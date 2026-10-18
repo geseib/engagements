@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Screens, Redrawn</title>
+<style>
+:root {
+  --canvas: #0A1324;
+  --panel: #111C33;
+  --panel-2: #16233F;
+  --ink: #F3F6FB;
+  --ink-2: #C9D3E4;
+  --ink-3: #8C9AB4;
+  --rule: rgba(201, 211, 228, .16);
+  --accent: #5AA9FF;
+  --accent-ink: #0A1324;
+  --gold: #F5C451;
+  --bar: #1C3256;
+  --bar-win: #3A3216;
+  --ok: #4FD18B;
+  /* the room profile's steps on a 1920x1080 canvas (present.css) */
+  --hero: 91px; --primary: 60px; --secondary: 40px; --body: 30px; --meta: 21px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #05090F; color: var(--ink);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+.page { padding: 24px 16px 80px; max-width: 1100px; margin: 0 auto; }
+.page > h1 { font-size: 22px; margin: 0 0 4px; }
+.page p.lede { color: var(--ink-3); margin: 0 0 24px; font-size: 15px; line-height: 1.5; }
+.shot { margin: 0 0 40px; }
+.shot h2 { font-size: 16px; margin: 0 0 4px; }
+.shot .why { color: var(--ink-3); font-size: 14px; line-height: 1.5; margin: 0 0 10px; }
+.viewport { width: 100%; aspect-ratio: 16 / 9; overflow: hidden; position: relative;
+  border-radius: 8px; border: 1px solid var(--rule); }
+.viewport > .frame { transform-origin: 0 0; position: absolute; top: 0; left: 0; }
+
+/* ---------- the 1920x1080 frame ---------- */
+.frame { width: 1920px; height: 1080px; background: var(--canvas); overflow: hidden;
+  display: flex; flex-direction: column; padding: 56px 96px 48px; }
+.strip { display: flex; align-items: center; gap: 28px; font-size: var(--meta);
+  color: var(--ink-3); letter-spacing: .02em; flex: none; }
+.strip .grow { flex: 1; }
+.strip b { color: var(--ink-2); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px;
+  border-radius: 999px; background: var(--panel); color: var(--ink-2); }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.ring { width: 30px; height: 30px; border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--p) * 1%), rgba(255,255,255,.12) 0); position: relative; }
+.ring::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--panel); }
+
+.eyebrow { font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 700; margin: 0 0 14px; }
+.title { font-size: var(--hero); line-height: 1.04; font-weight: 800; letter-spacing: -.02em;
+  margin: 0; text-wrap: balance; }
+.title.two { font-size: 76px; }
+.lesson { font-size: var(--secondary); line-height: 1.38; color: var(--ink); margin: 36px 0 0;
+  max-width: 1560px; text-wrap: pretty; }
+.lesson.fit { font-size: 35px; }
+.lesson em { color: var(--gold); font-style: normal; }
+.main { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+
+.turn { flex: none; display: flex; align-items: center; gap: 28px; margin-top: 36px;
+  background: var(--panel-2); border-left: 10px solid var(--accent); border-radius: 0 16px 16px 0;
+  padding: 26px 36px; }
+.turn .k { font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
+  font-weight: 800; flex: none; width: 150px; }
+.turn .t { font-size: 36px; line-height: 1.3; font-weight: 600; }
+.foot { flex: none; font-size: var(--meta); color: var(--ink-3); margin-top: 20px; }
+
+/* voting */
+.reminder { display: flex; align-items: baseline; gap: 24px; margin: 28px 0 28px; flex: none; }
+.reminder .title { font-size: var(--primary); }
+.cards { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-height: 0; }
+.card { background: var(--panel); border-radius: 18px; padding: 30px 36px; display: flex; gap: 26px;
+  border: 2px solid transparent; }
+.num { flex: none; width: 58px; height: 58px; border-radius: 14px; background: var(--panel-2);
+  color: var(--accent); font-size: 32px; font-weight: 800; display: grid; place-items: center; }
+.card p { margin: 0; font-size: 34px; line-height: 1.38; color: var(--ink); }
+.cue { flex: none; display: flex; align-items: center; gap: 22px; margin-top: 24px; font-size: 28px; color: var(--ink-2); }
+.cue strong { color: var(--ink); }
+
+/* results */
+.win { position: relative; background: var(--panel); border-radius: 22px; padding: 40px 48px 40px;
+  overflow: hidden; border: 3px solid var(--gold); flex: none; }
+.win .fill, .row .fill { position: absolute; inset: 0 auto 0 0; z-index: 0; }
+.win .fill { background: var(--bar-win); }
+.win > *:not(.fill), .row > *:not(.fill) { position: relative; z-index: 1; }
+.win .head { display: flex; align-items: baseline; gap: 22px; margin-bottom: 16px; }
+.win .place { font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.win .pct { font-size: 64px; font-weight: 800; color: var(--gold); margin-left: auto; line-height: 1; }
+.win .votes { font-size: 24px; color: var(--ink-2); }
+.win p { margin: 0; font-size: 42px; line-height: 1.32; font-weight: 600; max-width: 1450px; }
+.rows { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; flex: none; }
+.row { position: relative; overflow: hidden; background: var(--panel); border-radius: 16px;
+  padding: 20px 32px; display: flex; align-items: center; gap: 28px; }
+.row .fill { background: var(--bar); }
+.row .rank { flex: none; font-size: 26px; font-weight: 800; color: var(--ink-3); width: 40px; }
+.row p { margin: 0; font-size: var(--body); line-height: 1.34; flex: 1; }
+.row .pct { flex: none; font-size: 40px; font-weight: 800; color: var(--accent); width: 120px; text-align: right; }
+.talk { flex: none; margin-top: 22px; font-size: 30px; color: var(--ink-2); display: flex; gap: 20px; align-items: baseline; }
+.talk .k { font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 800; }
+
+/* call: two columns */
+.cols { flex: 1; display: grid; grid-template-columns: 1.55fr 1fr; gap: 56px; min-height: 0; margin-top: 30px; }
+.side { background: var(--panel); border-radius: 18px; padding: 34px 38px; display: flex; flex-direction: column; gap: 22px; }
+.side h3 { margin: 0; font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.side p { margin: 0; font-size: 28px; line-height: 1.4; }
+.side .small { font-size: 24px; color: var(--ink-2); }
+.qr { width: 150px; height: 150px; border-radius: 10px; flex: none;
+  background: repeating-conic-gradient(#F3F6FB 0 25%, #0A1324 0 50%) 0 0 / 30px 30px; }
+.join { display: flex; gap: 24px; align-items: center; margin-top: auto; }
+.join b { font-size: 34px; display: block; }
+
+/* build room */
+.claude { flex: none; display: flex; align-items: center; gap: 20px; background: var(--panel);
+  border-radius: 14px; padding: 16px 26px; font-size: 26px; color: var(--ink-2); }
+.claude b { color: var(--ink); }
+.claude .spark { width: 34px; height: 34px; border-radius: 9px; background: #D97757; flex: none; }
+.claude .grow { flex: 1; }
+.opts { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; min-height: 0; margin-top: 30px; }
+.opt { position: relative; overflow: hidden; background: var(--panel); border-radius: 20px; padding: 34px 36px;
+  display: flex; flex-direction: column; gap: 16px; border: 3px solid transparent; }
+.opt .L { font-size: 30px; font-weight: 800; color: var(--accent); }
+.opt h4 { margin: 0; font-size: 46px; line-height: 1.12; font-weight: 800; letter-spacing: -.01em; }
+.opt p { margin: 0; font-size: 28px; line-height: 1.38; color: var(--ink-2); }
+.opts.open .opt h4 { font-size: 52px; }
+.opts.open .opt p { font-size: 34px; line-height: 1.38; color: var(--ink-2); }
+.opt .fillv { position: absolute; left: 0; right: 0; bottom: 0; background: var(--bar); z-index: 0; }
+.opt > *:not(.fillv) { position: relative; z-index: 1; }
+.opt.won { border-color: var(--gold); }
+.opt.won .fillv { background: var(--bar-win); }
+.opt .score { margin-top: auto; display: flex; align-items: baseline; gap: 16px; }
+.opt .score b { font-size: 72px; line-height: 1; }
+.opt.won .score b { color: var(--gold); }
+.opt .score span { font-size: 26px; color: var(--ink-2); }
+.opt .why { font-size: 26px; color: var(--ink); font-style: italic; border-left: 4px solid var(--gold); padding-left: 18px; }
+.badge { align-self: flex-start; background: var(--gold); color: var(--accent-ink); font-weight: 800;
+  font-size: 20px; letter-spacing: .1em; text-transform: uppercase; padding: 8px 14px; border-radius: 8px; }
+.sent { flex: none; margin-top: 24px; display: flex; gap: 22px; align-items: center; font-size: 30px;
+  background: var(--panel-2); border-left: 10px solid #D97757; border-radius: 0 16px 16px 0; padding: 22px 32px; }
+.sent .k { font-size: var(--meta); letter-spacing: .14em; text-transform: uppercase; color: #F0A285; font-weight: 800; flex: none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Room screens, redrawn: what the room reads and takes away</h1>
+  <p class="lede">Every frame is the 1920×1080 canvas a projector shows, drawn with the Room
+    profile's type steps. The content is real, from <code>sets/lessons-call-and-answer-fixed.csv</code>
+    and <code>sets/agentic-sdlc-call-and-answer.csv</code>. The answers and votes are made up.</p>
+
+  <!-- 1 -->
+  <section class="shot">
+    <h2>1 · Call &amp; Answer, a lesson is up (Room)</h2>
+    <p class="why">The title and the lesson lead: they are what changes from round to round, and what the room reads. The question to answer sits in one "Your turn" band. The generic instruction is gone: the strip already says where to answer.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Round 3</b> of 8</span><span class="grow"></span>
+        <span>engage.seibtribe.us · code <b>4821</b></span>
+        <span class="pill"><span class="ring" style="--p:50"></span><b>11</b> of 22 answered</span></div>
+      <div class="main">
+        <p class="eyebrow">School of Architecture</p>
+        <h1 class="title">The importance of thresholds</h1>
+        <p class="lesson">Architect Christopher Alexander taught that thresholds, the spaces between inside and outside, are crucial for human comfort. A good threshold gives a <em>gradual transition rather than an abrupt change</em>. That holds for buildings, for user interfaces and for organizational boundaries. When you design any system, build in buffer zones that help people adjust instead of forcing a sudden shift.</p>
+      </div>
+      <div class="turn"><span class="k">Your turn</span>
+        <span class="t">Describe how you apply thresholds in your work: a gradual transition where there would otherwise be an abrupt one.</span></div>
+    </div></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="shot">
+    <h2>2 · Call &amp; Answer, a long lesson with its own instruction (Room)</h2>
+    <p class="why">A 597-character lesson still fits on one screen: the title steps down to 76px over two lines, and the lesson to 35px. The question's own instruction ("Two or three sentences…") is specific, so it gets the band.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Round 2</b> of 6</span><span class="grow"></span>
+        <span>engage.seibtribe.us · code <b>4821</b></span>
+        <span class="pill"><span class="ring" style="--p:18"></span><b>4</b> of 22 answered</span></div>
+      <div class="main">
+        <p class="eyebrow">Planning</p>
+        <h1 class="title two">If an agent can build it from the ticket, who writes the ticket?</h1>
+        <p class="lesson fit">When the distance from a written intent to a running branch collapses to minutes, the written intent becomes the expensive part. Three positions are all defensible. <em>One:</em> specs get more rigorous than ever, because ambiguity now produces confident wrong code instead of a question in standup. <em>Two:</em> specs get cheaper and more disposable, because when three implementations cost an afternoon you stop arguing and go look. <em>Three:</em> the ticket stops existing and the branch becomes the proposal.</p>
+      </div>
+      <div class="turn"><span class="k">Your turn</span>
+        <span class="t">Which way is your team actually drifting, and is that good? Two or three sentences.</span></div>
+    </div></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="shot">
+    <h2>3 · The same lesson on Call (a Zoom share)</h2>
+    <p class="why">On Call, people read on their own screens, so the frame can carry more: the whole lesson, the answering guidance, and the join code with its QR. The title and the lesson still lead.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Agentic SDLC</b> · Round 2 of 6 · Planning</span><span class="grow"></span>
+        <span class="pill"><span class="ring" style="--p:18"></span><b>4</b> of 22 answered</span></div>
+      <div class="cols">
+        <div>
+          <h1 class="title two" style="font-size:66px">If an agent can build it from the ticket, who writes the ticket?</h1>
+          <p class="lesson" style="font-size:31px;margin-top:28px">When the distance from a written intent to a running branch collapses to minutes, the written intent becomes the expensive part. Three positions are all defensible. <em>One:</em> specs get more rigorous than ever, because ambiguity now produces confident wrong code instead of a question in standup. <em>Two:</em> specs get cheaper and more disposable, because when three implementations cost an afternoon you stop arguing and go look. <em>Three:</em> the ticket stops existing and the branch becomes the proposal. Pick the one your team is actually drifting toward and say whether that drift is a good thing.</p>
+        </div>
+        <div class="side">
+          <h3>Your turn</h3>
+          <p>Two or three sentences. Say which way your team is drifting, not which way it should drift.</p>
+          <p class="small">Answers stay anonymous. You'll vote on them next.</p>
+          <div class="join"><div class="qr"></div><div><span class="small">Join at engage.seibtribe.us</span><b>code 4821</b></div></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="shot">
+    <h2>4 · Voting (Room)</h2>
+    <p class="why">What the room votes on fills the screen: each answer is shown whole, numbered so people can name it out loud. The title stays as a reminder. No tallies while voting, so the early votes don't steer the rest; only how many have voted.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Round 3</b> of 8 · Vote</span><span class="grow"></span>
+        <span>Answers 1–6 of 9</span></div>
+      <div class="reminder"><h1 class="title">The importance of thresholds</h1></div>
+      <div class="cards">
+        <div class="card"><span class="num">1</span><p>We moved to a two-week "shadow mode" where the new billing system runs next to the old one. Nobody has to trust it on day one.</p></div>
+        <div class="card"><span class="num">2</span><p>New hires get a buddy for their first on-call, and they hold the pager only on the second rotation.</p></div>
+        <div class="card"><span class="num">3</span><p>Feature flags at 1%, 10%, 50%. The ramp is the threshold, and the dashboards are the doorway.</p></div>
+        <div class="card"><span class="num">4</span><p>Our reorg went badly because there wasn't one. Teams changed on a Monday, and it took months to recover.</p></div>
+        <div class="card"><span class="num">5</span><p>The settings page shows a preview before anything is saved, so you see the change before you commit to it.</p></div>
+        <div class="card"><span class="num">6</span><p>We stopped turning off the old API on a date. It now answers with a warning header for a quarter first.</p></div>
+      </div>
+      <div class="cue"><span class="pill"><span class="ring" style="--p:64"></span><strong>14</strong> of 22 voted</span>
+        Pick the one that best shows a good threshold, on your phone.</div>
+    </div></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="shot">
+    <h2>5 · Results (Room)</h2>
+    <p class="why">The takeaway is the winning answer, so it reads large in full, with its share in gold. The runners-up keep their text too. The bar is the fill behind each answer, so the chart and what was voted on are the same thing. The bottom line gives the host a way into the discussion.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Round 3</b> of 8 · Results</span><span class="grow"></span>
+        <span><b>22</b> voted</span></div>
+      <div class="main" style="justify-content:flex-start;padding-top:34px">
+      <h1 class="title" style="font-size:var(--primary);margin-bottom:30px">The importance of thresholds</h1>
+      <div class="win"><span class="fill" style="width:41%"></span>
+        <div class="head"><span class="place">The room's pick</span><span class="votes">9 of 22 votes</span><span class="pct">41%</span></div>
+        <p>Feature flags at 1%, 10%, 50%. The ramp is the threshold, and the dashboards are the doorway.</p></div>
+      <div class="rows">
+        <div class="row"><span class="fill" style="width:27%"></span><span class="rank">2</span><p>We moved to a two-week "shadow mode" where the new billing system runs next to the old one.</p><span class="pct">27%</span></div>
+        <div class="row"><span class="fill" style="width:18%"></span><span class="rank">3</span><p>We stopped turning off the old API on a date. It now answers with a warning header for a quarter first.</p><span class="pct">18%</span></div>
+        <div class="row"><span class="fill" style="width:9%"></span><span class="rank">4</span><p>New hires get a buddy for their first on-call, and they hold the pager only on the second rotation.</p><span class="pct">9%</span></div>
+      </div>
+      <div class="foot" style="margin-top:14px">and 5 more answers, 5% of the votes between them</div>
+      </div>
+      <div class="talk"><span class="k">Talk about it</span>Who wrote the winner? Tell us what the dashboards had to show before you went past 10%.</div>
+    </div></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="shot">
+    <h2>6 · Results on Call</h2>
+    <p class="why">On Call there's room for all the answers with their bars, and for Workie's read of the themes beside them.</p>
+    <div class="viewport"><div class="frame">
+      <div class="strip"><span><b>Architecture lessons</b> · Round 3 of 8 · Results</span><span class="grow"></span><span><b>22</b> voted</span></div>
+      <h1 class="title" style="font-size:60px;margin-top:26px">The importance of thresholds</h1>
+      <div class="cols" style="margin-top:24px">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="win" style="padding:26px 34px"><span class="fill" style="width:41%"></span>
+            <div class="head" style="margin-bottom:8px"><span class="place">The room's pick</span><span class="votes">9 votes</span><span class="pct" style="font-size:48px">41%</span></div>
+            <p style="font-size:32px">Feature flags at 1%, 10%, 50%. The ramp is the threshold, and the dashboards are the doorway.</p></div>
+          <div class="row"><span class="fill" style="width:27%"></span><span class="rank">2</span><p style="font-size:25px">We moved to a two-week "shadow mode" where the new billing system runs next to the old one.</p><span class="pct" style="font-size:32px">27%</span></div>
+          <div class="row"><span class="fill" style="width:18%"></span><span class="rank">3</span><p style="font-size:25px">We stopped turning off the old API on a date. It answers with a warning header for a quarter first.</p><span class="pct" style="font-size:32px">18%</span></div>
+          <div class="row"><span class="fill" style="width:9%"></span><span class="rank">4</span><p style="font-size:25px">New hires get a buddy for their first on-call, and hold the pager only on the second rotation.</p><span class="pct" style="font-size:32px">9%</span></div>
+          <div class="row"><span class="fill" style="width:5%"></span><span class="rank">5</span><p style="font-size:25px">The settings page previews a change before anything is saved.</p><span class="pct" style="font-size:32px">5%</span></div>
+        </div>
+        <div class="side">
+          <h3>Workie's read</h3>
+          <p>Most answers put the threshold in <b>time</b>: a ramp, a shadow period, a warning quarter.</p>
+          <p>The one story of an abrupt change (the Monday reorg) is the warning the others are built against.</p>
+          <p class="small">Nobody put a threshold in a <b>conversation</b>, such as a hand-off or a review. That might be worth asking about.</p>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 7 -->
+  <section class="shot">
+    <h2>7 · Build Room, Choose while the room votes (Room)</h2>
+    <p class="why">The prompt and the three options are what the room weighs, so each option's title is big and its one-line detail stays. Claude's status keeps its strip at the top. As in Call &amp; Answer, there are no tallies until the vote closes.</p>
+    <div class="viewport"><div class="frame">
+      <div class="claude"><span class="spark"></span><span><b>Claude is waiting on the room</b> · asked 1 min ago</span><span class="grow"></span>
+        <span class="pill"><span class="ring" style="--p:64"></span><b>9</b> of 14 voted</span></div>
+      <h1 class="title" style="margin-top:44px">Which page should we build first?</h1>
+      <div class="opts open">
+        <div class="opt"><span class="L">A</span><h4>The pricing page</h4><p>Three plans side by side, with a toggle for monthly and yearly. It's what sales keeps asking for.</p></div>
+        <div class="opt"><span class="L">B</span><h4>The sign-up flow</h4><p>Email, then a workspace name, then you're in. Nothing else on the way.</p></div>
+        <div class="opt"><span class="L">C</span><h4>A live demo room</h4><p>Visitors try the product with sample data before they make an account.</p></div>
+      </div>
+      <div class="cue">Choose on your phone, and say why if you like: Claude reads the reasons.</div>
+    </div></div>
+  </section>
+
+  <!-- 8 -->
+  <section class="shot">
+    <h2>8 · Build Room, the result and what Claude gets (Room)</h2>
+    <p class="why">The bars rise inside the options, so the room sees which option won and what it was in one look. The winner carries the room's best reason. The bottom band shows the direction the host sent, so the room knows what Claude does next.</p>
+    <div class="viewport"><div class="frame">
+      <div class="claude"><span class="spark"></span><span><b>Claude is building</b> · the sign-up flow · 40 s</span><span class="grow"></span><span><b>14</b> voted</span></div>
+      <h1 class="title" style="margin-top:44px;font-size:var(--primary)">Which page should we build first?</h1>
+      <div class="opts">
+        <div class="opt"><span class="fillv" style="height:21%"></span><span class="L">A</span><h4>The pricing page</h4><p>Three plans side by side, with a toggle for monthly and yearly. It's what sales keeps asking for.</p><div class="score"><b>3</b><span>votes · 21%</span></div></div>
+        <div class="opt won"><span class="fillv" style="height:64%"></span><span class="badge">The room's pick</span><h4>The sign-up flow</h4><p>Email, then a workspace name, then you're in. Nothing else on the way.</p>
+          <p class="why">"Nobody sees the pricing page if they can't get in."</p>
+          <div class="score"><b>9</b><span>votes · 64%</span></div></div>
+        <div class="opt"><span class="fillv" style="height:14%"></span><span class="L">C</span><h4>A live demo room</h4><p>Visitors try the product with sample data before they make an account.</p><div class="score"><b>2</b><span>votes · 14%</span></div></div>
+      </div>
+      <div class="sent"><span class="k">Sent to Claude</span>Build the sign-up flow first. Keep the workspace step optional.</div>
+    </div></div>
+  </section>
+</div>
+<script>
+  // scale each 1920x1080 frame to its box on the page
+  function fit() {
+    document.querySelectorAll('.viewport').forEach(function (v) {
+      var f = v.querySelector('.frame');
+      f.style.transform = 'scale(' + (v.clientWidth / 1920) + ')';
+    });
+  }
+  window.addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>

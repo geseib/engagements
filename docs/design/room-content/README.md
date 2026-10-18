@@ -1,5 +1,7 @@
 # What the room sees, and how large
 
+> **Rejected by the owner on 18 Oct 2026.** These frames lead with the generic instruction and drop the lesson. The redraw is in `../room-content-v2/`.
+
 Owner, 17 Oct 2026:
 
 > "the default option needs to share only the most relevant info to the room. For example
