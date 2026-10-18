@@ -38,6 +38,12 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
   // --present-mini is color-mix(in srgb, var(--surface) 60%, transparent): the surface at .6
   const surfaceHex = r('--surface').replace('#', '');
   const MINI = [r('--bg'), `rgba(${[0, 2, 4].map((i) => parseInt(surfaceHex.substr(i, 2), 16)).join(', ')}, 0.6)`];
+  // ROOM SCREENS, REDRAWN (room-content-v2): the results fill behind each
+  // answer (--present-fill, the accent at .22) and the pick's fill (the gold
+  // at 20%, color-mix toward transparent), each on the row's --surface.
+  const tint = (hex, a) => `rgba(${[0, 2, 4].map((i) => parseInt(hex.replace('#', '').substr(i, 2), 16)).join(', ')}, ${a})`;
+  const FILL = [r('--bg'), r('--surface'), tint(r('--accent'), 0.22)];
+  const PICK = [r('--bg'), r('--surface'), tint(r('--gold'), 0.2)];
   const LETTERBOX = [v('--present-canvas')];
   const PLATE = [r('--bg'), v('--present-plate')];  // the phase wipe over the canvas
   const STRIP = [...LETTERBOX, v('--present-plate')];
@@ -69,6 +75,16 @@ describe.each(SKINS)('present.css under the %s skin (dusk, on the wall)', (skin)
     ['the go button (its ink on --action, on the wall)', () => r('--on-action'), [r('--action')]],
     ['the safety-ask eyebrow on its card', () => r('--eyebrow-color'), CARD],
     ['the safety-ask note on its card', () => r('--muted'), CARD],
+    ['the "Your turn" label on its band', () => r('--accent-text'), CARD],
+    ['the "Your turn" question on its band', () => r('--text'), CARD],
+    ['an answer on its voting card', () => r('--text'), CARD],
+    ['a runner-up on its fill', () => r('--text'), FILL],
+    ['a runner-up\'s rank and credit on its fill (--text, not --muted)', () => r('--text'), FILL],
+    ['the pick on its gold fill', () => r('--text'), PICK],
+    ['"The room\'s pick" in gold on its fill', () => v('--present-pick'), PICK],
+    ['a ladder rung\'s number on its fill', () => r('--text'), FILL],
+    ['the top rung\'s number on the gold fill', () => r('--text'), PICK],
+    ['"Talk about it" on the field', () => r('--accent-text'), FIELD],
   ])('%s clears AA', (_label, fg, layers) => {
     expect(H.on(fg(), layers)).toBeGreaterThanOrEqual(H.AA);
   });

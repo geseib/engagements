@@ -55,6 +55,13 @@ html.present-locked body {
   --present-quote: var(--wall-quote);
   --present-plate: rgba(11, 18, 32, 0.93);
   --present-success-text: var(--success-text);
+  /* RESULTS (room-content-v2 frames 5, 12): the bar is the fill behind each
+     answer, the skin's accent at a tint; the room's pick in the skin's gold. */
+  --present-fill: rgb(var(--accent-rgb) / 0.22);
+  /* The pick is rank 1's status colour (SPEC §3: gold/silver/bronze are status,
+     not skin accent), read here once and nowhere else in the sheet. */
+  --present-pick: var(--gold);
+  --present-pick-fill: color-mix(in srgb, var(--present-pick) 20%, transparent);
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -393,6 +400,192 @@ html.present-locked body {
   overflow-wrap: anywhere;
 }
 .present .present-part { flex: none; font-size: var(--L-meta); color: var(--accent-text); font-weight: 600; margin-top: 16px; }
+
+/* ==== ROOM SCREENS, REDRAWN (owner, 18 Oct 2026; docs/design/room-content-v2) ==== */
+
+/* ---- a lesson is up (frames 1-3): the title leads, the lesson under it at
+   the secondary step (never dropped; --fit shrinks it toward --fit-min), the
+   question in one "Your turn" band ---- */
+.present .present-rc-story {
+  margin: 0 0 .5em;
+  font-size: calc(var(--L-secondary) * var(--fit));
+  line-height: 1.32;
+  font-weight: 400;
+  color: var(--text);
+  max-width: 64ch;
+  text-wrap: pretty;
+}
+.present .present-turn {
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  margin: .5em 0 0;
+  padding: .55em 1em;
+  background: var(--surface);
+  border-left: 6px solid var(--accent);
+  border-radius: 0 16px 16px 0;
+  font-size: calc(var(--L-secondary) * var(--fit));
+  max-width: 64ch;
+}
+.present .present-turn-ey {
+  flex: none;
+  font-size: calc(var(--L-meta) * var(--fit));
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.present .present-turn-text { margin: 0; font-weight: 600; line-height: 1.25; }
+
+/* the title as the reminder above the answers and the results */
+.present .present-reminder { margin: 0 0 .45em; flex: none; }
+
+/* ---- voting: every answer, whole and numbered (frame 4) ---- */
+.present .present-answers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(20px * var(--fit));
+  align-content: start;
+}
+.present .present-answers.is-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.present .present-answers > li { min-width: 0; display: flex; }
+.present .present-answer.ui-card {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: .6em;
+  --ui-card-pad: calc(24px * var(--fit)) calc(30px * var(--fit));
+  border-radius: 22px;
+  font-size: calc(var(--L-secondary) * var(--fit));
+}
+.present .present-answer-n { font-size: .8em; margin-top: .05em; }
+.present .present-answer-text { margin: 0; line-height: 1.28; font-weight: 500; overflow-wrap: anywhere; }
+.present .present-foot.is-start { justify-content: flex-start; }
+
+/* ---- one answer up while voting (frame 11): large, its number, the chips ---- */
+.present .present-focus { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.present .present-focus-head { flex: none; display: flex; align-items: center; gap: 22px; margin-bottom: 28px; }
+.present .present-focus-of { font-size: var(--L-body); color: var(--muted); }
+.present .present-focus .present-fit-text { flex: 0 1 auto; font-weight: 600; max-width: 46ch; }
+.present .present-chips { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 12px; }
+.present .present-chip { font-size: var(--L-meta); }
+.present .present-chip-gap { font-size: var(--L-meta); color: var(--muted); }
+
+/* ---- results (frame 5): the pick in a gold card, the runners-up keep their
+   text, the bar the FILL behind each, relative to the pick ---- */
+.present .present-tally.is-fill .present-trow {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --ui-size: calc(var(--L-body) * var(--fit));
+}
+.present .present-tally.is-fill .present-trow .ui-trow-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  background: var(--present-fill);
+}
+/* on the fill, rank and credit are --text: --muted over the tint is under AA */
+.present .present-tally.is-fill .present-trow .ui-trow-rank,
+.present .present-tally.is-fill .present-trow .ui-trow-sub { color: var(--text); }
+.present .present-tally.is-fill .present-trow.is-pick {
+  grid-template-columns: minmax(0, 1fr);
+  box-shadow: inset 0 0 0 3px var(--present-pick);
+  padding: calc(24px * var(--fit)) calc(34px * var(--fit));
+}
+.present .present-tally.is-fill .present-trow.is-pick .ui-trow-rank { display: none; }
+.present .present-tally.is-fill .present-trow.is-pick .ui-trow-bar { background: var(--present-pick-fill); }
+.present .present-tally.is-fill .present-trow.is-pick .present-idea { font-size: calc(var(--L-secondary) * 1.1 * var(--fit)); }
+.present .present-pick-ey {
+  display: block;
+  margin: 0 0 .5em;
+  font-size: calc(var(--L-meta) * var(--fit));
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--present-pick);
+}
+.present .present-tally.is-fill + .present-more { padding-left: 0; }
+.present .present-talk {
+  margin: auto 0 0;
+  padding-top: calc(24px * var(--fit));
+  font-size: calc(var(--L-body) * var(--fit));
+  line-height: 1.3;
+  color: var(--text);
+  max-width: 70ch;
+}
+.present .present-talk-ey {
+  margin-right: .8em;
+  font-size: calc(var(--L-meta) * var(--fit));
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+/* ---- one result up (frame 12): its place, the answer, the ladder ---- */
+.present .present-result {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 80px;
+  align-items: center;
+}
+.present .present-result .present-focus { height: 100%; }
+.present .present-credit { flex: none; margin: .6em 0 0; font-size: var(--L-body); color: var(--muted); }
+.present .present-ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.present .present-rung {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: calc(var(--L-body) * 2);
+  padding: 0 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--L-body);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.present .present-rung-fill { position: absolute; top: 0; bottom: 0; left: 0; z-index: -1; background: var(--present-fill); }
+.present .present-rung.is-top { box-shadow: inset 0 0 0 3px var(--present-pick); }
+.present .present-rung.is-top .present-rung-fill { background: var(--present-pick-fill); }
+.present .present-rung.is-current { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* ---- the QR beside the moment (frames 9-10): the moment keeps a narrower
+   column, the fitter fits it there; the lobby's join block on the right ---- */
+.present .present-with-join {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 64px;
+}
+.present .present-with-join > .present-frame { min-width: 0; min-height: 0; }
+.present .present-joinpanel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.present .present-joinpanel .present-qr { width: 380px; flex: none; }
+.present .present-joinpanel .present-code { font-size: var(--L-hero); }
 
 /* ---- Workie's read ---- */
 .present .present-read { font-size: calc(var(--L-body) * 1.22 * var(--fit)); line-height: 1.36; }

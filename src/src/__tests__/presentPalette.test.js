@@ -61,8 +61,20 @@ describe.each(SKINS)('present.css under the %s skin: contrast, composited', (ski
 });
 
 describe('present.css: house rules (SPEC §4.5)', () => {
-  it('reads no --primary, --primary-deep, --secondary or --gold', () => {
-    expect(BODY).not.toMatch(/var\(--(primary|secondary|gold)/);
+  it('reads no --primary, --primary-deep or --secondary', () => {
+    expect(BODY).not.toMatch(/var\(--(primary|secondary)/);
+  });
+  // THE ROOM'S PICK (owner, 18 Oct 2026, docs/design/room-content-v2 frames 5
+  // and 12: "--sk-gold for the pick"). Gold is rank 1's status colour (SPEC
+  // §3), not the skin's accent, so it is read exactly once, as the scope's
+  // --present-pick, and only the pick's card, eyebrow and rung use that.
+  it('reads --gold once, as --present-pick, and only the pick uses it', () => {
+    expect(BODY.match(/var\(--gold\)/g)).toEqual(['var(--gold)']);
+    expect(BODY).toMatch(/--present-pick:\s*var\(--gold\);/);
+    const users = [...BODY.matchAll(/([^{}]+)\{[^}]*var\(--present-pick\)[^}]*\}/g)]
+      .map((m) => m[1].trim()).filter((sel) => sel !== '.present');
+    expect(users.length).toBeGreaterThan(0);
+    users.forEach((sel) => expect(sel).toMatch(/is-pick|present-pick-ey|is-top/));
   });
   it('under the Present skin the wall carries no orange: --action and --accent resolve blue', () => {
     if (!SKINS.includes('present')) return;

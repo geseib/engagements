@@ -36,9 +36,10 @@ const overflows = (el) => Boolean(el) && (el.scrollHeight > el.clientHeight + 1 
   THE RESULTS TALLY'S OWN LEVERS (walk of dev 26af5fc8, F1: five long ideas
   ran 992px of content into a 571px main). Past the floor: clamp each idea to
   two lines (data-clamp="2"); then take rows down from the bottom, never the
-  first, and count them in the "and N more ideas" line. A refit starts clean.
+  first (the room's pick), and count them in the "and N more answers" line
+  (room-content-v2 frame 5). A refit starts clean.
 */
-const moreText = (n) => `and ${n} more ${n === 1 ? 'idea' : 'ideas'}`;
+const moreText = (n) => `and ${n} more ${n === 1 ? 'answer' : 'answers'}`;
 
 function resetTally(canvas) {
   const tally = canvas.querySelector('.present-tally.is-ideas');

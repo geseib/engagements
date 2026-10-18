@@ -125,19 +125,40 @@ describe('for a host', () => {
     await waitFor(() => expect(posts()).toHaveLength(1));
   });
 
-  test('J puts the join code on the wall, and takes it down', async () => {
+  // THE QR SIDE PANEL (owner, 18 Oct 2026): J sends {join: !current} and no
+  // focus, so whatever the room is looking at stays up beside the QR.
+  test('J shows the QR panel, and takes it down, leaving the focus alone', async () => {
     serve(host());
     const { result, rerender } = renderHook(({ snap }) => usePresentControls({ gameId: '5479', snapshot: snap, total: 4, refetch: jest.fn() }),
       { initialProps: { snap: ASK } });
     await waitFor(() => expect(result.current.armed).toBe(true));
     press('j');
     await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(JSON.parse(posts()[0][1].body)).toEqual({ focus: 'join', index: null, questionNumber: 5 });
-    rerender({ snap: { ...ASK, stageFocus: { focus: 'join' } } });
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ join: true, questionNumber: 5 });
+    rerender({ snap: { ...ASK, stageFocus: { focus: 'none', index: null, join: true } } });
     expect(result.current.joinShown).toBe(true);
     press('J');
     await waitFor(() => expect(posts()).toHaveLength(2));
-    expect(JSON.parse(posts()[1][1].body)).toEqual({ focus: 'none', index: null, questionNumber: 5 });
+    expect(JSON.parse(posts()[1][1].body)).toEqual({ join: false, questionNumber: 5 });
+  });
+
+  test('a legacy focus of join still reads as the QR up', async () => {
+    serve(host());
+    const { result } = renderHook(() => usePresentControls({
+      gameId: '5479', snapshot: { ...ASK, stageFocus: { focus: 'join' } }, total: 4, refetch: jest.fn(),
+    }));
+    await waitFor(() => expect(result.current.armed).toBe(true));
+    expect(result.current.joinShown).toBe(true);
+  });
+
+  test('the keys step from the voting overview when every answer fits (overview passed through)', async () => {
+    serve(host({ state: 'VOTE#005' }));
+    const snapshot = { state: 'VOTE#005', stageFocus: { focus: 'none', index: null }, roomCounts: { joined: 4 } };
+    const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot, total: 3, overview: true, refetch: jest.fn() }));
+    await waitFor(() => expect(result.current.armed).toBe(true));
+    press('ArrowRight');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ focus: 'answer', index: 0, part: 0, questionNumber: 5 });
   });
 
   test('Workie\'s page turns with a relative step', async () => {

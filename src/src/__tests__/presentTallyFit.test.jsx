@@ -4,7 +4,7 @@
  * main and --fit stayed 1: the fitter never re-ran when the rows arrived (its
  * key held no row text), and past the floor it had no lever for the tally.
  * Now, in order: shrink to the profile's floor; then clamp each idea to two
- * lines; then show fewer rows ("and N more ideas"). Never the top row, never
+ * lines; then show fewer rows ("and N more answers"). Never the top row, never
  * the heading.
  *
  * jsdom has no layout, so the main's height is modelled from what is shown:
@@ -19,7 +19,7 @@ function canvasWith(rows, { box = 571, lineH = 60, more = 0 } = {}) {
   const div = document.createElement('div');
   div.innerHTML = `<div class="present-main"><p class="present-task">t</p><div class="present-tally is-ideas">${
     Array.from({ length: rows }, (_, i) => `<div class="present-trow" data-row="${i}"></div>`).join('')
-  }</div><p class="present-more" data-more="${more}"${more ? '' : ' hidden'}>${more ? `and ${more} more ideas` : ''}</p></div>`;
+  }</div><p class="present-more" data-more="${more}"${more ? '' : ' hidden'}>${more ? `and ${more} more answers` : ''}</p></div>`;
   const main = div.querySelector('.present-main');
   const tally = div.querySelector('.present-tally');
   const height = () => {
@@ -60,7 +60,7 @@ test('still too tall: rows go from the bottom, never the top, and the more line 
   expect(rows.slice(-hidden).every((r) => r.hidden)).toBe(true);
   const more = div.querySelector('.present-more');
   expect(more.hidden).toBe(false);
-  expect(more.textContent).toBe(`and ${1 + hidden} more ideas`);
+  expect(more.textContent).toBe(`and ${1 + hidden} more answers`);
 });
 
 test('a refit starts clean: rows back, no clamp, the more line as the model gave it', () => {

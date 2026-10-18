@@ -41,6 +41,28 @@ describe('results', () => {
   });
 });
 
+describe('voting, when every answer fits the overview (owner, 18 Oct 2026, room-content-v2 frame 4)', () => {
+  const vote = (stageFocus = { focus: 'none', index: null }) => snap({ state: 'VOTE#005', stageFocus });
+  const O = { total: 3, overview: true };
+  it('forward from the overview puts answer 1 up; back from the overview does nothing', () => {
+    expect(presentKeyStep(vote(), 'forward', O)).toEqual([{ kind: 'focus', focus: 'answer', index: 0, part: 0 }]);
+    expect(presentKeyStep(vote(), 'back', O)).toEqual([]);
+  });
+  it('back from answer 1 returns to the overview', () => {
+    expect(presentKeyStep(vote(answerAt(0, 'VOTE')), 'back', O)).toEqual([{ kind: 'focus', focus: 'none' }]);
+  });
+  it('the answers step both ways, by part; forward past the last asks for the next step', () => {
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE')), 'forward', O)).toEqual([{ kind: 'focus', focus: 'answer', index: 2, part: 0 }]);
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE', 1, 2)), 'back', O)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0, parts: 2 }]);
+    expect(presentKeyStep(vote(answerAt(2, 'VOTE')), 'forward', O)).toEqual([]);
+  });
+  it('when they do not fit, today\'s stepping holds: answer 1 is up, back from it wraps', () => {
+    const N = { total: 3, overview: false };
+    expect(presentKeyStep(vote(), 'forward', N)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0 }]);
+    expect(presentKeyStep(vote(), 'back', N)).toEqual([{ kind: 'focus', focus: 'answer', index: 2, part: 0 }]);
+  });
+});
+
 describe("Workie's read and feedback", () => {
   const read = (page) => snap({ stageBeat: 'field-notes', stageNotes: { page, pages: 4 } });
   it('pages forward and back; the last page does not start the next round', () => {

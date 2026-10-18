@@ -159,12 +159,81 @@ describe('every moment', () => {
     expect(v).toMatch(/2 of 5 voted/);
     expect(v).toMatch(/on your phone, laptop or tablet/);
   });
-  it('the voting navigator has no name, no points and no rank', () => {
+  it('one answer up while voting: large, its number, the chips; no name, no points and no rank (frame 11)', () => {
     const { container } = drawn(...EVERY[3].slice(1));
-    expect(container.textContent).toMatch(/Response 2 · name hidden/);
+    expect(container.querySelector('.present-badge').textContent).toBe('2');
+    expect(container.textContent).toMatch(/Response 2 of 2/);
+    expect(container.querySelector('.present-fit-text').textContent).toBe(NAMED[1].answer);
+    const chips = [...container.querySelectorAll('.present-chip')];
+    expect(chips.map((c) => c.textContent)).toEqual(['1', '2']);
+    expect(chips[1].className).toMatch(/is-current/);
+    expect(chips[1].className).toMatch(/ui-badge--accent/);
+    expect(chips[0].className).toMatch(/ui-badge--muted/);
     expect(container.textContent).not.toMatch(/Chen|Okafor|points/);
-    expect(container.querySelector('.present-points, .present-rank')).toBeNull();
+    expect(container.querySelector('.present-points, .present-rank, .present-ladder')).toBeNull();
     expect(container.querySelector('[data-mode="vote"]')).not.toBeNull();
+  });
+  it('voting opens on every answer, whole and numbered, when they fit (frame 4)', () => {
+    const { container, model } = drawn(snap({ state: 'VOTE#005' }), { answers: NAMED });
+    expect(model.overview).toBe(true);
+    const cards = [...container.querySelectorAll('.present-answers .present-answer')];
+    expect(cards.map((c) => c.querySelector('.present-answer-n').textContent)).toEqual(['1', '2']);
+    expect(cards.map((c) => c.querySelector('.present-answer-text').textContent)).toEqual(NAMED.map((a) => a.answer));
+    expect(cards[0].className).toMatch(/ui-card/);
+    expect(container.querySelector('h1.present-reminder').textContent).toBe('What should we stop doing');
+    expect(container.querySelector('.present-foot').textContent).toMatch(/2 of 5 voted/);
+    expect(container.textContent).not.toMatch(/Chen|Okafor|points/);
+  });
+  it('the QR sits beside the moment, nothing taken off it (frames 9-10)', () => {
+    const { container } = drawn(snap({ state: 'VOTE#005', stageFocus: { focus: 'none', index: null, join: true } }), { answers: NAMED });
+    const wrap = container.querySelector('.present-with-join');
+    expect(wrap).not.toBeNull();
+    expect(wrap.querySelectorAll('.present-answer')).toHaveLength(2);
+    const panel = wrap.querySelector('.present-joinpanel');
+    expect(panel.textContent).toMatch(/Scan to join · no app, no account/);
+    expect(panel.textContent).toMatch(/engage\.dev\.seibtribe\.us\/play/);
+    expect(panel.querySelector('.present-code').textContent).toBe('5479');
+    expect(panel.querySelector('[data-qr]').getAttribute('data-qr')).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
+    // with no QR up there is no panel
+    expect(drawn(snap({ state: 'VOTE#005' }), { answers: NAMED }).container.querySelector('.present-joinpanel')).toBeNull();
+  });
+  it('a lesson is up: the title leads, the lesson under it, the question in "Your turn"; no generic line on Room (frames 1-2)', () => {
+    const Q2 = {
+      title: 'THE IMPORTANCE OF THRESHOLDS', category: 'School of Architecture',
+      detail: 'Describe how you apply thresholds in your work. Architect Christopher Alexander taught that thresholds are crucial for human comfort.',
+      setCustomInstruction: 'Answer on your phone.',
+    };
+    const { container } = drawn(snap({ currentQuestionData: Q2 }), {});
+    expect(container.querySelector('.present-eyebrow').textContent).toBe('School of Architecture');
+    const title = container.querySelector('[data-rc-part="title"]');
+    expect(title.getAttribute('data-rc')).toBe('lead');
+    expect(title.textContent).toBe('The Importance of Thresholds');
+    const story = container.querySelector('.present-rc-story');
+    expect(story.textContent).toMatch(/^Architect Christopher Alexander/);
+    expect(story.hasAttribute('data-drop')).toBe(false);
+    const turn = container.querySelector('.present-turn');
+    expect(turn.querySelector('.present-turn-ey').textContent).toBe('Your turn');
+    expect(turn.querySelector('.present-turn-text').textContent).toBe('Describe how you apply thresholds in your work.');
+    expect(container.textContent).not.toMatch(/Answer on your phone\./);
+  });
+  it('on Call the generic instruction is one slim line that may give way', () => {
+    const Q3 = { title: 'Thresholds', detail: 'A lesson about doorways and how people pass through them.', setCustomInstruction: 'Answer on your phone.' };
+    const { container } = drawn(snap({ currentQuestionData: Q3, stageProfile: 'call' }), {});
+    const line = container.querySelector('[data-rc-part="task"]');
+    expect(line.textContent).toBe('Answer on your phone.');
+    expect(line.getAttribute('data-drop')).toBe('1');
+    expect(container.querySelector('.present-turn')).toBeNull();
+  });
+  it('one result up: its place, the answer and a ladder with no numbers when names are hidden (frame 12)', () => {
+    const [, s] = EVERY[5];
+    const { container } = drawn({ ...s, authorsRevealed: false, stageFocus: { ...s.stageFocus, index: 1 } }, { results: { voteTallies: TALLIES } });
+    expect(container.querySelector('.present-place').textContent).toBe('2nd');
+    const rungs = [...container.querySelectorAll('.present-rung')];
+    expect(rungs.map((r) => r.querySelector('.present-rung-n').textContent)).toEqual(['1', '2']);
+    expect(rungs[0].className).toMatch(/is-top/);
+    expect(rungs[1].className).toMatch(/is-current/);
+    expect(container.querySelector('.present-rung-pts')).toBeNull();
+    expect(container.textContent).not.toMatch(/Chen|Okafor|points/);
   });
   it('the results navigator names and scores a revealed round', () => {
     const { container } = drawn(...EVERY[5].slice(1));
@@ -203,20 +272,20 @@ describe('every moment', () => {
     expect(canvasOf(answering).classList.contains('ui-ground--wall')).toBe(true);
     expect(answering.querySelector('.present-top').classList.contains('ui-top-line')).toBe(true);
     expect(answering.querySelector('.present-eyebrow').classList.contains('ui-eyebrow')).toBe(true);
-    // The lesson leads (owner, 18 Oct 2026), else the task; the title is the muted eyebrow above it.
+    // The title leads (owner, 18 Oct 2026, room-content-v2); the lesson sits under it.
     expect(answering.querySelector('[data-rc="lead"]').className).toMatch(/present-rc-lead/);
-    expect(answering.querySelector('[data-rc-part="title"]').className).toMatch(/ui-eyebrow--muted/);
+    expect(answering.querySelector('[data-rc-part="title"]').getAttribute('data-rc')).toBe('lead');
+    expect(answering.querySelector('[data-rc-part="story"]').className).toMatch(/present-rc-story/);
     expect(answering.querySelector('.present-meter').className).toMatch(/ui-pips--meter/);
-    // Call carries the title: as a heading above the task, and on the voting screen.
-    const [, aSnap, aReads] = EVERY[1];
-    expect(drawn({ ...aSnap, stageProfile: 'call' }, aReads).container.querySelector('.present-rc-title').className).toMatch(/ui-heading--primary/);
+    // The voting reminder is a Heading at the primary step.
     const [, vSnap, vReads] = EVERY[2];
     const voting = drawn({ ...vSnap, stageProfile: 'call' }, vReads).container;
     expect(voting.querySelector('h1.present-h2').className).toMatch(/ui-heading--primary/);
-    const nav = drawn(...EVERY[5].slice(1)).container;
-    expect(nav.querySelector('.present-card').className).toMatch(/ui-card is-selected/);
+    const nav = drawn(...EVERY[3].slice(1)).container;
     expect(nav.querySelector('.present-badge').className).toMatch(/ui-badge ui-badge--accent/);
-    expect(nav.querySelector('.present-track').className).toMatch(/ui-pips--track/);
+    const overview = drawn(snap({ state: 'VOTE#005' }), { answers: NAMED }).container;
+    expect(overview.querySelector('.present-answer').className).toMatch(/ui-card/);
+    expect(overview.querySelector('.present-answer-n').className).toMatch(/ui-badge/);
     const tally = drawn(...EVERY[4].slice(1)).container;
     expect(tally.querySelectorAll('.present-trow.ui-trow').length).toBeGreaterThan(0);
     const read = drawn(...EVERY[6].slice(1)).container;
