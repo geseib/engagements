@@ -358,7 +358,7 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   await check('stageNotes, defaulted', () =>
     assert.deepStrictEqual(host.body.stageNotes, { page: 0, pages: null, plan: null, planKey: null, rev: 0 }));
   await check('stageFocus, defaulted, with part, phase and rev', () =>
-    assert.deepStrictEqual(host.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 0 }));
+    assert.deepStrictEqual(host.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 0, join: false }));
   await check('stageProfile, null until chosen', () => assert.strictEqual(host.body.stageProfile, null));
   await check('presenting is 0 with no Presentation open (tests/viewer-connections.js counts them)', () => assert.strictEqual(host.body.presenting, 0));
   const pub = await call(PUBLIC_ROUTE, VOTE_GAME);
@@ -376,7 +376,7 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   put({ PK: `GAME#${VOTE_GAME}`, SK: 'STATE', State: 'VOTE#001', LessonNumber: 1, StageProfile: 'tv' });
   const inVote = await call(HOST_ROUTE, VOTE_GAME, { authorizer: hostOf(ORG) });
   await check('during VOTE the VOTE focus is handed back', () =>
-    assert.deepStrictEqual(inVote.body.stageFocus, { focus: 'answer', index: 2, part: 0, parts: 1, phase: 'VOTE', rev: 4 }));
+    assert.deepStrictEqual(inVote.body.stageFocus, { focus: 'answer', index: 2, part: 0, parts: 1, phase: 'VOTE', rev: 4, join: false }));
   await check('the page and profile are read back', () => {
     assert.deepStrictEqual([inVote.body.stageNotes.page, inVote.body.stageNotes.pages, inVote.body.stageNotes.rev], [1, 3, 2]);
     assert.strictEqual(inVote.body.stageProfile, 'tv');
@@ -384,7 +384,7 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   put({ PK: `GAME#${VOTE_GAME}`, SK: 'STATE', State: 'RESULTS#001', LessonNumber: 1, StageProfile: 'tv' });
   const atResults = await call(HOST_ROUTE, VOTE_GAME, { authorizer: hostOf(ORG) });
   await check('on RESULTS the VOTE-stamped focus reads none', () =>
-    assert.deepStrictEqual(atResults.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 4 }));
+    assert.deepStrictEqual(atResults.body.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 4, join: false }));
 
   say('\n7. the room\'s window and the host\'s notes ride the host door only (host console spec §3.4, §4.2)');
   const NOTES_GAME = '6104';

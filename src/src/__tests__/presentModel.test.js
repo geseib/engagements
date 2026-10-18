@@ -1,4 +1,4 @@
-import { presentModel } from '../present/presentModel';
+import { presentModel, ordinal, ladderOf, voteChipsOf } from '../present/presentModel';
 
 const Q = { title: 'What should we stop doing', detail: 'Name one habit.', category: 'Retro', setRoundNoun: null };
 const base = (over = {}) => ({
@@ -162,14 +162,103 @@ describe('presentModel: the moment', () => {
   });
 });
 
-describe('the join code mid-session (owner, 2026-10-13)', () => {
-  it('a join focus during a round shows the code, the QR address and the room count', () => {
-    const m = presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'join', index: null, part: 0, parts: 1, phase: null, rev: 2 } }),
-      { origin: 'https://engage.dev.seibtribe.us' });
+describe('the QR beside the moment (owner, 18 Oct 2026: "it moves the screen around a bit so all content is there")', () => {
+  const ORIGIN = { origin: 'https://engage.dev.seibtribe.us' };
+  it('stageFocus.join during a round keeps the moment and carries the join facts beside it', () => {
+    const m = presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'none', index: null, join: true } }), ORIGIN);
+    expect(m.moment).toBe('VOTING');
+    expect(m.join.code).toBe('5479');
+    expect(m.join.joinUrl).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
+    expect(m.join.joinHost).toBe('engage.dev.seibtribe.us/play');
+    expect(m.join.joined).toBe(5);
+  });
+  it('a legacy focus of join reads the same way', () => {
+    const m = presentModel(base({ state: 'ASK#005', stageFocus: { focus: 'join', index: null } }), ORIGIN);
+    expect(m.moment).toBe('ANSWERING');
+    expect(m.join.code).toBe('5479');
+  });
+  it('the QR sits beside an answer put up, and beside the results', () => {
+    const vote = presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'answer', index: 1, phase: 'VOTE', join: true } }), { ...ORIGIN, answers: NAMED });
+    expect(vote.moment).toBe('VOTE_RESPONSE');
+    expect(vote.join).toBeTruthy();
+    const results = presentModel(base({ state: 'RESULTS#005', stageFocus: { focus: 'none', join: true } }), ORIGIN);
+    expect(results.moment).toBe('RESULTS');
+    expect(results.join).toBeTruthy();
+  });
+  it('a moment with nothing of its own gives the wall to the join code whole', () => {
+    const m = presentModel(base({ state: 'RESULTS#005', stageBeat: 'field-notes', stageFocus: { focus: 'none', join: true } }), ORIGIN);
     expect(m.moment).toBe('JOIN');
     expect(m.code).toBe('5479');
-    expect(m.joinUrl).toBe('https://engage.dev.seibtribe.us/play?gameId=5479');
-    expect(m.joined).toBe(5);
     expect(m.roundLabel).toBe('Round 5');
+  });
+  it('join: false, or no round, is no panel', () => {
+    expect(presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'none', join: false } }), ORIGIN).join).toBeUndefined();
+    expect(presentModel(base({ state: 'CREATED', stageFocus: { focus: 'none', join: true } }), ORIGIN).join).toBeUndefined();
+  });
+});
+
+describe('voting opens on all the answers when they fit (owner, 18 Oct 2026, frame 4)', () => {
+  const SHORT = [{ answer: 'Shadow mode for two weeks.' }, { answer: 'A buddy for the first on-call.' }, { answer: 'Feature flags at 1%, 10%, 50%.' }];
+  it('every answer, whole and numbered, no name; the overview flag for the keys', () => {
+    const m = presentModel(base({ state: 'VOTE#005', roomCounts: { joined: 5, answered: 3, voted: 1 } }), { answers: SHORT.map((a, i) => ({ ...a, playerName: `P${i}` })) });
+    expect(m.moment).toBe('VOTING');
+    expect(m.overview).toBe(true);
+    expect(m.total).toBe(3);
+    expect(m.answers).toEqual(SHORT.map((a, i) => ({ n: i + 1, text: a.answer })));
+    expect(JSON.stringify(m)).not.toMatch(/P0|P1|P2|points/);
+    expect(m.counts.line).toBe('1 of 5 voted');
+  });
+  it('when they do not fit, answer 1 is up as before, and the model says so', () => {
+    const long = Array.from({ length: 7 }, (_, i) => ({ answer: `Answer ${i} is long enough to count. `.repeat(3) }));
+    const m = presentModel(base({ state: 'VOTE#005' }), { answers: long });
+    expect(m.moment).toBe('VOTE_RESPONSE');
+    expect(m.overview).toBe(false);
+    expect(m.index).toBe(0);
+  });
+  it('an answer put up while voting is the one up, with chips for where it sits', () => {
+    const m = presentModel(base({ state: 'VOTE#005', stageFocus: { focus: 'answer', index: 2, phase: 'VOTE' } }), { answers: SHORT });
+    expect(m.moment).toBe('VOTE_RESPONSE');
+    expect(m.overview).toBe(true);
+    expect(m.chips.map((c) => [c.n, c.current])).toEqual([[1, false], [2, false], [3, true]]);
+  });
+});
+
+describe('one result up (frame 12)', () => {
+  const TALLY = { voteTallies: { 0: { playerName: 'Maya', answerText: 'A', totalScore: 4 }, 1: { playerName: 'Sam', answerText: 'B', totalScore: 8 } } };
+  it('carries its place and a ladder of shares; names hidden means no points anywhere', () => {
+    const m = presentModel(base({ state: 'RESULTS#005', stageFocus: { focus: 'answer', index: 1, phase: 'RESULTS' } }), { results: TALLY });
+    expect(m.moment).toBe('RESPONSES');
+    expect(m.place).toBe('2nd');
+    expect(m.ladder.map((r) => [r.label, r.share, r.current, r.points])).toEqual([['1', 1, false, null], ['2', 0.5, true, null]]);
+    expect(m.credit).toBeNull();
+    expect(JSON.stringify(m)).not.toMatch(/Maya|Sam/);
+  });
+  it('a named round adds the credit', () => {
+    const m = presentModel(base({ state: 'RESULTS#005', authorsRevealed: true, stageFocus: { focus: 'answer', index: 0, phase: 'RESULTS' } }), { results: TALLY });
+    expect(m.place).toBe('1st');
+    expect(m.credit).toBe('8 points — Sam');
+  });
+});
+
+describe('the small helpers behind frames 11 and 12', () => {
+  it('ordinal says a place out loud', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 103].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '103rd']);
+  });
+  const rows = (n) => Array.from({ length: n }, (_, i) => ({ n: i + 1, share: 1 - i * 0.1, top: i === 0, points: null }));
+  it('the ladder shows up to five rungs and folds the rest into a range', () => {
+    expect(ladderOf(rows(4), 1).map((r) => r.label)).toEqual(['1', '2', '3', '4']);
+    expect(ladderOf(rows(9), 1).map((r) => r.label)).toEqual(['1', '2', '3', '4', '5–9']);
+    expect(ladderOf(rows(9), 6).map((r) => [r.label, r.current])).toEqual([
+      ['1', false], ['2', false], ['3', false], ['4–6', false], ['7', true], ['8–9', false],
+    ]);
+    expect(ladderOf(rows(6), 5).map((r) => r.label)).toEqual(['1', '2', '3', '4–5', '6']);
+  });
+  it('the chips are every number up to twelve, else a window with an ellipsis', () => {
+    expect(voteChipsOf(3, 1).map((c) => c.n)).toEqual([1, 2, 3]);
+    const long = voteChipsOf(30, 15);
+    expect(long[0].gap).toBe(true);
+    expect(long[long.length - 1].gap).toBe(true);
+    expect(long.filter((c) => !c.gap)).toHaveLength(11);
+    expect(long.find((c) => c.current).n).toBe(16);
   });
 });

@@ -94,7 +94,10 @@ export function FillCue({ placed }) {
 
 export function presentFitKey(model) {
   const rows = Array.isArray(model.rows) ? model.rows.map((r) => (r && (r.idea || r.label)) || '').join('\u241E') : '';
-  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task]
+  // The voting overview's answers and the QR panel change the layout too.
+  const answers = Array.isArray(model.answers) ? model.answers.map((a) => (a && a.text) || '').join('\u241E') : '';
+  const join = model.join ? 'qr' : '';
+  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task, answers, join]
     .map((x) => (x === undefined ? '' : String(x))).join('|');
 }
 
@@ -140,11 +143,14 @@ function CallPresentPage() {
   const total = Number.isInteger(model.total) && model.total > 0
     ? model.total
     : Number(snapshot && snapshot.roomCounts && snapshot.roomCounts.answered) || 0;
+  // Does every answer fit the voting overview? Decided once, in the model
+  // (config/roomContent.js overviewFits), so the keys and the wall agree.
+  const overview = Boolean(model.overview);
   const controls = usePresentControls({
-    gameId, snapshot, total, refetch, notesReady: model.moment !== 'READ_WAIT',
+    gameId, snapshot, total, overview, refetch, notesReady: model.moment !== 'READ_WAIT',
   });
-  // A CLICK ANYWHERE TAKES THE JOIN CODE DOWN (owner, 2026-10-13), as J does,
-  // for a host who may drive the session; the strip and the ask keep their own.
+  // A CLICK ANYWHERE TAKES THE QR DOWN (owner, 2026-10-13), as J does, for a
+  // host who may drive the session; the strip and the ask keep their own.
   const { joinShown, armed, toggleJoin } = controls;
   useEffect(() => {
     if (!joinShown || !armed) return undefined;
@@ -193,7 +199,7 @@ function CallPresentPage() {
           onClick={controls.toggleJoin}
           disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
         >
-          {controls.joinShown ? 'Hide join code (J)' : 'Join code (J)'}
+          {controls.joinShown ? 'Hide QR (J)' : 'Show QR (J)'}
         </Button>
         <Button variant="action" className="present-strip-btn is-go" onClick={controls.forward}>Forward ›</Button>
       </div>

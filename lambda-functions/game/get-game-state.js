@@ -194,7 +194,7 @@ exports.handler = async (event) => {
       the wall (D5).
     */
     const NO_FOCUS_HERE = { focus: 'none', index: null, part: 0, parts: 1, phase: null };
-    let stageFocus = { ...NO_FOCUS_HERE, rev: 0 };
+    let stageFocus = { ...NO_FOCUS_HERE, rev: 0, join: false };
     const phaseNow = (/^(VOTE|RESULTS)#/.exec(String(currentState)) || [])[1] || null;
     /*
       WORKIE'S PAGE (two-surface PLAN 1.9/1.11): stored on ROUND# by
@@ -257,10 +257,16 @@ exports.handler = async (event) => {
         };
         const storedFocus = notesRow.StageFocus;
         const focusRev = Number.isInteger(notesRow.StageFocusRev) ? notesRow.StageFocusRev : 0;
-        stageFocus = { ...NO_FOCUS_HERE, rev: focusRev };
-        if (storedFocus === 'question' || storedFocus === 'join') {
-          // The question enlarged, or the join code and QR on the wall.
-          stageFocus = { ...NO_FOCUS_HERE, focus: storedFocus, rev: focusRev };
+        /*
+          THE QR SIDE PANEL (owner, 18 Oct 2026; stage-focus.js joinOfRow):
+          `StageJoin` once written, independent of the focus; a legacy row
+          whose focus is 'join' reads as the panel up and no focus.
+        */
+        const join = typeof notesRow.StageJoin === 'boolean' ? notesRow.StageJoin : storedFocus === 'join';
+        stageFocus = { ...NO_FOCUS_HERE, rev: focusRev, join };
+        if (storedFocus === 'question') {
+          // The question enlarged.
+          stageFocus = { ...NO_FOCUS_HERE, focus: storedFocus, rev: focusRev, join };
         } else if (storedFocus === 'answer' && Number.isInteger(notesRow.StageFocusIndex)) {
           const stamped = notesRow.StageFocusPhase || 'RESULTS';
           if (FOCUS_PHASES.includes(stamped) && stamped === phaseNow) {
@@ -269,7 +275,7 @@ exports.handler = async (event) => {
             const part = Number.isInteger(notesRow.StageFocusPart) && notesRow.StageFocusPart >= 0
               && notesRow.StageFocusPart < parts ? notesRow.StageFocusPart : 0;
             stageFocus = {
-              focus: 'answer', index: notesRow.StageFocusIndex, part, parts, phase: stamped, rev: focusRev,
+              focus: 'answer', index: notesRow.StageFocusIndex, part, parts, phase: stamped, rev: focusRev, join,
             };
           }
         }

@@ -31,7 +31,8 @@ import { tallyOrder } from '../config/navigatorOrder';
 import { authorsHiddenNow } from '../config/anonymity';
 import { PROFILES, DEFAULT_PROFILE } from '../config/displayProfile';
 import { resolveInstruction } from '../config/instructions';
-import { roomContentFor, questionRoomData } from '../config/roomContent';
+import { roomContentFor, questionRoomData, overviewFits, textOf } from '../config/roomContent';
+import { joinShown } from '../config/stageFocus';
 
 /*
   THE TEAM'S TASK, the line the room is answering (session 7924, finding #4).
@@ -84,13 +85,71 @@ function countsOf(snapshot, which) {
   return { done, of, line };
 }
 
+const hiddenNow = (snapshot) => authorsHiddenNow({
+  gameType: snapshot.gameType,
+  anonymousUntilReveal: true,
+  authorsRevealed: snapshot.authorsRevealed,
+});
+
+/** "1st", "2nd", "3rd", "11th": a place said out loud. */
+export function ordinal(n) {
+  const k = Math.abs(int(n));
+  const teen = k % 100 >= 11 && k % 100 <= 13;
+  const suffix = teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[k % 10] || 'th');
+  return `${k}${suffix}`;
+}
+
+/**
+ * WHERE ONE RESULT SITS (docs/design/room-content-v2 frame 12): a short ladder
+ * of bars, the pick at the top, the one on the wall marked. Up to five rungs;
+ * the rest fold into a range ("5–9"). Bars are the share of the pick's backing,
+ * never a count; `points` is filled only where names show.
+ */
+export function ladderOf(rows, index) {
+  const total = rows.length;
+  const rung = (i) => ({
+    key: `r${i}`, label: String(rows[i].n), share: rows[i].share, top: Boolean(rows[i].top),
+    current: i === index, points: rows[i].points === undefined ? null : rows[i].points,
+  });
+  const out = [];
+  const fold = (a, b) => {
+    if (a > b) return;
+    if (a === b) { out.push(rung(a)); return; }
+    out.push({ key: `f${a}`, label: `${a + 1}–${b + 1}`, share: rows[a].share, range: true, current: false, points: null });
+  };
+  if (total <= 5) {
+    rows.forEach((_, i) => out.push(rung(i)));
+  } else if (index < 4) {
+    [0, 1, 2, 3].forEach((i) => out.push(rung(i)));
+    fold(4, total - 1);
+  } else {
+    [0, 1, 2].forEach((i) => out.push(rung(i)));
+    fold(3, index - 1);
+    out.push(rung(index));
+    fold(index + 1, total - 1);
+  }
+  return out;
+}
+
+/**
+ * THE CHIPS UNDER AN ANSWER PUT UP WHILE VOTING (frame 11): every answer's
+ * number, the one on the wall marked. Twelve at most; a longer round shows the
+ * eleven around the one up, with an ellipsis at a cut end. Numbers only.
+ */
+export function voteChipsOf(total, index) {
+  const n = Math.max(0, int(total));
+  if (n <= 12) return Array.from({ length: n }, (_, i) => ({ key: `c${i}`, n: i + 1, current: i === index }));
+  const start = Math.max(0, Math.min(index - 5, n - 11));
+  const chips = [];
+  if (start > 0) chips.push({ key: 'gap-a', gap: true });
+  for (let i = start; i < start + 11; i += 1) chips.push({ key: `c${i}`, n: i + 1, current: i === index });
+  if (start + 11 < n) chips.push({ key: 'gap-b', gap: true });
+  return chips;
+}
+
 /** The tally rows, named or not, each with its own text. */
 function tallyRows(snapshot, results) {
-  const hidden = authorsHiddenNow({
-    gameType: snapshot.gameType,
-    anonymousUntilReveal: true,
-    authorsRevealed: snapshot.authorsRevealed,
-  });
+  const hidden = hiddenNow(snapshot);
   const order = tallyOrder(results && results.voteTallies, []);
   // The share bar is the room's backing relative to the top idea: a proportion,
   // never a score, so it stays in a round whose names (and points) are hidden.
@@ -110,6 +169,7 @@ function tallyRows(snapshot, results) {
       credit: points === null ? null : RW.backedCredit(points, named ? String(row.playerName) : ''),
       share: top > 0 ? int(row.points) / top : 0,
       top: i === 0 && top > 0,
+      place: ordinal(i + 1),
       named: Boolean(named),
     };
   });
@@ -222,28 +282,46 @@ function momentModel(snapshot, reads = {}) {
   const q = snapshot.currentQuestionData || {};
   const state = String(snapshot.state || '');
 
-  // VOTING SHOWS THE RESPONSES (owner, 2026-10-13: "when going to vote, we
-  // should automatically get the response screens up. but it should say Vote
-  // on your device"). Response 1 is up from the start; a VOTE-stamped answer
-  // focus moves it on. The join code and the question still take the wall when
-  // a host puts them up.
-  const votingFocus = focus.focus === 'answer' && focus.phase === 'VOTE' ? focus : { index: 0, part: 0, parts: 1 };
-  if (/^VOTE#/.test(state) && focus.focus !== 'join' && focus.focus !== 'question') {
+  /*
+    VOTING OPENS ON ALL THE ANSWERS WHEN THEY FIT (owner, 18 Oct 2026,
+    docs/design/room-content-v2 frame 4 and question 5, replacing 13 Oct's
+    "Response 1 is on the wall from the start"): every answer whole, numbered,
+    no tally. When they do not fit on one page (config/roomContent.js
+    overviewFits, the same test the keys use) answer 1 is up, as before. A
+    VOTE-stamped answer focus puts one up either way (frame 11). The question
+    still takes the wall when a host puts it up.
+  */
+  const votingFocus = focus.focus === 'answer' && focus.phase === 'VOTE' ? focus : null;
+  if (/^VOTE#/.test(state) && focus.focus !== 'question') {
     const rows = voteRows(reads.answers);
     if (rows.length) {
+      const overview = overviewFits(rows.map((r) => r.text), profile);
+      const counts = countsOf(snapshot, 'voted');
+      if (overview && !votingFocus) {
+        return {
+          moment: 'VOTING',
+          ...common,
+          title: String(q.title || ''),
+          task: taskOf(q, snapshot),
+          overview: true,
+          answers: rows.map((r) => ({ n: r.n, text: r.text })),
+          total: rows.length,
+          lead: RW.voteOnDevice,
+          counts,
+        };
+      }
+      const nav = navigatorOf(rows, votingFocus || { index: 0, part: 0, parts: 1 }, { vote: true });
       return {
         moment: 'VOTE_RESPONSE',
         ...common,
         title: String(q.title || ''),
         task: taskOf(q, snapshot),
-        ...navigatorOf(rows, votingFocus, { vote: true }),
-        counts: countsOf(snapshot, 'voted'),
+        ...nav,
+        overview,
+        chips: voteChipsOf(nav.total, nav.index),
+        counts,
       };
     }
-  }
-  // THE JOIN CODE, put up mid-session from any host surface (owner, 2026-10-13).
-  if (focus.focus === 'join' && /^(ASK|VOTE|RESULTS)#/.test(state)) {
-    return { moment: 'JOIN', ...common, ...joinFacts(snapshot, reads, common.gameId) };
   }
   if (focus.focus === 'question' && /^(ASK|VOTE|RESULTS)#/.test(state)) {
     return { moment: 'QUESTION_FOCUS', ...common, category: q.category || '', title: String(q.title || ''), task: taskOf(q, snapshot), story: storyOf(q) };
@@ -296,13 +374,28 @@ function momentModel(snapshot, reads = {}) {
         rows: rows.slice(0, show),
         more: rows.length - show,
         total: rows.length,
+        hidden: hiddenNow(snapshot),
         voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),
       };
     }
     case 'RESPONSES': {
       const rows = tallyRows(snapshot, reads.results);
       if (!rows.length) return { moment: 'RESULTS', ...common, title: String(q.title || ''), loading: true, rows: [], more: 0, total: 0, voted: 0 };
-      return { moment, ...common, title: String(q.title || ''), ...navigatorOf(rows, focus, { vote: false }) };
+      const nav = navigatorOf(rows, focus, { vote: false });
+      const row = rows[nav.index];
+      // ONE RESULT UP (frame 12): its place and where it sits; the credit
+      // (name and points) only where the round shows names.
+      return {
+        moment,
+        ...common,
+        title: String(q.title || ''),
+        ...nav,
+        place: row.place,
+        credit: row.credit,
+        hidden: hiddenNow(snapshot),
+        ladder: ladderOf(rows, nav.index),
+        voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),
+      };
     }
     case 'READ': {
       const md = reads.summary && (reads.summary.markdownResponse || reads.summary.summaryText || reads.summary.summary);
@@ -345,9 +438,31 @@ function momentModel(snapshot, reads = {}) {
 */
 const ROOM_MOMENT = { JOIN: 'LOBBY', READ_WAIT: 'READ' };
 
+/*
+  THE QR AS A SIDE PANEL (owner, 18 Oct 2026: "whenever the host wants to show
+  the qr code. it moves the screen around a bit so all content is there but
+  the qr code is avail"; frames 9-10). `stageFocus.join` is its own fact on the
+  server, beside the focus, so the moment stays what it is and carries `join`
+  (the lobby's address, code and QR); the wall draws it in a narrower column
+  with the panel on the right. A moment with nothing of its own to show
+  (Workie still writing, a beat this wall does not draw) gives the wall to the
+  join code whole, as before. The lobby is the join already.
+*/
+const JOIN_TAKES_THE_WALL = ['READ_WAIT', 'OTHER', 'WAITING'];
+const NO_JOIN_PANEL = ['LOBBY', 'JOIN', 'ENDED', 'NOT_FOUND'];
+
+function withJoin(model, snapshot, reads) {
+  if (!joinShown(snapshot.stageFocus) || !/^(ASK|VOTE|RESULTS)#/.test(String(snapshot.state || ''))) return model;
+  if (NO_JOIN_PANEL.includes(model.moment)) return model;
+  const facts = joinFacts(snapshot, reads, model.gameId);
+  if (JOIN_TAKES_THE_WALL.includes(model.moment)) return { ...model, moment: 'JOIN', ...facts };
+  return { ...model, join: facts };
+}
+
 export function presentModel(snapshot, reads = {}) {
-  const model = momentModel(snapshot, reads);
-  if (!snapshot || typeof snapshot !== 'object' || snapshot.notFound) return model;
+  const base = momentModel(snapshot, reads);
+  if (!snapshot || typeof snapshot !== 'object' || snapshot.notFound) return base;
+  const model = withJoin(base, snapshot, reads);
   const q = snapshot.currentQuestionData || {};
   const cue = model.moment === 'VOTING' ? model.lead : RW.voteOnDevice;
   const room = roomContentFor(ROOM_MOMENT[model.moment] || model.moment, model.profile, questionRoomData(q, {
@@ -356,7 +471,9 @@ export function presentModel(snapshot, reads = {}) {
     roundLabel: model.roundLabel,
     cue,
   }));
-  return { ...model, room };
+  // The host's way into the discussion (config/roomContent.js TALK_LINE).
+  const talk = model.moment === 'RESULTS' ? textOf(room, 'talk') || '' : undefined;
+  return talk === undefined ? { ...model, room } : { ...model, room, talk };
 }
 
 export default presentModel;
