@@ -115,9 +115,11 @@ bundle with long content (six entries of 130–320 characters) at **1280×720, 1
 - **Only what the room needs now, large and readable** (owner, 17 Oct). One function
   decides it for every room screen, one screen and two, C&A and Build Room:
   `config/roomContent.js` `roomContentFor(moment, profile, data)`. While a question or
-  lesson is up the lesson leads at the profile's primary step and the task sits under it
-  (owner, 18 Oct: the room must see the lesson, not only what to do); Call may carry more
-  (the title as a heading, the category, an ask's detail); in a Build Room Claude's status is on
+  lesson is up the title leads, the lesson sits under it and is never dropped, and the
+  question to answer is one "Your turn" band; a generic instruction is left off (owner,
+  18 Oct: "the instructions is the optional one"). Voting shows what is voted on; results
+  put the bars behind the answers. Call may carry more (the generic line, an ask's detail,
+  Workie's read beside the results); in a Build Room Claude's status is on
   every screen and never dropped. The decisions table is in the module's header and
   `docs/design/parity/PLAN.md` §2d.
 - **Content before people.** Results lead with the ideas: the idea in full as the

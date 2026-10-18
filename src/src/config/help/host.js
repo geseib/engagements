@@ -248,7 +248,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The size also decides how much the room is shown. On Room, TV and Table the room sees only what it needs, large: when a question or lesson is up, the lesson leads, with the task under it and the title as a small label above. Call, read on people\'s own screens, adds the title as a heading and the category. In a Build Room the ask and its options lead, a long one pages, and Claude\'s status line is always there. The same rule holds on one screen and on the room\'s window.',
+          text: 'The size also decides how much the room is shown. On every size the room sees only what it needs, large. When a question or lesson is up, the title and the lesson lead, and the question to answer sits in a "Your turn" band; the general instruction ("answer on your phone") is left off, because the top line already says where to answer. While voting the room sees every answer, numbered, or one at a time when they are long; at results the room\'s pick reads in full with the bars behind the answers, and no vote counts while names are hidden. Call, read on people\'s own screens, adds the general instruction. In a Build Room each option shows its detail, the tally stays hidden until the vote closes, a long ask pages, and Claude\'s status line is always there. Show the QR puts the join code in a panel beside what is up, instead of covering it; click an answer, or step with → and ←, to put one up, and Esc goes back to all of them. The same rule holds on one screen and on the room\'s window.',
         },
         { t: 'h', text: 'Names' },
         {

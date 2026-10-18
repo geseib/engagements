@@ -10,7 +10,7 @@ These frames replace `docs/design/room-content/`. The owner rejected those on 18
 > the expense of seeing what was voted on. think of what is important to take away and
 > discuss. then think how do i make it really visually engaging and informative quickly."
 
-This is a static mockup (`index.html`). **Nothing here is built yet.** Dev is partway there:
+This is the mockup (`index.html`) the build follows, approved by the owner 18 Oct ("agree with all three, go build it on dev"). Dev is partway there:
 `39bd137c` (another session, 18 Oct) already makes the lesson lead on every profile, with the
 task under it labelled "The task". This mockup goes further (the title as hero, a "Your turn"
 band) and builds on that commit rather than on the 17 Oct rule.

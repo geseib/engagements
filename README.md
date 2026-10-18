@@ -102,7 +102,7 @@ screenshots reach the room only after the host releases them from the queue
 (`POST …/build/posts`; the `reviewAgentPosts` setting, on by default).
 
 What every room screen shows, per moment and room screen size, is decided in one place:
-`src/src/config/roomContent.js` (the task leads on Room, TV and Table; Call says more).
+`src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
 
 ## Documentation
 

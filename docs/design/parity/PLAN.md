@@ -634,24 +634,26 @@ read it. Call is the one verbose profile; Room, TV and Table carry only what is 
 | Moment | Room / TV / Table | Call |
 |---|---|---|
 | Lobby | **Lead:** the session title, large, with the event details under it; the QR at the right with the address and code under it. Count | same |
-| A question or lesson is up (answering, the question put back) | **Lead: the lesson** (the task when there is none), primary step (hero when short), never dropped. The task under it at the secondary step, labelled "The task", never dropped. Title as a small kicker (not when it repeats the lead). Category dropped. Count | Category kicker, title as a heading, **lead: the lesson**, the task, count |
-| Voting | **Lead:** "N answers are on your phone…". The task as one slim line (may give way). Title dropped. Count | + the title |
-| A response on the wall (voting) | **Lead:** the response. "Vote on your …" kicker, the task slim (may give way), count | the task kept |
-| Results | **Lead:** the ideas. The task slim (first to give way). Counts | + the title kicker, the task kept |
+| A question or lesson is up (answering, the question put back) | **Lead: the title** (hero when short). **The lesson** under it at the secondary step, never dropped. **"Your turn"**: the question's own instruction, or the question pulled from the front of the lesson, never dropped. A generic instruction is left off. Category as a small eyebrow. Count | same, + the generic instruction as a line that may give way |
+| Voting | **Lead: every answer, whole and numbered** (all at once when `overviewFits`, else one at a time from answer 1). The title as the reminder. No tally. Count | same |
+| A response on the wall (voting) | **Lead:** the one answer the host put up, with chips showing where it sits. Title in the top line. Count | same |
+| Results | **Lead: the pick in full**, the runners-up with their text, the bar the fill behind each, relative to the pick. **No counts where names are hidden.** The title as the reminder; the talk line (first to give way). Counts | same |
 | Responses, Workie's read | **Lead:** the response, the page | same |
 | Feedback | **Lead:** the ask, or the comment put up. The round's title as the reminder (kicker) | same |
 | A question for the room | **Lead:** the question and its options. Kind kicker, count | same |
 | Ended | **Lead:** thanks. Session title | same |
 | Top line | the round (the session title only in the lobby and at the end) | session title and round |
-| Build Room: an ask (live, voting) | **Lead:** the prompt and the option titles (secondary step or larger; a long ask pages). Claude's status (support, essential). Count | + the ask's detail and each option's detail (first to give way) |
-| Build Room: results | as an ask, with the tally | + the room's reasons (first to give way) |
+| Build Room: an ask (live, voting) | **Lead:** the prompt and the option titles (secondary step or larger; a long ask pages), each option's detail under it (first to give way). **No tally while open.** Claude's status (support, essential). Count | + the ask's detail |
+| Build Room: results | as an ask, the tally rising inside the options, the pick marked with the room's best reason; "Sent to Claude" | same |
 | Build Room: the wheel | **Lead:** the prompt and the wheel (scales with the fitter). Claude's status | + the detail |
 | Build Room: between asks | **Lead: Claude's status** (headline, the doing line and its duration, the helper and activity lines); the newest picture and the last decision as support | same |
 | Build Room: a talking point, the run list | **Lead:** the point; the run list and its current step (essential). Claude's status | same |
 | Build Room: History, Build | **Lead:** the story (newest that fit, "and N earlier"); the newest screenshot. Claude's status at the top | same |
 | Build Room: codes, crew board, the brief | **Lead:** what the host put up. Claude's status | same |
 
-**Changed 18 Oct** (owner: "for the rounds for the answer phase neither the host nor the room sees the actual lesson instead we tell them what to do"): the lesson leads and the task sits under it, on every profile; until then the task led and a question with its own instruction dropped the lesson. The lobby leads with the session title and its details ("why is the title of the session tiny").
+**Changed again 18 Oct, afternoon** (owner: "you provided the biggest text with the generic room instructions, not the changing lesson … the instructions is the optional one. the title often is nice to have big too"; and "nice to see a bar chart results but not at the expense of seeing what was voted on"). Mockup and reasoning: `docs/design/room-content-v2/`. The title and the lesson lead; the question goes in "Your turn"; voting shows every answer; results put the bars behind the answers with no counts where names are hidden; Build Room options keep their detail on every profile and hide the tally until the vote closes. Two host moves: the QR as a side panel beside the content (`stageFocus.join`), and putting one answer or result up.
+
+**Changed 18 Oct, morning** (owner: "for the rounds for the answer phase neither the host nor the room sees the actual lesson instead we tell them what to do"): the lesson leads and the task sits under it, on every profile; until then the task led and a question with its own instruction dropped the lesson. The lobby leads with the session title and its details ("why is the title of the session tiny").
 
 **Claude's status** is essential on every Build Room moment and profile, on one screen
 and on the room's window, on Stage, Build and History (`screens/ClaudeStatus.jsx`): never
@@ -670,9 +672,7 @@ Stage, the first page and "and 3 more options on your phone" on the room's windo
 server fact carries an option page; §5 lever 3). Measurements and before/after pictures:
 `docs/design/room-content/README.md`.
 
-**For the owner:** (1) the lesson on Room for a question with its own instruction is
-dropped (the title stays as the kicker); if a set's instructions lean on the lesson, the
-set should leave the instruction generic or this rule changes in one line. (2) The room's
+**For the owner:** (1) settled 18 Oct: the lesson is never dropped. (2) The room's
 window cannot page a long ask (no server fact); a `build/wall` option page the host's ↑ ↓
 publishes would let it follow, as `/stage-focus` does for C&A.
 
