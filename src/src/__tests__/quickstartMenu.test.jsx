@@ -229,3 +229,73 @@ describe('a plan limit lands in the sheet, not in a browser alert', () => {
     alertSpy.mockRestore();
   });
 });
+
+/* WHERE THE ROOM WATCHES, AND THE WINDOW OPENING WITH THE SESSION (owner, 18
+   Oct 2026: Quick start "doesnt let you know what screen mode its in or allow
+   you to pick. if its auto to two screen its not opening the second browser
+   window"). rejects: a mode chosen in another visit applied unseen; no way to
+   change it here; on two screens, no room's window; the window opened after
+   an await (a browser blocks that popup); a window left open, blank, when the
+   session failed. */
+describe('screen mode in Quick start', () => {
+  let popup;
+  beforeEach(() => {
+    popup = { location: { href: 'about:blank' }, close: jest.fn(), opener: 'x' };
+    window.open = jest.fn(() => popup);
+  });
+
+  test('shows the current mode and changes it with one press', async () => {
+    const onRoomScreen = jest.fn();
+    renderMenu({ roomScreen: 'two', onRoomScreen });
+    const two = await screen.findByRole('button', { name: 'Two screens' });
+    expect(two).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'One screen' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'One screen' }));
+    expect(onRoomScreen).toHaveBeenCalledWith('classic');
+  });
+
+  test('not chosen yet: says so, neither pressed', async () => {
+    renderMenu({ roomScreen: null, onRoomScreen: jest.fn() });
+    await screen.findByRole('button', { name: 'Two screens' });
+    expect(screen.getByText(/Not chosen yet/)).toBeInTheDocument();
+  });
+
+  test('two screens: the room\'s window opens inside the press, then goes to the session', async () => {
+    const order = [];
+    window.open = jest.fn(() => { order.push('open'); return popup; });
+    const realImpl = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts) => { if (opts && opts.method === 'POST') order.push(`post ${String(url).replace(/.*games/, 'games')}`); return realImpl(url, opts); });
+    const { onGameCreated } = renderMenu({ roomScreen: 'two', onRoomScreen: jest.fn() });
+    fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
+    await waitFor(() => expect(onGameCreated).toHaveBeenCalled());
+    expect(order[0]).toBe('open');
+    expect(window.open).toHaveBeenCalledWith('about:blank', 'engage-room', expect.stringContaining('popup'));
+    expect(popup.location.href).toBe('/present?gameId=4821&placed=1');
+  });
+
+  test('one screen: no window', async () => {
+    const { onGameCreated } = renderMenu({ roomScreen: 'classic', onRoomScreen: jest.fn() });
+    fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
+    await waitFor(() => expect(onGameCreated).toHaveBeenCalled());
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  test('the session fails to start: the blank window closes again', async () => {
+    window.alert = jest.fn();
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: SETS }) };
+      if (String(url).endsWith('/start')) return { ok: false, json: async () => ({}) };
+      return { ok: true, json: async () => ({ gameId: '4821' }) };
+    });
+    renderMenu({ roomScreen: 'two', onRoomScreen: jest.fn() });
+    fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
+    await waitFor(() => expect(popup.close).toHaveBeenCalled());
+  });
+
+  test('a blocked popup says where to open the window instead', async () => {
+    window.open = jest.fn(() => null);
+    renderMenu({ roomScreen: 'two', onRoomScreen: jest.fn() });
+    fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/blocked the room's window/);
+  });
+});
