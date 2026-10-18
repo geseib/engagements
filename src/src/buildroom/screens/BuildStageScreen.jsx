@@ -53,7 +53,9 @@ import { RunStage } from '../BuildRun';
 import { CrewBoard, EarlyLook, featuredShare } from '../BuildCrew';
 import { WallCodes, wifiLink, demoOnStage } from '../BuildWifiShare';
 import { dialogOpen } from '../useNextFocus';
-import { stageModel, isPointsVote } from '../buildScreens';
+import {
+  stageModel, isPointsVote, sentStageAsk, sentOf,
+} from '../buildScreens';
 import { buildControls } from '../buildControls';
 import useStageMoves from '../useStageMoves';
 import { safeHref } from '../links';
@@ -205,18 +207,25 @@ export default function BuildStageScreen({
   const meterBody = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   const pickable = Boolean(c) && !ended && !codesUp && !crewOn && Boolean(current) && !pointsVote;
+  // FRAME 8 (docs/design/room-content-v2, owner 18 Oct 2026): once the host
+  // sends the room's decision, its result stays up with the "Sent to Claude"
+  // band until Claude says what it is doing (the one I9 state); then the work
+  // row (I10). Drawn only: the host's moves are the quiet moment's, as before.
+  const sentAsk = !current && !codesUp && !crewOn && !ended ? sentStageAsk(room, now) : null;
+  const shownAsk = current || sentAsk;
   // WHAT THE ROOM SEES (config/roomContent.js): the same call on one screen and on the room's window.
   const momentNow = buildMomentOf({
-    current: codesUp || crewOn ? null : current,
+    current: codesUp || crewOn ? null : shownAsk,
     wheel: Boolean(current && m.wheel),
     point: m.point || null,
     run: m.run || null,
-    showing: Boolean(codesUp || crewOn || (!current && room.opening && room.opening.phase === 'opening')),
+    showing: Boolean(codesUp || crewOn || (!shownAsk && room.opening && room.opening.phase === 'opening')),
   });
-  const rc = buildRoomContent(momentNow, profile, room, codesUp || crewOn ? null : current, now);
-  const optSize = current ? optionPageSizeFor(profile, current.options, {
-    height: window.innerHeight, results: current.status === 'results',
+  const rc = buildRoomContent(momentNow, profile, room, codesUp || crewOn ? null : shownAsk, now);
+  const optSize = shownAsk ? optionPageSizeFor(profile, shownAsk.options, {
+    height: window.innerHeight, results: !['live', 'voting'].includes(shownAsk.status),
   }) : 0;
+  const sentWords = sentAsk ? (sentOf(room) || {}).text || '' : '';
   // Claude's line changes height as its words change: the fitter measures again.
   const claudeNow = textOf(rc, 'claude') || {};
   const claudeKey = [claudeNow.headline, claudeNow.dur, claudeNow.helperLine].join('/');
@@ -249,11 +258,11 @@ export default function BuildStageScreen({
         )}
       </section>
     );
-  } else if (current) {
+  } else if (shownAsk) {
     content = (
       <AskStage
-        key={`${current.askId}:${current.status}`}
-        ask={current}
+        key={`${shownAsk.askId}:${shownAsk.status}`}
+        ask={shownAsk}
         room={room}
         host={false}
         busy={Boolean(c && c.busy)}
@@ -296,7 +305,7 @@ export default function BuildStageScreen({
       <Stage
         profile={profile}
         phase={m.phase || ''}
-        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}:${optPage}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : '', claudeKey].join('|')}
+        fitKey={[shownAsk ? `${shownAsk.askId}:${shownAsk.status}:${shownAsk.answerCount}:${shownAsk.voteCount}:${shownAsk.wheel ? shownAsk.wheel.spins.length : 0}:${optPage}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : '', claudeKey, sentWords].join('|')}
         rail={(
           <Rail
             phase={m.phase}
@@ -331,7 +340,7 @@ export default function BuildStageScreen({
             {content}
             {/* Claude's status, essential on every screen the room sees (owner, 17 Oct
                 2026); between asks the IdleStage above IS that status, so not twice. */}
-            {momentNow !== 'BUILD_IDLE' && <ClaudeStatus rc={rc} />}
+            {momentNow !== 'BUILD_IDLE' && <ClaudeStatus rc={rc} sent={sentWords} />}
           </div>
         </div>
       </Stage>
