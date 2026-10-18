@@ -891,7 +891,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.22.0';
+const LATEST_PLUGIN = '1.23.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1565,8 +1565,10 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Which Host alert items the host has seen, on any of their devices. Never Claude's or a phone's.
     ...(isAgent ? {} : { seen: seenOf(room.seen) }),
     agent: agentStatus(room.state, room.keys, now),
-    // The Session panel's "Claude's plugin is out of date" line. Claude and the room never get it.
-    ...(isAgent ? {} : { plugin: pluginView(room.state) }),
+    // The Session panel's plugin line (what runs, whether it is the latest). The
+    // room never gets it; Claude gets only the latest version, to say on connect
+    // whether it is current (owner, 18 Oct: "super informative" about the version).
+    ...(isAgent ? { pluginLatest: LATEST_PLUGIN } : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
     lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),

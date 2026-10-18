@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.22.0';
+const VERSION = '1.23.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -508,9 +508,25 @@ function badgeSnippet(label) {
     `pointer-events:none">Choice ${label}</div>`;
 }
 
+/**
+ * Which plugin is running, and whether it is the latest (owner, 18 Oct): on
+ * connect and in room_status. `latest` comes from Engage; an Engage too old to
+ * say gets the version alone.
+ */
+function pluginVersionLine(latest) {
+  const v = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(latest || '')) ? String(latest) : '';
+  if (!v) return `Engage plugin ${VERSION}.`;
+  const a = VERSION.split('.').map(Number); const b = v.split('.').map(Number);
+  const cmp = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  if (cmp === 0) return `Engage plugin ${VERSION}: the latest.`;
+  if (cmp > 0) return `Engage plugin ${VERSION} (this Engage knows ${v} as its latest).`;
+  return `Engage plugin ${VERSION} is older than the latest, ${v}. Tell the host: they update it from Connect Claude Code in the Build Room, then restart Claude Code here. Until then, features newer than ${VERSION} do not work.`;
+}
+
 function renderState(st) {
   const lines = [];
   lines.push(`Engage Build Room · session ${s(st.gameId) || CONFIG.gameId}${st.title ? ` — ${s(st.title)}` : ''}`);
+  lines.push(pluginVersionLine(st.pluginLatest));
   lines.push(`Goal: ${s(st.goal) || '(no goal set)'}`);
   // THE ROOM DECIDES (owner, 2026-10-07): until the room (or the host) has
   // answered "What are we making?", a title and goal are only a name.
