@@ -29,10 +29,16 @@ Status: research only. Nothing here is built.
    as a research finding, and copies it into `demo/data/` only after the host agrees. Every source
    is recorded in `SOURCES.md`.
 
-**Build order:** (1) the delivery mechanism plus the **dashboard** starter, because the CSV story
-is the one the owner named and it proves the `data/` convention; (2) **infographic**, which reuses
-the charts and data loader; (3) **interactive website**; (4) **training site**; (5) the phone
-**Add a source** flow. The dashboard is useful before step 5: the host can drop a CSV into
+**Build order** (updated 2026-10-18 after the wider search in "More starters from the wild";
+the first step is unchanged): (1) the delivery mechanism plus the **dashboard** starter, because
+the CSV story is the one the owner named and it proves the `data/` convention; (2) **decision
+matrix** and (3) **branching scenario**: both are small, need no library, and show the room
+shaping the result live, so they are the best demos for the least work. The branching
+scenario also becomes the "What would you do?" part of the training site; (4) **infographic**,
+which reuses the charts and data loader; (5) **training site**; (6) **clickable prototype**, which
+replaces the plain "interactive website" because it is the same page with a stronger purpose;
+(7) the phone **Add a source** flow. The rest of the catalogue follows in the order of the
+ranking below. The dashboard is useful before step 7: the host can drop a CSV into
 `demo/data/` by hand.
 
 ## How a Build Room starts today (what the starters plug into)
@@ -156,6 +162,203 @@ Conventions:
   added without touching the code.
 - **Hello content:** "Welcome, new Brightwater volunteer": three short lessons and a quiz each.
 - Optional: CLAUDE.md says how to add a reveal.js slide mode if the room wants slides.
+
+## More starters from the wild
+
+Owner, 2026-10-18: *"find other starters based on what they find on the internet. do some
+digging see what is cool ideas out there."* I looked at explorable explanations, data-journalism
+visual essays, civic budget tools, design-sprint and team-workshop artefacts, roadmap templates,
+event-site template categories, game jams, creative-coding challenges and music toys. The test
+for each one: a room plus Claude can make a working first version in about an hour, as a static
+page with no build step, using only permissive vendored libraries or none.
+
+Some sites (ncase.me, pudding.cool, explorabl.es, revealjs.com) did not resolve from this
+container. Where they are cited, the link comes from search results or other pages about them,
+not from opening the page itself.
+
+**One pattern across nearly all of them:** the content is a small JSON or CSV file that the room
+fills, and Engage's three asks fill it directly. **Ideas** become items, cards, options or
+branches. **Choose** picks the path, the look or the winner. **Rate** sets weights, scores and
+feelings. Each starter's CLAUDE.md should say which file each kind of ask feeds. Most also share
+four small parts: load data, draw a chart, sliders bound to state, and a hash router. Build those
+once as `demo/kit/` and reuse them in every starter.
+
+### The candidates
+
+Each entry gives: what it is · what the room gives · the hello sample (Brightwater Library) ·
+library · effort for Claude in an hour · real examples.
+
+**Explain**
+
+1. **Explorable "what if" simulator.** Sliders change a small model and the picture changes at
+   once, so the reader learns by playing. This is Bret Victor's "explorable explanation" idea,
+   and Nicky Case's *Parable of the Polygons* and *The Evolution of Trust* are the best-known
+   examples ([Wikipedia](https://en.wikipedia.org/wiki/Explorable_explanation),
+   [Evolution of Trust](https://www.exploring-economics.org/en/discover/the-evolution-of-trust/),
+   [Why Simulate?](https://blog.ncase.me/why-simulate/),
+   [awesome-explorables](https://github.com/blob42/awesome-explorables)) · the room gives the
+   question, the rules and which slider matters (Choose) · hello: "Why the queue at the desk
+   grows": arrivals and staff sliders, people drawn as dots · canvas plus Chart.js · medium:
+   the model is the hard part, so keep it to 2 or 3 rules · **wow**.
+2. **Calculator / estimator.** "What would it cost us?" Assumptions as inputs, the answer and a
+   chart update live. The NYT rent-or-buy calculator is the model people praise
+   ([Inman](https://www.inman.com/2014/05/22/new-york-times-raises-the-bar-on-rent-vs-buy-calculators/),
+   [Get Rich Slowly](https://www.getrichslowly.org/the-new-york-times-rent-vs-buy-calculator/))
+   · the room gives the assumptions and argues the defaults (Rate) · hello: "What does one more
+   opening hour cost?" · none plus Chart.js · low. Best as a mode of the simulator, not a
+   starter of its own.
+3. **Timeline.** Dated events with a picture and a line each, scrolling sideways or down.
+   Knight Lab's TimelineJS is the classic. It is MPL-2.0 and reads a JSON file as well as a
+   Google Sheet ([repo](https://github.com/NUKnightLab/TimelineJS3),
+   [Davidson](https://digitallearning.davidson.edu/timelinejs-projects/)) · the room gives the
+   events, dates and image links (Ideas) · hello: "Brightwater Library, 1925 to 2025" · our own
+   CSS timeline over `data/events.json`, because TimelineJS is heavier and loads fonts and
+   media from the network · low.
+4. **Story map.** A map whose places light up as you scroll the story
+   ([Leaflet storymap template](https://github.com/JackDougherty/leaflet-storymap-layers),
+   [Mapbox storytelling](https://labs.mapbox.com/education/impact-tools/interactive-storytelling))
+   · the room gives places, stories and photo links · hello: "Five branches, five stories" ·
+   Leaflet (BSD-2-Clause, about 40 kB gzipped, [repo](https://github.com/Leaflet/Leaflet)).
+   **Catch:** map tiles need the network, and the OpenStreetMap tile policy blocks prefetching
+   and offline use ([policy](https://operations.osmfoundation.org/policies/tiles/)). So the
+   offline version is an SVG outline from Natural Earth, which is public domain
+   ([datahub](https://datahub.io/core/geo-countries)), with live tiles only when the network
+   allows · medium.
+5. **Scrollytelling essay.** Pinned sections whose chart changes as you scroll, like The
+   Pudding's visual essays ([Storybench](https://www.storybench.org/?p=8613),
+   [The Pudding](https://pudding.cool/about)) · Scrollama (MIT, by a Pudding co-founder,
+   [repo](https://github.com/russellsamora/scrollama)) or our own IntersectionObserver code.
+   This is the infographic starter's "story mode", not a separate starter.
+
+**Decide**
+
+6. **Decision matrix.** Options down the side, criteria across the top, a weight slider per
+   criterion, live weighted totals and a winner. Add a "does the winner hold if a weight moves?"
+   check ([Lilly Tech Systems example](https://aischool.lillytechsystems.com/tools/decision-matrix.html))
+   · the room gives options and criteria (Ideas) and the weights (Rate, averaged) · hello:
+   "Where should the new branch go?": 3 sites, 4 criteria · none · low · it turns a vote
+   into an artefact the team keeps and can argue with later.
+7. **Budget balancer.** Spend a fixed pot across categories with sliders; it must balance, and
+   the trade-off shows as you move. Cities run these as "Balancing Act" budget simulators at
+   public budget workshops ([Hartford](https://www.americancityandcounty.com/?p=25634),
+   [Greensboro](https://greensboro-nc.gov/departments/budget-evaluation/budget-simulator),
+   [Courtenay](https://www.courtenay.ca/node/2381)) · the room gives the categories and its
+   priorities, and each phone's split can be averaged into "the room's budget" · hello: "Spend
+   Brightwater's $100,000" · none plus a Chart.js doughnut · low to medium · **wow** at
+   community meetings and offsites.
+8. **Roadmap board (Now / Next / Later).** Cards in three columns, dragged to reorder. It is the
+   common no-dates product roadmap ([Aha!](https://www.aha.io/roadmapping/guide/templates/create/now-next-later-roadmap),
+   [Savio](https://www.savio.io/product-roadmap/now-next-later-roadmaps/)) · it maps exactly to
+   Engage's own build / Later / ideas lanes, and the room's ideas become cards and votes order
+   them · hello: "What Brightwater does next" · SortableJS (MIT, touch support, no framework,
+   [repo](https://github.com/SortableJS/Sortable)) · low.
+9. **Journey map / persona.** Steps of someone's experience across the top, with what they do,
+   feel (a Rate score drawn as a line) and the pain points. This is the "Map" day of a design
+   sprint ([sprint cheat sheet](https://www.dsebastien.net/2021-02-09-design-sprint-2-0-cheatsheet/))
+   · the room gives steps (Ideas) and feelings (Rate) · hello: "A new member's first month" ·
+   own HTML grid. Mermaid (MIT) has a journey diagram, but it is large for one picture
+   ([repo](https://github.com/mermaid-js/mermaid)) · low.
+
+**Play**
+
+10. **Branching scenario ("What would you do?").** A choose-your-own-adventure: a situation,
+    two or three choices, consequences, several endings. Twine is the classic tool, but it is
+    GPL and its story formats carry their own licences
+    ([linuxlinks](https://www.linuxlinks.com/twine/),
+    [twinery forum](https://twinery.org/forum/discussion/comment/8340/)). inkjs runs ink stories
+    in the browser and is MIT ([repo](https://github.com/y-lohse/inkjs)). Simplest is our own
+    20-line engine over `data/story.json` · the room writes branches (Ideas) and **votes the
+    path live** (Choose), with the projector showing the story unfolding · hello: "Your first
+    shift at the desk" · none · low · **wow**, and the strongest core for training.
+11. **Personality quiz ("Which … are you?").** Answers are votes for results; the most-voted
+    result wins ([Dragonfly Cave vote quiz](https://www.dragonflycave.com/free-quiz-scripts/),
+    [Tally template](https://tally.so/templates/personality-quiz-template/mYGlvw)) · the room
+    invents the results and the questions · hello: "Which Brightwater shelf are you?" · none ·
+    low · light, social, and good to open an event with. Not a trivia game: Engage already runs
+    those.
+12. **Arcade mini-game.** One mechanic, one screen, a score: catch, dodge, or sort. Game jams show
+    how much fits in tiny games: js13kGames 2025 had 197 entries on the theme "Black Cat"
+    ([winners](https://dev.to/js13kgames/js13kgames-2025-winners-announced-20nl)) · the room
+    spins the wheel for theme, hero and rule, and rates difficulty after playing · hello:
+    "Shelve the books before closing" · KAPLAY (MIT, the community successor to the archived
+    Kaboom.js, [repo](https://github.com/kaplayjs/kaplay),
+    [note](https://jslegenddev.substack.com/p/kaboomjs-is-now-kaplay)) or plain canvas · medium
+    · **wow**: the room plays it on their phones over Wi-Fi share.
+13. **Sound toy / step sequencer.** A grid of steps and sounds, in the style of Chrome Music Lab,
+    which is open source and built on Tone.js
+    ([Google](https://developers.googleblog.com/introducing-chrome-music-lab/),
+    [Music Lab](https://experiments.withgoogle.com/music-lab)) · the room picks the scale,
+    instruments and tempo · hello: "The library's quiet hour, as a beat" · Tone.js (MIT,
+    [repo](https://github.com/Tonejs/Tone.js)) · medium · fun, but niche and loud in a room.
+14. **Generative poster.** Shapes, colour and the room's words drawn by code; press a key for a
+    new variant, then print one. This is the Genuary creative-coding tradition
+    ([Genuary 2025 notes](https://perthirtysix.com/genuary2025),
+    [bit-101](https://bit-101.com/blog/posts/2023-12-29/community-creative-coding/)) · the room
+    gives the palette (Choose), words (Ideas) and picks the keeper · hello: "Brightwater's 100th
+    birthday poster" · plain canvas. p5.js is the usual tool, but it is LGPL-2.1
+    ([repo](https://github.com/processing/p5.js)), so it fails the permissive rule · low to
+    medium · **wow** as a closing artefact.
+
+**Make a page for an event or a team**
+
+15. **Clickable prototype.** 3 to 5 phone-sized screens linked by taps: the design sprint's
+    "realistic but minimal" prototype that is ready to test in minutes
+    ([sprint cheat sheet](https://www.dsebastien.net/2021-02-09-design-sprint-2-0-cheatsheet/))
+    · the room picks each screen's direction with A/B mockups (already `/engage:ab-mockups`) ·
+    hello: "Book a study room": four screens · none (hash router, phone frame) · low · the
+    natural evolution of "interactive website".
+16. **Event microsite.** Agenda, speakers, a venue page, FAQ and a QR code to the page.
+    Conference is a template category of its own on Framer's marketplace
+    ([Framer categories](https://marketplace.framer.com/marketplace/templates/category)) · the
+    room gives agenda items and the questions people will ask · hello: "Brightwater Book Fair" ·
+    qrcode-generator (MIT, [npm](https://npmjs.com/package/qrcode-generator)) · low ·
+    immediately useful after the session.
+17. **Team page / "Manual of Me".** One card per person: how to work with me, what I am good at,
+    what to avoid ([Miro: The Manual of Me](https://miro.com/miroverse/the-manual-of-me-template),
+    [Tanzu Labs](https://labspractices.com/practices/personal-user-manual/)) · each person
+    answers the prompts · low effort, but it **cuts across Engage's rule never to name people in
+    the room**: it needs explicit opt-in, the person's own words, and no remote sharing by
+    default. Park it until that is designed.
+18. **FAQ finder.** Searchable questions, plus a "find your answer" path of yes/no steps, with no
+    AI and no backend · the room gives the questions people really ask · it is the branching
+    engine (10) and the training site's content model, so it belongs inside those.
+
+### Ranking: the ten to add to the catalogue
+
+| # | Starter | Group | Why it makes the list | Wow? |
+|---|---|---|---|---|
+| 1 | Decision matrix | Decide | Smallest build; turns the room's votes into a lasting artefact | |
+| 2 | Branching scenario | Play / Explain | Room votes the path live; also the core of training | **yes** |
+| 3 | Clickable prototype | Make a page | Uses `/engage:ab-mockups` as is; design-sprint staple | |
+| 4 | Budget balancer | Decide | Community meetings and offsites; real civic precedent | **yes** |
+| 5 | Explorable simulator | Explain | The most impressive "aha" page in an hour | **yes** |
+| 6 | Arcade mini-game | Play | Everyone plays it on their phone at the end | **yes** |
+| 7 | Event microsite | Make a page | Useful the next day; low risk | |
+| 8 | Timeline | Explain | Easy for a room to fill with Ideas; history and retros | |
+| 9 | Roadmap board | Decide | Maps onto Engage's Later list; teams leave with a plan | |
+| 10 | Generative poster | Play | Cheap, beautiful closing artefact to print | **yes** |
+
+Together with the first four (dashboard, infographic, training, interactive website), the
+catalogue groups as: **Show data** (dashboard, infographic with story mode), **Explain**
+(training, simulator, timeline), **Decide** (decision matrix, budget, roadmap), **Play**
+(branching scenario, arcade game, poster) and **Make a page** (clickable prototype, which takes
+over from interactive website, plus the event microsite). Fourteen tiles is too many for the
+opening's six-slot wheel, so the Making step picks a group and the starter is a second, smaller
+choice.
+
+**Later, or folded into others:** the calculator (a simulator mode), scrollytelling (infographic
+story mode), the FAQ finder (training and branching), the story map (waits on an offline map
+answer), the journey map (a good design-sprint add-on), the sound toy (niche), and the team page
+(waits on a privacy design).
+
+**For a demo to a new audience,** run the branching scenario with the room voting the path,
+then the budget balancer, then end on the arcade game played on phones. That shows Ideas,
+Choose and Rate each driving a page Claude builds on the spot.
+
+**Licence rule check:** all chosen libraries are MIT or BSD (Chart.js, Papa Parse, SortableJS,
+KAPLAY, Tone.js, qrcode-generator, Leaflet, Scrollama, inkjs), or the starter needs none.
+Excluded: p5.js (LGPL-2.1) and Twine's runtime formats (GPL tool, mixed format licences).
+TimelineJS (MPL-2.0) and Mermaid (MIT) are allowed but not needed.
 
 ## Where the choice plugs in
 
@@ -285,3 +488,8 @@ starter 1.0.0" so the room's first decision is a clean diff against it.
 6. Should Google Sheets be accepted only as published CSV links, or should the host's own Google
    sign-in be used to read private sheets (much more work, and private data)?
 7. Keep the starters in this repo, or a separate public `engage-starters` repo from day one?
+8. With fourteen starters, is a two-step pick (group, then starter) right for the opening, or
+   should each session's host choose the six that go on the wheel?
+9. The budget balancer and the decision matrix are best when every phone's sliders are
+   averaged. That needs a new ask shape (a set of sliders per phone). Worth it, or is one Rate
+   ask per criterion enough for a first version?

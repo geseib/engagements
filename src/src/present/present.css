@@ -595,7 +595,7 @@ html.present-locked body {
 .present .present-joinpanel .present-code { font-size: var(--L-hero); }
 
 /* ---- Workie's read ---- */
-.present .present-read { font-size: calc(var(--L-body) * 1.22 * var(--fit)); line-height: 1.36; }
+.present .present-read { font-size: calc(var(--L-secondary) * 1.15 * var(--fit)); line-height: 1.32; }
 /* MarkdownRenderer's own classes carry the paper theme's colours and sizes
    (styles.css .markdown-*); on the wall they inherit, as the host's stage
    does under .notes-md (styles/stage.css). */

@@ -157,3 +157,13 @@ test('answering: the question\'s own instruction is labelled "Your turn", a defa
   const generic = render(<ResponsesPanel kicker="k" title="Thresholds" task="Answer on your phone." phase="ASK" responses={[]} authorsHidden />);
   expect(generic.container.querySelector('.hc-task-k').textContent).toBe('The task');
 });
+
+// rejects (walk of dev eed66685): "The question · On the wall now" showing the
+// instructions while the wall showed the ranked results.
+test('the first row carries the lesson; at the results it is "The results"', () => {
+  const { container, rerender } = render(<ResponsesPanel kicker="k" title="t" phase="VOTE" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden onQuestionToWall={() => {}} />);
+  const row = () => container.querySelector('[data-testid="hc-question"]');
+  expect(row().textContent).toBe('The questionDescribe a time.');
+  rerender(<ResponsesPanel kicker="k" title="t" phase="RESULTS" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden questionOnWall onQuestionToWall={() => {}} />);
+  expect(row().textContent).toBe('The results · On the wall nowDescribe a time.');
+});

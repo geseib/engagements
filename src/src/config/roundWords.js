@@ -144,6 +144,9 @@ const RW = Object.freeze({
   /** The Remote's short form: "R2 of 6". */
   stripRoundShort: (n, of) => (Number(of) > 0 ? `R${n} of ${of}` : `R${n}`),
   yourPartLabel: 'Your part now',
+  // What the responses answer, on the wall and the console (owner, 18 Oct 2026).
+  theQuestionLabel: 'The question',
+  theTaskLabel: 'The task',
   showSteps: 'Show the steps',
   /**
    * "Your part now": one line per moment, ending with the main button's own

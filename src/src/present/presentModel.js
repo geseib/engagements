@@ -43,6 +43,17 @@ import { joinShown } from '../config/stageFocus';
 */
 const taskOf = (q, snapshot) => resolveInstruction(q, q.setCustomInstruction, snapshot.gameType);
 const storyOf = (q) => String(q.detail || q.questionDetail || '');
+/**
+ * THE LINE THAT SAYS WHAT THE RESPONSES ANSWER, while the room votes on or
+ * reads them (owner, 18 Oct 2026: the room must see the lesson, not only what
+ * to do). The lesson as "The question"; the task only when there is no lesson.
+ */
+const contextOf = (q, snapshot) => {
+  const lesson = storyOf(q).trim();
+  return lesson
+    ? { task: lesson, taskLabel: RW.theQuestionLabel }
+    : { task: taskOf(q, snapshot), taskLabel: RW.theTaskLabel };
+};
 import { prosePageSlice, proseBudgetFor } from '../config/stagePaging';
 import { partText } from './presentFit';
 import { wallCreditFor } from '../config/comments';
@@ -356,7 +367,7 @@ function momentModel(snapshot, reads = {}) {
         moment,
         ...common,
         title: String(q.title || ''),
-        task: taskOf(q, snapshot),
+        ...contextOf(q, snapshot),
         lead: RW.answersOnDevices(answered),
         counts: countsOf(snapshot, 'voted'),
       };
@@ -369,7 +380,7 @@ function momentModel(snapshot, reads = {}) {
         ...common,
         title: String(q.title || ''),
         heading: RW.whatTheRoomBacked,
-        task: taskOf(q, snapshot),
+        ...contextOf(q, snapshot),
         loading: !reads.results,
         rows: rows.slice(0, show),
         more: rows.length - show,

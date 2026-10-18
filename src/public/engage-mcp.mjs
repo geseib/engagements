@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.24.0';
+const VERSION = '1.24.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -3222,7 +3222,12 @@ async function publicDnsA(host) {
   return a ? String(a.data) : '';
 }
 
-/** One request through the tunnel, to the address public DNS gave: does it reach this gateway? */
+/**
+ * One request through the tunnel, to the address public DNS gave: does it reach
+ * this gateway? `{ ok, why }`: `why` says what came back instead, in a few
+ * plain words, for the host's line and cloudflared.log (1.24.1, owner 18 Oct:
+ * "the remote share didnt work: troubleshoot").
+ */
 function reachesGateway(address, ip) {
   const u = new URL(address);
   const probe = process.env.ENGAGE_TUNNEL_PROBE ? new URL(process.env.ENGAGE_TUNNEL_PROBE) : null;
@@ -3236,12 +3241,28 @@ function reachesGateway(address, ip) {
       ...(probe ? {} : { servername: u.hostname, lookup: (h, o, cb) => (o && o.all ? cb(null, [{ address: ip, family: 4 }]) : cb(null, ip, 4)) }),
     }, (res) => {
       let b = ''; res.on('data', (c) => { if (b.length < 4096) b += c; });
-      res.on('end', () => resolve(res.statusCode === 403 && b.includes('Open this from the Build Room')));
+      res.on('end', () => {
+        const ok = res.statusCode === 403 && b.includes('Open this from the Build Room');
+        resolve({ ok, why: ok ? '' : `the link answered ${res.statusCode}${res.headers.server ? ` from ${String(res.headers.server).slice(0, 40)}` : ''}` });
+      });
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.on('error', () => resolve(false));
+    req.on('error', (e) => resolve({ ok: false, why: `the link did not answer (${(e && (e.code || e.message)) || 'error'})` }));
     req.end();
   });
+}
+
+/**
+ * What went wrong, kept on this laptop for whoever troubleshoots:
+ * ~/.engage/cloudflared.log, the reason and cloudflared's own last lines.
+ * Overwritten each time; never sent anywhere.
+ */
+function keepTunnelLog(why, tail) {
+  try {
+    mkdirSync(engageHome(), { recursive: true });
+    writeFileSync(pathJoin(engageHome(), 'cloudflared.log'),
+      `${new Date().toISOString()} plugin ${VERSION}, cloudflared ${CLOUDFLARED.version}, ${process.platform}-${process.arch}\n${why}\n\n--- cloudflared said ---\n${String(tail || '').slice(-4000)}\n`, { mode: 0o600 });
+  } catch { /* only a help */ }
 }
 
 /** Start the tunnel in the background; rounds keep reporting 'starting' meanwhile. */
@@ -3282,29 +3303,39 @@ function ensureTunnel() {
     child.on('exit', () => {
       if (gen !== remote.gen || remote.tunnel !== child) return;
       // Before an address: a refusal or a crash. After one: it stopped.
+      keepTunnelLog(remote.tunnelState === 'live' ? 'cloudflared stopped' : 'cloudflared exited before it was ready', tail);
       fail(remote.tunnelState === 'live' ? TUNNEL_WORDS.stopped : (/status 429/.test(tail) ? TUNNEL_WORDS.refused : TUNNEL_WORDS.noAddress));
     });
     const got = await gotAddress;
     if (gen !== remote.gen) return;
     if (!got) {
+      keepTunnelLog('cloudflared gave no address', tail);
       if (/status 429/.test(tail)) return fail(TUNNEL_WORDS.refused);
       return fail(TUNNEL_WORDS.noAddress);
     }
     // Ready means reachable: public DNS has the name, and a request gets through.
     const host = new URL(got).hostname;
     const until = Date.now() + TUNNEL_READY_MS;
+    let why = 'public DNS never found the link';
     while (Date.now() < until && gen === remote.gen) {
       let ip = '';
-      try { ip = await publicDnsA(host); } catch { /* not yet */ }
-      if (ip && await reachesGateway(got, ip)) {
-        if (gen !== remote.gen) return;
-        remote.address = got; remote.tunnelState = 'live';
-        log('remote share live');
-        return;
+      try { ip = await publicDnsA(host); } catch (e) { why = `public DNS could not be asked (${(e && (e.code || e.name || e.message)) || 'error'})`; }
+      if (ip) {
+        const r = await reachesGateway(got, ip);
+        if (r.ok) {
+          if (gen !== remote.gen) return;
+          remote.address = got; remote.tunnelState = 'live';
+          log('remote share live');
+          return;
+        }
+        why = r.why;
       }
       await new Promise((r) => setTimeout(r, Math.min(2000, TUNNEL_READY_MS)));
     }
-    fail(TUNNEL_WORDS.notReady);
+    if (gen !== remote.gen) return;
+    log('remote tunnel not ready:', why);
+    keepTunnelLog(why, tail);
+    fail(`${TUNNEL_WORDS.notReady} (${why}.)`);
   })().catch((e) => { log('remote tunnel:', e && e.message); fail(TUNNEL_WORDS.noAddress); });
 }
 

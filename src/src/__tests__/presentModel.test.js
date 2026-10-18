@@ -58,7 +58,11 @@ describe('presentModel: the moment', () => {
     expect(presentModel(base({ currentQuestionData: own })).task).toBe('Name one habit to drop.');
     const set = { ...Q, setCustomInstruction: 'Which structure must go, and who gains?' };
     expect(presentModel(base({ currentQuestionData: set })).task).toBe('Which structure must go, and who gains?');
-    expect(presentModel(base({ state: 'VOTE#005', currentQuestionData: set })).task).toBe('Which structure must go, and who gains?');
+    // Voting carries the lesson, "The question", when there is one (owner, 18 Oct 2026).
+    expect(presentModel(base({ state: 'VOTE#005', currentQuestionData: { ...set, detail: '' } })).task).toBe('Which structure must go, and who gains?');
+    const voting = presentModel(base({ state: 'VOTE#005', currentQuestionData: set }));
+    expect(voting.task).toBe(String(Q.detail || Q.questionDetail));
+    expect(voting.taskLabel).toBe('The question');
   });
   it('the set\'s own round noun names the round', () => {
     expect(presentModel(base({ currentQuestionData: { ...Q, setRoundNoun: 'Lesson' } })).roundLabel).toBe('Lesson 5');
