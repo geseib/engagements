@@ -5454,6 +5454,8 @@ body {
 .quickstart-close:hover { color: var(--text); border-color: var(--muted); }
 
 .quickstart-content { padding: 22px 28px 28px; }
+/* Where the room watches, above the sets (QuickstartMenu QuickScreens). */
+.quickstart-screens { margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; font-size: 14px; }
 
 .quickstart-loading {
   text-align: center;

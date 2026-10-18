@@ -5,13 +5,47 @@ import SetImageBadge from './SetImageBadge';
 import PlanLimitNotice from './PlanLimitNotice';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
+import { SCREEN_WORDS } from '../config/roomScreen';
+import { TWO_SURFACE_TYPES, presentHref } from '../config/surfaces';
+import { openPendingRoomWindow, willPlace } from '../present/roomWindow';
+import './stage/ScreensGroup.css';
 import {
   isUnreadableSet, unreadableSetName, UNREADABLE_REASON, UNREADABLE_SUB,
 } from '../utils/unreadableSet';
 
 const API_BASE = window.API_BASE;
 
-const QuickstartMenu = ({ onGameCreated, onClose }) => {
+/**
+ * WHERE THE ROOM WATCHES, IN QUICK START (owner, 18 Oct 2026). Quick start
+ * creates and starts in one press, so the lobby's "Where will the room
+ * watch?" never came: the mode was whatever this browser chose last, unshown.
+ * The same choice as Settings › Screens (it stores the same value), shown
+ * before the press. Call & Answer sets only: the type two screens cover.
+ */
+export function QuickScreens({ choice, onChoose, blocked = false }) {
+  const two = choice === 'two';
+  const hint = blocked ? SCREEN_WORDS.quickBlocked
+    : choice === null ? SCREEN_WORDS.quickUnchosen
+      : two ? (willPlace() ? SCREEN_WORDS.quickTwoPlaces : SCREEN_WORDS.quickTwoBeside)
+        : SCREEN_WORDS.quickOne;
+  return (
+    <div className="scr quickstart-screens">
+      <div className="scr-row">
+        <div className="scr-k">
+          <span className="scr-label" id="qs-screens-label">{SCREEN_WORDS.where}</span>
+          <span className="scr-hint" role={blocked ? 'alert' : undefined}>{hint}</span>
+        </div>
+        <div className="scr-seg" role="group" aria-labelledby="qs-screens-label">
+          <button type="button" className="scr-seg-btn" aria-pressed={choice === 'classic'} onClick={() => onChoose('classic')}>{SCREEN_WORDS.one}</button>
+          <button type="button" className="scr-seg-btn" aria-pressed={two} onClick={() => onChoose('two')}>{SCREEN_WORDS.two}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScreen = null }) => {
+  const [windowBlocked, setWindowBlocked] = useState(false);
   const [quickstartSets, setQuickstartSets] = useState({
     'call-and-answer': [],
     'trivia': [],
@@ -70,7 +104,15 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
 
   const createQuickGame = async (questionSet) => {
     if (creating) return;
-    
+
+    // TWO SCREENS: open the room's window now, inside this click, while the
+    // browser still allows a popup. It is blank until the session exists,
+    // then goes to the room's window and onto the other display
+    // (present/roomWindow.js openPendingRoomWindow).
+    const twoScreens = roomScreen === 'two' && TWO_SURFACE_TYPES.includes(questionSet.engagementType);
+    const pending = twoScreens ? openPendingRoomWindow() : null;
+    setWindowBlocked(twoScreens && !pending);
+
     setCreating(true);
     setLimit(null);
     try {
@@ -131,6 +173,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
 
         if (startResponse.ok) {
           console.log(`✅ Quickstart game started: ${gameData.gameId}`);
+          if (pending) pending.go(presentHref(gameData.gameId));
           
           // Store the event title in localStorage
           localStorage.setItem(`game_${gameData.gameId}_title`, quickTitle);
@@ -151,6 +194,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
           
           onClose();
         } else {
+          if (pending) pending.cancel();
           throw new Error('Failed to start game');
         }
       } else {
@@ -158,6 +202,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
         // A plan limit is not a fault: say it in the sheet, with the way out
         // (PlanLimitNotice, compact — this sheet is narrow).
         const refusal = parseUpgradeRequired(createResponse, errorData);
+        if (pending) pending.cancel();
         if (refusal) {
           setLimit(refusal);
           return;
@@ -165,6 +210,7 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
         throw new Error(errorData.error || 'Failed to create game');
       }
     } catch (error) {
+      if (pending) pending.cancel();
       console.error('Failed to create quickstart game:', error);
       alert(`Failed to create quickstart game: ${error.message}`);
     } finally {
@@ -253,6 +299,9 @@ const QuickstartMenu = ({ onGameCreated, onClose }) => {
 
         <div className="quickstart-content">
           <PlanLimitNotice refusal={limit} outcome="Nothing was created." surface="dusk" compact onDismiss={() => setLimit(null)} />
+          {onRoomScreen && TWO_SURFACE_TYPES.some((t) => (quickstartSets[t] || []).length > 0) ? (
+            <QuickScreens choice={roomScreen} onChoose={onRoomScreen} blocked={windowBlocked} />
+          ) : null}
           {totalQuickstartSets === 0 ? (
             <div className="no-quickstart-sets">
               <h3>No Quickstart Sets Available</h3>

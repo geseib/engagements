@@ -6516,6 +6516,8 @@ Focus on actionable business strategy insights.`;
           });
         }}
         onClose={() => setShowQuickstartMenu(false)}
+        roomScreen={roomScreenChoice}
+        onRoomScreen={chooseRoomScreen}
       />
     );
   }

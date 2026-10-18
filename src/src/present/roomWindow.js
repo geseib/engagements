@@ -80,12 +80,10 @@ export function placedHref(href) {
  * other display, filled. Returns the window (or null when the popup was
  * blocked) and a promise that settles true when it was placed.
  */
-export function openRoomWindow(href, win = window) {
-  const w = win.open(placedHref(href), ROOM_WINDOW_NAME, 'popup,width=960,height=540');
-  if (!w) return { window: null, placed: Promise.resolve(false) };
-  // The room's page has no use for this one; keep our handle, drop its link back.
-  try { w.opener = null; } catch (e) { /* some browsers make it read-only */ }
-  const placed = Promise.resolve()
+/** Move an open room's window onto the other display and fill it. Settles true when placed. */
+function placeOnOtherScreen(w, win) {
+  if (!canPlace(win)) return Promise.resolve(false);
+  return Promise.resolve()
     .then(() => win.getScreenDetails())
     .then((details) => {
       const d = pickRoomScreen(details);
@@ -96,7 +94,39 @@ export function openRoomWindow(href, win = window) {
       return true;
     })
     .catch(() => false);
-  return { window: w, placed };
+}
+
+export function openRoomWindow(href, win = window) {
+  const w = win.open(placedHref(href), ROOM_WINDOW_NAME, 'popup,width=960,height=540');
+  if (!w) return { window: null, placed: Promise.resolve(false) };
+  // The room's page has no use for this one; keep our handle, drop its link back.
+  try { w.opener = null; } catch (e) { /* some browsers make it read-only */ }
+  return { window: w, placed: placeOnOtherScreen(w, win) };
+}
+
+/**
+ * A ROOM'S WINDOW FOR A SESSION THAT DOES NOT EXIST YET (Quick start; owner,
+ * 18 Oct 2026: "if its auto to two screen its not opening the second browser
+ * window"). The popup may only open inside the click, and the session's
+ * address is known only after the create call answers, so the window opens
+ * blank now and is sent to the address later. Placement waits for the address
+ * (a blank popup is moved with it).
+ *
+ * Returns null when the popup was blocked. `go(href)` sends it to the room's
+ * window and places it; `cancel()` closes it (the create failed).
+ */
+export function openPendingRoomWindow(win = window) {
+  const w = win.open('about:blank', ROOM_WINDOW_NAME, 'popup,width=960,height=540');
+  if (!w) return null;
+  return {
+    window: w,
+    go(href) {
+      try { w.location.href = placedHref(href); } catch (e) { return Promise.resolve(false); }
+      try { w.opener = null; } catch (e) { /* read-only in some browsers */ }
+      return placeOnOtherScreen(w, win);
+    },
+    cancel() { try { w.close(); } catch (e) { /* already gone */ } },
+  };
 }
 
 /**

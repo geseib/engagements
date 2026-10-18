@@ -12,7 +12,8 @@ import {
   pickRoomScreen, placedHref, openRoomWindow, onRoomWindowClick, willPlace, ROOM_WINDOW_NAME,
 } from '../present/roomWindow';
 import RoomWindowLink from '../components/stage/RoomWindowLink';
-import { useClickToFill } from '../PresentPage';
+import { useClickToFill, FillCue, FILL_CUE } from '../PresentPage';
+import { act } from '@testing-library/react';
 
 const laptop = { availLeft: 0, availTop: 0, availWidth: 1440, availHeight: 875, isInternal: true };
 const projector = { availLeft: 1440, availTop: 0, availWidth: 1920, availHeight: 1080, isInternal: false };
@@ -136,5 +137,32 @@ describe('one click fills the screen on a placed window', () => {
     fireEvent.click(getByText('wall'));
     expect(request).not.toHaveBeenCalled();
     expect(onDocClick).toHaveBeenCalled();
+  });
+});
+
+/* THE CUE (owner, 18 Oct 2026: nothing said one click fills the screen).
+   rejects: no cue on a placed window; a cue that stays once it is full
+   screen; a cue on a window opened the ordinary way. */
+describe('the one-click cue', () => {
+  beforeEach(() => {
+    document.documentElement.requestFullscreen = jest.fn(() => Promise.resolve());
+    Object.defineProperty(document, 'fullscreenEnabled', { value: true, configurable: true });
+    Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true, writable: true });
+  });
+  afterEach(() => { delete document.documentElement.requestFullscreen; });
+
+  test('placed and not full screen: the cue shows, then goes once it is full screen', () => {
+    const { queryByText } = render(<FillCue placed />);
+    expect(queryByText(FILL_CUE)).not.toBeNull();
+    act(() => {
+      Object.defineProperty(document, 'fullscreenElement', { value: document.documentElement, configurable: true, writable: true });
+      document.dispatchEvent(new Event('fullscreenchange'));
+    });
+    expect(queryByText(FILL_CUE)).toBeNull();
+  });
+
+  test('a window opened the ordinary way shows no cue', () => {
+    const { queryByText } = render(<FillCue placed={false} />);
+    expect(queryByText(FILL_CUE)).toBeNull();
   });
 });
