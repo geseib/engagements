@@ -92,146 +92,159 @@ code { font-family: var(--f-mono); font-size: .92em; }
 <body>
 <main class="page">
   <header>
-    <span class="eb">Build Room · Connect Claude Code</span>
-    <h1>The same window, for the first time and for coming back</h1>
-    <p class="lede">Owner, 18 Oct: <b>"can the app detect this and present the connect modal in a more concise easy to follow depending on if first time or resumed."</b> The room already knows whether Claude has worked here: it kicked off, posted, or listened for the host. When it has, the window opens on <b>Welcome back</b> with one command. The four steps stay one click away, for a new folder or another laptop.</p>
+    <span class="eb">Build Room · Connect Claude Code · revised 18 Oct</span>
+    <h1>One paste that is always right, whether it is the first time or the tenth</h1>
+    <p class="lede">Owner, 18 Oct: <b>"we cant assume they have claude cli running. the nice thing about the first time the command they cut and paste launches claude and starts the session with the key. of course why not just kickoff as well? think through full scenarios."</b> So every case gets a terminal paste that opens Claude Code in the right folder and runs <code>/engage:kickoff</code>. Kickoff now connects first and knows a resumed room from a new one, so the host never chooses between kickoff and continue.</p>
   </header>
 
-  <section class="tw" aria-label="Which window opens">
+  <section class="tw" aria-label="The seven cases">
     <table class="when">
-      <thead><tr><th>The room has seen</th><th>The window opens on</th><th>What the host runs</th></tr></thead>
+      <thead><tr><th>Case</th><th>How the room tells</th><th>The window shows</th></tr></thead>
       <tbody>
-        <tr><td>No Claude yet</td><td>C1 · First time: today's four steps</td><td>The start command in a terminal, then <code>/engage:kickoff</code></td></tr>
-        <tr><td>Claude before, plugin current</td><td>C2 · Welcome back</td><td><code>/engage:continue</code> in the project's folder. Nothing else.</td></tr>
-        <tr><td>Claude before, plugin older</td><td>C3 · Welcome back, update first</td><td>The update command, restart Claude Code, then <code>/engage:continue</code></td></tr>
+        <tr><td>1 · First time</td><td>Claude has never called in</td><td><b>W1</b>: install, then one paste that makes the folder, opens Claude Code, connects with a new key and kicks off</td></tr>
+        <tr><td>2 · Connected now</td><td>The plugin checked in within the last 30 s (it does every 4–15 s while connected)</td><td><b>W2</b>: "Connected now", nothing to do</td></tr>
+        <tr><td>3 · Same laptop, Claude Code closed</td><td>Claude worked here; quiet for more than 30 s</td><td><b>W3</b>: one paste, <code>cd</code> into the folder and open Claude Code on kickoff. No key: the folder keeps it.</td></tr>
+        <tr><td>4 · Claude Code open, not connected</td><td>Same as 3</td><td><b>W3</b>'s second line: <code>/engage:kickoff</code> to type inside Claude Code</td></tr>
+        <tr><td>5 · Plugin out of date</td><td>Running version is older</td><td><b>W4</b>: the same one paste, with the update in front</td></tr>
+        <tr><td>6 · Another laptop, or the folder is gone</td><td>The room can't tell; the host says so</td><td><b>W5</b>: "Show all the steps", with a new key and the note that the files are on the other laptop</td></tr>
+        <tr><td>7 · The folder's key no longer works</td><td>The server refuses it</td><td><b>T2</b>: Claude says so in Claude Code and what to ask the host for</td></tr>
       </tbody>
     </table>
   </section>
 
-  <!-- C2 -->
-  <section class="frame" aria-labelledby="c2">
-    <div class="frame-h"><span class="eb">C2</span><h2 id="c2">Welcome back, plugin current</h2></div>
-    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, welcome back">
+  <!-- W3 -->
+  <section class="frame" aria-labelledby="w3">
+    <div class="frame-h"><span class="eb">W3 · cases 3 and 4</span><h2 id="w3">Coming back on the same laptop</h2></div>
+    <div class="modal" role="img" aria-label="Mockup: Connect Claude Code, coming back">
       <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
-      <div class="back"><span class="dot"></span><div><b>Claude has worked in this room before</b><span>Last here at 10:42, in the folder <code>volunteer-sign-up</code>.</span></div></div>
+      <div class="back"><span class="dot" style="background:var(--muted)"></span><div><b>Claude worked here, last at 10:42</b><span>In <code>~/build-room/volunteer-sign-up</code>. Claude Code is not connected now.</span></div></div>
+      <div class="ver"><span>Claude's plugin</span><b>1.24.0</b><span class="ok">The latest.</span></div>
       <ol class="steps">
         <li class="is-now"><span class="n">1</span><div class="sb">
-          <span class="st">In Claude Code, in that folder, run</span>
-          <pre class="cmd">/engage-dev:continue</pre>
-          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">It reconnects to this room and picks up where you left off.</span></div>
+          <span class="st">Paste this into a terminal</span>
+          <pre class="cmd">cd ~/build-room/volunteer-sign-up &amp;&amp; claude "/engage-dev:kickoff"</pre>
+          <div class="row"><span class="btn primary">⧉ Copy</span><span class="hint">Opens Claude Code in the folder. It reconnects and picks up where it left off.</span></div>
+          <span class="hint">Claude Code already open in that folder? Type <code>/engage-dev:kickoff</code> there instead.</span>
         </div></li>
       </ol>
-      <div class="ver"><span>Claude's plugin</span><b>1.24.0</b><span class="ok">The latest.</span></div>
-      <label class="check"><i></i><span>Review Claude's questions before the room sees them<small>When off, Claude's asks open to the room straight away.</small></span></label>
-      <details class="fold"><summary>Starting in a new folder or on another laptop? Show all the steps</summary></details>
+      <details class="fold"><summary>On another laptop, or the folder is gone? Show all the steps</summary></details>
       <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
     </div>
     <div class="note">
-      <p><b>One step, because the plugin now connects for you.</b> <span class="new">New in 1.24.0:</span> <code>/engage:continue</code> and <code>/engage:kickoff</code> call <code>connect</code> first. After a restart nobody needs a separate connect step, and the Wi-Fi and remote share are always running.</p>
+      <p><b>No key in the paste.</b> The folder saved its key when Claude first connected (<code>.engage/session.json</code>), so coming back never mints a new one, and the key already working keeps working.</p>
       <ul>
-        <li><b>The folder name</b> comes from the plugin when it connects: the last part of the path only (<code>volunteer-sign-up</code>), never the whole path, which carries the laptop's user name.</li>
-        <li><b>The version line</b> is the one Settings now shows (shipped in 1.23.0).</li>
-        <li><b>All the steps</b> opens C1 in place, so a new key is still one click away.</li>
-        <li><b>Revoke key</b> moves into the folded steps; a returning host rarely needs it.</li>
+        <li><b>The folder</b> is reported by the plugin relative to the home folder (<code>~/build-room/volunteer-sign-up</code>), never the full path with the laptop's user name. A folder outside the home folder is shown by its name only, with "cd into it first" instead of the <code>cd</code>.</li>
+        <li><b>Kickoff on a resumed room</b> does not post a new plan. It restates where things stand in one update, picks up the host's latest direction, and carries on.</li>
       </ul>
     </div>
   </section>
 
-  <!-- C3 -->
-  <section class="frame" aria-labelledby="c3">
-    <div class="frame-h"><span class="eb">C3</span><h2 id="c3">Welcome back, plugin out of date</h2></div>
-    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, welcome back with an update">
+  <!-- W2 -->
+  <section class="frame" aria-labelledby="w2">
+    <div class="frame-h"><span class="eb">W2 · case 2</span><h2 id="w2">Claude Code is connected now</h2></div>
+    <div class="modal" role="img" aria-label="Mockup: Connect Claude Code, connected now">
       <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
-      <div class="back"><span class="dot"></span><div><b>Claude has worked in this room before</b><span>Last here at 10:42, in the folder <code>volunteer-sign-up</code>.</span></div></div>
+      <div class="back"><span class="dot"></span><div><b>Connected now</b><span>Claude Code is listening, in <code>~/build-room/volunteer-sign-up</code>. Nothing to do here.</span></div></div>
+      <div class="ver"><span>Claude's plugin</span><b>1.24.0</b><span class="ok">The latest.</span></div>
+      <details class="fold"><summary>Restart it, or move to another laptop</summary></details>
+      <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
+    </div>
+    <div class="note">
+      <p><b>The window stops asking for anything</b> while the plugin is checking in. The fold holds W3's paste (to restart) and W5's steps.</p>
+      <ul><li>If it goes quiet for 30 s, the window turns into W3 by itself.</li></ul>
+    </div>
+  </section>
+
+  <!-- W4 -->
+  <section class="frame" aria-labelledby="w4">
+    <div class="frame-h"><span class="eb">W4 · case 5</span><h2 id="w4">Coming back with an old plugin</h2></div>
+    <div class="modal" role="img" aria-label="Mockup: Connect Claude Code, coming back with an update">
+      <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
+      <div class="back"><span class="dot" style="background:var(--muted)"></span><div><b>Claude worked here, last at 10:42</b><span>In <code>~/build-room/volunteer-sign-up</code>. Claude Code is not connected now.</span></div></div>
       <div class="ver"><span>Claude's plugin</span><b class="old">1.22.0</b><span>·</span><span>Latest</span><b>1.24.0</b></div>
       <ol class="steps">
         <li class="is-old"><span class="n">1</span><div class="sb">
-          <span class="st">Update the Engage plugin</span>
+          <span class="st">Paste this into a terminal: it updates, then opens Claude Code</span>
           <pre class="cmd">curl -fsSL https://engage.dev.seibtribe.us/engage-mcp.mjs -o ~/.engage-mcp.mjs \
-  &amp;&amp; node ~/.engage-mcp.mjs --install-plugin --api … --tier dev</pre>
-          <div class="row"><span class="btn primary">⧉ Copy</span><span class="hint">Run it in a terminal, then restart Claude Code in the folder.</span></div>
-        </div></li>
-        <li class="is-now"><span class="n">2</span><div class="sb">
-          <span class="st">In Claude Code, run</span>
-          <pre class="cmd">/engage-dev:continue</pre>
-          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">It says on connect which plugin it is running.</span></div>
+  &amp;&amp; node ~/.engage-mcp.mjs --install-plugin --api … --tier dev \
+  &amp;&amp; cd ~/build-room/volunteer-sign-up &amp;&amp; claude "/engage-dev:kickoff"</pre>
+          <div class="row"><span class="btn primary">⧉ Copy</span><span class="hint">Close Claude Code first if it is open, so the new plugin loads.</span></div>
         </div></li>
       </ol>
-      <details class="fold"><summary>Starting in a new folder or on another laptop? Show all the steps</summary></details>
+      <details class="fold"><summary>On another laptop, or the folder is gone? Show all the steps</summary></details>
       <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
     </div>
     <div class="note">
-      <p><b>Update leads.</b> Its Copy is the window's one orange; Continue waits as step 2.</p>
-      <ul>
-        <li>Opened from Settings' <b>out of date · Update</b>, the cursor lands on step 1, as today.</li>
-        <li>Once the new plugin calls in, the window becomes C2 by itself.</li>
-      </ul>
+      <p><b>Still one paste.</b> Update, then the same reopen as W3. Settings' <b>out of date · Update</b> opens here.</p>
     </div>
   </section>
 
-  <!-- C1 -->
-  <section class="frame" aria-labelledby="c1">
-    <div class="frame-h"><span class="eb">C1</span><h2 id="c1">First time in this room (and "Show all the steps")</h2></div>
-    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, first time">
+  <!-- W1 -->
+  <section class="frame" aria-labelledby="w1">
+    <div class="frame-h"><span class="eb">W1 · case 1, and W5 · case 6</span><h2 id="w1">First time, or another laptop</h2></div>
+    <div class="modal" role="img" aria-label="Mockup: Connect Claude Code, first time">
       <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
       <p class="sub">Claude Code runs on this laptop and joins the room.</p>
+      <div class="back" style="background:var(--tint-amber);border-color:rgba(246,169,76,.4)"><span class="dot" style="background:var(--primary)"></span><div><b>W5 only: the files so far are on the other laptop</b><span>A new folder starts empty. Claude picks up from the room's decisions, the brief and the timeline. A new key stops the old one.</span></div></div>
       <ol class="steps">
         <li class="is-done"><span class="n">1</span><div class="sb">
-          <span class="st">Check for the latest Engage plugin</span>
-          <div class="ver"><span>Latest</span><b>1.24.0</b><span>Claude's version shows here once it connects.</span></div>
+          <span class="st">Install the Engage plugin</span>
+          <div class="ver"><span>Latest</span><b>1.24.0</b></div>
           <div class="row"><span class="btn">⧉ Copy the install command</span><span class="hint">Run it in a terminal. Needs Node 18 or later.</span></div>
         </div></li>
         <li class="is-now"><span class="n">2</span><div class="sb">
           <span class="st">Mint a key and copy the start command</span>
           <span class="hint">Project folder <code>~/build-room/volunteer-sign-up</code></span>
+          <pre class="cmd">mkdir -p ~/build-room/volunteer-sign-up &amp;&amp; cd ~/build-room/volunteer-sign-up \
+  &amp;&amp; claude "/engage-dev:kickoff eng_4821_…"</pre>
           <div class="row"><span class="btn primary">Mint a key and copy the command</span></div>
         </div></li>
         <li><span class="n">3</span><div class="sb">
           <span class="st">Paste it into a terminal</span>
-          <span class="hint">Makes the folder and opens Claude Code in it.</span>
-        </div></li>
-        <li><span class="n">4</span><div class="sb">
-          <span class="st">Kick off</span>
-          <pre class="cmd">/engage-dev:kickoff</pre>
-          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">Run it in Claude Code. It connects, then plans with the room.</span></div>
+          <span class="hint">It makes the folder, opens Claude Code, connects and kicks off. That is the last step.</span>
         </div></li>
       </ol>
       <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
     </div>
     <div class="note">
-      <p><b>Today's four steps, unchanged in order.</b> Step 4's line now says kickoff connects too.</p>
+      <p><b>Three steps, not four.</b> Kickoff takes the key, so the separate "Kick off" step goes.</p>
       <ul>
-        <li>Shown when the room has never seen Claude, and in place under C2 and C3 when the host opens <b>Show all the steps</b>.</li>
+        <li><b>W5</b> is the same window with the amber line on top, opened from "Show all the steps".</li>
         <li>The review checkbox and "More commands for later" stay below, as today.</li>
       </ul>
     </div>
   </section>
 
-  <!-- C4 -->
-  <section class="frame" aria-labelledby="c4">
-    <div class="frame-h"><span class="eb">C4</span><h2 id="c4">In Claude Code, after <code>/engage-dev:continue</code></h2></div>
-    <div class="term" role="img" aria-label="Mockup of Claude Code output after continue">
+  <!-- T1, T2 -->
+  <section class="frame" aria-labelledby="t1">
+    <div class="frame-h"><span class="eb">T1 and T2 · in Claude Code</span><h2 id="t1">What the paste opens on</h2></div>
+    <div class="term" role="img" aria-label="Mockup: Claude Code after coming back">
       <div class="bar"><i></i><i></i><i></i></div>
-<pre><span class="you">&gt; /engage-dev:continue</span>
+<pre><span class="dim">T1 · coming back (case 3)</span>
+<span class="you">&gt; /engage-dev:kickoff</span>
 
 <span class="dim">⏺ engage-dev · connect</span>
   Connected this project (~/build-room/volunteer-sign-up) to Build Room 4821.
-  This folder already had work in it, so the room's work goes on the branch build-room/4821.
-
-  Engage Build Room · session 4821 — Volunteer sign-up for the food bank
   <span class="good">Engage plugin 1.24.0: the latest.</span>
-  Goal: A one-page site where a volunteer can pick a shift in under a minute, on a phone.
+  RESUMING: Claude has worked here before. 3 decisions, 12 updates; the last at 10:42.
 
 <span class="dim">⏺ engage-dev · check_directions</span>
   From the host: "Use B, the calm photo with the calendar. Make Sign up bigger."
 
-⏺ Picking up the host's direction: the calendar header, with a bigger Sign up button.</pre>
+⏺ Back on the shift page: picking up the host's direction, the calendar
+  header with a bigger Sign up button.
+
+<span class="dim">T2 · the folder's key no longer works (case 7)</span>
+<span class="you">&gt; /engage-dev:kickoff</span>
+  This folder's key no longer opens Build Room 4821: a newer key was minted,
+  or it was revoked. Ask the host for a new start command
+  (Connect Claude Code › Show all the steps), and paste it here.</pre>
     </div>
     <div class="note">
-      <p><b>What the host sees on their laptop</b> after pasting one command: connected, which plugin, and the work resuming.</p>
+      <p><b>Kickoff reads the room before it plans.</b> With decisions or updates already there, it resumes; otherwise it plans as today.</p>
       <ul>
-        <li>If the plugin is older, the green line is the "older than the latest" line instead, with what to do.</li>
-        <li>On the host's screen the Claude chip turns green as soon as it connects.</li>
+        <li><code>/engage:continue</code> stays, for "keep going after a direction" inside a running session.</li>
+        <li>T2 replaces today's bare "Forbidden".</li>
       </ul>
     </div>
   </section>
