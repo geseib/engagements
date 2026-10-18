@@ -891,7 +891,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.23.0';
+const LATEST_PLUGIN = '1.24.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -982,7 +982,10 @@ const mergeSeen = (current, ids) => [...current.filter((x) => !ids.includes(x)),
 // ("Edited Header.jsx", "Ran npm test"); its server sends them here in
 // batches. One row holds the latest few: it is a live view, not a record, so
 // it never reaches the timeline, the report or a phone.
-const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'other']);
+// test, check and save (plugin 1.24.0) feed the Stage's Building / Testing /
+// Fixing / Checking / Saved row (docs/design/build-room-ideas I10).
+const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'test', 'check', 'save', 'other']);
+const TEST_COUNT_MAX = 1000000;
 const ACTIVITY_KEEP = 12;
 const ACTIVITY_PER_POST = 25;
 
@@ -999,7 +1002,13 @@ function normalizeActivity(items, nowIso) {
     const t = Date.parse(it.at);
     // A laptop clock can be off; never in the future, never older than an hour.
     const at = new Date(Number.isFinite(t) ? Math.min(Math.max(t, now - 3600000), now) : now).toISOString();
-    out.push({ at, kind, text });
+    // A test run carries its counts only (never its output), and whether it failed.
+    const count = (v) => (Number.isInteger(v) && v >= 0 && v <= TEST_COUNT_MAX ? v : null);
+    const t2 = kind === 'test' && it.tests && typeof it.tests === 'object' ? it.tests : null;
+    const tests = t2 && (count(t2.passed) !== null || count(t2.failed) !== null)
+      ? { passed: count(t2.passed) || 0, failed: count(t2.failed) || 0 } : null;
+    const failed = it.failed === true || Boolean(tests && tests.failed > 0);
+    out.push({ at, kind, text, ...(tests ? { tests } : {}), ...(failed ? { failed: true } : {}) });
   }
   return { value: out };
 }
@@ -1571,6 +1580,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     ...(isAgent ? { pluginLatest: LATEST_PLUGIN } : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
+    // What the Stage says went to Claude last (I9). Claude has its own inbox.
+    ...(isAgent ? {} : { sent: sentView(room) }),
     lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
@@ -1875,6 +1886,10 @@ function wallView({ gameId, meta, sessionState, room: whole, players, now, crew 
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forWall),
     doing: doingPublicView(room.activity, nowIso),
     agent: { connected: agent.connected, listening: agent.listening, name: agent.name },
+    // I9-I10 (owner, 18 Oct 2026): what went to Claude last, and what Claude's
+    // tools did (file and program names only, as the plugin writes them).
+    sent: sentView(room, names),
+    activity: activityView(room.activity).filter((a) => !names(a.text)),
     shownPoint: shown ? { ...shown, from: shown.from === 'claude' ? 'claude' : nameOf(shown.from) } : null,
     run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
     // That the demo is on this Wi-Fi, never its link: the link carries the gateway's key (phones have it).
@@ -1903,6 +1918,34 @@ function publicOutcome(o, forRoom = publicUrl) {
  */
 function pendingDirections(room) {
   return room.logs.filter((l) => l.ForAgent && !l.ForBuilder && !l.DeliveredAt && l.Kind !== 'note');
+}
+
+/**
+ * SENT TO CLAUDE (docs/design/build-room-ideas I9, owner 18 Oct 2026: "the
+ * heading could state Sent to claude ... until it updates what it has done").
+ * The newest entry that went to the host's Claude, as the Stage says it:
+ * `verb` 'decided' for a room decision, 'asked' for Ask Claude, else 'told';
+ * `pickedAt` once Claude's inbox took it. Later (held), a builder's entry, a
+ * host-only one and a cancelled run item never count. `hide(text)` blanks
+ * words the reader may not see (the wall: a name the room meter hides); the
+ * entry still counts, so the Stage still says Sent to Claude. Null when none.
+ */
+function sentView(room, hide = () => false) {
+  let best = null;
+  for (const l of (room && room.logs) || []) {
+    if (!l.ForAgent || l.ForBuilder || l.HostOnly || l.Cancelled || l.Kind === 'note') continue;
+    if (!best || String(l.CreatedAt || '') >= String(best.CreatedAt || '')) best = l;
+  }
+  if (!best) return null;
+  const as = claudeGetsOf(best.ForAgentAs);
+  const text = String(best.Text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return {
+    verb: best.Kind === 'decision' ? 'decided' : as === 'ask' ? 'asked' : 'told',
+    text: hide(text) ? '' : text,
+    askId: best.AskId || null,
+    at: best.CreatedAt || null,
+    pickedAt: best.DeliveredAt || null,
+  };
 }
 
 /** Entries for one builder's Claude (crew mode): feedback, the base moving. */
@@ -2068,7 +2111,7 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
-  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,

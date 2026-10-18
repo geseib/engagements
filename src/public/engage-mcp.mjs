@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -2401,7 +2401,7 @@ function promptText(name, args) {
 
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
-ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. No names, files, paths or links. Keep your task list current.
+ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. Name what the room or the host asked for ("Adding the old-school leaderboard"), never just "Working on the code". No names, files, paths or links. Keep your task list current.
 
 How to collaborate:
 - THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). When room_status says the room has said enough, draft the one-page brief with draft_brief (a headline and a short summary, in the room's words; invent nothing). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
@@ -3692,6 +3692,60 @@ export function commandName(command) {
   return '';
 }
 
+// THE STAGE'S ROW (docs/design/build-room-ideas I10, owner 18 Oct 2026):
+// Building / Testing / Fixing / Checking / Saved, read from what Claude ran,
+// so it moves even when Claude forgets to post. A test run carries its counts
+// and nothing else: never a test's name or a line of its output.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1'];
+const TEST_PROGRAMS = ['jest', 'vitest', 'mocha', 'pytest', 'ava', 'tap', 'playwright', 'cypress', 'karma', 'rspec', 'phpunit'];
+const CHECK_PROGRAMS = ['vite', 'serve', 'http-server', 'live-server', 'next', 'screencapture', 'open', 'xdg-open', 'curl', 'wget'];
+
+/** 'test', 'check', 'save' or 'run', from a command's name (commandName) and, for a few words, the whole line. */
+export function commandKind(name, command = '') {
+  const n = String(name || '');
+  const [prog, sub, third] = n.split(' ');
+  const line = String(command || '');
+  if (prog === 'git' && sub === 'commit') return 'save';
+  if (TEST_PROGRAMS.includes(prog) || (['npx', 'bunx'].includes(prog) && TEST_PROGRAMS.includes(sub))) {
+    return /playwright\s+install\b/.test(line) ? 'run' : 'test';
+  }
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && (sub === 'test' || sub === 't' || (sub === 'run' && /^test/.test(third || '')) || /^test/.test(sub || ''))) return 'test';
+  if ((prog === 'go' || prog === 'cargo' || prog === 'deno') && sub === 'test') return 'test';
+  if ((prog === 'python' || prog === 'python3') && /\s-m\s+(pytest|unittest)\b/.test(line)) return 'test';
+  if (prog === 'node' && /\s--test\b/.test(line)) return 'test';
+  if (CHECK_PROGRAMS.includes(prog)) {
+    // curl and wget only when they fetch this laptop's own demo.
+    if (prog === 'curl' || prog === 'wget') return /(localhost|127\.0\.0\.1)/.test(line) ? 'check' : 'run';
+    return 'check';
+  }
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && (sub === 'start' || sub === 'dev' || (sub === 'run' && /^(dev|start|serve|preview)/.test(third || '')))) return 'check';
+  if ((prog === 'python' || prog === 'python3') && /\s-m\s+http\.server\b/.test(line)) return 'check';
+  return 'run';
+}
+
+/**
+ * {passed, failed} from a test run's output, or null when no runner's summary
+ * line is in it. The last summary wins (watch mode, several suites).
+ * jest/vitest "Tests: 1 failed, 12 passed", pytest "1 failed, 12 passed in",
+ * mocha "12 passing" / "1 failing", node --test "# pass 12" / "# fail 1",
+ * cargo "test result: ok. 12 passed; 1 failed". Go names packages, not
+ * tests: no counts, so the run's own exit decides.
+ */
+export function testCounts(output) {
+  const text = String(output || '').replace(/\x1b\[[0-9;]*m/g, '').slice(-200000);
+  // The summary is near the end: read the last few lines that carry a count.
+  // "Test Files 1 passed" (vitest) and "Test Suites: 1 failed" (jest) count files, not tests.
+  const lines = text.split(/\r?\n/)
+    .filter((l) => /\b\d+\s+(passed|failed|passing|failing)\b|^#\s*(pass|fail)\s+\d+/i.test(l))
+    .filter((l) => !/Test (Files|Suites)\b/i.test(l));
+  if (!lines.length) return null;
+  const last = lines.slice(-3).reverse().join('\n'); // newest first: its count wins
+  const pick = (re) => { const m = last.match(re); return m ? Number(m[1]) : null; };
+  const passed = pick(/(\d+)\s+(?:passed|passing)\b/i) ?? pick(/^#\s*pass\s+(\d+)/im);
+  const failed = pick(/(\d+)\s+(?:failed|failing)\b/i) ?? pick(/^#\s*fail\s+(\d+)/im);
+  return passed === null && failed === null ? null : { passed: passed || 0, failed: failed || 0 };
+}
+
 /** A task title or helper job is fit for the room only as a short plain phrase. '' to say nothing. */
 function plainPhrase(v) {
   const t = String(v || '').replace(/\s+/g, ' ').trim();
@@ -3843,10 +3897,25 @@ function activityLineOf(data) {
     case 'Write': return { kind: 'edit', text: `Wrote ${base(input.file_path)}` };
     case 'Read': return { kind: 'read', text: `Read ${base(input.file_path)}` };
     case 'Glob': case 'Grep': case 'LS': return { kind: 'search', text: 'Searched the code' };
-    case 'Bash': { const c = commandName(input.command); return { kind: 'run', text: c ? `Ran ${c}` : 'Ran a command' }; }
+    case 'Bash': {
+      const c = commandName(input.command);
+      const text = c ? `Ran ${c}` : 'Ran a command';
+      // A failed command reaches the PostToolUseFailure hook (plugin 1.24.0), its output in `error`.
+      const failedRun = String(data.hook_event_name || '') === 'PostToolUseFailure';
+      const kind = commandKind(c, input.command);
+      if (kind === 'test') {
+        const res = data.tool_response && typeof data.tool_response === 'object' ? data.tool_response : {};
+        const out = failedRun ? String(data.error || '') : `${res.stdout || ''}\n${res.stderr || ''}`;
+        const tests = testCounts(out);
+        return { kind, text, ...(tests ? { tests } : {}), ...(failedRun || (tests && tests.failed > 0) ? { failed: true } : {}) };
+      }
+      return { kind, text, ...(failedRun ? { failed: true } : {}) };
+    }
     case 'WebFetch': {
       let host = '';
       try { host = new URL(String(input.url || '')).hostname; } catch { /* not a URL */ }
+      // Claude looking at its own running demo is Checking (I10), not research.
+      if (LOCAL_HOSTS.includes(host)) return { kind: 'check', text: 'Looked at the running demo' };
       return { kind: 'web', text: host ? `Looked at ${host}` : 'Looked something up online' };
     }
     case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
@@ -3856,7 +3925,7 @@ function activityLineOf(data) {
   }
 }
 
-/** --activity: the PostToolUse, PreToolUse and SubagentStop hook. Never fails the tool, never prints. */
+/** --activity: the PostToolUse, PostToolUseFailure, PreToolUse and SubagentStop hook. Never fails the tool, never prints. */
 function hookActivity() {
   let data = {};
   try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
@@ -4101,6 +4170,8 @@ function writePlugin(home, root, plug) {
       Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }],
       // One plain line per tool for the room's live view (hookActivity).
       PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+      // A command that fails (a red test run) comes here instead, with its output in `error` (I10).
+      PostToolUseFailure: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
       // A helper's line starts when it is asked (PreToolUse carries its description) and ends when it stops.
       PreToolUse: [{ matcher: 'Agent|Task', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
       SubagentStop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],

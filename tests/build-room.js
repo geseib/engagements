@@ -611,6 +611,39 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await agentCall('POST', 'activity', { items: 'nope' })).status, 400);
   });
 
+  await check('I10: a test line keeps its counts and whether it failed, never anything else; check and save are kinds', async () => {
+    await agentCall('POST', 'activity', { items: [
+      { kind: 'test', text: 'Ran npm test', tests: { passed: 12, failed: 1, names: ['SECRET'] }, output: 'SECRET' },
+      { kind: 'test', text: 'Ran pytest', failed: true },
+      { kind: 'test', text: 'Ran jest', tests: { passed: -3, failed: 'x' } },
+      { kind: 'check', text: 'Looked at the running demo' },
+      { kind: 'save', text: 'Ran git commit', tests: { passed: 1 } },
+    ] });
+    const got = (await hostCall('GET', 'state')).body.activity.slice(-5).map(({ at, ...rest }) => rest);
+    assert.deepStrictEqual(got, [
+      { kind: 'test', text: 'Ran npm test', tests: { passed: 12, failed: 1 }, failed: true },
+      { kind: 'test', text: 'Ran pytest', failed: true },
+      { kind: 'test', text: 'Ran jest' },
+      { kind: 'check', text: 'Looked at the running demo' },
+      { kind: 'save', text: 'Ran git commit' },
+    ]);
+  });
+  await check('I9: `sent` is the newest thing that went to Claude: told or asked, picked up once its inbox took it, never Later', async () => {
+    assert.strictEqual((await hostCall('POST', 'directions', { text: 'We need an old-school leaderboard' })).status, 201);
+    let sent = (await hostCall('GET', 'state')).body.sent;
+    assert.deepStrictEqual({ verb: sent.verb, text: sent.text, picked: sent.pickedAt }, { verb: 'told', text: 'We need an old-school leaderboard', picked: null });
+    await hostCall('POST', 'directions', { text: 'Pair sign-ups', as: 'later' });
+    assert.strictEqual((await hostCall('GET', 'state')).body.sent.text, 'We need an old-school leaderboard', 'Later is held, not sent');
+    await agentCall('GET', 'inbox');
+    sent = (await hostCall('GET', 'state')).body.sent;
+    assert.ok(sent.pickedAt && Date.parse(sent.pickedAt) >= Date.parse(sent.at), JSON.stringify(sent));
+    await hostCall('POST', 'directions', { text: 'Which font reads best from the back?', as: 'ask' });
+    sent = (await hostCall('GET', 'state')).body.sent;
+    assert.deepStrictEqual([sent.verb, sent.pickedAt], ['asked', null]);
+    assert.strictEqual((await agentCall('GET', 'state')).body.sent, undefined, 'Claude has its inbox');
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.sent, undefined, 'a phone never gets a direction');
+  });
+
   console.log('\nfeedback on a preview (owner, 2026-10-04)');
   seed();
   await check('a phone says "Looks good" or "Needs a change" on what Claude is showing; once per preview', async () => {

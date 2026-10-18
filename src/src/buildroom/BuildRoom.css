@@ -355,6 +355,23 @@
 .brm .brm-plain-side .brm-tx { font-size: var(--brm-st-body); }
 .brm .brm-bignum { font-size: var(--brm-st-hero); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .brm .brm-plain { grid-template-columns: minmax(0, 1fr); } }
+/* Sent to Claude (docs/design/build-room-ideas I9): amber, still, until Claude says what it is doing. */
+.brm .brm-sdot--sent { background: var(--accent-text); box-shadow: 0 0 0 10px var(--brm-tint-amber); }
+.brm .brm-sidetime { margin-top: 6px; color: var(--muted); font-size: var(--brm-t-label); font-variant-numeric: tabular-nums; }
+/* While Claude works (I10): the row, the test counts, the last few tool lines. */
+.brm .brm-work { margin: 18px 0 0 48px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.brm .brm-phases { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.brm .brm-phases li { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--brm-rule); color: var(--muted); font-size: var(--brm-t-label); font-weight: 700; }
+.brm .brm-phases li.is-on { color: var(--accent-text); background: var(--brm-tint-amber); border-color: var(--brm-line-amber); }
+.brm .brm-phases li.is-done { color: var(--brm-success-text); border-color: var(--brm-line-green); }
+.brm .brm-phases li.is-bad { color: var(--danger-text); background: var(--brm-tint-red); border-color: var(--brm-line-red); }
+.brm .brm-tests { margin: 0; font-weight: 700; color: var(--brm-success-text); }
+.brm .brm-tests.is-bad { color: var(--danger-text); }
+.brm .brm-ticker { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.brm .brm-ticker li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 10px; overflow-wrap: anywhere; }
+.brm .brm-ticker li:first-child { color: var(--text); }
+.brm .brm-ticker-t { font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .brm .brm-work { margin-left: 0; } }
 .brm .brm-latest { background: var(--brm-tint-amber-soft); border: 1px solid var(--brm-line-amber); border-radius: 14px; padding: 14px 18px; }
 .brm .brm-kind { font-size: var(--brm-t-label); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
 .brm .brm-tx { font-size: var(--brm-st-body); line-height: 1.3; margin-top: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
