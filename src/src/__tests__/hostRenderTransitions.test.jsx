@@ -331,6 +331,13 @@ describe('Continue on an unstarted session', () => {
  * because it rode in on the question.
  */
 describe('the stage takes a set instruction from the question, not only the catalogue', () => {
+  // A SET's instruction is the generic kind: since 18 Oct 2026 Room, TV and
+  // Table leave it off the room's screen ("the instructions is the optional
+  // one"), and Call, read on people's own screens, still shows it. So these
+  // run on Call, where the instruction reaching the stage is still visible.
+  beforeEach(() => { window.localStorage.setItem('engage.displayProfile', 'call'); });
+  afterEach(() => { window.localStorage.removeItem('engage.displayProfile'); });
+
   test('an empty question-sets list does not blank the instruction on ASK', async () => {
     const LIVE = '5678';
     const INSTRUCTION = 'Answer honestly, in your own words.';
