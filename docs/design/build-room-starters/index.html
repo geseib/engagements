@@ -1,0 +1,335 @@
+<title>Build Room Starters</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Layout: a catalogue sheet. The answer up top, then starters by group as index cards, then how it works and the questions. */
+:root {
+  --bg: #F2F4F3; --surface: #FFFFFF; --ink: #16211D; --muted: #56635D; --rule: #D5DCD8;
+  --accent: #1D6B52; --accent-soft: #E1EEE8; --wow: #8A5A00; --wow-soft: #FBEFD3;
+  --f-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111816; --surface: #19221F; --ink: #E7EEEA; --muted: #9DACA5; --rule: #2C3833;
+  --accent: #6FCBA6; --accent-soft: #1D3229; --wow: #F2C35B; --wow-soft: #3A2F14; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111816; --surface: #19221F; --ink: #E7EEEA; --muted: #9DACA5; --rule: #2C3833;
+  --accent: #6FCBA6; --accent-soft: #1D3229; --wow: #F2C35B; --wow-soft: #3A2F14; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-body); }
+.page { max-width: 1160px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; line-height: 1.08; letter-spacing: -.01em; }
+h2 { font-size: 26px; font-weight: 800; }
+h3 { font-size: 19px; font-weight: 600; line-height: 1.25; }
+.eb { font: 600 12px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.lede { max-width: 66ch; color: var(--muted); margin: 14px 0 0; font-size: 17px; }
+.lede b { color: var(--ink); }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.answer { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 16px; }
+.answer div { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.answer b { font-family: var(--f-display); font-size: 17px; }
+.answer span { color: var(--muted); font-size: 14.5px; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
+ol.top10 { list-style: none; margin: 14px 0 0; padding: 0; counter-reset: r; display: flex; flex-direction: column; }
+ol.top10 li { counter-increment: r; display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+ol.top10 li::before { content: counter(r); font: 500 14px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+ol.top10 li span { color: var(--muted); font-size: 14px; }
+ol.top10 li i, .wow { font-style: normal; font: 600 11px/1 var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--wow); background: var(--wow-soft); padding: 4px 7px; border-radius: 999px; white-space: nowrap; }
+ol.top10 li:not(:has(i))::after { content: ""; }
+.demo { background: var(--accent-soft); border-radius: 14px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.demo ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.demo p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filters span { color: var(--muted); font-size: 14px; margin-right: 4px; }
+.filters button { font: 600 14px var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+.group { display: flex; flex-direction: column; gap: 16px; }
+.group[hidden] { display: none; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card header { display: flex; flex-direction: column; gap: 8px; }
+.tags { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rank { font: 500 12px/1 var(--f-mono); color: var(--accent); background: var(--accent-soft); padding: 4px 7px; border-radius: 6px; }
+.rank.first { color: var(--muted); background: transparent; border: 1px solid var(--rule); }
+.what { margin: 0; font-size: 15px; }
+dl { margin: 0; display: grid; grid-template-columns: 8.5em minmax(0, 1fr); gap: 6px 12px; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; border-top: 1px solid var(--rule); padding-top: 10px; }
+
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 24px; }
+.how > div { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.how ol, .how ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; }
+code { font: 500 .88em var(--f-mono); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.out { columns: 2 280px; column-gap: 28px; font-size: 15px; padding-left: 20px; margin: 0; }
+.out li { break-inside: avoid; margin-bottom: 7px; }
+.qs { list-style: none; counter-reset: q; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.qs li { counter-increment: q; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; font-size: 15px; display: grid; grid-template-columns: 1.8em minmax(0, 1fr); }
+.qs li::before { content: counter(q); font: 500 14px var(--f-mono); color: var(--accent); }
+.foot { color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--rule); padding-top: 16px; }
+</style>
+
+<main class="page">
+  <header>
+    <div class="eb">Build Room · research, nothing built yet</div>
+    <h1>Starters for a room that builds with Claude</h1>
+    <p class="lede">A starter is a small working web page Claude lays down at the start of a session, so the room sees something running in the first minutes and spends the hour shaping it. Every one works <b>with no internet and no install</b>, and each one is filled by the room’s <b>ideas, votes and ratings</b>.</p>
+  </header>
+
+  <section class="answer" aria-label="The recommendation">
+    <div><b>Plain web pages</b><span>HTML, one stylesheet, a few small libraries copied in. Runs with one command, shares over Wi‑Fi or remotely as it is.</span></div>
+    <div><b>Kept in this repo</b><span>A public folder on GitHub. Each site serves its own copy, and the plugin checks every file before writing it.</span></div>
+    <div><b>Host picks in the opening</b><span>On “What are we making?”: pick a group, then a starter. “None” is always first.</span></div>
+    <div><b>Room adds sources</b><span>“Add a source” on the phone: a link to a page, a repo or a CSV. Nothing downloads until the host says use it.</span></div>
+  </section>
+
+  <section class="split">
+    <div>
+      <h2>The ten to add</h2>
+      <ol class="top10"><li><b>Decision matrix</b><span>Decide</span></li><li><b>“What would you do?” branching story</b><span>Play</span><i>wow</i></li><li><b>Clickable prototype</b><span>Make a page</span></li><li><b>Budget balancer</b><span>Decide</span><i>wow</i></li><li><b>“What if” simulator</b><span>Explain</span><i>wow</i></li><li><b>Arcade mini-game</b><span>Play</span><i>wow</i></li><li><b>Event page</b><span>Make a page</span></li><li><b>Timeline</b><span>Explain</span></li><li><b>Now / Next / Later roadmap</b><span>Decide</span></li><li><b>Generative poster</b><span>Play</span><i>wow</i></li></ol>
+    </div>
+    <div class="demo">
+      <h2>For a demo to a new audience</h2>
+      <ol>
+        <li>The <b>branching story</b>, with the room voting each turn.</li>
+        <li>The <b>budget balancer</b>, every phone sharing out the money.</li>
+        <li>End on the <b>arcade game</b>, played on everyone’s phone.</li>
+      </ol>
+      <p>That shows ideas, votes and ratings each driving a page Claude builds on the spot.</p>
+      <p><b>Build order:</b> dashboard, decision matrix, branching story, infographic, training site, clickable prototype, then the phone’s “Add a source”.</p>
+    </div>
+  </section>
+
+  <div class="filters" role="group" aria-label="Show">
+    <span>Show</span>
+    <button type="button" id="f-all" aria-pressed="true" data-f="all">All 13</button>
+    <button type="button" id="f-wow" aria-pressed="false" data-f="wow">Wow in a demo</button>
+    <button type="button" id="f-new" aria-pressed="false" data-f="new">The ten new ones</button>
+  </div>
+
+  <section class="group" id="g-0" aria-labelledby="gh-0">
+  <h2 id="gh-0">Show data</h2>
+  <div class="cards"><article class="card" data-group="Show data" data-wow="false" data-new="false">
+  <header><div class="tags"><span class="rank first">First four</span></div><h3>Dashboard</h3></header>
+  <p class="what">Number tiles, a line and a bar chart, one filter that drives everything, and the data as a table.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Points at a CSV; Claude re-maps one small config file to it.</dd>
+    <dt>Sample page</dt><dd>Brightwater Library this year: visits and loans by branch.</dd>
+    <dt>Library</dt><dd>Chart.js, Papa Parse</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  
+</article><article class="card" data-group="Show data" data-wow="false" data-new="false">
+  <header><div class="tags"><span class="rank first">First four</span></div><h3>Infographic</h3></header>
+  <p class="what">One long scrolling story: a headline number, 4–6 facts, each with a chart or icon row and a source line. Has a scroll-driven story mode.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Facts and sources as ideas; votes on which numbers lead.</dd>
+    <dt>Sample page</dt><dd>A year at Brightwater in six numbers.</dd>
+    <dt>Library</dt><dd>Chart.js; own scroll code (or Scrollama, MIT)</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://pudding.cool/about" target="_blank" rel="noopener">The Pudding</a><a href="https://github.com/russellsamora/scrollama" target="_blank" rel="noopener">Scrollama</a></div>
+</article></div>
+</section><section class="group" id="g-1" aria-labelledby="gh-1">
+  <h2 id="gh-1">Explain</h2>
+  <div class="cards"><article class="card" data-group="Explain" data-wow="false" data-new="false">
+  <header><div class="tags"><span class="rank first">First four</span></div><h3>Training site</h3></header>
+  <p class="what">Lessons with a sidebar outline, a “try it” box, a short check after each lesson, progress kept in the browser. Uses the branching story for “what would you do?” moments.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Lessons, real questions people ask, scenarios.</dd>
+    <dt>Sample page</dt><dd>Welcome, new Brightwater volunteer: three lessons and a quiz each.</dd>
+    <dt>Library</dt><dd>None</dd>
+    <dt>Effort in an hour</dt><dd>Medium</dd>
+  </dl>
+  
+</article><article class="card" data-group="Explain" data-wow="true" data-new="true">
+  <header><div class="tags"><span class="rank">#5</span><span class="wow">Wow in a demo</span></div><h3>“What if” simulator</h3></header>
+  <p class="what">Sliders change a small model and the picture changes at once, so people learn by playing (Bret Victor’s explorable explanations, Nicky Case’s Evolution of Trust). A calculator is one mode of it.</p>
+  <dl>
+    <dt>The room gives</dt><dd>The question, the rules, which slider matters.</dd>
+    <dt>Sample page</dt><dd>Why the queue at the desk grows: arrivals and staff sliders, people as dots.</dd>
+    <dt>Library</dt><dd>Canvas, Chart.js</dd>
+    <dt>Effort in an hour</dt><dd>Medium</dd>
+  </dl>
+  <div class="links"><a href="https://en.wikipedia.org/wiki/Explorable_explanation" target="_blank" rel="noopener">Explorable explanation</a><a href="https://github.com/blob42/awesome-explorables" target="_blank" rel="noopener">awesome-explorables</a></div>
+</article><article class="card" data-group="Explain" data-wow="false" data-new="true">
+  <header><div class="tags"><span class="rank">#8</span></div><h3>Timeline</h3></header>
+  <p class="what">Dated events with a picture and a line each. For history pieces and retros.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Events, dates and image links as ideas.</dd>
+    <dt>Sample page</dt><dd>Brightwater Library, 1925 to 2025.</dd>
+    <dt>Library</dt><dd>Own CSS over a JSON file (TimelineJS is heavier and loads from the network)</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://github.com/NUKnightLab/TimelineJS3" target="_blank" rel="noopener">TimelineJS</a></div>
+</article></div>
+</section><section class="group" id="g-2" aria-labelledby="gh-2">
+  <h2 id="gh-2">Decide</h2>
+  <div class="cards"><article class="card" data-group="Decide" data-wow="false" data-new="true">
+  <header><div class="tags"><span class="rank">#1</span></div><h3>Decision matrix</h3></header>
+  <p class="what">Options down the side, criteria across the top, a weight slider per criterion, live totals and a winner, plus a check of whether the winner holds if a weight moves.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Options and criteria as ideas; weights as ratings.</dd>
+    <dt>Sample page</dt><dd>Where should the new branch go? 3 sites, 4 criteria.</dd>
+    <dt>Library</dt><dd>None</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://aischool.lillytechsystems.com/tools/decision-matrix.html" target="_blank" rel="noopener">Example tool</a></div>
+</article><article class="card" data-group="Decide" data-wow="true" data-new="true">
+  <header><div class="tags"><span class="rank">#4</span><span class="wow">Wow in a demo</span></div><h3>Budget balancer</h3></header>
+  <p class="what">Share out a fixed pot across categories with sliders that must balance; the trade-off shows as you move. Cities run these at public budget workshops.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Categories and priorities; each phone’s split can be averaged into “the room’s budget”.</dd>
+    <dt>Sample page</dt><dd>Spend Brightwater’s $100,000.</dd>
+    <dt>Library</dt><dd>Chart.js doughnut</dd>
+    <dt>Effort in an hour</dt><dd>Low–medium</dd>
+  </dl>
+  <div class="links"><a href="https://www.americancityandcounty.com/?p=25634" target="_blank" rel="noopener">Hartford</a><a href="https://greensboro-nc.gov/departments/budget-evaluation/budget-simulator" target="_blank" rel="noopener">Greensboro</a></div>
+</article><article class="card" data-group="Decide" data-wow="false" data-new="true">
+  <header><div class="tags"><span class="rank">#9</span></div><h3>Now / Next / Later roadmap</h3></header>
+  <p class="what">Cards in three columns, dragged to reorder. Matches Build Room’s own Later list, so teams leave with a plan.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Ideas become cards; votes order them.</dd>
+    <dt>Sample page</dt><dd>What Brightwater does next.</dd>
+    <dt>Library</dt><dd>SortableJS (MIT)</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://www.aha.io/roadmapping/guide/templates/create/now-next-later-roadmap" target="_blank" rel="noopener">Now/Next/Later</a></div>
+</article></div>
+</section><section class="group" id="g-3" aria-labelledby="gh-3">
+  <h2 id="gh-3">Play</h2>
+  <div class="cards"><article class="card" data-group="Play" data-wow="true" data-new="true">
+  <header><div class="tags"><span class="rank">#2</span><span class="wow">Wow in a demo</span></div><h3>“What would you do?” branching story</h3></header>
+  <p class="what">A choose-your-own-adventure: a situation, 2–3 choices, consequences, several endings. The projector shows the story unfolding as the room votes each turn.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Branches as ideas; the path chosen live by vote.</dd>
+    <dt>Sample page</dt><dd>Your first shift at the desk.</dd>
+    <dt>Library</dt><dd>None (own small engine over a JSON file); inkjs (MIT) if needed</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://github.com/y-lohse/inkjs" target="_blank" rel="noopener">inkjs</a><a href="https://www.linuxlinks.com/twine/" target="_blank" rel="noopener">Twine</a></div>
+</article><article class="card" data-group="Play" data-wow="true" data-new="true">
+  <header><div class="tags"><span class="rank">#6</span><span class="wow">Wow in a demo</span></div><h3>Arcade mini-game</h3></header>
+  <p class="what">One mechanic, one screen, a score: catch, dodge or sort. The room plays it on their phones over Wi‑Fi share at the end.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Theme, hero and rule spun on the wheel; difficulty rated after playing.</dd>
+    <dt>Sample page</dt><dd>Shelve the books before closing.</dd>
+    <dt>Library</dt><dd>KAPLAY (MIT) or plain canvas</dd>
+    <dt>Effort in an hour</dt><dd>Medium</dd>
+  </dl>
+  <div class="links"><a href="https://dev.to/js13kgames/js13kgames-2025-winners-announced-20nl" target="_blank" rel="noopener">js13kGames 2025</a><a href="https://github.com/kaplayjs/kaplay" target="_blank" rel="noopener">KAPLAY</a></div>
+</article><article class="card" data-group="Play" data-wow="true" data-new="true">
+  <header><div class="tags"><span class="rank">#10</span><span class="wow">Wow in a demo</span></div><h3>Generative poster</h3></header>
+  <p class="what">Shapes, colour and the room’s words drawn by code; press a key for a new variant, keep the best. A closing piece to print.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Palette by vote, words as ideas, the keeper picked by vote.</dd>
+    <dt>Sample page</dt><dd>Brightwater’s 100th birthday poster.</dd>
+    <dt>Library</dt><dd>Plain canvas (p5.js is LGPL, so it is out)</dd>
+    <dt>Effort in an hour</dt><dd>Low–medium</dd>
+  </dl>
+  <div class="links"><a href="https://perthirtysix.com/genuary2025" target="_blank" rel="noopener">Genuary 2025</a></div>
+</article></div>
+</section><section class="group" id="g-4" aria-labelledby="gh-4">
+  <h2 id="gh-4">Make a page</h2>
+  <div class="cards"><article class="card" data-group="Make a page" data-wow="false" data-new="true">
+  <header><div class="tags"><span class="rank">#3</span></div><h3>Clickable prototype</h3></header>
+  <p class="what">3–5 phone-sized screens linked by taps: the design sprint’s “realistic but minimal” prototype. Takes over from the plain “interactive website”.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Each screen’s direction picked from A/B mockups Claude already makes.</dd>
+    <dt>Sample page</dt><dd>Book a study room: four screens.</dd>
+    <dt>Library</dt><dd>None</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://www.dsebastien.net/2021-02-09-design-sprint-2-0-cheatsheet/" target="_blank" rel="noopener">Design sprint cheat sheet</a></div>
+</article><article class="card" data-group="Make a page" data-wow="false" data-new="true">
+  <header><div class="tags"><span class="rank">#7</span></div><h3>Event page</h3></header>
+  <p class="what">Agenda, speakers, venue, FAQ and a QR code to the page. Useful the next day.</p>
+  <dl>
+    <dt>The room gives</dt><dd>Agenda items and the questions people will ask.</dd>
+    <dt>Sample page</dt><dd>Brightwater Book Fair.</dd>
+    <dt>Library</dt><dd>qrcode-generator (MIT)</dd>
+    <dt>Effort in an hour</dt><dd>Low</dd>
+  </dl>
+  <div class="links"><a href="https://marketplace.framer.com/marketplace/templates/category" target="_blank" rel="noopener">Framer template categories</a></div>
+</article></div>
+</section>
+
+  <section class="how" aria-label="How it would work">
+    <div>
+      <h2>How a starter gets there</h2>
+      <ol>
+        <li>The host picks it in the opening; the room’s brief says which.</li>
+        <li>Claude asks the plugin for it. The plugin downloads it from the Engage site and checks every file against a fingerprint it carries. Any mismatch and nothing is written.</li>
+        <li>It goes into a fresh project as the first commit, so the room’s first decision is a clean change against it.</li>
+        <li>Each one carries a map for Claude (<code>CLAUDE.md</code>), sample data in <code>demo/data/</code>, and “replace me” markers Claude fills from the brief.</li>
+        <li>Anyone outside a session can copy one: <code>npx giget gh:geseib/engagements/src/public/starters/dashboard</code></li>
+      </ol>
+    </div>
+    <div>
+      <h2>How the room adds content</h2>
+      <ol>
+        <li>On the phone, <b>Add a source</b>: a link and one line on what it is. “Only links anyone may see. No personal data.”</li>
+        <li>It lands in the host’s ideas list. The host presses <b>Use this</b>, or doesn’t.</li>
+        <li>The plugin (not Claude) downloads it: secure links only, no addresses inside the network, 10 MB at most, data and image files only. It goes into a hidden inbox folder.</li>
+        <li>Claude says what it found (“Monthly visits by branch, 84 rows: fits the line chart”) and flags columns that look like personal data.</li>
+        <li>Only after the host sends it on does the file join the page, with a line in <code>SOURCES.md</code>.</li>
+      </ol>
+      <p class="lede" style="font-size:14.5px;margin:0">Works for a web page, a CSV or JSON link, a file in a GitHub repo, and a Google Sheet published as CSV. Anything fetched is treated as data, never as instructions to Claude.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Left out, or folded in</h2>
+    <ul class="out" style="margin-top:14px">
+      <li><b>Calculator:</b> a mode of the “what if” simulator.</li>
+      <li><b>Scroll-driven story:</b> the infographic’s story mode.</li>
+      <li><b>FAQ finder:</b> lives inside training and the branching story.</li>
+      <li><b>Story map:</b> waits on a map that works offline; the free map provider’s terms forbid offline use.</li>
+      <li><b>Journey map / persona:</b> a good design-sprint add-on later.</li>
+      <li><b>Sound toy:</b> fun, but niche and loud in a room.</li>
+      <li><b>Personality quiz:</b> a light opener; easy to add later.</li>
+      <li><b>Team page (“Manual of Me”):</b> parked; it names people, which Build Room avoids, so it needs a privacy design first.</li>
+      <li><b>Interactive website:</b> replaced by the clickable prototype.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Your call</h2>
+    <ol class="qs" style="margin-top:14px">
+      <li>With thirteen starters, pick a group then a starter? Or the host chooses which six go on the opening’s wheel?</li>
+      <li>One made-up subject (a town library) for every sample page, or two or three Claude can choose from to match the room?</li>
+      <li>Does the room vote for the starter, or does the host pick it?</li>
+      <li>Budget balancer and decision matrix are best when every phone’s sliders are averaged. Worth a new question type, or one rating per criterion to start?</li>
+      <li>Photo uploads from phones soon, or are links enough for now?</li>
+      <li>Allow PDFs as sources (good for training content, big and hard to review)? Is 10 MB the right cap?</li>
+      <li>Google Sheets only as published CSV links, or read private sheets with the host’s sign-in (much more work)?</li>
+      <li>A fifth first-wave starter for a plain document or guide page?</li>
+      <li>Keep starters in this repo, or a separate public repo from day one?</li>
+    </ol>
+  </section>
+
+  <p class="foot">From <code>docs/design/build-room-starters/RESEARCH.md</code> (18 Oct 2026). Every library named is MIT or BSD, or the starter needs none. Some sources (Nicky Case, The Pudding) could not be opened from the research container; those links come from search results.</p>
+</main>
+
+<script>
+(() => {
+  const btns = [...document.querySelectorAll('.filters button')];
+  const apply = (f) => {
+    btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === f)));
+    document.querySelectorAll('.card').forEach((c) => {
+      c.hidden = f === 'wow' ? c.dataset.wow !== 'true' : f === 'new' ? c.dataset.new !== 'true' : false;
+    });
+    document.querySelectorAll('.group').forEach((g) => { g.hidden = !g.querySelector('.card:not([hidden])'); });
+  };
+  btns.forEach((b) => b.addEventListener('click', () => apply(b.dataset.f)));
+})();
+</script>
