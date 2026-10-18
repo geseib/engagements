@@ -891,7 +891,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.24.0';
+const LATEST_PLUGIN = '1.24.1';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1934,7 +1934,9 @@ function sentView(room, hide = () => false) {
   let best = null;
   for (const l of (room && room.logs) || []) {
     if (!l.ForAgent || l.ForBuilder || l.HostOnly || l.Cancelled || l.Kind === 'note') continue;
-    if (!best || String(l.CreatedAt || '') >= String(best.CreatedAt || '')) best = l;
+    // Two in the same millisecond: the later row key wins, so every read agrees.
+    const a = `${l.CreatedAt || ''}|${l.SK || ''}`;
+    if (!best || a >= `${best.CreatedAt || ''}|${best.SK || ''}`) best = l;
   }
   if (!best) return null;
   const as = claudeGetsOf(best.ForAgentAs);

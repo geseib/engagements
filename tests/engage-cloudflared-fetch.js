@@ -52,6 +52,8 @@ const a = process.argv; const target = new URL(a[a.indexOf('--url') + 1]);
 if (mode === '429') { process.stderr.write('INF Requesting new quick Tunnel on trycloudflare.com...\\nquick tunnel provisioning failed with status 429\\n'); process.exit(1); }
 if (mode === 'silent') { setInterval(() => {}, 1000); return; }
 const s = http.createServer((req, res) => {
+  // 'edge-down': an address, but Cloudflare's edge never reaches this laptop (its 530 page).
+  if (mode === 'edge-down') { res.writeHead(530, { server: 'cloudflare' }); return res.end('error code: 1033'); }
   const up = http.request({ host: target.hostname, port: target.port, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
   up.on('error', () => { res.writeHead(502); res.end('error code: 502'); });
   req.pipe(up);
@@ -205,6 +207,18 @@ async function remoteOffThenOn() {
     await until(() => /did not give this laptop a remote link/.test(lastRemote().error || ''), 10000);
     const pid = spawns()[spawns().length - 1];
     await until(() => !alive(pid));
+    setMode('ok');
+  });
+  await check('an address that never reaches this laptop: the host is told what came back, and ~/.engage/cloudflared.log keeps it (1.24.1)', async () => {
+    setMode('edge-down');
+    await sleep(2600);
+    await remoteOffThenOn();
+    await until(() => /did not finish setting up the remote link/.test(lastRemote().error || ''), 25000);
+    assert.match(lastRemote().error, /the link answered 530 from cloudflare/);
+    const logText = fs.readFileSync(path.join(home, '.engage', 'cloudflared.log'), 'utf8');
+    assert.match(logText, /plugin 1\.\d+\.\d+, cloudflared 2026\.10\.1/);
+    assert.match(logText, /the link answered 530/);
+    assert.match(logText, /--- cloudflared said ---\n[\s\S]*quick Tunnel has been created/);
     setMode('ok');
   });
   await check('Engage goes silent: cloudflared is killed with the gateway', async () => {
