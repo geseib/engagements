@@ -1,8 +1,32 @@
-import React, { useCallback, useEffect } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useState,
+} from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
 import { step, canStep, positionLabel } from '../utils/answerSpotlight';
 import { answerText } from '../config/stageAnswers';
+import { minimalK, partText } from '../present/presentFit';
+
+/** The ladder beside a result shows this many rows; the rest share the last ("5–9"). */
+export const LADDER_ROWS = 5;
+
+/**
+ * The ladder's rows: one per answer in order (the caller's tally order), the
+ * last row covering the tail when there are more than LADDER_ROWS. Each row's
+ * bar is its answer's share relative to the pick; a collapsed row takes the
+ * share of its first (highest) answer.
+ */
+export function ladderRows(total, shareAt, rows = LADDER_ROWS) {
+  const n = Math.max(0, total);
+  const out = [];
+  for (let i = 0; i < Math.min(n, rows); i += 1) {
+    const last = i === rows - 1 && n > rows;
+    out.push({
+      from: i, to: last ? n - 1 : i, label: last ? `${i + 1}–${n}` : String(i + 1), share: shareAt(i),
+    });
+  }
+  return out;
+}
 
 /**
  * ONE ANSWER, BIG ENOUGH TO READ, WITH THE REST STILL REACHABLE.
@@ -133,14 +157,52 @@ export default function AnswerSpotlight({
    * reading.
    */
   onJump = null,
+  /**
+   * THE ROOM'S LOOK, ONE ANSWER PUT UP (owner, 18 Oct 2026,
+   * docs/design/room-content-v2 frames 11 and 12). Empty by default — the
+   * phone, the past-round review and anything else keep exactly what they had.
+   *
+   *   'vote'    the answer's NUMBER as a badge ("answer 4 of 9"), and a row of
+   *             numbered chips saying where it sits, each one a way to it. No
+   *             name, no points, whatever `labelFor` would say: the number IS
+   *             the label while voting.
+   *   'result'  its PLACE ("2nd") as the eyebrow, and a ladder of bars beside
+   *             it — every place's bar relative to the pick, this one marked —
+   *             with no figures on it. `placeFor(answer)` and
+   *             `shareFor(answer)` (0..1) are the caller's, so anonymity and
+   *             the tally stay decided where the cards behind decide them.
+   */
+  variant = '',
+  placeFor = null,
+  shareFor = null,
+  /**
+   * A LONG ANSWER SPLITS INTO PARTS rather than scrolling on a projector:
+   * past `partChars` characters it is cut at sentence ends
+   * (present/presentFit.js, the wall's own cutter) into the fewest parts that
+   * each fit, and → / ← walk the parts before they move to the next answer.
+   * Null (the default) keeps the one scrolling text every other caller has.
+   */
+  partChars = null,
 }) {
   const total = answers.length;
   const open = Number.isInteger(index) && index >= 0 && index < total;
+  const [part, setPart] = useState(0);
+  const fullText = open ? answerText(answers[index].answer) : '';
+  const parts = useMemo(() => (
+    Number.isFinite(partChars) && partChars > 0 && fullText.length > partChars
+      ? minimalK(fullText, (slice) => slice.length <= partChars)
+      : 1
+  ), [fullText, partChars]);
+  // A new answer opens on its first part.
+  useEffect(() => { setPart(0); }, [index]);
+  const shownPart = Math.min(part, parts - 1);
 
   const move = useCallback((delta) => {
+    if (delta > 0 && shownPart < parts - 1) { setPart(shownPart + 1); return; }
+    if (delta < 0 && shownPart > 0) { setPart(shownPart - 1); return; }
     const next = step(index, delta, total);
     if (next !== null && next !== index) onIndex(next);
-  }, [index, total, onIndex]);
+  }, [index, total, onIndex, shownPart, parts]);
 
   /*
     ARROW KEYS, because this is read from across a room with a clicker, and
@@ -208,18 +270,41 @@ export default function AnswerSpotlight({
 
   const answer = answers[index];
   const points = answer.points || 0;
+  const isVote = variant === 'vote';
+  const isResult = variant === 'result';
+  const text = parts > 1 ? partText(fullText, shownPart, parts) : fullText;
+  const share = (i) => {
+    const v = typeof shareFor === 'function' ? Number(shareFor(answers[i], i)) : 0;
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+  };
+  const place = isResult && typeof placeFor === 'function' ? placeFor(answer, index) : '';
+  const ladder = isResult && typeof shareFor === 'function' ? ladderRows(total, share) : [];
+  // The meta line repeats nothing: while voting the number is the label, and
+  // a hidden result's label would only say "Response N" again.
+  const who = labelFor(answer, index);
+  const showWho = !isVote && who && !(isResult && /^Response \d+$/.test(who));
 
   return (
     <Modal
       overlayClassName="modal-overlay answer-spotlight__scrim"
-      contentClassName={`answer-spotlight${surfaceClassName ? ` ${surfaceClassName}` : ''}`}
+      contentClassName={`answer-spotlight${surfaceClassName ? ` ${surfaceClassName}` : ''}${variant ? ` is-${variant}` : ''}`}
       onClose={onClose}
       closeOnBackdrop
       closeOnEscape
       label={title}
     >
       <div className="answer-spotlight__head">
-        <span className="answer-spotlight__count">{positionLabel(index, total)}</span>
+        {isVote ? (
+          <span className="answer-spotlight__num-line">
+            <span className="answer-spotlight__num" aria-hidden="true">{index + 1}</span>
+            <span className="answer-spotlight__count">{`answer ${positionLabel(index, total)}`}</span>
+          </span>
+        ) : (
+          <span className="answer-spotlight__count">{positionLabel(index, total)}</span>
+        )}
+        {parts > 1 && (
+          <span className="answer-spotlight__part">{`Part ${shownPart + 1} of ${parts}`}</span>
+        )}
         <button
           type="button"
           className="answer-spotlight__close"
@@ -230,24 +315,68 @@ export default function AnswerSpotlight({
         </button>
       </div>
 
-      <div className="answer-spotlight__text">{answerText(answer.answer)}</div>
-
-      <div className="answer-spotlight__meta">
-        <span className="answer-spotlight__who">{labelFor(answer, index)}</span>
-        {showPoints && (
-          <span className="answer-spotlight__tally">
-            {`+${points}`}
-            <small>{`${answer.votes || 0} votes`}</small>
-          </span>
+      {!variant && <div className="answer-spotlight__text">{text}</div>}
+      {variant && (
+      <div className={isResult && ladder.length ? 'answer-spotlight__split' : 'answer-spotlight__main'}>
+        <div className="answer-spotlight__body">
+          {place && <span className="answer-spotlight__place">{place}</span>}
+          <div className="answer-spotlight__text">{text}</div>
+        </div>
+        {ladder.length > 0 && (
+          <ol className="answer-spotlight__ladder" aria-label="Where it sits">
+            {ladder.map((row) => {
+              const here = index >= row.from && index <= row.to;
+              return (
+                <li
+                  key={row.label}
+                  className={`answer-spotlight__rung${row.from === 0 ? ' is-pick' : ''}${here ? ' is-here' : ''}`}
+                  aria-current={here ? 'true' : undefined}
+                >
+                  <span className="answer-spotlight__rung-fill" style={{ width: `${Math.max(3, Math.round(row.share * 100))}%` }} />
+                  <span className="answer-spotlight__rung-n">{row.label}</span>
+                </li>
+              );
+            })}
+          </ol>
         )}
       </div>
+      )}
+
+      {(!variant || showWho || showPoints) && (
+        <div className="answer-spotlight__meta">
+          <span className="answer-spotlight__who">{!variant || showWho ? who : ''}</span>
+          {showPoints && (
+            <span className="answer-spotlight__tally">
+              {`+${points}`}
+              <small>{`${answer.votes || 0} votes`}</small>
+            </span>
+          )}
+        </div>
+      )}
+
+      {isVote && total > 1 && (
+        <div className="answer-spotlight__chips" role="group" aria-label="Answers">
+          {answers.map((a, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`answer-spotlight__chip${i === index ? ' is-on' : ''}`}
+              aria-current={i === index ? 'true' : undefined}
+              aria-label={`Answer ${i + 1}`}
+              onClick={() => { if (i !== index) onIndex(i); }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="answer-spotlight__nav">
         <button
           type="button"
           className="btn-secondary"
           onClick={() => move(-1)}
-          disabled={!canStep(index, -1, total)}
+          disabled={!canStep(index, -1, total) && shownPart === 0}
           aria-label="Previous answer"
         >
           <Icon name="CaretLeft" size={18} /> Previous
@@ -256,7 +385,7 @@ export default function AnswerSpotlight({
           type="button"
           className="btn-secondary"
           onClick={() => move(1)}
-          disabled={!canStep(index, 1, total)}
+          disabled={!canStep(index, 1, total) && shownPart >= parts - 1}
           aria-label="Next answer"
         >
           Next <Icon name="CaretRight" size={18} />
