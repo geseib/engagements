@@ -108,4 +108,11 @@ export const SCREEN_WORDS = Object.freeze({
   open: 'Open ↗',
   size: 'Room screen size',
   sizeHint: 'How big the room\'s screen draws everything',
+  // Quick start (owner, 18 Oct 2026: it "doesnt let you know what screen mode
+  // its in or allow you to pick", and two screens opened no window).
+  quickTwoPlaces: 'The room\'s window opens on your other display as the session starts. Click it once to fill the screen.',
+  quickTwoBeside: 'The room\'s window opens as the session starts. Drag it onto the projector and press F.',
+  quickOne: 'The projector shows this laptop.',
+  quickUnchosen: 'Not chosen yet. Pick one, or the lobby will ask.',
+  quickBlocked: 'The browser blocked the room\'s window. Open it from Room\'s window ↗ at the top.',
 });

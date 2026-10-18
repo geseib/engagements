@@ -46,11 +46,11 @@
  *  --------------  ---------------------------------------  ------------------------------
  *  LOBBY           LEAD join (address, code, QR); session   same
  *                  title kicker; count
- *  ANSWERING       LEAD the task; title as a kicker (not    category kicker; title as a
- *                  when it repeats the task); the lesson    heading (support); LEAD the
- *                  only when the instruction is generic     task; the lesson (support,
- *                  ("adapt this lesson"), as support that   first to give way); count
- *                  may give way; category dropped; count
+ *  ANSWERING       LEAD the lesson (the task when there is  category kicker; title as a
+ *                  none); the task as support at the        heading (support); LEAD the
+ *                  secondary step, never dropped; title as  lesson; the task (support,
+ *                  a kicker (not when it repeats the        never dropped); count
+ *                  lead); category dropped; count           (owner, 18 Oct 2026)
  *  QUESTION_FOCUS  as ANSWERING, no count                   as ANSWERING, no count
  *  VOTING          LEAD the cue (vote on your phone); the   title heading; the task; LEAD
  *                  task as support; title dropped; count    the cue; count
@@ -208,13 +208,23 @@ function topLine(p, moment, verbose, d) {
   p.part('roundLabel', str(d.roundLabel) ? ROLE.KICKER : ROLE.DROPPED, 'meta', str(d.roundLabel));
 }
 
-/** ANSWERING and QUESTION_FOCUS: the task leads. */
+/**
+ * ANSWERING and QUESTION_FOCUS: THE LESSON LEADS (owner, 18 Oct 2026: "for the
+ * rounds for the answer phase neither the host nor the room sees the actual
+ * lesson instead we tell them what to do"). The lesson is the question the
+ * room is answering; the task says how to answer it, at the secondary step
+ * under it and never dropped. With no lesson the task leads; with neither, the
+ * title. Until 18 Oct the task led and a question with its own instruction
+ * dropped the lesson on Room, TV and Table, so the room was told how to answer
+ * a question it was never shown.
+ */
 function questionUp(p, moment, verbose, d) {
   const task = str(d.task);
   const title = str(d.title);
   const story = str(d.story);
-  const leadKey = task ? 'task' : 'title';
-  const repeats = title && task && norm(title) === norm(task);
+  const leadKey = story ? 'story' : task ? 'task' : 'title';
+  const leadText = leadKey === 'story' ? story : task;
+  const repeats = title && leadText && norm(title) === norm(leadText);
   p.part('category', verbose && str(d.category) ? ROLE.KICKER : ROLE.DROPPED, 'meta', str(d.category));
   if (leadKey === 'title') {
     p.part('title', ROLE.LEAD, leadSize(title), title);
@@ -223,11 +233,12 @@ function questionUp(p, moment, verbose, d) {
   } else {
     p.part('title', verbose ? ROLE.SUPPORT : ROLE.KICKER, verbose ? 'secondary' : 'meta', title);
   }
-  if (task) p.part('task', ROLE.LEAD, leadSize(task), task);
-  // The lesson: on Call always; elsewhere only when the instruction is
-  // generic and so needs it ("How could you adapt this lesson…").
-  const storyShown = story && (verbose || !d.taskOwn);
-  p.part('story', storyShown ? ROLE.SUPPORT : ROLE.DROPPED, 'body', story, { drop: true });
+  if (story) p.part('story', ROLE.LEAD, leadSize(story), story);
+  if (task) {
+    const sameAsStory = story && norm(story) === norm(task);
+    if (leadKey === 'task') p.part('task', ROLE.LEAD, leadSize(task), task);
+    else p.part('task', sameAsStory ? ROLE.DROPPED : ROLE.SUPPORT, 'secondary', task, { keep: true });
+  }
   if (moment === 'ANSWERING') p.part('count', ROLE.COUNT, 'meta');
   return leadKey;
 }

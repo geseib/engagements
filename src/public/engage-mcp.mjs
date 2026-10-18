@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.22.0';
+const VERSION = '1.24.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -508,9 +508,25 @@ function badgeSnippet(label) {
     `pointer-events:none">Choice ${label}</div>`;
 }
 
+/**
+ * Which plugin is running, and whether it is the latest (owner, 18 Oct): on
+ * connect and in room_status. `latest` comes from Engage; an Engage too old to
+ * say gets the version alone.
+ */
+function pluginVersionLine(latest) {
+  const v = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(latest || '')) ? String(latest) : '';
+  if (!v) return `Engage plugin ${VERSION}.`;
+  const a = VERSION.split('.').map(Number); const b = v.split('.').map(Number);
+  const cmp = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  if (cmp === 0) return `Engage plugin ${VERSION}: the latest.`;
+  if (cmp > 0) return `Engage plugin ${VERSION} (this Engage knows ${v} as its latest).`;
+  return `Engage plugin ${VERSION} is older than the latest, ${v}. Tell the host: they update it from Connect Claude Code in the Build Room, then restart Claude Code here. Until then, features newer than ${VERSION} do not work.`;
+}
+
 function renderState(st) {
   const lines = [];
   lines.push(`Engage Build Room · session ${s(st.gameId) || CONFIG.gameId}${st.title ? ` — ${s(st.title)}` : ''}`);
+  lines.push(pluginVersionLine(st.pluginLatest));
   lines.push(`Goal: ${s(st.goal) || '(no goal set)'}`);
   // THE ROOM DECIDES (owner, 2026-10-07): until the room (or the host) has
   // answered "What are we making?", a title and goal are only a name.
@@ -557,7 +573,7 @@ function renderState(st) {
   }
   if (st.outcome && st.outcome.summary) lines.push('', `Wrap-up already posted: ${trunc(st.outcome.summary, 200)}`);
   if (st.lan && st.lan.status === 'live') {
-    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link. When you start the demo\'s or the mockups\' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person\'s name>"} (each field optional). The host may edit it, and it wins over your links: the room\'s Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.');
+    lines.push('', 'SHARING ON WI-FI: the room opens your app on their own laptops, tablets and phones through Engage\'s gateway on this laptop. Keep starting servers on localhost (never --host 0.0.0.0). Route backend calls through your dev server (/api proxied to the backend) instead of calling another port from the page, and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link. When you start the demo\'s or the mockups\' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person\'s name>"} (each field optional). The host may edit it, and it wins over your links: the room\'s Open the demo goes to it. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.');
   }
   if (st.lan && st.lan.remote && st.lan.remote.wanted) {
     // Remote share (spec §4.5): one tunnel to the newest thing shown, and Cloudflare's quick-tunnel limits.
@@ -816,7 +832,7 @@ const TOOLS = [
         kind: { type: 'string', enum: ['progress', 'milestone', 'showing', 'answer'], description: 'Default "progress". "answer" answers a question the room asked you (THE ROOM ASKS YOU).' },
         detail: str('Optional extra detail shown when the entry is expanded.', { maxLength: 2000 }),
         link: str('Optional PUBLIC http(s) link (e.g. a deployed preview).'),
-        role: { type: 'string', enum: ['demo', 'mockup'], description: 'What the link is, when it is one of this project\'s pages: "demo" for the playable demo (the room\'s Open the build goes there), "mockup" for a mockup. Needs a link.' },
+        role: { type: 'string', enum: ['demo', 'mockup'], description: 'What the link is, when it is one of this project\'s pages: "demo" for the playable demo (the room\'s Open the demo goes there), "mockup" for a mockup. Needs a link.' },
         doing: str('What you are doing as this piece of work starts: 4 to 7 words, present tense, starting with an -ing verb, e.g. "Scaffolding the site" or "Mocking up 3 graph options". Never people\'s names, file paths, commands or links. The room sees it as your headline.', { maxLength: 50 }),
         done: str('Past tense of the line that just ended, 2 to 7 words, e.g. "Scaffolded the site". Same rules as doing.', { maxLength: 50 }),
         runItem: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only when the host\'s run list sent you an item (the direction says RUN LIST ITEM k): the k of the item you just finished. It tells the host this item is done so Next can move on.' },
@@ -2385,7 +2401,7 @@ function promptText(name, args) {
 
 const INSTRUCTIONS = `Engage connects you to a live room of people through the host's Build Room session. The host's laptop is usually on a projector, the room follows along on their phones, and you are building something real with them.
 
-ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. No names, files, paths or links. Keep your task list current.
+ALWAYS say what you are doing: post_update with doing (4-7 words, starts with an -ing verb, "Scaffolding the site") when a piece of work starts, done (past tense of the piece that just ended, "Scaffolded the site") in the same call as the next doing. Name what the room or the host asked for ("Adding the old-school leaderboard"), never just "Working on the code". No names, files, paths or links. Keep your task list current.
 
 How to collaborate:
 - THE OPENING: a new room starts by framing the build (room_status says "PHASE: OPENING"). Then you prepare and listen: set up the project folder, write no product code, read the brief as each step lands, and when an answer is thin propose ONE probing question with ask_room_for_ideas and forStep (the step it probes; it lands on the host's screen for review). When room_status says the room has said enough, draft the one-page brief with draft_brief (a headline and a short summary, in the room's words; invent nothing). Wait with wait_for_direction. When the host presses Start building you get the whole brief as a direction: then plan, post the plan, and build.
@@ -2406,7 +2422,7 @@ How to collaborate:
 - Show, don't just tell: screenshot each mockup and share_image it onto its Choose option (askId + label), so phones see it too; before wrap_up, share_image one or two screenshots of the finished product with kind "final" for the report.
 - Run THIS project's server on a port no other project is using, and take the URL from what the server prints (never assume localhost:5173 or 3000: an earlier session's server may still hold that port). Open the page once to check it is this project before you share the link. If a server from an earlier session is still running, tell the host; do not stop it unless they ask. Engage refuses a local link served from another folder.
 - Start servers on localhost, never --host 0.0.0.0. When the host shares the build on Wi-Fi, Engage's gateway opens it to the room's laptops, tablets and phones. So route backend calls through the dev server (/api proxied), and make every page work at phone, tablet and laptop widths. Serve only what the room should open: the app, or the demo from its own folder, and each mockup from a mockups folder; never the project root, never a folder listing. Link the page itself (http://localhost:<port>/demo/index.html), never a folder or a page of links you made for yourself: when shared, the room can open only the folders of the pages you link.
-- When you start the demo's or the mockups' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"} (each field optional). The host may edit it, and it wins over your links: the room's Open the build goes to its demo. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
+- When you start the demo's or the mockups' server, write .engage/share.json in this project: {"demo": "http://localhost:<port>/demo/index.html", "mockups": "http://localhost:<port>/mockups/", "label": "<a few words naming this session, never a person's name>"} (each field optional). The host may edit it, and it wins over your links: the room's Open the demo goes to it. Mark each link you post: post_update role "demo" for the playable demo, role "mockup" for a mockup.
 - The build is always something people open as a web page, even when the room is making a document or a plan: serve it from this project's folder on one local address. When the host also opens it to people who are not in the room, room_status says SHARING REMOTELY; then show a built copy rather than the dev server, and never use server-sent events.
 - Always attach the URL of what you show: the url of every Choose option, and link on post_update "showing". Local URLs (localhost) are right here: the host opens them on this laptop, and when the host shares on Wi-Fi the room opens them too, on their laptops, tablets and phones.
 - At the end, call wrap_up with a summary, what was built, links (the running demo first) and next steps, then post a final milestone.
@@ -2597,7 +2613,7 @@ function lanSessionName() {
 const pageStart = (title) => '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
   `<title>${escapeHtml(title)}</title><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.5rem;color:#1B2942">` +
   `<p style="margin:0 0 .5rem;font-size:.85rem;color:#5B6880">${escapeHtml(lanSessionName())}</p>`;
-const notFoundPage = () => `${pageStart('Not shared')}<h1 style="font-size:1.4rem">Not part of the shared build</h1><p>Go back to the Build Room and press Open the build.</p></body>`;
+const notFoundPage = () => `${pageStart('Not shared')}<h1 style="font-size:1.4rem">Not part of the shared demo</h1><p>Go back to the Build Room and press Open the demo.</p></body>`;
 /** Every answer the gateway gives names its session (S3 d), so a host can tell which room a port is. */
 const sessionHeader = () => ({ 'X-Engage-Session': String(CONFIG.gameId || '') });
 function notShared(res) {
@@ -2655,8 +2671,8 @@ const wifiLock = Object.freeze({
 });
 
 const lockedPage = () => `${pageStart('Engage Build Room')}<h1 style="font-size:1.6rem">Open this from the Build Room</h1>` +
-  '<p>This build is only for people in the room. Join the session on your laptop, tablet or phone and press Open the build.</p>' +
-  '<p>If you were in the room, the host may have turned sharing off.</p></body>';
+  '<p>This demo is only for people in this session. Join the session on your laptop, tablet or phone and press Open the demo.</p>' +
+  '<p>If you joined, the host may have turned sharing off.</p></body>';
 
 /** Headers for the app: it is being opened on localhost. */
 function forwardHeaders(req, target, lock = wifiLock) {
@@ -3676,6 +3692,60 @@ export function commandName(command) {
   return '';
 }
 
+// THE STAGE'S ROW (docs/design/build-room-ideas I10, owner 18 Oct 2026):
+// Building / Testing / Fixing / Checking / Saved, read from what Claude ran,
+// so it moves even when Claude forgets to post. A test run carries its counts
+// and nothing else: never a test's name or a line of its output.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1'];
+const TEST_PROGRAMS = ['jest', 'vitest', 'mocha', 'pytest', 'ava', 'tap', 'playwright', 'cypress', 'karma', 'rspec', 'phpunit'];
+const CHECK_PROGRAMS = ['vite', 'serve', 'http-server', 'live-server', 'next', 'screencapture', 'open', 'xdg-open', 'curl', 'wget'];
+
+/** 'test', 'check', 'save' or 'run', from a command's name (commandName) and, for a few words, the whole line. */
+export function commandKind(name, command = '') {
+  const n = String(name || '');
+  const [prog, sub, third] = n.split(' ');
+  const line = String(command || '');
+  if (prog === 'git' && sub === 'commit') return 'save';
+  if (TEST_PROGRAMS.includes(prog) || (['npx', 'bunx'].includes(prog) && TEST_PROGRAMS.includes(sub))) {
+    return /playwright\s+install\b/.test(line) ? 'run' : 'test';
+  }
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && (sub === 'test' || sub === 't' || (sub === 'run' && /^test/.test(third || '')) || /^test/.test(sub || ''))) return 'test';
+  if ((prog === 'go' || prog === 'cargo' || prog === 'deno') && sub === 'test') return 'test';
+  if ((prog === 'python' || prog === 'python3') && /\s-m\s+(pytest|unittest)\b/.test(line)) return 'test';
+  if (prog === 'node' && /\s--test\b/.test(line)) return 'test';
+  if (CHECK_PROGRAMS.includes(prog)) {
+    // curl and wget only when they fetch this laptop's own demo.
+    if (prog === 'curl' || prog === 'wget') return /(localhost|127\.0\.0\.1)/.test(line) ? 'check' : 'run';
+    return 'check';
+  }
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(prog) && (sub === 'start' || sub === 'dev' || (sub === 'run' && /^(dev|start|serve|preview)/.test(third || '')))) return 'check';
+  if ((prog === 'python' || prog === 'python3') && /\s-m\s+http\.server\b/.test(line)) return 'check';
+  return 'run';
+}
+
+/**
+ * {passed, failed} from a test run's output, or null when no runner's summary
+ * line is in it. The last summary wins (watch mode, several suites).
+ * jest/vitest "Tests: 1 failed, 12 passed", pytest "1 failed, 12 passed in",
+ * mocha "12 passing" / "1 failing", node --test "# pass 12" / "# fail 1",
+ * cargo "test result: ok. 12 passed; 1 failed". Go names packages, not
+ * tests: no counts, so the run's own exit decides.
+ */
+export function testCounts(output) {
+  const text = String(output || '').replace(/\x1b\[[0-9;]*m/g, '').slice(-200000);
+  // The summary is near the end: read the last few lines that carry a count.
+  // "Test Files 1 passed" (vitest) and "Test Suites: 1 failed" (jest) count files, not tests.
+  const lines = text.split(/\r?\n/)
+    .filter((l) => /\b\d+\s+(passed|failed|passing|failing)\b|^#\s*(pass|fail)\s+\d+/i.test(l))
+    .filter((l) => !/Test (Files|Suites)\b/i.test(l));
+  if (!lines.length) return null;
+  const last = lines.slice(-3).reverse().join('\n'); // newest first: its count wins
+  const pick = (re) => { const m = last.match(re); return m ? Number(m[1]) : null; };
+  const passed = pick(/(\d+)\s+(?:passed|passing)\b/i) ?? pick(/^#\s*pass\s+(\d+)/im);
+  const failed = pick(/(\d+)\s+(?:failed|failing)\b/i) ?? pick(/^#\s*fail\s+(\d+)/im);
+  return passed === null && failed === null ? null : { passed: passed || 0, failed: failed || 0 };
+}
+
 /** A task title or helper job is fit for the room only as a short plain phrase. '' to say nothing. */
 function plainPhrase(v) {
   const t = String(v || '').replace(/\s+/g, ' ').trim();
@@ -3827,10 +3897,25 @@ function activityLineOf(data) {
     case 'Write': return { kind: 'edit', text: `Wrote ${base(input.file_path)}` };
     case 'Read': return { kind: 'read', text: `Read ${base(input.file_path)}` };
     case 'Glob': case 'Grep': case 'LS': return { kind: 'search', text: 'Searched the code' };
-    case 'Bash': { const c = commandName(input.command); return { kind: 'run', text: c ? `Ran ${c}` : 'Ran a command' }; }
+    case 'Bash': {
+      const c = commandName(input.command);
+      const text = c ? `Ran ${c}` : 'Ran a command';
+      // A failed command reaches the PostToolUseFailure hook (plugin 1.24.0), its output in `error`.
+      const failedRun = String(data.hook_event_name || '') === 'PostToolUseFailure';
+      const kind = commandKind(c, input.command);
+      if (kind === 'test') {
+        const res = data.tool_response && typeof data.tool_response === 'object' ? data.tool_response : {};
+        const out = failedRun ? String(data.error || '') : `${res.stdout || ''}\n${res.stderr || ''}`;
+        const tests = testCounts(out);
+        return { kind, text, ...(tests ? { tests } : {}), ...(failedRun || (tests && tests.failed > 0) ? { failed: true } : {}) };
+      }
+      return { kind, text, ...(failedRun ? { failed: true } : {}) };
+    }
     case 'WebFetch': {
       let host = '';
       try { host = new URL(String(input.url || '')).hostname; } catch { /* not a URL */ }
+      // Claude looking at its own running demo is Checking (I10), not research.
+      if (LOCAL_HOSTS.includes(host)) return { kind: 'check', text: 'Looked at the running demo' };
       return { kind: 'web', text: host ? `Looked at ${host}` : 'Looked something up online' };
     }
     case 'WebSearch': return { kind: 'web', text: 'Searched the web' };
@@ -3840,7 +3925,7 @@ function activityLineOf(data) {
   }
 }
 
-/** --activity: the PostToolUse, PreToolUse and SubagentStop hook. Never fails the tool, never prints. */
+/** --activity: the PostToolUse, PostToolUseFailure, PreToolUse and SubagentStop hook. Never fails the tool, never prints. */
 function hookActivity() {
   let data = {};
   try { data = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { /* not JSON */ }
@@ -4085,6 +4170,8 @@ function writePlugin(home, root, plug) {
       Stop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --checkpoint', timeout: 60 }] }],
       // One plain line per tool for the room's live view (hookActivity).
       PostToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
+      // A command that fails (a red test run) comes here instead, with its output in `error` (I10).
+      PostToolUseFailure: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
       // A helper's line starts when it is asked (PreToolUse carries its description) and ends when it stops.
       PreToolUse: [{ matcher: 'Agent|Task', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],
       SubagentStop: [{ hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/engage-mcp.mjs" --activity', timeout: 10 }] }],

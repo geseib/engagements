@@ -9,11 +9,18 @@ import RoomWindowLink from '../stage/RoomWindowLink';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent }) {
+export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null }) {
   const status = presentStatusFrom(presentDetail);
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
+      {/* The way out, saying where it goes (owner, 18 Oct 2026). The session
+          keeps running; Continue brings the host back. */}
+      {onLeave ? (
+        <button type="button" className="hc-leave" onClick={onLeave} title={CW.allSessionsHint}>
+          <span aria-hidden="true">←</span> {CW.allSessions}
+        </button>
+      ) : null}
       <span className="hc-brand">Engagements</span>
       <span className="hc-name">{title}</span>
       <span className="hc-spacer" />

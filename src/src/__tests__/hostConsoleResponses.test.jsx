@@ -136,3 +136,12 @@ test('no question row without a way to put it up, or while answering', () => {
   render(<ResponsesPanel kicker="k" title="t" phase="ASK" responses={R} task="Which process must go?" authorsHidden onQuestionToWall={() => {}} />);
   expect(screen.queryByTestId('hc-question')).toBeNull();
 });
+
+// rejects (owner, 18 Oct 2026): the host told what the room should do but never
+// shown the lesson the room is answering.
+test('answering: the lesson shows above the task', () => {
+  const { container } = render(<ResponsesPanel kicker="k" title="Precision" lesson="Give an example of how precision paid off." task="Use STAR." phase="ASK" responses={[]} authorsHidden />);
+  const lesson = container.querySelector('.hc-lesson');
+  expect(lesson.textContent).toBe('Give an example of how precision paid off.');
+  expect(lesson.compareDocumentPosition(container.querySelector('.hc-task')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

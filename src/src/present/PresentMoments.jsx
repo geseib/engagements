@@ -116,22 +116,36 @@ function TaskLine({ task, rc = null }) {
 
 /* ------------------------------------------------------------ the moments */
 
+/**
+ * THE LOBBY (owner, 18 Oct 2026: "why is the title of the session tiny. the
+ * link and room id can be under the QR code. on the left could be nicely
+ * designed title of the session and potentially the summary of the event").
+ * Left: the session's title at the hero step, the host's Event Details under
+ * it (may give way for space), and how many are in. Right: the QR, with the
+ * address and the session code under it. The top line carries no title here:
+ * the title is the page.
+ */
 export function PresentLobby({ model }) {
   const midSession = model.moment === 'JOIN';
+  const title = model.sessionTitle || 'Welcome';
   return (
     <div className="present-moment present-frame">
-      <Top model={model} right={midSession ? 'Join' : 'Joining'} />
+      <Top model={{ ...model, sessionTitle: '' }} right={midSession ? 'Join' : 'Joining'} />
       <div className="present-main">
         <div className="present-lobby">
-          <div>
-            <Eyebrow className="present-eyebrow">Scan to join · no app, no account</Eyebrow>
-            <p className="present-lead present-join-url">{model.joinHost}</p>
+          <div className="present-lobby-about">
+            <Heading level={1} size="hero" balance className="present-lobby-title">{title}</Heading>
+            {model.details ? <p className="present-lobby-details" data-drop="1">{model.details}</p> : null}
+            <p className="present-lead present-lobby-count">{`${model.joined} in the room`}</p>
+          </div>
+          <div className="present-lobby-join">
+            <div className="present-qr" aria-label="QR code to join">
+              <QRCodeSVG value={model.joinUrl} size={512} level="M" includeMargin={false} />
+            </div>
+            <Eyebrow className="present-eyebrow present-join-ey">Scan to join<br />no app, no account</Eyebrow>
+            <p className="present-join-url">{model.joinHost}</p>
             <Eyebrow tone="muted" className="present-eyebrow present-code-label">Session code</Eyebrow>
             <p className="present-code">{model.code}</p>
-            <p className="present-lead">{`${model.joined} in the room`}</p>
-          </div>
-          <div className="present-qr" aria-label="QR code to join">
-            <QRCodeSVG value={model.joinUrl} size={512} level="M" includeMargin={false} />
           </div>
         </div>
       </div>
@@ -145,10 +159,9 @@ export function PresentLobby({ model }) {
 /**
  * A QUESTION OR A LESSON IS UP (owner, 17 Oct 2026: "the most important thing
  * is the lesson [and] the instructions"). What shows and how large is
- * config/roomContent.js's: on Room, TV and Table the task leads at the hero or
- * primary step and the title is a small kicker above it; the lesson shows when
- * the instruction is generic and needs it, and may give way for space. Call
- * adds the category, the title as a heading and the lesson.
+ * config/roomContent.js's: the lesson leads at the hero or primary step, the
+ * task sits under it as "The task", and the title is a small kicker above (on
+ * Call a heading, with the category). With no lesson the task leads.
  */
 export function RoomQuestion({ model }) {
   const rc = model.room;
@@ -162,9 +175,10 @@ export function RoomQuestion({ model }) {
       {titleRole === ROLE.KICKER ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Eyebrow> : null}
       {titleRole === ROLE.SUPPORT ? <Heading level={2} size="primary" balance className="present-h2 present-rc-title" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Heading> : null}
       {titleRole === ROLE.LEAD ? lead('title') : null}
-      {shows(rc, 'task') ? lead('task') : null}
-      {shows(rc, 'story') ? (
-        <p className="present-lead present-rc-support" data-drop={String(dropRank(rc, 'story') || 1)} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
+      {shows(rc, 'story') ? lead('story') : null}
+      {roleOf(rc, 'task') === ROLE.LEAD ? lead('task') : null}
+      {roleOf(rc, 'task') === ROLE.SUPPORT ? (
+        <p className="present-task present-rc-task" {...rcAttrs(rc, 'task')}><span className="present-task-ey">The task</span>{textOf(rc, 'task')}</p>
       ) : null}
     </>
   );

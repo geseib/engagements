@@ -60,6 +60,7 @@ let stateInbox = [];
 let stateBrief;
 let stateOpening;
 let stateLan;
+let statePluginLatest;
 let stateYou;
 let statePoints;
 let postedIds = 0;
@@ -97,6 +98,7 @@ const server = http.createServer((req, res) => {
         ...(stateYou ? { you: stateYou } : {}),
         ...(statePoints ? { points: statePoints } : {}),
         ...(statePluginNote ? { pluginNote: statePluginNote } : {}),
+        ...(statePluginLatest ? { pluginLatest: statePluginLatest } : {}),
       });
     }
     if (req.method === 'POST' && p === 'asks') {
@@ -500,6 +502,22 @@ const hardStop = setTimeout(() => {
     const src = fs.readFileSync(SCRIPT, 'utf8');
     const line = /^- The build is always something people open as a web page, even when the room is making a document[^\n]*SHARING REMOTELY[^\n]*built copy[^\n]*server-sent events/gm;
     assert.strictEqual((src.match(line) || []).length, 2);
+  });
+  await check('room_status says which plugin runs and whether it is the latest (owner, 18 Oct)', async () => {
+    const VERSION = (fs.readFileSync(SCRIPT, 'utf8').match(/const VERSION = '([^']+)';/) || [])[1];
+    const line = async () => textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} })).split('\n')[1];
+    try {
+      statePluginLatest = undefined;
+      assert.strictEqual(await line(), `Engage plugin ${VERSION}.`);
+      statePluginLatest = VERSION;
+      assert.strictEqual(await line(), `Engage plugin ${VERSION}: the latest.`);
+      statePluginLatest = '99.0.0';
+      assert.match(await line(), new RegExp(`^Engage plugin ${VERSION.replace(/\./g, '\\.')} is older than the latest, 99\\.0\\.0\\. Tell the host`));
+      statePluginLatest = '0.0.1';
+      assert.strictEqual(await line(), `Engage plugin ${VERSION} (this Engage knows 0.0.1 as its latest).`);
+    } finally {
+      statePluginLatest = undefined;
+    }
   });
   await check('room_status with kickoff tells Engage (Connect step 4); without it, it does not', async () => {
     const before = requests.length;

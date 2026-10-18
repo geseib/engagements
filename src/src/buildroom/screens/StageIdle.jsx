@@ -7,7 +7,7 @@ import Icon from '../../components/Icon';
 import BuildImage from '../BuildImage';
 import { W } from '../words';
 import {
-  claudeState, latestDecisionLine, mockupsReady, looksWords,
+  claudeState, mockupsReady, looksWords, stageSide, workView, testsWords, clockOf,
 } from '../buildScreens';
 import { OpenLink } from './common';
 
@@ -53,6 +53,34 @@ export function WrappedStage({ outcome, agent, images = [] }) {
   );
 }
 
+/**
+ * WHILE CLAUDE WORKS (docs/design/build-room-ideas I10): Building / Testing /
+ * Fixing / Checking / Saved from the plugin's hook, the last test run's counts,
+ * and the last few lines its tools wrote (file and program names only).
+ */
+function WorkRow({ work }) {
+  const tw = testsWords(work.tests);
+  return (
+    <div className="brm-work" data-testid="brm-work">
+      {work.phases && (
+        <ol className="brm-phases" aria-label="Where Claude is">
+          {work.phases.map((p) => (
+            <li key={p.name} className={p.state ? `is-${p.state}` : undefined} aria-current={p.state === 'on' ? 'step' : undefined}>{p.name}</li>
+          ))}
+        </ol>
+      )}
+      {tw && <p className={`brm-tests${work.tests && work.tests.bad ? ' is-bad' : ''}`}>{tw}</p>}
+      {work.ticker.length > 0 && (
+        <ul className="brm-ticker" aria-label={W.claudeWorkNow}>
+          {work.ticker.map((t, i) => (
+            <li key={`${t.at}:${i}`}><span className="brm-ticker-t">{clockOf(t.at)}</span><span>{t.text}</span></li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function IdleStage({ room, now, host }) {
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const shots = (room.images || []).filter((i) => i.kind !== 'mockup');
@@ -60,7 +88,8 @@ export function IdleStage({ room, now, host }) {
   // ONE STATUS (owner, 2026-10-07): the same rule the dock, the host's Now
   // card and the header chip read, so the wall never says two things.
   const st = claudeState(room, now);
-  const decision = latestDecisionLine(room);
+  // I9: what went to Claude last (or the room's latest decision), word for word.
+  const side = stageSide(room);
   const looks = mockupsReady(room);
   if (looks) {
     const w = looksWords(looks.images);
@@ -90,6 +119,8 @@ export function IdleStage({ room, now, host }) {
       </section>
     );
   }
+  // I10: the row, the test counts and the last few things Claude's tools did, while it works.
+  const work = st.key === 'building' ? workView(room, now) : null;
   const sinceAt = st.since ? new Date(st.since) : null;
   const sinceText = st.key === 'building' && sinceAt && Number.isFinite(sinceAt.getTime())
     ? sinceAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
@@ -108,13 +139,15 @@ export function IdleStage({ room, now, host }) {
           </p>
         )}
         {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
+        {work && <WorkRow work={work} />}
         {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
       </div>
-      {decision && (
+      {side && (
         <aside className="brm-plain-side">
-          <div>
-            <div className="brm-kind">We decided</div>
-            <div className="brm-tx">{decision}</div>
+          <div data-testid="brm-stage-side">
+            <div className="brm-kind">{side.label}</div>
+            <div className="brm-tx">{side.text}</div>
+            {side.at && side.label !== W.weDecided && <div className="brm-sidetime">{clockOf(side.at)}</div>}
           </div>
         </aside>
       )}

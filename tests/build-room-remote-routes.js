@@ -343,6 +343,17 @@ const rkeys = () => [...store.values()].filter((x) => String(x.SK).startsWith('B
     await host('POST', 'share', { remote: false });
   });
 
+  console.log('\nwhich plugin (owner, 18 Oct)');
+  await check('Claude\'s state names the latest plugin and nothing else of the host\'s; the host\'s view keeps its plugin line', async () => {
+    const S = require(path.join(REPO, 'lambda-functions/game/build-store.js'));
+    const c = (await claude('GET', 'state')).body;
+    assert.strictEqual(c.pluginLatest, S.LATEST_PLUGIN);
+    assert.strictEqual(c.plugin, undefined);
+    const h = (await host('GET', 'state')).body;
+    assert.strictEqual(h.plugin.latest, S.LATEST_PLUGIN);
+    assert.strictEqual(h.pluginLatest, undefined);
+  });
+
   console.log('\nwho opened it');
   await check('the plugin\'s device counts reach the host by name, most first', async () => {
     await host('POST', 'share', { remote: true });

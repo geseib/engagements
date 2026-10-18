@@ -17,9 +17,10 @@ test('the laptop ladder only: 12 / 13 / 15 / 19 / 24px', () => {
   expect(css).not.toMatch(/font-size:\s*[\d.]+(rem|em)/);
   expect(css).not.toMatch(/var\(--(L|t)-/);
 });
-test('the main area scrolls; the footer is outside it (Review Focus 5)', () => {
+// The next step is a card above the main area, outside its scroll (owner, 18 Oct 2026).
+test('the main area scrolls; the next-step card is above it, outside it (Review Focus 5)', () => {
   expect(css).toMatch(/\.hc-main\s*\{[^}]*overflow:\s*auto/);
-  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail main"\s*"foot foot"/);
+  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail now"\s*"rail main"/);
 });
 test('no colour literal', () => {
   expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/);

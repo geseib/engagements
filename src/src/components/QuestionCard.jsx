@@ -50,10 +50,11 @@ import {
  * stage passes roomContentFor('ANSWERING', profile, questionRoomData(…)) for
  * a Call & Answer round, the same call the room's window makes
  * (present/presentModel.js). With it, ASK draws the parts that content names:
- * the task as the lead (h1.q, the expand recovery on it, never dropped), the
- * title as a kicker above it on Room, TV and Table or a heading on Call, the
- * lesson as support that may give way ("The lesson"). Without it (the set
- * editor's preview, the other types) ASK draws the frozen DOM below.
+ * the lesson as the lead (h1.q, the expand recovery on it, never dropped; the
+ * task when there is no lesson), the title as a kicker above it on Room, TV
+ * and Table or a heading on Call, the task under the lesson ("The task").
+ * Without it (the set editor's preview, the other types) ASK draws the frozen
+ * DOM below.
  */
 export default function QuestionCard({
   phase = 'ASK',
@@ -178,9 +179,12 @@ function RoomLines({ question, room, onExpand }) {
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       )}
-      {shows(room, 'story') && (
-        <p className="qdetail" data-drop="4" data-drop-note="The lesson" {...rcAttrs(room, 'story')}>
-          {textOf(room, 'story')}
+      {/* The task under the lesson (owner, 18 Oct 2026): how to answer it,
+          never dropped. When there is no lesson the task is the lead above. */}
+      {roleOf(room, 'task') === ROLE.SUPPORT && (
+        <p className="qdetail q-task" {...rcAttrs(room, 'task')}>
+          <span className="q-task-k">The task</span>
+          {textOf(room, 'task')}
         </p>
       )}
     </>

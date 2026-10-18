@@ -248,7 +248,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The size also decides how much the room is shown. On Room, TV and Table the room sees only what it needs, large: when a question or lesson is up, the task leads, with the title as a small label above it, and the lesson stays only when the task asks about it. Call, read on people\'s own screens, adds the title as a heading, the category and the lesson. In a Build Room the ask and its options lead, a long one pages, and Claude\'s status line is always there. The same rule holds on one screen and on the room\'s window.',
+          text: 'The size also decides how much the room is shown. On Room, TV and Table the room sees only what it needs, large: when a question or lesson is up, the lesson leads, with the task under it and the title as a small label above. Call, read on people\'s own screens, adds the title as a heading and the category. In a Build Room the ask and its options lead, a long one pages, and Claude\'s status line is always there. The same rule holds on one screen and on the room\'s window.',
         },
         { t: 'h', text: 'Names' },
         {
@@ -306,11 +306,11 @@ const running = {
           t: 'table',
           head: ['Part', 'What it is for'],
           rows: [
-            ['Top line', 'The join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
+            ['Top line', '← All sessions (in the lobby and at the end: back to your sessions; this one keeps running and Continue brings you back), the join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
             ['The loop', 'The round\'s steps. Press one to look at it privately; the room stays where it is until you press Back to the room.'],
             ['Left rail', 'Round queue, People (with Show scoreboard / Hide scoreboard), Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
-            ['Main area', 'Responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it. The part of the read the wall is showing is marked "On the wall". During voting and results, the first row, "The question", puts the question back up.'],
-            ['Footer', 'The one count for the step, Your part now, and the buttons.'],
+            ['Your part now', 'At the top of the centre: what to do next, the one count for the step, what the wall shows next, and the buttons.'],
+            ['Main area', 'The lesson and the task while the room answers, responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it. The part of the read the wall is showing is marked "On the wall". During voting and results, the first row, "The question", puts the question back up.'],
           ],
         },
         { t: 'h', text: 'Is the room\'s window up?' },
@@ -327,7 +327,7 @@ const running = {
           t: 'note',
           tone: 'tip',
           title: 'Chrome or Edge with a second display: it opens there for you',
-          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen (it says so at the bottom until you do). Quick start shows where the room watches before you pick a set, and on two screens it opens the room\'s window as the session starts. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
         },
         {
           t: 'note',

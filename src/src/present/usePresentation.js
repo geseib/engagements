@@ -23,7 +23,7 @@
  * This module never imports the signed-in fetch: the wall is unauthenticated
  * (presentImports.test.js).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import webSocketClient from '../WebSocketClient';
 import { startPresentStatus } from './presentStatusReporter';
 
@@ -64,6 +64,17 @@ const roundOf = (state) => {
   const m = /^(ASK|VOTE|RESULTS)#(\d+)$/.exec(String(state || ''));
   return m ? { phase: m[1], padded: m[2].padStart(3, '0') } : null;
 };
+
+/**
+ * The Event Details worth putting on the wall: the host's own words. Quick
+ * start wrote "Quick start session using <set>" there, which says nothing to a
+ * room; it is left off.
+ */
+export function eventDetailsOf(text) {
+  const t = typeof text === 'string' ? text.trim() : '';
+  if (!t || /^Quick start session using /i.test(t)) return '';
+  return t;
+}
 
 async function readJson(res) {
   try { return await res.json(); } catch (e) { return null; }
@@ -222,6 +233,26 @@ export default function usePresentation(gameId) {
     };
   }, [gameId, schedule]);
 
+  // THE EVENT DETAILS for the lobby (owner, 18 Oct 2026: "on the left could be
+  // nicely designed title of the session and potentially the summary of the
+  // event"). What the host typed into Event Details at setup, from the public
+  // read the player's join screen already uses (PlayerPage, GET /games/{id}
+  // ?role=player). Once per session: it does not change while the room waits.
+  const [details, setDetails] = useState('');
+  useEffect(() => {
+    if (!gameId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}games/${encodeURIComponent(gameId)}?role=player`);
+        if (!res.ok) return;
+        const body = await readJson(res);
+        if (!cancelled) setDetails(eventDetailsOf(body && body.engagementInfo));
+      } catch (e) { /* the lobby reads without it */ }
+    })();
+    return () => { cancelled = true; };
+  }, [gameId]);
+
   // The poll: fast while the room is acting, slow otherwise.
   const live = Boolean(snapshot && /^(ASK|VOTE)#/.test(String(snapshot.state || '')));
   const waitingForRead = Boolean(snapshot && snapshot.stageBeat === 'field-notes' && !reads.summary);
@@ -233,5 +264,6 @@ export default function usePresentation(gameId) {
     return () => clearInterval(timer);
   }, [gameId, live, waitingForRead, refetch, gone]);
 
-  return { snapshot, reads, refetch };
+  const withDetails = useMemo(() => ({ ...reads, details }), [reads, details]);
+  return { snapshot, reads: withDetails, refetch };
 }

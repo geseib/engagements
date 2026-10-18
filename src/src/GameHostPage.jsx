@@ -6516,6 +6516,8 @@ Focus on actionable business strategy insights.`;
           });
         }}
         onClose={() => setShowQuickstartMenu(false)}
+        roomScreen={roomScreenChoice}
+        onRoomScreen={chooseRoomScreen}
       />
     );
   }
@@ -8031,7 +8033,7 @@ Focus on actionable business strategy insights.`;
       case 'LOBBY':
         return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
-        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
