@@ -23,7 +23,11 @@
  * this for the beat, and this is deliberately its sibling.
  */
 
-/** The closed set the writer enforces. Mirrors FOCUS_KINDS in stage-focus.js. */
+/**
+ * The closed set the writer enforces. Mirrors FOCUS_KINDS in stage-focus.js.
+ * 'join' is accepted from older surfaces and means `join: true` (the QR side
+ * panel, joinShown below); the server never stores it as the focus.
+ */
 export const FOCUS_KINDS = ['none', 'question', 'answer', 'join'];
 
 /**
@@ -107,7 +111,34 @@ function extrasOf(value, kind) {
     if (FOCUS_PHASES.includes(value.phase)) out.phase = value.phase;
   }
   if (Number.isInteger(value.rev) && value.rev >= 0) out.rev = value.rev;
+  // The QR side panel (owner, 18 Oct 2026), beside any focus. Absent means
+  // "this payload says nothing about it": a reader keeps what it had.
+  if (typeof value.join === 'boolean') out.join = value.join;
   return out;
+}
+
+/**
+ * IS THE QR UP ON THE WALL? (owner, 18 Oct 2026: "whenever the host wants to
+ * show the qr code. it moves the screen around a bit so all content is there
+ * but the qr code is avail"). Its own fact since then, `stageFocus.join`
+ * (stage-focus.js StageJoin), beside whatever the focus is. A focus of 'join'
+ * from an older deploy reads as up.
+ */
+export function joinShown(stageFocus) {
+  const f = stageFocus && typeof stageFocus === 'object' ? stageFocus : {};
+  if (typeof f.join === 'boolean') return f.join;
+  return f.focus === 'join';
+}
+
+/**
+ * The body that shows or hides the QR panel and touches nothing else, or null
+ * outside a round. `focus` is left out on purpose: the server then keeps the
+ * focus as it is (stage-focus.js), and 'none' would close a response.
+ */
+export function joinRequest({ join, state } = {}) {
+  const round = roundOfState(state);
+  if (round === null || typeof join !== 'boolean') return null;
+  return { join, questionNumber: Number(round) };
 }
 
 /**

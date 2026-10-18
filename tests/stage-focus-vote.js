@@ -246,16 +246,16 @@ const setState = (gameId, State, LessonNumber = 1) => {
   await post('4012', { focus: 'answer', index: 2, questionNumber: 1 });
   const inVote = await readState('4012');
   check('during VOTE the VOTE focus is there, with its phase, part and rev', () =>
-    assert.deepStrictEqual(inVote.stageFocus, { focus: 'answer', index: 2, part: 0, parts: 1, phase: 'VOTE', rev: 1 }));
+    assert.deepStrictEqual(inVote.stageFocus, { focus: 'answer', index: 2, part: 0, parts: 1, phase: 'VOTE', rev: 1, join: false }));
   setState('4012', 'RESULTS#001');
   const afterResults = await readState('4012');
   check('after Show results the same row reads none: response 3 never becomes rank 3', () =>
-    assert.deepStrictEqual(afterResults.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 1 }));
+    assert.deepStrictEqual(afterResults.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 1, join: false }));
   seedGame('4013');
   put({ PK: 'GAME#4013', SK: 'ROUND#001', StageFocus: 'answer', StageFocusIndex: 1 });
   const legacy = await readState('4013');
   check('a legacy row with no stamp reads as RESULTS', () =>
-    assert.deepStrictEqual(legacy.stageFocus, { focus: 'answer', index: 1, part: 0, parts: 1, phase: 'RESULTS', rev: 0 }));
+    assert.deepStrictEqual(legacy.stageFocus, { focus: 'answer', index: 1, part: 0, parts: 1, phase: 'RESULTS', rev: 0, join: false }));
   setState('4013', 'VOTE#001');
   const legacyInVote = await readState('4013');
   check('…and so reads none during VOTE', () => assert.strictEqual(legacyInVote.stageFocus.focus, 'none'));
@@ -273,19 +273,26 @@ const setState = (gameId, State, LessonNumber = 1) => {
   });
 
   console.log('\n8. the join code on the wall (owner, 2026-10-13: "when presenting i still need ability to show qr code")');
+  console.log('   legacy focus \'join\' is join: true, the focus left alone (owner, 18 Oct 2026: the QR as a side panel)');
   for (const [gid, state] of [['4014', 'ASK#001'], ['4015', 'VOTE#001'], ['4016', 'RESULTS#001']]) {
     seedGame(gid);
     setState(gid, state);
     const res = await post(gid, { focus: 'join', index: 4, part: 1, parts: 2, questionNumber: 1 });
-    check(`${state}: a join focus is stored, with no index, part or phase`, () => {
+    check(`${state}: legacy focus 'join' stores StageJoin true and writes no focus`, () => {
       assert.strictEqual(res.statusCode, 200, res.body);
       const r = roundOf(gid, '001');
-      assert.strictEqual(r.StageFocus, 'join');
-      assert.deepStrictEqual([r.StageFocusIndex, r.StageFocusPart, r.StageFocusParts, r.StageFocusPhase], [null, null, null, null]);
+      assert.strictEqual(r.StageJoin, true);
+      assert.strictEqual(r.StageFocus, undefined);
+      assert.strictEqual(JSON.parse(res.body).join, true);
     });
     const read = await readState(gid);
-    check(`${state}: get-game-state hands it back`, () =>
-      assert.deepStrictEqual(read.stageFocus, { focus: 'join', index: null, part: 0, parts: 1, phase: null, rev: 1 }));
+    check(`${state}: get-game-state hands back join: true beside no focus`, () =>
+      assert.deepStrictEqual(read.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 1, join: true }));
+    check(`${state}: the frame carries join: true and focus none`, () => {
+      const f = sent.find((x) => x.message.type === 'stageFocusChanged').message;
+      assert.strictEqual(f.join, true);
+      assert.strictEqual(f.focus, 'none');
+    });
   }
   check('FOCUS_KINDS is mirrored in config/stageFocus.js, join included', () => {
     const { FOCUS_KINDS } = require(path.join(REPO, 'lambda-functions/game/stage-focus.js'));
@@ -318,6 +325,106 @@ const setState = (gameId, State, LessonNumber = 1) => {
   check('with no board open, nothing about the scoreboard is written or sent', () => {
     assert.strictEqual(store.get(key('GAME#4018', 'STATE')).Scoreboard, undefined);
     assert.ok(!sent.some((x) => x.message.type === 'scoreboardChanged'));
+  });
+  seedGame('4019');
+  setState('4019', 'RESULTS#001');
+  {
+    const row = store.get(key('GAME#4019', 'STATE'));
+    store.set(key('GAME#4019', 'STATE'), { ...row, Scoreboard: { open: true, style: 'departure', page: 1 }, ScoreboardRev: 2 });
+  }
+  await post('4019', { join: true, questionNumber: 1 });
+  check('join: true closes an open scoreboard too', () =>
+    assert.strictEqual(store.get(key('GAME#4019', 'STATE')).Scoreboard.open, false));
+
+  console.log('\n10. join: true|false, its own fact beside the focus (owner, 18 Oct 2026: "it moves the screen around a bit so all content is there but the qr code is avail")');
+  seedGame('4020');
+  setState('4020', 'VOTE#001');
+  await post('4020', { focus: 'answer', index: 3, questionNumber: 1 });
+  const joinAlone = await post('4020', { join: true, questionNumber: 1 });
+  check('join alone is 200 and stored as StageJoin', () => {
+    assert.strictEqual(joinAlone.statusCode, 200, joinAlone.body);
+    assert.strictEqual(roundOf('4020', '001').StageJoin, true);
+  });
+  check('…the answer focus beside it is untouched', () => {
+    const r = roundOf('4020', '001');
+    assert.deepStrictEqual([r.StageFocus, r.StageFocusIndex, r.StageFocusPhase], ['answer', 3, 'VOTE']);
+  });
+  check('…and its frame carries the focus as it stands AND join, so no surface closes the answer', () => {
+    const f = sent.filter((x) => x.connectionId === 'host-1').map((x) => x.message).pop();
+    assert.deepStrictEqual(
+      [f.type, f.focus, f.index, f.part, f.parts, f.phase, f.join, f.rev],
+      ['stageFocusChanged', 'answer', 3, 0, 1, 'VOTE', true, 2]
+    );
+  });
+  const both = await readState('4020');
+  check('get-game-state hands back both', () =>
+    assert.deepStrictEqual(both.stageFocus, { focus: 'answer', index: 3, part: 0, parts: 1, phase: 'VOTE', rev: 2, join: true }));
+  const none = await post('4020', { focus: 'none', questionNumber: 1 });
+  check('focus none clears the answer, not the QR', () => {
+    assert.strictEqual(none.statusCode, 200, none.body);
+    const r = roundOf('4020', '001');
+    assert.strictEqual(r.StageFocus, 'none');
+    assert.strictEqual(r.StageJoin, true);
+  });
+  await post('4020', { join: false, questionNumber: 1 });
+  check('join: false takes the QR down', () => assert.strictEqual(roundOf('4020', '001').StageJoin, false));
+  const after = await readState('4020');
+  check('…and get-game-state says so', () => assert.strictEqual(after.stageFocus.join, false));
+  seedGame('4021');
+  setState('4021', 'RESULTS#001');
+  const together = await post('4021', { focus: 'answer', index: 1, join: true, questionNumber: 1 });
+  check('focus and join in one request: both stored, one rev', () => {
+    assert.strictEqual(together.statusCode, 200, together.body);
+    const r = roundOf('4021', '001');
+    assert.deepStrictEqual([r.StageFocus, r.StageFocusIndex, r.StageJoin, r.StageFocusRev], ['answer', 1, true, 1]);
+  });
+  for (const bad of ['yes', 1, null, 'true']) {
+    seedGame('4022');
+    const res = await post('4022', { join: bad, questionNumber: 1 });
+    check(`join ${JSON.stringify(bad)} is 400, nothing written`, () => {
+      assert.strictEqual(res.statusCode, 400, res.body);
+      assert.strictEqual(roundOf('4022', '001'), undefined);
+    });
+  }
+  seedGame('4023');
+  const nothing = await post('4023', { questionNumber: 1 });
+  check('neither focus nor join is 400', () => assert.strictEqual(nothing.statusCode, 400, nothing.body));
+  seedGame('4024');
+  put({ PK: 'GAME#4024', SK: 'ROUND#001', StageFocus: 'join', StageFocusRev: 3 });
+  const legacyRow = await readState('4024');
+  check('a legacy row whose focus is join reads as join: true, focus none', () =>
+    assert.deepStrictEqual(legacyRow.stageFocus, { focus: 'none', index: null, part: 0, parts: 1, phase: null, rev: 3, join: true }));
+  await post('4024', { join: false, questionNumber: 1 });
+  check('…and join: false takes even that down (StageJoin wins over the legacy focus)', () => {
+    assert.strictEqual(roundOf('4024', '001').StageJoin, false);
+  });
+  const legacyDown = await readState('4024');
+  check('…as get-game-state reads it', () => assert.strictEqual(legacyDown.stageFocus.join, false));
+  // Opening the scoreboard takes the QR panel down, and only it (scoreboard.js).
+  const { handler: scoreboard } = require(path.join(REPO, 'lambda-functions/game/scoreboard.js'));
+  seedGame('4025');
+  setState('4025', 'RESULTS#001');
+  store.set(key('GAME#4025', 'STATE'), { ...store.get(key('GAME#4025', 'STATE')), ScoresAfterRound: 1 });
+  await post('4025', { focus: 'answer', index: 0, join: true, questionNumber: 1 });
+  sent = [];
+  const opened = await scoreboard({
+    requestContext: { http: { method: 'POST' } }, pathParameters: { gameId: '4025' }, body: JSON.stringify({ open: true }),
+  });
+  check('opening the scoreboard over the QR panel: 200', () => assert.strictEqual(opened.statusCode, 200, opened.body));
+  check('…StageJoin goes false, the answer focus stays', () => {
+    const r = roundOf('4025', '001');
+    assert.deepStrictEqual([r.StageJoin, r.StageFocus, r.StageFocusIndex], [false, 'answer', 0]);
+  });
+  check('…and its frame says join false with the answer still up', () => {
+    const f = sent.map((x) => x.message).find((m) => m.type === 'stageFocusChanged');
+    assert.ok(f, 'no stageFocusChanged frame');
+    assert.deepStrictEqual([f.join, f.focus, f.index], [false, 'answer', 0]);
+  });
+
+  check('the frontend mirror reads join (config/stageFocus.js)', () => {
+    const mirror = require('fs').readFileSync(path.join(REPO, 'src/src/config/stageFocus.js'), 'utf8');
+    assert.match(mirror, /typeof value\.join === 'boolean'/);
+    assert.match(mirror, /export function joinShown\(/);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
