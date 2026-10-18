@@ -599,7 +599,8 @@ html.present-locked body {
 /* The one-click cue on a window the host placed (PresentPage FillCue): quiet,
    bottom centre, gone once the window is full screen. */
 .present-fillcue {
-  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 2000;
+  /* Above the wall's foot line, never on it (walk of dev 173fc2f6). */
+  position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 2000;
   margin: 0; padding: 12px 22px; border-radius: 999px;
   font: 600 18px/1.2 var(--font-ui);
   color: var(--text); background: var(--surface);

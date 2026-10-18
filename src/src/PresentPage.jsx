@@ -87,7 +87,9 @@ export const FILL_CUE = 'Click anywhere to fill the screen';
 export function FillCue({ placed }) {
   const full = useFullscreenElement();
   if (!placed || full || !canFullscreen()) return null;
-  return <p className="present-fillcue" role="status">{FILL_CUE}</p>;
+  // data-theme="dark": the cue sits outside the wall's own scope, so it re-enters
+  // the dusk tokens itself (a light page drew it white; walk of dev 173fc2f6).
+  return <p className="present-fillcue" data-theme="dark" role="status">{FILL_CUE}</p>;
 }
 
 export function presentFitKey(model) {
