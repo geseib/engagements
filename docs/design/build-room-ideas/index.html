@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ideas From the Room</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: a design sheet; each frame is a host, phone or Stage view, with its note beside it. */
+:root {
+  color-scheme: dark;
+  /* Warm Summit dusk, as shipped (src/src/styles.css) */
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A; --text: #F4EDE4; --muted: #9BA8BE;
+  --primary: #F6A94C; --secondary: #7CA7E6; --success: #4FB286; --success-text: #6FD0A4; --danger-text: #EF8C86;
+  --rule: rgba(155,168,190,.22); --cmd: #0B1322; --tint-green: rgba(79,178,134,.14); --tint-amber: rgba(246,169,76,.13);
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--f-ui); }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 40px; }
+h1 { font: 800 clamp(26px, 4vw, 34px)/1.15 var(--f-display); margin: 0; text-wrap: balance; }
+.lede { margin: 10px 0 0; color: var(--muted); max-width: 70ch; }
+.lede b { color: var(--text); }
+.eb { font: 700 12px/1 var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.frame { display: grid; grid-template-columns: minmax(0, 620px) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .frame { grid-template-columns: minmax(0, 1fr); } }
+.frame-h { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.frame-h h2 { font: 800 21px/1.25 var(--f-display); margin: 0; }
+.note { display: flex; flex-direction: column; gap: 10px; color: var(--muted); font-size: 14px; min-width: 0; }
+.note b { color: var(--text); }
+.note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.new { color: var(--success-text); font-weight: 700; }
+
+/* The window */
+.modal { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.35); min-width: 0; }
+.mh { display: flex; align-items: center; gap: 12px; }
+.mh h3 { margin: 0; font: 800 19px/1.2 var(--f-ui); flex: 1; }
+.x { width: 32px; height: 32px; border: 1px solid var(--rule); border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 16px; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+.back { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--tint-green); border: 1px solid rgba(79,178,134,.35); }
+.back .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); margin-top: 6px; flex: none; }
+.back b { display: block; font-size: 15px; }
+.back span { font-size: 13px; color: var(--muted); }
+.back code { font: 500 12.5px var(--f-mono); color: var(--text); }
+.ver { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); align-items: baseline; }
+.ver b { font: 700 15px var(--f-ui); color: var(--text); font-variant-numeric: tabular-nums; }
+.ver .ok { color: var(--success-text); font-weight: 600; }
+.ver .old { color: var(--danger-text); }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+ol.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; }
+.n { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--rule); display: grid; place-items: center; font: 700 12px var(--f-ui); color: var(--muted); }
+li.is-now .n { border: 1.5px dashed var(--primary); color: var(--primary); }
+li.is-done .n { background: var(--tint-green); border-color: rgba(79,178,134,.5); color: var(--success-text); }
+li.is-old .n { border-color: var(--danger-text); color: var(--danger-text); }
+.sb { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.st { font: 700 15px/1.3 var(--f-ui); }
+.hint { font-size: 13px; color: var(--muted); }
+pre.cmd { margin: 0; padding: 12px 14px; background: var(--cmd); border-radius: 10px; font: 13px/1.55 var(--f-mono); color: var(--text); white-space: pre-wrap; word-break: break-all; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--text); font: 600 13px var(--f-ui); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #2A1A06; }
+.btn.ghost { background: transparent; }
+.fold { border-top: 1px solid var(--rule); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.fold summary { font: 600 13px var(--f-ui); color: var(--secondary); list-style: none; }
+.fold summary::before { content: "▸ "; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.check i { width: 16px; height: 16px; border-radius: 4px; background: var(--primary); flex: none; margin-top: 3px; }
+.check small { display: block; color: var(--muted); font-size: 13px; }
+.foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; color: var(--muted); }
+
+/* Claude Code, in a terminal */
+.term { background: #0A0F18; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; min-width: 0; }
+.term .bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); }
+.term pre { margin: 0; padding: 14px 16px; font: 13px/1.6 var(--f-mono); color: var(--text); white-space: pre-wrap; overflow-x: auto; }
+.term .you { color: var(--primary); }
+.term .dim { color: var(--muted); }
+.term .good { color: var(--success-text); }
+
+table.when { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tw { overflow-x: auto; }
+table.when th { text-align: left; font: 700 12px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+table.when td { padding: 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.when td:first-child { font-weight: 700; white-space: nowrap; }
+code { font-family: var(--f-mono); font-size: .92em; }
+
+/* Ideas sheet additions */
+.frame.wide { grid-template-columns: minmax(0, 1fr); }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.who { font-size: 13px; color: var(--muted); }
+.who b { color: var(--text); }
+.itext { font: 600 17px/1.35 var(--f-ui); }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu { border: 1px solid var(--rule); background: var(--surface-2); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; max-width: 420px; }
+.menu .mi { padding: 9px 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 2px; }
+.menu .mi b { font: 600 14px var(--f-ui); }
+.menu .mi span { font-size: 12.5px; color: var(--muted); }
+.menu .mi.hi { background: rgba(246,169,76,.12); }
+.menu .mi.off b { color: var(--muted); }
+.menu .mi.off span { color: var(--primary); }
+.menu .g { font: 700 11px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 8px 10px 2px; }
+.thread { display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--rule); padding-left: 12px; }
+.msg { font-size: 14px; }
+.msg .by { font: 700 12px var(--f-ui); color: var(--muted); display: block; }
+.msg.host .by { color: var(--primary); }
+.field { background: var(--cmd); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; font-size: 14px; min-height: 40px; }
+.field .q { color: var(--muted); }
+.field .caret { display: inline-block; width: 1px; height: 1em; background: var(--primary); vertical-align: -2px; }
+.lab { font: 700 12px var(--f-ui); color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.seg span { padding: 7px 12px; font: 600 13px var(--f-ui); color: var(--muted); }
+.seg span.on { background: var(--surface-2); color: var(--text); }
+.pill { font: 700 11px var(--f-ui); letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.pill.live { background: var(--tint-green); color: var(--success-text); }
+.pill.priv { background: rgba(124,167,230,.15); color: var(--secondary); }
+.mine { border: 1px dashed var(--rule); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* The big screen */
+.stage { aspect-ratio: 16 / 9; background: #0B1424; border: 1px solid var(--rule); border-radius: 14px; padding: 4% 5%; display: flex; flex-direction: column; gap: 3%; min-width: 0; container-type: inline-size; }
+.stage .sq { font: 600 clamp(12px, 2.4cqw, 22px)/1.3 var(--f-ui); color: var(--muted); }
+.stage .sq b { color: var(--text); }
+.stage .sh { font: 800 clamp(18px, 4.4cqw, 44px)/1.15 var(--f-display); text-wrap: balance; }
+.bars { display: flex; flex-direction: column; gap: 2.4cqw; margin-top: auto; }
+.bar { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.5em; gap: 1.6cqw; align-items: center; font: 700 clamp(12px, 2.4cqw, 24px) var(--f-ui); }
+.bar i { display: block; height: 3.2cqw; min-height: 10px; border-radius: 6px; background: var(--primary); }
+.bar.no i { background: var(--secondary); }
+.sfoot { font-size: clamp(10px, 1.7cqw, 16px); color: var(--muted); display: flex; justify-content: space-between; }
+.fb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6cqw; margin-top: auto; }
+.fb div { background: var(--surface); border-radius: 10px; padding: 1.6cqw; font: 500 clamp(10px, 1.9cqw, 18px)/1.35 var(--f-ui); }
+.mocks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2cqw; margin-top: auto; }
+.mock { background: var(--surface); border-radius: 10px; padding: 1.4cqw; display: flex; flex-direction: column; gap: 1cqw; font: 700 clamp(10px, 2cqw, 18px) var(--f-ui); }
+.mock .pic { aspect-ratio: 4/3; border-radius: 6px; background: repeating-linear-gradient(135deg, var(--surface-2) 0 8px, #1f3050 8px 16px); }
+
+/* Phones */
+.phones { display: flex; gap: 18px; flex-wrap: wrap; }
+.phone { width: 260px; max-width: 100%; background: #0B1424; border: 1px solid var(--rule); border-radius: 28px; padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.phone .pt { font: 700 12px var(--f-ui); color: var(--muted); text-align: center; }
+.phone h4 { margin: 0; font: 800 18px/1.25 var(--f-display); }
+.phone .big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.phone .big span { height: 52px; border-radius: 12px; display: grid; place-items: center; font: 800 17px var(--f-ui); background: var(--surface-2); }
+.phone .big span.on { background: var(--primary); color: #2A1A06; }
+.phone .cap { font-size: 12.5px; color: var(--muted); }
+
+/* Timeline */
+.tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tl li { display: grid; grid-template-columns: 52px 14px minmax(0, 1fr); gap: 10px; padding: 7px 0; font-size: 14px; }
+.tl .t { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+.tl .d { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); margin-top: 5px; border: 1px solid var(--rule); }
+.tl .d.k { background: var(--primary); border-color: var(--primary); }
+.tl .d.g { background: var(--success); border-color: var(--success); }
+.tl small { display: block; color: var(--muted); font-size: 12.5px; }
+.qs { display: flex; flex-direction: column; gap: 12px; }
+.qs div { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; }
+.stage.two { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 4%; }
+.stage .side { border-left: 1px solid var(--rule); padding-left: 8%; display: flex; flex-direction: column; gap: 1.4cqw; }
+.stage .kind { font: 700 clamp(9px, 1.5cqw, 14px) var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.stage .said { font: 600 clamp(11px, 2.3cqw, 22px)/1.35 var(--f-ui); }
+.stage .hd { display: flex; align-items: center; gap: 1.4cqw; }
+.stage .hd i { width: 1.6cqw; height: 1.6cqw; min-width: 8px; min-height: 8px; border-radius: 50%; background: var(--primary); }
+.stage .hd i.w { background: var(--success); }
+.stage .ln { font: 500 clamp(10px, 2cqw, 19px)/1.4 var(--f-ui); color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <div class="eb">Build Room · design sheet · not built yet</div>
+    <h1>An idea from the room, start to finish</h1>
+    <p class="lede">Joe sends <b>“add documentation”</b> from his phone. Today the host can only flash it on the wall; the vote and Ideas options are greyed out, and closing it loses it. Redrawn: the host can <b>ask Joe privately</b>, or <b>put it to the room on the big screen</b> as a yes/no vote or a call for feedback, quoting Joe. Every step lands on the timeline, the host may vote too (never required), and Claude can be asked for mockups at any point.</p>
+  </header>
+
+  <!-- I1 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I1 · host’s Queue</div><h2>The idea card: every door open, none greyed out</h2></div>
+    <div class="card">
+      <div class="who"><b>Joe</b> · 10:42 · from his phone</div>
+      <div class="itext">add documentation</div>
+      <div class="acts">
+        <span class="btn primary">Put it to the room ▾</span>
+        <span class="btn">Reply to Joe</span>
+        <span class="btn">Send to Claude ▾</span>
+        <span class="btn">Save for later</span>
+        <span class="btn ghost">Dismiss</span>
+      </div>
+      <div class="menu">
+        <div class="g">On the big screen</div>
+        <div class="mi hi"><b>Yes/no vote: should we do this?</b><span>Joe’s words, your question, Yes and No on every phone.</span></div>
+        <div class="mi"><b>Ask the room for feedback</b><span>Joe’s words and your question; people type a short answer.</span></div>
+        <div class="mi"><b>Vote between ideas…</b><span>Pick 1–5 more from the Queue or Later; one Choose vote.</span></div>
+        <div class="mi"><b>Just show it</b><span>Full Stage for 20 seconds. No vote.</span></div>
+        <div class="g">Into an open ask</div>
+        <div class="mi off"><b>Add to the open Ideas ask</b><span>No Ideas ask is open: <u>open one with this idea in it</u></span></div>
+      </div>
+    </div>
+    <div class="note">
+      <ul>
+        <li><span class="new">Put it to the room</span> is the main button. A single idea gets a <b>yes/no</b> or <b>feedback</b> round on its own; “Vote between ideas” lets you tick the others <i>inside</i> the dialog, so ticking first is no longer a hidden rule.</li>
+        <li><b>No greyed-out options.</b> When something can’t happen yet, the line says why and offers the fix (“open one with this idea in it”).</li>
+        <li><b>Just show it</b> replaces the small wall pop-up: the idea takes the whole Stage for 20 seconds.</li>
+        <li><b>Acknowledge</b> folds into <b>Reply to Joe</b> (“Got it, thanks”) so Joe hears back either way.</li>
+        <li>Closing the card never loses it: it goes to <b>Handled</b> with what was decided, and the timeline has it (I7).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- I2 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I2 · private, two-way</div><h2>Reply to Joe, and Joe answers</h2></div>
+    <div class="card">
+      <div class="row"><span class="pill priv">Only you and Joe</span></div>
+      <div class="thread">
+        <div class="msg"><span class="by">Joe · 10:42</span>add documentation</div>
+        <div class="msg host"><span class="by">You · 10:43</span>What kind of documentation?</div>
+        <div class="msg"><span class="by">Joe · 10:44</span>A short how-to for volunteers, on the sign-up page</div>
+      </div>
+      <div class="field"><span class="q">Reply to Joe…</span><span class="caret"></span></div>
+      <div class="acts">
+        <span class="btn">Send</span>
+        <span class="btn primary">Put it to the room ▾</span>
+        <span class="btn">Send to Claude ▾</span>
+      </div>
+      <div class="hint">Putting it to the room now quotes Joe’s <b>latest</b> words: “A short how-to for volunteers, on the sign-up page.” You can edit it first.</div>
+    </div>
+    <div class="phones">
+      <div class="phone">
+        <div class="pt">Joe’s phone</div>
+        <h4>The host replied</h4>
+        <div class="cap">Your idea: “add documentation”</div>
+        <div class="msg host"><span class="by">Host</span>What kind of documentation?</div>
+        <div class="field"><span class="q">A short how-to for volunteers, on the sign-up page</span><span class="caret"></span></div>
+        <span class="btn primary">Send to the host</span>
+        <div class="cap">Only the host sees this.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- I3 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I3 · the alternative: the whole room</div><h2>Put it to the room: Joe’s words, your question</h2></div>
+    <div class="card">
+      <div class="seg"><span class="on">Yes/no vote</span><span>Ask for feedback</span></div>
+      <div class="lab">What Joe said (filled in, edit for clarity)</div>
+      <div class="field">add documentation</div>
+      <div class="lab">Your question</div>
+      <div class="field">What kind of documentation should we add, and where should it be accessed?<span class="caret"></span></div>
+      <label class="check"><i></i><span>Show Joe’s name<small>Off: the Stage says “Someone said”.</small></span></label>
+      <div class="lab">On the big screen</div>
+      <div class="field"><b>Joe said</b> “add documentation.” What kind of documentation should we add, and where should it be accessed?</div>
+      <div class="acts"><span class="btn primary">Put it on the big screen</span><span class="btn ghost">Cancel</span></div>
+    </div>
+    <div class="note">
+      <ul>
+        <li>The app pulls in <b>who</b> and <b>what</b>; you only type the question. Both boxes stay editable.</li>
+        <li><b>Yes/no</b> suits “should we do this?”. <b>Feedback</b> suits “what kind / where?”, like the question here. The same form, one switch.</li>
+        <li>If there was a private thread (I2), Joe’s latest answer is filled in instead, and his first words are kept on the timeline.</li>
+        <li>Nothing goes to Claude from here. What happens after the round is your call (I6).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- I4 -->
+  <section class="frame wide">
+    <div class="frame-h"><div class="eb">I4 · Stage, the big screen</div><h2>The room sees the quote, the question and the count</h2></div>
+    <div class="phones" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:18px">
+      <div class="stage">
+        <div class="sq"><b>Joe said</b> “add documentation.”</div>
+        <div class="sh">Should we do this?</div>
+        <div class="bars">
+          <div class="bar"><span>Yes</span><i style="width:75%"></i><span>9</span></div>
+          <div class="bar no"><span>No</span><i style="width:25%"></i><span>3</span></div>
+        </div>
+        <div class="sfoot"><span>12 of 14 voted · includes the host</span><span>Vote on your phone</span></div>
+      </div>
+      <div class="stage">
+        <div class="sq"><b>Joe said</b> “add documentation.”</div>
+        <div class="sh">What kind should we add, and where should it be accessed?</div>
+        <div class="fb">
+          <div>A FAQ under the sign-up button</div>
+          <div>Short video for first-timers</div>
+          <div>Printable shift checklist</div>
+        </div>
+        <div class="sfoot"><span>7 answers · no names</span><span>Answer on your phone</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- I5 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I5 · phones, and the host’s own vote</div><h2>Everyone answers; the host may</h2></div>
+    <div class="phones">
+      <div class="phone">
+        <div class="pt">Room phone · yes/no</div>
+        <div class="cap"><b style="color:var(--text)">Joe said</b> “add documentation.”</div>
+        <h4>Should we do this?</h4>
+        <div class="big"><span class="on">Yes</span><span>No</span></div>
+        <div class="cap">You can change your answer until the host closes it.</div>
+      </div>
+      <div class="phone">
+        <div class="pt">Room phone · feedback</div>
+        <div class="cap"><b style="color:var(--text)">Joe said</b> “add documentation.”</div>
+        <h4>What kind, and where?</h4>
+        <div class="field"><span class="q">Your answer…</span><span class="caret"></span></div>
+        <span class="btn primary">Send</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row"><span class="pill live">Live</span><b>Yes/no · Joe’s idea</b></div>
+      <div class="who">12 of 14 voted · Yes 9 · No 3</div>
+      <div class="mine">
+        <div class="lab">Your vote (optional)</div>
+        <div class="acts"><span class="btn">Yes</span><span class="btn">No</span></div>
+        <div class="hint">Counts as one person. Skip it and the round runs the same.</div>
+      </div>
+      <div class="acts"><span class="btn primary">Close the vote</span></div>
+      <div class="hint">The same “Your vote (optional)” box sits on every room vote and feedback round: Choose, Rate, Ideas, yes/no.</div>
+    </div>
+  </section>
+
+  <!-- I6 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I6 · after the round</div><h2>The host decides, and the decision is recorded</h2></div>
+    <div class="card">
+      <div class="row"><span class="pill">Closed</span><b>Yes 9 · No 4</b><span class="who">(includes your Yes)</span></div>
+      <div class="itext">Joe said “add documentation.”</div>
+      <div class="lab">What now?</div>
+      <div class="acts">
+        <span class="btn primary">Send to Claude ▾</span>
+        <span class="btn">Ask Claude for mockups</span>
+        <span class="btn">Ask the room a follow-up</span>
+        <span class="btn">Save for later</span>
+        <span class="btn ghost">Drop it</span>
+      </div>
+      <div class="menu">
+        <div class="g">Send to Claude</div>
+        <div class="mi hi"><b>Build it</b><span>Joe’s words, your question, and the result (9 yes, 4 no) go as one direction.</span></div>
+        <div class="mi"><b>With the room’s answers</b><span>After a feedback round: the 7 answers go too, no names.</span></div>
+        <div class="mi"><b>Just a note</b><span>Claude keeps it in mind; no build yet.</span></div>
+      </div>
+    </div>
+    <div class="note">
+      <ul>
+        <li>Every exit is a decision the timeline names: <b>sent to Claude</b>, <b>mockups asked</b>, <b>follow-up</b>, <b>saved for later</b>, <b>dropped</b>.</li>
+        <li>Joe’s phone tells him what happened to his idea: “The room voted yes. The host sent it to Claude.”</li>
+        <li>A <b>No</b> result doesn’t decide anything by itself; you still pick.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- I7 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I7 · Ask Claude, anywhere</div><h2>Mockups to vote on, a walkthrough, a feature sketch</h2></div>
+    <div class="stage">
+      <div class="sq">Claude drew 3 ways to do <b>Joe’s idea</b></div>
+      <div class="sh">Which documentation should we build?</div>
+      <div class="mocks">
+        <div class="mock"><div class="pic"></div>A · FAQ under sign-up</div>
+        <div class="mock"><div class="pic"></div>B · First-shift guide</div>
+        <div class="mock"><div class="pic"></div>C · Help panel on each page</div>
+      </div>
+      <div class="sfoot"><span>Pick one on your phone</span><span>8 of 14</span></div>
+    </div>
+    <div class="note">
+      <div class="menu">
+        <div class="g">Ask Claude (host only)</div>
+        <div class="mi"><b>Walk us through the demo</b><span>Claude steps the room through what it built, one screen at a time.</span></div>
+        <div class="mi"><b>Mock up a feature…</b><span>Type it or pick an idea; 2–3 pictures come back to you first.</span></div>
+        <div class="mi hi"><b>Mockups of this idea</b><span>From any idea card, vote, or result.</span></div>
+      </div>
+      <ul>
+        <li>Mockups come back to <b>you</b> first, held like every Claude post. From there: <b>Put to a vote</b>, <b>Ask for new mockups</b>, or <b>Save for later</b>. Those three are always there.</li>
+        <li><b>Ask for new mockups</b> mid-vote too: the vote pauses, the new set replaces it, the timeline keeps both.</li>
+        <li>Needs new plugin skills for walkthrough and mockups (plugin 1.24.0+); an older plugin shows “Update the plugin to use this”.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- I8 -->
+  <section class="frame">
+    <div class="frame-h"><div class="eb">I8 · Timeline</div><h2>Whose idea, and what was decided</h2></div>
+    <div class="card">
+      <ul class="tl">
+        <li><span class="t">10:42</span><span class="d k"></span><span><b>Joe’s idea</b>: “add documentation”</span></li>
+        <li><span class="t">10:43</span><span class="d"></span><span>You asked Joe privately: “What kind of documentation?”<small>Private · only you see this line</small></span></li>
+        <li><span class="t">10:44</span><span class="d"></span><span>Joe: “A short how-to for volunteers, on the sign-up page”<small>Private</small></span></li>
+        <li><span class="t">10:46</span><span class="d k"></span><span>Put to the room · yes/no<small>“Joe said … Should we do this?”</small></span></li>
+        <li><span class="t">10:49</span><span class="d"></span><span>Yes 9 · No 4 · you voted</span></li>
+        <li><span class="t">10:49</span><span class="d"></span><span>Asked Claude for mockups · 3 came back</span></li>
+        <li><span class="t">10:53</span><span class="d"></span><span>Room chose <b>B · First-shift guide</b> (8 of 14)</span></li>
+        <li><span class="t">10:53</span><span class="d g"></span><span><b>Decided: sent to Claude</b> to build B</span></li>
+      </ul>
+    </div>
+    <div class="note">
+      <ul>
+        <li>Today only ideas sent straight to Claude reach the timeline. Here every idea gets a line when it arrives and one for each decision, including <b>saved for later</b>, <b>dropped</b> and <b>just shown</b>.</li>
+        <li>Private lines are the host’s only; the room’s window shows the public ones.</li>
+        <li>The saved PDF report carries the same lines, without the private ones.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- I9 -->
+  <section class="frame wide">
+    <div class="frame-h"><div class="eb">I9 · Stage between asks</div><h2>“Sent to Claude” until Claude says what it is doing</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:18px">
+      <div class="stage two">
+        <div style="display:flex;flex-direction:column;gap:3cqw">
+          <div class="hd"><i></i><div class="sh">Sent to Claude</div></div>
+          <div class="ln">10:58 · waiting for Claude to pick it up</div>
+        </div>
+        <div class="side">
+          <div class="kind">We told Claude</div>
+          <div class="said">“We need an old-school leaderboard.”</div>
+        </div>
+      </div>
+      <div class="stage two">
+        <div style="display:flex;flex-direction:column;gap:3cqw">
+          <div class="hd"><i class="w"></i><div class="sh">Adding a retro leaderboard to the home page</div></div>
+          <div class="ln">Claude said this at 10:59 · for 1 min</div>
+        </div>
+        <div class="side">
+          <div class="kind">We told Claude</div>
+          <div class="said">“We need an old-school leaderboard.”</div>
+          <div class="ln">10:58</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <ul>
+        <li><b>Left, the moment it is sent:</b> the headline reads <b>Sent to Claude</b> with the time, instead of the last status. As soon as Claude posts what it is doing, the headline becomes Claude’s own line, as today.</li>
+        <li><b>Right column:</b> instead of only “We decided”, it shows <b>the newest thing that went to Claude</b>, word for word: <b>We told Claude</b> for Do now and Keep in mind, <b>We asked Claude</b> for Ask Claude. A room vote still reads <b>We decided</b>: “Leaderboard style: B · Arcade”.</li>
+        <li>It stays until something newer goes to Claude, so the room always sees what Claude is working from.</li>
+        <li>Room-safe: no names. A direction from Joe’s idea reads the same; the timeline holds who it came from.</li>
+        <li>The same words go on the small Claude line on every other room screen (“Sent to Claude: …”), so a phone or the room’s window doesn’t lag behind the Stage.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="frame wide">
+    <div class="frame-h"><div class="eb">Your call</div><h2>Four things to decide before building</h2></div>
+    <div class="qs">
+      <div><b>1. Joe’s name on the big screen: on or off by default?</b><br><span class="who">Drawn on, as in your example. The wall today shows no names.</span></div>
+      <div><b>2. Should the room see that the host voted?</b><br><span class="who">Drawn as “includes the host” under the count, never which way.</span></div>
+      <div><b>3. “Sent to Claude” (I9): how long before it says Claude hasn’t picked it up?</b><br><span class="who">Proposed: after 2 minutes the host (not the room) sees “Claude hasn’t picked this up yet. Is Claude Code still running?”</span></div>
+      <div><b>4. Build order.</b><br><span class="who">Proposed: (0) the Stage’s “Sent to Claude” (small, can go first); (a) card, private reply, put it to the room, host vote, timeline; then (b) Ask Claude: mockups, walkthrough, feature sketch, which needs the plugin skills.</span></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
