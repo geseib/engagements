@@ -32,10 +32,10 @@ test('top: name, join code, room\'s window and its status', () => {
   expect(screen.getByText("Room's window: on, full screen")).toBeInTheDocument();
 });
 
-test('the loop is there without Your part now; the footer carries it with the buttons', () => {
+test('the loop is there without Your part now; the next-step card carries it with the buttons', () => {
   const { container } = render(<HostConsole {...props()}><div>panel</div></HostConsole>);
   expect(container.querySelector('.hc-loop .wfs-part')).toBeNull();
-  expect(container.querySelector('.hc-foot').textContent).toMatch(/Your part now/);
+  expect(container.querySelector('.hc-now').textContent).toMatch(/Your part now/);
   expect(screen.getByRole('button', { name: /Start voting/ })).toBeInTheDocument();
 });
 
@@ -186,11 +186,11 @@ describe('Space on the rail and the top line', () => {
   });
 });
 
-test('the footer says what is next on the wall, only when given (spec §3.5)', () => {
+test('the card says what is next on the wall, only when given (spec §3.5)', () => {
   const { container, rerender } = render(<HostConsole {...props()}><div /></HostConsole>);
   expect(container.querySelector('.hc-next')).toBeNull();
   rerender(<HostConsole {...props({ footer: { ...props().footer, nextOnWall: 'Next on the wall: the vote' } })}><div /></HostConsole>);
-  expect(container.querySelector('.hc-foot .hc-next').textContent).toBe('Next on the wall: the vote');
+  expect(container.querySelector('.hc-now .hc-next').textContent).toBe('Next on the wall: the vote');
 });
 
 /* THE QUEUE COUNTS THE SAME ROUNDS THE STRIP DOES (walk, 15 Oct: the queue
@@ -327,4 +327,33 @@ test('the page draws no second scoreboard card on the console', () => {
   expect(src).not.toMatch(/consoleBoard/);
   expect(src).not.toMatch(/Take it down|takeItDown|scoreboardOnWall/);
   expect(src).toMatch(/scoreboard: \{ \.\.\.scoreboardAvail, open: scoreboard\.open, onToggle:/);
+});
+
+// rejects (owner, 18 Oct 2026): what the host does next at the bottom of the
+// screen, and "Back to menu" beside Start round 1 taking the host out.
+test('the next step is a card at the top of the centre, before the panel', () => {
+  const { container } = render(<HostConsole {...props()}><div data-testid="panel">panel</div></HostConsole>);
+  expect(container.querySelector('.hc-foot')).toBeNull();
+  const now = container.querySelector('.hc-now');
+  expect(now.compareDocumentPosition(screen.getByTestId('panel')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(now.querySelector('.hc-part').textContent.length).toBeGreaterThan(0);
+});
+
+test('leaving is the top line\'s "All sessions", never a button beside the round controls', () => {
+  const onAction = jest.fn();
+  const leave = { id: 'leave', label: 'Back to menu', intent: 'leave', icon: 'House' };
+  const lobby = { primary: { id: 'start', label: 'Start round 1', intent: 'start', icon: 'Play' }, secondary: leave, status: { text: '', tone: '' } };
+  const { container } = render(<HostConsole {...props({ footer: { status: lobby.status, part: strip.part, controls: lobby, onAction } })}><div /></HostConsole>);
+  expect(screen.queryByRole('button', { name: /Back to menu/ })).toBeNull();
+  expect(container.querySelector('.hc-now').textContent).not.toMatch(/All sessions/);
+  const out = screen.getByRole('button', { name: /All sessions/ });
+  expect(out.closest('.hc-top')).toBeTruthy();
+  fireEvent.click(out);
+  expect(onAction).toHaveBeenCalledWith(leave);
+  expect(screen.getByRole('button', { name: /Start round 1/ })).toBeInTheDocument();
+});
+
+test('no way out on the top line mid-round, where there is no leave control', () => {
+  render(<HostConsole {...props()}><div /></HostConsole>);
+  expect(screen.queryByRole('button', { name: /All sessions/ })).toBeNull();
 });

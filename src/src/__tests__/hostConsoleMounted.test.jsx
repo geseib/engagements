@@ -90,7 +90,7 @@ test('two screens: the console, not the stage, with the host notes beside the re
   expect(container.querySelector('.stage')).toBeNull();
   expect(await screen.findByText('The Meiji reforms took two decades.', {}, { timeout: 5000 })).toBeInTheDocument();
   // One main button, in the console's footer.
-  expect(container.querySelector('.hc-foot .host-action-bar')).toBeTruthy();
+  expect(container.querySelector('.hc-now .host-action-bar')).toBeTruthy();
 });
 
 test('presentChanged reads the host door again', async () => {
