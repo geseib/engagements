@@ -34,7 +34,7 @@ async function until(fn, ms = 30000, label = 'condition') {
 // ── The project: a small demo app Claude "built", served from its own folder ──
 const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'remote-demo-')));
 const project = path.join(work, 'project'); fs.mkdirSync(path.join(project, 'demo'), { recursive: true });
-fs.writeFileSync(path.join(project, 'demo', 'index.html'), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pick a shift</title>
+fs.writeFileSync(path.join(project, 'demo', 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pick a shift</title>
 <body style="margin:0;font-family:system-ui;background:#F4EFE6;color:#1F3B2D;padding:28px">
 <div style="letter-spacing:.2em;font-size:13px;opacity:.75">EASTSIDE FOOD BANK</div>
 <h1 style="font-size:34px;margin:.3em 0">Saturday 9-12 · 4 spots left</h1>
