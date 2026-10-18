@@ -145,3 +145,15 @@ test('answering: the lesson shows above the task', () => {
   expect(lesson.textContent).toBe('Give an example of how precision paid off.');
   expect(lesson.compareDocumentPosition(container.querySelector('.hc-task')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
+
+// The room's label for the question's own instruction (owner, 18 Oct 2026,
+// docs/design/room-content-v2): "Your turn" when the task is the question's
+// own; a set's or type's default instruction stays "The task".
+test('answering: the question\'s own instruction is labelled "Your turn", a default one "The task"', () => {
+  const own = render(<ResponsesPanel kicker="k" title="Thresholds" lesson="Alexander taught…" task="Describe how you apply thresholds." taskOwn phase="ASK" responses={[]} authorsHidden />);
+  expect(own.container.querySelector('.hc-task-k').textContent).toBe('Your turn');
+  expect(own.container.querySelector('.hc-task')).toHaveClass('is-own');
+  own.unmount();
+  const generic = render(<ResponsesPanel kicker="k" title="Thresholds" task="Answer on your phone." phase="ASK" responses={[]} authorsHidden />);
+  expect(generic.container.querySelector('.hc-task-k').textContent).toBe('The task');
+});

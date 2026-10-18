@@ -352,3 +352,79 @@ describe('a long answer can actually be scrolled', () => {
     expect(block('.answer-spotlight__text')).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
+
+/* THE ROOM'S LOOK, ONE ANSWER PUT UP (owner, 18 Oct 2026,
+   docs/design/room-content-v2 frames 11-12). Opt-in by `variant`: every
+   caller that passes none keeps exactly the dialog it had. */
+describe('the stage variants', () => {
+  const ROWS = [
+    { answer: 'First idea.', playerName: 'Ada', points: 8 },
+    { answer: 'Second idea.', playerName: 'Ben', points: 6 },
+    { answer: 'Third idea.', playerName: 'Cleo', points: 2 },
+    { answer: 'Fourth idea.', playerName: 'Dev', points: 1 },
+    { answer: 'Fifth idea.', playerName: 'Eve', points: 1 },
+    { answer: 'Sixth idea.', playerName: 'Fay', points: 0 },
+  ];
+  const label = (a, i) => `Response ${i + 1}`;
+
+  test('vote: the number, "answer N of M", chips that go to an answer, no name and no meta line', () => {
+    const onIndex = jest.fn();
+    render(<AnswerSpotlight answers={ROWS} index={2} onIndex={onIndex} onClose={() => {}} labelFor={label} variant="vote" />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('is-vote');
+    expect(dialog.querySelector('.answer-spotlight__num').textContent).toBe('3');
+    expect(dialog.querySelector('.answer-spotlight__count').textContent).toBe('answer 3 of 6');
+    expect(dialog.querySelector('.answer-spotlight__meta')).toBeNull();
+    expect(dialog.textContent).not.toMatch(/Response \d|Ada|Cleo/);
+    fireEvent.click(screen.getByRole('button', { name: 'Answer 5' }));
+    expect(onIndex).toHaveBeenCalledWith(4);
+  });
+
+  test('result: the place and a ladder of bars with no figures, the tail collapsed into one rung', () => {
+    render(
+      <AnswerSpotlight
+        answers={ROWS}
+        index={1}
+        onIndex={() => {}}
+        onClose={() => {}}
+        labelFor={label}
+        variant="result"
+        placeFor={() => '2nd'}
+        shareFor={(a) => a.points / 8}
+      />,
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('.answer-spotlight__place').textContent).toBe('2nd');
+    const rungs = [...dialog.querySelectorAll('.answer-spotlight__rung')];
+    expect(rungs.map((r) => r.textContent)).toEqual(['1', '2', '3', '4', '5–6']);
+    expect(rungs[1]).toHaveClass('is-here');
+    expect(rungs[0].querySelector('.answer-spotlight__rung-fill').style.width).toBe('100%');
+    expect(rungs[1].querySelector('.answer-spotlight__rung-fill').style.width).toBe('75%');
+    // A hidden label ("Response 2") is not repeated under the answer.
+    expect(dialog.querySelector('.answer-spotlight__meta')).toBeNull();
+  });
+
+  test('a long answer splits into parts at sentence ends; → walks the parts, then the next answer', () => {
+    const long = `${'One sentence of a long answer. '.repeat(12)}The end.`;
+    const onIndex = jest.fn();
+    render(<AnswerSpotlight answers={[{ answer: long }, { answer: 'Short.' }]} index={0} onIndex={onIndex} onClose={() => {}} labelFor={label} variant="vote" partChars={120} />);
+    const dialog = screen.getByRole('dialog');
+    const partLine = () => dialog.querySelector('.answer-spotlight__part').textContent;
+    const parts = Number(/of (\d)/.exec(partLine())[1]);
+    expect(parts).toBeGreaterThan(1);
+    expect(dialog.querySelector('.answer-spotlight__text').textContent.length).toBeLessThanOrEqual(120);
+    for (let p = 1; p < parts; p += 1) fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(partLine()).toBe(`Part ${parts} of ${parts}`);
+    expect(onIndex).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(onIndex).toHaveBeenCalledWith(1);
+  });
+
+  test('no variant: the dialog is the one every other caller had (text, then the label line)', () => {
+    render(<AnswerSpotlight answers={ROWS} index={0} onIndex={() => {}} onClose={() => {}} labelFor={label} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('.answer-spotlight__text').parentElement).toBe(dialog);
+    expect(dialog.querySelector('.answer-spotlight__who').textContent).toBe('Response 1');
+    expect(dialog.querySelector('.answer-spotlight__chips, .answer-spotlight__ladder, .answer-spotlight__part')).toBeNull();
+  });
+});

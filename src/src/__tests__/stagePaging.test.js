@@ -206,10 +206,14 @@ describe('resultsPageSizeFor', () => {
     expect(resultsPageSizeFor('nonsense')).toBe(resultsPageSizeFor('room'));
     expect(base('table')).toBe(5);
   });
-  test('the host page pages RESULTS with it, and only RESULTS', () => {
+  // Since 18 Oct 2026 the one-screen stage's VOTE and RESULTS pages are the
+  // room content rule's (components/stage/roomPaging.js, held by
+  // stageRoomPaging.test.js): every answer when overviewFits, the pick and its
+  // runners-up on results. The render and auto-mode's step read ONE helper.
+  test('the host page pages VOTE and RESULTS with the room helper, render and auto-mode alike', () => {
     // eslint-disable-next-line global-require
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(src).toMatch(/const stagePageSize = hostPhase === 'RESULTS' \? resultsPageSizeFor\(profile\) : pageSizeFor\(profile\);/);
-    expect(src).toMatch(/pageSlice\(answers, rawIndex, resultsPageSizeFor\(profile\)\)/);
+    expect(src).toMatch(/const stagePageSize = stagePageSizeFor\(hostPhase, profile, answers\);/);
+    expect(src).toMatch(/pageSlice\(answers, rawIndex, stagePageSizeFor\('RESULTS', profile, answers\)\)/);
   });
 });

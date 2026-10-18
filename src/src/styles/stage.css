@@ -736,10 +736,9 @@ a.dock-more{text-decoration:none}
 .q[data-expandable]{cursor:zoom-in}
 /* WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026; config/roomContent.js,
    components/QuestionCard RoomLines). While a Call & Answer question is up the
-   LEAD is the task: the primary step (hero when short), a sentence weight and a
-   wider measure, because it is read, not glanced. The title above it is a
-   .kicker on Room, TV and Table, a heading at the secondary step on Call.
-   Pinned by __tests__/roomContentPalette.test.js. */
+   LEAD is the title since 18 Oct (the lesson, or the task, when there is no
+   title): the hero step when short, else primary at a sentence weight and a
+   wider measure. Pinned by __tests__/roomContentPalette.test.js. */
 .q.q-lead{font-weight:700;line-height:1.12;max-width:min(100%, calc(var(--measure) + 8ch))}
 .q.q-lead.is-primary{font-size:var(--t-primary)}
 .q.q-lead.is-hero{font-size:var(--t-hero);font-weight:800;line-height:1.02;max-width:var(--measure)}
@@ -755,6 +754,29 @@ a.dock-more{text-decoration:none}
   border-left:4px solid var(--accent);padding-left:.7em}
 .q-task-k{display:block;font-size:var(--t-meta);letter-spacing:.08em;
   text-transform:uppercase;color:var(--muted);margin:0 0 .15em}
+/* THE TITLE AND THE LESSON LEAD, THE QUESTION IN "YOUR TURN" (owner, 18 Oct
+   2026, docs/design/room-content-v2 frames 1-3; components/QuestionCard
+   RoomLines). The category is a small eyebrow in the accent's text tint; the
+   title is .q.q-lead above; the lesson sits under it at the secondary step,
+   full --text, never dropped (no data-drop); the question's own instruction
+   is one band with the accent rule. Call's generic instruction is .q-howto, a
+   body-step line the fitter may give up (data-drop="3").
+   Contrast, measured on the stage field: --text 14.97:1, --accent-text 8.86:1
+   (Classic) / 9.14:1 (Present); on the band (accent at .10 over the field)
+   --text 12.60:1 or more, --accent-text 7.46:1 or more. Tokens only; held by
+   __tests__/stageRoomContentPalette.test.js. */
+.q-eyebrow{color:var(--accent-text)}
+.q-lesson{font-size:var(--t-secondary);font-weight:500;line-height:1.3;color:var(--text);
+  margin:0;max-width:min(100%, calc(var(--measure) + 34ch))}
+.q-lesson[data-expandable]{cursor:zoom-in}
+.q-turn{display:flex;align-items:baseline;gap:calc(1vw + 12px);margin-top:calc(1vh + 4px);
+  background:rgb(var(--accent-rgb) / .10);border-left:calc(var(--hair) * 4 + 2px) solid var(--accent);
+  border-radius:var(--radius-sm);padding:calc(1.2vh + 6px) calc(1.2vw + 12px);
+  max-width:min(100%, calc(var(--measure) + 40ch))}
+.q-turn-k{flex:none;font-size:var(--t-meta);font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent-text);white-space:nowrap}
+.q-turn-t{margin:0;min-width:0;font-size:var(--t-secondary);font-weight:650;line-height:1.25;color:var(--text)}
+.qdetail.q-howto{max-width:min(100%, calc(var(--measure) + 20ch))}
 /* GATHERING RESPONSES… (components/stage/StageGathering.jsx, owner
    2026-10-11). The VOTE/RESULTS wait: .qdetail's size and tone so it reads as
    a calm sentence, three muted dots that breathe so it reads as work in
@@ -1023,7 +1045,11 @@ a.dock-more{text-decoration:none}
    fitter), the points and name a small credit under it, and the room's backing
    a bar along the card's foot, relative to the top idea. */
 .cards.is-ideas .card{align-items:flex-start;padding-block:calc(.6vh + 4px)}
-.cards.is-ideas .card .ans{font-weight:700;line-height:1.18;display:-webkit-box;
+/* In full since 18 Oct 2026 (room-content-v2 frame 5: "not at the expense of
+   seeing what was voted on"): the three-line clamp that stood here is the
+   fitter's to apply, behind [data-clamped="on"], and nobody else's. */
+.cards.is-ideas .card .ans{font-weight:700;line-height:1.18}
+.content[data-clamped="on"] .cards.is-ideas .card .ans{display:-webkit-box;
   -webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .cards.is-ideas .card .who{opacity:.72;font-weight:500}
 /* The question line above the cards, pressable: it puts the question up. */
@@ -1412,3 +1438,109 @@ a.dock-more{text-decoration:none}
 /* The offered tier dims by colour, not by dropping below the profile floor —
    .w4/.w5 already sit on the ladder's bottom rungs. */
 .terms .t.wl-dim{color:var(--muted)}
+
+/* ===========================================================================
+   THE ROOM'S SCREENS, REDRAWN (owner, 18 Oct 2026, docs/design/room-content-v2;
+   the rule is config/roomContent.js). Voting, results, the one answer put up,
+   and the QR side panel, on the one-screen stage. Tokens only: the skin's
+   roles (--accent, --accent-text, --gold, --on-accent) and channel tints, so
+   Classic and Present both reach every colour here. Measured (both skins):
+   the pick's words 11.09:1 and its gold label 6.56:1 on the gold card; the
+   rest in __tests__/stageRoomContentPalette.test.js.
+   =========================================================================== */
+
+/* The title as the reminder above the answers and the results (frames 4-5):
+   the primary step, essential, pressable to put the question back up. */
+.q-remind{font-family:var(--font-display);font-weight:800;font-size:var(--t-primary);
+  line-height:1.08;letter-spacing:-.005em;margin:0;color:var(--text);
+  max-width:min(100%, calc(var(--measure) + 24ch))}
+.q-remind.is-openable{cursor:pointer}
+.q-remind.is-openable:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+
+/* VOTING (frame 4): every answer whole and numbered, at the secondary step,
+   two columns when there is more than one. No name, no points, no rank. */
+.cards.is-ballot.is-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cards.is-ballot .card{align-items:flex-start;padding:calc(1.6vh + 6px) calc(1.4vw + 12px)}
+.cards.is-ballot .card .num{flex:none;display:grid;place-items:center;
+  min-width:1.7em;height:1.7em;padding:0 .2em;border-radius:var(--radius-sm);
+  background:rgb(var(--accent-rgb) / .14);color:var(--accent-text);
+  font-family:var(--font-display);font-weight:800;
+  font-size:max(var(--floor),calc(var(--t-secondary) * .78))}
+.cards.is-ballot .card .ans{font-size:var(--t-secondary);font-weight:500;line-height:1.28}
+.cards.is-ballot .card.is-showing{border-color:var(--accent);border-width:2px}
+
+/* RESULTS (frame 5): the pick in full in the skin's gold, the runners-up with
+   their text and their bar as the fill behind it, relative to the pick. */
+.cards.is-ideas .card.is-pick{border:calc(var(--hair) + 1px) solid var(--gold);
+  background:color-mix(in srgb, var(--gold) 16%, var(--bg));
+  padding:calc(2vh + 8px) calc(2vw + 14px)}
+.cards.is-ideas .card.is-pick .pick-k{display:block;font-size:var(--t-meta);font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:0 0 .35em}
+.cards.is-ideas .card.is-pick .ans{font-size:max(var(--floor),calc(var(--t-secondary) * 1.05));font-weight:750}
+.cards.is-ideas .card.is-runner{align-items:center}
+.cards.is-ideas .card.is-runner .ans{font-size:var(--t-body);font-weight:500}
+.cards.is-ideas .card.is-runner .fill{background:rgb(var(--accent-rgb) / .22)}
+.more-answers{font-size:var(--t-meta);color:var(--muted);margin:0;font-weight:600}
+/* The host's way into the discussion (TALK_LINE): the first part to give way. */
+.talk{display:flex;align-items:baseline;gap:calc(.8vw + 10px);margin:calc(1.5vh + 6px) 0 0;
+  font-size:var(--t-body);line-height:1.3;color:var(--text)}
+.talk-k{flex:none;font-size:var(--t-meta);font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent-text);white-space:nowrap}
+.talk-t{min-width:0}
+
+/* THE QR AS A SIDE PANEL (frames 9-10). The content keeps its column and
+   narrows; the join block stands on the right at the profile's own (unfitted)
+   steps, because the fitter does not shrink what it does not own. */
+.content[data-join]{flex-direction:row;align-items:stretch;gap:calc(2vw + 10px)}
+.content[data-join] > .fitbox{flex:1 1 auto;min-width:0}
+.stage-join{order:2;flex:none;align-self:center;width:clamp(300px, 25vw, 480px);max-height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:calc(1vh + 6px);overflow:hidden;text-align:center;
+  background:var(--surface);border:var(--hair) solid var(--rule);border-radius:var(--radius-lg);
+  padding:calc(2.4vh + 8px) calc(1.4vw + 10px)}
+.stage-join .qr{width:min(100%, clamp(200px, 32vh, 400px));height:auto;aspect-ratio:1 / 1}
+:root.d-table .stage-join{width:clamp(240px, 27vw, 340px)}
+:root.d-table .stage-join .qr{width:min(100%, clamp(160px, 28vh, 260px));height:auto}
+.stage-join-k{margin:0;font-size:var(--L-meta);color:var(--muted);font-weight:600}
+.stage-join-url{margin:0;font-family:var(--font-display);font-weight:800;font-size:var(--L-body);
+  color:var(--text);overflow-wrap:anywhere;max-width:100%}
+.stage-join-code{margin:0;font-family:var(--font-display);font-weight:800;font-size:var(--L-primary);
+  line-height:1;letter-spacing:.08em;color:var(--text)}
+
+/* ONE ANSWER PUT UP (frames 11-12): components/AnswerSpotlight with
+   surfaceClassName "stage-spot" and a variant. The number or the place, the
+   answer at the primary step, and where it sits: chips while voting, a
+   ladder of bars (no figures) on a result. `__text` keeps the scroll
+   contract inside `__body`, which is itself allowed to shrink. */
+.stage-spot .answer-spotlight__main,
+.stage-spot .answer-spotlight__split{flex:1 1 auto;min-height:0;display:flex;gap:calc(2vw + 12px)}
+.stage-spot .answer-spotlight__split{display:grid;grid-template-columns:minmax(0,1fr) clamp(220px, 22vw, 420px);align-items:center}
+.stage-spot .answer-spotlight__body{flex:1 1 auto;min-width:0;min-height:0;max-height:100%;
+  display:flex;flex-direction:column}
+.stage-spot.is-vote .answer-spotlight__text,
+.stage-spot.is-result .answer-spotlight__text{font-size:var(--L-primary);font-weight:650;line-height:1.24}
+.stage-spot .answer-spotlight__num-line{display:inline-flex;align-items:center;gap:.7em;min-width:0}
+.stage-spot .answer-spotlight__num{display:grid;place-items:center;min-width:1.7em;height:1.7em;padding:0 .2em;
+  border-radius:var(--radius-sm);background:rgb(var(--accent-rgb) / .16);color:var(--accent-text);
+  font-family:var(--font-display);font-weight:800;font-size:var(--L-secondary)}
+.stage-spot .answer-spotlight__part{margin-left:auto;font-size:var(--L-meta);color:var(--muted);font-weight:700}
+.stage-spot .answer-spotlight__place{display:block;margin:0 0 .4em;font-size:var(--L-meta);font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--accent-text)}
+.stage-spot .answer-spotlight__ladder{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+  gap:calc(.8vh + 4px)}
+.stage-spot .answer-spotlight__rung{position:relative;overflow:hidden;display:flex;align-items:center;
+  height:calc(var(--L-meta) * 2.4);padding:0 .8em;border:2px solid transparent;
+  border-radius:var(--radius-sm);background:rgb(var(--slate-rgb) / .14)}
+.stage-spot .answer-spotlight__rung-fill{position:absolute;left:0;top:0;bottom:0;background:rgb(var(--accent-rgb) / .24)}
+.stage-spot .answer-spotlight__rung.is-pick{border-color:var(--gold)}
+.stage-spot .answer-spotlight__rung.is-pick .answer-spotlight__rung-fill{background:color-mix(in srgb, var(--gold) 28%, transparent)}
+/* --text, not --accent: in Classic the accent IS the gold, and the rung on
+   screen must not read as the pick. */
+.stage-spot .answer-spotlight__rung.is-here{border-color:var(--text)}
+.stage-spot .answer-spotlight__rung-n{position:relative;font-size:var(--L-meta);font-weight:800;color:var(--text)}
+.stage-spot .answer-spotlight__chips{flex:none;display:flex;flex-wrap:wrap;gap:.5em}
+.stage-spot .answer-spotlight__chip{appearance:none;-webkit-appearance:none;font:inherit;font-size:var(--L-meta);
+  font-weight:700;min-width:2.2em;height:2.2em;padding:0 .4em;border:0;border-radius:var(--radius-sm);
+  background:rgb(var(--slate-rgb) / .2);color:var(--text);cursor:pointer}
+.stage-spot .answer-spotlight__chip.is-on{background:var(--accent);color:var(--on-accent)}
+.stage-spot .answer-spotlight__chip:focus-visible{outline:3px solid var(--text);outline-offset:2px}
