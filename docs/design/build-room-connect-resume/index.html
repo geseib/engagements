@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connect, Welcome Back</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: a design sheet; each frame is the real Connect Claude Code window, drawn at its shipped width, with its note beside it. */
+:root {
+  color-scheme: dark;
+  /* Warm Summit dusk, as shipped (src/src/styles.css) */
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A; --text: #F4EDE4; --muted: #9BA8BE;
+  --primary: #F6A94C; --secondary: #7CA7E6; --success: #4FB286; --success-text: #6FD0A4; --danger-text: #EF8C86;
+  --rule: rgba(155,168,190,.22); --cmd: #0B1322; --tint-green: rgba(79,178,134,.14); --tint-amber: rgba(246,169,76,.13);
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--f-ui); }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 40px; }
+h1 { font: 800 clamp(26px, 4vw, 34px)/1.15 var(--f-display); margin: 0; text-wrap: balance; }
+.lede { margin: 10px 0 0; color: var(--muted); max-width: 70ch; }
+.lede b { color: var(--text); }
+.eb { font: 700 12px/1 var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.frame { display: grid; grid-template-columns: minmax(0, 620px) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .frame { grid-template-columns: minmax(0, 1fr); } }
+.frame-h { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.frame-h h2 { font: 800 21px/1.25 var(--f-display); margin: 0; }
+.note { display: flex; flex-direction: column; gap: 10px; color: var(--muted); font-size: 14px; min-width: 0; }
+.note b { color: var(--text); }
+.note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.new { color: var(--success-text); font-weight: 700; }
+
+/* The window */
+.modal { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.35); min-width: 0; }
+.mh { display: flex; align-items: center; gap: 12px; }
+.mh h3 { margin: 0; font: 800 19px/1.2 var(--f-ui); flex: 1; }
+.x { width: 32px; height: 32px; border: 1px solid var(--rule); border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 16px; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+.back { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--tint-green); border: 1px solid rgba(79,178,134,.35); }
+.back .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); margin-top: 6px; flex: none; }
+.back b { display: block; font-size: 15px; }
+.back span { font-size: 13px; color: var(--muted); }
+.back code { font: 500 12.5px var(--f-mono); color: var(--text); }
+.ver { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); align-items: baseline; }
+.ver b { font: 700 15px var(--f-ui); color: var(--text); font-variant-numeric: tabular-nums; }
+.ver .ok { color: var(--success-text); font-weight: 600; }
+.ver .old { color: var(--danger-text); }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+ol.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; }
+.n { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--rule); display: grid; place-items: center; font: 700 12px var(--f-ui); color: var(--muted); }
+li.is-now .n { border: 1.5px dashed var(--primary); color: var(--primary); }
+li.is-done .n { background: var(--tint-green); border-color: rgba(79,178,134,.5); color: var(--success-text); }
+li.is-old .n { border-color: var(--danger-text); color: var(--danger-text); }
+.sb { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.st { font: 700 15px/1.3 var(--f-ui); }
+.hint { font-size: 13px; color: var(--muted); }
+pre.cmd { margin: 0; padding: 12px 14px; background: var(--cmd); border-radius: 10px; font: 13px/1.55 var(--f-mono); color: var(--text); white-space: pre-wrap; word-break: break-all; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--text); font: 600 13px var(--f-ui); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #2A1A06; }
+.btn.ghost { background: transparent; }
+.fold { border-top: 1px solid var(--rule); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.fold summary { font: 600 13px var(--f-ui); color: var(--secondary); list-style: none; }
+.fold summary::before { content: "▸ "; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.check i { width: 16px; height: 16px; border-radius: 4px; background: var(--primary); flex: none; margin-top: 3px; }
+.check small { display: block; color: var(--muted); font-size: 13px; }
+.foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; color: var(--muted); }
+
+/* Claude Code, in a terminal */
+.term { background: #0A0F18; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; min-width: 0; }
+.term .bar { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); }
+.term pre { margin: 0; padding: 14px 16px; font: 13px/1.6 var(--f-mono); color: var(--text); white-space: pre-wrap; overflow-x: auto; }
+.term .you { color: var(--primary); }
+.term .dim { color: var(--muted); }
+.term .good { color: var(--success-text); }
+
+table.when { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tw { overflow-x: auto; }
+table.when th { text-align: left; font: 700 12px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+table.when td { padding: 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.when td:first-child { font-weight: 700; white-space: nowrap; }
+code { font-family: var(--f-mono); font-size: .92em; }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <span class="eb">Build Room · Connect Claude Code</span>
+    <h1>The same window, for the first time and for coming back</h1>
+    <p class="lede">Owner, 18 Oct: <b>"can the app detect this and present the connect modal in a more concise easy to follow depending on if first time or resumed."</b> The room already knows whether Claude has worked here: it kicked off, posted, or listened for the host. When it has, the window opens on <b>Welcome back</b> with one command. The four steps stay one click away, for a new folder or another laptop.</p>
+  </header>
+
+  <section class="tw" aria-label="Which window opens">
+    <table class="when">
+      <thead><tr><th>The room has seen</th><th>The window opens on</th><th>What the host runs</th></tr></thead>
+      <tbody>
+        <tr><td>No Claude yet</td><td>C1 · First time: today's four steps</td><td>The start command in a terminal, then <code>/engage:kickoff</code></td></tr>
+        <tr><td>Claude before, plugin current</td><td>C2 · Welcome back</td><td><code>/engage:continue</code> in the project's folder. Nothing else.</td></tr>
+        <tr><td>Claude before, plugin older</td><td>C3 · Welcome back, update first</td><td>The update command, restart Claude Code, then <code>/engage:continue</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- C2 -->
+  <section class="frame" aria-labelledby="c2">
+    <div class="frame-h"><span class="eb">C2</span><h2 id="c2">Welcome back, plugin current</h2></div>
+    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, welcome back">
+      <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
+      <div class="back"><span class="dot"></span><div><b>Claude has worked in this room before</b><span>Last here at 10:42, in the folder <code>volunteer-sign-up</code>.</span></div></div>
+      <ol class="steps">
+        <li class="is-now"><span class="n">1</span><div class="sb">
+          <span class="st">In Claude Code, in that folder, run</span>
+          <pre class="cmd">/engage-dev:continue</pre>
+          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">It reconnects to this room and picks up where you left off.</span></div>
+        </div></li>
+      </ol>
+      <div class="ver"><span>Claude's plugin</span><b>1.24.0</b><span class="ok">The latest.</span></div>
+      <label class="check"><i></i><span>Review Claude's questions before the room sees them<small>When off, Claude's asks open to the room straight away.</small></span></label>
+      <details class="fold"><summary>Starting in a new folder or on another laptop? Show all the steps</summary></details>
+      <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
+    </div>
+    <div class="note">
+      <p><b>One step, because the plugin now connects for you.</b> <span class="new">New in 1.24.0:</span> <code>/engage:continue</code> and <code>/engage:kickoff</code> call <code>connect</code> first. After a restart nobody needs a separate connect step, and the Wi-Fi and remote share are always running.</p>
+      <ul>
+        <li><b>The folder name</b> comes from the plugin when it connects: the last part of the path only (<code>volunteer-sign-up</code>), never the whole path, which carries the laptop's user name.</li>
+        <li><b>The version line</b> is the one Settings now shows (shipped in 1.23.0).</li>
+        <li><b>All the steps</b> opens C1 in place, so a new key is still one click away.</li>
+        <li><b>Revoke key</b> moves into the folded steps; a returning host rarely needs it.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- C3 -->
+  <section class="frame" aria-labelledby="c3">
+    <div class="frame-h"><span class="eb">C3</span><h2 id="c3">Welcome back, plugin out of date</h2></div>
+    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, welcome back with an update">
+      <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
+      <div class="back"><span class="dot"></span><div><b>Claude has worked in this room before</b><span>Last here at 10:42, in the folder <code>volunteer-sign-up</code>.</span></div></div>
+      <div class="ver"><span>Claude's plugin</span><b class="old">1.22.0</b><span>·</span><span>Latest</span><b>1.24.0</b></div>
+      <ol class="steps">
+        <li class="is-old"><span class="n">1</span><div class="sb">
+          <span class="st">Update the Engage plugin</span>
+          <pre class="cmd">curl -fsSL https://engage.dev.seibtribe.us/engage-mcp.mjs -o ~/.engage-mcp.mjs \
+  &amp;&amp; node ~/.engage-mcp.mjs --install-plugin --api … --tier dev</pre>
+          <div class="row"><span class="btn primary">⧉ Copy</span><span class="hint">Run it in a terminal, then restart Claude Code in the folder.</span></div>
+        </div></li>
+        <li class="is-now"><span class="n">2</span><div class="sb">
+          <span class="st">In Claude Code, run</span>
+          <pre class="cmd">/engage-dev:continue</pre>
+          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">It says on connect which plugin it is running.</span></div>
+        </div></li>
+      </ol>
+      <details class="fold"><summary>Starting in a new folder or on another laptop? Show all the steps</summary></details>
+      <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
+    </div>
+    <div class="note">
+      <p><b>Update leads.</b> Its Copy is the window's one orange; Continue waits as step 2.</p>
+      <ul>
+        <li>Opened from Settings' <b>out of date · Update</b>, the cursor lands on step 1, as today.</li>
+        <li>Once the new plugin calls in, the window becomes C2 by itself.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- C1 -->
+  <section class="frame" aria-labelledby="c1">
+    <div class="frame-h"><span class="eb">C1</span><h2 id="c1">First time in this room (and "Show all the steps")</h2></div>
+    <div class="modal" role="img" aria-label="Mockup of the Connect Claude Code window, first time">
+      <div class="mh"><h3>Connect Claude Code</h3><span class="x">✕</span></div>
+      <p class="sub">Claude Code runs on this laptop and joins the room.</p>
+      <ol class="steps">
+        <li class="is-done"><span class="n">1</span><div class="sb">
+          <span class="st">Check for the latest Engage plugin</span>
+          <div class="ver"><span>Latest</span><b>1.24.0</b><span>Claude's version shows here once it connects.</span></div>
+          <div class="row"><span class="btn">⧉ Copy the install command</span><span class="hint">Run it in a terminal. Needs Node 18 or later.</span></div>
+        </div></li>
+        <li class="is-now"><span class="n">2</span><div class="sb">
+          <span class="st">Mint a key and copy the start command</span>
+          <span class="hint">Project folder <code>~/build-room/volunteer-sign-up</code></span>
+          <div class="row"><span class="btn primary">Mint a key and copy the command</span></div>
+        </div></li>
+        <li><span class="n">3</span><div class="sb">
+          <span class="st">Paste it into a terminal</span>
+          <span class="hint">Makes the folder and opens Claude Code in it.</span>
+        </div></li>
+        <li><span class="n">4</span><div class="sb">
+          <span class="st">Kick off</span>
+          <pre class="cmd">/engage-dev:kickoff</pre>
+          <div class="row"><span class="btn">⧉ Copy</span><span class="hint">Run it in Claude Code. It connects, then plans with the room.</span></div>
+        </div></li>
+      </ol>
+      <div class="foot"><span>Game 4821.</span><span class="btn">Done</span></div>
+    </div>
+    <div class="note">
+      <p><b>Today's four steps, unchanged in order.</b> Step 4's line now says kickoff connects too.</p>
+      <ul>
+        <li>Shown when the room has never seen Claude, and in place under C2 and C3 when the host opens <b>Show all the steps</b>.</li>
+        <li>The review checkbox and "More commands for later" stay below, as today.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- C4 -->
+  <section class="frame" aria-labelledby="c4">
+    <div class="frame-h"><span class="eb">C4</span><h2 id="c4">In Claude Code, after <code>/engage-dev:continue</code></h2></div>
+    <div class="term" role="img" aria-label="Mockup of Claude Code output after continue">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="you">&gt; /engage-dev:continue</span>
+
+<span class="dim">⏺ engage-dev · connect</span>
+  Connected this project (~/build-room/volunteer-sign-up) to Build Room 4821.
+  This folder already had work in it, so the room's work goes on the branch build-room/4821.
+
+  Engage Build Room · session 4821 — Volunteer sign-up for the food bank
+  <span class="good">Engage plugin 1.24.0: the latest.</span>
+  Goal: A one-page site where a volunteer can pick a shift in under a minute, on a phone.
+
+<span class="dim">⏺ engage-dev · check_directions</span>
+  From the host: "Use B, the calm photo with the calendar. Make Sign up bigger."
+
+⏺ Picking up the host's direction: the calendar header, with a bigger Sign up button.</pre>
+    </div>
+    <div class="note">
+      <p><b>What the host sees on their laptop</b> after pasting one command: connected, which plugin, and the work resuming.</p>
+      <ul>
+        <li>If the plugin is older, the green line is the "older than the latest" line instead, with what to do.</li>
+        <li>On the host's screen the Claude chip turns green as soon as it connects.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+</body>
+</html>
