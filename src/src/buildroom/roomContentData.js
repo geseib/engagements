@@ -30,7 +30,8 @@ export function claudeWords(room, now) {
   return {
     key: st.key,
     headline: st.headline,
-    line: st.line || '',
+    // Sent to Claude (I9): beside an open ask the one line is what was sent, word for word.
+    line: st.key === 'sent' && st.sent && st.sent.text && st.sent.verb !== 'decided' ? `\u201c${st.sent.text}\u201d` : (st.line || ''),
     dur: st.doing && !st.doing.stale ? st.doing.dur : '',
     helperLine: st.helperLine || '',
   };

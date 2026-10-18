@@ -255,10 +255,31 @@ async function check(name, fn) {
       assert.strictEqual(r.stdout, '', 'a hook prints nothing');
     }
     assert.deepStrictEqual(linesIn().map((l) => [l.kind, l.text]), [
-      ['edit', 'Edited Header.jsx'], ['run', 'Ran npm run dev'], ['search', 'Searched the code'], ['web', 'Looked at docs.example.com'],
+      ['edit', 'Edited Header.jsx'], ['check', 'Ran npm run dev'], ['search', 'Searched the code'], ['web', 'Looked at docs.example.com'],
     ]);
     const raw = fs.readFileSync(activityPath, 'utf8');
     for (const secret of ['SECRET', 'sk-live', 'hunter2', 'key=abc', '/Users/x']) assert.ok(!raw.includes(secret), `${secret} leaked`);
+  });
+  await check('I10: a test run says testing with its counts only; a failed one comes through PostToolUseFailure; a commit saves; the demo is checking', async () => {
+    const keep = fs.readFileSync(activityPath, 'utf8');
+    fs.writeFileSync(activityPath, '');
+    const runs = [
+      { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'npm test' }, tool_response: { stdout: 'PASS src/Leaderboard.test.jsx\n  SECRET-TEST-NAME\nTests:       13 passed, 13 total', stderr: '' } },
+      { hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'npx vitest run' }, error: 'Exit code 1\n FAIL SECRET-TEST-NAME\n      Tests  1 failed | 12 passed (13)' },
+      { hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'npm run build' }, error: 'Exit code 2\nSECRET-OUTPUT' },
+      { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "SECRET-MESSAGE"' }, tool_response: { stdout: '', stderr: '' } },
+      { hook_event_name: 'PostToolUse', tool_name: 'WebFetch', tool_input: { url: 'http://localhost:5173/scores' } },
+    ];
+    for (const data of runs) assert.strictEqual(activityHook(project, data).status, 0);
+    assert.deepStrictEqual(linesIn().map((l) => [l.kind, l.text, l.tests || null, l.failed || false]), [
+      ['test', 'Ran npm test', { passed: 13, failed: 0 }, false],
+      ['test', 'Ran npx vitest', { passed: 12, failed: 1 }, true],
+      ['run', 'Ran npm run build', null, true],
+      ['save', 'Ran git commit', null, false],
+      ['check', 'Looked at the running demo', null, false],
+    ]);
+    assert.ok(!fs.readFileSync(activityPath, 'utf8').includes('SECRET'), 'never a test name, an output line or a message');
+    fs.writeFileSync(activityPath, keep);
   });
   await check('in any other folder the hook writes nothing', async () => {
     const other = tmp('other-activity');
@@ -532,6 +553,9 @@ async function check(name, fn) {
     // The live view: one plain line per tool, from a PostToolUse hook on every tool.
     assert.strictEqual(hooks.hooks.PostToolUse[0].matcher, '*');
     assert.ok(/--activity/.test(hooks.hooks.PostToolUse[0].hooks[0].command));
+    // A failed command (a red test run) reaches PostToolUseFailure instead (I10).
+    assert.strictEqual(hooks.hooks.PostToolUseFailure[0].matcher, 'Bash');
+    assert.ok(/--activity/.test(hooks.hooks.PostToolUseFailure[0].hooks[0].command));
     assert.strictEqual(hooks.hooks.PreToolUse[0].matcher, 'Agent|Task');
     assert.ok(/--activity/.test(hooks.hooks.PreToolUse[0].hooks[0].command) && /--activity/.test(hooks.hooks.SubagentStop[0].hooks[0].command));
     assert.ok(/npm run dev|dev server/.test(fs.readFileSync(path.join(plug, 'commands', 'preview.md'), 'utf8')));
