@@ -31,6 +31,24 @@ or are left out.
 the whole lesson, guidance on how to answer, the QR, every answer with its bar, and
 Workie's read of the themes.
 
+## Two host moves, on every moment (owner, 18 Oct)
+
+> "i like this idea whenever the host wants to show the qr code. it moves the screen around a
+> bit so all content is there but the qr code is avail."
+
+> "With the pages that show all responses or results, the host can still choose to click on
+> one or the other or cycle through them on the screen. this is especially import when the
+> answers are longer."
+
+- **Show the QR** is a panel on the right, not a takeover. The content steps down to fit
+  beside it, and nothing leaves the screen. Today `focus: 'join'` replaces the whole moment
+  (`present/PresentMoments.jsx`), so this changes it. Press it again to hide the panel.
+- **Put one up.** On any page that shows all the answers or results, the host clicks one or
+  steps with → and ←, and it fills the screen. The chips (voting) or the ladder (results)
+  show where it sits, and Esc goes back to all of them. A long answer splits into parts, as
+  `present/presentKeys.js` already does. This reuses the stage-focus `answer` index that
+  exists today; the overview is the new part.
+
 ## Frames (1920×1080, the Room profile's type steps)
 
 | | |
@@ -43,6 +61,10 @@ Workie's read of the themes.
 | 6. Results on Call, with Workie's read | ![](results-call.png) |
 | 7. Build Room Choose while voting, Room | ![](build-choose-room.png) |
 | 8. Build Room result and what Claude gets, Room | ![](build-result-room.png) |
+| 9. The host shows the QR while a lesson is up | ![](answering-qr-room.png) |
+| 10. The QR during voting | ![](voting-qr-room.png) |
+| 11. The host puts one answer up while voting | ![](voting-focus-room.png) |
+| 12. The host puts one result up | ![](results-focus-room.png) |
 
 ## Questions for the owner before it is built
 
@@ -56,5 +78,9 @@ Workie's read of the themes.
 3. **No tallies while voting.** Agreed, or should the host be able to show them live?
 4. **"Talk about it" on results.** Is a fixed facilitator line acceptable ("Who wrote the
    winner? Tell us more"), or should Workie write one per round?
-5. **The ALL-CAPS titles** in the architecture set read slower at hero size. Show them in
+5. **Voting opens on all the answers or on answer 1?** On 2026-10-13 the owner had
+   "Response 1 is on the wall from the start of voting" (`presentKeys.js`). These frames open
+   on all of them, with → stepping to answer 1. The proposal is to open on the overview
+   when they fit on one page, and on answer 1 when they don't.
+6. **The ALL-CAPS titles** in the architecture set read slower at hero size. Show them in
    sentence case on room screens?
