@@ -163,6 +163,17 @@ code { font-family: var(--f-mono); font-size: .92em; }
 .stage .hd i { width: 1.6cqw; height: 1.6cqw; min-width: 8px; min-height: 8px; border-radius: 50%; background: var(--primary); }
 .stage .hd i.w { background: var(--success); }
 .stage .ln { font: 500 clamp(10px, 2cqw, 19px)/1.4 var(--f-ui); color: var(--muted); }
+.phase { display: flex; gap: 1cqw; flex-wrap: wrap; }
+.phase span { font: 700 clamp(9px, 1.5cqw, 14px) var(--f-ui); padding: .5cqw 1.2cqw; border-radius: 999px; color: var(--muted); border: 1px solid var(--rule); }
+.phase span.on { color: #2A1A06; background: var(--primary); border-color: var(--primary); }
+.phase span.done { color: var(--success-text); border-color: rgba(79,178,134,.45); }
+.phase span.bad { color: #2A0A08; background: var(--danger-text); border-color: var(--danger-text); }
+.tick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .7cqw; margin-top: auto; }
+.tick li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr); gap: 1cqw; font: 500 clamp(9px, 1.7cqw, 16px)/1.3 var(--f-ui); color: var(--muted); }
+.tick li:first-child { color: var(--text); }
+.tick li b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tests { font: 700 clamp(10px, 2cqw, 19px) var(--f-ui); }
+.tests .p { color: var(--success-text); } .tests .f { color: var(--danger-text); }
 </style>
 </head>
 <body>
@@ -439,13 +450,75 @@ code { font-family: var(--f-mono); font-size: .92em; }
     </div>
   </section>
 
+  <!-- I10 -->
   <section class="frame wide">
-    <div class="frame-h"><div class="eb">Your call</div><h2>Four things to decide before building</h2></div>
+    <div class="frame-h"><div class="eb">I10 · Stage while Claude works</div><h2>What Claude is doing, and the proof it is doing it</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:18px">
+      <div class="stage two">
+        <div style="display:flex;flex-direction:column;gap:2.2cqw;min-width:0">
+          <div class="hd"><i class="w"></i><div class="sh">Adding the old-school leaderboard</div></div>
+          <div class="phase"><span class="on">Building</span><span class="">Testing</span><span class="">Fixing</span><span class="">Checking</span><span class="">Saved</span></div>
+          <div class="ln">Step 2 of 4 · Score table and arcade font</div>
+          
+          <ul class="tick"><li><b>11:02</b><span>Edited Leaderboard.jsx</span></li><li><b>11:02</b><span>Edited scores.js</span></li><li><b>11:01</b><span>Wrote arcade.css</span></li><li><b>11:00</b><span>Read App.jsx</span></li></ul>
+        </div>
+        <div class="side">
+          <div class="kind">We told Claude</div>
+          <div class="said">“We need an old-school leaderboard.”</div>
+          <div class="ln">10:58</div>
+        </div>
+      </div>
+      <div class="stage two">
+        <div style="display:flex;flex-direction:column;gap:2.2cqw;min-width:0">
+          <div class="hd"><i class="w"></i><div class="sh">Adding the old-school leaderboard</div></div>
+          <div class="phase"><span class="done">Building</span><span class="bad">Testing</span><span class="on">Fixing</span><span class="">Checking</span><span class="">Saved</span></div>
+          <div class="ln">Step 3 of 4 · Tests</div>
+          <div class="tests"><span class="p">12 passed</span> · <span class="f">1 failed</span> <span class="ln">· fixing it</span></div>
+          <ul class="tick"><li><b>11:05</b><span>Edited scores.js</span></li><li><b>11:04</b><span>Ran npm test</span></li><li><b>11:04</b><span>Edited Leaderboard.test.jsx</span></li><li><b>11:03</b><span>Edited Leaderboard.jsx</span></li></ul>
+        </div>
+        <div class="side">
+          <div class="kind">We told Claude</div>
+          <div class="said">“We need an old-school leaderboard.”</div>
+          <div class="ln">10:58</div>
+        </div>
+      </div>
+      <div class="stage two">
+        <div style="display:flex;flex-direction:column;gap:2.2cqw;min-width:0">
+          <div class="hd"><i class="w"></i><div class="sh">Checking the leaderboard in the browser</div></div>
+          <div class="phase"><span class="done">Building</span><span class="done">Testing</span><span class="done">Fixing</span><span class="on">Checking</span><span class="">Saved</span></div>
+          <div class="ln">Step 4 of 4 · Look at it running</div>
+          <div class="tests"><span class="p">13 passed</span></div>
+          <ul class="tick"><li><b>11:07</b><span>Took a screenshot</span></li><li><b>11:07</b><span>Looked at localhost</span></li><li><b>11:06</b><span>Ran npm run dev</span></li><li><b>11:06</b><span>Ran npm test</span></li></ul>
+        </div>
+        <div class="side">
+          <div class="kind">We told Claude</div>
+          <div class="said">“We need an old-school leaderboard.”</div>
+          <div class="ln">10:58</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <ul>
+        <li><b>Headline: Claude’s own words</b>, as today (“Adding the old-school leaderboard”). The skill asks Claude to name what the room asked for, not “Working on the code”.</li>
+        <li><b>The stage row comes from the plugin’s hook, not from Claude</b>, so it moves even when Claude forgets to post: an edit is <b>Building</b>; a test command is <b>Testing</b>; edits after a failed run are <b>Fixing</b>; a dev server, a page fetch or a screenshot is <b>Checking</b>; a commit is <b>Saved</b>. The stage the work has already passed through stays green; a failed test run stays red until a run passes.</li>
+        <li><b>Test counts only</b> (“12 passed · 1 failed”), never the output or the test names. Shown only when the hook can read them from the test run; otherwise the row just says Testing.</li>
+        <li><b>Step 2 of 4</b> is Claude’s to-do list, as today, with the step’s title.</li>
+        <li><b>The ticker</b> is the hook’s last four lines, newest on top: file names and program names only (“Ran npm test”), never contents, arguments or links. Today these lines show only when nothing else does; here they always show under the headline.</li>
+        <li>The right column stays what we told Claude (I9). After Saved, the Stage goes back to “Claude is ready” with “Done: Added the old-school leaderboard”.</li>
+        <li>The room’s window and the phones’ Claude line get the headline and the stage word (“Fixing”), not the ticker.</li>
+        <li>Needs plugin 1.24.0 (the stage and test counts come from the hook). An older plugin still gives the headline and the ticker.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="frame wide">
+    <div class="frame-h"><div class="eb">Your call</div><h2>Five things to decide before building</h2></div>
     <div class="qs">
       <div><b>1. Joe’s name on the big screen: on or off by default?</b><br><span class="who">Drawn on, as in your example. The wall today shows no names.</span></div>
       <div><b>2. Should the room see that the host voted?</b><br><span class="who">Drawn as “includes the host” under the count, never which way.</span></div>
       <div><b>3. “Sent to Claude” (I9): how long before it says Claude hasn’t picked it up?</b><br><span class="who">Proposed: after 2 minutes the host (not the room) sees “Claude hasn’t picked this up yet. Is Claude Code still running?”</span></div>
-      <div><b>4. Build order.</b><br><span class="who">Proposed: (0) the Stage’s “Sent to Claude” (small, can go first); (a) card, private reply, put it to the room, host vote, timeline; then (b) Ask Claude: mockups, walkthrough, feature sketch, which needs the plugin skills.</span></div>
+      <div><b>4. File names on the projector (I10): ok?</b><br><span class="who">Drawn with them (“Edited Leaderboard.jsx”), as the host’s screen shows today. The alternative is “Edited a file”, which says much less.</span></div>
+      <div><b>5. Build order.</b><br><span class="who">Proposed: (0) the Stage’s “Sent to Claude” and the live Stage (I9, I10); (a) card, private reply, put it to the room, host vote, timeline; then (b) Ask Claude: mockups, walkthrough, feature sketch, which needs the plugin skills.</span></div>
     </div>
   </section>
 </main>
