@@ -14,7 +14,7 @@ import { navigateTo } from './auth/navigate';
 import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
 import { categoryRows, questionKey } from './config/setupPanel';
-import { focusRequest, sameFocus, NO_FOCUS } from './config/stageFocus';
+import { focusRequest, sameFocus, NO_FOCUS, joinShown, joinRequest } from './config/stageFocus';
 import { fetchComments, postRoomNote } from './utils/commentsClient';
 import RoomNote from './components/RoomNote';
 import useRoundAsks from './hooks/useRoundAsks';
@@ -503,7 +503,8 @@ function HostRemote() {
     here), it opens this phone's Join code panel too; any tap on this phone,
     other than the panel's own button, takes it down everywhere.
   */
-  const joinOnWall = Boolean(stageFocus && stageFocus.focus === 'join');
+  // Its own fact since 18 Oct (stageFocus.join): a panel beside what is up, not a takeover.
+  const joinOnWall = joinShown(stageFocus);
   const round = snapshot?.currentQuestion || null;
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
@@ -779,9 +780,12 @@ function HostRemote() {
    */
   const setStageFocus = useCallback(async (next) => {
     if (!gameId || focusBusy) return;
-    if (sameFocus(next, stageFocus)) return;
+    const isJoin = next && typeof next.join === 'boolean';
+    if (isJoin ? next.join === joinShown(stageFocus) : sameFocus(next, stageFocus)) return;
 
-    const body = focusRequest({ ...next, state: snapshot?.state });
+    const body = isJoin
+      ? joinRequest({ join: next.join, state: snapshot?.state })
+      : focusRequest({ ...next, state: snapshot?.state });
     if (!body) return;
 
     setFocusBusy(true);
@@ -837,7 +841,7 @@ function HostRemote() {
     const onTap = (e) => {
       const t = e.target;
       if (t && typeof t.closest === 'function' && t.closest('[data-join-toggle]')) return;
-      setStageFocus({ focus: 'none' });
+      setStageFocus({ join: false });
     };
     document.addEventListener('click', onTap);
     return () => document.removeEventListener('click', onTap);
@@ -2043,7 +2047,7 @@ function HostRemote() {
                       data-join-toggle=""
                       aria-pressed={joinOnWall}
                       disabled={focusBusy}
-                      onClick={() => setStageFocus(joinOnWall ? { focus: 'none' } : { focus: 'join' })}
+                      onClick={() => setStageFocus({ join: !joinOnWall })}
                     >
                       <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                       {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
