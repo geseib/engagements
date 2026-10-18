@@ -3,13 +3,16 @@
  *
  * config/roomContent.js decides, per moment and display profile, which parts
  * of a moment the room's screens show and with what emphasis. These tests hold
- * the decisions table in its header: the task leads whenever a question or a
- * lesson is up on Room, TV and Table; Call carries the extra; nothing ever
+ * the decisions table in its header: the title and the lesson lead whenever a
+ * question or a lesson is up, the question's own task in "Your turn" (owner,
+ * 18 Oct 2026, docs/design/room-content-v2); voting shows every answer and
+ * results the pick with no counts; Call carries the extra; nothing ever
  * carries a name; Claude's status is never dropped in a Build Room.
  */
 import {
   roomContentFor, shows, roleOf, sizeOf, textOf, isVerbose, taskIsOwn,
-  CA_MOMENTS, BUILD_MOMENTS, MINIMAL_PROFILES, ROLE,
+  CA_MOMENTS, BUILD_MOMENTS, MINIMAL_PROFILES, ROLE, LIST_LEADS, TALK_LINE,
+  questionRoomData, splitLessonQuestion, roomTitle, overviewFits,
 } from '../config/roomContent';
 import { PROFILES } from '../config/displayProfile';
 
@@ -53,8 +56,9 @@ describe('the shape', () => {
       expect(typeof rc.lead).toBe('string');
       expect(shows(rc, rc.lead)).toBe(true);
       expect(roleOf(rc, rc.lead)).toBe(ROLE.LEAD);
-      // A lead is drawn at the profile's hero or primary step, never smaller.
-      expect(['hero', 'primary']).toContain(sizeOf(rc, rc.lead));
+      // A lead is drawn at the profile's hero or primary step, never smaller;
+      // a list lead (every answer, the ranked ideas) at secondary.
+      expect(LIST_LEADS.includes(rc.lead) ? ['secondary'] : ['hero', 'primary']).toContain(sizeOf(rc, rc.lead));
       // What may give way for space is only ever something that shows, and never the lead.
       rc.dropOrder.forEach((k) => {
         expect(shows(rc, k)).toBe(true);
@@ -90,69 +94,68 @@ describe('never a name, never the Workie background', () => {
 describe('Call & Answer: a question or a lesson is up', () => {
   const UP = ['ANSWERING', 'QUESTION_FOCUS'];
 
-  // rejects (owner, 18 Oct 2026): the task leading while the lesson the room is
-  // answering is dropped ("neither the host nor the room sees the actual lesson").
-  it.each(UP)('%s: the lesson leads on every profile; the task sits under it, never dropped', (moment) => {
+  // rejects (owner, 18 Oct 2026): "you provided the biggest text with the
+  // generic room instructions, not the changing lesson ... the instructions is
+  // the optional one. the title often is nice to have big too."
+  it.each(UP)('%s: the title leads and the lesson sits under it, never dropped, on every profile', (moment) => {
     PROFILES.forEach((profile) => {
       [DATA, { ...DATA, taskOwn: false }].forEach((d) => {
         const rc = roomContentFor(moment, profile, d);
-        expect(rc.lead).toBe('story');
-        expect(textOf(rc, 'story')).toBe(STORY);
-        expect(roleOf(rc, 'task')).toBe(ROLE.SUPPORT);
-        expect(sizeOf(rc, 'task')).toBe('secondary');
-        expect(rc.essential).toContain('task');
-        expect(rc.dropOrder).not.toContain('task');
-        expect(rc.order.indexOf('story')).toBeLessThan(rc.order.indexOf('task'));
+        expect(rc.lead).toBe('title');
+        expect(roleOf(rc, 'story')).toBe(ROLE.SUPPORT);
+        expect(sizeOf(rc, 'story')).toBe('secondary');
+        expect(rc.essential).toContain('story');
+        expect(rc.dropOrder).not.toContain('story');
+        expect(rc.order.indexOf('title')).toBeLessThan(rc.order.indexOf('story'));
       });
     });
   });
 
-  it.each(UP)('%s: the title is only a small kicker on Room, TV and Table; no category', (moment) => {
-    MINIMAL_PROFILES.forEach((profile) => {
+  it.each(UP)('%s: the question\'s own task is "Your turn", never dropped, on every profile', (moment) => {
+    PROFILES.forEach((profile) => {
       const rc = roomContentFor(moment, profile, DATA);
-      expect(roleOf(rc, 'title')).toBe(ROLE.KICKER);
-      expect(sizeOf(rc, 'title')).toBe('meta');
-      expect(shows(rc, 'category')).toBe(false);
+      expect(roleOf(rc, 'task')).toBe(ROLE.SUPPORT);
+      expect(sizeOf(rc, 'task')).toBe('secondary');
+      expect(rc.essential).toContain('task');
+      expect(rc.order.indexOf('story')).toBeLessThan(rc.order.indexOf('task'));
     });
   });
 
-  it.each(UP)('%s: Call carries the category and the title as a heading', (moment) => {
-    const rc = roomContentFor(moment, 'call', DATA);
-    expect(rc.lead).toBe('story');
-    expect(roleOf(rc, 'category')).toBe(ROLE.KICKER);
-    expect(roleOf(rc, 'title')).toBe(ROLE.SUPPORT);
+  it.each(UP)('%s: a generic instruction is left off Room, TV and Table; on Call it is a line that may give way', (moment) => {
+    MINIMAL_PROFILES.forEach((profile) => {
+      expect(shows(roomContentFor(moment, profile, { ...DATA, taskOwn: false }), 'task')).toBe(false);
+    });
+    const call = roomContentFor(moment, 'call', { ...DATA, taskOwn: false });
+    expect(roleOf(call, 'task')).toBe(ROLE.SUPPORT);
+    expect(sizeOf(call, 'task')).toBe('body');
+    expect(call.dropOrder).toContain('task');
   });
 
-  it.each(UP)('%s: with no lesson the task leads', (moment) => {
-    MINIMAL_PROFILES.forEach((profile) => {
-      const rc = roomContentFor(moment, profile, { ...DATA, story: '' });
+  it.each(UP)('%s: the category is a small eyebrow on every profile', (moment) => {
+    PROFILES.forEach((profile) => {
+      const rc = roomContentFor(moment, profile, DATA);
+      expect(roleOf(rc, 'category')).toBe(ROLE.KICKER);
+      expect(sizeOf(rc, 'category')).toBe('meta');
+    });
+  });
+
+  it.each(UP)('%s: with no title the lesson leads; with neither, the task', (moment) => {
+    PROFILES.forEach((profile) => {
+      expect(roomContentFor(moment, profile, { ...DATA, title: '' }).lead).toBe('story');
+      const rc = roomContentFor(moment, profile, { ...DATA, title: '', story: '' });
       expect(rc.lead).toBe('task');
       expect(textOf(rc, 'task')).toBe(LONG_TASK);
-      expect(shows(rc, 'story')).toBe(false);
     });
   });
 
-  it('a task that only repeats the lesson is not shown twice', () => {
-    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, task: STORY });
-    expect(rc.lead).toBe('story');
-    expect(shows(rc, 'task')).toBe(false);
+  it('a task that only repeats the lesson or the title is not shown twice', () => {
+    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, task: STORY }), 'task')).toBe(false);
+    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, task: DATA.title }), 'task')).toBe(false);
   });
 
-  it('a short lead is drawn at hero, a long one at primary', () => {
-    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: '', task: 'Name one habit to drop.' }), 'task')).toBe('hero');
-    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: '' }), 'task')).toBe('primary');
-    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: 'Name one habit to drop.' }), 'story')).toBe('hero');
-  });
-
-  it('a title that only repeats the task is not shown twice', () => {
-    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, story: '', title: LONG_TASK });
-    expect(shows(rc, 'title')).toBe(false);
-    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, title: STORY }), 'title')).toBe(false);
-  });
-
-  it('with no task the title leads, so the room is never shown nothing', () => {
-    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, story: '', task: '' });
-    expect(rc.lead).toBe('title');
+  it('a short title is drawn at hero, a long one at primary', () => {
+    expect(sizeOf(roomContentFor('ANSWERING', 'room', DATA), 'title')).toBe('hero');
+    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, title: LONG_TASK }), 'title')).toBe('primary');
   });
 
   it('ANSWERING shows the answered count everywhere; QUESTION_FOCUS has none', () => {
@@ -168,23 +171,28 @@ describe('Call & Answer: a question or a lesson is up', () => {
 });
 
 describe('Call & Answer: the other moments', () => {
-  it('VOTING: the cue leads; the title only on Call; the task is support', () => {
-    MINIMAL_PROFILES.forEach((p) => {
+  it('VOTING: every answer leads; the title stays as the reminder; no task, no tally', () => {
+    PROFILES.forEach((p) => {
       const rc = roomContentFor('VOTING', p, DATA);
-      expect(rc.lead).toBe('cue');
-      expect(shows(rc, 'title')).toBe(false);
-      expect(roleOf(rc, 'task')).toBe(ROLE.SUPPORT);
+      expect(rc.lead).toBe('answers');
+      expect(roleOf(rc, 'title')).toBe(ROLE.SUPPORT);
+      expect(rc.essential).toContain('title');
+      expect(shows(rc, 'task')).toBe(false);
+      expect(shows(rc, 'tally')).toBe(false);
     });
-    expect(shows(roomContentFor('VOTING', 'call', DATA), 'title')).toBe(true);
   });
 
-  it('RESULTS leads with the ideas; the task is the first to give way on Room, TV and Table', () => {
-    MINIMAL_PROFILES.forEach((p) => {
+  it('RESULTS: the ideas lead under the title; the talk line is the first to give way and never asks who wrote it', () => {
+    PROFILES.forEach((p) => {
       const rc = roomContentFor('RESULTS', p, DATA);
       expect(rc.lead).toBe('ideas');
-      expect(rc.dropOrder[0]).toBe('task');
+      expect(roleOf(rc, 'title')).toBe(ROLE.SUPPORT);
+      expect(shows(rc, 'task')).toBe(false);
+      expect(rc.dropOrder[0]).toBe('talk');
+      expect(textOf(rc, 'talk')).toBe(TALK_LINE);
     });
-    expect(roomContentFor('RESULTS', 'call', DATA).dropOrder).not.toContain('task');
+    expect(TALK_LINE).not.toMatch(/who\b|wrote|author/i);
+    expect(textOf(roomContentFor('RESULTS', 'room', { ...DATA, talk: 'Workie topic' }), 'talk')).toBe('Workie topic');
   });
 
   it('VOTE_RESPONSE and RESPONSES lead with the response', () => {
@@ -220,21 +228,28 @@ describe('Call & Answer: the other moments', () => {
 describe('Build Room', () => {
   const ASKS = ['BUILD_ASK', 'BUILD_RESULTS', 'BUILD_WHEEL'];
 
-  it.each(ASKS)('%s: the prompt and its options lead; detail and reasons only on Call', (moment) => {
-    MINIMAL_PROFILES.forEach((p) => {
+  // Owner, 18 Oct 2026: "not at the expense of seeing what was voted on".
+  it.each(ASKS)('%s: the prompt and its options lead; each option\'s detail shows on every profile', (moment) => {
+    PROFILES.forEach((p) => {
       const rc = roomContentFor(moment, p, DATA);
       expect(rc.lead).toBe('prompt');
       expect(roleOf(rc, 'options')).toBe(ROLE.LEAD);
-      expect(shows(rc, 'detail')).toBe(false);
-      expect(shows(rc, 'optionDetail')).toBe(false);
-      expect(shows(rc, 'whys')).toBe(false);
-      expect(JSON.stringify(rc)).not.toContain('OPTION-DETAIL');
-      expect(JSON.stringify(rc)).not.toContain('BUILD-ASK-DETAIL');
+      expect(shows(rc, 'optionDetail')).toBe(true);
+      expect(JSON.stringify(textOf(rc, 'options'))).toContain('OPTION-DETAIL-A');
+      expect(rc.dropOrder).toContain('optionDetail');
     });
-    const call = roomContentFor(moment, 'call', DATA);
-    expect(shows(call, 'detail')).toBe(true);
-    expect(shows(call, 'optionDetail')).toBe(true);
-    if (moment === 'BUILD_RESULTS') expect(shows(call, 'whys')).toBe(true);
+    expect(shows(roomContentFor(moment, 'room', DATA), 'detail')).toBe(false);
+    expect(shows(roomContentFor(moment, 'call', DATA), 'detail')).toBe(true);
+  });
+
+  it('no tally while an ask is open; on the result the tally and the room\'s reasons show everywhere', () => {
+    PROFILES.forEach((p) => {
+      expect(shows(roomContentFor('BUILD_ASK', p, DATA), 'tally')).toBe(false);
+      expect(shows(roomContentFor('BUILD_ASK', p, DATA), 'whys')).toBe(false);
+      const res = roomContentFor('BUILD_RESULTS', p, DATA);
+      expect(shows(res, 'tally')).toBe(true);
+      expect(shows(res, 'whys')).toBe(true);
+    });
   });
 
   it('option titles are drawn at secondary or larger, never at body', () => {
@@ -285,5 +300,57 @@ describe('taskIsOwn', () => {
     expect(taskIsOwn({ CustomInstructions: ' x ' })).toBe(true);
     expect(taskIsOwn({ customInstructions: '  ' })).toBe(false);
     expect(taskIsOwn(null)).toBe(false);
+  });
+});
+
+describe('the question inside a lesson (owner, 18 Oct 2026)', () => {
+  const LESSON = 'Describe how you apply the concept of thresholds in your work. Architect Christopher Alexander taught that thresholds are crucial for human comfort.';
+
+  it('a first sentence that asks becomes "Your turn"; the rest stays the lesson', () => {
+    const { question, lesson } = splitLessonQuestion(LESSON);
+    expect(question).toBe('Describe how you apply the concept of thresholds in your work.');
+    expect(lesson).toMatch(/^Architect Christopher Alexander/);
+    expect(splitLessonQuestion('How do you design for human scale? Jane Jacobs observed that cities work best for pedestrians.').question)
+      .toBe('How do you design for human scale?');
+  });
+
+  it('a lesson that does not open with a question is left whole', () => {
+    const text = 'Most teams carry one decision that shaped everything after it. It is rarely the dramatic one; it is the quick call made in a corridor.';
+    expect(splitLessonQuestion(text)).toEqual({ question: '', lesson: text });
+    expect(splitLessonQuestion('Describe it. Short.')).toEqual({ question: '', lesson: 'Describe it. Short.' });
+    expect(splitLessonQuestion('')).toEqual({ question: '', lesson: '' });
+  });
+
+  it('questionRoomData pulls the question only when the question has no instruction of its own', () => {
+    const generic = questionRoomData({ title: 'THE IMPORTANCE OF THRESHOLDS', detail: LESSON }, { task: 'Adapt this lesson to your work.' });
+    expect(generic.taskOwn).toBe(true);
+    expect(generic.task).toMatch(/^Describe how you apply/);
+    expect(generic.story).toMatch(/^Architect/);
+    expect(generic.title).toBe('The Importance of Thresholds');
+    const own = questionRoomData({ title: 't', detail: LESSON, customInstructions: 'Two sentences.' }, { task: 'Two sentences.' });
+    expect(own.task).toBe('Two sentences.');
+    expect(own.story).toBe(LESSON);
+    const plain = questionRoomData({ title: 't', detail: 'A lesson with no question in front of it, long enough to stand alone here.' }, { task: 'Answer on your phone.' });
+    expect(plain.taskOwn).toBe(false);
+    expect(plain.task).toBe('Answer on your phone.');
+  });
+
+  it('roomTitle changes only an ALL-CAPS title', () => {
+    expect(roomTitle('FORM FOLLOWS FUNCTION')).toBe('Form Follows Function');
+    expect(roomTitle('THE GENIUS OF THE PLACE')).toBe('The Genius of the Place');
+    expect(roomTitle('If an agent can build it, who writes the ticket?')).toBe('If an agent can build it, who writes the ticket?');
+    expect(roomTitle('AWS')).toBe('AWS');
+  });
+});
+
+describe('voting opens on all the answers when they fit (owner, 18 Oct 2026)', () => {
+  const short = (n) => Array.from({ length: n }, (_, i) => `Answer ${i + 1}: a short idea worth weighing.`);
+  it('fits within the profile\'s count and length; otherwise one at a time', () => {
+    expect(overviewFits(short(6), 'room')).toBe(true);
+    expect(overviewFits(short(7), 'room')).toBe(false);
+    expect(overviewFits(short(5), 'tv')).toBe(false);
+    expect(overviewFits(['x'.repeat(201)], 'room')).toBe(false);
+    expect(overviewFits([], 'room')).toBe(false);
+    expect(overviewFits(short(4).map((text) => ({ text })), 'tv')).toBe(true);
   });
 });
