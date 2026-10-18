@@ -90,54 +90,68 @@ describe('never a name, never the Workie background', () => {
 describe('Call & Answer: a question or a lesson is up', () => {
   const UP = ['ANSWERING', 'QUESTION_FOCUS'];
 
-  it.each(UP)('%s: the task leads on Room, TV and Table; the title is only a small kicker', (moment) => {
+  // rejects (owner, 18 Oct 2026): the task leading while the lesson the room is
+  // answering is dropped ("neither the host nor the room sees the actual lesson").
+  it.each(UP)('%s: the lesson leads on every profile; the task sits under it, never dropped', (moment) => {
+    PROFILES.forEach((profile) => {
+      [DATA, { ...DATA, taskOwn: false }].forEach((d) => {
+        const rc = roomContentFor(moment, profile, d);
+        expect(rc.lead).toBe('story');
+        expect(textOf(rc, 'story')).toBe(STORY);
+        expect(roleOf(rc, 'task')).toBe(ROLE.SUPPORT);
+        expect(sizeOf(rc, 'task')).toBe('secondary');
+        expect(rc.essential).toContain('task');
+        expect(rc.dropOrder).not.toContain('task');
+        expect(rc.order.indexOf('story')).toBeLessThan(rc.order.indexOf('task'));
+      });
+    });
+  });
+
+  it.each(UP)('%s: the title is only a small kicker on Room, TV and Table; no category', (moment) => {
     MINIMAL_PROFILES.forEach((profile) => {
       const rc = roomContentFor(moment, profile, DATA);
-      expect(rc.lead).toBe('task');
-      expect(textOf(rc, 'task')).toBe(LONG_TASK);
       expect(roleOf(rc, 'title')).toBe(ROLE.KICKER);
       expect(sizeOf(rc, 'title')).toBe('meta');
       expect(shows(rc, 'category')).toBe(false);
     });
   });
 
-  it.each(UP)('%s: a question with its own instruction needs no story on Room, TV or Table', (moment) => {
-    MINIMAL_PROFILES.forEach((profile) => {
-      expect(shows(roomContentFor(moment, profile, DATA), 'story')).toBe(false);
-    });
-  });
-
-  it.each(UP)('%s: a generic instruction ("adapt this lesson") keeps the lesson, as support that may give way', (moment) => {
-    MINIMAL_PROFILES.forEach((profile) => {
-      const rc = roomContentFor(moment, profile, { ...DATA, taskOwn: false });
-      expect(rc.lead).toBe('task');
-      expect(roleOf(rc, 'story')).toBe(ROLE.SUPPORT);
-      expect(rc.dropOrder).toContain('story');
-    });
-  });
-
-  it.each(UP)('%s: Call carries the category, the title as a heading, the task and the story', (moment) => {
+  it.each(UP)('%s: Call carries the category and the title as a heading', (moment) => {
     const rc = roomContentFor(moment, 'call', DATA);
-    expect(rc.lead).toBe('task');
+    expect(rc.lead).toBe('story');
     expect(roleOf(rc, 'category')).toBe(ROLE.KICKER);
     expect(roleOf(rc, 'title')).toBe(ROLE.SUPPORT);
-    expect(roleOf(rc, 'story')).toBe(ROLE.SUPPORT);
-    // the story is the first thing to go when space runs out
-    expect(rc.dropOrder[0]).toBe('story');
   });
 
-  it('a short task is drawn at hero, a long one at primary', () => {
-    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, task: 'Name one habit to drop.' }), 'task')).toBe('hero');
-    expect(sizeOf(roomContentFor('ANSWERING', 'room', DATA), 'task')).toBe('primary');
+  it.each(UP)('%s: with no lesson the task leads', (moment) => {
+    MINIMAL_PROFILES.forEach((profile) => {
+      const rc = roomContentFor(moment, profile, { ...DATA, story: '' });
+      expect(rc.lead).toBe('task');
+      expect(textOf(rc, 'task')).toBe(LONG_TASK);
+      expect(shows(rc, 'story')).toBe(false);
+    });
+  });
+
+  it('a task that only repeats the lesson is not shown twice', () => {
+    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, task: STORY });
+    expect(rc.lead).toBe('story');
+    expect(shows(rc, 'task')).toBe(false);
+  });
+
+  it('a short lead is drawn at hero, a long one at primary', () => {
+    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: '', task: 'Name one habit to drop.' }), 'task')).toBe('hero');
+    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: '' }), 'task')).toBe('primary');
+    expect(sizeOf(roomContentFor('ANSWERING', 'room', { ...DATA, story: 'Name one habit to drop.' }), 'story')).toBe('hero');
   });
 
   it('a title that only repeats the task is not shown twice', () => {
-    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, title: LONG_TASK });
+    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, story: '', title: LONG_TASK });
     expect(shows(rc, 'title')).toBe(false);
+    expect(shows(roomContentFor('ANSWERING', 'room', { ...DATA, title: STORY }), 'title')).toBe(false);
   });
 
   it('with no task the title leads, so the room is never shown nothing', () => {
-    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, task: '' });
+    const rc = roomContentFor('ANSWERING', 'room', { ...DATA, story: '', task: '' });
     expect(rc.lead).toBe('title');
   });
 

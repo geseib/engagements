@@ -248,7 +248,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The size also decides how much the room is shown. On Room, TV and Table the room sees only what it needs, large: when a question or lesson is up, the task leads, with the title as a small label above it, and the lesson stays only when the task asks about it. Call, read on people\'s own screens, adds the title as a heading, the category and the lesson. In a Build Room the ask and its options lead, a long one pages, and Claude\'s status line is always there. The same rule holds on one screen and on the room\'s window.',
+          text: 'The size also decides how much the room is shown. On Room, TV and Table the room sees only what it needs, large: when a question or lesson is up, the lesson leads, with the task under it and the title as a small label above. Call, read on people\'s own screens, adds the title as a heading and the category. In a Build Room the ask and its options lead, a long one pages, and Claude\'s status line is always there. The same rule holds on one screen and on the room\'s window.',
         },
         { t: 'h', text: 'Names' },
         {

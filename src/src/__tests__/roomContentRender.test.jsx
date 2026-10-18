@@ -75,47 +75,58 @@ describe.each([['own instruction', OWN], ['generic instruction (a lesson)', LESS
     const s = pick(partsOf(stage.container));
     const w = pick(partsOf(wall.container));
     expect(s).toEqual(w);
-    expect(s.task).toBe('lead');
+    expect(s.story).toBe('lead');
+    expect(s.task).toBe('support');
     stage.unmount();
     wall.unmount();
   });
 });
 
 describe('what the room sees while a question is up', () => {
-  it('Room: the task leads, the title is a kicker, no story for an own instruction, no background', () => {
+  // rejects (owner, 18 Oct 2026): a question with its own instruction showing
+  // the room the instruction and never the lesson it is about.
+  it('Room: the lesson leads, the task under it, the title a kicker, no background', () => {
     const { container } = render(<PresentMoment model={presentModel(snapshot(OWN, 'room'))} />);
-    expect(container.querySelector('[data-rc-part="task"][data-rc="lead"]').textContent).toBe(OWN_TASK);
+    expect(container.querySelector('[data-rc-part="story"][data-rc="lead"]').textContent).toBe(OWN.questionDetail);
+    const task = container.querySelector('[data-rc-part="task"]');
+    expect(task.getAttribute('data-rc')).toBe('support');
+    expect(task.textContent).toContain(OWN_TASK);
+    expect(task.hasAttribute('data-drop')).toBe(false);
     expect(container.querySelector('[data-rc-part="title"]').getAttribute('data-rc')).toBe('kicker');
-    expect(container.querySelector('[data-rc-part="story"]')).toBeNull();
     expect(container.querySelector('[data-rc-part="category"]')).toBeNull();
     expect(container.textContent).not.toContain('WORKIE-ONLY-BACKGROUND');
     // the session title is not on the top line on Room while a question is up
     expect(container.textContent).not.toContain('Q4 offsite');
+    // the lesson is drawn before the task
+    const parts = [...container.querySelectorAll('[data-rc-part]')].map((el) => el.getAttribute('data-rc-part'));
+    expect(parts.indexOf('story')).toBeLessThan(parts.indexOf('task'));
   });
 
-  it('Room: a lesson with a generic instruction keeps the lesson, droppable', () => {
-    const { container } = render(<PresentMoment model={presentModel(snapshot(LESSON, 'room'))} />);
-    const story = container.querySelector('[data-rc-part="story"]');
-    expect(story.getAttribute('data-rc')).toBe('support');
-    expect(story.hasAttribute('data-drop')).toBe(true);
-  });
-
-  it('Call: category, title as a heading, the task leading, the story', () => {
+  it('Call: category, title as a heading, the lesson leading, the task', () => {
     const { container } = render(<PresentMoment model={presentModel(snapshot(OWN, 'call'))} />);
-    expect(partsOf(container)).toMatchObject({ category: 'kicker', title: 'support', task: 'lead', story: 'support' });
+    expect(partsOf(container)).toMatchObject({ category: 'kicker', title: 'support', story: 'lead', task: 'support' });
     expect(container.textContent).toContain('Q4 offsite');
   });
 
-  it('the stage card on Room: the task leads and carries the expand recovery; the title is a kicker', () => {
+  it('the stage card on Room: the lesson leads with the expand recovery; the task under it; the title a kicker', () => {
     const onExpand = jest.fn();
     const { container } = render(<QuestionCard phase="ASK" question={OWN} gameType="call-and-answer" instruction={OWN_TASK} room={stageRoom(OWN, 'room')} onExpand={onExpand} />);
+    const lead = container.querySelector('[data-rc-part="story"]');
+    expect(lead.classList.contains('q')).toBe(true);
+    expect(lead.getAttribute('data-expandable')).toBe('1');
+    expect(lead.textContent).toBe(OWN.questionDetail);
     const task = container.querySelector('[data-rc-part="task"]');
-    expect(task.classList.contains('q')).toBe(true);
-    expect(task.getAttribute('data-expandable')).toBe('1');
-    expect(container.querySelector('.kicker[data-rc-part="title"]').textContent).toBe(OWN.title);
-    // the task is never droppable, the old "How to answer" line is gone
+    expect(task.textContent).toContain(OWN_TASK);
     expect(task.hasAttribute('data-drop')).toBe(false);
+    expect(container.querySelector('.kicker[data-rc-part="title"]').textContent).toBe(OWN.title);
     expect(container.querySelector('[data-drop-note="How to answer"]')).toBeNull();
+  });
+
+  it('with no lesson the task leads on both', () => {
+    const q = { ...OWN, questionDetail: '' };
+    const { container } = render(<PresentMoment model={presentModel(snapshot(q, 'room'))} />);
+    expect(container.querySelector('[data-rc-part="task"][data-rc="lead"]').textContent).toBe(OWN_TASK);
+    expect(container.querySelector('[data-rc-part="story"]')).toBeNull();
   });
 
   it('without `room` the card keeps its frozen DOM (the set editor preview)', () => {

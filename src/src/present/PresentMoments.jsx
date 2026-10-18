@@ -145,10 +145,9 @@ export function PresentLobby({ model }) {
 /**
  * A QUESTION OR A LESSON IS UP (owner, 17 Oct 2026: "the most important thing
  * is the lesson [and] the instructions"). What shows and how large is
- * config/roomContent.js's: on Room, TV and Table the task leads at the hero or
- * primary step and the title is a small kicker above it; the lesson shows when
- * the instruction is generic and needs it, and may give way for space. Call
- * adds the category, the title as a heading and the lesson.
+ * config/roomContent.js's: the lesson leads at the hero or primary step, the
+ * task sits under it as "The task", and the title is a small kicker above (on
+ * Call a heading, with the category). With no lesson the task leads.
  */
 export function RoomQuestion({ model }) {
   const rc = model.room;
@@ -162,9 +161,10 @@ export function RoomQuestion({ model }) {
       {titleRole === ROLE.KICKER ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Eyebrow> : null}
       {titleRole === ROLE.SUPPORT ? <Heading level={2} size="primary" balance className="present-h2 present-rc-title" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Heading> : null}
       {titleRole === ROLE.LEAD ? lead('title') : null}
-      {shows(rc, 'task') ? lead('task') : null}
-      {shows(rc, 'story') ? (
-        <p className="present-lead present-rc-support" data-drop={String(dropRank(rc, 'story') || 1)} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
+      {shows(rc, 'story') ? lead('story') : null}
+      {roleOf(rc, 'task') === ROLE.LEAD ? lead('task') : null}
+      {roleOf(rc, 'task') === ROLE.SUPPORT ? (
+        <p className="present-task present-rc-task" {...rcAttrs(rc, 'task')}><span className="present-task-ey">The task</span>{textOf(rc, 'task')}</p>
       ) : null}
     </>
   );

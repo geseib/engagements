@@ -72,6 +72,8 @@
 .hc-panel { display: grid; gap: 12px; }
 .hc-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .hc-h { margin: 0; font-size: 24px; line-height: 1.2; }
+/* The lesson the room is answering (owner, 18 Oct 2026): read, not glanced. */
+.hc-lesson { margin: 0; font-size: 19px; line-height: 1.35; max-width: 62ch; color: var(--text); }
 .hc-task { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--surface); border-radius: 0 8px 8px 0; }
 .hc-task-k { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .hc-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }

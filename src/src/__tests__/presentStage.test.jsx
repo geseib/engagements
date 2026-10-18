@@ -183,8 +183,8 @@ describe('every moment', () => {
     expect(canvasOf(answering).classList.contains('ui-ground--wall')).toBe(true);
     expect(answering.querySelector('.present-top').classList.contains('ui-top-line')).toBe(true);
     expect(answering.querySelector('.present-eyebrow').classList.contains('ui-eyebrow')).toBe(true);
-    // The task leads on Room (owner, 17 Oct 2026); the title is the muted eyebrow above it.
-    expect(answering.querySelector('[data-rc-part="task"]').className).toMatch(/present-rc-lead/);
+    // The lesson leads (owner, 18 Oct 2026), else the task; the title is the muted eyebrow above it.
+    expect(answering.querySelector('[data-rc="lead"]').className).toMatch(/present-rc-lead/);
     expect(answering.querySelector('[data-rc-part="title"]').className).toMatch(/ui-eyebrow--muted/);
     expect(answering.querySelector('.present-meter').className).toMatch(/ui-pips--meter/);
     // Call carries the title: as a heading above the task, and on the voting screen.
