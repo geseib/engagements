@@ -23,6 +23,9 @@ import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
 import TallyRow from '../components/ui/TallyRow';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
+import {
+  shows, roleOf, sizeOf, textOf, dropRank, ROLE,
+} from '../config/roomContent';
 
 /* ------------------------------------------------------------ shared parts */
 
@@ -31,14 +34,20 @@ import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWo
    present-* classes stay on each so present.css can pass the wall's ladder to
    them; the colours and the treatment are the skin's. */
 
+/** The data attributes every room-content part carries: which part, which role. */
+export const rcAttrs = (rc, key) => ({ 'data-rc-part': key, 'data-rc': roleOf(rc, key) });
+
 function Top({ model, right }) {
+  // The session title rides the top line only where the room content keeps it
+  // (Call; the lobby and the end everywhere): config/roomContent.js.
+  const title = model.sessionTitle && (!model.room || shows(model.room, 'sessionTitle')) ? model.sessionTitle : '';
   return (
     <TopLine
       className="present-top"
       left={(
         <>
-          {model.sessionTitle ? <b>{model.sessionTitle}</b> : null}
-          {model.sessionTitle && model.roundLabel ? ' · ' : null}
+          {title ? <b>{title}</b> : null}
+          {title && model.roundLabel ? ' · ' : null}
           {model.roundLabel || null}
         </>
       )}
@@ -73,8 +82,12 @@ const WIPE = {
   VOTING: { word: 'Voting', line: `Vote on your ${deviceWords}`, tone: 'live' },
   RESULTS: { word: 'Results', line: 'Look up', tone: 'results' },
 };
+const AFTER_RESULTS = ['RESPONSES', 'READ', 'READ_WAIT', 'FEEDBACK', 'ROOM_QUESTION', 'ROOM_RESULTS'];
 export function PhaseWipe({ moment }) {
-  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING' : moment === 'RESPONSES' || moment === 'READ' ? 'RESULTS' : moment;
+  // Everything the round does after its results is still the results phase: a
+  // read that lands after "Workie is writing" (READ_WAIT → READ) replayed the
+  // "Results · Look up" wipe over Workie's first page (walk of dev eed66685).
+  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING' : AFTER_RESULTS.includes(moment) ? 'RESULTS' : moment;
   const previous = useRef(phase);
   const [wipe, setWipe] = useState(null);
   useEffect(() => {
@@ -93,40 +106,50 @@ export function PhaseWipe({ moment }) {
 }
 
 /**
- * The team's task: what the room is answering. Never dropped for space (the
- * background story is the line that goes). Slim during voting, as one line
- * under the title, so the ballot keeps the room.
+ * What the responses answer, as one slim line, while the room votes on or
+ * reads them: the lesson as "The question" (owner, 18 Oct 2026), else the task. While the question is up the task is the LEAD instead
+ * (RoomQuestion). Here it is support: on Room, TV and Table it may give way
+ * for space (config/roomContent.js); on Call it stays.
  */
-function TaskLine({ task, slim = false }) {
+function TaskLine({ task, label = RW.theTaskLabel, rc = null }) {
   if (!task) return null;
-  return slim
-    ? <p className="present-task is-slim"><span className="present-task-ey">The task</span>{task}</p>
-    : (
-      <div className="present-task">
-        <span className="present-task-ey">The task</span>
-        <p>{task}</p>
-      </div>
-    );
+  if (rc && !shows(rc, 'task')) return null;
+  const extra = rc ? { ...rcAttrs(rc, 'task'), ...(dropRank(rc, 'task') ? { 'data-drop': String(dropRank(rc, 'task')) } : {}) } : {};
+  return <p className="present-task is-slim" {...extra}><span className="present-task-ey">{label}</span>{task}</p>;
 }
 
 /* ------------------------------------------------------------ the moments */
 
+/**
+ * THE LOBBY (owner, 18 Oct 2026: "why is the title of the session tiny. the
+ * link and room id can be under the QR code. on the left could be nicely
+ * designed title of the session and potentially the summary of the event").
+ * Left: the session's title at the hero step, the host's Event Details under
+ * it (may give way for space), and how many are in. Right: the QR, with the
+ * address and the session code under it. The top line carries no title here:
+ * the title is the page.
+ */
 export function PresentLobby({ model }) {
   const midSession = model.moment === 'JOIN';
+  const title = model.sessionTitle || 'Welcome';
   return (
     <div className="present-moment present-frame">
-      <Top model={model} right={midSession ? 'Join' : 'Joining'} />
+      <Top model={{ ...model, sessionTitle: '' }} right={midSession ? 'Join' : 'Joining'} />
       <div className="present-main">
         <div className="present-lobby">
-          <div>
-            <Eyebrow className="present-eyebrow">Scan to join · no app, no account</Eyebrow>
-            <p className="present-lead present-join-url">{model.joinHost}</p>
+          <div className="present-lobby-about">
+            <Heading level={1} size="hero" balance className="present-lobby-title">{title}</Heading>
+            {model.details ? <p className="present-lobby-details" data-drop="1">{model.details}</p> : null}
+            <p className="present-lead present-lobby-count">{`${model.joined} in the room`}</p>
+          </div>
+          <div className="present-lobby-join">
+            <div className="present-qr" aria-label="QR code to join">
+              <QRCodeSVG value={model.joinUrl} size={512} level="M" includeMargin={false} />
+            </div>
+            <Eyebrow className="present-eyebrow present-join-ey">Scan to join<br />no app, no account</Eyebrow>
+            <p className="present-join-url">{model.joinHost}</p>
             <Eyebrow tone="muted" className="present-eyebrow present-code-label">Session code</Eyebrow>
             <p className="present-code">{model.code}</p>
-            <p className="present-lead">{`${model.joined} in the room`}</p>
-          </div>
-          <div className="present-qr" aria-label="QR code to join">
-            <QRCodeSVG value={model.joinUrl} size={512} level="M" includeMargin={false} />
           </div>
         </div>
       </div>
@@ -137,30 +160,57 @@ export function PresentLobby({ model }) {
   );
 }
 
+/**
+ * A QUESTION OR A LESSON IS UP (owner, 18 Oct 2026: "the instructions is the
+ * optional one. the title often is nice to have big too";
+ * docs/design/room-content-v2 frames 1-3). What shows and how large is
+ * config/roomContent.js's: the category a small eyebrow, the title the lead
+ * (hero when short), the lesson under it at the secondary step (never dropped:
+ * the fitter shrinks it toward --fit-min), and the question's own instruction
+ * in one "Your turn" band. A generic instruction is off Room, TV and Table;
+ * on Call it is one slim line that may give way.
+ */
+export function RoomQuestion({ model }) {
+  const rc = model.room;
+  const titleRole = roleOf(rc, 'title');
+  const lead = (key) => (
+    <p className={`present-rc-lead is-${sizeOf(rc, key)}`} data-rc-size={sizeOf(rc, key)} {...rcAttrs(rc, key)}>{textOf(rc, key)}</p>
+  );
+  const taskRole = roleOf(rc, 'task');
+  const taskDrop = dropRank(rc, 'task');
+  return (
+    <>
+      {shows(rc, 'category') ? <Eyebrow className="present-eyebrow" {...rcAttrs(rc, 'category')}>{textOf(rc, 'category')}</Eyebrow> : null}
+      {titleRole === ROLE.KICKER ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Eyebrow> : null}
+      {titleRole === ROLE.SUPPORT ? <Heading level={2} size="primary" balance className="present-h2 present-rc-title" {...rcAttrs(rc, 'title')}>{textOf(rc, 'title')}</Heading> : null}
+      {titleRole === ROLE.LEAD ? lead('title') : null}
+      {roleOf(rc, 'story') === ROLE.LEAD ? lead('story') : null}
+      {roleOf(rc, 'story') === ROLE.SUPPORT ? (
+        <p className="present-rc-story" data-rc-size={sizeOf(rc, 'story')} {...rcAttrs(rc, 'story')}>{textOf(rc, 'story')}</p>
+      ) : null}
+      {taskRole === ROLE.LEAD ? lead('task') : null}
+      {taskRole === ROLE.SUPPORT && !taskDrop ? (
+        // "Your turn": the question the room answers (its own instruction, or
+        // the question pulled from the front of the lesson). Never dropped.
+        <div className="present-turn" {...rcAttrs(rc, 'task')}>
+          <span className="present-turn-ey">Your turn</span>
+          <p className="present-turn-text">{textOf(rc, 'task')}</p>
+        </div>
+      ) : null}
+      {taskRole === ROLE.SUPPORT && taskDrop ? (
+        // Call only: the set's or the type's generic instruction, slim, first to give way.
+        <p className="present-task is-slim present-rc-task" data-drop={String(taskDrop)} {...rcAttrs(rc, 'task')}>{textOf(rc, 'task')}</p>
+      ) : null}
+    </>
+  );
+}
+
 export function PresentAnswering({ model }) {
   return (
     <div className="present-moment present-frame">
       <Top model={model} right="Answering" />
       <div className="present-main">
-        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
-        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        <TaskLine task={model.task} />
-        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
-      </div>
-      <CountsFoot counts={model.counts} />
-    </div>
-  );
-}
-
-export function PresentVoting({ model }) {
-  return (
-    <div className="present-moment present-frame">
-      <Top model={model} right="Voting" />
-      <div className="present-main">
-        <Eyebrow className="present-eyebrow">Vote</Eyebrow>
-        <Heading level={1} size="primary" balance className="present-h2">{model.title}</Heading>
-        <TaskLine task={model.task} slim />
-        <p className="present-lead">{model.lead}</p>
+        <RoomQuestion model={model} />
       </div>
       <CountsFoot counts={model.counts} />
     </div>
@@ -168,30 +218,92 @@ export function PresentVoting({ model }) {
 }
 
 /**
- * RESULTS, IDEAS FIRST (owner, 16 Oct 2026, docs/design/results-ideas-first
- * version A): "the voting is less about the people and more about getting the
- * best or most relevant ideas to the top of the conversation." The idea is the
- * headline, in full (up to three lines, then the fitter); the rank and the
- * share bar say how much the room backed it; the points and, only when the
- * round shows names, "— Name" are the small credit line. The top row is
- * outlined. No points cell: the points live in the credit.
+ * VOTING (owner, 18 Oct 2026, docs/design/room-content-v2 frame 4): "nice to
+ * see a bar chart results but not at the expense of seeing what was voted
+ * on". When every answer fits (presentModel, config/roomContent.js
+ * overviewFits) they are all up, whole and numbered so the room can name one
+ * out loud; the title stays as the reminder; how many have voted and the cue
+ * are small. No tally while voting, and never a name. Before any answer has
+ * arrived it is the cue alone.
+ */
+export function PresentVoting({ model }) {
+  const rc = model.room;
+  if (model.overview && Array.isArray(model.answers)) {
+    const many = model.answers.length > 3;
+    return (
+      <div className="present-moment present-frame" data-mode="overview">
+        <Top model={model} right="Voting" />
+        <div className="present-main is-top">
+          {shows(rc, 'title') ? <Heading level={1} size="primary" balance className="present-h2 present-reminder" {...rcAttrs(rc, 'title')}>{model.title}</Heading> : null}
+          <ol className={`present-answers${many ? ' is-grid' : ''}`} {...rcAttrs(rc, 'answers')}>
+            {model.answers.map((a) => (
+              <li key={a.n}>
+                <Card className="present-answer">
+                  <NumberBadge as="span" n={a.n} className="present-answer-n" />
+                  <p className="present-answer-text">{a.text}</p>
+                </Card>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="present-foot is-start">
+          <Meter done={model.counts.done} of={model.counts.of} />
+          <span className="present-foot-count">{model.counts.line}</span>
+          {shows(rc, 'cue') ? <span {...rcAttrs(rc, 'cue')}>{model.lead}</span> : null}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="present-moment present-frame">
+      <Top model={model} right="Voting" />
+      <div className="present-main">
+        <Eyebrow className="present-eyebrow">Vote</Eyebrow>
+        {shows(rc, 'title') ? <Heading level={1} size="primary" balance className="present-h2" {...rcAttrs(rc, 'title')}>{model.title}</Heading> : null}
+        <TaskLine task={model.task} rc={rc} />
+        <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(rc, 'cue')}>{model.lead}</p>
+      </div>
+      <CountsFoot counts={model.counts} />
+    </div>
+  );
+}
+
+/**
+ * RESULTS (owner, 18 Oct 2026, frame 5, building on 16 Oct's ideas first):
+ * "think of what is important to take away and discuss". The room's pick in
+ * full in a gold card; the runners-up keep their text; the bar is the FILL
+ * behind each, relative to the pick (the pick is 100%), so the chart and what
+ * was voted on are one thing. Where names are hidden there is no count, point
+ * or percentage beside an answer (a number beside an answer is attribution by
+ * arithmetic); a named round keeps the credit line and its points. Rows that
+ * do not fit fold into "and N more answers" (PresentStage fitTally); the talk
+ * line at the foot gives way first.
  */
 export function PresentTally({ model }) {
+  const rc = model.room;
+  const talk = model.talk && (!rc || shows(rc, 'talk')) ? model.talk : '';
   return (
     <div className="present-moment present-frame">
       <Top model={model} right={model.heading || 'Results'} />
-      <div className="present-main">
-        <TaskLine task={model.task} slim />
+      <div className="present-main is-top">
+        {model.title && (!rc || shows(rc, 'title')) ? (
+          <Heading level={1} size="primary" balance className="present-h2 present-reminder" {...(rc ? rcAttrs(rc, 'title') : {})}>{model.title}</Heading>
+        ) : null}
         {model.loading && !model.rows.length ? (
           <p className="present-lead">Counting the votes</p>
         ) : (
-          <div className="present-tally is-ideas">
+          <div className="present-tally is-ideas is-fill" {...(rc ? rcAttrs(rc, 'ideas') : {})}>
             {model.rows.map((row) => (
               <TallyRow
                 key={row.n}
-                className={`present-trow${row.top ? ' is-top' : ''}`}
-                rank={row.n}
-                label={<span className="present-idea">{row.idea}</span>}
+                className={`present-trow${row.top ? ' is-top is-pick' : ''}`}
+                rank={row.top ? null : row.n}
+                label={row.top ? (
+                  <>
+                    <span className="present-pick-ey">{"The room's pick"}</span>
+                    <span className="present-idea">{row.idea}</span>
+                  </>
+                ) : <span className="present-idea">{row.idea}</span>}
                 sub={row.credit}
                 share={row.share}
                 points={null}
@@ -202,13 +314,117 @@ export function PresentTally({ model }) {
         {/* Always drawn, so the fitter can count the rows it takes down
             (PresentStage.jsx fitTally); data-more is the model's own count. */}
         <p className="present-more" data-more={model.more || 0} hidden={!(model.more > 0)}>
-          {model.more > 0 ? `and ${model.more} more ${model.more === 1 ? 'idea' : 'ideas'}` : ''}
+          {model.more > 0 ? moreAnswers(model.more) : ''}
         </p>
+        {talk ? (
+          <p className="present-talk" data-drop={String((rc && dropRank(rc, 'talk')) || 1)} {...(rc ? rcAttrs(rc, 'talk') : {})}>
+            <span className="present-talk-ey">Talk about it</span>
+            {talk}
+          </p>
+        ) : null}
       </div>
       <div className="present-foot">
         <span><b>{model.total}</b>{` ${model.total === 1 ? 'response' : 'responses'} · `}<b>{model.voted}</b>{' voted'}</span>
       </div>
     </div>
+  );
+}
+
+/** "and 5 more answers": the rows the tally folds away (PresentStage's fitter counts the same way). */
+export const moreAnswers = (n) => `and ${n} more ${n === 1 ? 'answer' : 'answers'}`;
+
+/**
+ * ONE ANSWER PUT UP WHILE VOTING (frame 11): the answer large, its number, and
+ * chips showing where it sits among all of them. Never a name, points or rank.
+ * A long answer pages ("Part 1 of 2"), as presentKeys steps it.
+ */
+export function VoteFocus({ model }) {
+  return (
+    <div className="present-moment present-frame" data-mode="vote">
+      <Top model={model} right={model.title && shows(model.room, 'title') ? model.title : 'Voting'} />
+      <div className="present-main present-main-nav">
+        <div className="present-focus">
+          <div className="present-focus-head">
+            <NumberBadge as="div" n={model.focused.n} size="var(--L-secondary)" className="present-badge" />
+            <span className="present-focus-of">{model.position}</span>
+          </div>
+          <p className="present-fit-text" {...rcAttrs(model.room, 'response')}>{model.text}</p>
+          {model.parts > 1 ? <div className="present-part">{RW.partOf(model.part + 1, model.parts)}</div> : null}
+        </div>
+      </div>
+      <div className="present-foot is-start">
+        <ol className="present-chips" aria-label="Answers">
+          {(model.chips || []).map((c) => (c.gap ? (
+            <li key={c.key} className="present-chip-gap" aria-hidden="true">…</li>
+          ) : (
+            <li key={c.key}>
+              <NumberBadge as="span" n={c.n} tone={c.current ? 'accent' : 'muted'} className={`present-chip${c.current ? ' is-current' : ''}`} />
+            </li>
+          )))}
+        </ol>
+        {model.counts ? <span className="present-foot-count">{model.counts.line}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ONE RESULT PUT UP (frame 12): the answer large with its place ("2nd"), and a
+ * ladder of bars showing where it sits, the pick at the top. Where names are
+ * hidden the ladder carries no number but the rank; a named round adds the
+ * credit (name and points) under the answer and the points on the ladder.
+ */
+export function ResultFocus({ model }) {
+  return (
+    <div className="present-moment present-frame" data-mode="results">
+      <Top model={model} right={model.title || 'Results'} />
+      <div className="present-main present-main-nav">
+        <div className="present-result">
+          <div className="present-focus">
+            <Eyebrow className="present-eyebrow present-place">{model.place}</Eyebrow>
+            <p className="present-fit-text">{model.text}</p>
+            {model.credit ? <p className="present-credit">{model.credit}</p> : null}
+            {model.parts > 1 ? <div className="present-part">{RW.partOf(model.part + 1, model.parts)}</div> : null}
+          </div>
+          <ol className="present-ladder" aria-label="Where it sits">
+            {(model.ladder || []).map((r) => (
+              <li
+                key={r.key}
+                className={`present-rung${r.top ? ' is-top' : ''}${r.current ? ' is-current' : ''}${r.range ? ' is-range' : ''}`}
+              >
+                <span className="present-rung-fill" style={{ width: `${Math.round(Math.max(0.03, Math.min(1, r.share || 0)) * 100)}%` }} />
+                <span className="present-rung-n">{r.label}</span>
+                {!model.hidden && r.points !== null ? <span className="present-rung-pts">{r.points}</span> : null}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+      <div className="present-foot">
+        <span>{model.position}</span>
+        {model.focused && model.focused.meta && !model.hidden ? <span>{model.focused.meta}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * THE QR BESIDE THE MOMENT (owner, 18 Oct 2026: "it moves the screen around a
+ * bit so all content is there but the qr code is avail"; frames 9-10). The
+ * lobby's join block, on the right; the moment keeps its column and the fitter
+ * fits it to the narrower width. Nothing leaves the screen.
+ */
+export function JoinPanel({ join }) {
+  return (
+    <aside className="present-joinpanel" aria-label="Join this session">
+      <div className="present-qr" aria-label="QR code to join">
+        <QRCodeSVG value={join.joinUrl} size={512} level="M" includeMargin={false} />
+      </div>
+      <Eyebrow className="present-eyebrow present-join-ey">Scan to join · no app, no account</Eyebrow>
+      <p className="present-join-url">{join.joinHost}</p>
+      <Eyebrow tone="muted" className="present-eyebrow present-code-label">Session code</Eyebrow>
+      <p className="present-code">{join.code}</p>
+    </aside>
   );
 }
 
@@ -242,7 +458,7 @@ export function ResponseNavigator({ model, vote = false }) {
       <Top model={model} right={vote ? 'Voting' : 'Responses'} />
       <div className="present-main present-main-nav">
         {vote ? <Eyebrow className="present-eyebrow present-vote-cue">{`Vote on your ${deviceWords}`}</Eyebrow> : null}
-        {vote ? <TaskLine task={model.task} slim /> : null}
+        {vote ? <TaskLine task={model.task} label={model.taskLabel} rc={model.room} /> : null}
         <div className="present-nav">
           <div className="present-flank">{flank(win.left)}</div>
           <Card selected className="present-card">
@@ -291,10 +507,7 @@ export function PresentQuestionFocus({ model }) {
     <div className="present-moment present-frame">
       <Top model={model} right="The question" />
       <div className="present-main">
-        {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
-        <Heading level={1} size="hero" balance className="present-hero">{model.title}</Heading>
-        <TaskLine task={model.task} />
-        {model.story ? <p className="present-lead" data-drop="1">{model.story}</p> : null}
+        <RoomQuestion model={model} />
       </div>
       <div className="present-foot"><span>{model.roundLabel}</span></div>
     </div>
@@ -313,7 +526,7 @@ export function PresentFeedback({ model }) {
         <Eyebrow className="present-eyebrow">{model.roundLabel ? `${model.roundLabel} · Feedback` : 'Feedback'}</Eyebrow>
         {/* The round's title as a reminder, not the question again (owner,
             2026-10-13: "too much like the original question"). */}
-        {model.title ? <Heading level={2} size="primary" balance className="present-h2">{model.title}</Heading> : null}
+        {model.title ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(model.room, 'title')}>{model.title}</Eyebrow> : null}
         {model.featured ? (
           // The comment the host put up, as the laptop shows it.
           <figure className="present-quote">
@@ -327,7 +540,7 @@ export function PresentFeedback({ model }) {
             ) : null}
           </figure>
         ) : (
-          <p className="present-lead">{`Provide feedback on the round from your ${deviceWords}.`}</p>
+          <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(model.room, 'ask')}>{`Provide feedback on the round from your ${deviceWords}.`}</p>
         )}
       </div>
       <div className="present-foot"><span>{model.roundLabel || ''}</span></div>
@@ -425,16 +638,28 @@ export function PresentQuiet({ model, eyebrow, line, foot }) {
   );
 }
 
-/** The one moment for each model; unknown models are a quiet wait. */
+/** The one moment for each model, with the QR beside it when the host put it up. */
 export function PresentMoment({ model }) {
+  const moment = <MomentFor model={model} />;
+  if (!model.join) return moment;
+  return (
+    <div className="present-with-join">
+      {moment}
+      <JoinPanel join={model.join} />
+    </div>
+  );
+}
+
+/** The one moment for each model; unknown models are a quiet wait. */
+function MomentFor({ model }) {
   switch (model.moment) {
     case 'LOBBY':
     case 'JOIN': return <PresentLobby model={model} />;
     case 'ANSWERING': return <PresentAnswering model={model} />;
     case 'VOTING': return <PresentVoting model={model} />;
-    case 'VOTE_RESPONSE': return <ResponseNavigator model={model} vote />;
+    case 'VOTE_RESPONSE': return <VoteFocus model={model} />;
     case 'RESULTS': return <PresentTally model={model} />;
-    case 'RESPONSES': return <ResponseNavigator model={model} />;
+    case 'RESPONSES': return <ResultFocus model={model} />;
     case 'READ': return <ReadPage model={model} />;
     case 'READ_WAIT': return <PresentQuiet model={model} eyebrow={RW.whatWeHeard} line={`${RW.workieWriting}…`} />;
     case 'FEEDBACK': return <PresentFeedback model={model} />;

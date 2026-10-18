@@ -47,6 +47,7 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
             {host && entry.held && <span className="brm-tl-flag">{W.laterHeld}</span>}
+            {host && entry.roomHold && <span className="brm-tl-flag brm-tl-flag--held">{entry.roomHold === 'kept' ? W.postKept : W.postNotShown}</span>}
             {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${continueCommand()}` : 'Waiting for Claude'}</span>}
           </>
         )}

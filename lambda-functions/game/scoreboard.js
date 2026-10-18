@@ -64,6 +64,7 @@ const {
   scoreboardWrite, revAfter, scoreboardFrame,
 } = require('./scoreboard-state');
 const { roundNumber } = require('./standings');
+const { focusFrameFromRow } = require('./stage-focus');
 
 /** The client's own words (config/scoreboard.js NOT_SCORED_YET). */
 const NOT_SCORED_YET = 'Scores appear after the first round';
@@ -270,6 +271,30 @@ exports.handler = async (event) => {
           // No join code up (the usual case), or the clear failed: the board is open either way.
           if (focusError && focusError.name !== 'ConditionalCheckFailedException') {
             console.error('⚠️ SCOREBOARD: the join code did not come down:', focusError?.message);
+          }
+        }
+        /*
+          THE QR SIDE PANEL (StageJoin, 18 Oct 2026) gives way the same way,
+          and only it: the focus beside it (a response, the question) stays,
+          and the frame carries the row as it now stands (stage-focus.js
+          focusFrameFromRow) so no surface reads it as the focus closing.
+        */
+        try {
+          const now = new Date().toISOString();
+          const cleared = await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
+            UpdateExpression: 'SET #join = :false, #updatedAt = :now ADD #rev :one',
+            ConditionExpression: '#join = :true',
+            ExpressionAttributeNames: { '#join': 'StageJoin', '#rev': 'StageFocusRev', '#updatedAt': 'UpdatedAt' },
+            ExpressionAttributeValues: { ':true': true, ':false': false, ':now': now, ':one': 1 },
+            ReturnValues: 'ALL_NEW',
+          }));
+          await broadcastToGame(gameId, focusFrameFromRow(gameId, padded, (cleared && cleared.Attributes) || {},
+            stateRead.Item && stateRead.Item.State, now));
+        } catch (joinError) {
+          if (joinError && joinError.name !== 'ConditionalCheckFailedException') {
+            console.error('⚠️ SCOREBOARD: the QR panel did not come down:', joinError?.message);
           }
         }
       }

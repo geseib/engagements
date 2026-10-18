@@ -136,3 +136,34 @@ test('no question row without a way to put it up, or while answering', () => {
   render(<ResponsesPanel kicker="k" title="t" phase="ASK" responses={R} task="Which process must go?" authorsHidden onQuestionToWall={() => {}} />);
   expect(screen.queryByTestId('hc-question')).toBeNull();
 });
+
+// rejects (owner, 18 Oct 2026): the host told what the room should do but never
+// shown the lesson the room is answering.
+test('answering: the lesson shows above the task', () => {
+  const { container } = render(<ResponsesPanel kicker="k" title="Precision" lesson="Give an example of how precision paid off." task="Use STAR." phase="ASK" responses={[]} authorsHidden />);
+  const lesson = container.querySelector('.hc-lesson');
+  expect(lesson.textContent).toBe('Give an example of how precision paid off.');
+  expect(lesson.compareDocumentPosition(container.querySelector('.hc-task')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+// The room's label for the question's own instruction (owner, 18 Oct 2026,
+// docs/design/room-content-v2): "Your turn" when the task is the question's
+// own; a set's or type's default instruction stays "The task".
+test('answering: the question\'s own instruction is labelled "Your turn", a default one "The task"', () => {
+  const own = render(<ResponsesPanel kicker="k" title="Thresholds" lesson="Alexander taught…" task="Describe how you apply thresholds." taskOwn phase="ASK" responses={[]} authorsHidden />);
+  expect(own.container.querySelector('.hc-task-k').textContent).toBe('Your turn');
+  expect(own.container.querySelector('.hc-task')).toHaveClass('is-own');
+  own.unmount();
+  const generic = render(<ResponsesPanel kicker="k" title="Thresholds" task="Answer on your phone." phase="ASK" responses={[]} authorsHidden />);
+  expect(generic.container.querySelector('.hc-task-k').textContent).toBe('The task');
+});
+
+// rejects (walk of dev eed66685): "The question · On the wall now" showing the
+// instructions while the wall showed the ranked results.
+test('the first row carries the lesson; at the results it is "The results"', () => {
+  const { container, rerender } = render(<ResponsesPanel kicker="k" title="t" phase="VOTE" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden onQuestionToWall={() => {}} />);
+  const row = () => container.querySelector('[data-testid="hc-question"]');
+  expect(row().textContent).toBe('The questionDescribe a time.');
+  rerender(<ResponsesPanel kicker="k" title="t" phase="RESULTS" lesson="Describe a time." task="Use STAR." responses={R} authorsHidden questionOnWall onQuestionToWall={() => {}} />);
+  expect(row().textContent).toBe('The results · On the wall nowDescribe a time.');
+});

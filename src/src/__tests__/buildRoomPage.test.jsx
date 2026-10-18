@@ -2877,7 +2877,9 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
   });
 
-  test('D2: the Stage says the line and how long, the helper beneath, and nothing from the engine room', async () => {
+  // Since I10 (owner, 18 Oct 2026) the Stage also lists the last few tool lines
+  // under the line ("Ran git push"); still never where the line came from.
+  test('D2: the Stage says the line and how long, the helper beneath, and the tool lines only in their own list', async () => {
     await openRoom(hostState({
       activity: COMMANDS,
       doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }),
@@ -2887,7 +2889,11 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     expect(within(stage).getByRole('heading', { name: 'Claude is mocking up 3 graph options' })).toBeInTheDocument();
     expect(within(stage).getByText('for 4 min')).toBeInTheDocument();
     expect(within(stage).getByText('A helper is researching contrast rules')).toBeInTheDocument();
-    expect(stage.textContent).not.toMatch(/Ran |Claude said this|to-do list/);
+    expect(stage.textContent).not.toMatch(/Claude said this|to-do list/);
+    const tools = within(stage).getByRole('list', { name: 'What Claude just did' });
+    expect(within(tools).getAllByRole('listitem')[0]).toHaveTextContent('Ran git push');
+    const rest = stage.textContent.replace(tools.textContent, '');
+    expect(rest).not.toMatch(/Ran /);
   });
 
   test('D5: a stale line is Claude was, the chip says when it was last seen, the Stage tells the room', async () => {

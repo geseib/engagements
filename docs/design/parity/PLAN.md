@@ -1,7 +1,21 @@
 # Parity: bringing Trivia, Poll, Survey and Build Room up to the host standards
 
 Written 16 Oct 2026 on `working/parity-plan`, branched from `working/build-room-host-redesign`
-at `3f07c0e4`. **A plan, not code.** Nothing here is built.
+at `3f07c0e4`.
+
+**Status, 17 Oct 2026.** On test at `50c2fe45` (dev `448d260a`), with release notes:
+H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 1.20.0
+labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
+(the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
+**Waiting on the owner:** the console mockup and its five questions
+(`docs/design/build-room-console/`, gates B8); (remote share is being built by another session from the design the owner approved on
+16 Oct, `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; this plan's
+`DESIGN.md` is superseded); three small rulings (the label on
+the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
+**Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
+the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
+following the server, D3 on the signed-in page, and the demo QR and Copy carrying a join
+link instead of the share key. **Not started:** B8–B10, Trivia, Poll, Survey (§4).
 
 Inputs: `docs/design/host-standards/README.md` (the standards, and the table this plan
 corrected), `docs/design/two-surface/PLAN.md`, `docs/superpowers/specs/2026-10-15-host-console-design.md`.
@@ -285,6 +299,7 @@ place changes, the table says where it goes; nothing is dropped to fit the share
 | Settings: codes, List names on the room meter, Claude, Crew, Back to the opening, Wrap up, Report, End session | `BuildSessionPanel.jsx:419-489` | unchanged, plus Screens first | the same panel from the Session rail section |
 | History (filters, the ask window, the mockup viewer), the Build screen (latest shot, open the build) | Build / History screens | unchanged | on the wall (read-only); the laptop opens the same views privately from the rail |
 | The report, wrap-up, end | Session panel, wrapped bar | unchanged | Session section; the footer's ended moment |
+| Releasing Claude's posts (§2c): Release to the room, Keep to myself, Release all, the "Check Claude's posts" switch | Host screen's queue (`BuildHeldPosts`), Session › Settings › Claude | unchanged | Rail section "Waiting for you"; the same Session panel |
 
 **How it is held.** A list, `buildroom/capabilities.js`, names every row above with an id.
 Each entry point carries `data-capability="<id>"`. A test renders the page on one screen
@@ -546,6 +561,120 @@ directory listing of the mockups with a `.js` file "that supposedly linked all 4
 | S1 | **Built (1.19.0).** **Scope each gateway to the paths Claude linked**: a request outside the demo's and the options' own paths gets 404, and a directory listing is never forwarded | the plugin (`engage-mcp.mjs` gateway); a plugin release (`LATEST_PLUGIN`) | about a day, plus every host updating the plugin (the update dot already asks them to) |
 | S2 | **Built (1.19.0).** **Tell Claude** (the MCP server's instructions) to serve the demo and each mockup from their own folder, never a project root, and never to link a helper page | `engage-mcp.mjs` instructions | an hour; relies on Claude following it, so S1 is the guarantee |
 | S3 | **Built (1.20.0).** (a) The plugin reads `.engage/share.json` each round (loopback http only, 4 KB at most, a broken file declares nothing) and reports it; Engage keeps it on the Wi-Fi row and it wins: Open the build, the QR and the phones go to its `demo` page, the declared servers are shared first and their folders are in scope. (b) `post_update` takes `role: demo or mockup`; the demo is the declared one, else the newest link marked demo, else the newest link. Claude is told to set the role and write the file. (c) The share panel names each server Demo, Mockups, "Mockups · Ask 3" or App N, as "localhost:5173 → :4900"; the gateway's own pages say "Build Room 4821 · label or title". The title comes from a state read Claude made, never from the share loop, because an agent's state read takes Claude's inbox. (d) Ports from `4900 + (code mod 100) × 10`, ten per session (`ENGAGE_LAN_PORT` still overrides, twenty from it); `X-Engage-Session` on every gateway answer; `.engage/share-status.json` lists each server local → Wi-Fi → role, with no key. A 1.19.0 plugin keeps working: it declares nothing and ignores the new `roles` in the answer. **Asked for:** mark every shared server's role, and every session (owner, 17 Oct: "push these as a env var or something else, so that the mockup serving vs the demo share are clearly marked. and if im running multiple sessions from the same server, it is clearly labeled to find"). (a) A project file `.engage/share.json` (`demo`, `mockups`, `label`), editable by the host or Claude at any time, reported by the plugin and winning over any guess: Open the build and the QR always go to `demo`, mockup servers are shared only for option previews. Not an env var: it is fixed at Claude Code's start and the same for every server. (b) Claude's show tool takes `role: demo or mockup` and Claude writes the file when it starts servers. (c) Labels: the share panel names each server ("Demo · localhost:5173 → :4900", "Mockups (Ask 3)") instead of App 1/App 2; the gateway's own pages name the session ("Build Room 1215 · title"). (d) Several sessions on one laptop: a port block per game code (`ENGAGE_LAN_PORT` still overrides; today every session starts at 4900 and their ports interleave, likely why 1215 shared on :4904), `X-Engage-Session` on every gateway response, and `.engage/share-status.json` listing local → Wi-Fi → role per project | plugin (`engage-mcp.mjs`), `build-lan.js`, `BuildWifiShare.jsx` | about a day; plugin 1.20.0 |
+
+## 2c. Release gate (owner, 17 Oct)
+
+Owner, 17 Oct: *"Have thing get to host queue to release to room."* Nothing Claude makes
+for the room reaches the room (the phones, the room's window, the laptop's projected
+Stage, Build and History) until the host releases it from the host's queue. Owner's
+ruling the same day: Claude's live status (the doing line, its helper and steps,
+connected, listening) stays live and is never held.
+
+**Built.**
+- **The setting.** `Settings.reviewAgentPosts` on BUILD#STATE, on by default (like
+  `reviewAgentAsks`), set by the host's `POST build/settings`. Off: posts go straight
+  through as before; what is already held stays held until released.
+- **What is held.** Claude's posts (`progress`, `milestone`, `showing`, `checkpoint`,
+  `answer`, from the host's Claude or a builder's) and the host's Claude's screenshots
+  are written with `Released: false` on the log row (and the image row). No flag means
+  released, so every row written before the gate stays visible. A builder's picture
+  follows the crew board, as before.
+- **Where held rows go.** The host's read and Claude's (`roomHold: 'held'|'kept'` on
+  the entry and the image). Never `publicView`, `roomHistory`, `wallView`, the wall's
+  image route or the phone's image route, and they never drive the room's Open the
+  build (`lanPublicView` reads the room's rows). The host's share link and the Wi-Fi
+  targets may still use them. One filter does it: `roomRowsForRoom`
+  (`build-store.js`), which also drops a picture or entry about an ask the room has not
+  seen, and every "Claude proposed a question" entry (`HostOnly` from now; an older row
+  by its words). A phone cannot send preview feedback on a held showing.
+- **Mockups** (an image on an ask) are never held: they appear on phones and the wall
+  exactly when their ask opens, whatever the setting.
+- **The API.** `POST build/posts {action: 'release'|'keep', ids: [logId…]}`, the host's
+  only (Claude and a builder 403, a phone 404), 50 at a time, all or nothing: every id
+  must be waiting (404 otherwise; 409 for one kept). Release stamps `ReleasedAt` and a
+  screenshot's entry releases its picture; the entry keeps its key, so History shows it
+  at the time it happened. Keep stamps `KeptAt`: private for good.
+- **The host's screen.** Waiting for you lists each held post ("Claude wants to show the
+  room": its words, picture and link) with Release to the room and Keep to myself, and
+  Release all when two or more wait (`BuildHeldPosts.jsx`). The Host alert counts them on
+  one grey line of fixed words ("Claude wants to show 2 things", seen ids `post:<logId>`).
+  Session › Settings › Claude: "Check Claude's posts before the room sees them". The
+  host's Timeline marks "Not shown to the room" / "Kept to yourself". The laptop's
+  projected Stage, Build and History draw `roomSees(room)`, the room's copy. Capability
+  id `release-posts`.
+- **The codes card follows the server.** When the server clears `wall.codes` (an ask
+  opened), the laptop's own codes card comes down too; a read from before the server
+  heard the laptop put them up does not count.
+- **Claude** (plugin **1.21.0**) is told its posts and screenshots reach the room once
+  the host releases them, and a held post's reply says it went to the host's queue.
+
+Tests: `tests/build-release.js` (server), `__tests__/buildRelease.test.jsx` (host screen).
+
+## 2d. What the room sees, and how large (owner, 17 Oct)
+
+> "Remember the experience for 1 and 2 screen destination and the default option needs to
+> share only the most relevant info to the room. For example the call and answer when
+> asked a question or given a lesson the most important thing is the lesson needed t the
+> instructions. But anything on the screen worth having needs to be large type and
+> readable. This can be more verbose on zoom screen the projector but always keep it to
+> just what is needed."
+
+And, the same day: "I do like that Claude's status and activity is kept current on the
+build room stage (whichever screen shown to the room)."
+
+**Built** (`worktree-agent-a1aa9c2da620aa868`). One pure function decides it for every
+screen the room sees: `src/src/config/roomContent.js`, `roomContentFor(moment, profile,
+data)`. It returns each part of the moment with a role (lead, support, kicker, count,
+dropped), a ladder step, what may give way for space (`dropOrder`) and what never may
+(`essential`). The one-screen stage (`GameHostPage` → `QuestionCard`), the room's window
+(`presentModel` → `PresentMoments`) and the Build Room's projected Stage, Build and History
+(`buildroom/roomContentData.js`, the same components on one screen and on the window) all
+read it. Call is the one verbose profile; Room, TV and Table carry only what is needed.
+
+| Moment | Room / TV / Table | Call |
+|---|---|---|
+| Lobby | **Lead:** the session title, large, with the event details under it; the QR at the right with the address and code under it. Count | same |
+| A question or lesson is up (answering, the question put back) | **Lead: the title** (hero when short). **The lesson** under it at the secondary step, never dropped. **"Your turn"**: the question's own instruction, or the question pulled from the front of the lesson, never dropped. A generic instruction is left off. Category as a small eyebrow. Count | same, + the generic instruction as a line that may give way |
+| Voting | **Lead: every answer, whole and numbered** (all at once when `overviewFits`, else one at a time from answer 1). The title as the reminder. No tally. Count | same |
+| A response on the wall (voting) | **Lead:** the one answer the host put up, with chips showing where it sits. Title in the top line. Count | same |
+| Results | **Lead: the pick in full**, the runners-up with their text, the bar the fill behind each, relative to the pick. **No counts where names are hidden.** The title as the reminder; the talk line (first to give way). Counts | same |
+| Responses, Workie's read | **Lead:** the response, the page | same |
+| Feedback | **Lead:** the ask, or the comment put up. The round's title as the reminder (kicker) | same |
+| A question for the room | **Lead:** the question and its options. Kind kicker, count | same |
+| Ended | **Lead:** thanks. Session title | same |
+| Top line | the round (the session title only in the lobby and at the end) | session title and round |
+| Build Room: an ask (live, voting) | **Lead:** the prompt and the option titles (secondary step or larger; a long ask pages), each option's detail under it (first to give way). **No tally while open.** Claude's status (support, essential). Count | + the ask's detail |
+| Build Room: results | as an ask, the tally rising inside the options, the pick marked with the room's best reason; "Sent to Claude" | same |
+| Build Room: the wheel | **Lead:** the prompt and the wheel (scales with the fitter). Claude's status | + the detail |
+| Build Room: between asks | **Lead: Claude's status** (headline, the doing line and its duration, the helper and activity lines); the newest picture and the last decision as support | same |
+| Build Room: a talking point, the run list | **Lead:** the point; the run list and its current step (essential). Claude's status | same |
+| Build Room: History, Build | **Lead:** the story (newest that fit, "and N earlier"); the newest screenshot. Claude's status at the top | same |
+| Build Room: codes, crew board, the brief | **Lead:** what the host put up. Claude's status | same |
+
+**Changed again 18 Oct, afternoon** (owner: "you provided the biggest text with the generic room instructions, not the changing lesson … the instructions is the optional one. the title often is nice to have big too"; and "nice to see a bar chart results but not at the expense of seeing what was voted on"). Mockup and reasoning: `docs/design/room-content-v2/`. The title and the lesson lead; the question goes in "Your turn"; voting shows every answer; results put the bars behind the answers with no counts where names are hidden; Build Room options keep their detail on every profile and hide the tally until the vote closes. Two host moves: the QR as a side panel beside the content (`stageFocus.join`), and putting one answer or result up.
+
+**Changed 18 Oct, morning** (owner: "for the rounds for the answer phase neither the host nor the room sees the actual lesson instead we tell them what to do"): the lesson leads and the task sits under it, on every profile; until then the task led and a question with its own instruction dropped the lesson. The lobby leads with the session title and its details ("why is the title of the session tiny").
+
+**Claude's status** is essential on every Build Room moment and profile, on one screen
+and on the room's window, on Stage, Build and History (`screens/ClaudeStatus.jsx`): never
+`data-drop`, the body step or larger, and after an open ask's prompt and options, never in
+their place.
+
+**Never a name, never the Workie Background:** the output is built from a whitelist; the
+question's Background (authoring prompt: "Never shown to players") is never a part, even on
+Call.
+
+**Large and readable:** the lead is the profile's hero or primary step and shrinks only to
+`--fit-min` (`__tests__/roomContentPalette.test.js`). A long Build Room ask **pages** its
+options (`stagePaging.js` `OPTION_PAGE_SIZE`: Room 3, TV 2 or 1 under 900px tall, Call 3
+or 2 at results, Table 4): "Options 1–3 of 6 · page 1 of 2 · ↑ ↓ to page" on the host's
+Stage, the first page and "and 3 more options on your phone" on the room's window (no
+server fact carries an option page; §5 lever 3). Measurements and before/after pictures:
+`docs/design/room-content/README.md`.
+
+**For the owner:** (1) settled 18 Oct: the lesson is never dropped. (2) The room's
+window cannot page a long ask (no server fact); a `build/wall` option page the host's ↑ ↓
+publishes would let it follow, as `/stage-focus` does for C&A.
 
 ## 3. Build Room's other standards (B10, after two screens)
 

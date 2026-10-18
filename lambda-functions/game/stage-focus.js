@@ -63,10 +63,12 @@ const db = DynamoDBDocumentClient.from(client);
  * watches a button do nothing with no error anywhere in the system.
  */
 /*
- * 'join' puts the join code and QR on the wall mid-session (owner,
- * 2026-10-13: "when presenting i still need ability to show qr code"). Like
- * 'question', it carries no index, part or phase. Mirrored in
- * src/src/config/stageFocus.js (tests/stage-focus-vote.js §8).
+ * 'join' put the join code and QR on the wall mid-session (owner,
+ * 2026-10-13: "when presenting i still need ability to show qr code"). Since
+ * 18 Oct the QR is its own fact, `join: true|false` (StageJoin, below), shown
+ * BESIDE whatever the focus is; 'join' stays accepted as a focus kind and
+ * means `join: true`, the focus left alone. It is never stored as StageFocus.
+ * Mirrored in src/src/config/stageFocus.js (tests/stage-focus-vote.js §8).
  */
 const FOCUS_KINDS = ['none', 'question', 'answer', 'join'];
 
@@ -136,6 +138,47 @@ const broadcastToGame = async (gameId, message) => {
   }
 };
 
+/**
+ * Is the QR panel up on this ROUND# row? `StageJoin` once it has been written;
+ * a row from before it (a legacy `StageFocus: 'join'`) reads as up.
+ */
+function joinOfRow(row) {
+  const r = row || {};
+  if (typeof r.StageJoin === 'boolean') return r.StageJoin;
+  return r.StageFocus === 'join';
+}
+
+/**
+ * THE FRAME, FROM THE ROW AS IT NOW STANDS: the focus as get-game-state hands
+ * it back in this phase, and the QR. A writer of either fact sends this whole
+ * shape, so a client applying a frame that only moved the QR never closes the
+ * response the host has up, and the reverse.
+ */
+function focusFrameFromRow(gameId, padded, row, state, now) {
+  const r = row || {};
+  const phaseNow = (/^(VOTE|RESULTS)#/.exec(String(state || '')) || [])[1] || null;
+  const out = {
+    type: 'stageFocusChanged', gameId, questionNumber: padded,
+    focus: 'none', index: null, part: null, parts: null, phase: null,
+  };
+  if (r.StageFocus === 'question') {
+    out.focus = 'question';
+  } else if (r.StageFocus === 'answer' && Number.isInteger(r.StageFocusIndex)) {
+    const stamped = r.StageFocusPhase || 'RESULTS';
+    if (FOCUS_PHASES.includes(stamped) && stamped === phaseNow) {
+      out.focus = 'answer';
+      out.index = r.StageFocusIndex;
+      out.part = Number.isInteger(r.StageFocusPart) ? r.StageFocusPart : 0;
+      out.parts = Number.isInteger(r.StageFocusParts) ? r.StageFocusParts : 1;
+      out.phase = stamped;
+    }
+  }
+  out.join = joinOfRow(r);
+  out.rev = Number.isInteger(r.StageFocusRev) ? r.StageFocusRev : null;
+  out.timestamp = now;
+  return out;
+}
+
 exports.handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS' || event.httpMethod === 'OPTIONS') {
     return respond(200, {});
@@ -150,14 +193,34 @@ exports.handler = async (event) => {
     return respond(400, { error: 'Body must be JSON' });
   }
 
-  const { focus, index, questionNumber, part, parts } = body;
+  const { index, questionNumber, part, parts } = body;
 
   if (!gameId) {
     return respond(400, { error: 'gameId is required' });
   }
 
-  if (!FOCUS_KINDS.includes(focus)) {
-    return respond(400, { error: `focus must be one of: ${FOCUS_KINDS.join(', ')}` });
+  /*
+    THE QR SIDE PANEL IS ITS OWN FACT (owner, 18 Oct 2026: "whenever the host
+    wants to show the qr code. it moves the screen around a bit so all content
+    is there but the qr code is avail"; docs/design/room-content-v2 frames 9-10).
+    `join: true|false` is stored on the ROUND# record as `StageJoin`, next to
+    the focus and independent of it: the room can see an answer AND the QR.
+    It travels alone or alongside `focus`.
+
+    LEGACY `focus: 'join'` (every surface before this) means `join: true` and
+    leaves the focus as it is. `focus: 'none'` clears the answer or question
+    focus only; it never takes the QR down (that is `join: false`).
+  */
+  if (body.join !== undefined && typeof body.join !== 'boolean') {
+    return respond(400, { error: 'join must be true or false' });
+  }
+  const legacyJoin = body.focus === 'join';
+  const joinValue = legacyJoin ? true : body.join;
+  const focus = legacyJoin ? undefined : body.focus;
+  const setsFocus = focus !== undefined;
+
+  if (setsFocus ? !FOCUS_KINDS.includes(focus) : joinValue === undefined) {
+    return respond(400, { error: `focus must be one of: ${FOCUS_KINDS.join(', ')} (or send join: true|false)` });
   }
 
   /*
@@ -264,44 +327,48 @@ exports.handler = async (event) => {
       all. Whichever of the four ROUND# writers touches a round first stamps
       the 30-day clock; the rest leave it alone.
     */
-    const written = await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
-      UpdateExpression: 'SET #focus = :focus, #idx = :idx, #phase = :phase, #part = :part, #parts = :parts, '
-        + '#updatedAt = :now, #qn = :qn, #ttl = if_not_exists(#ttl, :ttl) ADD #rev :one',
-      ExpressionAttributeNames: {
+    const names = {
+      '#rev': 'StageFocusRev',
+      '#updatedAt': 'UpdatedAt',
+      '#qn': 'QuestionNumber',
+      '#ttl': 'ttl'
+    };
+    const values = { ':now': now, ':qn': padded, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS), ':one': 1 };
+    const sets = [];
+    if (setsFocus) {
+      Object.assign(names, {
         '#focus': 'StageFocus',
         '#idx': 'StageFocusIndex',
         '#phase': 'StageFocusPhase',
         '#part': 'StageFocusPart',
-        '#parts': 'StageFocusParts',
-        '#rev': 'StageFocusRev',
-        '#updatedAt': 'UpdatedAt',
-        '#qn': 'QuestionNumber',
-        '#ttl': 'ttl'
-      },
-      ExpressionAttributeValues: {
-        ':focus': focus, ':idx': storedIndex, ':phase': stampedPhase, ':part': storedPart, ':parts': storedParts,
-        ':now': now, ':qn': padded, ':ttl': ttlFrom(null, ROUND_RECORD_DAYS), ':one': 1
-      },
-      // The new rev comes back with the write, so the frame can carry it.
-      ReturnValues: 'UPDATED_NEW'
-    }));
-    const rev = Number.isInteger(written && written.Attributes && written.Attributes.StageFocusRev)
-      ? written.Attributes.StageFocusRev : null;
+        '#parts': 'StageFocusParts'
+      });
+      Object.assign(values, {
+        ':focus': focus, ':idx': storedIndex, ':phase': stampedPhase, ':part': storedPart, ':parts': storedParts
+      });
+      sets.push('#focus = :focus', '#idx = :idx', '#phase = :phase', '#part = :part', '#parts = :parts');
+    }
+    if (joinValue !== undefined) {
+      names['#join'] = 'StageJoin';
+      values[':join'] = joinValue;
+      sets.push('#join = :join');
+    }
+    sets.push('#updatedAt = :now', '#qn = :qn', '#ttl = if_not_exists(#ttl, :ttl)');
 
-    await broadcastToGame(gameId, {
-      type: 'stageFocusChanged',
-      gameId,
-      questionNumber: padded,
-      focus,
-      index: storedIndex,
-      part: storedPart,
-      parts: storedParts,
-      phase: stampedPhase,
-      rev,
-      timestamp: now
-    });
+    const written = await db.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: `ROUND#${padded}` },
+      UpdateExpression: `SET ${sets.join(', ')} ADD #rev :one`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+      // The whole row comes back, so the frame carries the focus AND the QR as
+      // they now stand, whichever of the two this request changed.
+      ReturnValues: 'ALL_NEW'
+    }));
+    const frame = focusFrameFromRow(gameId, padded, (written && written.Attributes) || {},
+      stateRead.Item && stateRead.Item.State, now);
+
+    await broadcastToGame(gameId, frame);
 
     /*
       THE JOIN CODE AND THE SCOREBOARD ARE ONE AT A TIME (owner, 2026-10-13:
@@ -310,7 +377,7 @@ exports.handler = async (event) => {
       scoreboard, here on the server, so the laptop, the Remote and every wall
       follow the one frame. scoreboard.js does the other half.
     */
-    if (focus === 'join') {
+    if (joinValue === true) {
       const board = normaliseScoreboard(stateRead.Item && stateRead.Item.Scoreboard);
       if (board.open) {
         try {
@@ -326,8 +393,8 @@ exports.handler = async (event) => {
     }
 
     return respond(200, {
-      status: 'OK', gameId, questionNumber: padded, focus, index: storedIndex,
-      part: storedPart, parts: storedParts, phase: stampedPhase, rev,
+      status: 'OK', gameId, questionNumber: padded, focus: frame.focus, index: frame.index,
+      part: frame.part, parts: frame.parts, phase: frame.phase, rev: frame.rev, join: frame.join,
     });
   } catch (error) {
     console.error('❌ Stage focus error:', error);
@@ -337,3 +404,5 @@ exports.handler = async (event) => {
 
 exports.FOCUS_PHASES = FOCUS_PHASES;
 exports.FOCUS_KINDS = FOCUS_KINDS;
+exports.joinOfRow = joinOfRow;
+exports.focusFrameFromRow = focusFrameFromRow;

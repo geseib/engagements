@@ -153,7 +153,12 @@ export function buildApi(gameId) {
     clearWall: () => post('ideas/wall/clear'),
     /** `{summary, built?, links?, nextSteps?}` → `{outcome}` */
     saveOutcome: (body) => post('outcome', body),
-    /** `{reviewAgentAsks?, agentName?}` → `{settings}` */
+    /**
+     * THE RELEASE GATE (parity PLAN §2c): Claude's held posts to the room
+     * (`release`), or the host's for good (`keep`). → `{released}` | `{kept}`
+     */
+    postsAction: (action, ids) => post('posts', { action, ids }),
+    /** `{reviewAgentAsks?, reviewAgentPosts?, listNames?, agentName?}` → `{settings}` */
     saveSettings: (body) => post('settings', body),
     // ── Talking points (docs/design/build-room-talking-points; build-room.js) ──
     /** `{kind:'research'|'ideas', subject}` → `{request}`: Claude (or a helper) starts when it next listens. */

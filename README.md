@@ -92,12 +92,17 @@ The plugin's source is `src/public/engage-mcp.mjs`; `tests/engage-plugin.js` and
 `tests/engage-mcp.js` cover it, and `tests/engage-lan-gateway.js` runs its Wi-Fi share
 against a real app. Share demo opens only the pages Claude linked (never a folder
 listing); a project can name its demo and mockups in `.engage/share.json`, and each
-session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides).
+session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides). **Remote share** (off by default) opens the demo to people who are not on the Wi-Fi: the plugin runs a pinned, hash-checked `cloudflared` quick tunnel per session behind a key per person (design `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; `tests/engage-remote-gateway.js`, `tests/engage-cloudflared-fetch.js`).
 Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.js`).
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (the key comes from
 the host's Session › Settings › Screens): public, read-only, no names
-(`src/src/present/buildwall/`, read `GET …/build-play/wall`).
+(`src/src/present/buildwall/`, read `GET …/build-play/wall`). Claude's posts and
+screenshots reach the room only after the host releases them from the queue
+(`POST …/build/posts`; the `reviewAgentPosts` setting, on by default).
+
+What every room screen shows, per moment and room screen size, is decided in one place:
+`src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
 
 ## Documentation
 

@@ -388,7 +388,10 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
 
   console.log('\ntimeline, ideas inbox, wrap-up');
   await check('Claude posts progress; a host note never reaches Claude or a phone', async () => {
-    assert.strictEqual((await agentCall('POST', 'log', { kind: 'showing', text: 'Mockups at localhost:5173', link: 'http://localhost:5173' })).status, 201);
+    const showing = await agentCall('POST', 'log', { kind: 'showing', text: 'Mockups at localhost:5173', link: 'http://localhost:5173' });
+    assert.strictEqual(showing.status, 201);
+    // The release gate (§2c, tests/build-release.js): it reaches phones once the host releases it.
+    assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [showing.body.entry.logId] })).status, 200);
     assert.strictEqual((await agentCall('POST', 'log', { kind: 'decision', text: 'I decided' })).status, 400);
     await hostCall('POST', 'log', { kind: 'note', text: 'Marcus seems bored' });
     const a = await agentCall('GET', 'state');
@@ -608,12 +611,48 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await agentCall('POST', 'activity', { items: 'nope' })).status, 400);
   });
 
+  await check('I10: a test line keeps its counts and whether it failed, never anything else; check and save are kinds', async () => {
+    await agentCall('POST', 'activity', { items: [
+      { kind: 'test', text: 'Ran npm test', tests: { passed: 12, failed: 1, names: ['SECRET'] }, output: 'SECRET' },
+      { kind: 'test', text: 'Ran pytest', failed: true },
+      { kind: 'test', text: 'Ran jest', tests: { passed: -3, failed: 'x' } },
+      { kind: 'check', text: 'Looked at the running demo' },
+      { kind: 'save', text: 'Ran git commit', tests: { passed: 1 } },
+    ] });
+    const got = (await hostCall('GET', 'state')).body.activity.slice(-5).map(({ at, ...rest }) => rest);
+    assert.deepStrictEqual(got, [
+      { kind: 'test', text: 'Ran npm test', tests: { passed: 12, failed: 1 }, failed: true },
+      { kind: 'test', text: 'Ran pytest', failed: true },
+      { kind: 'test', text: 'Ran jest' },
+      { kind: 'check', text: 'Looked at the running demo' },
+      { kind: 'save', text: 'Ran git commit' },
+    ]);
+  });
+  await check('I9: `sent` is the newest thing that went to Claude: told or asked, picked up once its inbox took it, never Later', async () => {
+    assert.strictEqual((await hostCall('POST', 'directions', { text: 'We need an old-school leaderboard' })).status, 201);
+    let sent = (await hostCall('GET', 'state')).body.sent;
+    assert.deepStrictEqual({ verb: sent.verb, text: sent.text, picked: sent.pickedAt }, { verb: 'told', text: 'We need an old-school leaderboard', picked: null });
+    await hostCall('POST', 'directions', { text: 'Pair sign-ups', as: 'later' });
+    assert.strictEqual((await hostCall('GET', 'state')).body.sent.text, 'We need an old-school leaderboard', 'Later is held, not sent');
+    await agentCall('GET', 'inbox');
+    sent = (await hostCall('GET', 'state')).body.sent;
+    assert.ok(sent.pickedAt && Date.parse(sent.pickedAt) >= Date.parse(sent.at), JSON.stringify(sent));
+    await hostCall('POST', 'directions', { text: 'Which font reads best from the back?', as: 'ask' });
+    sent = (await hostCall('GET', 'state')).body.sent;
+    assert.deepStrictEqual([sent.verb, sent.pickedAt], ['asked', null]);
+    assert.strictEqual((await agentCall('GET', 'state')).body.sent, undefined, 'Claude has its inbox');
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.sent, undefined, 'a phone never gets a direction');
+  });
+
   console.log('\nfeedback on a preview (owner, 2026-10-04)');
   seed();
   await check('a phone says "Looks good" or "Needs a change" on what Claude is showing; once per preview', async () => {
     const shown = await agentCall('POST', 'log', { kind: 'showing', text: 'Header B is live', link: 'http://localhost:5173/' });
     assert.strictEqual(shown.status, 201, JSON.stringify(shown.body));
     const logId = shown.body.entry.logId;
+    // Held for the host until released (§2c): no feedback on a preview the room has not seen.
+    assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'good' })).status, 409);
+    assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [logId] })).status, 200);
     const p = await playCall('GET', 'state', priya);
     assert.ok(p.body.log.some((e) => e.logId === logId && e.kind === 'showing'), 'the phone sees the preview');
     assert.strictEqual((await playCall('POST', 'idea', { ...priya, aboutLogId: logId, verdict: 'change' })).status, 400, 'a change needs words');
@@ -1359,6 +1398,8 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   console.log('\nWi-Fi share (docs/design/build-room-lan-share/PLAN.md §3)');
   const report = (body) => agentCall('POST', 'share/report', body);
   const LIVE = (over = {}) => ({ status: 'live', key: 'abcdefghijklmnopqrstuv', open: 2, map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ...over });
+  // Claude's post, released to the room by the host (the release gate, §2c; tests/build-release.js).
+  const showRoom = async (body) => { const r = await agentCall('POST', 'log', body); assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: [r.body.entry.logId] })).status, 200); };
 
   await check('off by default: the plugin is told not wanted and given no addresses (nothing to open)', async () => {
     seed();
@@ -1377,7 +1418,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('off then quickly on: participants are never handed the old key', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await showRoom({ kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     await hostCall('POST', 'share', { on: false });
@@ -1494,7 +1535,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('live: participants get the Wi-Fi link with the key; off: they get nothing, at once', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'The first board', link: 'http://localhost:5173/b' });
+    await showRoom({ kind: 'showing', text: 'The first board', link: 'http://localhost:5173/b' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     let v = (await playCall('GET', 'state', priya)).body;
@@ -1519,7 +1560,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('a stale report counts as off for participants', async () => {
     seed();
-    await agentCall('POST', 'log', { kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
+    await showRoom({ kind: 'showing', text: 'x', link: 'http://localhost:5173/' });
     await hostCall('POST', 'share', { on: true });
     await report(LIVE());
     const k = key(`GAME#${GAME}`, 'BUILD#LAN');

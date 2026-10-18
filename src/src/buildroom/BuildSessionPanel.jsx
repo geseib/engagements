@@ -42,6 +42,24 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 const plural = (n, one, many) => (n === 1 ? one : many);
 
 /** "2:31", in the host's own clock. Empty for a missing or unreadable time. */
+/** Settings > Claude: which plugin Claude runs and whether it is the latest. Here only, never a room screen. */
+function PluginVersion({ plugin }) {
+  const latest = plugin.latest || '';
+  // Connected, but too old to say its version (before the header): older than the latest.
+  if (!plugin.running && plugin.outdated) {
+    return <p className="brm-hint brm-sp-note brm-ver" data-testid="brm-plugin-ver"><span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{W.pluginOlder(latest)}</b></span></p>;
+  }
+  if (!plugin.running) return <p className="brm-hint brm-sp-note" data-testid="brm-plugin-ver">{W.pluginUnknown}</p>;
+  return (
+    <p className="brm-hint brm-sp-note brm-ver" data-testid="brm-plugin-ver">
+      <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className={plugin.outdated ? 'brm-ver-old' : ''}>{plugin.running}</b></span>
+      {plugin.outdated
+        ? <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+        : <span className="brm-ver-ok">{W.pluginCurrent}</span>}
+    </p>
+  );
+}
+
 export function timeOf(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -515,6 +533,8 @@ export default function BuildSessionPanel({
                     </button>
                   )}
                 </div>
+                {/* Which plugin Claude runs, always (owner, 18 Oct): the version, and whether it is the latest. */}
+                {!ended && room.plugin && <PluginVersion plugin={room.plugin} />}
                 {/* The plugin is older than the current one: one line, here only (never the Stage or a device). */}
                 {!ended && room.plugin && room.plugin.outdated && (
                   <p className="brm-hint brm-sp-note" data-testid="brm-plugin-out">
@@ -524,6 +544,18 @@ export default function BuildSessionPanel({
                 )}
                 {!ended && slots.autoSwitch}
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
+                {/* THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts and screenshots wait for the host. */}
+                {!ended && (
+                  <div data-capability="release-posts">
+                    <Switch
+                      label={W.postsSwitch}
+                      checked={room.settings ? room.settings.reviewAgentPosts !== false : true}
+                      disabled={busy}
+                      onChange={(on) => run(() => api.saveSettings({ reviewAgentPosts: on }))}
+                      note={W.postsNote}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="brm-sp-grp" data-group="crew" data-capability="crew">

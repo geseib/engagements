@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import {
-  render, screen, fireEvent, waitFor, within, act,
+  render, screen, fireEvent, waitFor, within, act, cleanup,
 } from '@testing-library/react';
 import { authFetch } from '../auth/authFetch';
 import webSocketClient from '../WebSocketClient';
@@ -755,6 +755,27 @@ describe('the plugin update notice (owner, 2026-10-10): the Host screen only', (
     openSettings();
     expect(within(panel()).queryByTestId('brm-plugin-out')).toBeNull();
     expect(panel().textContent).not.toMatch(/out of date/);
+  });
+
+  test('Settings always says which plugin Claude runs (owner, 18 Oct): current, older, too old to say, not yet connected', async () => {
+    // Each part is its own span (laid out by CSS gap), so join them with a space to read the line.
+    const line = () => {
+      const el = within(panel()).getByTestId('brm-plugin-ver');
+      const parts = [...el.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim());
+      return parts.length ? parts.join(' ') : el.textContent.trim();
+    };
+    const cases = [
+      [{ st: CURRENT }, `Claude's plugin ${S.LATEST_PLUGIN} The latest.`],
+      [{ st: OLD }, `Claude's plugin 1.14.0 Latest ${S.LATEST_PLUGIN}`],
+      [{}, `Claude's plugin older than ${S.LATEST_PLUGIN}`],
+      [{ st: { AgentSeenAt: undefined } }, "Claude's version shows here once it connects."],
+    ];
+    for (const [args, want] of cases) {
+      cleanup();
+      await openRoom(hostState(args));
+      openSettings();
+      expect(line()).toBe(want);
+    }
   });
 
   test('never on the Stage, nor on Build or History, which the room sees', async () => {

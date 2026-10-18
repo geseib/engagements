@@ -8,7 +8,18 @@
  * A participant is given a Wi-Fi link only while the host wants sharing on
  * AND the plugin said "live" in the last 30 seconds. Otherwise local links are
  * dropped from their view exactly as before this existed.
+ *
+ * REMOTE SHARE (owner, 2026-10-16; docs/superpowers/specs/
+ * 2026-10-16-build-room-remote-share-design.md). One more switch on the same
+ * row: one Cloudflare quick tunnel per session, forwarding to the newest thing
+ * Claude showed, behind a key per PERSON. While it is live everyone's Open the
+ * demo goes that way. The shared view carries only its status, when it went
+ * live and the newest path: never the tunnel's address, never a key. Each
+ * person gets their own link from their own phone route; keys are stored and
+ * sent to the laptop as SHA-256 hashes only.
  */
+const crypto = require('crypto');
+
 const SK_LAN = 'BUILD#LAN';
 const REPORT_FRESH_MS = 30 * 1000;
 const QUIET_AFTER_MS = 2 * 60 * 1000;
@@ -17,6 +28,13 @@ const STATUSES = Object.freeze(['off', 'live', 'failed']);
 const KEY_RE = /^[A-Za-z0-9_-]{20,64}$/;
 /** One plugin process (1.18.0+): random at its start, so two copies on one room differ. */
 const REPORTER_RE = /^[A-Za-z0-9_-]{12,64}$/;
+/** SHA-256, base64url, no padding. */
+const KEY_HASH_RE = /^[A-Za-z0-9_-]{43}$/;
+/** The only remote address there is: a quick tunnel's origin. */
+const TUNNEL_RE = /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/;
+const MAX_DEVICES = 50;
+const MAX_PEOPLE = 200;
+const OLD_PLUGIN = "This laptop's Engage plugin is too old to share remotely. Update it from Connect.";
 
 const hostOf = (url) => { try { return new URL(String(url)); } catch (e) { return null; } };
 
@@ -202,8 +220,41 @@ function lanScopes(room) {
   return out;
 }
 
+/** The remote block of a report. A plugin before 1.19.0 sends none: it cannot share remotely. */
+function normalizeRemote(remote) {
+  if (remote === undefined || remote === null) {
+    return { value: { RemoteSupported: false, RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {} } };
+  }
+  const m = remote || {};
+  const status = String(m.status || '');
+  if (!STATUSES.includes(status)) return { error: `remote.status must be one of ${STATUSES.join(', ')}` };
+  const address = String(m.address || '');
+  if (address && !TUNNEL_RE.test(address)) return { error: 'remote.address must be a quick tunnel origin' };
+  if (status === 'live' && !address) return { error: 'A live remote report needs its address' };
+  const target = String(m.target || '');
+  if (target && !isLoopbackUrl(target)) return { error: 'remote.target must be a loopback address' };
+  const devices = {};
+  const entries = Object.entries(m.devices && typeof m.devices === 'object' ? m.devices : {});
+  if (entries.length > MAX_PEOPLE) return { error: 'remote.devices lists too many people' };
+  for (const [name, n] of entries) {
+    if (!Number.isInteger(n) || n < 0 || n > MAX_DEVICES) return { error: 'remote.devices must be counts' };
+    const clean = String(name).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (clean && n > 0) devices[clean] = n;
+  }
+  return { value: {
+    RemoteSupported: true,
+    RemoteStatus: status,
+    RemoteAddress: status === 'off' ? '' : address,
+    RemoteTarget: target ? hostOf(target).origin : '',
+    RemoteError: String(m.error || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    RemoteDevices: status === 'live' ? devices : {},
+  } };
+}
+
 function normalizeReport(body) {
   const b = body || {};
+  const remote = normalizeRemote(b.remote);
+  if (remote.error) return { error: remote.error };
   const status = String(b.status || '');
   if (!STATUSES.includes(status)) return { error: `status must be one of ${STATUSES.join(', ')}` };
   const key = String(b.key || '');
@@ -219,7 +270,7 @@ function normalizeReport(body) {
   const reporter = REPORTER_RE.test(String(b.reporter || '')) ? String(b.reporter) : '';
   // 1.20.0+: what .engage/share.json declares. An older plugin sends none: nothing declared.
   const declared = normalizeDeclared(b.declared);
-  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter, Declared: declared } };
+  return { value: { Status: status, Map: map, Key: validKey, Open: open, Error: error, Reporter: reporter, Declared: declared, ...remote.value } };
 }
 
 /**
@@ -249,6 +300,80 @@ function lanStatus(row, now) {
   return 'starting';
 }
 
+/** 'off' | 'starting' | 'live' | 'failed', on the freshness rule lanStatus uses. */
+function remoteStatus(row, now) {
+  if (!row || !row.Wanted || !row.RemoteWanted) return 'off';
+  const fresh = row.ReportedAt && Date.parse(now) - Date.parse(row.ReportedAt) < REPORT_FRESH_MS;
+  if (!fresh) return 'starting';
+  if (row.RemoteSupported === false) return 'failed';
+  if (row.RemoteStatus === 'failed') return 'failed';
+  if (row.RemoteStatus === 'live' && TUNNEL_RE.test(String(row.RemoteAddress || ''))) return 'live';
+  return 'starting';
+}
+
+/**
+ * When this tunnel went live. A new address is a new tunnel, so a new time:
+ * that is how a phone learns its saved link is stale.
+ */
+function remoteLiveSince(before, value, now) {
+  if (!value || value.RemoteStatus !== 'live') return null;
+  const b = before || {};
+  if (b.RemoteStatus === 'live' && b.RemoteLiveSince && b.RemoteAddress === value.RemoteAddress) return b.RemoteLiveSince;
+  return now;
+}
+
+function hashKey(key) {
+  return crypto.createHash('sha256').update(String(key)).digest('base64url');
+}
+
+/** 128 bits; the raw key goes to its phone and nowhere else. */
+function mintRemoteKey() {
+  const key = crypto.randomBytes(16).toString('base64url');
+  return { key, hash: hashKey(key) };
+}
+
+/**
+ * The keys that open the remote gateway now. A key counts only while its
+ * person is in the session, not removed, and on the device it was minted for:
+ * a handover gives the name a new ClientId, which ends the old device's key.
+ */
+function liveRemoteKeys(rkeys, players) {
+  const byName = new Map((players || []).map((p) => [p.PlayerName || p.playerName, p]));
+  return (rkeys || []).filter((k) => {
+    const p = byName.get(k.PlayerName);
+    if (!p || p.Removed || p.RemovedAt) return false;
+    if (p.ClientId && p.ClientId !== k.ClientId) return false;
+    return KEY_HASH_RE.test(String(k.Hash || ''));
+  }).map((k) => ({ hash: k.Hash, player: k.PlayerName }));
+}
+
+/**
+ * The one local address the remote tunnel forwards to: the demo (Share demo
+ * S3: declared, then marked, then the newest link), else the newest shared
+ * target. Only ever one of lanTargets, so remote reaches a subset of Wi-Fi.
+ */
+function remoteTarget(room) {
+  const targets = lanTargets(room);
+  const demo = hostOf(lanDemoUrl(room));
+  if (demo && targets.includes(demo.origin)) return demo.origin;
+  return targets[targets.length - 1] || '';
+}
+
+/** Path, search and hash of the demo's own page: what Open the demo opens. */
+function remotePath(room) {
+  const u = hostOf(lanDemoUrl(room));
+  if (u && isLoopbackUrl(u.toString()) && u.origin === remoteTarget(room)) return `${u.pathname}${u.search}${u.hash}` || '/';
+  return '/';
+}
+
+/** A person's link: the tunnel's origin, a path, their key. '' unless remote is live. */
+function remoteLink(row, pathAndMore, key, now) {
+  if (remoteStatus(row, now) !== 'live') return '';
+  const u = new URL(pathAndMore || '/', row.RemoteAddress);
+  u.searchParams.set('k', key);
+  return u.toString();
+}
+
 const withKey = (lanOrigin, rest, key) => {
   const u = new URL(rest || '/', lanOrigin);
   u.searchParams.set('k', key);
@@ -267,6 +392,17 @@ function lanTranslator(row, now) {
 }
 
 function lanPublicView(room, now) {
+  const wifi = wifiPublicView(room, now);
+  const remote = remoteStatus(room && room.lan, now);
+  if (remote === 'off') return wifi;
+  if (remote === 'live') {
+    // Everyone takes the remote route (owner, 2026-10-16): no Wi-Fi link.
+    return { remote, remoteSince: room.lan.RemoteLiveSince || null, remotePath: remotePath(room) };
+  }
+  return { ...(wifi || {}), remote };
+}
+
+function wifiPublicView(room, now) {
   const t = lanTranslator(room && room.lan, now);
   // The demo first (S3): declared, then marked, then the newest link; the first one shared wins.
   for (const url of demoCandidates(room)) {
@@ -308,10 +444,24 @@ function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
     offerDismissed: Boolean(r.OfferDismissedAt),
     reportedAt: r.ReportedAt || null,
     wantedAt: r.WantedAt || null,
+    remote: remoteHostView(r, now),
   };
+}
+
+/** Never the tunnel's address: the host has nothing to copy (spec §3). */
+function remoteHostView(r, now) {
+  const status = remoteStatus(r, now);
+  const people = status === 'live'
+    ? Object.entries(r.RemoteDevices || {}).map(([name, devices]) => ({ name, devices }))
+      .sort((a, b) => b.devices - a.devices || a.name.localeCompare(b.name))
+    : [];
+  let error = '';
+  if (status === 'failed') error = r.RemoteSupported === false ? OLD_PLUGIN : (r.RemoteError || '');
+  return { wanted: Boolean(r.Wanted && r.RemoteWanted), status, error, people };
 }
 
 module.exports = {
   SK_LAN, REPORT_FRESH_MS, QUIET_AFTER_MS, MAX_TARGETS,
   isLoopbackUrl, isPrivateLanUrl, lanTargets, lanRoles, lanDemoUrl, normalizeDeclared, scopeOf, lanScopes, normalizeReport, reportOwnsRoom, lanStatus, lanTranslator, lanPublicView, lanHostView,
+  KEY_HASH_RE, TUNNEL_RE, remoteStatus, remoteLiveSince, hashKey, mintRemoteKey, liveRemoteKeys, remotePath, remoteTarget, remoteLink,
 };

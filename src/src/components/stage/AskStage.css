@@ -11,7 +11,8 @@
 .askstage .askstage-ideas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(.6vh + 4px); }
 .askstage .askstage-options li {
   display: flex; align-items: center; gap: .6em;
-  font-size: var(--t-body); color: var(--text);
+  /* the options lead with the question (config/roomContent.js): the secondary step */
+  font-size: var(--t-secondary); color: var(--text);
 }
 .askstage .askstage-letter {
   flex: none; display: inline-grid; place-items: center;

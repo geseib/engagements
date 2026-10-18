@@ -24,10 +24,14 @@ describe('host page (two surfaces)', () => {
     expect(HOST).toMatch(/onPreviewEnd: \(\) => setQrMode\(\(mode\) => \(mode === 'pinned' \|\| twoSurfaces \? mode : null\)\)/);
   });
   test('it publishes whenever what this page shows differs from what the screens show', () => {
-    expect(HOST).toMatch(/if \(pinned === joinOnServerRef\.current\) return;\s*joinOnServerRef\.current = pinned;\s*if \(publishFocusRef\.current\) publishFocusRef\.current\(\{ focus: pinned \? 'join' : 'none' \}\)/);
+    // Since 18 Oct 2026 the join code is its own fact, `{ join }`, on
+    // /stage-focus: `focus: 'none'` no longer takes it down.
+    expect(HOST).toMatch(/if \(pinned === joinOnServerRef\.current\) return;\s*joinOnServerRef\.current = pinned;\s*if \(publishFocusRef\.current\) publishFocusRef\.current\(\{ join: pinned \}\)/);
   });
   test('a join frame (its own echo included) records the screens and pins it here; anything else takes it down', () => {
-    expect(HOST).toMatch(/if \(focus\.focus === 'join'\) \{\s*joinOnServerRef\.current = true;\s*setQrMode\('pinned'\);/);
+    // `joinUp` is the frame's `join`, or a legacy `focus: 'join'`.
+    expect(HOST).toMatch(/const joinUp = typeof data\.join === 'boolean' \? data\.join : focus\.focus === 'join';/);
+    expect(HOST).toMatch(/if \(joinUp\) \{\s*joinOnServerRef\.current = true;\s*setQrMode\('pinned'\);/);
     expect(HOST).toMatch(/else if \(joinOnServerRef\.current\) \{\s*joinOnServerRef\.current = false;/);
   });
   test('no one-shot "from the server" flag survives (the swallowed take-down, 2026-10-13)', () => {
@@ -45,13 +49,14 @@ describe('host page (two surfaces)', () => {
 describe('Remote', () => {
   test('the panel button reads Display on screen and toggles the join focus', () => {
     expect(REMOTE).toMatch(/joinOnWall \? 'Take it off the screen' : 'Display on screen'/);
-    expect(REMOTE).toMatch(/setStageFocus\(joinOnWall \? \{ focus: 'none' \} : \{ focus: 'join' \}\)/);
+    // Since 18 Oct the QR is its own fact beside the focus: { join: true|false }.
+    expect(REMOTE).toMatch(/setStageFocus\(\{ join: !joinOnWall \}\)/);
   });
   test('a join put up elsewhere opens the Join code panel here', () => {
     expect(REMOTE).toMatch(/if \(joinOnWall\) \{\s*setJoinOpen/);
   });
   test('any tap but the panel button takes it down', () => {
-    expect(REMOTE).toMatch(/closest\('\[data-join-toggle\]'\)\) return;\s*setStageFocus\(\{ focus: 'none' \}\)/);
+    expect(REMOTE).toMatch(/closest\('\[data-join-toggle\]'\)\) return;\s*setStageFocus\(\{ join: false \}\)/);
   });
 });
 

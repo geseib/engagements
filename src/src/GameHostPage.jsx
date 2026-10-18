@@ -7,7 +7,9 @@ import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
-import { focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus } from './config/stageFocus';
+import {
+  focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus, roundOfState,
+} from './config/stageFocus';
 import RW from './config/roundWords';
 import QuickstartMenu from './components/QuickstartMenu';
 import GameSetupDialog from './components/GameSetupDialog';
@@ -18,6 +20,10 @@ import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import PollBoard from './components/stage/PollBoard';
 import QuestionCard from './components/QuestionCard';
+import {
+  roomContentFor, questionRoomData, roomTitle, textOf, OVERVIEW_FIT,
+} from './config/roomContent';
+import { stagePageSizeFor } from './components/stage/roomPaging';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -44,6 +50,7 @@ import WavelengthSessionVocabulary from './components/stage/WavelengthSessionVoc
 import Dock from './components/stage/Dock';
 import Pager from './components/stage/Pager';
 import StageGathering from './components/stage/StageGathering';
+import StageJoinPanel from './components/stage/StageJoinPanel';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
@@ -55,7 +62,7 @@ import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
 import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
-  pageSizeFor, resultsPageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
+  pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
 import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
@@ -174,13 +181,22 @@ const SURVEY_READ_STATES = new Set(['SURVEY#OPEN', 'SURVEY#CLOSED', 'ENDED']);
  * wherever the host can put a response up, the question can go back up too.
  * One screen: it opens the question large, over the stage. Two screens: the
  * same press puts it on the wall (expandQuestion publishes the focus).
+ *
+ * THE TITLE AS THE REMINDER (owner, 18 Oct 2026, docs/design/room-content-v2
+ * frames 4 and 5; config/roomContent.js VOTING and RESULTS): the round's title
+ * at the primary step above the answers, title-cased when the set wrote it in
+ * capitals. Support, and essential — no data-drop: the fitter may not take
+ * away the one line saying what is being voted on or what the result is of.
  */
+/** The words on the results' top card (docs/design/room-content-v2 frame 5). */
+const RESULTS_PICK = "The room's pick";
+
 function StageQuestionRecap({ question, onOpen }) {
   return (
-    <p
-      className="recap is-openable"
-      data-drop="4"
-      data-drop-note="The prompt"
+    <h2
+      className="q-remind is-openable"
+      data-rc-part="title"
+      data-rc="support"
       role="button"
       tabIndex={0}
       aria-label="Show the question on the screen"
@@ -192,8 +208,8 @@ function StageQuestionRecap({ question, onOpen }) {
         }
       }}
     >
-      {question.title || question.question}
-    </p>
+      {roomTitle(question.title || question.question)}
+    </h2>
   );
 }
 
@@ -521,6 +537,19 @@ function GameHostPage() {
    * deliberate act with a deliberate dismissal, so that one counts.
    */
   const [qrMode, setQrMode] = useState(null);
+  /**
+   * THE JOIN CODE AS A SIDE PANEL ON THE ONE-SCREEN STAGE (owner, 18 Oct
+   * 2026, docs/design/room-content-v2 frames 9-10). The stage-focus `join`
+   * fact as this page last heard it — from the game state on restore, from
+   * every stage-focus frame (`join`, or a legacy `focus: 'join'`), and from
+   * this page's own toggle. Independent of the answer focus. Drawn only on
+   * one screen while a round is up (`joinPanelLive`); the lobby keeps its own
+   * join block and two surfaces keep the takeover the wall and Remote share.
+   */
+  const [joinPanel, setJoinPanel] = useState(false);
+  // J on one screen calls the render's toggle through this (it is defined
+  // below the early returns, where the round and the phase are known).
+  const joinToggleRef = useRef(null);
   // No other overlay on this page has an Escape handler to fold into, so this
   // one is scoped to qrMode alone rather than joining a shared listener.
   useEffect(() => {
@@ -1143,6 +1172,9 @@ function GameHostPage() {
     With the switch off, the profile stays this browser's own, as before.
   */
   const twoSurfaces = twoSurfacesHere(currentGameType);
+  // For the socket handlers, registered once: which kind of host page this is now.
+  const twoSurfacesRef = useRef(twoSurfaces);
+  twoSurfacesRef.current = twoSurfaces;
   /*
     THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
     On two screens, for the round types, outside an event, the laptop renders
@@ -1261,7 +1293,9 @@ function GameHostPage() {
     const pinned = qrMode === 'pinned';
     if (pinned === joinOnServerRef.current) return;
     joinOnServerRef.current = pinned;
-    if (publishFocusRef.current) publishFocusRef.current({ focus: pinned ? 'join' : 'none' });
+    // The join code is its own fact on /stage-focus (`{ join }`, 18 Oct 2026):
+    // `focus: 'none'` no longer takes it down, so both directions send `join`.
+    if (publishFocusRef.current) publishFocusRef.current({ join: pinned });
   }, [qrMode, twoSurfaces]);
 
   // J PUTS THE JOIN CODE UP AND TAKES IT DOWN, on the laptop as on the
@@ -1276,6 +1310,23 @@ function GameHostPage() {
       if (t && typeof t.closest === 'function' && t.closest('.setup-panel')) return;
       e.preventDefault();
       setQrMode((mode) => (mode ? null : 'pinned'));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [twoSurfaces]);
+
+  // ON ONE SCREEN, J SHOWS AND HIDES THE QR SIDE PANEL while a round is up
+  // (owner, 18 Oct 2026: "Press it again to hide the panel"). The same guards
+  // as above; outside a round the key does nothing here.
+  useEffect(() => {
+    if (twoSurfaces) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'j' && e.key !== 'J') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented) return;
+      const t = e.target;
+      if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return;
+      if (t && typeof t.closest === 'function' && t.closest('.setup-panel')) return;
+      if (joinToggleRef.current && joinToggleRef.current()) e.preventDefault();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -2912,9 +2963,15 @@ Focus on actionable business strategy insights.`;
       setWallFocus(focus.focus);
       setLessonExpanded(next.lessonExpanded);
       setSpotlightIndex(next.spotlightIndex);
+      // THE QR SIDE PANEL (one screen): the frame's `join` fact, or a legacy
+      // `focus: 'join'` read as join on. Never the full-screen takeover here.
+      const joinUp = typeof data.join === 'boolean' ? data.join : focus.focus === 'join';
+      setJoinPanel(joinUp);
       // The join code, put up or taken down on any surface (this page's own
       // echo included): record what the screens show, then match it here.
-      if (focus.focus === 'join') {
+      if (!twoSurfacesRef.current) {
+        joinOnServerRef.current = joinUp;
+      } else if (joinUp) {
         joinOnServerRef.current = true;
         setQrMode('pinned');
       } else if (joinOnServerRef.current) {
@@ -3298,6 +3355,10 @@ Focus on actionable business strategy insights.`;
           this once the rows are in and the count is real.
         */
         pendingFocusRef.current = gameStateData.stageFocus || null;
+        // The QR side panel is part of the same durable fact (`join`, or a
+        // legacy `focus: 'join'`), restored with it.
+        setJoinPanel(Boolean(gameStateData.stageFocus
+          && (gameStateData.stageFocus.join === true || gameStateData.stageFocus.focus === 'join')));
         focusRevRef.current = Number.isInteger(gameStateData.stageFocus?.rev) ? gameStateData.stageFocus.rev : null;
         // A reload on What we heard comes back on the page the room was on.
         if (hostPhaseForBeat(phaseOfGameState(gameStateData.state), gameStateData.stageBeat) === 'FIELD_NOTES'
@@ -6306,7 +6367,7 @@ Focus on actionable business strategy insights.`;
     let pageText = '';
     let notesReady = false;
     if (phase === 'RESULTS') {
-      const slice = pageSlice(answers, rawIndex, resultsPageSizeFor(profile));
+      const slice = pageSlice(answers, rawIndex, stagePageSizeFor('RESULTS', profile, answers));
       page = slice.page;
       pages = slice.pages;
     } else if (phase === 'FIELD_NOTES') {
@@ -6515,6 +6576,8 @@ Focus on actionable business strategy insights.`;
           });
         }}
         onClose={() => setShowQuickstartMenu(false)}
+        roomScreen={roomScreenChoice}
+        onRoomScreen={chooseRoomScreen}
       />
     );
   }
@@ -7557,9 +7620,10 @@ Focus on actionable business strategy insights.`;
    * label page two's first card "Response 1" on the projector while twelve
    * phones called it "Response 4".
    */
-  // RESULTS cards are ideas first and taller (config/stagePaging.js
-  // RESULTS_PAGE_SIZE, measured): fewer per page there than when voting.
-  const stagePageSize = hostPhase === 'RESULTS' ? resultsPageSizeFor(profile) : pageSizeFor(profile);
+  // VOTING shows every answer at once when they fit (overviewFits), RESULTS
+  // the pick and its runners-up (owner, 18 Oct 2026; components/stage/
+  // roomPaging.js beside the numbers). Every other phase reads stagePaging.
+  const stagePageSize = stagePageSizeFor(hostPhase, profile, answers);
   const pageKey = `${hostPhase}#${lessonNumber}`;
   /* ONE INDEX FOR THE WHOLE STAGE, because the states that page are mutually
      exclusive and the key already carries the phase. FIELD_NOTES pages prose
@@ -7580,6 +7644,15 @@ Focus on actionable business strategy insights.`;
   // The RESULTS cards' share bars are backing relative to the top idea, over
   // the whole round (not the page): computed once here, not per card.
   const resultsTopPoints = answers.reduce((m, a) => Math.max(m, (a && a.points) || 0), 0);
+  // The answers past this page, said once under the runners-up ("and 5 more").
+  const resultsMore = Math.max(0, answers.length - (answerPage.offset + answerPage.items.length));
+  // RESULTS as config/roomContent.js decides it: the talk line, the first part
+  // the fitter may give up (TALK_LINE unless Workie has a topic of its own).
+  const resultsRoom = roomContentFor('RESULTS', profile, { title: currentQuestion ? (currentQuestion.title || '') : '' });
+  // How long a response may run in the one-screen spotlight before it pages
+  // into parts (frame 11): the room content's per-answer overview budget,
+  // doubled — the spotlight has the whole screen for one answer.
+  const spotlightPartChars = (OVERVIEW_FIT[profile] || OVERVIEW_FIT.room).each * 2;
 
   // AUTO-MODE'S HANDS — see the effect above the early returns. Assigned by
   // the same render that draws the stage, so when the timer fires it presses
@@ -7688,6 +7761,21 @@ Focus on actionable business strategy insights.`;
   // eslint-disable-next-line no-use-before-define
   publishFocusRef.current = (focus) => publishFocus(focus);
   const publishFocus = (focus) => {
+    // THE QR SIDE PANEL'S FACT, `{ join: true|false }` (owner, 18 Oct 2026):
+    // independent of the answer focus, so it travels alone and changes no
+    // wall focus here. Round-addressed like every other focus.
+    if (focus && typeof focus.join === 'boolean') {
+      const round = roundOfState(gameStateRef.current);
+      if (round === null) return;
+      authFetch(`${API_BASE}games/${gameId}/stage-focus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ join: focus.join, questionNumber: Number(round) }),
+      }).catch((error) => {
+        console.warn('⚠️ STAGE FOCUS: the room was not told about the join code:', error?.message);
+      });
+      return;
+    }
     const body = focusRequest({ ...focus, state: gameStateRef.current });
     // No round on screen — nothing can be focused, so there is nothing to say.
     if (!body) return;
@@ -7700,6 +7788,32 @@ Focus on actionable business strategy insights.`;
     }).catch((error) => {
       console.warn('⚠️ STAGE FOCUS: the room was not told:', error?.message);
     });
+  };
+
+  /*
+    SHOW THE QR, ON ONE SCREEN (owner, 18 Oct 2026, docs/design/room-content-v2
+    frames 9-10). While a round is up the host's show-QR controls — the rail's
+    code, J, the Session panel's "show the join code" — toggle a side panel and
+    send `{ join: !current }` to /stage-focus, rather than covering the stage
+    with the expanded-QR overlay. Outside a round (and in the lobby, which has
+    its own join block) they keep the overlay. Two surfaces are untouched: the
+    wall and the Remote share the `join` focus there.
+  */
+  const joinPanelAllowed = !twoSurfaces && hostPhase !== 'LOBBY' && roundOfState(gameState) !== null;
+  const joinPanelLive = joinPanelAllowed && joinPanel;
+  const setJoinOnStage = (next) => {
+    setJoinPanel(next);
+    setQrMode(null);
+    publishFocus({ join: next });
+  };
+  const showJoinCode = () => {
+    if (joinPanelAllowed) setJoinOnStage(!joinPanel);
+    else setQrMode('pinned');
+  };
+  joinToggleRef.current = () => {
+    if (!joinPanelAllowed) return false;
+    setJoinOnStage(!joinPanel);
+    return true;
   };
 
   /**
@@ -7947,6 +8061,17 @@ Focus on actionable business strategy insights.`;
     return played.concat(now, planned);
   })();
   const consoleTask = currentQuestion ? getHostInstructionText(currentQuestion) : '';
+  /*
+    THE QUESTION'S WORDS FOR THE ROOM (config/roomContent.js questionRoomData),
+    once, for the stage's ASK card and the console's answering panel: the
+    lesson with the question pulled out of its front, the task, and whether the
+    task is the question's own ("Your turn") or the set's default. Read from
+    the record the instruction resolves against, so the two agree.
+  */
+  const askRecord = currentQuestionOf(questions, currentQuestionId) || currentQuestion;
+  const askRoomData = currentGameType === 'call-and-answer' && askRecord
+    ? questionRoomData(askRecord, { task: getHostInstructionText(askRecord), sessionTitle: eventTitle })
+    : null;
   const consoleAuthorsHidden = authorsHiddenNow({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed });
   const consoleKicker = (label) => [workflow && workflow.round ? workflow.round.label : '', label].filter(Boolean).join(' · ');
   // The one line roundStep writes for what the main button puts up next.
@@ -8030,16 +8155,16 @@ Focus on actionable business strategy insights.`;
       case 'LOBBY':
         return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
-        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} task={consoleTask} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
         // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
-        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
         return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;
@@ -8158,6 +8283,8 @@ Focus on actionable business strategy insights.`;
           stagePageIndex,
           loadingAIInsights, currentAIInsights ? 1 : 0,
           wavelengthFitKey, surveyFitKey,
+          // The QR side panel narrows the content's column: re-measure.
+          joinPanelLive ? 'join' : '',
         ].join('|')}
         strip={workflow
           ? (
@@ -8221,7 +8348,7 @@ Focus on actionable business strategy insights.`;
                        J, takes it down; the classic page keeps its hover preview. */
                     onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : (twoSurfaces ? 'pinned' : 'preview'))),
                     onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' || twoSurfaces ? mode : null)),
-                    onPin: () => setQrMode('pinned'),
+                    onPin: showJoinCode,
                   })
               : {}}
           />
@@ -8348,7 +8475,16 @@ Focus on actionable business strategy insights.`;
             content, in every state" — the check that was missing when a dense
             ASK threw away the question's full prompt and kept a host-only
             Reveal Authors button plus its two-line explanation. */}
-        <div className="content" data-grow={STAGE_GROW[hostPhase] || '1'}>
+        {/* THE QR AS A SIDE PANEL, NOT A TAKEOVER (owner, 18 Oct 2026,
+            docs/design/room-content-v2 frames 9-10): "it moves the screen
+            around a bit so all content is there but the qr code is avail."
+            `[data-join]` lays the content out in a narrower column with the
+            join block on the right; the fitter re-measures (fitKey) and steps
+            the type down, and nothing leaves the screen. */}
+        <div className="content" data-join={joinPanelLive ? '1' : undefined} data-grow={STAGE_GROW[hostPhase] || '1'}>
+          {joinPanelLive && gameId && (
+            <StageJoinPanel playUrl={playUrl} joinUrl={joinDisplayUrl} code={eventCode || gameId} />
+          )}
           <div className="fitbox">
 
             {hostPhase === 'LOBBY' && (
@@ -8420,6 +8556,14 @@ Focus on actionable business strategy insights.`;
                 2026-09-19 §2.3), so the two cannot drift. The click-to-expand
                 recovery and the wavelength rule that used to be written here
                 are explained there, beside the markup they govern. */}
+            {/* WHAT THE ROOM SEES (owner, 18 Oct 2026, docs/design/room-content-v2):
+                a Call & Answer round draws the parts config/roomContent.js
+                names for this profile, from the same call the room's window
+                makes — the title leads, the lesson under it, the question's
+                own instruction in "Your turn". `askRoomData` reads the same
+                question record the instruction is resolved from, so its own
+                instruction (customInstructions) decides "Your turn". Other
+                types keep the card's own DOM. */}
             {hostPhase === 'ASK' && currentQuestion && (
               <QuestionCard
                 phase="ASK"
@@ -8427,6 +8571,9 @@ Focus on actionable business strategy insights.`;
                 gameType={currentGameType}
                 instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
                 onExpand={expandQuestion}
+                room={askRoomData
+                  ? roomContentFor('ANSWERING', profile, askRoomData)
+                  : null}
               />
             )}
 
@@ -8438,7 +8585,16 @@ Focus on actionable business strategy insights.`;
 
             {hostPhase === 'VOTE' && (
               <>
-                <div className="kicker">
+                {/* THE CUE, THE TITLE, EVERY ANSWER (owner, 18 Oct 2026,
+                    docs/design/room-content-v2 frame 4): "nice to see a bar
+                    chart results but not at the expense of seeing what was
+                    voted on". The cue is a small kicker, the title the
+                    reminder, and the answers lead: whole, numbered so the room
+                    can name one out loud, at the secondary step. No name, no
+                    points, no rank and no tally while voting (owner,
+                    2026-10-12), so the first votes cannot steer the rest; how
+                    many have voted is the meter's. */}
+                <div className="kicker" data-rc-part="cue" data-rc="kicker">
                   {currentQuestion?.image ? 'Vote for the best title' : 'Vote for the best response'}
                 </div>
                 {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
@@ -8458,9 +8614,10 @@ Focus on actionable business strategy insights.`;
                     which is right until there are more responses than stage —
                     at which point the tail was simply cut off, with nothing on
                     screen saying so.
-                    A page is the middle: as many as the profile can hold, a
-                    printed position, and two keys the room can read off the
-                    line itself. */}
+                    A page is the middle: all of them when they fit
+                    (overviewFits, components/stage/roomPaging.js), else as
+                    many as the profile can hold, a printed position, and two
+                    keys the room can read off the line itself. */}
                 <StageGathering
                   status={stageResponsesStatus}
                   noun={stageGatheringNoun(gameState)}
@@ -8472,10 +8629,10 @@ Focus on actionable business strategy insights.`;
                 {/* OPENABLE DURING VOTING TOO (owner, 2026-10-13): a card puts
                     that response on the wall exactly as results do, in the
                     voting order every ballot shows (`answers` here is
-                    /answers/host, already in that order), and ALWAYS as
-                    "Response N" — never a name during voting, whatever the
-                    round's names setting, so a shared laptop cannot leak one. */}
-                <div className="cards">
+                    /answers/host, already in that order), and ALWAYS by its
+                    number — never a name during voting, whatever the round's
+                    names setting, so a shared laptop cannot leak one. */}
+                <div className={`cards is-ballot${answerPage.items.length > 1 ? ' is-two' : ''}`} data-rc-part="answers" data-rc="lead">
                   {stageResponsesReady && answerPage.items.map((answer, i) => {
                     const idx = answerPage.offset + i;
                     const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
@@ -8498,16 +8655,19 @@ Focus on actionable business strategy insights.`;
                           }
                         }}
                       >
+                        <span className="num" aria-hidden="true">{idx + 1}</span>
                         <div className="body">
-                          <div className="ans">{`“${answerText(answer.answer)}”`}</div>
-                          <span className="who anon">{label}</span>
+                          <div className="ans">{answerText(answer.answer)}</div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                {/* One screen: the response opens here. Two surfaces: it is on
-                    the wall, and the card above is marked instead. */}
+                {/* One screen: the response opens here, numbered, with chips
+                    saying where it sits (frame 11); → and ← step (through the
+                    parts of a long one first), Esc goes back to all of them.
+                    Two surfaces: it is on the wall, and the card above is
+                    marked instead. */}
                 <AnswerSpotlight
                   surfaceClassName="stage-spot"
                   answers={answers}
@@ -8517,6 +8677,8 @@ Focus on actionable business strategy insights.`;
                   showPoints={false}
                   labelFor={(answer, idx) => navigatorLabel(answer, idx, { phase: 'VOTE' })}
                   title={`Round ${lessonNumber} response`}
+                  variant="vote"
+                  partChars={spotlightPartChars}
                 />
                 {stageResponsesReady && (
                   <Pager
@@ -8649,11 +8811,27 @@ Focus on actionable business strategy insights.`;
                      are a small credit, only while the names show; the top
                      card is outlined (.lead). The share is backing relative to
                      the top idea, a proportion and never a score, so it stays
-                     in a round whose names are hidden. */
+                     in a round whose names are hidden.
+
+                     THE PICK IN FULL, THE BARS BEHIND THE WORDS (owner, 18 Oct
+                     2026, docs/design/room-content-v2 frame 5): "nice to see a
+                     bar chart results but not at the expense of seeing what
+                     was voted on. think of what is important to take away and
+                     discuss." The title is the reminder; the top idea sits in
+                     a card marked "The room's pick" (the skin's gold role);
+                     the runners-up keep their text, each with its bar as the
+                     fill BEHIND it, relative to the pick, so the chart and
+                     what was voted on are one thing. No count, no points and
+                     no percentage while names are hidden — a number beside an
+                     answer lets its author be worked out (16 Oct). A named
+                     round keeps the credit line and the points. The rest
+                     collapse into "and N more answers", still reachable
+                     through the Pager; "Talk about it" gives the host a way in
+                     without asking anyone to own up, and is the first thing
+                     the fitter may give up. */
                   <>
-                  <div className="kicker">{RW.whatTheRoomBacked}</div>
                   {currentQuestion && <StageQuestionRecap question={currentQuestion} onOpen={expandQuestion} />}
-                  <div className="cards is-ideas">
+                  <div className="cards is-ideas" data-rc-part="ideas" data-rc="lead">
                     {answerPage.items.map((answer, i) => {
                       const idx = answerPage.offset + i;
                       const points = answer.points || 0;
@@ -8705,10 +8883,11 @@ Focus on actionable business strategy insights.`;
                         button element would need every one of those properties
                         reset, and it must stay a legal parent for the tally.
                       */
+                      const pick = answer.placement === 1;
                       return (
                         <div
                           key={idx}
-                          className={`card is-openable ${answer.placement === 1 ? 'lead' : ''}`}
+                          className={`card is-openable ${pick ? 'lead is-pick' : 'is-runner'}`}
                           role="button"
                           tabIndex={0}
                           aria-label={`Read this answer in full: ${displayName}`}
@@ -8720,19 +8899,35 @@ Focus on actionable business strategy insights.`;
                             }
                           }}
                         >
-                          {/* "1st", not "1" — the owner's word for it. */}
-                          <span className="rank">{placeLabel(answer.placement)}</span>
+                          {/* The bar is the fill behind the runner's words,
+                              relative to the pick; the pick's card is the
+                              whole bar. A proportion, never a figure. */}
+                          {!pick && (
+                            <span className="fill" aria-hidden="true" style={{ width: `${Math.max(3, Math.round(share * 100))}%` }} />
+                          )}
+                          {/* "2nd", not "2" — the owner's word for it. The
+                              pick says what it is in words instead. */}
+                          {!pick && <span className="rank">{placeLabel(answer.placement)}</span>}
                           <div className="body">
+                            {pick && <span className="pick-k">{RESULTS_PICK}</span>}
                             <div className="ans">{answerText(answer.answer)}</div>
                             {showPoints && (
                               <span className="who revealed">{RW.backedCredit(points, displayName)}</span>
                             )}
                           </div>
-                          <span className="share" aria-hidden="true" style={{ width: `${Math.max(3, Math.round(share * 100))}%` }} />
                         </div>
                       );
                     })}
                   </div>
+                  {resultsMore > 0 && (
+                    <p className="more-answers">{`and ${resultsMore} more ${resultsMore === 1 ? 'answer' : 'answers'}`}</p>
+                  )}
+                  {textOf(resultsRoom, 'talk') && (
+                    <p className="talk" data-rc-part="talk" data-rc="support" data-drop="3" data-drop-note="Talk about it">
+                      <span className="talk-k">Talk about it</span>
+                      <span className="talk-t">{textOf(resultsRoom, 'talk')}</span>
+                    </p>
+                  )}
                   </>
                 )}
 
@@ -8809,6 +9004,13 @@ Focus on actionable business strategy insights.`;
                     }),
                   })}
                   title={`Round ${lessonNumber} response`}
+                  /* ONE RESULT, PUT UP (frame 12): its place ("2nd") and a
+                     ladder of bars beside it, relative to the pick, saying
+                     where it sits — numbers only while the names show. */
+                  variant={phaseOfGameState(gameState) === 'VOTE' ? 'vote' : 'result'}
+                  placeFor={(answer) => placeLabel(answer.placement)}
+                  shareFor={(answer) => (resultsTopPoints > 0 ? (answer.points || 0) / resultsTopPoints : 0)}
+                  partChars={spotlightPartChars}
                 />
               </>
             )}
@@ -9116,7 +9318,7 @@ Focus on actionable business strategy insights.`;
             createdAt: gameCreatedAt,
           })}
           suppressKeys={Boolean(inviteTarget)}
-          onShowJoinCode={() => setQrMode('pinned')}
+          onShowJoinCode={showJoinCode}
           profile={profile}
           onProfileChange={setProfile}
           roomScreen={twoSurfaces ? 'two' : 'classic'}
@@ -9242,7 +9444,9 @@ Focus on actionable business strategy insights.`;
           overlay, same dismissal: the room only ever needs one way in.
           The preview modifier keeps the backdrop pointer-transparent -- see
           the class's comment in styles.css for why. */}
-      {(showExpandedQR || qrMode) && (
+      {/* On one screen during a round the QR is the side panel (joinPanelLive),
+          so the rail's hover preview no longer covers the stage there. */}
+      {(showExpandedQR || (qrMode && !(joinPanelAllowed && qrMode === 'preview'))) && (
         <div
           className={qrOverlayClassName(qrMode)}
           onClick={() => { setShowExpandedQR(false); setQrMode(null); }}

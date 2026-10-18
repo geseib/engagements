@@ -60,10 +60,42 @@ export function queueItems(room) {
     .map((a) => ({ type: 'ask', id: `ask:${a.askId}`, from: a.source === 'agent' ? 'claude' : 'you', at: a.createdAt || '', ask: a }));
   const ideas = (room.ideas || []).filter((i) => i.status === 'new')
     .map((i) => ({ type: 'idea', id: `idea:${i.ideaId}`, from: i.source === 'host' ? 'you' : 'room', at: i.createdAt || '', idea: i }));
+  // THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts waiting to be released to the room.
+  const posts = heldPosts(room)
+    .map((l) => ({ type: 'post', id: `post:${l.logId}`, from: 'claude', at: l.createdAt || '', entry: l }));
   const byAge = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
   const claude = asks.filter((x) => x.from === 'claude').sort(byAge);
-  const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas].sort(byAge);
+  const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas, ...posts].sort(byAge);
   return [...claude, ...rest];
+}
+
+/** Claude's posts (and screenshots) waiting for the host to release them to the room, oldest first. */
+export function heldPosts(room) {
+  return ((room && room.log) || []).filter((l) => l.roomHold === 'held');
+}
+
+/** The picture a post carries: a screenshot's entry names its image in `detail`. */
+export const postImageId = (entry) => (entry && entry.kind === 'image' ? entry.detail || null : null);
+
+/**
+ * WHAT THE ROOM MAY SEE OF THE HOST'S READ (§2c): the laptop's own Stage,
+ * Build and History are projected, so they draw the room's copy: no post or
+ * screenshot the host has not released, no picture for an ask the room has
+ * not seen. Everything else is the host's read as it is.
+ */
+export function roomSees(room) {
+  if (!room) return room;
+  const log = room.log || [];
+  const images = room.images || [];
+  if (!log.some((l) => l.roomHold) && !images.some((i) => i.roomHold || i.askId)) return room;
+  const unseen = new Set((room.asks || []).filter((a) => ['proposed', 'discarded'].includes(a.status)).map((a) => a.askId));
+  const pics = images.filter((i) => !i.roomHold && !(i.askId && unseen.has(i.askId)));
+  const picIds = new Set(pics.map((i) => i.imageId));
+  return {
+    ...room,
+    log: log.filter((l) => !l.roomHold && (l.kind !== 'image' || picIds.has(l.detail))),
+    images: pics,
+  };
 }
 
 // ── The Host alert (docs/design/build-room-host-alert, owner 2026-10-10) ────
@@ -112,17 +144,21 @@ export function hostAlert(room, local, { demoReady = false } = {}) {
     // One rule: a look is as new as its last version. A new version has a new id, so one the host opened counts again.
     .map((s) => { const at = s.updatedAt || s.createdAt || ''; return { id: `share:${s.shareId}#${at.replace(/\D/g, '').slice(0, 17)}`, at }; })
     .filter((x) => fresh(x.id, x.at)).sort(byAt);
+  // Claude's posts waiting to be released (§2c): grey, fixed words, never the post's own.
+  const posts = heldPosts(room).map((l) => ({ id: `post:${l.logId}`, at: l.createdAt || '' }))
+    .filter((x) => fresh(x.id, x.at)).sort(byAt);
   const ids = (list) => list.map((x) => x.id);
   const lines = [];
   if (questions.length) lines.push({ key: 'question', label: W.alertQuestion(questions.length), go: W.alertOpen, ids: ids(questions), target: { kind: 'ask', id: questions[0].askId } });
   if (mockups.length) lines.push({ key: 'mockups', label: W.alertMockups(mockups.length, mockups[0].a.options.length), go: W.alertSee, ids: ids(mockups), target: { kind: 'ask', id: mockups[0].askId } });
   if (ideas.length) lines.push({ key: 'ideas', label: W.alertIdeas(ideas.length), go: W.alertReview, ids: ids(ideas), target: { kind: 'waiting' } });
   if (looks.length) lines.push({ key: 'looks', label: W.alertLooks(looks.length), go: W.alertReview, ids: ids(looks), target: { kind: 'waiting' } });
+  if (posts.length) lines.push({ key: 'posts', label: W.alertPosts(posts.length), go: W.alertReview, ids: ids(posts), target: { kind: 'waiting' } });
   // SHARE DEMO on the Stage (docs/design/build-room-share-demo D1 B): one grey line, last; the
   // page passes `demoReady` for the Stage only (Build and History carry it on the header chip).
   if (demoReady) lines.push({ key: 'demo', label: W.demoReadyLine, go: W.alertShare, ids: [], target: { kind: 'share' } });
   return {
-    count: questions.length + mockups.length + ideas.length + looks.length + (demoReady ? 1 : 0),
+    count: questions.length + mockups.length + ideas.length + looks.length + posts.length + (demoReady ? 1 : 0),
     amber: questions.length + mockups.length > 0,
     lines,
   };
@@ -263,7 +299,7 @@ export function doingLine(doing, now) {
 /**
  * `host: true` is the host's own screen: the line speaks to the host, never about
  * them (`continueOn`: the Continue prompt button is on that screen).
- * @returns {{ key: 'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
+ * @returns {{ key: 'sent'|'building'|'waiting'|'paused'|'none', headline: string, line: string, since: string|null }}
  */
 export function claudeState(room, now, opts = {}) {
   // A line Claude or its to-do list gave wins, unless Claude is waiting for direction.
@@ -273,10 +309,87 @@ export function claudeState(room, now, opts = {}) {
   return dl && !dl.text && dl.helperLine ? { ...st, helperLine: dl.helperLine } : st;
 }
 
+// SENT TO CLAUDE (docs/design/build-room-ideas I9, owner 18 Oct 2026): from
+// the moment something goes to Claude the headline says so, until Claude says
+// what it is doing. Once Claude's inbox took it, at most this long more.
+export const SENT_PICKED_HOLD_MS = 2 * 60 * 1000;
+/** The host is told Claude has not taken it after this long (never the room). */
+export const SENT_UNPICKED_WARN_MS = 2 * 60 * 1000;
+
+/** The read's `sent` (build-store.js sentView), checked; null when none. */
+export function sentOf(room) {
+  const s = room && room.sent;
+  if (!s || typeof s !== 'object' || !Number.isFinite(timeOf(s.at))) return null;
+  return {
+    verb: ['decided', 'asked', 'told'].includes(s.verb) ? s.verb : 'told',
+    text: typeof s.text === 'string' ? s.text.trim() : '',
+    askId: typeof s.askId === 'string' && s.askId ? s.askId : null,
+    at: s.at,
+    pickedAt: Number.isFinite(timeOf(s.pickedAt)) ? s.pickedAt : null,
+  };
+}
+
+/**
+ * THE RESULT STAYS UP WHILE IT IS "SENT TO CLAUDE" (docs/design/room-content-v2
+ * frame 8, owner 18 Oct 2026): once the host sends the room's decision, the
+ * Stage keeps that ask's result on the wall, with the direction in a "Sent to
+ * Claude" band, for exactly as long as the one Sent to Claude state lasts
+ * (claudeState key 'sent', I9). When Claude says what it is doing, the Stage
+ * moves on to Claude's status and the work row (I10), as before. Null when
+ * nothing qualifies: the current ask must be the decided one that was sent.
+ */
+export function sentStageAsk(room, now) {
+  const sent = sentOf(room);
+  if (!sent || sent.verb !== 'decided' || !sent.askId || !room || room.currentAskId !== sent.askId) return null;
+  const ask = (room.asks || []).find((a) => a.askId === sent.askId && a.status === 'decided');
+  if (!ask || ask.wheel || !['choice', 'rating', 'suggest'].includes(ask.kind)) return null;
+  if (ask.decision && ask.decision.sentToAgent === false) return null;
+  return claudeState(room, now).key === 'sent' ? ask : null;
+}
+
+/** Longest reason the room's best is allowed to be, in characters, before a shorter one is preferred. */
+export const BEST_WHY_MAX = 180;
+
+/**
+ * THE ROOM'S BEST REASON FOR ITS PICK (frame 8): of the reasons given for the
+ * winning option, the fullest one that still reads at a glance (≤ BEST_WHY_MAX),
+ * else the shortest. Words only: a reason never carries its author here.
+ */
+export function bestWhy(whys, label) {
+  const mine = (Array.isArray(whys) ? whys : [])
+    .filter((w) => w && w.label === label && typeof w.text === 'string' && w.text.trim())
+    .map((w) => w.text.trim());
+  if (!mine.length) return '';
+  const fits = mine.filter((t) => t.length <= BEST_WHY_MAX);
+  if (fits.length) return fits.reduce((a, b) => (b.length > a.length ? b : a));
+  return mine.reduce((a, b) => (b.length < a.length ? b : a));
+}
+
+/** The headline while Claude has not yet said what it is doing with what was sent. Null otherwise. */
+function sentState(room, now, { host = false } = {}, dl = null) {
+  const sent = sentOf(room);
+  if (!sent) return null;
+  const at = new Date(now).getTime();
+  const sentMs = timeOf(sent.at);
+  const log = (room && room.log) || [];
+  // Claude saying anything after the send ends it: a doing line, or a post.
+  const said = log.some((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && timeOf(l.createdAt) > sentMs);
+  if (said || (dl && timeOf(dl.startedAt) > sentMs)) return null;
+  const pickedMs = sent.pickedAt ? timeOf(sent.pickedAt) : NaN;
+  if (Number.isFinite(pickedMs) && at - pickedMs > SENT_PICKED_HOLD_MS) return null;
+  let line;
+  if (Number.isFinite(pickedMs)) line = W.sentPicked(clockOf(sent.pickedAt));
+  else if (host && at - sentMs > SENT_UNPICKED_WARN_MS) line = W.sentNotPicked;
+  else line = W.sentWaiting(clockOf(sent.at));
+  return { key: 'sent', headline: W.sentHeadline, line, since: sent.at, sent };
+}
+
 function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = null) {
   const at = new Date(now).getTime();
   const agent = (room && room.agent) || {};
   const log = (room && room.log) || [];
+  const sentSt = sentState(room, now, { host }, dl);
+  if (sentSt) return sentSt;
   if (dl && !dl.stale) {
     return { key: 'building', headline: dl.headline, line: dl.helperLine, since: dl.startedAt, doing: dl };
   }
@@ -317,6 +430,84 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
   }
   return { key: 'none', headline: 'Waiting for Claude Code', line: '', since: null };
 }
+
+/**
+ * THE STAGE'S RIGHT COLUMN (I9): the newest thing that went to Claude, word
+ * for word ("We told Claude" / "We asked Claude"), or the room's latest
+ * decision ("We decided") when that is newer or is what was sent.
+ * @returns {{ label: string, text: string, at: string|null } | null}
+ */
+export function stageSide(room) {
+  const sent = sentOf(room);
+  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision)
+    .reduce((best, a) => (!best || String(a.decidedAt) >= String(best.decidedAt) ? a : best), null);
+  const decision = latestDecisionLine(room);
+  const decidedMs = decided ? timeOf(decided.decidedAt) : NaN;
+  if (sent && sent.verb !== 'decided' && sent.text && !(timeOf(sent.at) < decidedMs)) {
+    return { label: sent.verb === 'asked' ? W.weAskedClaude : W.weToldClaude, text: `\u201c${sent.text}\u201d`, at: sent.at };
+  }
+  return decision ? { label: W.weDecided, text: decision, at: decided ? decided.decidedAt || null : null } : null;
+}
+
+// THE STAGE'S ROW (I10): what Claude's tools say about the work since the last
+// thing went to Claude. The plugin (1.24.0) marks a test run, a look at the
+// running demo and a commit; an edit after a failed test run is Fixing.
+export const WORK_PHASES = Object.freeze(['Building', 'Testing', 'Fixing', 'Checking', 'Saved']);
+const WORK_WINDOW_MS = 20 * 60 * 1000;
+const TICKER_MS = 10 * 60 * 1000;
+const TICKER_LINES = 4;
+
+/**
+ * @returns {{ phases: {name: string, state: ''|'on'|'done'|'bad'}[] | null,
+ *   tests: {passed: number|null, failed: number|null, bad: boolean} | null,
+ *   ticker: {at: string, text: string}[] } | null}
+ */
+export function workView(room, now) {
+  const at = new Date(now).getTime();
+  const sent = sentOf(room);
+  const from = Math.max(at - WORK_WINDOW_MS, sent ? timeOf(sent.pickedAt || sent.at) : -Infinity);
+  const acts = ((room && room.activity) || [])
+    .filter((a) => a && a.text && Number.isFinite(timeOf(a.at)))
+    .map((a) => ({ at: a.at, kind: a.kind, text: a.text, tests: a.tests || null, failed: a.failed === true }));
+  // Engage's own commit tool is not a hook line: its checkpoint post is the Save.
+  const saves = ((room && room.log) || []).filter((l) => l.kind === 'checkpoint' && Number.isFinite(timeOf(l.createdAt)))
+    .map((l) => ({ at: l.createdAt, kind: 'save', text: '' }));
+  const items = acts.concat(saves).filter((a) => timeOf(a.at) >= from).sort((a, b) => timeOf(a.at) - timeOf(b.at));
+  const visited = new Set();
+  let current = null;
+  let lastTest = null;
+  for (const a of items) {
+    let p = null;
+    if (a.kind === 'edit') p = lastTest && lastTest.failed ? 'Fixing' : 'Building';
+    else if (a.kind === 'test') { p = 'Testing'; lastTest = a; }
+    else if (a.kind === 'check') p = 'Checking';
+    else if (a.kind === 'save') p = 'Saved';
+    if (p) { visited.add(p); current = p; }
+  }
+  const phases = current ? WORK_PHASES.map((name) => ({
+    name,
+    state: name === 'Testing' && lastTest && lastTest.failed ? 'bad' : name === current ? 'on' : visited.has(name) ? 'done' : '',
+  })) : null;
+  const tests = lastTest ? {
+    passed: lastTest.tests ? Number(lastTest.tests.passed) || 0 : null,
+    failed: lastTest.tests ? Number(lastTest.tests.failed) || 0 : null,
+    bad: lastTest.failed,
+  } : null;
+  const ticker = acts.filter((a) => at - timeOf(a.at) <= TICKER_MS)
+    .sort((a, b) => timeOf(b.at) - timeOf(a.at)).slice(0, TICKER_LINES)
+    .map((a) => ({ at: a.at, text: a.text }));
+  if (!phases && !ticker.length) return null;
+  return { phases, tests, ticker };
+}
+
+/** "12 passed · 1 failed", or what is known without counts. */
+export function testsWords(tests) {
+  if (!tests) return '';
+  if (tests.passed === null) return tests.bad ? W.testsFailed : W.testsPassed;
+  return [tests.passed ? W.testsPassedN(tests.passed) : '', tests.failed ? W.testsFailedN(tests.failed) : ''].filter(Boolean).join(' \u00b7 ') || W.testsPassed;
+}
+
+export { clockOf };
 
 /** The latest decision as "Question: answer", or ''. */
 export function latestDecisionLine(room) {

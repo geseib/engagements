@@ -3,6 +3,7 @@ import React from 'react';
 import CW from '../../../config/consoleWords';
 import { navigatorLabel } from '../../../config/navigatorOrder';
 import StageGathering from '../../stage/StageGathering';
+import { YOUR_TURN } from '../../QuestionCard';
 
 /**
  * The responses, as the host works with them (host console spec §3.4):
@@ -21,10 +22,13 @@ import StageGathering from '../../stage/StageGathering';
  * THE QUESTION, BACK ON THE WALL (owner, 16 Oct 2026): at VOTE and RESULTS,
  * wherever a response can go up, a first row "The question" (the task text)
  * puts the question back up (`onQuestionToWall`), marked "On the wall now"
- * while the wall shows it (`questionOnWall`). The task then shows only there.
+ * while the wall shows it (`questionOnWall`). The row carries the lesson
+ * (owner, 18 Oct 2026), else the task; the task box then does not show. At
+ * RESULTS the row is "The results": pressing it takes a spotlit response down
+ * and the ranked results come back.
  */
 export default function ResponsesPanel({
-  kicker, title, task = '', phase, responses = [], authorsHidden = true,
+  kicker, title, lesson = '', task = '', taskOwn = false, phase, responses = [], authorsHidden = true,
   onWallIndex = null, onPutOnWall = null, stillWriting = 0, side = null, upNext = null,
   status = 'ready', gatheringNoun = 'responses', onRetry = null,
   questionOnWall = false, onQuestionToWall = null,
@@ -44,7 +48,13 @@ export default function ResponsesPanel({
     <section className="hc-panel">
       <p className="hc-kicker">{kicker}</p>
       <h2 className="hc-h">{title}</h2>
-      {task && !questionRow ? <div className="hc-task"><span className="hc-task-k">{CW.theTask}</span>{task}</div> : null}
+      {/* The lesson the room is answering, above the task (owner, 18 Oct 2026). */}
+      {lesson && phase === 'ASK' ? <p className="hc-lesson">{lesson}</p> : null}
+      {/* The room's label for the question's own instruction ("Your turn",
+          docs/design/room-content-v2) when it is the question's own; a set's
+          or type's default instruction stays "The task" — the host still
+          sees it here, the room does not. */}
+      {task && !questionRow ? <div className={`hc-task${taskOwn ? ' is-own' : ''}`}><span className="hc-task-k">{taskOwn ? YOUR_TURN : CW.theTask}</span>{task}</div> : null}
       <div className={`hc-cols${side ? '' : ' is-one'}`}>
         <div className="hc-resps">
           {questionRow ? (
@@ -55,8 +65,11 @@ export default function ResponsesPanel({
               onClick={onQuestionToWall}
             >
               <span className="hc-resp-body">
-                <small>{CW.theQuestion}{questionOnWall ? ` · ${CW.onTheWall}` : ''}</small>
-                {task || title}
+                {/* At RESULTS this row is the ranked results (focus none), not the
+                    question: it said "The question · On the wall now" while the
+                    wall showed the tally (walk of dev eed66685). */}
+                <small>{phase === 'RESULTS' ? CW.resultsTitle : CW.theQuestion}{questionOnWall ? ` · ${CW.onTheWall}` : ''}</small>
+                {lesson || task || title}
               </span>
             </button>
           ) : null}

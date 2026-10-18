@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import { remoteStep, requestFor } from '../config/hostRemote';
 import { presentKeyStep } from './presentKeys';
+import { joinShown, joinRequest } from '../config/stageFocus';
 
 /**
  * THE ROUND'S OWN NEXT STEP FROM THE WALL (owner, 2026-10-13: "when
@@ -74,6 +75,12 @@ async function perform(gameId, snapshot, writes) {
         ...(w.focus === 'answer' && w.parts !== undefined ? { parts: w.parts } : {}),
         questionNumber,
       };
+    } else if (w.kind === 'join') {
+      // The QR side panel alone: no focus in the body, so the server keeps the
+      // focus as it is (stage-focus.js; config/stageFocus.js joinRequest).
+      path = 'stage-focus';
+      body = joinRequest({ join: w.join, state: snapshot && snapshot.state });
+      if (!body) return false;
     } else if (w.kind === 'beat') {
       path = 'stage-beat';
       body = { beat: w.beat, questionNumber };
@@ -128,10 +135,11 @@ async function checkAccess(gameId) {
  * @param {string} p.gameId
  * @param {object|null} p.snapshot  the wall's last /state
  * @param {number} p.total          how many responses the round has
+ * @param {boolean} p.overview      every answer fits on the voting overview (presentModel)
  * @param {boolean} p.notesReady    Workie's read has arrived on the wall
  * @param {(force?: boolean) => void} p.refetch  look again after a write
  */
-export default function usePresentControls({ gameId, snapshot, total, notesReady = true, refetch }) {
+export default function usePresentControls({ gameId, snapshot, total, overview = false, notesReady = true, refetch }) {
   const [access, setAccess] = useState('checking');
   const [hostState, setHostState] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -148,7 +156,7 @@ export default function usePresentControls({ gameId, snapshot, total, notesReady
     notesReady,
     hasQuestionSet: true,
   }) : null;
-  live.current = { snapshot, total, refetch, step, access, confirm };
+  live.current = { snapshot, total, overview, refetch, step, access, confirm };
 
   const recheck = useCallback(async () => {
     if (!gameId) return 'signed-out';
@@ -230,8 +238,8 @@ export default function usePresentControls({ gameId, snapshot, total, notesReady
     let a = live.current.access;
     if (a !== 'host') a = await recheck();
     if (a !== 'host') { showStrip(); return; }
-    const { snapshot: snap, total: n } = live.current;
-    const writes = presentKeyStep(snap, dir, { total: n });
+    const { snapshot: snap, total: n, overview: fits } = live.current;
+    const writes = presentKeyStep(snap, dir, { total: n, overview: Boolean(fits) });
     if (!writes.length) {
       if (dir === 'forward') askPrimary();
       return;
@@ -247,15 +255,17 @@ export default function usePresentControls({ gameId, snapshot, total, notesReady
     }
   }, [gameId, recheck, showStrip, askPrimary, runConfirmed, closeConfirm, after]);
 
-  const joinShown = Boolean(snapshot && snapshot.stageFocus && snapshot.stageFocus.focus === 'join');
+  // THE QR SIDE PANEL (owner, 18 Oct 2026): J shows it beside the moment and
+  // takes it down again, {join: !current}; the focus is left as it is.
+  const qrShown = joinShown(snapshot && snapshot.stageFocus);
   const toggleJoin = useCallback(async () => {
     let a = live.current.access;
     if (a !== 'host') a = await recheck();
     if (a !== 'host') { showStrip(); return; }
     const snap = live.current.snapshot;
-    const shown = Boolean(snap && snap.stageFocus && snap.stageFocus.focus === 'join');
+    const shown = joinShown(snap && snap.stageFocus);
     try {
-      await perform(gameId, snap, [{ kind: 'focus', focus: shown ? 'none' : 'join' }]);
+      await perform(gameId, snap, [{ kind: 'join', join: !shown }]);
     } finally {
       after();
     }
@@ -303,6 +313,6 @@ export default function usePresentControls({ gameId, snapshot, total, notesReady
     confirmGo: runConfirmed,
     confirmCancel: closeConfirm,
     toggleJoin,
-    joinShown,
+    joinShown: qrShown,
   };
 }

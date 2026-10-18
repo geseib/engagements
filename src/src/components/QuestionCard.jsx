@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
+import {
+  shows, roleOf, sizeOf, textOf, mayDrop, ROLE,
+} from '../config/roomContent';
 
 /**
  * THE QUESTION AS THE ROOM SEES IT — one component for the stage and the
@@ -42,6 +45,16 @@ import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/que
  *
  * `instruction` IS A PROP. The stage passes getHostInstructionText(…) and the
  * preview resolveInstruction(…); the card never decides what the room is told.
+ *
+ * `room` IS WHAT THE ROOM SEES, AND HOW LARGE (owner, 17 Oct 2026): the
+ * stage passes roomContentFor('ANSWERING', profile, questionRoomData(…)) for
+ * a Call & Answer round, the same call the room's window makes
+ * (present/presentModel.js). With it, ASK draws the parts that content names
+ * (owner, 18 Oct 2026): the category eyebrow, the title as the lead (h1.q,
+ * the expand recovery on it), the lesson under it (never dropped), and the
+ * "Your turn" band when the question has its own instruction — see RoomLines.
+ * Without it (the set editor's preview, the other types) ASK draws the frozen
+ * DOM below.
  */
 export default function QuestionCard({
   phase = 'ASK',
@@ -51,6 +64,7 @@ export default function QuestionCard({
   answers,
   onExpand,
   withQuestion = false,
+  room = null,
 }) {
   if (phase === 'REVEAL') {
     if (gameType !== 'trivia') return null;
@@ -113,6 +127,8 @@ export default function QuestionCard({
 
   if (!question) return null;
 
+  if (room) return <RoomLines question={question} room={room} onExpand={onExpand} />;
+
   return (
     <>
       <QuestionLines question={question} gameType={gameType} onExpand={onExpand} />
@@ -129,6 +145,75 @@ export default function QuestionCard({
       <p className="qdetail" data-drop="3" data-drop-note="How to answer">
         {instruction}
       </p>
+    </>
+  );
+}
+
+/** The data attributes a room-content part carries: which part, which role. */
+const rcAttrs = (rc, key) => ({ 'data-rc-part': key, 'data-rc': roleOf(rc, key) });
+
+/** The label on the question's own instruction (docs/design/room-content-v2). */
+export const YOUR_TURN = 'Your turn';
+
+/**
+ * ASK, AS THE ROOM CONTENT SAYS (config/roomContent.js; owner, 18 Oct 2026,
+ * docs/design/room-content-v2 frames 1-3):
+ *
+ *   "you provided the biggest text with the generic room instructions, not
+ *    the changing lesson ... the instructions is the optional one. the title
+ *    often is nice to have big too."
+ *
+ * So, top to bottom: the category as a small eyebrow; the TITLE as the lead
+ * (h1.q, hero when short, primary when long); the LESSON under it at the
+ * secondary step, never dropped; the question's own instruction (or the
+ * question pulled from the front of the lesson) in one "Your turn" band, never
+ * dropped. A generic instruction ("answer on your phone") is not drawn on
+ * Room, TV or Table; on Call it is a small line the fitter may give up first
+ * (data-drop="3", announced). With no title the lesson leads; with neither,
+ * the task.
+ *
+ * THE RECOVERY STAYS. The heading and the lesson both open the full question
+ * (`onExpand`), so a lesson the fitter had to set small can still be read.
+ */
+function RoomLines({ question, room, onExpand }) {
+  const expand = typeof onExpand === 'function'
+    ? { 'data-expandable': '1', title: 'Show the full question', onClick: onExpand }
+    : {};
+  const leadKey = room.lead;
+  const storyRole = roleOf(room, 'story');
+  const taskRole = roleOf(room, 'task');
+  const taskBand = taskRole === ROLE.SUPPORT && !mayDrop(room, 'task');
+  const taskLine = taskRole === ROLE.SUPPORT && mayDrop(room, 'task');
+  return (
+    <>
+      {shows(room, 'category') && (
+        <div className="kicker q-eyebrow" {...rcAttrs(room, 'category')}>{textOf(room, 'category')}</div>
+      )}
+      <h1 className={`q q-lead is-${sizeOf(room, leadKey)}`} data-rc-size={sizeOf(room, leadKey)} {...rcAttrs(room, leadKey)} {...expand}>
+        {textOf(room, leadKey)}
+      </h1>
+      {storyRole === ROLE.SUPPORT && (
+        <p className="q-lesson" {...rcAttrs(room, 'story')} {...expand}>{textOf(room, 'story')}</p>
+      )}
+      {question.image && (
+        <img
+          className="stage-art"
+          src={question.image}
+          alt={question.title || 'Artwork'}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
+      {taskBand && (
+        <div className="q-turn" {...rcAttrs(room, 'task')}>
+          <span className="q-turn-k">{YOUR_TURN}</span>
+          <p className="q-turn-t">{textOf(room, 'task')}</p>
+        </div>
+      )}
+      {taskLine && (
+        <p className="qdetail q-howto" {...rcAttrs(room, 'task')} data-drop="3" data-drop-note="How to answer">
+          {textOf(room, 'task')}
+        </p>
+      )}
     </>
   );
 }

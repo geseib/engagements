@@ -44,6 +44,9 @@ export function wallRoom(view) {
     images: v.images || [],
     outcome: v.outcome || null,
     doing: v.doing || null,
+    // I9-I10: what went to Claude last, and the lines Claude's tools wrote.
+    sent: v.sent || null,
+    activity: Array.isArray(v.activity) ? v.activity : [],
     agent: v.agent || {},
     shownPoint: v.shownPoint || null,
     run: v.run || null,

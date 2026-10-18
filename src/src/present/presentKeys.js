@@ -7,9 +7,11 @@
  * It never moves the round itself — no Start voting, Show results or Next
  * round from a stray key; those stay on the host's dock and the Remote.
  *
- * Pure: `presentKeyStep(snapshot, 'forward' | 'back', { total })` returns the
- * writes to make, in order — `[]` for "nothing". `total` is how many
- * responses the round has. presentControls.js performs them.
+ * Pure: `presentKeyStep(snapshot, 'forward' | 'back', { total, overview })`
+ * returns the writes to make, in order — `[]` for "nothing". `total` is how
+ * many responses the round has; `overview` is whether every answer fits on
+ * the voting overview (config/roomContent.js overviewFits, decided where the
+ * wall's model is built). presentControls.js performs them.
  *   { kind: 'focus', focus, index?, part?, parts? }  POST /stage-focus
  *   { kind: 'beat', beat }                            POST /stage-beat
  *   { kind: 'page', step: 'next' | 'prev' }          POST /stage-beat (Workie's page)
@@ -45,7 +47,7 @@ function stepResponse(at, dir, total) {
   return null;
 }
 
-export function presentKeyStep(snapshot, dir, { total = 0 } = {}) {
+export function presentKeyStep(snapshot, dir, { total = 0, overview = false } = {}) {
   const s = snapshot || {};
   const state = String(s.state || '');
   const m = ROUND.exec(state);
@@ -54,13 +56,27 @@ export function presentKeyStep(snapshot, dir, { total = 0 } = {}) {
   const n = Math.max(0, intOr(total, 0));
   const focus = s.stageFocus || {};
 
+  // The question put up comes down with either key. The QR side panel is its
+  // own fact (stageFocus.join) and stays: J takes it down, not a step.
   if (focus.focus === 'question' || focus.focus === 'join') return [NONE];
 
   if (phase === 'VOTE') {
-    // Response 1 is on the wall from the start of voting (owner, 2026-10-13).
-    // Forward past the last asks to Show results; back from the first wraps.
     if (n === 0) return [];
-    const at = answerFocus(focus, 'VOTE') || { index: 0, part: 0, parts: 1 };
+    const focused = answerFocus(focus, 'VOTE');
+    if (overview) {
+      // ALL THE ANSWERS FIT, so voting opens on all of them (owner, 18 Oct
+      // 2026; config/roomContent.js overviewFits): forward puts answer 1 up,
+      // back from answer 1 returns to all of them; forward past the last asks
+      // to Show results.
+      if (!focused) return dir === 'forward' ? [show(0)] : [];
+      const next = stepResponse(focused, dir, n);
+      if (next) return [next];
+      return dir === 'back' ? [NONE] : [];
+    }
+    // They do not fit: response 1 is on the wall from the start of voting
+    // (owner, 2026-10-13). Forward past the last asks to Show results; back
+    // from the first wraps.
+    const at = focused || { index: 0, part: 0, parts: 1 };
     const next = stepResponse(at, dir, n);
     if (next) return [next];
     return dir === 'back' ? [show(n - 1)] : [];

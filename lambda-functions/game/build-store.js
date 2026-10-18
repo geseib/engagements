@@ -38,6 +38,45 @@ const LOG_KINDS = Object.freeze([
 ]);
 /** What Claude may post. Decisions and directions are the host's to write. `answer` answers an Ask Claude. */
 const AGENT_LOG_KINDS = Object.freeze(['progress', 'milestone', 'showing', 'checkpoint', 'answer']);
+/**
+ * THE RELEASE GATE (owner, 17 Oct 2026: "Have thing get to host queue to
+ * release to room"; docs/design/parity/PLAN.md §2c). With the room's
+ * `reviewAgentPosts` on (the default), Claude's posts (AGENT_LOG_KINDS, from
+ * the host's Claude or a builder's) and its screenshots are written HELD:
+ * `Released: false` on the log or image row. Absent means released, so every
+ * row written before the gate stays visible. A held row is on the host's read
+ * and Claude's, never on a phone, the wall, the wall's image route or the
+ * room's Open the build, until the host releases it (`ReleasedAt`) or keeps
+ * it to themselves (`KeptAt`: private for good, off the queue). A mockup (an
+ * image on an ask) is never held: it follows its ask. Claude's live status
+ * (the doing line, its steps, connected, listening) is never held (owner, 17 Oct).
+ */
+const isHeld = (r) => Boolean(r) && r.Released === false;
+/** 'held' (on the host's queue), 'kept' (the host's for good) or null (the room may see it). */
+const roomHoldOf = (r) => (isHeld(r) ? (r.KeptAt ? 'kept' : 'held') : null);
+/** On the host's queue: held, not kept. */
+const awaitingRelease = (r) => isHeld(r) && !r.KeptAt;
+/** "Claude proposed a question: …" (flagged HostOnly since the gate; an older row by its words). */
+const isProposalEntry = (l) => Boolean(l) && (l.HostOnly === true || (l.Kind === 'ask' && l.By === 'system' && /^Claude proposed a question/.test(String(l.Text || ''))));
+/** The asks the room has seen: everything but a proposed or discarded one. */
+const roomSeenAskIds = (room) => new Set((room.asks || []).filter((a) => !['proposed', 'discarded'].includes(a.Status)).map((a) => a.AskId));
+
+/**
+ * The room's rows: what a phone, the wall and the room's Open the build are
+ * made from. Held posts and screenshots out; a picture or an entry about an
+ * ask the room has not seen out; Claude's proposals out; a screenshot entry
+ * whose picture is not the room's out.
+ */
+function roomRowsForRoom(room) {
+  const seen = roomSeenAskIds(room);
+  const images = (room.images || []).filter((r) => !isHeld(r) && (!r.AskId || seen.has(r.AskId)));
+  const imageIds = new Set(images.map((r) => r.ImageId));
+  const logs = (room.logs || []).filter((l) => !isHeld(l) && !isProposalEntry(l)
+    && (!l.AskId || seen.has(l.AskId))
+    && (l.Kind !== 'image' || imageIds.has(l.Detail)));
+  return { ...room, logs, images };
+}
+
 /** What Claude may say a link it posts is (Share demo S3, plugin 1.20.0). */
 const LINK_ROLES = Object.freeze(['demo', 'mockup']);
 
@@ -318,6 +357,8 @@ const SK = Object.freeze({
   log: (iso) => `BUILD#LOG#${timeKey(iso)}`,
   idea: (iso) => `BUILD#IDEA#${timeKey(iso)}`,
   key: (hash) => `BUILD#KEY#${hash}`,
+  // Remote share: one key per person, its hash only (build-lan.js).
+  rkey: (player) => `BUILD#RKEY#${player}`,
   img: (iso) => `BUILD#IMG#${timeKey(iso)}`,
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md).
   point: (iso) => `BUILD#POINT#${timeKey(iso)}`,
@@ -502,6 +543,7 @@ function roomFromRows(rows) {
   const room = {
     state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null, seen: null,
+    rkeys: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
@@ -515,6 +557,7 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#LOG#')) room.logs.push(r);
     else if (sk.startsWith('BUILD#IDEA#')) room.ideas.push(r);
     else if (sk.startsWith('BUILD#KEY#')) room.keys.push(r);
+    else if (sk.startsWith('BUILD#RKEY#')) room.rkeys.push(r);
     else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
     else if (sk.startsWith('BUILD#POINT#')) room.points.push(r);
     else if (sk.startsWith('BUILD#PREQ#')) room.preqs.push(r);
@@ -717,6 +760,9 @@ function logView(r) {
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
+    // THE RELEASE GATE (§2c): held for the host, or kept; released ones carry when.
+    ...(roomHoldOf(r) ? { roomHold: roomHoldOf(r) } : {}),
+    ...(r.ReleasedAt ? { releasedAt: r.ReleasedAt } : {}),
     // A finished step carries when it ran; no other entry has this key.
     ...(r.Kind === 'step' ? { step: { startedAt: r.StartedAt || null, endedAt: r.EndedAt || null, durationMs: Number(r.DurationMs) || 0, source: r.Source || 'claude' } } : {}),
   };
@@ -733,6 +779,7 @@ function imageView(r) {
     bytes: r.Bytes || 0,
     by: r.By || 'agent',
     createdAt: r.CreatedAt || null,
+    ...(roomHoldOf(r) ? { roomHold: roomHoldOf(r) } : {}),
   };
 }
 
@@ -844,7 +891,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.20.0';
+const LATEST_PLUGIN = '1.24.1';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -898,6 +945,8 @@ function agentStatus(stateRow, keys, now) {
 
 const settingsOf = (stateRow) => ({
   reviewAgentAsks: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentAsks === false),
+  // THE RELEASE GATE (§2c): Claude's posts and screenshots wait for the host. On unless the host turned it off.
+  reviewAgentPosts: !(stateRow && stateRow.Settings && stateRow.Settings.reviewAgentPosts === false),
   // Whether the Stage's room meter may list who has joined (owner, 2026-10-09). Off until the host says so.
   listNames: Boolean(stateRow && stateRow.Settings && stateRow.Settings.listNames === true),
 });
@@ -907,7 +956,7 @@ const settingsOf = (stateRow) => ({
 // host opened, and the time of the last Mark all seen. Ids only: no text, no names.
 const SEEN_MAX_IDS = 200;
 const SEEN_MAX_PER_POST = 50;
-const SEEN_ID = /^(?:ask|idea|share):[A-Za-z0-9_.#-]{1,80}$/;
+const SEEN_ID = /^(?:ask|idea|share|post):[A-Za-z0-9_.#-]{1,80}$/;
 
 const seenOf = (row) => ({
   ids: Array.isArray(row && row.Ids) ? row.Ids.filter((x) => typeof x === 'string') : [],
@@ -933,7 +982,10 @@ const mergeSeen = (current, ids) => [...current.filter((x) => !ids.includes(x)),
 // ("Edited Header.jsx", "Ran npm test"); its server sends them here in
 // batches. One row holds the latest few: it is a live view, not a record, so
 // it never reaches the timeline, the report or a phone.
-const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'other']);
+// test, check and save (plugin 1.24.0) feed the Stage's Building / Testing /
+// Fixing / Checking / Saved row (docs/design/build-room-ideas I10).
+const ACTIVITY_KINDS = Object.freeze(['edit', 'read', 'run', 'search', 'web', 'agent', 'plan', 'test', 'check', 'save', 'other']);
+const TEST_COUNT_MAX = 1000000;
 const ACTIVITY_KEEP = 12;
 const ACTIVITY_PER_POST = 25;
 
@@ -950,7 +1002,13 @@ function normalizeActivity(items, nowIso) {
     const t = Date.parse(it.at);
     // A laptop clock can be off; never in the future, never older than an hour.
     const at = new Date(Number.isFinite(t) ? Math.min(Math.max(t, now - 3600000), now) : now).toISOString();
-    out.push({ at, kind, text });
+    // A test run carries its counts only (never its output), and whether it failed.
+    const count = (v) => (Number.isInteger(v) && v >= 0 && v <= TEST_COUNT_MAX ? v : null);
+    const t2 = kind === 'test' && it.tests && typeof it.tests === 'object' ? it.tests : null;
+    const tests = t2 && (count(t2.passed) !== null || count(t2.failed) !== null)
+      ? { passed: count(t2.passed) || 0, failed: count(t2.failed) || 0 } : null;
+    const failed = it.failed === true || Boolean(tests && tests.failed > 0);
+    out.push({ at, kind, text, ...(tests ? { tests } : {}), ...(failed ? { failed: true } : {}) });
   }
   return { value: out };
 }
@@ -1516,10 +1574,14 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Which Host alert items the host has seen, on any of their devices. Never Claude's or a phone's.
     ...(isAgent ? {} : { seen: seenOf(room.seen) }),
     agent: agentStatus(room.state, room.keys, now),
-    // The Session panel's "Claude's plugin is out of date" line. Claude and the room never get it.
-    ...(isAgent ? {} : { plugin: pluginView(room.state) }),
+    // The Session panel's plugin line (what runs, whether it is the latest). The
+    // room never gets it; Claude gets only the latest version, to say on connect
+    // whether it is current (owner, 18 Oct: "super informative" about the version).
+    ...(isAgent ? { pluginLatest: LATEST_PLUGIN } : { plugin: pluginView(room.state) }),
     activity: activityView(room.activity),
     ...(isAgent ? {} : { doing: doingView(room.activity, now) }),
+    // What the Stage says went to Claude last (I9). Claude has its own inbox.
+    ...(isAgent ? {} : { sent: sentView(room) }),
     lan: LAN.lanHostView(room.lan, now, { withKey: !isAgent, room }),
     currentAskId: (room.state && room.state.CurrentAskId) || null,
     asks: room.asks.map((a) => askView(a, room, audience)),
@@ -1544,7 +1606,9 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
 }
 
 /** What a phone sees. */
-function publicView({ gameId, meta, sessionState, room, players, me, now }) {
+function publicView({ gameId, meta, sessionState, room: whole, players, me, now }) {
+  // The room's rows only (§2c): nothing held, nothing about an ask it has not seen.
+  const room = roomRowsForRoom(whole);
   const lanLink = LAN.lanTranslator(room.lan, now);
   const forRoom = (u) => (u && !isLocalUrl(u) ? u : (u ? lanLink(u) : ''));
   const currentAskId = (room.state && room.state.CurrentAskId) || null;
@@ -1745,7 +1809,8 @@ function crewWallView(crew, nameOf) {
  * `crew` is the phones' crew read (build-crew.js crewView 'public', no seat);
  * build-crew requires this file, so the caller passes it in.
  */
-function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
+function wallView({ gameId, meta, sessionState, room: whole, players, now, crew }) {
+  const room = roomRowsForRoom(whole);
   const listNames = settingsOf(room.state).listNames;
   const nowIso = now || new Date().toISOString();
   const forWall = publicUrl;
@@ -1780,7 +1845,7 @@ function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
   const log = room.logs
     .filter((l) => !l.ForBuilder && !PRIVATE_LOG_KINDS.includes(l.Kind) && !PHONE_HIDDEN_LOG_KINDS.includes(l.Kind) && !WALL_HIDDEN_LOG_KINDS.includes(l.Kind))
     .filter((l) => l.Kind !== 'image' || imageIds.has(l.Detail))
-    // "Claude proposed a question: …" names an ask the room has not seen.
+    // "Claude proposed a question: …" names an ask the room has not seen (roomRowsForRoom drops it too).
     .filter((l) => !l.AskId || seenAsks.has(l.AskId))
     .map(logView)
     .filter((l) => !names(l.text))
@@ -1821,6 +1886,10 @@ function wallView({ gameId, meta, sessionState, room, players, now, crew }) {
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forWall),
     doing: doingPublicView(room.activity, nowIso),
     agent: { connected: agent.connected, listening: agent.listening, name: agent.name },
+    // I9-I10 (owner, 18 Oct 2026): what went to Claude last, and what Claude's
+    // tools did (file and program names only, as the plugin writes them).
+    sent: sentView(room, names),
+    activity: activityView(room.activity).filter((a) => !names(a.text)),
     shownPoint: shown ? { ...shown, from: shown.from === 'claude' ? 'claude' : nameOf(shown.from) } : null,
     run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
     // That the demo is on this Wi-Fi, never its link: the link carries the gateway's key (phones have it).
@@ -1849,6 +1918,36 @@ function publicOutcome(o, forRoom = publicUrl) {
  */
 function pendingDirections(room) {
   return room.logs.filter((l) => l.ForAgent && !l.ForBuilder && !l.DeliveredAt && l.Kind !== 'note');
+}
+
+/**
+ * SENT TO CLAUDE (docs/design/build-room-ideas I9, owner 18 Oct 2026: "the
+ * heading could state Sent to claude ... until it updates what it has done").
+ * The newest entry that went to the host's Claude, as the Stage says it:
+ * `verb` 'decided' for a room decision, 'asked' for Ask Claude, else 'told';
+ * `pickedAt` once Claude's inbox took it. Later (held), a builder's entry, a
+ * host-only one and a cancelled run item never count. `hide(text)` blanks
+ * words the reader may not see (the wall: a name the room meter hides); the
+ * entry still counts, so the Stage still says Sent to Claude. Null when none.
+ */
+function sentView(room, hide = () => false) {
+  let best = null;
+  for (const l of (room && room.logs) || []) {
+    if (!l.ForAgent || l.ForBuilder || l.HostOnly || l.Cancelled || l.Kind === 'note') continue;
+    // Two in the same millisecond: the later row key wins, so every read agrees.
+    const a = `${l.CreatedAt || ''}|${l.SK || ''}`;
+    if (!best || a >= `${best.CreatedAt || ''}|${best.SK || ''}`) best = l;
+  }
+  if (!best) return null;
+  const as = claudeGetsOf(best.ForAgentAs);
+  const text = String(best.Text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return {
+    verb: best.Kind === 'decision' ? 'decided' : as === 'ask' ? 'asked' : 'told',
+    text: hide(text) ? '' : text,
+    askId: best.AskId || null,
+    at: best.CreatedAt || null,
+    pickedAt: best.DeliveredAt || null,
+  };
 }
 
 /** Entries for one builder's Claude (crew mode): feedback, the base moving. */
@@ -2014,7 +2113,7 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
-  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
@@ -2024,6 +2123,6 @@ module.exports = {
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,
-  hostView, publicView, roomHistory, wallView, crewWallView, WALL_KEY_BYTES, mintWallKey, wallKeyMatches,
+  hostView, publicView, roomHistory, wallView, isHeld, roomHoldOf, awaitingRelease, isProposalEntry, roomRowsForRoom, crewWallView, WALL_KEY_BYTES, mintWallKey, wallKeyMatches,
   WALL_SCREENS, WALL_CODES, WALL_PROFILES, wallStateOf, normalizeWall, pendingDirections, pendingForBuilder, inboxText, inboxFrom, defaultDirection, decisionReworded,
 };

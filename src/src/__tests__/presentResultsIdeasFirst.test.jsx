@@ -74,7 +74,30 @@ describe('PresentTally draws version A', () => {
     expect(rows[0].querySelector('.ui-trow-sub').textContent).toBe('8 points — Ada');
     expect(rows[0].querySelector('.ui-trow-bar').style.width).toBe('100%');
     expect(rows[1].querySelector('.ui-trow-bar').style.width).toBe('75%');
-    expect(rows[0].querySelector('.ui-trow-rank').textContent).toBe('1');
+    // The pick is marked in words, not a rank (room-content-v2 frame 5).
+    expect(rows[0].classList.contains('is-pick')).toBe(true);
+    expect(rows[0].querySelector('.present-pick-ey').textContent).toBe("The room's pick");
+    expect(rows[0].querySelector('.ui-trow-rank').textContent).toBe('');
+    expect(rows[1].querySelector('.ui-trow-rank').textContent).toBe('2');
+  });
+  it('the title is the reminder above the ideas, and the talk line sits at the foot, first to give way', () => {
+    const c = draw(snap());
+    expect(c.querySelector('h1.present-reminder').textContent).toBe('Temperature control');
+    const talk = c.querySelector('.present-talk');
+    expect(talk.textContent).toMatch(/^Talk about it/);
+    expect(talk.textContent).toMatch(/What do the top two have in common/);
+    expect(talk.getAttribute('data-drop')).toBe('1');
+    // the bar is the fill behind each row
+    expect(c.querySelector('.present-tally').classList.contains('is-fill')).toBe(true);
+  });
+  it('hidden round: nothing beside an answer is a number but its rank', () => {
+    const c = draw(snap({ authorsRevealed: false }));
+    const rows = [...c.querySelectorAll('.present-trow')];
+    rows.forEach((row) => {
+      const words = row.querySelector('.ui-trow-who').textContent;
+      expect(words).not.toMatch(/\d+\s*(points?|votes?|%)/);
+      expect(row.querySelector('.ui-trow-points').textContent).toBe('');
+    });
   });
   it('the heading reads "What the room backed"; the foot keeps the counts', () => {
     const c = draw(snap());

@@ -36,12 +36,19 @@ const SECRETS = {
   draftSummary: 'DRAFT-SUMMARY-NOT-AGREED-77',
   later: 'LATER-ITEM-HELD-FOR-CLAUDE-77',
   unusedIdea: 'UNUSED-IDEA-NOBODY-SENT-77',
-  direction: 'DIRECTION-WORDS-OF-THE-HOST-77',
+  // An older direction: only the NEWEST thing sent to Claude is on the wall (I9, `sent`).
+  olderDirection: 'OLDER-DIRECTION-WORDS-OF-THE-HOST-77',
   point: 'TALKING-POINT-NOT-SHOWN-77',
   lanKey: 'LANKEYlanKEYlanKEY77zz',
   email: 'host-person@example.org',
   idSecret: 'SECRET-ID-SECRET-NEVER-SENT-0123456789abcdef',
   proposed: 'PROPOSED-ASK-THE-ROOM-NEVER-SAW-77',
+};
+// ON THE WALL SINCE 18 OCT 2026 (docs/design/build-room-ideas I9-I10, owner: the
+// Stage says what we told Claude, word for word, and what Claude's tools did):
+// the newest direction, in `sent` only; Claude's tool lines, in `activity` only.
+const SHOWN = {
+  direction: 'DIRECTION-WORDS-OF-THE-HOST-77',
   activity: 'ACTIVITY-LINE-CLAUDE-IS-ON-77',
 };
 
@@ -81,7 +88,11 @@ async function buildFixture() {
 
   // The host's own words: a private note, a direction, a brief with a Later item.
   await hostCall('POST', 'log', { kind: 'note', text: SECRETS.privateLog });
-  await hostCall('POST', 'directions', { text: SECRETS.direction });
+  await hostCall('POST', 'directions', { text: SECRETS.olderDirection });
+  // Log rows sort by millisecond, then a random id: two posts in one millisecond
+  // come back in either order, and "newest" would be a coin toss.
+  await new Promise((r) => setTimeout(r, 3));
+  await hostCall('POST', 'directions', { text: SHOWN.direction });
   await hostCall('POST', 'brief', { forWhom: 'Volunteers on a Saturday', keep: ['Keep it to one page'], later: [SECRETS.later] });
   // Claude's draft of the brief, not yet used.
   const draft = await agentCall('POST', 'brief/draft', { headline: SECRETS.draftHeadline, summary: SECRETS.draftSummary });
@@ -90,7 +101,7 @@ async function buildFixture() {
   const pts = await agentCall('POST', 'points', { points: [{ kind: 'talk', text: SECRETS.point }] });
   assert.ok(pts.status < 300, JSON.stringify(pts.body));
   // Claude's live activity line.
-  await agentCall('POST', 'activity', { items: [{ kind: 'edit', text: SECRETS.activity }], doing: SECRETS.activity });
+  await agentCall('POST', 'activity', { items: [{ kind: 'edit', text: SHOWN.activity }], doing: SHOWN.activity });
   // The Host alert's seen.
   await hostCall('POST', 'seen', { ids: [`ask:${choice.askId}`] });
 
@@ -104,6 +115,9 @@ async function buildFixture() {
   // The demo on this Wi-Fi: live, with its key; Claude showed it at a laptop address.
   put({ PK, SK: 'BUILD#LAN', Wanted: true, Status: 'live', ReportedAt: new Date().toISOString(), LiveSince: new Date().toISOString(), Open: 1, Key: SECRETS.lanKey, Map: [{ local: 'http://localhost:5173', lan: 'http://192.168.1.20:4900' }], ttl: H.TTL });
   await agentCall('POST', 'log', { kind: 'showing', text: 'The form, running', link: 'http://localhost:5173/signup' });
+  // The release gate (§2c, tests/build-release.js): the host releases Claude's posts and screenshot to the room.
+  const held = (await hostCall('GET', 'state')).body.log.filter((l) => l.roomHold === 'held').map((l) => l.logId);
+  assert.strictEqual((await hostCall('POST', 'posts', { action: 'release', ids: held })).status, 200);
 
   // A crew: a builder whose branch and lane carry her name, an early look on the wall, a room reaction.
   await hostCall('POST', 'crew/settings', { enabled: true });
@@ -164,8 +178,8 @@ const hasName = (text) => NAMES.filter((n) => text.toLowerCase().includes(n.toLo
   await check('the allowlist: these keys and no others', async () => {
     wall = (await body()).body;
     assert.deepStrictEqual(Object.keys(wall).sort(), [
-      'agent', 'brief', 'crew', 'current', 'doing', 'gameId', 'goal', 'history', 'ideaCounts', 'images', 'lan', 'log', 'opening', 'outcome',
-      'playerCount', 'players', 'rev', 'run', 'shownPoint', 'state', 'title', 'wall', 'wallComment',
+      'activity', 'agent', 'brief', 'crew', 'current', 'doing', 'gameId', 'goal', 'history', 'ideaCounts', 'images', 'lan', 'log', 'opening', 'outcome',
+      'playerCount', 'players', 'rev', 'run', 'sent', 'shownPoint', 'state', 'title', 'wall', 'wallComment',
     ].sort());
     // Claude's status line on the Stage and the Build screen, as a phone reads it: no key, no times.
     assert.deepStrictEqual(Object.keys(wall.agent).sort(), ['connected', 'listening', 'name']);
@@ -179,14 +193,23 @@ const hasName = (text) => NAMES.filter((n) => text.toLowerCase().includes(n.toLo
     assert.ok(!text.includes('@'), 'no email, nor anything shaped like one');
     assert.ok(!text.includes(ids.unusedIdea), 'not even the unused idea\'s id');
   });
+  await check('I9-I10: the newest direction in `sent` and Claude\'s tool lines in `activity`, and nowhere else', async () => {
+    const r = await body();
+    assert.deepStrictEqual(Object.keys(r.body.sent).sort(), ['askId', 'at', 'pickedAt', 'text', 'verb']);
+    assert.strictEqual(r.body.sent.text, SHOWN.direction);
+    assert.strictEqual(r.body.sent.verb, 'told');
+    assert.deepStrictEqual(r.body.activity.map((a) => a.text), [SHOWN.activity]);
+    const rest = JSON.stringify({ ...r.body, sent: null, activity: null });
+    for (const s of Object.values(SHOWN)) assert.ok(!rest.includes(s), `${s} outside sent/activity`);
+  });
   await check('with List names off, no name anywhere: players, voters, why names, idea authors, the wheel, the crew', async () => {
     const text = (await body()).text;
     assert.deepStrictEqual(hasName(text), []);
     assert.ok(!/playerName|voters|"spinner":"[^"h]/.test(text), text.slice(0, 400));
     assert.deepStrictEqual(wall.players, []);
   });
-  await check('never the host-only parts: seen, ideas, activity, points, settings, plugin, briefDraft, agent', async () => {
-    for (const k2 of ['seen', 'ideas', 'activity', 'points', 'settings', 'plugin', 'briefDraft', 'asks', 'mine', 'myIdeas', 'deleteAs', 'wallKey', 'presenting', 'presentDetail']) {
+  await check('never the host-only parts: seen, ideas, points, settings, plugin, briefDraft, agent', async () => {
+    for (const k2 of ['seen', 'ideas', 'points', 'settings', 'plugin', 'briefDraft', 'asks', 'mine', 'myIdeas', 'deleteAs', 'wallKey', 'presenting', 'presentDetail']) {
       assert.ok(!(k2 in wall), `wallView carries ${k2}`);
     }
   });

@@ -16,7 +16,7 @@ import usePresentation from './present/usePresentation';
 import { presentModel } from './present/presentModel';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import { hasScoreboard } from './config/scoreboard';
-import useFullscreenKey from './hooks/useFullscreenKey';
+import useFullscreenKey, { useFullscreenElement } from './hooks/useFullscreenKey';
 import { fullscreenElement, enterFullscreen, canFullscreen } from './utils/fullscreen';
 import usePresentControls from './present/presentControls';
 import Button from './components/ui/Button';
@@ -77,9 +77,27 @@ export function useClickToFill(on) {
   }, [on]);
 }
 
+/**
+ * THE CUE FOR THAT ONE CLICK (owner, 18 Oct 2026: the placed window "wasnt
+ * fullscreen. i have to click that window and press f"; nothing said one
+ * click would do). Shown only on a window the host placed, only until it is
+ * full screen. The room may glimpse it while the host is setting up.
+ */
+export const FILL_CUE = 'Click anywhere to fill the screen';
+export function FillCue({ placed }) {
+  const full = useFullscreenElement();
+  if (!placed || full || !canFullscreen()) return null;
+  // data-theme="dark": the cue sits outside the wall's own scope, so it re-enters
+  // the dusk tokens itself (a light page drew it white; walk of dev 173fc2f6).
+  return <p className="present-fillcue" data-theme="dark" role="status">{FILL_CUE}</p>;
+}
+
 export function presentFitKey(model) {
   const rows = Array.isArray(model.rows) ? model.rows.map((r) => (r && (r.idea || r.label)) || '').join('\u241E') : '';
-  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task]
+  // The voting overview's answers and the QR panel change the layout too.
+  const answers = Array.isArray(model.answers) ? model.answers.map((a) => (a && a.text) || '').join('\u241E') : '';
+  const join = model.join ? 'qr' : '';
+  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task, answers, join]
     .map((x) => (x === undefined ? '' : String(x))).join('|');
 }
 
@@ -94,11 +112,15 @@ function paramFromUrl(name) {
 /** The Build Room's window: the wall, placed and filled as the Presentation is. */
 function BuildWallPage({ gameId, k }) {
   useFullscreenKey();
-  useClickToFill(useMemo(placedFromUrl, []));
+  const placed = useMemo(placedFromUrl, []);
+  useClickToFill(placed);
   return (
-    <Suspense fallback={null}>
-      <BuildWall gameId={gameId} k={k} />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <BuildWall gameId={gameId} k={k} />
+      </Suspense>
+      <FillCue placed={placed} />
+    </>
   );
 }
 
@@ -114,17 +136,21 @@ function CallPresentPage() {
   const { snapshot, reads, refetch } = usePresentation(gameId);
   const model = gameId ? presentModel(snapshot, reads) : { moment: 'NOT_FOUND', profile: 'room' };
   useFullscreenKey();
-  useClickToFill(useMemo(placedFromUrl, []));
+  const placed = useMemo(placedFromUrl, []);
+  useClickToFill(placed);
   // Forward and back with the keys or a clicker, for a host who may drive
   // this session (present/presentControls.js); the room's own view is unchanged.
   const total = Number.isInteger(model.total) && model.total > 0
     ? model.total
     : Number(snapshot && snapshot.roomCounts && snapshot.roomCounts.answered) || 0;
+  // Does every answer fit the voting overview? Decided once, in the model
+  // (config/roomContent.js overviewFits), so the keys and the wall agree.
+  const overview = Boolean(model.overview);
   const controls = usePresentControls({
-    gameId, snapshot, total, refetch, notesReady: model.moment !== 'READ_WAIT',
+    gameId, snapshot, total, overview, refetch, notesReady: model.moment !== 'READ_WAIT',
   });
-  // A CLICK ANYWHERE TAKES THE JOIN CODE DOWN (owner, 2026-10-13), as J does,
-  // for a host who may drive the session; the strip and the ask keep their own.
+  // A CLICK ANYWHERE TAKES THE QR DOWN (owner, 2026-10-13), as J does, for a
+  // host who may drive the session; the strip and the ask keep their own.
   const { joinShown, armed, toggleJoin } = controls;
   useEffect(() => {
     if (!joinShown || !armed) return undefined;
@@ -173,7 +199,7 @@ function CallPresentPage() {
           onClick={controls.toggleJoin}
           disabled={!/^(ASK|VOTE|RESULTS)#/.test(String(snapshot && snapshot.state))}
         >
-          {controls.joinShown ? 'Hide join code (J)' : 'Join code (J)'}
+          {controls.joinShown ? 'Hide QR (J)' : 'Show QR (J)'}
         </Button>
         <Button variant="action" className="present-strip-btn is-go" onClick={controls.forward}>Forward ›</Button>
       </div>
@@ -202,9 +228,12 @@ function CallPresentPage() {
   ) : null;
 
   return (
-    <PresentStage profile={model.profile} fitKey={fitKey} overlay={<>{overlay}{strip}{ask}</>} fitcheck={fitcheckOn()}>
-      <PresentMoment model={model} />
-      <PhaseWipe moment={model.moment} />
-    </PresentStage>
+    <>
+      <PresentStage profile={model.profile} fitKey={fitKey} overlay={<>{overlay}{strip}{ask}</>} fitcheck={fitcheckOn()}>
+        <PresentMoment model={model} />
+        <PhaseWipe moment={model.moment} />
+      </PresentStage>
+      <FillCue placed={placed} />
+    </>
   );
 }

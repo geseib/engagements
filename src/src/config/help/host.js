@@ -246,6 +246,10 @@ const gameSetup = {
             ['Table — laptop', 'A few people around one laptop.'],
           ],
         },
+        {
+          t: 'p',
+          text: 'The size also decides how much the room is shown. On every size the room sees only what it needs, large. When a question or lesson is up, the title and the lesson lead, and the question to answer sits in a "Your turn" band; the general instruction ("answer on your phone") is left off, because the top line already says where to answer. While voting the room sees every answer, numbered, or one at a time when they are long; at results the room\'s pick reads in full with the bars behind the answers, and no vote counts while names are hidden. Call, read on people\'s own screens, adds the general instruction. In a Build Room each option shows its detail, the tally stays hidden until the vote closes, a long ask pages, and Claude\'s status line is always there. Show the QR puts the join code in a panel beside what is up, instead of covering it; click an answer, or step with → and ←, to put one up, and Esc goes back to all of them. The same rule holds on one screen and on the room\'s window.',
+        },
         { t: 'h', text: 'Names' },
         {
           t: 'list',
@@ -302,11 +306,11 @@ const running = {
           t: 'table',
           head: ['Part', 'What it is for'],
           rows: [
-            ['Top line', 'The join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
+            ['Top line', '← All sessions (in the lobby and at the end: back to your sessions; this one keeps running and Continue brings you back), the join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
             ['The loop', 'The round\'s steps. Press one to look at it privately; the room stays where it is until you press Back to the room.'],
             ['Left rail', 'Round queue, People (with Show scoreboard / Hide scoreboard), Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
-            ['Main area', 'Responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it. The part of the read the wall is showing is marked "On the wall". During voting and results, the first row, "The question", puts the question back up.'],
-            ['Footer', 'The one count for the step, Your part now, and the buttons.'],
+            ['Your part now', 'At the top of the centre: what to do next, the one count for the step, what the wall shows next, and the buttons.'],
+            ['Main area', 'The lesson and the task while the room answers, responses as they land, the ballot in the room\'s order, results, Workie\'s read with Ask the room beside it. The part of the read the wall is showing is marked "On the wall". During voting and results, the first row, "The question", puts the question back up.'],
           ],
         },
         { t: 'h', text: 'Is the room\'s window up?' },
@@ -323,7 +327,7 @@ const running = {
           t: 'note',
           tone: 'tip',
           title: 'Chrome or Edge with a second display: it opens there for you',
-          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen (it says so at the bottom until you do). Quick start shows where the room watches before you pick a set, and on two screens it opens the room\'s window as the session starts. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
         },
         {
           t: 'note',
@@ -725,6 +729,8 @@ const plan = {
   .engage/share.json, plugin 1.20.0), the room's window (BuildSessionPanel's
   Screens group, present/buildwall/), the still dock (buildControls.js), and
   History's marks (buildScreens.js contributionsOf, askOutcome).
+  17 Oct: releasing Claude's posts (build-store.js reviewAgentPosts, the
+  queue's BuildHeldPosts.jsx, BuildSessionPanel's Claude group, plugin 1.21.0).
 */
 const buildRoom = {
   id: 'host-build-room',
@@ -780,9 +786,11 @@ const buildRoom = {
           items: [
             { title: 'Share demo', text: 'When Claude first shows the app, the Build Room asks once whether to share it. Share demo lets people on this Wi-Fi open this laptop\'s app on their phones, laptops and tablets; no one else can. Nothing is shared until you press it. Guest Wi-Fi often blocks this; test it from another device first. Anyone who cannot reach it still sees the screenshots. Only one Claude Code window shares a room at a time; if the count jumps, update the plugin from Connect.' },
             { title: 'What the share opens', text: 'Open the build and the QR go to the page Claude showed, not its folder. The room can open only the pages Claude linked and what those pages load; a folder\'s file list is never shown. The share panel names each server: Demo, Mockups, or App 1 and 2 when nothing says. To name them yourself, put a file .engage/share.json in the project folder with "demo", "mockups" and a "label"; it wins over Claude\'s guess. Each session takes its Wi-Fi ports from a block worked out from its code, and every page it serves names the session, so two rooms on one laptop are easy to tell apart. These need plugin 1.20.0: update it from Connect and restart Claude Code.' },
+            { title: 'People who are not in the room', text: 'In the Share demo panel, Also open it to people who are not here lets everyone in the session open the demo from anywhere, on Zoom or another network, with the same Open the demo button. It is off until you turn it on. Each person\'s button carries their own key; the panel lists who opened it and on how many devices, and Remove ends one person\'s link. It goes through Cloudflare, who can see the demo, and closes when you turn it off or the session ends. The first time, the laptop downloads a small tool, and some company networks block it. Update the plugin from Connect first (Settings, then Claude, says which plugin is running).' },
             { title: 'The room\'s window', text: 'Session, then Settings, then Screens: Room\'s window opens Stage, Build or History in a window of its own for the projector, on the second display in Chrome. It follows the screen you pick with 2, 3 and 4, needs no sign-in, and never shows a name. New link cuts off every open window (press it twice).' },
             { title: 'The Stage\'s buttons', text: 'The buttons along the bottom stay where they are. Space presses the main one; a move made early, such as Show results while people are still answering, asks you to press again. Host takes you back to the Host screen in one press; its number says how many things wait for you.' },
             { title: 'History', text: 'History shows every idea from the room that was used, and every ask the room saw. Each says what happened: chosen by the room or not, sent to Claude as written, reworded by the host, kept for later, or not sent. It never shows who sent an idea; a phone marks its own ideas as yours. Made so far counts the ideas used by the same rule.' },
+            { title: 'Releasing Claude\'s posts', text: 'Claude\'s updates, answers and screenshots wait in Waiting for you before the room sees them: Release to the room puts one on the phones and the room\'s screens at the time it happened, Keep to myself keeps it off them for good, and Release all lets several through at once. Your Timeline marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live "Claude is" line always shows. To let posts straight through, turn off Check Claude\'s posts before the room sees them in Session, Settings, Claude. Claude learns of this with plugin 1.21.0.' },
             { title: 'Wrap up', text: 'A summary, what was built, links and next steps, written by Claude or by you, saved into the report. Check the report, then end the session.' },
             { title: 'Save report', text: 'Keeps the report as a PDF, as for any session. The code stays in the project folder on your laptop.' },
           ],
