@@ -9,39 +9,54 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
-## 17 Oct 2026 (fourth push): Claude's posts wait for the host, and room screens show only what the room needs
+## 18 Oct 2026: room screens redrawn, Claude's posts wait for the host, and remote share
 
-**Test:** merge of dev `b5a464e0` (and the notes and help commit after it). **Review tag:** `reviewable/2026-10-17-…` (named in the push). Plan: `docs/design/parity/PLAN.md` §2c and §2d.
+**Test:** merge of dev `8b39973e` (and the notes, help and README commit after it). This is the first push to test since 17 Oct's third; it carries everything dev gained since, from several sessions. Plans: `docs/design/parity/PLAN.md` §2c and §2d; room screens mockup `docs/design/room-content-v2/`; remote share `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`.
 
 ### New
 
-- **Claude's posts wait in the host's queue** (owner: "have things get to the host queue to release to the room"). Claude's updates, milestones, showings, git checkpoints, its answers to the host's own questions, and its screenshots now arrive in **Waiting for you** as *Claude wants to show the room*, with **Release to the room**, **Keep to myself**, and **Release all** when several wait. Nothing reaches the phones or the room's screens until it is released; a released post takes its place at the time it happened. The Host alert counts them; the host's Timeline marks what the room has not been shown. Mockups appear when their ask opens. *Claude proposed a question* lines never reach the room. Claude's live status (the *Claude is* line, its steps) is never held. The switch: Session › Settings › Claude › **Check Claude's posts before the room sees them** (on by default). Claude learns of it with **plugin 1.21.0**.
-- **Room screens show only what the room needs, large** (owner: "the default option needs to share only the most relevant info to the room… anything on the screen worth having needs to be large type and readable… more verbose on Zoom"). One rule (`src/src/config/roomContent.js`) decides every moment for every room screen size, on one screen and on the room's window alike:
-  - **Call & Answer, a question or lesson up:** on Room, TV and Table the **task leads** at the screen's largest readable size (Room: 40 → 60 px on a 1080 canvas; TV: 40 → 80), the title a small label above it, the category gone; the lesson stays only when the task asks about it. **Call** (a screen share) adds the title as a heading, the category and the lesson. Voting leads with "your answers are on your phone"; results lead with the ideas.
-  - **Build Room:** the ask's prompt and options lead; a long ask **pages** its options (Room 3 at a time, TV 2, Call 3, Table 4) instead of being cut; details and the room's reasons show only on Call. **Claude's status line** is on Stage, Build and History on every size, after an open ask, never dropped.
-  - Measured in Chromium: 192 renders at four sizes × four profiles; nothing scrolls; six long options were cut in 28 of 32 renders before and in none after. Before/after pictures: `docs/design/room-content/`.
+- **Room screens show what the room reads and takes away** (owner, 18 Oct: "you provided the biggest text with the generic room instructions, not the changing lesson… the instructions is the optional one. the title often is nice to have big too"; and "nice to see a bar chart results but not at the expense of seeing what was voted on"). One rule (`config/roomContent.js`) for the one-screen stage and the room's window, on every size:
+  - **A question or lesson is up:** the **title** is the biggest text and the **lesson** sits under it, never dropped. The question to answer is one **Your turn** band: the question's own instruction, or the question pulled from the front of the lesson when it opens with one ("Describe how you…"). A general instruction ("answer on your phone") is left off Room, TV and Table; Call keeps it small. ALL-CAPS titles show in title case.
+  - **Voting:** every answer whole and numbered when they fit on one screen; otherwise answer 1, as before. The title stays as the reminder. No tally while voting.
+  - **Results:** the room's pick in full, the runners-up with their text, the bar the fill behind each answer measured against the pick. **No counts or percentages while names are hidden**; a named round keeps the credit and points. A *Talk about it* line at the foot never asks who wrote anything.
+  - **Put one up:** click an answer or a result, or step with → and ←; chips (voting) or a ladder of bars (results) show where it sits; Esc goes back to all of them.
+  - **Show QR is a panel beside what is up**, not a cover, on one screen and on the room's window, from J, the rail, the Presentation's strip or the phone remote. It is now its own fact on the server (`stageFocus.join`), so the answer on the wall stays up with it.
+  - **Build Room:** each option shows its detail on every size; **no tally while the ask is open**; on the result the votes rise inside the options, the pick is marked *The room's pick* with the room's best reason, and the Stage shows *Sent to Claude* with the direction until Claude says what it is doing.
+- **Remote share** (owner, 16 Oct design; walked by the owner on dev 18 Oct). Share demo has a switch, **Also open it to people who are not here** (off by default). People on Zoom or another network get the same **Open the demo** button, each with their own key. The panel lists who opened it and on how many devices, with **Remove**; starting and failed states say why. The plugin downloads a pinned, hash-checked Cloudflare tool on first use, runs one tunnel per session, goes live only once reachable, and never leaves it running. The tunnel forwards to the demo and keeps the Wi-Fi share's folder rules. Phones see *Not here? Opening soon.* while it starts.
+- **Claude's posts wait in the host's queue** (owner: "have things get to the host queue to release to the room"). Claude's updates, showings, answers and screenshots arrive in **Waiting for you** with **Release to the room**, **Keep to myself** and **Release all**; nothing reaches phones or room screens until released, and a released post takes its place at the time it happened. Claude's live status is never held. Switch: Session › Settings › Claude › *Check Claude's posts before the room sees them* (on by default).
+- **The Stage while Claude works** (I9, I10): *Sent to Claude* until Claude picks it up, then a row (Building / Testing / Fixing / Checking / Saved), the last test counts, and the last four things Claude's tools did (file and program names only). These tool lines now reach the room's window.
+- **Which plugin is running, everywhere:** Claude Code says it on connect; Settings › Claude always shows it and whether it is the latest.
+- **Plugin 1.24.1** carries all of the Build Room changes above (1.21 release gate, 1.22 remote share, 1.23 version everywhere, 1.24 the work row, 1.24.1 tunnel errors).
+- **Room's window lobby:** the session title large with the event details under it; the QR on the right with the address and code. Quick start writes the set's description into Event Details.
+- **Quick start shows Where the room watches** (one screen or two) and, on two, opens the room's window on the other display in the same press; a placed window says *Click anywhere to fill the screen*.
+- **Two-screen console:** the next step is a *Your part now* card at the top of the centre; leaving is *← All sessions* on the top line.
 
 ### Fixed
 
-- **The laptop's codes card stayed up when an ask opened** while the room's window took it down; it now follows the server.
-- **The stage's fit was taken before the web fonts loaded**, which could leave text 32 px over its box unmarked; it now refits when they arrive.
-- Phones no longer received *Claude proposed a question* lines or mockups for asks still being drafted (the two leaks the previous notes listed).
+- The visitor pages name the real button (*press Open the demo*) and no longer say the demo is only for people in the room.
+- The console's first row read *The question · On the wall now* while the wall showed the results; it now says *The results*. The strip draws its dot (*What we heard · results*).
+- A Workie read landing after *Workie is writing* no longer replays *Results · Look up* over its first page; the read on the wall is larger.
+- The laptop's codes card now follows the server when an ask opens; the stage refits once web fonts load.
 
 ### What to look at
 
-1. **Update the plugin** from Connect and restart Claude Code; Session › Claude says **1.21.0**.
-2. **The queue.** Ask Claude to post progress and a screenshot. Both wait in **Waiting for you**; a phone and the room's window show nothing new. **Release to the room** one: it appears on the phone's History at the time Claude posted it. **Keep to myself** the other: it never appears. Claude's *Claude is …* line stays live on the Stage throughout.
-3. **The switch.** Turn off *Check Claude's posts before the room sees them*: the next post goes straight to the room.
-4. **A Call & Answer question on Room.** Start a round on the Room size: the task is the big text, the title a small label above it, no category. Switch to **Call**: the title becomes a heading and the lesson shows. Do the same on the room's window (two screens).
-5. **A long Build Room ask.** Open a Choose ask with six long options on Room at 1280×720: *Options 1–3 of 6* with ↑ ↓ on the laptop's Stage; the room's window shows the first three and *and 3 more options on your phone*.
+1. **Update the plugin** from Connect Claude Code and restart Claude Code; Session › Settings › Claude says **1.24.1, the latest**.
+2. **A lesson round** (a Call & Answer lesson set, Room size): the title is the big text, the lesson under it, the question in *Your turn*; no "answer on your phone" line. Switch to **Call**: the general instruction appears, small.
+3. **Voting** with up to six short answers: all of them numbered on screen. Click one: it fills the screen with chips; → steps, Esc goes back.
+4. **Results:** *The room's pick* in full, bars behind the answers, no numbers while names are hidden. Open one: its place and the ladder.
+5. **Show QR** (J) during answering, then during voting with an answer up: the QR panel comes in beside the content and the answer stays up. Do the same from the phone remote and on the room's window (two screens).
+6. **Build Room, a Choose ask:** each option's detail on Room, no counts while open. Show results: bars inside the options, *The room's pick* with a quoted reason; send it: *Sent to Claude* until Claude picks it up.
+7. **The queue:** ask Claude to post progress and a screenshot; both wait in *Waiting for you*; release one, keep the other.
+8. **Remote share:** turn on *Also open it to people who are not here*; a phone on mobile data opens the demo from *Open the demo*; the panel lists it; **Remove** ends it; turning it off closes the address.
 
 ### Known gaps
 
-- The room's window cannot page a long Build Room ask (no server fact carries the page yet); it shows the first page and how many more.
-- The Call & Answer one-screen stage was not measured in a browser (it needs a signed-in host); it reads the same rule as the room's window, which was.
-- Builder screenshots still go straight to the crew board, which the host controls as before.
+- *Talk about it* is always the fixed line; Workie's discussion topic is not wired in yet.
+- Call keeps one column (the mockup's two-column Call layout is not built); no highlighted phrases in lessons.
+- TV and Table were checked by tests, not in a browser; the room's window was rendered in Chromium on Room and Call at 1280×720 and 1920×1080, the one-screen stage on Room at 1920×1080.
+- The room's window cannot page a long Build Room ask; it shows the first page and how many more.
+- Remote share: some company networks block Cloudflare's address; no uptime promise; the macOS unpack and a system proxy are untested in CI; on Windows a tunnel left by a crash is not cleaned up at the next start; History links stay Wi-Fi links.
 - The two-screen laptop console for Build Room still waits for the owner's review of its mockup.
-- Remote share (people off the Wi-Fi) is another session's work, merged here at plugin 1.22.0 with its switch off by default; its own notes and steps come from that work.
 
 ## 17 Oct 2026 (third push): Build Room's History marks, a share that opens only the demo, the room's window, and a dock that holds still
 
