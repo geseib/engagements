@@ -64,6 +64,10 @@ import {
 import { AskStage } from './AskStage';
 import { IdleStage } from './StageIdle';
 import { QrZoom } from './QrZoom';
+import ClaudeStatus from './ClaudeStatus';
+import { buildMomentOf, buildRoomContent } from '../roomContentData';
+import { optionPageSizeFor } from '../../config/stagePaging';
+import { textOf } from '../../config/roomContent';
 
 const none = () => undefined;
 
@@ -144,6 +148,10 @@ export default function BuildStageScreen({
   const editable = Boolean(c && current && current.status === 'results' && !ended && !crewOn && !pointsVote);
   const editKey = current ? `${current.askId}:${current.status}` : '';
   useEffect(() => { setEditing(false); setEditPick(null); }, [editKey]);
+  // A LONG ASK PAGES ITS OPTIONS (room content, owner 17 Oct 2026): ↑ ↓ on the
+  // host's Stage; the room's window shows the first page and counts the rest.
+  const [optPage, setOptPage] = useState(0);
+  useEffect(() => { setOptPage(0); }, [editKey, profile]);
   const liveLink = safeHref(liveBuildLink(room, now));
   // A click on an option or a wheel slice at results opens the send window
   // with that pick made; while the room is still answering it asks first, as before.
@@ -197,6 +205,21 @@ export default function BuildStageScreen({
   const meterBody = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
   const pickable = Boolean(c) && !ended && !codesUp && !crewOn && Boolean(current) && !pointsVote;
+  // WHAT THE ROOM SEES (config/roomContent.js): the same call on one screen and on the room's window.
+  const momentNow = buildMomentOf({
+    current: codesUp || crewOn ? null : current,
+    wheel: Boolean(current && m.wheel),
+    point: m.point || null,
+    run: m.run || null,
+    showing: Boolean(codesUp || crewOn || (!current && room.opening && room.opening.phase === 'opening')),
+  });
+  const rc = buildRoomContent(momentNow, profile, room, codesUp || crewOn ? null : current, now);
+  const optSize = current ? optionPageSizeFor(profile, current.options, {
+    height: window.innerHeight, results: current.status === 'results',
+  }) : 0;
+  // Claude's line changes height as its words change: the fitter measures again.
+  const claudeNow = textOf(rc, 'claude') || {};
+  const claudeKey = [claudeNow.headline, claudeNow.dur, claudeNow.helperLine].join('/');
   let content;
   if (codesUp) {
     content = <WallCodes room={room} now={now} link={demoLink} onZoom={c ? setZoom : null} />;
@@ -227,7 +250,24 @@ export default function BuildStageScreen({
       </section>
     );
   } else if (current) {
-    content = <AskStage key={`${current.askId}:${current.status}`} ask={current} room={room} host={false} busy={Boolean(c && c.busy)} ended={ended} run={c ? c.run : none} api={c ? c.api : null} pickId={editPick || pickId} onPick={pickable ? boardPick : null} />;
+    content = (
+      <AskStage
+        key={`${current.askId}:${current.status}`}
+        ask={current}
+        room={room}
+        host={false}
+        busy={Boolean(c && c.busy)}
+        ended={ended}
+        run={c ? c.run : none}
+        api={c ? c.api : null}
+        pickId={editPick || pickId}
+        onPick={pickable ? boardPick : null}
+        rc={rc}
+        paging={{
+          size: optSize, page: optPage, onPage: c ? setOptPage : null, enabled: Boolean(c) && !editing && !zoom && !c.overlayOpen,
+        }}
+      />
+    );
   } else if (room.opening && room.opening.phase === 'opening') {
     // THE OPENING (O3): between steps, the wall reads back the brief so far.
     content = <WallBrief room={room} />;
@@ -256,7 +296,7 @@ export default function BuildStageScreen({
       <Stage
         profile={profile}
         phase={m.phase || ''}
-        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : ''].join('|')}
+        fitKey={[current ? `${current.askId}:${current.status}:${current.answerCount}:${current.voteCount}:${current.wheel ? current.wheel.spins.length : 0}:${optPage}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : '', claudeKey].join('|')}
         rail={(
           <Rail
             phase={m.phase}
@@ -286,7 +326,14 @@ export default function BuildStageScreen({
           </Dock>
         ) : <Dock status={status} />}
       >
-        <div className="content" data-capability={pickable ? 'board-pick' : undefined}><div className="fitbox">{content}</div></div>
+        <div className="content" data-capability={pickable ? 'board-pick' : undefined} data-room-moment={momentNow}>
+          <div className="fitbox">
+            {content}
+            {/* Claude's status, essential on every screen the room sees (owner, 17 Oct
+                2026); between asks the IdleStage above IS that status, so not twice. */}
+            {momentNow !== 'BUILD_IDLE' && <ClaudeStatus rc={rc} />}
+          </div>
+        </div>
       </Stage>
       <WallComment comment={freshWallComment(room, now)} />
       {c && editing && editable && (

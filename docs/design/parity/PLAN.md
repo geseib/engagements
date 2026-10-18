@@ -8,8 +8,9 @@ H1–H5 (History marks), the Share demo fixes (host link, plugin 1.19.0 scopes, 
 labels and per-session ports: §2b S1–S3), B1–B7 (the room's window and its server), D1–D2
 (the still dock on C&A's shared parts). The owner ruled on every open question through Q19.
 **Waiting on the owner:** the console mockup and its five questions
-(`docs/design/build-room-console/`, gates B8); the remote share design and its twelve
-questions (`docs/design/build-room-remote-share/DESIGN.md`); three small rulings (the label on
+(`docs/design/build-room-console/`, gates B8); (remote share is being built by another session from the design the owner approved on
+16 Oct, `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; this plan's
+`DESIGN.md` is superseded); three small rulings (the label on
 the share's locked page, a cloned repo's `share.json`, a player's own "why" on the wall).
 **Ready without a ruling:** the two phone leaks the wall work found (an unseen ask named in
 the timeline, mockups of draft asks), paging long asks (B9m), the laptop's codes card
@@ -608,6 +609,70 @@ connected, listening) stays live and is never held.
   the host releases them, and a held post's reply says it went to the host's queue.
 
 Tests: `tests/build-release.js` (server), `__tests__/buildRelease.test.jsx` (host screen).
+
+## 2d. What the room sees, and how large (owner, 17 Oct)
+
+> "Remember the experience for 1 and 2 screen destination and the default option needs to
+> share only the most relevant info to the room. For example the call and answer when
+> asked a question or given a lesson the most important thing is the lesson needed t the
+> instructions. But anything on the screen worth having needs to be large type and
+> readable. This can be more verbose on zoom screen the projector but always keep it to
+> just what is needed."
+
+And, the same day: "I do like that Claude's status and activity is kept current on the
+build room stage (whichever screen shown to the room)."
+
+**Built** (`worktree-agent-a1aa9c2da620aa868`). One pure function decides it for every
+screen the room sees: `src/src/config/roomContent.js`, `roomContentFor(moment, profile,
+data)`. It returns each part of the moment with a role (lead, support, kicker, count,
+dropped), a ladder step, what may give way for space (`dropOrder`) and what never may
+(`essential`). The one-screen stage (`GameHostPage` → `QuestionCard`), the room's window
+(`presentModel` → `PresentMoments`) and the Build Room's projected Stage, Build and History
+(`buildroom/roomContentData.js`, the same components on one screen and on the window) all
+read it. Call is the one verbose profile; Room, TV and Table carry only what is needed.
+
+| Moment | Room / TV / Table | Call |
+|---|---|---|
+| Lobby | **Lead:** join (address, code, QR). Session title, count | same |
+| A question or lesson is up (answering, the question put back) | **Lead: the task**, primary step (hero when short), never dropped. Title as a small kicker (not when it repeats the task). The lesson only when the instruction is generic ("adapt this lesson"), as support that may give way. Category dropped. Count | Category kicker, title as a heading, **lead: the task**, the lesson (first to give way), count |
+| Voting | **Lead:** "N answers are on your phone…". The task as one slim line (may give way). Title dropped. Count | + the title |
+| A response on the wall (voting) | **Lead:** the response. "Vote on your …" kicker, the task slim (may give way), count | the task kept |
+| Results | **Lead:** the ideas. The task slim (first to give way). Counts | + the title kicker, the task kept |
+| Responses, Workie's read | **Lead:** the response, the page | same |
+| Feedback | **Lead:** the ask, or the comment put up. The round's title as the reminder (kicker) | same |
+| A question for the room | **Lead:** the question and its options. Kind kicker, count | same |
+| Ended | **Lead:** thanks. Session title | same |
+| Top line | the round (the session title only in the lobby and at the end) | session title and round |
+| Build Room: an ask (live, voting) | **Lead:** the prompt and the option titles (secondary step or larger; a long ask pages). Claude's status (support, essential). Count | + the ask's detail and each option's detail (first to give way) |
+| Build Room: results | as an ask, with the tally | + the room's reasons (first to give way) |
+| Build Room: the wheel | **Lead:** the prompt and the wheel (scales with the fitter). Claude's status | + the detail |
+| Build Room: between asks | **Lead: Claude's status** (headline, the doing line and its duration, the helper and activity lines); the newest picture and the last decision as support | same |
+| Build Room: a talking point, the run list | **Lead:** the point; the run list and its current step (essential). Claude's status | same |
+| Build Room: History, Build | **Lead:** the story (newest that fit, "and N earlier"); the newest screenshot. Claude's status at the top | same |
+| Build Room: codes, crew board, the brief | **Lead:** what the host put up. Claude's status | same |
+
+**Claude's status** is essential on every Build Room moment and profile, on one screen
+and on the room's window, on Stage, Build and History (`screens/ClaudeStatus.jsx`): never
+`data-drop`, the body step or larger, and after an open ask's prompt and options, never in
+their place.
+
+**Never a name, never the Workie Background:** the output is built from a whitelist; the
+question's Background (authoring prompt: "Never shown to players") is never a part, even on
+Call.
+
+**Large and readable:** the lead is the profile's hero or primary step and shrinks only to
+`--fit-min` (`__tests__/roomContentPalette.test.js`). A long Build Room ask **pages** its
+options (`stagePaging.js` `OPTION_PAGE_SIZE`: Room 3, TV 2 or 1 under 900px tall, Call 3
+or 2 at results, Table 4): "Options 1–3 of 6 · page 1 of 2 · ↑ ↓ to page" on the host's
+Stage, the first page and "and 3 more options on your phone" on the room's window (no
+server fact carries an option page; §5 lever 3). Measurements and before/after pictures:
+`docs/design/room-content/README.md`.
+
+**For the owner:** (1) the lesson on Room for a question with its own instruction is
+dropped (the title stays as the kicker); if a set's instructions lean on the lesson, the
+set should leave the instruction generic or this rule changes in one line. (2) The room's
+window cannot page a long ask (no server fact); a `build/wall` option page the host's ↑ ↓
+publishes would let it follow, as `/stage-focus` does for C&A.
 
 ## 3. Build Room's other standards (B10, after two screens)
 

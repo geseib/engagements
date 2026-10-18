@@ -25,6 +25,8 @@ import {
 import { safeHref } from '../links';
 import { clockTime, askNumber } from './common';
 import { Timeline } from './Timeline';
+import ClaudeStatus from './ClaudeStatus';
+import { buildRoomContent } from '../roomContentData';
 
 const HISTORY_FILTERS = [
   { key: 'all', label: 'Everything' },
@@ -120,7 +122,7 @@ function Earlier({ n }) {
 }
 
 export default function BuildHistoryScreen({
-  room, now = Date.now(), controls = null, fit = null,
+  room, now = Date.now(), controls = null, fit = null, profile = 'room',
 }) {
   const [chosen, setFilter] = useState('all');
   // The room's window has no filters: it shows the story.
@@ -149,6 +151,8 @@ export default function BuildHistoryScreen({
   return (
     <div className="brm-screenbody brm-histscreen" data-capability="history">
       <div className="brm-histmain">
+        {/* Claude's status, essential on every screen the room sees (owner, 17 Oct 2026). */}
+        <ClaudeStatus rc={buildRoomContent('BUILD_HISTORY', profile, room, null, now)} />
         {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
         {filter === 'artifacts' && (arts.length ? (
           <ul className="brm-arts" aria-label="Artifacts">

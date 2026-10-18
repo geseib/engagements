@@ -18,6 +18,7 @@ import HostQuestionSetsDialog from './components/HostQuestionSetsDialog';
 import WavelengthConvergence from './components/stage/WavelengthConvergence';
 import PollBoard from './components/stage/PollBoard';
 import QuestionCard from './components/QuestionCard';
+import { roomContentFor, questionRoomData } from './config/roomContent';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -8420,6 +8421,11 @@ Focus on actionable business strategy insights.`;
                 2026-09-19 §2.3), so the two cannot drift. The click-to-expand
                 recovery and the wavelength rule that used to be written here
                 are explained there, beside the markup they govern. */}
+            {/* WHAT THE ROOM SEES (owner, 17 Oct 2026): a Call & Answer round
+                draws the parts config/roomContent.js names for this profile,
+                from the same call the room's window makes — the task leads,
+                the title is a kicker on Room, TV and Table. Other types keep
+                the card's own DOM. */}
             {hostPhase === 'ASK' && currentQuestion && (
               <QuestionCard
                 phase="ASK"
@@ -8427,6 +8433,12 @@ Focus on actionable business strategy insights.`;
                 gameType={currentGameType}
                 instruction={getHostInstructionText(currentQuestionOf(questions, currentQuestionId))}
                 onExpand={expandQuestion}
+                room={currentGameType === 'call-and-answer'
+                  ? roomContentFor('ANSWERING', profile, questionRoomData(currentQuestion, {
+                    task: getHostInstructionText(currentQuestionOf(questions, currentQuestionId)),
+                    sessionTitle: eventTitle,
+                  }))
+                  : null}
               />
             )}
 

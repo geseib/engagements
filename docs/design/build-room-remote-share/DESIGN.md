@@ -1,5 +1,13 @@
 # Build Room: share the demo outside this Wi-Fi
 
+> **Superseded (17 Oct 2026).** This was written by a parallel task without knowing that the
+> owner had already approved a remote share design on 16 Oct in another session. The design
+> that is being built is `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`,
+> with its plan in `docs/superpowers/plans/2026-10-16-build-room-remote-share.md` and the spike
+> and mockups in this folder (`SPIKE.md`, `index.html`). Keep this file only as a second
+> reading of the threats; where the two differ, the approved design wins.
+
+
 Status: **design only, for the owner's approval. Nothing here is built.** Written 2026-10-17
 against `working/parity-plan` at `1e6e7539` (plugin 1.19.0). It assumes the parallel S3 work
 (plugin 1.20.0: `.engage/share.json` roles, a port block per session, `X-Engage-Session`,
