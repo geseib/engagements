@@ -772,7 +772,8 @@ a.dock-more{text-decoration:none}
 .q-turn{display:flex;align-items:baseline;gap:calc(1vw + 12px);margin-top:calc(1vh + 4px);
   background:rgb(var(--accent-rgb) / .10);border-left:calc(var(--hair) * 4 + 2px) solid var(--accent);
   border-radius:var(--radius-sm);padding:calc(1.2vh + 6px) calc(1.2vw + 12px);
-  max-width:min(100%, calc(var(--measure) + 40ch))}
+  /* As wide as the lesson above it: a narrow box wrapped a one-line question to three. */
+  max-width:min(100%, calc(var(--measure) + 34ch));width:100%;box-sizing:border-box}
 .q-turn-k{flex:none;font-size:var(--t-meta);font-weight:800;letter-spacing:.12em;
   text-transform:uppercase;color:var(--accent-text);white-space:nowrap}
 .q-turn-t{margin:0;min-width:0;font-size:var(--t-secondary);font-weight:650;line-height:1.25;color:var(--text)}
