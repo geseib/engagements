@@ -98,7 +98,7 @@ export function Step({ n, state, title, summary, open, onToggle, children }) {
 }
 
 /** The Ask step, opened: the wording, Edit wording and Discard. */
-function AskWording({ ask, busy, run, api }) {
+export function AskWording({ ask, busy, run, api }) {
   const [editing, setEditing] = useState(false);
   const [prompt, setPrompt] = useState(ask.prompt);
   const [detail, setDetail] = useState(ask.detail || '');

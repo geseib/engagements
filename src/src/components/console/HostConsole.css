@@ -158,3 +158,13 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc .askstage .askstage-idea { font-size: 15px; padding: 8px 12px; border-radius: 10px; }
 .hc .askstage .askstage-idea em { font-size: 13px; }
 .hc .hc-panel > .qdetail { font-size: 15px; max-width: none; }
+
+/* ONE CONSOLE, OTHER USES (parity PLAN §2.6, B8). A side column right of the
+   centre (the Build Room's folds): it runs from the next-step card's row to
+   the foot and scrolls inside itself. Call & Answer has none: unchanged. */
+.hc.hc--side { grid-template-columns: 260px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail main side"; }
+.hc-side { grid-area: side; min-height: 0; overflow: auto; border-left: 1px solid rgb(var(--glow-rgb) / .12); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+/* The strip with nothing live (answer (c)): kept, dimmed; its label stays readable. */
+.hc-loop.is-idle .wfs-loop .wfs-step { opacity: .55; }
+/* The main button's slot with no main move (answer (b)): held, named, never orange. */
+.hc-nomove { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px; border: 1px dashed rgb(var(--glow-rgb) / .3); border-radius: 10px; font-size: 15px; color: var(--muted); white-space: nowrap; }

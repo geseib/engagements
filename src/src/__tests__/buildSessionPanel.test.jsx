@@ -124,7 +124,8 @@ async function openRoom(state, players) {
   await waitFor(() => expect(playerGets().length).toBeGreaterThan(0));
 }
 
-const sessionButton = () => screen.getByRole('button', { name: /^SESSION/i });
+// With a room's window up the laptop is the console (B8): its rail's Session slot opens the same panel.
+const sessionButton = () => screen.queryByRole('button', { name: /^SESSION/i }) || document.querySelector('.hc--build .bc-sess');
 const panel = () => screen.getByRole('dialog', { name: 'Session' });
 const openPanel = () => { fireEvent.click(sessionButton()); return panel(); };
 const openSettings = () => {

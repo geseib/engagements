@@ -6,8 +6,10 @@
  *   1  the header carries "Room's window ↗" and whether that window is up, on
  *      Host, Build and History; the Stage's dock carries it as PRESENT
  *   2  while the window is up the laptop stays where it is: 2/3/4, P and "The
- *      room sees" send the screen to the window only; with none up, today's
- *      one screen exactly
+ *      room sees" send the screen to the window only; on one screen with none
+ *      up, today's one screen exactly. Since B8 the laptop on two screens is
+ *      the console (__tests__/buildTwoScreen.test.jsx); its top line carries
+ *      the header's window parts, so `header()` reads either
  *   3  "Where will the room watch?" once on the Host screen, the same choice
  *      Call & Answer stores; Two screens opens the room's window in the click;
  *      Settings, Screens shows and changes it
@@ -95,7 +97,9 @@ async function openRoom(state) {
   await screen.findByText('Volunteer sign-up');
 }
 
-const header = () => document.querySelector('.brm-hbar');
+// One screen: the Host screen's header. Two screens (B8): the console's top line carries the same parts.
+const header = () => document.querySelector('.brm-hbar') || document.querySelector('.hc-top');
+const classic = () => window.localStorage.setItem(SURFACES_KEY, 'classic');
 const onHost = () => screen.queryByRole('main', { name: 'Now' }) !== null;
 const sees = () => screen.getByRole('group', { name: 'The room sees' });
 
@@ -115,7 +119,7 @@ describe('1. the room\'s window on the header and the Stage', () => {
     expect(link).toHaveAttribute('href', WALL);
     expect(link).toHaveAttribute('target', '_blank');
     // The state alone shows (the link names the window); a reader hears it whole.
-    const stat = h.querySelector('.brm-winstat');
+    const stat = h.querySelector('.brm-winstat, .hc-winstat');
     expect(stat).toHaveTextContent("Room's window: Not open");
     expect(stat).toHaveClass('is-muted');
   });
@@ -129,10 +133,11 @@ describe('1. the room\'s window on the header and the Stage', () => {
 
   test('a window row on the session that stopped reporting reads as not open', async () => {
     await openRoom(hostState({ presenting: 1, detail: { ...UP, ageMs: 10 * 60 * 1000 } }));
-    expect(header().querySelector('.brm-winstat')).toHaveTextContent('Not open');
+    expect(header().querySelector('.brm-winstat, .hc-winstat')).toHaveTextContent('Not open');
   });
 
   test('Build and History carry it too', async () => {
+    classic();
     await openRoom(hostState());
     for (const key of ['3', '4']) {
       fireEvent.keyDown(window, { key });
@@ -141,6 +146,7 @@ describe('1. the room\'s window on the header and the Stage', () => {
   });
 
   test('the Stage carries it in its dock as PRESENT, with the window\'s state in its title', async () => {
+    classic();
     await openRoom(hostState());
     fireEvent.keyDown(window, { key: '2' });
     const dock = document.querySelector('footer.dock');
@@ -159,7 +165,8 @@ describe('1. the room\'s window on the header and the Stage', () => {
 });
 
 describe('2. while the room\'s window is up, the laptop stays where it is', () => {
-  test('no window: 2, 3, 4 switch this laptop, and the window follows, as today', async () => {
+  test('one screen, no window: 2, 3, 4 switch this laptop, and the window follows, as today', async () => {
+    classic();
     await openRoom(hostState());
     expect(screen.queryByRole('group', { name: 'The room sees' })).toBeNull();
     fireEvent.keyDown(window, { key: '3' });
@@ -174,8 +181,9 @@ describe('2. while the room\'s window is up, the laptop stays where it is', () =
     const g = sees();
     expect(within(g).getByRole('button', { name: 'History' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(g).getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-pressed', 'false');
-    const laptop = screen.getByRole('navigation', { name: 'This laptop' });
-    expect(within(laptop).getAllByRole('button').map((b) => b.textContent)).toEqual(['Host']);
+    // Two screens (B8): this laptop is the console, and stays it.
+    expect(document.querySelector('.hc--build')).not.toBeNull();
+    expect(onHost()).toBe(true);
   });
 
   test('window up: 3 sends Build to the window and the laptop stays on Host; the chip moves', async () => {
@@ -332,6 +340,7 @@ describe('4. one laptop, no second display', () => {
   });
 
   test('Settings, Screens: the same offer and line; New link says why you would press it', async () => {
+    classic();
     await openRoom(hostState());
     fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
     const panel = screen.getByRole('dialog', { name: 'Session' });

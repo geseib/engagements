@@ -34,7 +34,14 @@ function StatusText({ status, onReviewLate }) {
   );
 }
 
-export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null }) {
+/*
+  AN EMPTY, HELD SLOT (Build Room console, owner 19 Oct 2026, answer (b)):
+  with no main move (a Build Room between asks) a type may name the slot
+  instead of leaving it blank, so the card says why there is no button and
+  the button never jumps in from nothing. `emptyLabel` is that name; without
+  it, nothing is drawn, as before. `ignoreKey` reaches the bar unchanged.
+*/
+export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null, emptyLabel = '', ignoreKey = null, capability = undefined }) {
   /*
     NO DOCK ON TWO SCREENS. The Session panel and its scrim stop at
     `--dock-measured` (styles.css) so a bottom dock stays reachable; the
@@ -50,7 +57,7 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
   }, []);
   const statusText = (status && status.text) || '';
   return (
-    <section className="hc-now" aria-label={RW.yourPartLabel}>
+    <section className="hc-now" aria-label={RW.yourPartLabel} data-capability={capability}>
       <div className="hc-now-text">
         <p className="hc-part-k">{RW.yourPartLabel}</p>
         {part ? (
@@ -72,8 +79,10 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
             shortcutsEnabled={shortcutsEnabled}
             interceptAdvance={interceptAdvance}
             onBackKey={onBackKey}
+            ignoreKey={ignoreKey}
           />
         ) : null}
+        {emptyLabel && !(controls && controls.primary) ? <span className="hc-nomove" data-empty-slot="">{emptyLabel}</span> : null}
       </div>
     </section>
   );
