@@ -26,13 +26,19 @@ import { YOUR_TURN } from '../../QuestionCard';
  * (owner, 18 Oct 2026), else the task; the task box then does not show. At
  * RESULTS the row is "The results": pressing it takes a spotlit response down
  * and the ranked results come back.
+ *
+ * THE OVERVIEW (19 Oct 2026): at VOTE, when every answer fits, the room's
+ * window shows them all (presentModel); `overviewOnWall` then marks a row
+ * "All answers · On the wall now" and no single response, which the panel
+ * used to mark as Response 1 while the window showed the lot.
  */
 export default function ResponsesPanel({
   kicker, title, lesson = '', task = '', taskOwn = false, phase, responses = [], authorsHidden = true,
   onWallIndex = null, onPutOnWall = null, stillWriting = 0, side = null, upNext = null,
   status = 'ready', gatheringNoun = 'responses', onRetry = null,
-  questionOnWall = false, onQuestionToWall = null,
+  questionOnWall = false, onQuestionToWall = null, overviewOnWall = false,
 }) {
+  const overviewRow = phase === 'VOTE' && overviewOnWall && !questionOnWall;
   const questionRow = Boolean(onQuestionToWall) && (phase === 'VOTE' || phase === 'RESULTS');
   const ready = status === 'ready';
   const rows = ready ? responses : [];
@@ -73,11 +79,16 @@ export default function ResponsesPanel({
               </span>
             </button>
           ) : null}
+          {overviewRow && ready && rows.length ? (
+            <div data-testid="hc-overview" className="hc-resp hc-overview is-onwall">
+              <span className="hc-resp-body"><small>{`${CW.allAnswers} · ${CW.onTheWall}`}</small></span>
+            </div>
+          ) : null}
           {ready ? null : <StageGathering status={status} noun={gatheringNoun} onRetry={onRetry} />}
           {ready && ordered.length === 0 ? <p className="hc-muted">{CW.waitingForResponses}</p> : null}
           {ordered.map(({ r, i }) => {
             const label = navigatorLabel(r, i, { phase: labelPhase, authorsHidden: phase === 'VOTE' ? true : authorsHidden });
-            const onWall = !questionOnWall && onWallIndex === i;
+            const onWall = !questionOnWall && !overviewRow && onWallIndex === i;
             const Tag = onPutOnWall ? 'button' : 'div';
             return (
               <Tag

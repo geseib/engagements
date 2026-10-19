@@ -265,6 +265,13 @@ function secondaryFor(moment, ctx, primary) {
       if (moment === 'VOTING' && ctx.focus && ctx.focus.focus === 'question') {
         return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: 0, part: 0 });
       }
+      // THE OVERVIEW (19 Oct 2026): every answer fits, so the window shows
+      // them all (presentModel) and the next response is Response 1 itself.
+      // The host page says so (`overview`); the Remote does not, so it keeps
+      // Response 1 as up.
+      if (moment === 'VOTING' && ctx.overview) {
+        return control('next-response', RW.nextResponse, I.NEXT_RESPONSE, 'ArrowRight', { index: 0, part: 0 });
+      }
       const { index, part, parts } = moment === 'VOTING' ? { index: 0, part: 0, parts: 1 } : ctx.responses;
       if (parts > 1 && part < parts - 1) {
         return control('next-part', RW.nextPart, I.NEXT_PART, 'ArrowRight', { index, part: part + 1, parts });
@@ -346,6 +353,7 @@ function statusFor(moment, ctx) {
       // Response 1 is on the wall from the start of voting.
       const vote = counted(RW.voted);
       if (!(ctx.answerCount > 0)) return vote;
+      if (ctx.overview) return withVote(vote, RW.showingAll(ctx.answerCount));
       return withVote(vote, RW.showingResponse(1, ctx.answerCount));
     }
     case 'RESULTS':

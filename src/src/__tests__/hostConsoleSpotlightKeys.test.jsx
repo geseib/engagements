@@ -123,6 +123,23 @@ test('a response put on the wall from the console: → → still drives the foot
 });
 
 /*
+  THE OVERVIEW, ON THE CONSOLE (19 Oct 2026). Three short answers fit the
+  room's window all at once (config/roomContent.js overviewFits), and with
+  nothing put up the window shows them all. The console said "Response 1 ·
+  On the wall now"; it says the overview, and marks no single response.
+*/
+test('every answer fits: the console says "All answers · On the wall now", not Response 1', async () => {
+  const { container } = render(<GameHostPage />);
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  expect(container.querySelector('.hc-main [data-testid="hc-overview"]').textContent).toBe('All answers · On the wall now');
+  expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"].is-onwall')).toHaveLength(0);
+  // Putting one up moves the mark to it.
+  await act(async () => { fireEvent.click(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')[0]); });
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')[0]).toHaveClass('is-onwall'));
+  expect(container.querySelector('.hc-main [data-testid="hc-overview"]')).toBeNull();
+});
+
+/*
   THE STAGE'S READINESS GUARD, ON THE CONSOLE (final review, 15 Oct). Until
   this vote's own rows land, the console lists none (so no press can publish
   an index into the previous phase's list) and says what the stage says.

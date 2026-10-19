@@ -96,6 +96,8 @@ const RW = Object.freeze({
   voted: (x, n) => (Number(x) >= Number(n) ? `All ${n} voted` : `${x} of ${n} voted`),
   resultsOnScreen: 'Results are on screen',
   showingResponse: (i, n) => `Showing response ${i} of ${n}`,
+  /** Voting on the overview: every answer is on the wall at once (19 Oct 2026). */
+  showingAll: (n) => `Showing all ${n} answers`,
   partOf: (p, n) => `Part ${p} of ${n}`,
   readingPage: (p, n) => `Reading page ${p} of ${n}`,
   pageOf: (p, n) => `Page ${p} of ${n}`,

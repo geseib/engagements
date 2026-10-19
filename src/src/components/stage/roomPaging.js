@@ -39,4 +39,23 @@ export function stagePageSizeFor(phase, profile, answers = []) {
   return pageSizeFor(profile);
 }
 
+/**
+ * WHAT THE ROOM'S WINDOW SHOWS DURING VOTING, read on the host's page (19 Oct
+ * 2026). The window's own rule (present/presentModel.js): the question when
+ * the host put it up; a response the host put up; else every answer at once
+ * when they pass overviewFits, else Response 1. The console and the laptop's
+ * cards mark what this returns, so they never say "Response 1 · On the wall
+ * now" while the window shows all of them.
+ *
+ * @returns {{ overview: boolean, index: number|null }} `index` is the response
+ *   on the wall (null for the overview, the question, or no answers)
+ */
+export function votingWall({ spotlightIndex = null, wallFocus = 'none', answers = [], profile } = {}) {
+  if (wallFocus === 'question') return { overview: false, index: null };
+  if (Number.isInteger(spotlightIndex) && spotlightIndex >= 0) return { overview: false, index: spotlightIndex };
+  const texts = answerTexts(answers);
+  if (!texts.length) return { overview: false, index: null };
+  return overviewFits(texts, profile) ? { overview: true, index: null } : { overview: false, index: 0 };
+}
+
 export default stagePageSizeFor;

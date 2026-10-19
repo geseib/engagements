@@ -49,6 +49,19 @@ test('voting with no focus yet already shows Response 1', () => {
   expect(roundStep('VOTING', CTX({ focus: null, answerCount: 1 })).secondary).toBeNull();
 });
 
+// THE OVERVIEW (19 Oct 2026): when every answer fits, the room's window opens
+// voting on all of them (presentModel), not Response 1. The host page passes
+// `overview`, so the status says so and Next response puts Response 1 up.
+test('voting on the overview: "Showing all N answers", and Next response is Response 1', () => {
+  const s = roundStep('VOTING', CTX({ focus: null, answerCount: 4, overview: true }));
+  expect(s.primary).toMatchObject({ id: 'reveal' });
+  expect(s.secondary).toMatchObject({ id: 'next-response', index: 0, part: 0 });
+  expect(s.status.text).toBe(`${RW.voted(3, 5)} · ${RW.showingAll(4)}`);
+  expect(RW.showingAll(4)).toBe('Showing all 4 answers');
+  // Without the flag (the Remote, a list that does not fit) Response 1 is up, as before.
+  expect(roundStep('VOTING', CTX({ focus: null })).secondary).toMatchObject({ index: 1 });
+});
+
 test('a long response steps by part first', () => {
   const s = roundStep('VOTE_RESPONSES', CTX({ focus: { focus: 'answer', index: 2, part: 0, parts: 2, phase: 'VOTE' } }));
   expect(s.secondary).toMatchObject({ id: 'next-part', label: RW.nextPart, index: 2, part: 1, parts: 2 });
@@ -79,4 +92,17 @@ test('the host page says the question is up when the wall shows it', () => {
   expect(s.focus).toMatchObject({ focus: 'question', index: null });
   const r = snapshotFromHostPage({ gameType: 'call-and-answer', phase: 'VOTE', answerCount: 3, wallFocus: 'question', spotlightIndex: 1 });
   expect(r.focus).toMatchObject({ focus: 'answer', index: 1 });
+});
+
+test('the host page carries the overview to roundStep only while no response or the question is up', () => {
+  // eslint-disable-next-line global-require
+  const { snapshotFromHostPage, hostControlsFor } = require('../config/hostControls');
+  const base = { gameType: 'call-and-answer', phase: 'VOTE', answerCount: 3, playerCount: 4, votedCount: 1 };
+  expect(snapshotFromHostPage({ ...base, voteOverview: true }).overview).toBe(true);
+  expect(snapshotFromHostPage({ ...base, voteOverview: true, spotlightIndex: 1 }).overview).toBe(false);
+  expect(snapshotFromHostPage({ ...base, voteOverview: true, wallFocus: 'question' }).overview).toBe(false);
+  expect(snapshotFromHostPage({ ...base, phase: 'RESULTS', voteOverview: true }).overview).toBe(false);
+  const c = hostControlsFor({ ...base, voteOverview: true });
+  expect(c.secondary).toMatchObject({ id: 'next-response', index: 0 });
+  expect(c.status.text).toMatch(RW.showingAll(3));
 });
