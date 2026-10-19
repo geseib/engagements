@@ -483,6 +483,13 @@ projector, the wall would need the keyed link while `codes === 'both'`: an owner
 
 ---
 
+### 2.9b The console mockup's five answers (owner, 19 Oct)
+
+"use the recommendations for the five … a. yes, b. dunno, c. dunno what this means. d mock up. e. yes."
+(a) Spin the wheel is the result's second button on two screens; (b) the main button slot stays empty between asks ("No main move now"); (c) the strip stays between asks, dimmed; (d) four slots on the left, folds on the right, redrawn with "Your part now" at the top of the centre: `docs/design/build-room-consider/` frame 1, for the owner's look; (e) People ticks who has answered, by name. B8 is unblocked except for (d)'s look.
+
+New the same day: **Consider** on any idea, answer or option at any time (queue for the room, or send to Claude with editable words and a why), and a **sent mark** on every list item that reached Claude, opening History at its entry. Mockup: `docs/design/build-room-consider/` frames 2–6.
+
 ## 2a. The dock that holds still, and the way back to Host (owner, 17 Oct)
 
 Owner, 17 Oct: *"right now the bottom row buttons jump all over the place as you move the
