@@ -2764,6 +2764,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
   });
   const [edited, setEdited] = useState(Boolean(draft));
   const [note, setNote] = useState('');
+  const [why, setWhy] = useState(() => (draft && draft.why) || '');
   // WHAT CLAUDE GETS (step 7c): as the ready question's set says, else Do now.
   // Later is a list, never a kind (owner, 2026-10-08): a set that says `later` starts at Do now.
   const [as, setAs] = useState(() => {
@@ -2800,8 +2801,8 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
   const dirty = useRef(false);
   const touch = () => { dirty.current = true; };
   useEffect(() => {
-    if (dirty.current && onDraft) onDraft({ direction, as, chosen });
-  }, [direction, as, chosen]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (dirty.current && onDraft) onDraft({ direction, as, chosen, why });
+  }, [direction, as, chosen, why]); // eslint-disable-line react-hooks/exhaustive-deps
   // In spoken mode the sentence follows the picks until the host types in it.
   const pick = (next) => {
     touch();
@@ -2834,7 +2835,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
       const said = direction.trim();
       const out = await run(async () => {
         if (beforeDecide) await beforeDecide();
-        return api.askAction(ask.askId, decideBody(ask, { direction: said, chosen, note, send, as: kind, spoken }));
+        return api.askAction(ask.askId, decideBody(ask, { direction: said, chosen, note, send, as: kind, spoken, why: spoken ? '' : why }));
       });
       if (out !== undefined && onSent) onSent({ as: kind, send, direction: said });
       return out;
@@ -2884,6 +2885,13 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         </div>
       )}
       <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { touch(); setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
+      {!spoken && (
+        <label className="brm-field brm-decide-why">
+          <span className="brm-lbl">{W.considerWhy}</span>
+          <input className="brm-input" value={why} maxLength={500} placeholder={W.decideWhyPlaceholder} onChange={(e) => { touch(); setWhy(e.target.value); }} />
+          {edited && !why.trim() && <span className="brm-hint">{W.decideWhyHint}</span>}
+        </label>
+      )}
       {ask.kind === 'choice' && (
         <div className="brm-field">
           <span className="brm-lbl">{spoken ? 'What the room chose' : 'Chosen'}</span>

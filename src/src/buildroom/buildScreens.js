@@ -847,9 +847,12 @@ export const defaultKind = (ask) => (ask && ask.claudeGets) || (ask && ask.openi
  * screen's panel, the Stage's Send and its Change before sending window). `as` goes only
  * when it differs from the question's own kind: the server's default.
  */
-export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false }) {
+export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false, why = '' }) {
+  const said = String(why || '').trim();
   return {
     action: 'decide', direction: String(direction || '').trim(), chosen, note: String(note || '').trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+    // The host's why (owner, 19 Oct: "add the why field to send B"): Claude reads it, History keeps it.
+    ...(said ? { why: said } : {}),
     method: decisionMethod(ask, chosen, spoken),
     // Always said when sending, so the line the host read can never disagree with the server's default.
     ...(send ? { as: as || defaultKind(ask) } : {}),

@@ -95,11 +95,15 @@ listing); a project can name its demo and mockups in `.engage/share.json`, and e
 session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides). **Remote share** (off by default) opens the demo to people who are not on the Wi-Fi: the plugin runs a pinned, hash-checked `cloudflared` quick tunnel per session behind a key per person (design `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; `tests/engage-remote-gateway.js`, `tests/engage-cloudflared-fetch.js`).
 Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.js`).
 
-A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (the key comes from
-the host's Session › Settings › Screens): public, read-only, no names
+A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
+Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the
+choice is `engage.surfaces`, shared with Call & Answer): public, read-only, no names
 (`src/src/present/buildwall/`, read `GET …/build-play/wall`). Claude's posts and
 screenshots reach the room only after the host releases them from the queue
-(`POST …/build/posts`; the `reviewAgentPosts` setting, on by default).
+(`POST …/build/posts`; the `reviewAgentPosts` setting, on by default). On two screens the laptop is the console (`buildroom/BuildConsole.jsx`, `buildConsole.js`,
+reusing `components/console/*`). **Consider** (`POST …/build/consider`, `BuildConsider.jsx`)
+queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` marks what
+reached Claude and links each mark to its History entry.
 
 What every room screen shows, per moment and room screen size, is decided in one place:
 `src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.

@@ -46,6 +46,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   const [direction, setDirection] = useState(kept ? String(kept.direction) : initialPick ? directionFor(ask, initialPick) : start.direction);
   // The three kinds; a set that says Later is not one of them (Save for later is the button).
   const [as, setAs] = useState(() => { const k = (kept && kept.as) || defaultKind(ask); return k === 'later' ? 'do-now' : k; });
+  const [why, setWhy] = useState(() => (kept && kept.why) || '');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => reaskStart(ask));
@@ -72,7 +73,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
 
   const decide = async (kind) => {
     const out = await attempt(
-      () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind })),
+      () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind, why })),
       W.notSent,
     );
     if (out !== undefined) { onSent({ as: kind, send: true, direction: direction.trim() }); onClose(); }
@@ -193,6 +194,11 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
           </div>
         )}
         <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => setDirection(e.target.value)} placeholder="What should Claude do now?" />
+        <label className="brm-field brm-decide-why">
+          <span className="brm-lbl">{W.considerWhy}</span>
+          <input className="brm-input" value={why} maxLength={500} placeholder={W.decideWhyPlaceholder} onChange={(e) => setWhy(e.target.value)} />
+          {pick && direction.trim() !== directionFor(ask, pick).trim() && !why.trim() && <span className="brm-hint">{W.decideWhyHint}</span>}
+        </label>
         <div className="brm-field">
           <span className="brm-lbl">Claude gets it as</span>
           <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">

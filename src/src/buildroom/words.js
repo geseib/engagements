@@ -640,6 +640,8 @@ export const W = Object.freeze({
   considerSendHint: 'Now, or Later. The ask keeps running.',
   considerWords: "What Claude gets (the room's words to start; change them if you like)",
   considerWhy: 'Why? (Claude reads this; History keeps it)',
+  decideWhyHint: "You changed the room's words. Saying why helps Claude, and the room sees it in History.",
+  decideWhyPlaceholder: 'Optional: why these words',
   considerChanged: "You changed the room's words. Saying why helps Claude, and the room sees it in History.",
   considerEsc: 'Esc closes; nothing is lost',
   considerRound: 'How the room answers',
