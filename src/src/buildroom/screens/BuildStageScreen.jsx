@@ -51,7 +51,8 @@ import { WallBrief } from '../BuildOpening';
 import { PointStage } from '../BuildPointStage';
 import { RunStage } from '../BuildRun';
 import { CrewBoard, EarlyLook, featuredShare } from '../BuildCrew';
-import { WallCodes, wifiLink, demoOnStage } from '../BuildWifiShare';
+import { wifiLink, demoOnStage } from '../BuildWifiShare';
+import StageJoinPanel from '../../components/stage/StageJoinPanel';
 import { dialogOpen } from '../useNextFocus';
 import {
   stageModel, isPointsVote, sentStageAsk, sentOf,
@@ -139,7 +140,7 @@ export default function BuildStageScreen({
   const wheelTurning = Boolean(lastSpinId && lastSpinId !== settledSpin);
   const both = codesUp && demoOnStage(room, now, demoLink);
   const bar = c ? buildControls(room, current, now, {
-    crewOn, draft: c.draft || null, turning: wheelTurning, highlight: c.highlight, codesUp, codesBoth: both, busy: Boolean(c.busy),
+    crewOn, draft: c.draft || null, turning: wheelTurning, highlight: c.highlight, busy: Boolean(c.busy),
   }) : null;
   const m = bar ? bar.model : stageModel(room, current, now, { crewOn, turning: wheelTurning });
   const [editing, setEditing] = useState(false);
@@ -206,22 +207,22 @@ export default function BuildStageScreen({
   const joinedWaiting = c && joined && listNames ? { names: joined, mode: reveal, ...handlers } : null;
   const meterBody = m.meter.of === null ? String(m.meter.count) : <>{m.meter.count}<small>{` / ${m.meter.of}`}</small></>;
   const playUrl = `${window.location.origin}/play?gameId=${room.gameId}`;
-  const pickable = Boolean(c) && !ended && !codesUp && !crewOn && Boolean(current) && !pointsVote;
+  const pickable = Boolean(c) && !ended && !crewOn && Boolean(current) && !pointsVote;
   // FRAME 8 (docs/design/room-content-v2, owner 18 Oct 2026): once the host
   // sends the room's decision, its result stays up with the "Sent to Claude"
   // band until Claude says what it is doing (the one I9 state); then the work
   // row (I10). Drawn only: the host's moves are the quiet moment's, as before.
-  const sentAsk = !current && !codesUp && !crewOn && !ended ? sentStageAsk(room, now) : null;
+  const sentAsk = !current && !crewOn && !ended ? sentStageAsk(room, now) : null;
   const shownAsk = current || sentAsk;
   // WHAT THE ROOM SEES (config/roomContent.js): the same call on one screen and on the room's window.
   const momentNow = buildMomentOf({
-    current: codesUp || crewOn ? null : shownAsk,
+    current: crewOn ? null : shownAsk,
     wheel: Boolean(current && m.wheel),
     point: m.point || null,
     run: m.run || null,
-    showing: Boolean(codesUp || crewOn || (!shownAsk && room.opening && room.opening.phase === 'opening')),
+    showing: Boolean(crewOn || (!shownAsk && room.opening && room.opening.phase === 'opening')),
   });
-  const rc = buildRoomContent(momentNow, profile, room, codesUp || crewOn ? null : shownAsk, now);
+  const rc = buildRoomContent(momentNow, profile, room, crewOn ? null : shownAsk, now);
   const optSize = shownAsk ? optionPageSizeFor(profile, shownAsk.options, {
     height: window.innerHeight, results: !['live', 'voting'].includes(shownAsk.status),
   }) : 0;
@@ -230,9 +231,7 @@ export default function BuildStageScreen({
   const claudeNow = textOf(rc, 'claude') || {};
   const claudeKey = [claudeNow.headline, claudeNow.dur, claudeNow.helperLine].join('/');
   let content;
-  if (codesUp) {
-    content = <WallCodes room={room} now={now} link={demoLink} onZoom={c ? setZoom : null} />;
-  } else if (crewOn) {
+  if (crewOn) {
     content = (
       <>
         {onWall && <EarlyLook key={onWall.shareId} share={onWall} crew={crew} host={false} stage />}
@@ -314,11 +313,11 @@ export default function BuildStageScreen({
             join={ended
               ? { code: room.gameId, closed: true }
               : c
-                ? { url: `${window.location.host}/play`, code: room.gameId, onPreview: none, onPreviewEnd: none, onPin: () => setZoom('join') }
+                ? { url: `${window.location.host}/play`, code: room.gameId, onPreview: none, onPreviewEnd: none, onPin: c.onToggleCodes || (() => setZoom('join')) }
                 : { url: `${window.location.host}/play`, code: room.gameId }}
           />
         )}
-        meter={codesUp ? null : <RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={meterBody} waiting={joinedWaiting} />}
+        meter={<RoomMeter phase={m.phase || 'LOBBY'} heading={m.meter.heading} body={meterBody} waiting={joinedWaiting} />}
         dock={c ? (
           <Dock
             data-capability={bar.primary ? 'ask-moves' : undefined}
@@ -335,7 +334,21 @@ export default function BuildStageScreen({
           </Dock>
         ) : <Dock status={status} />}
       >
-        <div className="content" data-capability={pickable ? 'board-pick' : undefined} data-room-moment={momentNow}>
+        {/* THE CODES AS A SIDE PANEL, NOT A TAKEOVER (owner, 18 Oct 2026; the
+            Call & Answer stage's StageJoinPanel, docs/design/room-content-v2):
+            the moment keeps its column and the fitter steps it down beside
+            the join code, and the demo's code while it is shared. Until then
+            the codes card replaced the Stage. */}
+        <div className="content" data-join={codesUp ? '1' : undefined} data-capability={pickable ? 'board-pick' : undefined} data-room-moment={momentNow}>
+          {codesUp && (
+            <StageJoinPanel
+              playUrl={playUrl}
+              joinUrl={`${window.location.host}/play`}
+              code={room.gameId}
+              second={both ? { url: demoLink, head: W.stageDemoHead, note: W.stageSameWifi, zoomLabel: 'Enlarge the demo code' } : null}
+              onZoom={c ? (which) => setZoom(which === 'second' ? 'demo' : 'join') : null}
+            />
+          )}
           <div className="fitbox">
             {content}
             {/* Claude's status, essential on every screen the room sees (owner, 17 Oct

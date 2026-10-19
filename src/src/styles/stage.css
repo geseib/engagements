@@ -1507,6 +1507,13 @@ a.dock-more{text-decoration:none}
   color:var(--text);overflow-wrap:anywhere;max-width:100%}
 .stage-join-code{margin:0;font-family:var(--font-display);font-weight:800;font-size:var(--L-primary);
   line-height:1;letter-spacing:.08em;color:var(--text)}
+/* A Build Room's demo, the panel's second code (room-content-v2): both QRs
+   step down so the two share the panel's height. */
+.stage-join.is-two .qr{width:min(100%, clamp(150px, 22vh, 280px))}
+.stage-join-second{display:flex;flex-direction:column;align-items:center;gap:calc(.6vh + 4px);
+  width:100%;padding-top:calc(1.2vh + 6px);border-top:var(--hair) solid var(--rule)}
+.stage-join-note{margin:0;font-size:var(--L-meta);color:var(--muted)}
+.stage-join-zoom{display:block;padding:0;border:0;background:none;cursor:zoom-in}
 
 /* ONE ANSWER PUT UP (frames 11-12): components/AnswerSpotlight with
    surfaceClassName "stage-spot" and a variant. The number or the place, the

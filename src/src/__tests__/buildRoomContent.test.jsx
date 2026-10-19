@@ -162,8 +162,14 @@ describe("Claude's status on every screen the room sees (owner, 17 Oct 2026)", (
       expect(status(container)).not.toBeNull();
       unmount();
     });
+    // The codes are a side panel (owner, 18 Oct 2026): between asks the idle
+    // Stage stays beside them, and its lead IS Claude's status.
     const { container } = render(<BuildStageScreen room={wall()} now={now} profile={profile} show={{ codesUp: true }} />);
-    expect(status(container)).not.toBeNull();
+    expect(container.querySelector('[data-testid="stage-join-panel"]')).not.toBeNull();
+    expect(container.querySelector('.brm-stage--idle .brm-q').textContent).toBe('Claude is adding the parking map');
+    const live = render(<BuildStageScreen room={wall({ ask: 'live' })} now={now} profile={profile} show={{ codesUp: true }} />);
+    expect(status(live.container)).not.toBeNull();
+    live.unmount();
   });
 
   it.each(PROFILES)('%s: on Build and on History', (profile) => {

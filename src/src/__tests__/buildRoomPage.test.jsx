@@ -188,83 +188,90 @@ describe('the codes on the Stage', () => {
     current = { ...hostState(), lan: l };
     await act(async () => { handler({ gameId: GAME, rev: 9 }); });
   };
-  const card = () => screen.queryByTestId('brm-wallcodes');
+  // THE CODES ARE A SIDE PANEL (owner, 18 Oct 2026: "use the approach we now
+  // have for call and answer"): Call & Answer's StageJoinPanel beside the
+  // Stage's moment, the demo's code under the join while it is shared.
+  const card = () => screen.queryByTestId('stage-join-panel');
   const dock = () => document.querySelector('footer.dock');
+  const wallPosts = () => posts().filter((c) => path(c) === `games/${GAME}/build/wall`).map((c) => c.body);
+  // On the Stage the header is not drawn: the rail's code is the toggle there, as on Call & Answer's stage.
+  const railCode = () => screen.getByRole('button', { name: `Session code ${GAME}. Show the join QR code` });
 
-  test('the chip\'s Show on the Stage opens the two-code card; the meter steps aside; Hide the codes is the dock\'s one move', async () => {
+  test('the chip\'s Show on the Stage puts both codes beside the moment; the meter and the dock keep theirs; Join again takes them down', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
     fireEvent.click(screen.getByTestId('brm-wifi'));
     fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
     expect(card()).not.toBeNull();
-    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(card()).toHaveClass('is-two');
+    expect(card().closest('.content').getAttribute('data-join')).toBe('1');
     expect(screen.getByText('Try the demo yourself')).toBeInTheDocument();
-    // No demo-only dialog any more: one card for codes.
-    expect(screen.queryByRole('dialog', { name: 'Try the demo yourself' })).toBeNull();
-    expect(document.querySelector('.main.solo')).not.toBeNull();
-    expect(document.querySelector('aside.meter')).toBeNull();
-    const hide = within(dock()).getByRole('button', { name: 'Hide the codes' });
-    // The shared bar's one main button (parity PLAN §2a D1).
-    expect(hide).toHaveClass('host-action-bar__primary');
-    fireEvent.click(hide);
-    expect(card()).toBeNull();
+    // Nothing is replaced: the moment's own column and the room meter stay.
+    expect(document.querySelector('.content > .fitbox')).not.toBeNull();
     expect(document.querySelector('aside.meter')).not.toBeNull();
+    // The dock keeps the moment's moves: no "Hide the codes" takeover.
+    expect(within(dock()).queryByRole('button', { name: /Hide the code/ })).toBeNull();
+    await waitFor(() => expect(wallPosts()).toContainEqual(expect.objectContaining({ codes: 'both' })));
+    fireEvent.click(railCode());
+    expect(card()).toBeNull();
+    await waitFor(() => expect(wallPosts()).toContainEqual(expect.objectContaining({ codes: 'none' })));
   });
 
-  test('stopping or failing takes the demo half away and keeps Join up; sharing again brings the demo back to the card', async () => {
+  test('stopping or failing takes the demo code away and keeps Join up; sharing again brings it back', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
     fireEvent.click(screen.getByTestId('brm-wifi'));
     fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
     await push(lan('off'));
-    await waitFor(() => expect(card()).toHaveClass('is-one'));
-    expect(screen.getByText('Scan to join')).toBeInTheDocument();
+    await waitFor(() => expect(card()).not.toHaveClass('is-two'));
     expect(screen.queryByText('Try the demo yourself')).toBeNull();
-    expect(within(dock()).getByRole('button', { name: 'Hide the code' })).toBeInTheDocument();
+    expect(card()).not.toBeNull();
     await push(lan('failed', { error: 'No Wi-Fi address.' }));
-    expect(card()).toHaveClass('is-one');
+    expect(card()).not.toHaveClass('is-two');
     await push(lan('live'));
-    await waitFor(() => expect(card()).not.toHaveClass('is-one'));
+    await waitFor(() => expect(card()).toHaveClass('is-two'));
   });
 
-  test('no auto-hide: the demo stays on the card while nobody has opened it', async () => {
+  test('no auto-hide: the demo stays beside the join while nobody has opened it', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
     fireEvent.click(screen.getByTestId('brm-wifi'));
     fireEvent.click(screen.getByRole('button', { name: 'Show on the Stage' }));
     await push(lan('live', { open: 0, liveSince: ago(600) }));
-    // The count goes (nobody has opened it), and the demo stays.
-    await waitFor(() => expect(card().querySelector('.brm-wallcodes-n')).toBeNull());
-    expect(card()).not.toHaveClass('is-one');
-    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(card()).toHaveClass('is-two');
+    expect(card().querySelectorAll('.qr')).toHaveLength(2);
   });
 
-  test('the header\'s join button opens both codes while the demo is live', async () => {
+  test('the header\'s join button shows both codes while the demo is live; the rail\'s code hides them', async () => {
     await openRoom({ ...hostState(), lan: lan('live') });
     fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show both codes on the Stage` }));
-    expect(card()).not.toBeNull();
-    expect(card().querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+    expect(card()).toHaveClass('is-two');
     expect(screen.queryByRole('dialog', { name: 'Join QR code' })).toBeNull();
-  });
-
-  test('the header\'s join button opens Join alone when there is no live demo', async () => {
-    await openRoom({ ...hostState(), lan: lan('starting') });
-    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
-    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    fireEvent.click(railCode());
     expect(card()).toBeNull();
+    // Back on the Host screen, the header's Join says what a press does, and is pressed while they are up.
+    fireEvent.keyDown(window, { key: '1' });
+    const chip = screen.getByRole('button', { name: `Join code ${GAME}. Show both codes on the Stage` });
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('a click on a code enlarges it alone; Escape takes the card down', async () => {
-    await openRoom({ ...hostState(), lan: lan('live') });
-    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show both codes on the Stage` }));
-    fireEvent.click(screen.getByRole('button', { name: 'Enlarge the demo code' }));
-    const big = screen.getByRole('dialog', { name: 'Demo QR code' });
-    expect(within(big).getByText('192.168.1.20:4900')).toBeInTheDocument();
-    expect(big.querySelector('.brm-qrzoom-url').textContent).not.toMatch(/k=/);
-    // Escape closes the enlarged code first, and leaves the card.
-    fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Demo QR code' })).toBeNull());
+  // rejects (owner, 18 Oct 2026): "there is no way to use the host screen to put
+  // up the qr code on the room window" — with no demo, Join opened a QR on the
+  // laptop alone and told the server nothing.
+  test('with no live demo the header\'s join puts the join code on the Stage and the room\'s window', async () => {
+    await openRoom({ ...hostState(), lan: lan('starting') });
+    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
     expect(card()).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Enlarge the join code' }));
-    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Join QR code' })).getByRole('img'));
+    expect(card()).not.toHaveClass('is-two');
+    expect(screen.queryByRole('dialog', { name: 'Join QR code' })).toBeNull();
+    await waitFor(() => expect(wallPosts()).toContainEqual(expect.objectContaining({ codes: 'join' })));
+  });
+
+  test('J shows and hides the codes, as on Call & Answer; Escape takes them down', async () => {
+    await openRoom({ ...hostState(), lan: lan('starting') });
+    fireEvent.keyDown(document, { key: 'j' });
+    expect(card()).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'J' });
+    expect(card()).toBeNull();
+    fireEvent.keyDown(document, { key: 'j' });
+    expect(card()).not.toBeNull();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(card()).toBeNull();
   });
@@ -1015,8 +1022,10 @@ describe('the join QR and link (owner, 2026-10-04)', () => {
     const writeText = jest.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     try {
-      // The header's join code opens it (the join block under the stage is gone, owner 2026-10-05).
-      fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
+      // The header's join code puts it on the Stage beside the moment (owner,
+      // 18 Oct 2026, as on Call & Answer); the host enlarges it from there.
+      fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
+      fireEvent.click(screen.getByRole('button', { name: 'Enlarge the join code' }));
       const big = screen.getByRole('dialog', { name: 'Join QR code' });
       const full = `${window.location.origin}/play?gameId=${GAME}`;
       // The link copies, and does NOT close the big QR.
@@ -1167,10 +1176,10 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
   });
 
-  test('the join code in the header shows the QR', async () => {
+  test('the join code in the header puts the code on the Stage', async () => {
     await openRoom(busy());
-    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
-    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
+    expect(screen.getByTestId('stage-join-panel')).toBeInTheDocument();
   });
 });
 
@@ -1278,11 +1287,16 @@ describe('the Stage screen is the regular stage (rail, meter, dock)', () => {
     expect(screen.getByRole('button', { name: /^Host/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('the rail\'s join code shows the QR', async () => {
+  // The rail's code toggles the codes beside the moment, as on Call & Answer (owner, 18 Oct 2026).
+  test('the rail\'s join code shows and hides the join code beside the moment', async () => {
     await openRoom(live());
     fireEvent.keyDown(window, { key: '2' });
-    fireEvent.click(screen.getByRole('button', { name: `Session code ${GAME}. Show the join QR code` }));
-    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    const railCode = () => screen.getByRole('button', { name: `Session code ${GAME}. Show the join QR code` });
+    fireEvent.click(railCode());
+    expect(screen.getByTestId('stage-join-panel')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Join QR code' })).toBeNull();
+    fireEvent.click(railCode());
+    expect(screen.queryByTestId('stage-join-panel')).toBeNull();
   });
 });
 
@@ -2266,14 +2280,14 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     asNarrow(true);
     await openRoom(hostState());
     fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the QR code` }));
-    expect(screen.getByRole('dialog', { name: 'Join QR code' })).toBeInTheDocument();
+    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
+    expect(screen.getByTestId('stage-join-panel')).toBeInTheDocument();
   });
 
   test('wide: the join code, ask pill and live build stay in the header', async () => {
     asNarrow(false);
     await openRoom(hostState());
-    expect(within(header()).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(header()).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
     expect(within(header()).getByText(/Open the build/)).toBeInTheDocument();
   });
 
@@ -2282,11 +2296,11 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     await openRoom(hostState({ logs: [{ Kind: 'showing', Text: 'Header is live', By: 'agent', Link: 'http://localhost:5173/' }] }));
     const h = header();
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
-    expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
+    expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeNull();
     expect(within(h).queryByText(/Open the build/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
     const top = within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top');
-    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
     expect(within(top).getByText(/Open the build/)).toBeInTheDocument();
     expect(top.querySelector('.brm-wifi')).not.toBeNull();
     expect(top.querySelector('.brm-agentchip')).not.toBeNull();

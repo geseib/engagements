@@ -173,11 +173,12 @@ describe('each moment', () => {
     expect(c.tertiary).toBeNull();
   });
 
-  test('the codes card: its one move is to take it down', () => {
-    const c = controlsFor(MOMENTS['results, a winner'](), { codesUp: true, codesBoth: true });
-    expect(c.primary).toMatchObject({ action: 'hide-codes', label: W.hideCodes });
-    expect(c.secondary).toBeNull();
-    expect(controlsFor(MOMENTS.idle(), { codesUp: true }).primary.label).toBe(W.hideCode);
+  // rejects (owner, 18 Oct 2026, as on Call & Answer): the codes replacing the
+  // moment's moves. They are a side panel now; Join, J or Escape take them down.
+  test('the codes up: the moment keeps its own moves', () => {
+    const r = MOMENTS['results, a winner']();
+    expect(controlsFor(r, { codesUp: true, codesBoth: true })).toEqual(controlsFor(r));
+    expect(controlsFor(r, { codesUp: true }).primary.action).not.toBe('hide-codes');
   });
 
   test('ended: no moves', () => {
