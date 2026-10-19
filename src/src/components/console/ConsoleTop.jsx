@@ -8,7 +8,7 @@ import RoomWindowStatus from '../stage/RoomWindowStatus';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null }) {
+export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -23,7 +23,7 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
       <span className="hc-name">{title}</span>
       <span className="hc-spacer" />
       {code ? (
-        <button type="button" className="hc-code" onClick={onJoin} aria-label={`${CW.join} ${code}. Show the join code on the wall`}>
+        <button type="button" className="hc-code" onClick={onJoin} aria-label={`${CW.join} ${code}. Show the join code on the wall`} {...(codeProps || {})}>
           {CW.join} <b>{code}</b>
         </button>
       ) : null}
@@ -34,9 +34,13 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
         href={presentHref}
         detail={presentDetail}
         onOpen={open}
+        short={short}
         linkLabel={`${CW.roomsWindow} ↗`}
         classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }}
       />
+      {/* A type's own top-line parts (the Build Room's Share demo, The room
+          sees and the connection), after the window, in its order. */}
+      {children}
     </header>
   );
 }

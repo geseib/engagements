@@ -25,7 +25,7 @@
  *
  * Words come from words.js. Pure: no React, no fetch.
  */
-import { stageModel } from './buildScreens';
+import { stageModel, decisionChoices } from './buildScreens';
 import { W } from './words';
 
 const ICON = Object.freeze({
@@ -99,16 +99,59 @@ function control(move, m, busy, key) {
   };
 }
 
+/*
+  THE DECIDE PANEL INLINE (owner, 19 Oct 2026, the console mockup's answer
+  (a): "use the recommendations"). On one screen the result's second button
+  is "Change before sending": it opens the send window. On two screens the
+  console draws that panel already open beside the board, so a button that
+  opens it would do nothing; the second button there is "Spin the wheel"
+  (Spin again once the wheel has landed). The host's pick on the board, made
+  in the console's panel, is what the main button sends ("Send C to Claude").
+  The words are the dock's own; only which second button applies changes, so
+  the dock and the console read the same function (parity).
+*/
+const sendLabelFor = (current, pickId) => {
+  const c = decisionChoices(current).find((x) => x.id === pickId);
+  return c && c.label ? W.send(c.label) : W.sendPlain;
+};
+
+function inlineDecide(model, current, { pickId = null, answering = false } = {}) {
+  const m = model;
+  if (!current) return m;
+  // Answering for the room (people said it out loud): the panel's words go, in one press.
+  if (answering) return { ...m, primary: { action: 'to-claude', label: W.sendPlain, spoken: true }, secondary: null, extras: [] };
+  if (m.phase !== 'RESULTS' || m.pointsVote) return m;
+  const p = m.primary;
+  // The wheel still turning holds both buttons, as on the dock.
+  if (p && p.action === 'noop') return m;
+  const isEdit = (c) => Boolean(c && c.action === 'edit');
+  const wheel = current.wheel && !current.revotedAs ? current.wheel : null;
+  const canWheel = !current.revotedAs && current.kind !== 'rating' && decisionChoices(current).length > 0;
+  const spinMove = wheel ? { action: 'spin', label: W.spinAgain } : canWheel ? { action: 'wheel', label: W.spin } : null;
+  const picked = pickId && current.kind !== 'rating' ? pickId : null;
+  if (p && p.action === 'to-claude') {
+    return { ...m, primary: picked ? { ...p, label: sendLabelFor(current, picked) } : p, secondary: spinMove };
+  }
+  if (picked) return { ...m, primary: { action: 'to-claude', label: sendLabelFor(current, picked) }, secondary: spinMove };
+  // Nothing to send yet (a tie, a wheel not spun): the lead stays; the panel is the change.
+  return { ...m, secondary: isEdit(m.secondary) ? null : m.secondary };
+}
+
 /**
  * @param room the host's room (GET build/state)
  * @param current the ask on the Stage, or null
  * @param opts stageModel's options, plus `codesUp` / `codesBoth` (the codes
- *   card is up, with both codes) and `busy` (a host action is in flight)
+ *   card is up, with both codes), `busy` (a host action is in flight), and
+ *   the console's `decideInline` (the decide panel is drawn open: Spin the
+ *   wheel is the second button), with its `pickId` (the host's pick on the
+ *   board) and `answering` (the host answers for the room)
  */
 export function buildControls(room, current, now = Date.now(), {
   crewOn = false, draft = null, turning = false, highlight = null, codesUp = false, codesBoth = false, busy = false,
+  decideInline = false, pickId = null, answering = false,
 } = {}) {
-  const m = stageModel(room, current, now, { crewOn, draft, turning, highlight });
+  const staged = stageModel(room, current, now, { crewOn, draft, turning, highlight });
+  const m = decideInline && staged.phase !== 'ENDED' && !crewOn ? inlineDecide(staged, current, { pickId, answering }) : staged;
   const ended = m.phase === 'ENDED';
   const none = { status: m.status || '', primary: null, secondary: null, tertiary: null, model: m };
   if (ended) return none;

@@ -227,5 +227,53 @@ describe('each moment', () => {
     expect(c.primary.action).toBe('points-send');
     expect(c.secondary.action).toBe('points-run');
     expect(c.tertiary).toMatchObject({ action: 'points-later', label: W.saveRest });
+    // The console's panel never changes a points vote's three moves.
+    const inline = controlsFor(r, { decideInline: true });
+    expect([inline.primary.action, inline.secondary.action, inline.tertiary.action]).toEqual(['points-send', 'points-run', 'points-later']);
+  });
+});
+
+/*
+  THE DECIDE PANEL INLINE (the two-screen console, B8; owner, 19 Oct 2026,
+  the console mockup's answer (a)). On two screens the console draws the
+  decide panel open beside the board, so the result's second button is Spin
+  the wheel instead of Change before sending; every other move, and every
+  label, is the dock's. This is the parity rule both surfaces test against.
+*/
+describe('decideInline: which second button applies when the decide panel is open', () => {
+  test('results with a winner: Send B to Claude, Spin the wheel beside it (the dock says Change before sending)', () => {
+    const r = MOMENTS['results, a winner']();
+    const dock = controlsFor(r);
+    const inline = controlsFor(r, { decideInline: true });
+    expect(dock.secondary.label).toBe(W.change);
+    expect(inline.primary.label).toBe(dock.primary.label);
+    expect(inline.primary.label).toBe(W.send('B'));
+    expect(inline.secondary).toMatchObject({ action: 'wheel', label: W.spin });
+  });
+
+  test('a tie: Spin the wheel leads, and nothing beside it (the panel is the change)', () => {
+    const inline = controlsFor(MOMENTS['results, a tie'](), { decideInline: true });
+    expect(inline.primary).toMatchObject({ action: 'wheel', label: W.spin });
+    expect(inline.secondary).toBeNull();
+  });
+
+  test('the host picked another option in the panel: the main button sends that one', () => {
+    const inline = controlsFor(MOMENTS['results, a winner'](), { decideInline: true, pickId: 'A' });
+    expect(inline.primary).toMatchObject({ action: 'to-claude', label: W.send('A') });
+    expect(inline.secondary.label).toBe(W.spin);
+    // A pick in a tie gives it something to send.
+    expect(controlsFor(MOMENTS['results, a tie'](), { decideInline: true, pickId: 'B' }).primary.label).toBe(W.send('B'));
+  });
+
+  test('answering for the room: one Send', () => {
+    const inline = controlsFor(MOMENTS['choice live, 3 of 4'](), { decideInline: true, answering: true });
+    expect(inline.primary).toMatchObject({ action: 'to-claude', label: W.sendPlain });
+    expect(inline.secondary).toBeNull();
+  });
+
+  test.each(Object.keys(MOMENTS).filter((n) => !n.startsWith('results')))('every other moment is the dock\'s, word for word: %s', (name) => {
+    const r = MOMENTS[name]();
+    const pick = (c) => [c.primary, c.secondary, c.tertiary].map((x) => (x ? [x.action, x.label, Boolean(x.arm)] : null));
+    expect(pick(controlsFor(r, { decideInline: true }))).toEqual(pick(controlsFor(r)));
   });
 });

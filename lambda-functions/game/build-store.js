@@ -706,6 +706,16 @@ function tally(ask, room) {
   return { total: n, rating: { avg: n ? Math.round((sum / n) * 10) / 10 : null, count: n, dist }, whys };
 }
 
+/** The names of the people who have answered an ask, once each, in the order they answered. */
+function answeredNames(ask, room) {
+  const rows = ask.Kind === 'suggest'
+    ? (ask.Status === 'live' ? forAsk(room.resps, ask.AskId).filter((r) => (r.Source || 'player') === 'player') : forAsk(room.votes, ask.AskId))
+    : forAsk(room.answers, ask.AskId);
+  const out = [];
+  for (const r of rows) if (r.PlayerName && !out.includes(r.PlayerName)) out.push(r.PlayerName);
+  return out;
+}
+
 /** One ask, as `audience` may see it. `me` = {playerName} for a phone. */
 function askView(ask, room, audience, me) {
   const t = tally(ask, room);
@@ -767,6 +777,11 @@ function askView(ask, room, audience, me) {
       out.results = { total: t.total, rating: t.rating, whys: t.whys.map((w) => (isHost ? w : { label: w.label, text: w.text })) };
     }
   }
+  // WHO HAS ANSWERED, BY NAME, FOR THE HOST'S LAPTOP ONLY (owner, 19 Oct 2026,
+  // the console mockup's answer (e): "People ticks who has answered, by name";
+  // parity PLAN §2.9b). Names only, never what anyone chose. While the room
+  // suggests, the people who suggested; once it votes, the people who voted.
+  if (audience === 'host') out.answeredBy = answeredNames(ask, room);
   if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
   if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
   if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
