@@ -48,6 +48,21 @@ export function twoSurfacesOn({ env, search, storage, gameType } = {}) {
   return env === 'development';
 }
 
+/**
+ * ONE PAGE, ONE CHOICE (review #38, test 5b908b65): the host page decides from
+ * the choice it holds (read once when it opens, changed only by a choice made
+ * on it), never by re-reading storage on every render. Storage is shared by
+ * every tab in this browser (another host tab, a Build Room, a link carrying
+ * `?surfaces=`), so re-reading it flipped a page set to One screen back to the
+ * console on the next session update with nobody choosing.
+ */
+export function twoSurfacesFor(choice, { gameType, env } = {}) {
+  if (!TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer')) return false;
+  if (choice === 'two') return true;
+  if (choice === 'classic') return false;
+  return env === 'development';
+}
+
 /** The page's own reading, for components. */
 export function twoSurfacesHere(gameType) {
   if (typeof window === 'undefined') return false;

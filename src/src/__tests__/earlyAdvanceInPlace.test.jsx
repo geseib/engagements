@@ -50,3 +50,32 @@ test('first press arms "Start voting anyway" with the count; the second, within 
   expect(screen.queryByRole('button', { name: /anyway/ })).toBeNull();
   jest.useRealTimers();
 });
+
+// review #38 (test 5b908b65, session 7360): Show results pressed with 2 of 4
+// voted armed the button; the last ballots landed, the same button dropped its
+// `arm`, and the bar read the warning from nothing: "Cannot read properties of
+// undefined (reading 'text')", a blank host page. It now lets go instead.
+test('an armed button that stops needing a second press lets go, and the bar keeps drawing', () => {
+  const early = roundStep('VOTING', {
+    gameType: 'call-and-answer', roundNoun: 'Round', playerCount: 4, answerCount: 4,
+    progress: { received: 2, total: 4, allIn: false },
+  });
+  const allIn = roundStep('VOTING', {
+    gameType: 'call-and-answer', roundNoun: 'Round', playerCount: 4, answerCount: 4,
+    progress: { received: 4, total: 4, allIn: true },
+  });
+  expect(early.primary.arm).toBeTruthy();
+  expect(allIn.primary.id).toBe(early.primary.id);
+  expect(allIn.primary.arm).toBeFalsy();
+  const onAction = jest.fn();
+  const { rerender, container } = render(<HostActionBar controls={{ primary: early.primary, secondary: null, status: early.status }} onAction={onAction} />);
+  fireEvent.click(screen.getByRole('button', { name: early.primary.label }));
+  expect(onAction).not.toHaveBeenCalled();
+  expect(container.querySelector('.host-action-bar__armed')).not.toBeNull();
+  // The last ballots land: same button, no arm. No crash, no stale warning.
+  rerender(<HostActionBar controls={{ primary: allIn.primary, secondary: null, status: allIn.status }} onAction={onAction} />);
+  expect(container.querySelector('.host-action-bar__armed')).toBeNull();
+  // One press now acts.
+  fireEvent.click(screen.getByRole('button', { name: allIn.primary.label }));
+  expect(onAction).toHaveBeenCalledTimes(1);
+});

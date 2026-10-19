@@ -47,7 +47,9 @@ export default function ReadPanel({ kicker, markdown, askAddon = null, afterRead
   const sliced = Number.isInteger(page) && Number(budget) > 0 && Boolean(markdown);
   const read = (
     <div className="hc-card">
-      <h3 className="hc-card-h">{sliced ? CW.readTitle : `${CW.readTitle} · ${CW.readOnWall}`}</h3>
+      {/* "The wall shows this page" only beside a read that exists: while Workie
+          is still writing there is nothing on the wall to point at (review #38). */}
+      <h3 className="hc-card-h">{sliced || !String(markdown || '').trim() ? CW.readTitle : `${CW.readTitle} · ${CW.readOnWall}`}</h3>
       {sliced
         ? <ReadSlices markdown={markdown} page={page} budget={budget} askAddon={askAddon} />
         : <MarkdownRenderer content={markdown || ''} className="hc-md" listItemAddon={askAddon} />}

@@ -60,7 +60,7 @@ import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -473,6 +473,8 @@ function GameHostPage() {
     chosen, which is when the lobby asks. `roomScreenOpen` reopens the choice.
   */
   const [roomScreenChoice, setRoomScreenChoice] = useState(() => {
+    // A ?surfaces= in the address is a choice: twoSurfacesHere stores it first.
+    try { twoSurfacesHere('call-and-answer'); } catch (e) { /* no window */ }
     try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
   });
   const [roomScreenOpen, setRoomScreenOpen] = useState(false);
@@ -1171,7 +1173,9 @@ function GameHostPage() {
     another surface's choice arrives as `stageProfileChanged` or on a reload.
     With the switch off, the profile stays this browser's own, as before.
   */
-  const twoSurfaces = twoSurfacesHere(currentGameType);
+  // This page's choice, never storage re-read per render (review #38: another
+  // tab's write flipped One screen back to the console). config/surfaces.js.
+  const twoSurfaces = twoSurfacesFor(roomScreenChoice, { gameType: currentGameType, env: typeof window !== 'undefined' ? window.ENV : undefined });
   // For the socket handlers, registered once: which kind of host page this is now.
   const twoSurfacesRef = useRef(twoSurfaces);
   twoSurfacesRef.current = twoSurfaces;
