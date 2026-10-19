@@ -98,6 +98,12 @@ const RW = Object.freeze({
   showingResponse: (i, n) => `Showing response ${i} of ${n}`,
   /** Voting on the overview: every answer is on the wall at once (19 Oct 2026). */
   showingAll: (n) => `Showing all ${n} answers`,
+  // ── The end, on the stage and the room's window alike (19 Oct 2026) ──
+  sessionComplete: 'Session complete',
+  /** "4 rounds played": the noun is the set's round noun ("Round" by default). */
+  roundsPlayed: (n, noun = 'Round') => `${n} ${(Number(n) === 1 ? noun : `${noun}s`).toLowerCase()} played`,
+  /** A room count, not a participation rate (GameHostPage's ENDED explains why). */
+  endedInRoom: (n) => `${n} in the room · the full write-up is in the session report`,
   partOf: (p, n) => `Part ${p} of ${n}`,
   readingPage: (p, n) => `Reading page ${p} of ${n}`,
   pageOf: (p, n) => `Page ${p} of ${n}`,

@@ -77,7 +77,7 @@ import {
   shortcutsSuppressed, scoreboardKeysLive, sessionPanelKeyLive, qrOverlayInstructions,
 } from './utils/hostOverlays';
 import {
-  resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
+  resolveInstruction, currentQuestionOf, resolveRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import {
@@ -9156,9 +9156,10 @@ Focus on actionable business strategy insights.`;
                 honest one we do have, and the roll-up sits beneath it. */}
             {hostPhase === 'ENDED' && !isSurvey && (
               <>
-                <div className="kicker">Session complete</div>
+                {/* The words are the room's window's too (RW, 19 Oct 2026), so the two ends cannot drift. */}
+                <div className="kicker">{RW.sessionComplete}</div>
                 <h1 className="hero">
-                  {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played`}
+                  {RW.roundsPlayed(lessonNumber, getHostRoundNoun())}
                 </h1>
                 {/* IN THE CONTENT FLOW, ABOVE THE PODIUM, UNDROPPABLE.
                     10-ended.html puts its people figure INSIDE the podium's
@@ -9174,7 +9175,7 @@ Focus on actionable business strategy insights.`;
                     yet, so this states what it can rather than a figure that
                     would be 100% by construction. */}
                 <p className="qdetail">
-                  {`${players.length} in the room · the full write-up is in the session report`}
+                  {RW.endedInRoom(players.length)}
                 </p>
 
                 {/* The mockup's second stat card — `Rounds captured · All

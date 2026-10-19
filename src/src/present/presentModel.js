@@ -57,6 +57,8 @@ const contextOf = (q, snapshot) => {
 import { prosePageSlice, proseBudgetFor } from '../config/stagePaging';
 import { partText } from './presentFit';
 import { wallCreditFor } from '../config/comments';
+import { podiumEntries } from '../config/podium';
+import { isSurveyType } from '../config/hostControls';
 
 /** The results tally shows five; up to six fit whole (NOTES §5). */
 export const TALLY_TOP = 5;
@@ -387,6 +389,8 @@ function momentModel(snapshot, reads = {}) {
         total: rows.length,
         hidden: hiddenNow(snapshot),
         voted: int(snapshot.roomCounts && snapshot.roomCounts.voted),
+        // A comment the host put up shows here too, as on the stage (19 Oct 2026).
+        featured: featuredOf(reads.comments),
       };
     }
     case 'RESPONSES': {
@@ -410,7 +414,7 @@ function momentModel(snapshot, reads = {}) {
     }
     case 'READ': {
       const md = reads.summary && (reads.summary.markdownResponse || reads.summary.summaryText || reads.summary.summary);
-      if (!md) return { moment: 'READ_WAIT', ...common, line: RW.workieWriting };
+      if (!md) return { moment: 'READ_WAIT', ...common, line: RW.workieWriting, featured: featuredOf(reads.comments) };
       const notes = snapshot.stageNotes || {};
       const slice = prosePageSlice(md, int(notes.page), proseBudgetFor(profile));
       return {
@@ -422,6 +426,7 @@ function momentModel(snapshot, reads = {}) {
         pages: slice.pages,
         isTopics: /discussion/i.test(slice.section || ''),
         position: RW.pageOf(slice.page + 1, slice.pages),
+        featured: featuredOf(reads.comments),
       };
     }
     case 'FEEDBACK':
@@ -432,8 +437,31 @@ function momentModel(snapshot, reads = {}) {
       // counts, never a name; Ideas only as the host picks them.
       if (!liveAsk) return { moment: 'READ_WAIT', ...common };
       return { moment, ...common, ask: askFacts(liveAsk), counts: countsOf(snapshot, 'answered'), answered: int(liveAsk.answered) };
-    case 'ENDED':
-      return { moment, ...common };
+    case 'ENDED': {
+      /*
+        THE END, AS THE STAGE ENDS IT (19 Oct 2026; GameHostPage's ENDED): the
+        rounds played, the room count, and the podium only where the stage's
+        own rule (config/podium.js podiumEntries) allows one. The public door
+        carries no anonymity setting, so it is read as on (the default): a
+        type that names answers shows its podium only once the authors are
+        out (authorsRevealed), which is never more than the stage shows. The
+        names and totals are the public standings the scoreboard reads.
+        A survey ends quietly, as before: the stage's end is not a survey's.
+      */
+      if (isSurveyType(snapshot.gameType)) return { moment, ...common };
+      const rounds = Math.max(0, int(snapshot.currentQuestion));
+      const players = (Array.isArray(reads.players) ? reads.players : [])
+        .map((p) => ({ name: String((p && (p.playerName || p.name)) || ''), score: Number(p && (p.totalScore !== undefined ? p.totalScore : p.score)) || 0 }));
+      return {
+        moment,
+        ...common,
+        played: RW.roundsPlayed(rounds, capital(roundNounOf(snapshot))),
+        inRoom: RW.endedInRoom(Math.max(0, int(snapshot.roomCounts && snapshot.roomCounts.joined))),
+        podium: podiumEntries({
+          phase: 'ENDED', gameType: snapshot.gameType, anonymousUntilReveal: true, authorsRevealed: snapshot.authorsRevealed === true, players,
+        }),
+      };
+    }
     case 'OTHER':
       return { moment, ...common };
     default:

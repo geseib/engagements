@@ -155,6 +155,48 @@ describe('presentModel: the moment', () => {
     expect(named.featured).toEqual({ text: 'Old pick', who: 'Bea', credit: 'on the summary' });
     expect(presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments: [] }).featured).toBeNull();
   });
+  // THE END, AS THE STAGE ENDS (19 Oct 2026): the window said only "Thank
+  // you"; the one-screen stage says how many rounds were played, how many
+  // are in the room, and the podium where its own rule allows one.
+  describe('ENDED matches the stage\'s end', () => {
+    const PLAYERS = [
+      { playerName: 'Ada', totalScore: 12 }, { playerName: 'Ben', totalScore: 9 },
+      { playerName: 'Cleo', totalScore: 4 }, { playerName: 'Dev', totalScore: 2 }, { playerName: 'Eve', totalScore: 0 },
+    ];
+    const ended = (over = {}) => base({ state: 'ENDED', currentQuestion: 4, ...over });
+    it('rounds played and the room count, in the stage\'s words', () => {
+      const m = presentModel(ended(), {});
+      expect(m.moment).toBe('ENDED');
+      expect(m.played).toBe('4 rounds played');
+      expect(m.inRoom).toBe('5 in the room · the full write-up is in the session report');
+      expect(presentModel(ended({ currentQuestion: 1 }), {}).played).toBe('1 round played');
+    });
+    it('the podium: top three who scored, only once the names are out (the stage\'s podiumEntries)', () => {
+      const m = presentModel(ended({ authorsRevealed: true }), { players: PLAYERS });
+      expect(m.podium.map((e) => [e.name, e.score])).toEqual([['Ada', 12], ['Ben', 9], ['Cleo', 4]]);
+      expect(m.podium[0].label).toBeTruthy();
+    });
+    it('no podium while a round\'s authors are still hidden, nor before the players are read', () => {
+      expect(presentModel(ended({ authorsRevealed: false }), { players: PLAYERS }).podium).toEqual([]);
+      expect(presentModel(ended({ authorsRevealed: true }), {}).podium).toEqual([]);
+    });
+    it('trivia names no answers, so its podium needs no reveal; wavelength scores nothing, so has none', () => {
+      expect(presentModel(ended({ gameType: 'trivia' }), { players: PLAYERS }).podium).toHaveLength(3);
+      expect(presentModel(ended({ gameType: 'wavelength', authorsRevealed: true }), { players: PLAYERS.map((p) => ({ ...p, totalScore: 0 })) }).podium).toEqual([]);
+    });
+  });
+
+  // A COMMENT PUT UP DURING RESULTS OR THE READ (19 Oct 2026): the stage
+  // shows it (FeedbackWall, once one is featured); the window read comments
+  // only on the feedback beat, so it never did.
+  it('RESULTS and the read carry the featured comment, as FEEDBACK does', () => {
+    const comments = [{ text: 'Name the customer.', featured: true, featuredAt: '2026-10-13T10:05:00Z', playerName: 'Said in the room', fromHost: true, anchorKind: 'results' }];
+    const want = { text: 'Name the customer.', who: '', credit: 'Said in the room' };
+    expect(presentModel(base({ state: 'RESULTS#005' }), { comments }).featured).toEqual(want);
+    expect(presentModel(base({ state: 'RESULTS#005', stageBeat: 'field-notes', stageNotes: { page: 0, pages: 2 } }), { comments, summary: { markdownResponse: '## A\n\nb' } }).featured).toEqual(want);
+    expect(presentModel(base({ state: 'RESULTS#005', stageBeat: 'field-notes' }), { comments }).featured).toEqual(want);
+    expect(presentModel(base({ state: 'RESULTS#005' }), { comments: [] }).featured).toBeNull();
+  });
   it('the profile is the session fact, Room by default', () => {
     expect(presentModel(base()).profile).toBe('room');
     expect(presentModel(base({ stageProfile: 'tv' })).profile).toBe('tv');
