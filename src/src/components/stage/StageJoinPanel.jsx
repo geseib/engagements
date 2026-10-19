@@ -24,6 +24,17 @@ import { QRCodeSVG } from 'qrcode.react';
 export const JOIN_PROMISE = 'Scan to join · no app, no account';
 
 /**
+ * The address may wrap only before its path, never inside the domain: the
+ * panel broke "engage.dev.seibtribe. / us/play" (walk of dev 409c6621).
+ */
+function breakableUrl(url) {
+  const s = String(url || '');
+  const at = s.indexOf('/');
+  if (at <= 0) return s;
+  return <>{s.slice(0, at)}<wbr />{s.slice(at)}</>;
+}
+
+/**
  * `second`: a Build Room's demo while it is shared on the Wi-Fi ({ url, head,
  * note }), the panel's second code below the join (docs/design/room-content-v2:
  * "Two QR codes in Build Room ... so its QR panel holds both"). Both codes
@@ -45,7 +56,7 @@ export default function StageJoinPanel({ playUrl, joinUrl, code, second = null, 
     <aside className={`stage-join${second ? ' is-two' : ''}`} aria-label="Join this session" data-testid="stage-join-panel">
       {qr('join', playUrl, 'Enlarge the join code')}
       <p className="stage-join-k">{JOIN_PROMISE}</p>
-      <p className="stage-join-url">{joinUrl}</p>
+      <p className="stage-join-url">{breakableUrl(joinUrl)}</p>
       <p className="stage-join-code">{code}</p>
       {second && second.url ? (
         <div className="stage-join-second" data-testid="stage-join-second">
