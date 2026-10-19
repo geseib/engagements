@@ -10,6 +10,8 @@ import { ViewerContext } from '../MockupViewer';
 import { W } from '../words';
 import { winnerOf, ratingStep, bestWhy } from '../buildScreens';
 import { KIND_LABEL, askNumber, OpenLink } from './common';
+import { ItemTools } from '../BuildConsider';
+import { itemKeys } from '../sentMarks';
 import Pager from '../../components/stage/Pager';
 import { shows, dropRank } from '../../config/roomContent';
 import { pageSlice } from '../../config/stagePaging';
@@ -73,7 +75,8 @@ export function AskStage({
     tally: showTally, whys: showWhys, detailDrop: dropAt(rc, 'optionDetail'), whysDrop: dropAt(rc, 'whys'),
   } : null;
   // The full reasons list: the host's board, and Call; Room, TV and Table quote the best one on the pick.
-  const whysList = !open && ask.kind !== 'suggest' && showWhys && (!roomView || rc.verbose || ask.kind === 'rating');
+  // The host's board lists them as they arrive too, so a reason can be considered (Consider, 19 Oct 2026).
+  const whysList = (!open || (host && !roomView)) && ask.kind !== 'suggest' && showWhys && (!roomView || rc.verbose || ask.kind === 'rating');
   const cue = roomView && open && CUE[ask.kind] ? CUE[ask.kind](ask) : '';
   return (
     <section className={`brm-stage brm-stage--${ask.status}`} aria-label="Current ask" data-room-view={roomView ? '' : undefined}>
@@ -90,7 +93,7 @@ export function AskStage({
           {ask.detail && showDetail && <p className="brm-detail" data-drop={roomView ? dropAt(rc, 'detail') || '4' : undefined} data-drop-note={roomView ? 'Detail' : undefined}>{ask.detail}</p>}
         </>
       )}
-      {ask.kind === 'choice' && <ChoiceBoard ask={ask} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} showDetail={showOptionDetail} paging={roomView ? paging : null} room={room} />}
+      {ask.kind === 'choice' && <ChoiceBoard ask={ask} host={host} pickId={pickId} onPick={onPick} viewFrom={pathMode ? 'host' : null} showDetail={showOptionDetail} paging={roomView ? paging : null} room={room} />}
       {ask.kind === 'rating' && <RatingBoard ask={ask} tally={showTally} />}
       {ask.kind === 'suggest' && <SuggestBoard ask={ask} host={host} busy={busy} ended={ended} run={run} api={api} pickId={pickId} onPick={onPick} room={room} />}
       {whysList && <Whys ask={ask} host={host} drop={roomView ? dropAt(rc, 'whys') || '5' : null} />}
@@ -119,7 +122,7 @@ const cardPick = (onPick, id) => (e) => {
 };
 
 function ChoiceBoard({
-  ask, pickId = null, onPick = null, viewFrom = null, showDetail = true, paging = null, room = null,
+  ask, host = false, pickId = null, onPick = null, viewFrom = null, showDetail = true, paging = null, room = null,
 }) {
   const openViewer = useContext(ViewerContext);
   const open = ['live', 'voting'].includes(ask.status);
@@ -165,6 +168,8 @@ function ChoiceBoard({
             )}
             {tally && room && <div className="brm-score" data-rc-part="tally"><b>{r.count}</b> <span>{W.votesTally(r.count, r.pct)}</span></div>}
             {picking && <PickButton id={o.label} current={current} onPick={onPick} open={open} />}
+            {/* CONSIDER (frame 5): every option after a vote, with its mark once it reached Claude. */}
+            {host && !open && <ItemTools item={{ key: itemKeys.option(ask.askId, o.label), words: o.title, askId: ask.askId, type: 'option' }} />}
           </div>
         );
       })}
@@ -254,6 +259,8 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
             )}
             {host && <span className="brm-who">{r.source === 'host' ? 'from the room, out loud' : r.playerName}{r.hidden ? ' · hidden' : ''}</span>}
             {picking && !r.hidden && <PickButton id={r.respId} current={current} onPick={onPick} idea open={open} />}
+            {/* CONSIDER (frame 2): every idea as it arrives, with its mark once it reached Claude. */}
+            {host && !r.hidden && <ItemTools item={{ key: itemKeys.resp(ask.askId, r.respId), words: r.text, askId: ask.askId, type: 'resp' }} />}
             {host && !ended && (
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
                 {r.hidden ? 'Show' : 'Hide'}
@@ -286,6 +293,8 @@ function Whys({ ask, host, drop = null }) {
             <span className="brm-letter brm-letter--sm" aria-hidden="true">{w.label}</span>
             <span className="brm-w">{w.text}</span>
             {host && w.playerName && <span className="brm-who">{w.playerName}</span>}
+            {/* CONSIDER: a reason a phone gave is an answer with words, so it can go to Claude too. */}
+            {host && w.whyId && <ItemTools item={{ key: itemKeys.why(ask.askId, w.whyId), words: w.text, askId: ask.askId, type: 'why' }} />}
           </li>
         ))}
       </ul>

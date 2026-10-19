@@ -248,7 +248,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly, why, roomWords, liked, considered }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -275,8 +275,14 @@ async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, fo
     ...(spoken ? { Spoken: true } : {}),
     // PROVENANCE (docs/design/parity/PLAN.md §2.8, H1): what it was made from, stamped as it is sent.
     ...(ideaId ? { IdeaId: ideaId } : {}),
-    ...(sources ? { From: { AskIds: sources.askIds, IdeaIds: sources.ideaIds } } : {}),
+    ...(sources ? { From: { AskIds: sources.askIds, IdeaIds: sources.ideaIds, ...(sources.items && sources.items.length ? { Items: sources.items } : {}) } } : {}),
     ...(typeof asWritten === 'boolean' ? { AsWritten: asWritten } : {}),
+    // CONSIDER (docs/design/build-room-consider): the host's why (sealed, Claude reads it), the room's
+    // words it started from (sealed), how many liked it, and that it went from one thing the room gave.
+    ...(why ? { Why: why } : {}),
+    ...(roomWords ? { RoomWords: roomWords } : {}),
+    ...(liked ? { Liked: liked } : {}),
+    ...(considered ? { Considered: true } : {}),
     // A finished step (kind 'step'): when it ran and for how long.
     ...(step ? { StartedAt: step.startedAt, EndedAt: step.endedAt, DurationMs: step.durationMs, Source: step.source } : {}),
     // WHAT CLAUDE GETS (step 7c): do-now, keep, later or ask.
@@ -608,6 +614,11 @@ async function askAction(ctx, role, askId, body) {
       // Did the host change the words the pick would have gone with (H1, Q14)? Null: nothing to compare.
       const reworded = S.decisionReworded(ask, room, chosen, direction, Boolean(typed));
       if (reworded !== null) next.Decision.reworded = reworded;
+      // CONSIDER (owner, 19 Oct): why the host sent it this way; Claude reads it, History keeps it.
+      // With changed words, the room's own are kept too, for History to show struck through.
+      const why = S.cleanText(b.why, S.LIMITS.reason);
+      if (why) next.Decision.why = why;
+      if (reworded === true) next.Decision.roomWords = S.chosenWords(ask, room, chosen);
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
@@ -623,7 +634,7 @@ async function askAction(ctx, role, askId, body) {
         const brief = S.briefWithStep(room.state, ask.OpeningStep, ask.Probe ? S.questionAnswer(ask.Prompt, answer) : answer, { probe: Boolean(ask.Probe), askId, at: now });
         await saveBrief(ctx, brief);
       }
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep) });
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep), why: next.Decision.why || '' });
       await recordBuildDecision({ gameId: ctx.gameId, askId, metadata: ctx.meta }, { db });
     }
     await put(ctx, next);
@@ -967,7 +978,8 @@ async function postDirection(ctx, body) {
   if (!text) return fail(400, 'Write the direction');
   const src = await directionSources(ctx, body || {}, text);
   if (src.error) return fail(400, src.error);
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, ...src.value });
+  const why = S.cleanText((body || {}).why, S.LIMITS.reason);
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, why, ...src.value });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -986,16 +998,23 @@ async function directionSources(ctx, body, text) {
   const listOf = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? [...new Set(v.map(String))] : null);
   const askIds = listOf(body.fromAskIds);
   const ideaIds = listOf(body.fromIdeaIds);
-  if (!askIds || !ideaIds) return { error: 'fromAskIds and fromIdeaIds are lists' };
-  if (!askIds.length && !ideaIds.length) return { value: {} };
-  if (askIds.length + ideaIds.length > DIRECTION_SOURCES_MAX) return { error: 'Too many sources for one direction' };
+  // CONSIDER: one thing the room gave, by its item key (a suggestion, an option, a why).
+  const itemKeys = listOf(body.fromItems);
+  if (!askIds || !ideaIds || !itemKeys) return { error: 'fromAskIds, fromIdeaIds and fromItems are lists' };
+  if (!askIds.length && !ideaIds.length && !itemKeys.length) return { value: {} };
+  if (askIds.length + ideaIds.length + itemKeys.length > DIRECTION_SOURCES_MAX) return { error: 'Too many sources for one direction' };
   const room = await loadRoom(ctx);
   const asks = askIds.map((id) => findAsk(room, id));
   if (asks.some((a) => !a || a.Status !== 'decided')) return { error: 'A direction can only be written from decided asks' };
   const ideas = ideaIds.map((id) => findIdea(room, id));
   if (ideas.some((i) => !i)) return { error: 'One of those ideas is gone' };
-  const asWritten = !askIds.length && ideas.length === 1 && S.cleanText(ideas[0].Text, S.LIMITS.direction) === text;
-  return { value: { sources: { askIds, ideaIds }, asWritten } };
+  const items = itemKeys.map((k) => S.itemOf(room, k));
+  if (items.some((i) => !i || i.type === 'idea')) return { error: 'One of those is gone (an idea goes in fromIdeaIds)' };
+  // One source: its words are the room's, and as written means unchanged.
+  const one = !askIds.length && ideas.length + items.length === 1 ? (ideas[0] ? ideas[0].Text : items[0].words) : null;
+  const asWritten = one !== null && S.cleanText(one, S.LIMITS.direction) === text;
+  const roomWords = one !== null && !asWritten ? S.cleanText(one, S.LIMITS.direction) : '';
+  return { value: { sources: { askIds, ideaIds, items: itemKeys }, asWritten, ...(roomWords ? { roomWords } : {}), ...(items.length === 1 && items[0].liked ? { liked: items[0].liked } : {}) } };
 }
 
 async function ideaAction(ctx, ideaId, body) {
@@ -1041,11 +1060,104 @@ async function ideaAction(ctx, ideaId, body) {
   }
   if (action === 'direct' || action === 'suggest') {
     // A sent idea goes in the room's own words: as written (H1).
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true } : {}) });
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true, why: S.cleanText((body || {}).why, S.LIMITS.reason) } : {}) });
   }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });
+}
+
+/**
+ * CONSIDER (docs/design/build-room-consider, frames 2-5; owner, 19 Oct 2026).
+ * One thing the room gave (an idea, a suggestion, an option, a why), at any
+ * moment, without touching the ask it came from:
+ *   go 'send' | 'later'  to Claude now, or held on the Later list. `text` is
+ *        what Claude gets (the room's words when absent); `why` the host's
+ *        reason (optional, at most 500). Stamped with where it came from, as
+ *        written or reworded, the room's words and how many liked it.
+ *   go 'queue'           Queue for the room: `round` 'vote' waits in the queue
+ *        to go into a vote ("Queued for the room"); 'yesno' or 'feedback' makes
+ *        a waiting ask on its words, which opens only when the host opens it.
+ * Body: { item, go, text?, why?, as?, round?, prompt? }.
+ */
+const CONSIDER_ROUNDS = Object.freeze(['vote', 'yesno', 'feedback']);
+async function considerItem(ctx, body) {
+  const b = body || {};
+  const room = await loadRoom(ctx);
+  const item = S.itemOf(room, b.item);
+  if (!item) return fail(404, 'That is no longer there to consider');
+  const go = String(b.go || '');
+  const now = new Date().toISOString();
+  const words = S.cleanText(item.words, S.LIMITS.direction);
+  if (go === 'send' || go === 'later') {
+    const text = S.cleanText(b.text, S.LIMITS.direction) || words;
+    if (!text) return fail(400, 'Write what Claude gets');
+    const asWritten = text === words;
+    const why = S.cleanText(b.why, S.LIMITS.reason);
+    const asked = S.claudeGetsOf(b.as);
+    const as = go === 'later' ? 'later' : asked === 'later' ? 'do-now' : asked;
+    const stamp = { forAgent: true, as, why, asWritten, considered: true, liked: item.liked, ...(asWritten ? {} : { roomWords: words }) };
+    let row;
+    if (item.type === 'idea' && asWritten) {
+      row = await logEntry(ctx, { kind: 'idea', text, detail: item.idea.PlayerName ? `from ${item.idea.PlayerName}` : '', by: 'room', ideaId: item.ideaId, ...stamp });
+    } else {
+      const sources = { askIds: [], ideaIds: item.ideaId ? [item.ideaId] : [], items: item.type === 'idea' ? [] : [item.key] };
+      row = await logEntry(ctx, { kind: 'direction', text, by: 'host', sources, from: 'the room', ...stamp });
+    }
+    if (item.type === 'idea' && (item.idea.Status || 'new') !== 'promoted') {
+      const next = { ...item.idea, Status: 'promoted', PromotedVia: 'claude', UpdatedAt: now };
+      delete next.QueuedAt;
+      delete next.PriorStatus;
+      await put(ctx, next);
+    }
+    const rev = (await touchState(ctx)).Rev;
+    await announce(ctx, rev);
+    return reply(201, { entry: S.logView(row) });
+  }
+  if (go !== 'queue') return fail(400, 'go must be send, later or queue');
+  const round = String(b.round || 'vote');
+  if (!CONSIDER_ROUNDS.includes(round)) return fail(400, `round must be ${CONSIDER_ROUNDS.join(', ')}`);
+  const idea = item.type === 'idea' ? item.idea : null;
+  if (idea && !['new', 'later', 'acknowledged', 'queued'].includes(idea.Status || 'new')) {
+    return fail(409, 'That idea is already in a vote or sent to Claude');
+  }
+  let out = {};
+  if (round === 'vote') {
+    // Waits in the queue, marked, to be ticked into a vote. A suggestion, an
+    // option or a why becomes an idea of the room's, with no name.
+    if (idea) {
+      const next = { ...idea, Status: 'queued', QueuedAt: now, PriorStatus: idea.Status || 'new', UpdatedAt: now };
+      await put(ctx, next);
+      out = { idea: S.ideaView(next) };
+    } else {
+      const sk = S.SK.idea(now);
+      const made = {
+        SK: sk, IdeaId: sk.slice('BUILD#IDEA#'.length).replace('#', '-'), PlayerName: '', Source: 'room',
+        Text: S.cleanText(item.words, S.LIMITS.idea), Status: 'queued', QueuedAt: now, FromItem: item.key, CreatedAt: now,
+      };
+      await put(ctx, made);
+      out = { idea: S.ideaView(made) };
+    }
+  } else {
+    // A waiting ask on the room's words: Yes or No, or a short answer each. It opens when the host opens it.
+    const st = await touchState(ctx, { add: { AskSeq: 1 } });
+    const askId = S.pad3(st.AskSeq || 1);
+    const quote = `\u201c${S.cleanText(item.words, S.LIMITS.detail - 2)}\u201d`;
+    const prompt = S.cleanText(b.prompt, S.LIMITS.prompt) || (round === 'yesno' ? 'Should we do this?' : 'What would make this better?');
+    const yes = { label: 'A', title: 'Yes', detail: '', url: '', ...(idea ? { ideaId: idea.IdeaId } : {}) };
+    await put(ctx, {
+      SK: S.SK.ask(askId), AskId: askId, Kind: round === 'yesno' ? 'choice' : 'suggest', Prompt: prompt, Detail: quote,
+      Options: round === 'yesno' ? [yes, { label: 'B', title: 'No', detail: '', url: '' }] : [],
+      MaxPicks: 1, Status: 'proposed', Source: 'host', CreatedAt: now, FromItem: item.key, ...(idea ? { FromIdeas: [idea.IdeaId] } : {}),
+    });
+    if (idea) await put(ctx, { ...idea, Status: 'promoted', PromotedTo: askId, PriorStatus: idea.Status || 'new', UpdatedAt: now });
+    await logEntry(ctx, { kind: 'ask', text: 'Queued for the room: waiting for you to open it', by: 'system', askId });
+    const after = await loadRoom(ctx);
+    out = { ask: S.askView(findAsk(after, askId), after, 'host') };
+  }
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, out);
 }
 
 /** Acknowledge every new idea at once: a burst of reactions after Claude shows something. */
@@ -1196,7 +1308,19 @@ async function sendLater(ctx, itemId) {
   const item = brief.later.find((i) => i.id === itemId);
   if (!item) return fail(404, 'That is no longer on the Later list');
   await takeFromLater(ctx, [itemId]);
-  const row = await logEntry(ctx, { kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined });
+  // What it was made from goes with it (Consider: the mark moves from "for later" to sent).
+  const held = room.logs.find((l) => l.LogId === itemId) || null;
+  const from = held && held.From ? { askIds: held.From.AskIds || [], ideaIds: held.From.IdeaIds || [], items: held.From.Items || [] }
+    : held && held.IdeaId ? { askIds: [], ideaIds: [held.IdeaId], items: [] } : null;
+  const row = await logEntry(ctx, {
+    kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined,
+    ...(held && from ? {
+      sources: from,
+      asWritten: typeof held.AsWritten === 'boolean' ? held.AsWritten && S.cleanText(held.Text, S.LIMITS.direction) === item.text : undefined,
+      why: held.Why || '', roomWords: held.RoomWords || '', liked: held.Liked || 0, considered: Boolean(held.Considered),
+    } : {}),
+  });
+  if (held && from) await put(ctx, { ...held, SentAs: row.LogId });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -1264,7 +1388,7 @@ async function askFromIdeas(ctx, body) {
   const brief = S.briefView(room.state);
   const held = laterIds.map((id) => brief.later.find((i) => i.id === id));
   if (held.some((i) => !i)) return fail(404, 'One of those is no longer on the Later list');
-  if (ideas.some((i) => !['new', 'later', 'acknowledged'].includes(i.Status || 'new'))) {
+  if (ideas.some((i) => !['new', 'later', 'acknowledged', 'queued'].includes(i.Status || 'new'))) {
     return fail(409, 'One of those ideas is already in a vote or sent to Claude');
   }
   const norm = S.voteFromIdeas([...ideas, ...held.map((i) => ({ Text: i.text }))], b);
@@ -2992,6 +3116,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'log' && !b) return postLog(ctx, role, body);
   if (a === 'log' && b) return hostOnly() || editLog(ctx, b, body);
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
+  if (a === 'consider' && !b) return hostOnly() || considerItem(ctx, body);
   if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);
