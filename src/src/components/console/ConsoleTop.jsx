@@ -1,7 +1,6 @@
 import React from 'react';
 import CW from '../../config/consoleWords';
-import { presentStatusFrom } from '../../config/presentStatus';
-import RoomWindowLink from '../stage/RoomWindowLink';
+import RoomWindowStatus from '../stage/RoomWindowStatus';
 
 /**
  * THE CONSOLE'S TOP LINE (host console spec §3.1): the session's name, the
@@ -10,7 +9,6 @@ import RoomWindowLink from '../stage/RoomWindowLink';
  * full screen, visible. Never "the projector is on".
  */
 export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null }) {
-  const status = presentStatusFrom(presentDetail);
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -29,20 +27,16 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
           {CW.join} <b>{code}</b>
         </button>
       ) : null}
-      {presentHref ? (
-        <RoomWindowLink className="hc-btn" href={presentHref} onClick={open}>
-          {`${CW.roomsWindow} ↗`}
-        </RoomWindowLink>
-      ) : null}
-      {status.state === 'closed' && presentHref ? (
-        <RoomWindowLink className={`hc-winstat is-${status.tone}`} href={presentHref} title={status.hint} onClick={open}>
-          <span className="hc-dot" aria-hidden="true" />{status.label}
-        </RoomWindowLink>
-      ) : (
-        <span className={`hc-winstat is-${status.tone}`} title={status.hint} role="status">
-          <span className="hc-dot" aria-hidden="true" />{status.label}
-        </span>
-      )}
+      {/* The room's window and whether it is really up; on a laptop with no
+          second display, Open as a tab and the line that says what to do
+          (owner, 19 Oct 2026). The same part the Build Room's header draws. */}
+      <RoomWindowStatus
+        href={presentHref}
+        detail={presentDetail}
+        onOpen={open}
+        linkLabel={`${CW.roomsWindow} ↗`}
+        classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }}
+      />
     </header>
   );
 }

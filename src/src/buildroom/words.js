@@ -606,11 +606,19 @@ export const W = Object.freeze({
   screensScope: 'Applies now',
   wallOpen: "Room's window ↗",
   wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
-  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History.',
+  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History. While it is open, this laptop stays where it is.',
   wallNewLink: 'New link',
   wallNewLinkArmed: 'New link anyway',
   wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
-  wallNewLinkHint: 'Stops every window opened with the old link.',
+  // W1 (walk of 18 Oct): say why you would press it.
+  wallNewLinkLabel: 'Link shared by mistake?',
+  wallNewLinkHint: 'A new link cuts off every window opened with the old one, so only a window you open again from here shows the room.',
+  // TWO SCREENS ON THE LAPTOP (owner, 19 Oct 2026, item 2): while the room's
+  // window is open, the laptop stays where it is and these send the screen.
+  wallSees: 'The room sees',
+  wallSendTo: (label) => `Show ${label} on the room's window (this laptop stays where it is)`,
+  wallSeeHere: 'See it here',
+  wallSeeHereHint: "Show the room's screen on this laptop too. 1 brings you back to Host.",
   wallNewLinkDone: 'New link made. Open the room’s window again.',
   // THE RELEASE GATE (owner, 17 Oct 2026, parity PLAN §2c): Claude's posts wait in the queue for the host.
   postWants: 'Claude wants to show the room',

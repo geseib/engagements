@@ -209,14 +209,16 @@ export default function Dock({
         sees, in a new window — a real link, so the browser's own "open in new
         window" and a drag to the projector both work. Shaped like AGENDA and
         SESSION. Reads PRESENTING once a Presentation has connected (the host
-        door's `presenting`). Only where the two-surface switch is on.
+        door's `presenting`). Only where the two-surface switch is on. The
+        Build Room's Stage passes it always, with the window's status as its
+        `title` (owner, 19 Oct 2026: the room's window from the Stage too).
       */}
       {present && present.href && (
         <RoomWindowLink
           className="dock-more dock-present"
           href={present.href}
           aria-label={present.presenting > 0 ? 'Presenting. Open another Presentation window' : 'Open the Presentation in a new window'}
-          title="Drag it to the second screen and press F"
+          title={present.title || 'Drag it to the second screen and press F'}
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
           <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>

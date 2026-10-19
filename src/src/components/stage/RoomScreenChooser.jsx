@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import RoomWindowLink from './RoomWindowLink';
-import { ROOM_WORDS as W, recommendRoomScreen } from '../../config/roomScreen';
+import { roomWordsFor, recommendRoomScreen } from '../../config/roomScreen';
 import './RoomScreenChooser.css';
 
 /**
@@ -10,7 +10,10 @@ import './RoomScreenChooser.css';
  * one recommendation. Nothing changes until the host chooses.
  *
  * Drawn in the stage's overlay slot over the lobby, so the fitted stage under
- * it is untouched; it closes once a choice is made.
+ * it is untouched; it closes once a choice is made. The Build Room draws it on
+ * its Host screen until the browser has chosen (`type="build"`: the same
+ * choice, its own words for what stays private). `onChoose(choice)` runs
+ * inside the click, so a caller may open the room's window there.
  */
 function TwoScreensDrawing() {
   return (
@@ -52,13 +55,14 @@ function Choice({ value, picked, onPick }) {
   );
 }
 
-export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null }) {
+export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null, type = '' }) {
+  const W = roomWordsFor(type);
   const [helping, setHelping] = useState(false);
   const [answers, setAnswers] = useState({});
   const set = (k) => (v) => setAnswers((a) => ({ ...a, [k]: v }));
 
   if (helping) {
-    const rec = recommendRoomScreen(answers);
+    const rec = recommendRoomScreen(answers, type);
     const asked = answers.connected === 'no' ? 1 : 3;
     const done = ['connected', 'picture', 'private'].filter((k) => answers[k]).length;
     return (

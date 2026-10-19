@@ -10,7 +10,20 @@
  * screens offer it.
  */
 export const SURFACES_KEY = 'engage.surfaces';
-export const TWO_SURFACE_TYPES = ['call-and-answer'];
+/*
+  'build' since 19 Oct 2026 (parity PLAN §2.7, B9): the Build Room asks
+  "Where will the room watch?" and stores the same choice. Who reads this:
+    twoSurfacesOn / twoSurfacesHere   GameHostPage and HostRemote, neither of
+                                      which ever holds a Build Room session (it
+                                      lives at /build, BuildRoomPage); HostRemote
+                                      also refuses 'build' itself, since its
+                                      PRESENT link has no wall key
+    QuickstartMenu                    Quick start offers no Build Room sets
+    SessionSetupPanel, GameHostPage   the round types' Settings and Setup
+  The Build Room reads the stored choice through config/roomScreen.js, and its
+  room's window through presentHref(…, { type: 'build', k }).
+*/
+export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
 
 function overrideFrom(search) {
   try {

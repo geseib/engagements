@@ -57,6 +57,12 @@ import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
+import RoomScreenChooser from '../components/stage/RoomScreenChooser';
+import RoomWindowStatus from '../components/stage/RoomWindowStatus';
+import { storedRoomScreen, storeRoomScreen, SCREEN_WORDS } from '../config/roomScreen';
+import { presentStatusFrom, windowIsOpen } from '../config/presentStatus';
+import { presentHref } from '../config/surfaces';
+import { openRoomWindow } from '../present/roomWindow';
 import {
   pluginInstallCommand, pluginConnectCommand, projectSlug, cleanFolder, startCommand, hostImageUrl, apiBase, buildApi,
   createBuildSession, buildRoomPath, connectCommand, safeHref,
@@ -454,6 +460,55 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // they never draw a post or screenshot the host has not released.
   const roomView = useMemo(() => roomSees(room), [room]);
 
+  // ── TWO SCREENS ON THE LAPTOP (owner, 19 Oct 2026: "yes do 1-4") ────────
+  // While the room's window is really up (the server's `presenting` and
+  // `presentDetail`, config/presentStatus.js), this laptop stays where it is:
+  // 2, 3, 4, P, the header's "The room sees" and every "show it on the Stage"
+  // send the screen to the window only (POST build/wall). With no window open
+  // nothing changes: one screen, as before. HOST and 1 always come home.
+  const wallHref = room && room.wallKey ? presentHref(gameId, { type: 'build', k: room.wallKey }) : '';
+  const windowDetail = room && Number(room.presenting) > 0 ? room.presentDetail : null;
+  const windowOpen = Boolean(room) && windowIsOpen(room.presenting, room.presentDetail, now);
+  const windowOpenRef = useRef(false);
+  windowOpenRef.current = windowOpen;
+  const wallRevRef = useRef(0);
+  wallRevRef.current = serverWallRev;
+  // What this laptop last sent, until a read carries a newer rev than the one it was sent over.
+  const [wallSent, setWallSent] = useState(null); // {screen, rev}
+  const serverWallScreen = room && room.wall && isProjected(room.wall.screen) ? room.wall.screen : 'stage';
+  const wallScreen = wallSent && serverWallRev <= wallSent.rev ? wallSent.screen : serverWallScreen;
+  /** A screen the room sees, by any door: the window's alone while one is open, else this laptop's (and the window's). */
+  const showRoom = useCallback((next) => {
+    if (isProjected(next) && windowOpenRef.current) {
+      lastShown.current = next;
+      setWallSent({ screen: next, rev: wallRevRef.current });
+      sendWall(api, { screen: next });
+      return;
+    }
+    setScreen(next);
+  }, [api, setScreen]);
+
+  // "WHERE WILL THE ROOM WATCH?" (parity PLAN §2.7, B9): the same question and
+  // the same stored choice as Call & Answer's (config/roomScreen.js), asked on
+  // the Host screen until this browser has chosen, and in Settings, Screens.
+  // Two screens opens the room's window inside the click, placed as Quick
+  // start's is (present/roomWindow.js), unless one is already up.
+  const [roomChoice, setRoomChoice] = useState(() => {
+    try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
+  });
+  const [windowBlocked, setWindowBlocked] = useState(false);
+  const chooseRoom = (choice) => {
+    try { storeRoomScreen(window.localStorage, choice); } catch (e) { /* private mode: this visit only */ }
+    setRoomChoice(choice);
+    if (choice === 'two' && wallHref && !windowOpen) {
+      const opened = openRoomWindow(wallHref);
+      setWindowBlocked(!opened.window);
+    } else {
+      setWindowBlocked(false);
+    }
+  };
+  useEffect(() => { if (windowOpen) setWindowBlocked(false); }, [windowOpen]);
+
   // ── THE SESSION PANEL (owner, 2026-10-09) ───────────────────────────────
   // The roster is read here, not in the panel, because the count on SESSION
   // and the request strip need it while the panel is shut. The websocket says
@@ -609,6 +664,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
       if (dialogOpen()) return;
       if (e.key === 'p' || e.key === 'P') {
+        // With the room's window up the laptop stays: P sends the last screen the room saw.
+        if (windowOpenRef.current) { showRoom(isProjected(lastShown.current) ? lastShown.current : 'stage'); return; }
         setScreenState((cur) => {
           const next = togglePresent(cur, lastShown.current);
           if (isProjected(next)) lastShown.current = next;
@@ -617,11 +674,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         return;
       }
       const picked = screenForKey(e.key);
-      if (picked) setScreen(picked);
+      if (picked) showRoom(picked);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setScreen]);
+  }, [showRoom]);
 
   // SPACE ON THE HOST SCREEN (owner, 2026-10-07) presses the open step's
   // primary (`data-next-primary`), with the Stage dock's guards: never while
@@ -809,14 +866,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
-  const showCodes = () => { setScreen('stage'); codesAsked.current = true; setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
+  const showCodes = () => { showRoom('stage'); codesAsked.current = true; setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
   // The chip's Show on the Stage opens the same card (ruling 3).
   const share = { busy, run, api, onShowWall: showCodes };
   // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
   const demoLive = demoOnStage(room, now, wifiLink(room));
   const onJoinCode = demoLive ? showCodes : () => setJoinZoom(true);
   const headerTools = {
-    room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: setScreen, share,
+    room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: showRoom, share,
     onQr: onJoinCode, bothCodes: demoLive,
     onPlayers: () => openPanel('players'),
   };
@@ -996,6 +1053,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             onRunStop: stopList,
             // HOST: home in one press, the count a badge (D2; the list is on the Host screen).
             onHost: () => setScreen('host'),
+            // The room's window from the Stage too (owner, 19 Oct 2026): the dock's
+            // PRESENT, as Call & Answer's, with the window's state in its title.
+            present: wallHref ? { href: wallHref, presenting: windowOpen ? 1 : 0, title: presentStatusFrom(windowDetail).label } : null,
             alert: stageAlert,
             onSession: () => (panel ? closePanel() : openPanel()),
             panelOpen: Boolean(panel),
@@ -1010,8 +1070,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         now={now}
         host={host}
         screen={screen}
-        onScreen={setScreen}
+        onScreen={showRoom}
         ended={ended}
+        roomWindow={{
+          href: wallHref, detail: windowDetail, open: windowOpen, sees: wallScreen,
+          onSeeHere: () => setScreen(wallScreen),
+        }}
         connection={connection}
         onReconnect={reconnect}
         narrow={narrow}
@@ -1071,6 +1135,20 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {/* NOW: what Claude or the room is doing, with that moment's controls,
             and the one composer for everything the host types (C1, C4, C5). */}
         <main className="brm-hostcol" aria-label="Now">
+          {windowBlocked && (
+            <div className="brm-notice brm-row brm-gap" role="alert">
+              <span>{SCREEN_WORDS.quickBlocked}</span>
+              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</button>
+            </div>
+          )}
+          {/* WHERE WILL THE ROOM WATCH? once, until this browser has chosen
+              (parity PLAN §2.7, B9): Call & Answer's chooser, its words for a
+              Build Room. Settings, Screens changes it later. */}
+          {!ended && roomChoice === null && wallHref && (
+            <section className="brm-panel brm-roomwatch" data-capability="screens">
+              <RoomScreenChooser type="build" current={null} presentHref={wallHref} onChoose={chooseRoom} />
+            </section>
+          )}
           {firstRun && (
             <section className="brm-panel brm-howto" aria-labelledby="brm-howto-h">
               <h2 className="brm-h" id="brm-howto-h">How a Build Room works</h2>
@@ -1151,8 +1229,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 </div>
               ) : (
                 room.opening && room.opening.phase === 'opening'
-                  ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => setScreen('stage')} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => setScreen('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads} />
+                  ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => showRoom('stage')} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => showRoom('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads} />
               )}
             </>
           )}
@@ -1241,6 +1319,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onEnd={() => dialogFromPanel('end')}
           onShowCodes={showCodes}
           wifiLink={wifiLink(room)}
+          roomChoice={roomChoice}
+          onRoomChoice={chooseRoom}
         />
       )}
 
@@ -1690,11 +1770,17 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
   onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, pluginOutdated = false,
-  alert, onAlertGo, onAlertAll, share,
+  alert, onAlertGo, onAlertAll, share, roomWindow = null,
 }) {
   const pill = askPill(room);
   const tucked = narrow;
   const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes };
+  const rw = roomWindow || {};
+  // TWO SCREENS (owner, 19 Oct 2026): with the room's window up, the tabs keep
+  // this laptop's own place (Host, or the screen it is already on) and "The
+  // room sees" sends Stage, Build or History to the window.
+  const twoUp = Boolean(rw.open);
+  const tabs = twoUp ? SCREENS.filter((s) => s.key === 'host' || s.key === screen) : SCREENS;
   return (
     <header className="brm-hbar">
       {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
@@ -1706,8 +1792,8 @@ function RoomHeader({
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
-      <nav className="brm-screens" aria-label="Screens">
-        {SCREENS.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
+      <nav className="brm-screens" aria-label={twoUp ? 'This laptop' : 'Screens'}>
+        {tabs.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
           // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
           <HostAlert key={s.key} alert={alert} onHost={() => onScreen('host')} onGo={onAlertGo} onMarkAll={onAlertAll} />
         ) : (
@@ -1723,6 +1809,37 @@ function RoomHeader({
           </button>
         )))}
       </nav>
+      {twoUp && (
+        <div className="brm-roomsees" role="group" aria-label={W.wallSees}>
+          <span className="brm-roomsees-k">{W.wallSees}</span>
+          {SCREENS.filter((s) => isProjected(s.key)).map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              className={`brm-screen brm-seechip${rw.sees === s.key ? ' is-on' : ''}`}
+              aria-pressed={rw.sees === s.key}
+              title={`${W.wallSendTo(s.label)} (${s.shortcut})`}
+              onClick={() => onScreen(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+          <button type="button" className="brm-seehere" disabled={screen === rw.sees} title={W.wallSeeHereHint} onClick={rw.onSeeHere}>{W.wallSeeHere}</button>
+        </div>
+      )}
+      {/* The room's window and whether it is really up, on Host, Build and
+          History (owner, 19 Oct 2026; C&A's console top line, the same part).
+          The Stage carries it in its dock. */}
+      {rw.href && (
+        <RoomWindowStatus
+          className="rws brm-rws"
+          href={rw.href}
+          detail={rw.detail}
+          short
+          linkLabel={W.wallOpen}
+          classes={{ link: 'brm-btn brm-btn--sm brm-btn--ghost brm-rwlink', stat: 'brm-winstat', dot: 'brm-windot' }}
+        />
+      )}
       {/* THE ROOM SEES THIS HEADER on Build and History, so the cue there names
           nobody: an amber pill and the count on SESSION (S6b). The Host screen
           has the named strip instead. */}

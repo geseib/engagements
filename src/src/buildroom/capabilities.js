@@ -33,7 +33,7 @@ export const CAPABILITIES = Object.freeze([
   { id: 'report', name: 'The report, wrap-up, end', oneScreen: 'Session, This session' },
   // The room's window (parity PLAN §2.7, B7 and B9 in part): the Screens group, and the link that opens the wall.
   { id: 'screens', name: "Screens: the room's window, its status, the room screen size, a new link", oneScreen: 'Session, Settings, Screens' },
-  { id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "Session, Settings, Screens: Room's window" },
+  { id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "The header's Room's window ↗ (Host, Build, History), the Stage dock's PRESENT; Session, Settings, Screens: Room's window" },
   // The release gate (owner, 17 Oct 2026; parity PLAN §2c).
   { id: 'release-posts', name: "Releasing Claude's posts and screenshots to the room: release, keep to myself, release all, the check-posts switch", oneScreen: 'Host screen, Waiting for you; Session, Settings, Claude' },
 ].map((c) => Object.freeze(c)));
