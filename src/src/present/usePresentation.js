@@ -9,6 +9,12 @@
  *                                              round the room is on (the
  *                                              public route only reports)
  *   GET  games/{id}/ai-summary?questionId     on Workie's read
+ *   GET  games/{id}/comments?questionNumber    on the results, the read and
+ *                                              feedback, for the comment the
+ *                                              host put up
+ *   GET  games/{id}/players                    at ENDED, the public standings
+ *                                              the scoreboard reads, for the
+ *                                              podium
  *
  * FRAMES ARE REFETCH SIGNALS ONLY. Every frame's payload is ignored; it only
  * says "look again", debounced 400 ms so a burst of answers is one read. The
@@ -82,12 +88,12 @@ async function readJson(res) {
 
 export default function usePresentation(gameId) {
   const [snapshot, setSnapshot] = useState(null);
-  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null });
+  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
   const seqRef = useRef(0);
   const appliedRef = useRef(0);
   const debounceRef = useRef(null);
   const snapshotRef = useRef(null);
-  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null });
+  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
 
   /** The reads the moment needs, each fetched once per round unless a frame says otherwise. */
   const refreshReads = useCallback(async (snap, force) => {
@@ -135,10 +141,11 @@ export default function usePresentation(gameId) {
           }
         } catch (e) { /* the next poll tries again */ }
       }
-      // THE FEEDBACK ROUND'S FEATURED COMMENT (owner, 2026-10-13): the host
-      // puts one up on the laptop or the Remote; the wall shows it too.
+      // THE FEATURED COMMENT (owner, 2026-10-13): the host puts one up on the
+      // laptop or the Remote; the wall shows it too. On the results and the
+      // read as well as feedback (19 Oct 2026), where the stage shows it.
       // `commentFeatured` forces this read.
-      if (snap.stageBeat === 'feedback' && (force || readsKeyRef.current.comments !== key)) {
+      if (['results', 'field-notes', 'feedback'].includes(snap.stageBeat || 'results') && (force || readsKeyRef.current.comments !== key)) {
         try {
           const res = await fetch(`${base}games/${gameId}/comments?questionNumber=${encodeURIComponent(round.padded)}`);
           if (res.ok) {
@@ -158,6 +165,18 @@ export default function usePresentation(gameId) {
           // 404: Workie has not written yet; aiSummaryReady or the poll brings it.
         } catch (e) { /* the next poll tries again */ }
       }
+    }
+    // THE END (19 Oct 2026): the public standings, for the podium the stage
+    // shows. Once, unless a frame forces it (a late score, a removal).
+    if (snap && snap.state === 'ENDED' && (force || readsKeyRef.current.players !== 'ENDED')) {
+      try {
+        const res = await fetch(`${base}games/${gameId}/players`);
+        if (res.ok) {
+          const body = await readJson(res);
+          next.players = Array.isArray(body && body.players) ? body.players : [];
+          readsKeyRef.current.players = 'ENDED';
+        }
+      } catch (e) { /* the end reads without its podium */ }
     }
     if (Object.keys(next).length) setReads((cur) => ({ ...cur, ...next }));
   }, [gameId]);
@@ -179,9 +198,11 @@ export default function usePresentation(gameId) {
     appliedRef.current = seq;
     const prevRound = roundOf(snapshotRef.current && snapshotRef.current.state);
     const nowRound = roundOf(snap.state);
-    if (!prevRound || !nowRound || prevRound.padded !== nowRound.padded) {
-      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null };
-      setReads({ answers: null, results: null, summary: null, comments: null, ask: null });
+    // The end is one moment: its standings stay while it is up, read again only when forced.
+    const stillEnded = snapshotRef.current && snapshotRef.current.state === 'ENDED' && snap.state === 'ENDED';
+    if (!stillEnded && (!prevRound || !nowRound || prevRound.padded !== nowRound.padded)) {
+      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null, players: null };
+      setReads({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
     }
     snapshotRef.current = snap;
     setSnapshot(snap);

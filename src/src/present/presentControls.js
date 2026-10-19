@@ -5,7 +5,9 @@
  * When the Presentation window has focus, Space / → / ↓ / PageDown step
  * forward and ← / ↑ / PageUp step back through what is on the wall
  * (present/presentKeys.js decides what that means). A clicker sends
- * PageDown/PageUp or the arrows, so it works too.
+ * PageDown/PageUp or the arrows, so it works too. During voting ↑ ↓ page
+ * (a long answer's parts) or do nothing, as the one-screen laptop's ↑ ↓ page
+ * its ballot; → ← step the answers (presentKeys.js, `vertical`).
  *
  * ONLY FOR A HOST WHO MAY DRIVE THIS SESSION. The wall itself is public; the
  * writes here go to /stage-focus and /stage-beat, which carry the Cognito
@@ -52,6 +54,9 @@ export function keyDirection(event) {
   if (BACK.has(event.key)) return 'back';
   return null;
 }
+
+/** ↑ or ↓: the vertical keys, which page rather than step during voting. */
+export const isVerticalKey = (event) => Boolean(event) && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
 
 const apiBase = () => (typeof window !== 'undefined' && window.API_BASE) || '';
 const roundOf = (state) => {
@@ -226,7 +231,7 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
     }
   }, [gameId, closeConfirm, after]);
 
-  const move = useCallback(async (dir) => {
+  const move = useCallback(async (dir, { vertical = false } = {}) => {
     const now = Date.now();
     if (now - lastRef.current < KEY_DEBOUNCE_MS || busyRef.current) return;
     lastRef.current = now;
@@ -239,9 +244,10 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
     if (a !== 'host') a = await recheck();
     if (a !== 'host') { showStrip(); return; }
     const { snapshot: snap, total: n, overview: fits } = live.current;
-    const writes = presentKeyStep(snap, dir, { total: n, overview: Boolean(fits) });
+    const writes = presentKeyStep(snap, dir, { total: n, overview: Boolean(fits), vertical });
     if (!writes.length) {
-      if (dir === 'forward') askPrimary();
+      // A page key with nothing to page does nothing: it never asks for the round's next step.
+      if (dir === 'forward' && !(vertical && /^VOTE#/.test(String((snap && snap.state) || '')))) askPrimary();
       return;
     }
     busyRef.current = true;
@@ -286,7 +292,7 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
     const dir = keyDirection(event);
     if (!dir) return;
     event.preventDefault();
-    move(dir);
+    move(dir, { vertical: isVerticalKey(event) });
   }, [move, toggleJoin, runConfirmed, closeConfirm]);
 
   // Keys are always heard, so a press while the controls are off says why.

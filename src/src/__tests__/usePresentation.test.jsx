@@ -140,6 +140,28 @@ test('at RESULTS it reads get-results for the round on screen', async () => {
   expect(JSON.parse(init.body)).toEqual({ gameId: '5479', questionNumber: '002' });
 });
 
+// A comment the host puts up during results or the read (19 Oct 2026): the
+// window reads the round's comments on those beats too, not only on feedback.
+test.each(['results', 'field-notes'])('on the %s beat it reads the round\'s comments', async (beat) => {
+  stateQueue.push(json(stateBody({ state: 'RESULTS#002', stageBeat: beat })));
+  renderHook(() => usePresentation('5479'));
+  await waitFor(() => expect(global.fetch.mock.calls.some(([u]) => String(u).includes('/comments?'))).toBe(true));
+  expect(String(global.fetch.mock.calls.find(([u]) => String(u).includes('/comments?'))[0])).toBe('https://api.test.invalid/dev/games/5479/comments?questionNumber=002');
+});
+
+// The end, as the stage ends it (19 Oct 2026): the public standings for the podium.
+test('at ENDED it reads the public players once, for the podium', async () => {
+  stateQueue.push(json(stateBody({ state: 'ENDED', currentQuestion: 3 })));
+  global.fetch.mockImplementation((url) => {
+    if (String(url).includes('/state')) return json(stateBody({ state: 'ENDED', currentQuestion: 3 }));
+    if (String(url).endsWith('/players')) return json({ players: [{ playerName: 'Ada', totalScore: 3 }] });
+    return json({});
+  });
+  const { result } = renderHook(() => usePresentation('5479'));
+  await waitFor(() => expect(result.current.reads.players).toEqual([{ playerName: 'Ada', totalScore: 3 }]));
+  expect(String(global.fetch.mock.calls.find(([u]) => String(u).endsWith('/players'))[0])).toBe('https://api.test.invalid/dev/games/5479/players');
+});
+
 /*
   THE FIRST PRESENT_STATUS WAITS FOR THE SOCKET (final review, 15 Oct).
   sendCleanMessage returns false before the socket opens; the first report is

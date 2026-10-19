@@ -322,6 +322,7 @@ export function PresentTally({ model }) {
             {talk}
           </p>
         ) : null}
+        <FeaturedQuote featured={model.featured} />
       </div>
       <div className="present-foot">
         <span><b>{model.total}</b>{` ${model.total === 1 ? 'response' : 'responses'} · `}<b>{model.voted}</b>{' voted'}</span>
@@ -492,6 +493,7 @@ export function ReadPage({ model }) {
         <div className={`present-read${model.isTopics ? ' is-topics' : ''}`}>
           <MarkdownRenderer content={model.content} />
         </div>
+        <FeaturedQuote featured={model.featured} />
       </div>
       <div className="present-foot">
         <span>{"Workie's read"}</span>
@@ -515,6 +517,28 @@ export function PresentQuestionFocus({ model }) {
 }
 
 /**
+ * THE COMMENT THE HOST PUT UP, as the laptop shows it: a pull quote and its
+ * credit. On feedback, and on the results and the read (19 Oct 2026), where
+ * the stage shows it too (GameHostPage's FeedbackWall). `drop` lets the
+ * fitter give it up on a crowded screen, saying so, rather than the content.
+ */
+export function FeaturedQuote({ featured, drop = '1' }) {
+  if (!featured) return null;
+  return (
+    <figure className="present-quote" data-featured="comment">
+      <blockquote data-drop={drop}>{featured.text}</blockquote>
+      {featured.who || featured.credit ? (
+        <figcaption>
+          {featured.who ? <b>{featured.who}</b> : null}
+          {featured.who && featured.credit ? ' ' : ''}
+          {featured.credit}
+        </figcaption>
+      ) : null}
+    </figure>
+  );
+}
+
+/**
  * FEEDBACK (owner, 2026-10-13: "not even a clue to what round or question this
  * relates to"): the round and the question it asks about, then the ask itself.
  */
@@ -529,16 +553,7 @@ export function PresentFeedback({ model }) {
         {model.title ? <Eyebrow tone="muted" className="present-eyebrow present-rc-kicker" {...rcAttrs(model.room, 'title')}>{model.title}</Eyebrow> : null}
         {model.featured ? (
           // The comment the host put up, as the laptop shows it.
-          <figure className="present-quote">
-            <blockquote data-drop="1">{model.featured.text}</blockquote>
-            {model.featured.who || model.featured.credit ? (
-              <figcaption>
-                {model.featured.who ? <b>{model.featured.who}</b> : null}
-                {model.featured.who && model.featured.credit ? ' ' : ''}
-                {model.featured.credit}
-              </figcaption>
-            ) : null}
-          </figure>
+          <FeaturedQuote featured={model.featured} />
         ) : (
           <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(model.room, 'ask')}>{`Provide feedback on the round from your ${deviceWords}.`}</p>
         )}
@@ -626,14 +641,48 @@ export function PresentAsk({ model }) {
   );
 }
 
-export function PresentQuiet({ model, eyebrow, line, foot }) {
+export function PresentQuiet({ model, eyebrow, line, foot, children = null }) {
   return (
     <div className="present-moment present-frame">
       <Top model={model} right={eyebrow || ''} />
       <div className="present-main">
         <p className="present-quiet">{line}</p>
+        {children}
       </div>
       <div className="present-foot"><span>{foot || ''}</span></div>
+    </div>
+  );
+}
+
+/**
+ * THE END, AS THE STAGE ENDS IT (19 Oct 2026; GameHostPage's ENDED): the
+ * conclusion leads ("4 rounds played"), the room count under it, and the
+ * podium only when the model has one — config/podium.js decided that, with
+ * the stage's own gates. `data-attribution="revealed"` because the podium
+ * exists only once the reveal has happened (Podium.jsx says why).
+ */
+export function PresentEnded({ model }) {
+  const podium = Array.isArray(model.podium) ? model.podium : [];
+  return (
+    <div className="present-moment present-frame">
+      <Top model={model} right="Complete" />
+      <div className="present-main">
+        <Eyebrow className="present-eyebrow">{RW.sessionComplete}</Eyebrow>
+        <Heading level={1} size="hero" className="present-hero">{model.played}</Heading>
+        <p className="present-lead">{model.inRoom}</p>
+        {podium.length ? (
+          <div className="present-podium" data-attribution="revealed">
+            {podium.map((entry) => (
+              <div className="present-pod" key={`${entry.rank}-${entry.name}`}>
+                <div className="present-pod-pl">{entry.label}</div>
+                <span className="present-pod-nm">{entry.name}</span>
+                <div className="present-pod-sc">{entry.score.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="present-foot"><span>Thank you</span></div>
     </div>
   );
 }
@@ -661,12 +710,12 @@ function MomentFor({ model }) {
     case 'RESULTS': return <PresentTally model={model} />;
     case 'RESPONSES': return <ResultFocus model={model} />;
     case 'READ': return <ReadPage model={model} />;
-    case 'READ_WAIT': return <PresentQuiet model={model} eyebrow={RW.whatWeHeard} line={`${RW.workieWriting}…`} />;
+    case 'READ_WAIT': return <PresentQuiet model={model} eyebrow={RW.whatWeHeard} line={`${RW.workieWriting}…`}><FeaturedQuote featured={model.featured} /></PresentQuiet>;
     case 'FEEDBACK': return <PresentFeedback model={model} />;
     case 'ROOM_QUESTION':
     case 'ROOM_RESULTS': return <PresentAsk model={model} />;
     case 'QUESTION_FOCUS': return <PresentQuestionFocus model={model} />;
-    case 'ENDED': return <PresentQuiet model={model} eyebrow="Complete" line="Thank you. This session has ended." />;
+    case 'ENDED': return model.played ? <PresentEnded model={model} /> : <PresentQuiet model={model} eyebrow="Complete" line="Thank you. This session has ended." />;
     case 'OTHER': return <PresentQuiet model={model} line="This session shows on the host's screen." />;
     case 'NOT_FOUND': return <PresentQuiet model={model} line="This session has ended or the code is wrong." />;
     default: return <PresentQuiet model={model} line="Waiting for the session" />;

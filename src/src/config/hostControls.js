@@ -730,7 +730,7 @@ export function snapshotFromHostPage({
   answerCount = 0, hasQuestionSet = true, notesPage = 0, notesPages = 1, notesReady,
   spotlightIndex = null, responsePart = 0, responseParts = 1, goalLine = '',
   roomAsk = null, asksReady = 0, asksEnabled = false, roundNumber = null, totalRounds = null,
-  late = null, wallFocus = 'none',
+  late = null, wallFocus = 'none', voteOverview = false,
 } = {}) {
   const resolvedPhase = HOST_PHASES.includes(phase) ? phase : 'LOBBY';
   const responded = resolvedPhase === 'VOTE' ? votedCount : answeredCount;
@@ -773,6 +773,9 @@ export function snapshotFromHostPage({
     // The late items still waiting ({ notReviewed, answers }), for the
     // status line's count (late items Task 4). The Remote passes the same.
     late,
+    // Every answer is on the room's window during voting (roomPaging.js
+    // votingWall, 19 Oct 2026): roundStep says so and steps to Response 1.
+    overview: Boolean(voteOverview) && resolvedPhase === 'VOTE' && !onWall && wallFocus !== 'question',
   };
 }
 

@@ -569,6 +569,10 @@ export const W = Object.freeze({
   },
   armRunEarly: (k, j) => `Claude hasn't finished ${k}. Press again to send ${j}.`,
   armStop: 'Press again to stop the list.',
+  /** Show results with nobody in the room (0 of 0, QA 2026-10-18 C3). */
+  armNobodyHere: 'Nobody has joined yet. Press again to show results.',
+  /** Open voting held with no ideas (QA 2026-10-18 C2): why not, and the way on. */
+  noIdeasToVote: 'No ideas yet, so there is nothing to vote on. Wait for the room, or press Close without a vote on the Host screen.',
   /** HOST on the Stage: always home, in one press (D2). */
   hostBack: '← Host',
   hostKeys: 'Host screen (1 or P)',
