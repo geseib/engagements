@@ -185,10 +185,17 @@ function briefWithStep(state, key, text, { probe = false, id = '', askId = null,
   return b;
 }
 
-/** The session's phase: an opening until the host starts building. Rooms made before it have asks, so they are building. */
+/**
+ * The session's phase: an opening until the host starts building. Phase is
+ * pinned on BUILD#STATE by the first ask (createAsk) and by Start building /
+ * Back to the opening. Without it, a room made before the opening has asks
+ * that are not opening steps, so it is building; an opening-step ask never
+ * counts (QA 2026-10-18 B1: it did, and asking step 1 ended the opening).
+ */
 function phaseOf(state, room) {
   if (state && ['opening', 'building'].includes(state.Phase)) return state.Phase;
-  return (room && room.asks && room.asks.length) || (state && state.Outcome) ? 'building' : 'opening';
+  const legacyAsk = ((room && room.asks) || []).some((a) => !a.OpeningStep);
+  return legacyAsk || (state && state.Outcome) ? 'building' : 'opening';
 }
 
 /** The opening as the host, Claude and the phones see it. */

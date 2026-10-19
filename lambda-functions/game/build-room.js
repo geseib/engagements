@@ -385,6 +385,13 @@ async function hostState(ctx, audience) {
   return { room, view };
 }
 
+/**
+ * Pin the phase the room is in before it makes an ask (QA 2026-10-18 B1): a
+ * new room never wrote Phase, and its phase was then inferred from the asks it
+ * had made, so asking opening step 1 ended the opening. `{}` once pinned.
+ */
+const phasePin = (room) => (room.state && room.state.Phase ? {} : { Phase: S.phaseOf(room.state, room) });
+
 async function createAsk(ctx, role, body) {
   const norm = S.normalizeAsk(body);
   if (norm.error) return fail(400, norm.error);
@@ -393,7 +400,7 @@ async function createAsk(ctx, role, body) {
   const status = role === 'agent'
     ? (settings.reviewAgentAsks ? 'proposed' : 'live')
     : (body && body.draft ? 'proposed' : 'live');
-  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const st = await touchState(ctx, { set: phasePin(room), add: { AskSeq: 1 } });
   const askId = S.pad3(st.AskSeq || 1);
   const now = new Date().toISOString();
   const v = norm.value;
@@ -1207,7 +1214,7 @@ async function laterToVote(ctx, body) {
   const picked = ids.map((id) => brief.later.find((i) => i.id === id)).filter(Boolean);
   const norm = S.voteFromIdeas(picked.map((i) => ({ Text: i.text })), { prompt: b.prompt || 'Which should Claude build next?' });
   if (norm.error) return fail(400, norm.error.replace('Tick at least', 'The Later list needs at least').replace(' ideas to put to a vote', ' items to vote on'));
-  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const st = await touchState(ctx, { set: phasePin(room), add: { AskSeq: 1 } });
   const askId = S.pad3(st.AskSeq || 1);
   const now = new Date().toISOString();
   const v = norm.value;
@@ -1264,7 +1271,7 @@ async function askFromIdeas(ctx, body) {
   if (norm.error) return fail(400, norm.error);
   const mockups = b.askForMockups === true;
   const status = mockups || b.open === false ? 'proposed' : 'live';
-  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const st = await touchState(ctx, { set: phasePin(room), add: { AskSeq: 1 } });
   const askId = S.pad3(st.AskSeq || 1);
   const now = new Date().toISOString();
   const v = norm.value;
@@ -2570,7 +2577,7 @@ async function pointsVote(ctx, body) {
   if (got.response) return got.response;
   const norm = S.pointVoteAsk(got.rows, b);
   if (norm.error) return fail(400, norm.error);
-  const st = await touchState(ctx, { add: { AskSeq: 1 } });
+  const st = await touchState(ctx, { set: phasePin(room), add: { AskSeq: 1 } });
   const askId = S.pad3(st.AskSeq || 1);
   const now = new Date().toISOString();
   const v = norm.value;

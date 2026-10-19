@@ -1240,6 +1240,30 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(st.opening.steps.find((x) => x.key === 'tools').host, true);
     assert.strictEqual((await agentCall('GET', 'state')).body.opening.phase, 'opening', 'Claude sees the phase');
   });
+  // QA walk 2026-10-18 B1: a new room never wrote Phase, and phaseOf read
+  // 'building' as soon as any ask existed, so asking step 1 ended the opening.
+  await check('B1: asking and deciding the first opening step keeps the room in the opening', async () => {
+    seed();
+    const kinds = (await state()).opening.kinds.map((k) => ({ title: k.title }));
+    const k = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'What are we making?', options: kinds, openingStep: 'kind' });
+    assert.strictEqual(k.status, 201, JSON.stringify(k.body));
+    let st = await state();
+    assert.strictEqual(st.opening.phase, 'opening', 'step 1 live: still the opening');
+    await hostCall('POST', `asks/${k.body.ask.askId}`, { action: 'decide', direction: 'What are we making: A game', chosen: ['C'] });
+    st = await state();
+    assert.strictEqual(st.opening.phase, 'opening', 'step 1 decided: still the opening');
+    assert.strictEqual(st.opening.current, 'forWhom', 'step 2 is next');
+    // A plain ask asked during the opening does not end it either.
+    await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Any other thoughts?' });
+    assert.strictEqual((await state()).opening.phase, 'opening', 'only Start building ends the opening');
+    await hostCall('POST', 'opening/start', {});
+    assert.strictEqual((await state()).opening.phase, 'building');
+  });
+  await check('B1: a room made before the opening (asks, no Phase) still reads as building', async () => {
+    assert.strictEqual(S.phaseOf({}, { asks: [{ AskId: '001', Kind: 'suggest' }] }), 'building');
+    assert.strictEqual(S.phaseOf({}, { asks: [{ AskId: '001', Kind: 'choice', OpeningStep: 'kind' }] }), 'opening',
+      'a room whose only asks are opening steps is in the opening (rooms hit by B1 recover)');
+  });
   await check('deciding an opening step fills its brief line; a probe adds to it; Claude gets it as Keep in mind', async () => {
     seed();
     const kinds = (await state()).opening.kinds.map((k) => ({ title: k.title }));
@@ -1349,8 +1373,13 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
   });
   await check('a room that already has asks is building (rooms made before the opening)', async () => {
     seed();
-    await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });
+    // Made before the opening: an ask row and no Phase on BUILD#STATE (B1:
+    // a new room asking a plain question stays in the opening).
+    put({ PK: `GAME#${GAME}`, SK: 'BUILD#STATE', AskSeq: 1, Rev: 1 });
+    put({ PK: `GAME#${GAME}`, SK: 'BUILD#ASK#001', AskId: '001', Kind: 'rating', Prompt: 'How is it?', Status: 'results', CreatedAt: '2026-09-01T00:00:00.000Z' });
     assert.strictEqual((await state()).opening.phase, 'building');
+    await hostCall('POST', 'asks', { kind: 'rating', prompt: 'And now?' });
+    assert.strictEqual((await state()).opening.phase, 'building', 'its next ask pins building');
   });
 
   console.log('\nKick off (owner, 2026-10-07: step 4 of Connect turns green once kickoff has run)');
