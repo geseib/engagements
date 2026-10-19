@@ -1,7 +1,8 @@
 import React, { useId } from 'react';
 import { SCREEN_WORDS as W } from '../../config/roomScreen';
 import { presentStatusFrom } from '../../config/presentStatus';
-import RoomWindowLink from './RoomWindowLink';
+import { willPlace } from '../../present/roomWindow';
+import RoomWindowLink, { RoomWindowTab } from './RoomWindowLink';
 import './ScreensGroup.css';
 
 /**
@@ -20,7 +21,54 @@ import './ScreensGroup.css';
  *
  * `offerChoice` is false for game types two screens do not cover
  * (config/surfaces.js TWO_SURFACE_TYPES); then only the size is offered.
+ *
+ * The first two rows are exported, so the Build Room's Screens group
+ * (buildroom/BuildSessionPanel.jsx WallScreens) draws the same parts.
  */
+
+/** One screen or two: the segment, with the hint for the current choice. `words` may override the hints. */
+export function ScreenChoiceRow({ choice = 'classic', onChoose = () => {}, words = W }) {
+  const two = choice === 'two';
+  return (
+    <div className="scr-row" data-row="where">
+      <div className="scr-k">
+        <span className="scr-label">{words.where}</span>
+        <span className="scr-hint">{two ? words.whereHintTwo : words.whereHintOne}</span>
+      </div>
+      <div className="scr-seg" role="group" aria-label={words.where}>
+        <button type="button" className="scr-seg-btn" aria-pressed={!two} onClick={() => { if (two) onChoose('classic'); }}>{words.one}</button>
+        <button type="button" className="scr-seg-btn" aria-pressed={two} onClick={() => { if (!two) onChoose('two'); }}>{words.two}</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The room's window: its state alone (the row's label already names it, W2),
+ * the one instruction as text when it is open but not full screen (W3), Open ↗
+ * and, on a laptop with no second display, Open as a tab with its line.
+ * `linkProps` go on Open ↗ (a capability id, a title).
+ */
+export function RoomWindowRow({ href, detail = null, linkProps = {} }) {
+  if (!href) return null;
+  const status = presentStatusFrom(detail);
+  const placing = willPlace();
+  const note = status.state === 'windowed' ? W.fillOnce
+    : status.state === 'closed' && !placing ? W.noSecondDisplay : '';
+  return (
+    <div className="scr-row" data-row="window">
+      <div className="scr-k">
+        <span className="scr-label">{W.window}</span>
+        <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.short}</span>
+        {note ? <span className="scr-hint scr-note">{note}</span> : null}
+      </div>
+      <span className="scr-acts">
+        {status.state === 'closed' && !placing ? <RoomWindowTab className="scr-open scr-open--quiet" href={href} /> : null}
+        <RoomWindowLink className="scr-open" href={href} {...linkProps}>{W.open}</RoomWindowLink>
+      </span>
+    </div>
+  );
+}
 export const DISPLAY_PROFILES = [
   ['room', 'Room — projector'],
   ['tv', 'TV — large panel'],
@@ -40,30 +88,10 @@ export default function ScreensGroup({
   const two = choice === 'two';
   // Setup and the panel can both draw this group: one id each.
   const sizeId = useId();
-  const status = presentStatusFrom(presentDetail);
   return (
     <div className="scr">
-      {offerChoice ? (
-        <div className="scr-row">
-          <div className="scr-k">
-            <span className="scr-label">{W.where}</span>
-            <span className="scr-hint">{two ? W.whereHintTwo : W.whereHintOne}</span>
-          </div>
-          <div className="scr-seg" role="group" aria-label={W.where}>
-            <button type="button" className="scr-seg-btn" aria-pressed={!two} onClick={() => { if (two) onChoose('classic'); }}>{W.one}</button>
-            <button type="button" className="scr-seg-btn" aria-pressed={two} onClick={() => { if (!two) onChoose('two'); }}>{W.two}</button>
-          </div>
-        </div>
-      ) : null}
-      {offerChoice && two && presentHref ? (
-        <div className="scr-row">
-          <div className="scr-k">
-            <span className="scr-label">{W.window}</span>
-            <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.label}</span>
-          </div>
-          <RoomWindowLink className="scr-open" href={presentHref}>{W.open}</RoomWindowLink>
-        </div>
-      ) : null}
+      {offerChoice ? <ScreenChoiceRow choice={choice} onChoose={onChoose} /> : null}
+      {offerChoice && two && presentHref ? <RoomWindowRow href={presentHref} detail={presentDetail} /> : null}
       <div className="scr-row">
         <div className="scr-k">
           <label className="scr-label" htmlFor={sizeId}>{W.size}</label>

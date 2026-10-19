@@ -661,6 +661,43 @@
 }
 .brm .brm-more-panel .brm-btn { justify-content: flex-start; width: 100%; }
 
+/* ---- the room's window on the header, and "The room sees" (owner, 19 Oct 2026) ----
+   The shared part (components/stage/RoomWindowStatus.jsx) with this page's
+   button and pill. The pill is C&A's .hc-winstat in the room's tokens: --text
+   on the composited tint (success or amber at .14 over --surface), the
+   "not open" pill --muted on --surface (6.06:1, classic). The chips are the
+   screen tabs' own look; the one the window shows wears the tabs' "on". */
+.brm .brm-rws { flex: none; }
+.brm .brm-rwlink { white-space: nowrap; }
+.brm .brm-winstat {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px;
+  border-radius: 999px; border: 1px solid var(--brm-rule); color: var(--text);
+  font: 700 var(--brm-t-label)/1 var(--font-ui); text-decoration: none; white-space: nowrap;
+}
+.brm .brm-winstat.is-success { border-color: var(--success); background: var(--brm-tint-green); }
+.brm .brm-winstat.is-warn { border-color: var(--brm-line-amber); background: var(--brm-tint-amber); }
+.brm .brm-winstat.is-muted { color: var(--muted); }
+.brm .brm-winstat:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.brm .brm-windot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.brm .brm-winstat.is-success .brm-windot { background: var(--success); }
+.brm .brm-winstat.is-warn .brm-windot { background: var(--accent); }
+.brm .brm-roomsees {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 3px 3px 10px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--brm-line-amber);
+}
+.brm .brm-roomsees-k { color: var(--muted); font: 700 var(--brm-t-label)/1 var(--font-ui); margin-right: 4px; white-space: nowrap; }
+.brm .brm-seehere {
+  min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; cursor: pointer;
+  font: 700 var(--brm-t-label)/1 var(--font-ui); color: var(--info); text-decoration: underline; text-underline-offset: 2px;
+}
+.brm .brm-seehere:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+.brm .brm-seehere:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+/* "Where will the room watch?" on the Host screen: the shared chooser
+   (RoomScreenChooser.css) reads the stage ladder's --t-meta / --t-body, which
+   the Host screen does not carry, so it gets the laptop ladder's here. */
+.brm .brm-roomwatch { --t-meta: var(--brm-t-body); --t-body: var(--brm-t-head); }
+.brm .brm-roomwatch .wfs-view { padding: 0; background: transparent; overflow: visible; }
+
 /* A screen the room sees, below the header. */
 .brm .brm-screenbody { padding: 16px; display: grid; gap: 16px; }
 .brm .brm-buildscreen .brm-q { margin: 0; }

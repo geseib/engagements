@@ -7,9 +7,11 @@ test('connected, visible and full screen: on', () => {
   expect(presentStatusFrom({ open: true, fullscreen: true, visible: true, statusAt: at(5000) }, NOW))
     .toMatchObject({ state: 'on', label: 'Room\'s window: on, full screen', tone: 'success' });
 });
-test('connected, visible, not full screen: windowed, with the F hint', () => {
+test('connected, visible, not full screen: windowed, with the one fill instruction (W3)', () => {
   expect(presentStatusFrom({ open: true, fullscreen: false, visible: true, statusAt: at(5000) }, NOW))
-    .toMatchObject({ state: 'windowed', label: 'Room\'s window: open, not full screen', tone: 'warn', hint: 'Press F on that window' });
+    .toMatchObject({
+      state: 'windowed', label: 'Room\'s window: open, not full screen', short: 'Open, not full screen', tone: 'warn', hint: 'Click the room\'s window once to fill the screen (or press F)',
+    });
 });
 test('connected but hidden or minimised: hidden', () => {
   expect(presentStatusFrom({ open: true, fullscreen: true, visible: false, statusAt: at(5000) }, NOW))
