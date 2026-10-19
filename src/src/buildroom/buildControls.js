@@ -57,9 +57,23 @@ function stillToAct(done, of) {
   return Math.max(0, total - (Number(done) || 0));
 }
 
+/**
+ * Why a move cannot go yet, with what to do instead, or ''. Open voting with
+ * no ideas would open an empty ballot and refuse the room's later ideas (QA
+ * 2026-10-18 C2), so it waits, as C&A's Start voting does at 0 answers.
+ */
+function holdFor(move, m) {
+  if (move.action === 'vote' && m.phase === 'ASK' && m.meter && !(Number(m.meter.count) > 0)) return W.noIdeasToVote;
+  return '';
+}
+
 /** The arm for a move, or null: the early and lossy advances only. */
 function armFor(move, m) {
   if (move.action === 'close' && (m.phase === 'ASK' || m.phase === 'VOTE') && m.meter) {
+    // Nobody in the room at all (0 of 0): still an early advance, so it asks (QA 2026-10-18 C3).
+    if (m.meter.of !== null && m.meter.of !== undefined && !(Number(m.meter.of) > 0)) {
+      return { text: W.armNobodyHere, confirmLabel: W.armedLabel(move.label), inPlace: true };
+    }
     const left = stillToAct(m.meter.count, m.meter.of);
     if (left > 0) return { text: W.armStill(left, m.meter.of, m.phase === 'VOTE' ? 'voting' : 'answering'), confirmLabel: W.armedLabel(move.label), inPlace: true };
   }
@@ -71,14 +85,16 @@ function armFor(move, m) {
 
 function control(move, m, busy, key) {
   if (!move) return null;
-  const arm = armFor(move, m);
+  const hold = holdFor(move, m);
+  const arm = hold ? null : armFor(move, m);
   return {
     ...move,
     // Unique within a moment, and new when the moment changes, so an armed press never outlives its moment.
     id: `${key}:${move.action}:${m.phase || ''}:${move.askId || ''}`,
     icon: ICON[move.action] || 'ArrowRight',
-    disabled: Boolean(busy || move.disabled),
-    hint: '',
+    disabled: Boolean(busy || move.disabled || hold),
+    // HostActionBar shows a held main button's hint beside it.
+    hint: hold,
     ...(arm ? { arm } : {}),
   };
 }

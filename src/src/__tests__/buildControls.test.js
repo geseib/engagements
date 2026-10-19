@@ -123,6 +123,31 @@ describe('each moment', () => {
     expect(c.secondary).toMatchObject({ action: 'wheel' });
   });
 
+  // QA walk 2026-10-18 C2: one press opened voting on an empty ballot, and
+  // the room's later ideas were refused. With nothing to vote on the button
+  // says why not and what to do instead (C&A disables Start voting at 0).
+  test('C2: ideas with none yet: Open voting is held, saying why and what to do instead', () => {
+    const r = room({ st: { CurrentAskId: '004' }, rows: [{ SK: 'BUILD#ASK#004', Source: 'agent', CreatedAt: ago(600), AskId: '004', Kind: 'suggest', Prompt: 'What stops sign-up?', Detail: '', Options: [], MaxPicks: 3, Status: 'live' }] });
+    const c = controlsFor(r);
+    expect(c.primary).toMatchObject({ action: 'vote', label: W.openVoting, disabled: true, hint: W.noIdeasToVote });
+    expect(W.noIdeasToVote).toMatch(/^No ideas yet/);
+    expect(W.noIdeasToVote).toMatch(/Close without a vote/);
+    expect(c.secondary).toBeNull();
+  });
+
+  // QA walk 2026-10-18 C3: Show results with nobody in the room closed at once
+  // (stillToAct was null at 0 of 0). It arms, and says nobody has joined.
+  test('C3: nobody in the room: Show results arms in place, saying nobody has joined', () => {
+    const r = S.hostView({
+      gameId: '4821', meta: { Title: 'Volunteer sign-up', Details: '' }, sessionState: 'STARTED',
+      room: S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', CurrentAskId: '003' }, { SK: 'BUILD#ASK#003', Source: 'agent', CreatedAt: ago(600), ...CHOICE, Status: 'live' }]),
+      players: [], now: NOW,
+    });
+    const c = controlsFor(r);
+    expect(c.primary).toMatchObject({ action: 'close', label: W.showResults, arm: { text: W.armNobodyHere, confirmLabel: 'Show results anyway', inPlace: true } });
+    expect(W.armNobodyHere).toBe('Nobody has joined yet. Press again to show results.');
+  });
+
   test('voting with votes to come arms Show results with the voting words', () => {
     const r = room({ st: { CurrentAskId: '003' }, rows: [{ SK: 'BUILD#ASK#003', Source: 'agent', CreatedAt: ago(600), ...CHOICE, Kind: 'suggest', Status: 'voting' }, { SK: 'BUILD#VOTE#003#Ana', AskId: '003', PlayerName: 'Ana', Picks: ['r1'], CreatedAt: ago(100) }] });
     const c = controlsFor(r);
