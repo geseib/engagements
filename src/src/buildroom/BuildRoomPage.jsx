@@ -68,9 +68,11 @@ import {
   unheard, agentStopped, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind,
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
-  rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts,
+  rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts, roomStory, contributionsOf, doingLine,
 } from './buildScreens';
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
+import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
+import { sentMarks, itemKeys, storyHolds } from './sentMarks';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLookDialog, StageTabs,
 } from './BuildCrew';
@@ -731,6 +733,23 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     } catch (e) { /* the view still changes */ }
   };
 
+  // ── CONSIDER, AND THE SENT MARKS (docs/design/build-room-consider) ───────
+  // One panel for every list (`considering`), what was typed in it kept per
+  // item so Esc loses nothing, and the marks every list reads. A mark opens
+  // History at its entry: on the Host screen the History section in the side
+  // column, elsewhere the History screen (`historyFocus`).
+  const [considering, setConsidering] = useState(null);
+  const [considerDrafts, setConsiderDrafts] = useState({});
+  const [historyFocus, setHistoryFocus] = useState(null); // {target, n}
+  const marks = useMemo(() => sentMarks(room), [room]);
+  const openHistory = useCallback((target) => {
+    setHistoryFocus((f) => ({ target, n: ((f && f.n) || 0) + 1, on: screen === 'host' ? 'section' : 'screen' }));
+    if (screen !== 'host') setScreen('history');
+  }, [screen, setScreen]);
+  const considerValue = useMemo(() => ({
+    marks, openHistory, open: setConsidering, ended: Boolean(room && room.state === 'ENDED'),
+  }), [marks, openHistory, room]);
+
   // ── The Host alert (owner, 2026-10-10) ───────────────────────────────────
   // A line on the Stage or the Build / History header jumps to where the host
   // handles it. `alertFocus` is that request; it is served once the Host screen
@@ -971,6 +990,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     <ImageLoader.Provider value={loadImage}>
     <ViewerContext.Provider value={openViewer}>
     <ImageViewer.Provider value={openImage}>
+    <ConsiderContext.Provider value={considerValue}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' ? ' brm-room--host' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
         // ONE SCREEN: the room's Stage with the host's controls on it (parity PLAN §2.5).
@@ -1065,7 +1085,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
 
       {screen === 'build' && <BuildBuildScreen room={roomView} now={now} controls={{ ended, busy, run, api }} />}
-      {screen === 'history' && <BuildHistoryScreen room={roomView} now={now} controls={{ onOpenAsk: setDetailAskId }} />}
+      {screen === 'history' && <BuildHistoryScreen room={roomView} now={now} controls={{ onOpenAsk: setDetailAskId }} focus={historyFocus && historyFocus.on === 'screen' ? historyFocus : null} />}
       {screen === 'host' && (
       <div className="brm-host">
         {/* NOW: what Claude or the room is doing, with that moment's controls,
@@ -1199,6 +1219,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <aside className="brm-hostcol brm-hostcol--stack" data-capability="whats-next">
           {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
           <HistoryStack
+            openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
             items={[
               ...(room.opening && room.opening.phase === 'opening' ? [{
                 key: 'opening', label: 'The opening', capability: 'opening',
@@ -1213,6 +1234,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                 : <div className="brm-empty">No asks yet.</div> },
               { key: 'shots', label: 'Screenshots', count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
               { key: 'brief', label: 'Room brief', count: briefCount(room.brief), body: <BriefPanel brief={room.brief} busy={busy} ended={ended} run={run} api={api} /> },
+              // HISTORY (Consider, frame 4): a sent mark anywhere opens this, at its entry.
+              { key: 'history', label: W.historySection, count: storyCount(room), capability: 'history', body: <HistorySection room={room} now={now} focus={historyFocus && historyFocus.on === 'section' ? historyFocus : null} onOpenAsk={setDetailAskId} /> },
             ]}
           />
         </aside>
@@ -1333,7 +1356,18 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {viewer && !viewer.image && askById(room, viewer.askId) && (
         <MockupViewer key={`${viewer.askId}:${viewer.label}:${viewer.from}`} ask={askById(room, viewer.askId)} startLabel={viewer.label} backLabel={viewer.backLabel} onBack={closeViewer} />
       )}
+      {host && considering && (
+        <ConsiderPanel
+          item={considering} api={api} run={run} busy={busy}
+          draft={considerDrafts[considering.key] || null}
+          setDraft={(d) => setConsiderDrafts((all) => ({ ...all, [considering.key]: d }))}
+          canIdeas={Boolean(current && current.kind === 'suggest' && ['live', 'voting'].includes(current.status))}
+          onClose={() => setConsidering(null)}
+          onDone={() => setConsiderDrafts(({ [considering.key]: _gone, ...rest }) => rest)}
+        />
+      )}
     </div>
+    </ConsiderContext.Provider>
     </ImageViewer.Provider>
     </ViewerContext.Provider>
     </ImageLoader.Provider>
@@ -1808,12 +1842,15 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
 }
 
-function HistoryStack({ items }) {
+function HistoryStack({ items, openKey = null }) {
   // The first item opens, unless it has nothing in it yet (`skip`: an empty
   // Decided); an item that has gone (The opening, once building starts) opens
-  // the first one again.
+  // the first one again. `openKey` ({key, n}) opens one from outside: a sent
+  // mark opening History (Consider), each press once.
   const first = () => (items.find((it) => !it.skip) || items[0]).key;
   const [chosen, setOpen] = useState(first);
+  const asked = openKey ? `${openKey.key}:${openKey.n}` : '';
+  useEffect(() => { if (openKey) setOpen(openKey.key); }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = items.some((it) => it.key === chosen) ? chosen : first();
   return (
     <div className="brm-stack">
@@ -1837,6 +1874,36 @@ function HistoryStack({ items }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** How many entries the History section holds: the story the History screen tells. */
+function storyCount(room) {
+  return roomStory({ log: room.log || [], asks: room.asks || [], images: room.images || [], gave: contributionsOf(room), ended: room.state === 'ENDED' }).length;
+}
+
+/**
+ * THE HISTORY SECTION (docs/design/build-room-consider, frame 4): the story in
+ * the side column, newest first. With `focus` ({target, n}) it scrolls to the
+ * entry a sent mark named and highlights it ("showing the entry").
+ */
+export function HistorySection({ room, now, focus = null, onOpenAsk = null }) {
+  const story = roomStory({ log: room.log || [], asks: room.asks || [], images: room.images || [], doing: doingLine(room.doing, now), gave: contributionsOf(room), ended: room.state === 'ENDED' });
+  const ref = useRef(null);
+  const target = focus ? focus.target : null;
+  useEffect(() => {
+    if (!target || !ref.current) return;
+    const el = ref.current.querySelector('.is-focus');
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [target, focus && focus.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!story.length) return <div className="brm-empty">{W.nothingYet}</div>;
+  return (
+    <div className="brm-histsection" ref={ref}>
+      {target && story.some((it) => storyHolds(it, target) || (it.kids || []).some((k) => storyHolds(k, target))) && <p className="brm-hint brm-showing">{W.showingEntry}</p>}
+      <ol className="brm-story" aria-label={W.historySection}>
+        {story.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} focus={target} />)}
+      </ol>
     </div>
   );
 }
@@ -2599,6 +2666,7 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
               <td>
                 <span className="brm-nm" title={a.prompt}>{a.prompt}</span>
                 {a.decision && <span className="brm-subline" title={a.decision.direction}>Decided: {a.decision.direction}</span>}
+                <ItemMark itemKey={itemKeys.ask(a.askId)} />
               </td>
               <td>{KIND_LABEL[a.kind]}</td>
               <td><span className={`brm-chip brm-chip--${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span></td>
@@ -2632,6 +2700,8 @@ const openAskOf = (room) => (room.asks || []).find((a) => a.askId === room.curre
 /** "Dee · idea", "You · queued", "Sam · on the preview". */
 function ideaWho(idea) {
   if (idea.source === 'host') return 'You · queued';
+  // Made from something the room gave (Consider's Queue for the room): the room's, with no name.
+  if (!idea.playerName) return 'From the room · idea';
   return `${idea.playerName} · ${idea.aboutLogId ? 'on the preview' : 'idea'}`;
 }
 
@@ -2731,6 +2801,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
           {handled.map((idea) => (
             <div className="brm-idea brm-idea--done" key={idea.ideaId}>
               <div className="brm-idea-text">{idea.text}</div>
+              <ItemMark itemKey={itemKeys.idea(idea.ideaId)} />
               <div className="brm-who">{ideaWho(idea)} · {idea.walled ? 'on the wall' : idea.promotedTo ? `in ask ${askNumber(idea.promotedTo)}` : HANDLED[idea.status] || idea.status}</div>
               {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
@@ -2760,6 +2831,8 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <input type="checkbox" className="brm-qtick" checked={ticked} onChange={onTick} aria-label={`Tick: ${idea.text}`} />
         )}
         <span className="brm-who">{ideaWho(idea)} · {clockTime(idea.createdAt)}</span>
+        {/* CONSIDER (frames 2-3): the one panel for this card's two doors; the mark once it is queued or sent. */}
+        <span className="brm-push"><ItemTools item={{ key: itemKeys.idea(idea.ideaId), words: idea.text, type: 'idea', ideaId: idea.ideaId }} consider={!ended} /></span>
       </div>
       <div className="brm-idea-text">{idea.text}</div>
       {!ended && (

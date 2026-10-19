@@ -22,6 +22,8 @@ import React, { useRef } from 'react';
 import Icon from '../components/Icon';
 import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
+import { ItemMark } from './BuildConsider';
+import { itemKeys } from './sentMarks';
 
 const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
 
@@ -116,6 +118,7 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
               <div className="brm-dec-t">
                 <p className="brm-dec-q">Ask {askNo(a.askId)} · {a.prompt}</p>
                 <p className="brm-dec-a">{decidedAnswer(a)}</p>
+                <ItemMark itemKey={itemKeys.ask(a.askId)} />
                 {how && <p className="brm-dec-how">{how}</p>}
               </div>
             </li>
