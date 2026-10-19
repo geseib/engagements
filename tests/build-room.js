@@ -242,7 +242,9 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const h = await hostCall('GET', 'state');
     const ask = h.body.asks[0];
     assert.deepStrictEqual(ask.results.options.map((o) => [o.label, o.count, o.voters]), [['A', 1, ['Marcus']], ['B', 1, ['Priya']]]);
-    assert.deepStrictEqual(ask.results.whys, [{ label: 'B', text: 'Dates first', playerName: 'Priya' }]);
+    // whyId: a short hash the host's Consider names the why by (build-consider.js), never a name.
+    assert.deepStrictEqual(ask.results.whys.map(({ whyId, ...w }) => w), [{ label: 'B', text: 'Dates first', playerName: 'Priya' }]);
+    assert.ok(/^[0-9a-f]{12}$/.test(ask.results.whys[0].whyId));
   });
   await check('options freeze once anyone has answered', async () => {
     const r = await hostCall('POST', `asks/${askId}`, { action: 'edit', options: ['X', 'Y', 'Z'] });

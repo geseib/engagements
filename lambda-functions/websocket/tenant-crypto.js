@@ -531,7 +531,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildState: Object.freeze(['Outcome', 'Crew', 'WallComment', 'Brief', 'BriefDraft']),
   buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel', 'ClaudeNote', 'FromLater']),
   buildResponse: Object.freeze(['Text', 'Why']),
-  buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote']),
+  buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote', 'Why', 'RoomWords']),
   buildIdea: Object.freeze(['Text']),
   buildImage: Object.freeze(['Caption']),
   buildBuilder: Object.freeze(['Note']),
