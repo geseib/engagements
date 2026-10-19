@@ -191,7 +191,7 @@ describe('the rest of the host\'s screen', () => {
     const panel = screen.getByRole('dialog', { name: 'Session' });
     fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Show on the Stage' }));
-    const card = () => screen.queryByTestId('brm-wallcodes');
+    const card = () => screen.queryByTestId('stage-join-panel');
     expect(card()).not.toBeNull();
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
     // A read from before the server heard the laptop: still "none", and the card stays.

@@ -140,14 +140,14 @@ function inlineDecide(model, current, { pickId = null, answering = false } = {})
 /**
  * @param room the host's room (GET build/state)
  * @param current the ask on the Stage, or null
- * @param opts stageModel's options, plus `codesUp` / `codesBoth` (the codes
- *   card is up, with both codes), `busy` (a host action is in flight), and
- *   the console's `decideInline` (the decide panel is drawn open: Spin the
+ * @param opts stageModel's options, plus `busy` (a host action is in flight),
+ *   and the console's `decideInline` (the decide panel is drawn open: Spin the
  *   wheel is the second button), with its `pickId` (the host's pick on the
- *   board) and `answering` (the host answers for the room)
+ *   board) and `answering` (the host answers for the room). The codes no
+ *   longer change the moves (see below).
  */
 export function buildControls(room, current, now = Date.now(), {
-  crewOn = false, draft = null, turning = false, highlight = null, codesUp = false, codesBoth = false, busy = false,
+  crewOn = false, draft = null, turning = false, highlight = null, busy = false,
   decideInline = false, pickId = null, answering = false,
 } = {}) {
   const staged = stageModel(room, current, now, { crewOn, draft, turning, highlight });
@@ -155,11 +155,9 @@ export function buildControls(room, current, now = Date.now(), {
   const ended = m.phase === 'ENDED';
   const none = { status: m.status || '', primary: null, secondary: null, tertiary: null, model: m };
   if (ended) return none;
-  if (codesUp) {
-    // THE CODES CARD: its one move is to take it down, so the bar's button and Space do that.
-    const hide = { action: 'hide-codes', label: codesBoth ? W.hideCodes : W.hideCode };
-    return { ...none, primary: control(hide, m, busy, 'p') };
-  }
+  // THE CODES ARE A SIDE PANEL (owner, 18 Oct 2026, as on Call & Answer): the
+  // moment keeps its own moves; Join, J or Escape take the codes down. Until
+  // then the codes card replaced the Stage and its one move was "Hide the code".
   const extra = (m.extras || [])[0] || null;
   if (!m.primary && extra) {
     // The last item of a run: Stop is the only move left, so it leads, and asks twice.

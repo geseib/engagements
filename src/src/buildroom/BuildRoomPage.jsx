@@ -541,8 +541,23 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [panel, setPanel] = useState(null); // {tab: 'players'|'settings', group}
   const openPanel = useCallback((tab = 'players', group = '') => setPanel({ tab, group }), []);
   const closePanel = useCallback(() => setPanel(null), []);
-  // The header's join button with no demo to show: the one big Join QR (QrZoom).
+  // The enlarged Join QR on the laptop, for an ended session (the Stage shows no codes then).
   const [joinZoom, setJoinZoom] = useState(false);
+  // J shows and hides the codes, as on Call & Answer; set each render below.
+  const toggleCodesRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'j' && e.key !== 'J') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented) return;
+      if (isTypingTarget(e.target) || dialogOpen()) return;
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('.setup-panel')) return;
+      if (!toggleCodesRef.current) return;
+      e.preventDefault();
+      toggleCodesRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const narrow = useNarrowHeader();
   const playerCount = room ? room.playerCount : undefined;
   useEffect(() => { loadPlayers(); }, [loadPlayers, playerCount]);
@@ -942,12 +957,19 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const showCodes = () => { showRoom('stage'); codesAsked.current = true; setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
   // The chip's Show on the Stage opens the same card (ruling 3).
   const share = { busy, run, api, onShowWall: showCodes };
-  // The header's join button: both codes while the demo is live, Join alone otherwise (ruling 4).
+  // THE HEADER'S JOIN, THE RAIL'S CODE AND J: one toggle, as on Call & Answer
+  // (owner, 18 Oct 2026: "use the approach we now have for call and answer").
+  // The codes go to the Stage and the room's window as a side panel, the demo's
+  // beside the join while it is shared; press again to take them down. Until
+  // then, with no demo live, Join opened a QR on the laptop alone and the room
+  // never saw it. An ended session keeps the enlarged code on the laptop.
   const demoLive = demoOnStage(room, now, wifiLink(room));
-  const onJoinCode = demoLive ? showCodes : () => setJoinZoom(true);
+  const toggleCodes = () => (codesUp ? hideCodes() : showCodes());
+  const onJoinCode = ended ? () => setJoinZoom(true) : toggleCodes;
+  toggleCodesRef.current = ended ? null : toggleCodes;
   const headerTools = {
     room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: showRoom, share,
-    onQr: onJoinCode, bothCodes: demoLive,
+    onQr: onJoinCode, bothCodes: demoLive, codesUp: codesUp && !ended,
     onPlayers: () => openPanel('players'),
   };
   const asks = room.asks || [];
@@ -1106,10 +1128,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   let consoleNode = null;
   if (consoleOn) {
     const pickNow = pick && current && pick.askId === current.askId ? pick.id : null;
-    const moment = consoleMoment(room, current, { crewOn: onCrew, codesUp: codesUp && !ended });
+    const moment = consoleMoment(room, current, { crewOn: onCrew });
     const bar = buildControls(room, current, now, {
       crewOn: onCrew, draft: current ? drafts[current.askId] || null : null, turning: cTurning,
-      highlight: current ? highlights[current.askId] : undefined, codesUp: codesUp && !ended, codesBoth: codesUp && demoLive, busy,
+      highlight: current ? highlights[current.askId] : undefined, busy,
       decideInline: true, pickId: pickNow, answering,
     });
     consoleHandlers.current = {
@@ -1461,6 +1483,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             onSent: (out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); },
             onPick: (id) => { if (current) setConfirmPick({ ask: current, id }); },
             onHideCodes: hideCodes,
+            onToggleCodes: toggleCodes,
             onTakeDown: takePointDown,
             onPointLater: savePointLater,
             onPointsMove: moveForward,
@@ -1504,6 +1527,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onPlayers={() => openPanel('players')}
         onQr={onJoinCode}
         bothCodes={demoLive}
+        codesUp={codesUp && !ended}
         share={{ ...share, nudge: demoOffered && !narrow && (screen === 'build' || screen === 'history') }}
       />
       {/* A TEAM INVITATION (owner, 2026-10-10, option A): a slim bar on the Host
@@ -2158,7 +2182,14 @@ function useNarrowHeader() {
  * The chip is on every screen with a header (Share demo D1 B, D3): it carries
  * the nudge on Build and History, and Share demo after Not now.
  */
-function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes = false, withPill = true }) {
+/** The header's Join: what a press does now (a toggle, as on Call & Answer). */
+function joinChipWords(ended, codesUp, both) {
+  if (ended) return 'Show the QR code';
+  if (codesUp) return both ? 'Hide both codes on the Stage' : 'Hide the join code on the Stage';
+  return both ? 'Show both codes on the Stage' : 'Show the join code on the Stage';
+}
+
+function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes = false, codesUp = false, withPill = true }) {
   // Share demo appears once there is a running app to share (owner, 2026-10-11).
   const showWifi = !ended && Boolean(share) && demoRunnable(room);
   return (
@@ -2181,8 +2212,9 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
         type="button"
         className="brm-codewrap brm-codebtn"
         data-capability="share-demo"
-        title={bothCodes ? 'Show both codes on the Stage' : 'Show the QR code'}
-        aria-label={bothCodes ? `Join code ${room.gameId}. Show both codes on the Stage` : `Join code ${room.gameId}. Show the QR code`}
+        title={joinChipWords(ended, codesUp, bothCodes)}
+        aria-label={`Join code ${room.gameId}. ${joinChipWords(ended, codesUp, bothCodes)}`}
+        aria-pressed={ended ? undefined : codesUp}
         onClick={onQr}
       >
         <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
@@ -2200,12 +2232,12 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
  */
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
-  onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, pluginOutdated = false,
+  onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, codesUp = false, pluginOutdated = false,
   alert, onAlertGo, onAlertAll, share, roomWindow = null,
 }) {
   const pill = askPill(room);
   const tucked = narrow;
-  const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes };
+  const tools = { room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes, codesUp };
   const rw = roomWindow || {};
   // TWO SCREENS (owner, 19 Oct 2026): with the room's window up, the tabs keep
   // this laptop's own place (Host, or the screen it is already on) and "The

@@ -563,15 +563,16 @@ describe('Settings, in four groups', () => {
       expect(within(group()).getByText(/^2 of \d+ opened it$/)).toBeInTheDocument();
       fireEvent.click(within(group()).getByRole('button', { name: 'Show both on the Stage' }));
       expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
-      const card = screen.getByTestId('brm-wallcodes');
-      expect(card.querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+      // Both codes as a side panel beside the Stage's moment (owner, 18 Oct 2026).
+      const card = screen.getByTestId('stage-join-panel');
+      expect(card).toHaveClass('is-two');
     });
 
     test('no demo: Show on the Stage opens the card with Join alone', async () => {
       await openRoom(hostState());
       openSettings();
       fireEvent.click(within(group()).getByRole('button', { name: 'Show on the Stage' }));
-      expect(screen.getByTestId('brm-wallcodes')).toHaveClass('is-one');
+      expect(screen.getByTestId('stage-join-panel')).not.toHaveClass('is-two');
     });
 
     test('quiet: the warning under the codes, and Stop sharing stops it', async () => {
@@ -701,10 +702,10 @@ describe('a narrow header (480px and under)', () => {
     window.matchMedia = (q) => ({ matches: /max-width: 480px/.test(q), media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} });
     await openRoom(hostState());
     const header = document.querySelector('.brm-hbar');
-    expect(within(header).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
+    expect(within(header).queryByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeNull();
     openPanel();
     const top = within(panel()).getByTestId('brm-sp-top');
-    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
   });
 });
 

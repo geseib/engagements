@@ -92,12 +92,12 @@ const OPEN = ['live', 'voting'];
 /**
  * Which of the console's moments this is. The mockup's five (between, ask,
  * results, run, point) plus the ones the Host screen already had (the
- * opening, the crew board, the codes card, ended).
+ * opening, the crew board, ended). The codes are not a moment: since 19 Oct
+ * they sit beside whatever is on the Stage (StageJoinPanel), and the moves stay.
  */
-export function consoleMoment(room, current, { crewOn = false, codesUp = false } = {}) {
+export function consoleMoment(room, current, { crewOn = false } = {}) {
   if (!room) return 'between';
   if (room.state === 'ENDED') return 'ended';
-  if (codesUp) return 'codes';
   if (crewOn) return 'crew';
   if (current) return current.status === 'results' ? 'settle' : 'collect';
   if (room.opening && room.opening.phase === 'opening') return 'opening';

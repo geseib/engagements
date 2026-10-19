@@ -23,15 +23,48 @@ import { QRCodeSVG } from 'qrcode.react';
  */
 export const JOIN_PROMISE = 'Scan to join · no app, no account';
 
-export default function StageJoinPanel({ playUrl, joinUrl, code }) {
+/**
+ * The address may wrap only before its path, never inside the domain: the
+ * panel broke "engage.dev.seibtribe. / us/play" (walk of dev 409c6621).
+ */
+function breakableUrl(url) {
+  const s = String(url || '');
+  const at = s.indexOf('/');
+  if (at <= 0) return s;
+  return <>{s.slice(0, at)}<wbr />{s.slice(at)}</>;
+}
+
+/**
+ * `second`: a Build Room's demo while it is shared on the Wi-Fi ({ url, head,
+ * note }), the panel's second code below the join (docs/design/room-content-v2:
+ * "Two QR codes in Build Room ... so its QR panel holds both"). Both codes
+ * then step down to share the panel's height.
+ */
+/**
+ * `onZoom(which)`: the host's own screen may enlarge a code ('join' or
+ * 'second') to read or copy it. The room's window passes none, so nothing on
+ * it is pressable.
+ */
+export default function StageJoinPanel({ playUrl, joinUrl, code, second = null, onZoom = null }) {
+  const qr = (which, value, label) => {
+    const box = <QRCodeSVG value={value || ''} size={512} level="M" includeMargin={false} />;
+    return onZoom
+      ? <button type="button" className="qr stage-join-zoom" aria-label={label} onClick={() => onZoom(which)}>{box}</button>
+      : <div className="qr">{box}</div>;
+  };
   return (
-    <aside className="stage-join" aria-label="Join this session" data-testid="stage-join-panel">
-      <div className="qr">
-        <QRCodeSVG value={playUrl || ''} size={512} level="M" includeMargin={false} />
-      </div>
+    <aside className={`stage-join${second ? ' is-two' : ''}`} aria-label="Join this session" data-testid="stage-join-panel">
+      {qr('join', playUrl, 'Enlarge the join code')}
       <p className="stage-join-k">{JOIN_PROMISE}</p>
-      <p className="stage-join-url">{joinUrl}</p>
+      <p className="stage-join-url">{breakableUrl(joinUrl)}</p>
       <p className="stage-join-code">{code}</p>
+      {second && second.url ? (
+        <div className="stage-join-second" data-testid="stage-join-second">
+          {qr('second', second.url, second.zoomLabel || 'Enlarge this code')}
+          {second.head ? <p className="stage-join-k">{second.head}</p> : null}
+          {second.note ? <p className="stage-join-note">{second.note}</p> : null}
+        </div>
+      ) : null}
     </aside>
   );
 }
