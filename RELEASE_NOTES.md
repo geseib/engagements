@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 19 Oct 2026: Build Room on two screens, Consider with Sent to Claude marks, and fixes on both room types
 
-**Test:** merge of dev `DEVSHA` (and the notes commit after it). Plans: `docs/design/parity/PLAN.md` §2 (B8, B9, §2.9b); mockups `docs/design/build-room-console/` and `docs/design/build-room-consider/`; QA walk `docs/qa/2026-10-18-build-room-walk/`.
+**Test:** merge of dev `156265f6` (notes in the same commit). Plans: `docs/design/parity/PLAN.md` §2 (B8, B9, §2.9b); mockups `docs/design/build-room-console/` and `docs/design/build-room-consider/`; QA walk `docs/qa/2026-10-18-build-room-walk/`.
 
 ### New
 
