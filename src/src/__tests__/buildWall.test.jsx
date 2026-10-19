@@ -202,9 +202,14 @@ describe('nothing pressable, no name, at every moment and on every screen', () =
     expect(text).not.toMatch('UNUSED-IDEA');
   });
 
-  test('the codes card shows the join code when wall.codes is join', async () => {
+  // The codes are a side panel beside the Stage's moment (owner, 18 Oct 2026, as on Call & Answer).
+  test('the join code shows as a side panel beside the moment when wall.codes is join', async () => {
     const { container } = await draw(F.wallBody({ wall: { codes: 'join', screen: 'stage' } }));
-    expect(container.querySelector('.brm-wallcodes, [data-testid="brm-wallcodes"]')).not.toBeNull();
+    const panel = container.querySelector('[data-testid="stage-join-panel"]');
+    expect(panel).not.toBeNull();
+    expect(panel.closest('.content').getAttribute('data-join')).toBe('1');
+    expect(container.querySelector('.content > .fitbox')).not.toBeNull();
+    expect(container.querySelector('[data-testid="stage-join-second"]')).toBeNull();
   });
 });
 

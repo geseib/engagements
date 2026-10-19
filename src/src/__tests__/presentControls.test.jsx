@@ -161,6 +161,20 @@ describe('for a host', () => {
     expect(JSON.parse(posts()[0][1].body)).toEqual({ focus: 'answer', index: 0, part: 0, questionNumber: 5 });
   });
 
+  test('↓ on the voting overview does nothing and asks for no next step; → steps (19 Oct 2026)', async () => {
+    serve(host({ state: 'VOTE#005' }));
+    const snapshot = { state: 'VOTE#005', stageFocus: { focus: 'none', index: null }, roomCounts: { joined: 4 } };
+    const { result } = renderHook(() => usePresentControls({ gameId: '5479', snapshot, total: 3, overview: true, refetch: jest.fn() }));
+    await waitFor(() => expect(result.current.armed).toBe(true));
+    press('ArrowDown');
+    await pause();
+    expect(posts()).toHaveLength(0);
+    expect(result.current.confirm).toBeNull();
+    press('ArrowRight');
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(JSON.parse(posts()[0][1].body)).toEqual({ focus: 'answer', index: 0, part: 0, questionNumber: 5 });
+  });
+
   test('Workie\'s page turns with a relative step', async () => {
     serve(host({ state: 'RESULTS#005', stageBeat: 'field-notes' }));
     const snapshot = { ...RESULTS, stageBeat: 'field-notes', stageNotes: { page: 1, pages: 3 } };

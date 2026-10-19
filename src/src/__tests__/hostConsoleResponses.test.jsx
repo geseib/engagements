@@ -29,6 +29,20 @@ test('voting: the room\'s order, Response N always, the one on the wall marked, 
   expect(onPutOnWall).toHaveBeenCalledWith(1);
 });
 
+// 19 Oct 2026: when every answer fits, the room's window shows them all
+// (presentModel's overview), so no single response is "On the wall now".
+test('voting on the overview: "All answers · On the wall now", no response marked', () => {
+  render(<ResponsesPanel kicker="Round 2 · Voting" title="The ballot" phase="VOTE" responses={R} overviewOnWall onWallIndex={null} onPutOnWall={jest.fn()} onQuestionToWall={jest.fn()} />);
+  expect(screen.getByTestId('hc-overview').textContent).toMatch('All answers · On the wall now');
+  expect(screen.getAllByTestId('hc-resp').some((n) => n.classList.contains('is-onwall'))).toBe(false);
+  expect(screen.queryByText(/Response 1 · On the wall now/)).toBeNull();
+});
+
+test('voting with a response up: no overview row', () => {
+  render(<ResponsesPanel kicker="k" title="t" phase="VOTE" responses={R} onWallIndex={1} onPutOnWall={jest.fn()} />);
+  expect(screen.queryByTestId('hc-overview')).toBeNull();
+});
+
 test('results on a named round show names', () => {
   render(<ResponsesPanel kicker="Round 2 · Results" title="Results" phase="RESULTS" responses={R} authorsHidden={false} />);
   expect(screen.getAllByTestId('hc-resp')[0].textContent).toMatch('Ada');

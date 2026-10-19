@@ -23,7 +23,7 @@ import QuestionCard from './components/QuestionCard';
 import {
   roomContentFor, questionRoomData, roomTitle, textOf, OVERVIEW_FIT,
 } from './config/roomContent';
-import { stagePageSizeFor } from './components/stage/roomPaging';
+import { stagePageSizeFor, votingWall } from './components/stage/roomPaging';
 import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
@@ -77,7 +77,7 @@ import {
   shortcutsSuppressed, scoreboardKeysLive, sessionPanelKeyLive, qrOverlayInstructions,
 } from './utils/hostOverlays';
 import {
-  resolveInstruction, currentQuestionOf, resolveRoundNoun, pluralRoundNoun,
+  resolveInstruction, currentQuestionOf, resolveRoundNoun,
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import {
@@ -6353,8 +6353,11 @@ Focus on actionable business strategy insights.`;
     // on the wall, the step is that response's dwell, then the dock's primary.
     const onResponse = twoSurfaces && beatPhase === 'RESULTS' && spotlightIndex !== null;
     const phase = onResponse ? 'RESPONSES' : beatPhase;
-    // During voting the wall always shows a response: Response 1 until a step.
-    const votingIndex = twoSurfaces && beatPhase === 'VOTE' ? (spotlightIndex === null ? 0 : spotlightIndex) : null;
+    // During voting the wall shows every answer when they fit (the overview),
+    // else Response 1 until a step (roomPaging.js votingWall, as the window).
+    const voteWall = twoSurfaces && beatPhase === 'VOTE' ? votingWall({ spotlightIndex, wallFocus, answers, profile }) : null;
+    const votingIndex = voteWall ? voteWall.index : null;
+    const votingKey = voteWall && voteWall.overview ? 'overview' : votingIndex;
     const shownIndex = onResponse ? spotlightIndex : votingIndex;
     const shownAnswer = shownIndex !== null ? answers[shownIndex] : null;
 
@@ -6397,8 +6400,8 @@ Focus on actionable business strategy insights.`;
     // A vote landing re-runs this effect; the response on the wall keeps its
     // own clock, so a busy room does not hold Auto on one response forever.
     let delayMs = decision.delayMs;
-    if (votingIndex !== null && decision.kind === 'secondary') {
-      const key = `${lessonNumber}#${votingIndex}`;
+    if (votingKey !== null && decision.kind === 'secondary') {
+      const key = `${lessonNumber}#${votingKey}`;
       if (!autoShownRef.current || autoShownRef.current.key !== key) autoShownRef.current = { key, at: Date.now() };
       delayMs = Math.max(500, decision.delayMs - (Date.now() - autoShownRef.current.at));
     }
@@ -6433,7 +6436,7 @@ Focus on actionable business strategy insights.`;
     playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
-    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces]);
+    spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
 
   /*
     WORKIE'S PAGE AS A SERVER FACT (two-surface PLAN 1.14). Every way this page
@@ -6887,6 +6890,13 @@ Focus on actionable business strategy insights.`;
   // …and while they are not: gathering, or failed (config/stageAnswers.js).
   // The owner, 2026-10-11: the wait says "Gathering responses…", never blank.
   const stageResponsesStatus = stageAnswersStatus(gameState, answersFor, answersFailedFor);
+  // WHAT THE ROOM'S WINDOW SHOWS DURING VOTING (19 Oct 2026): every answer
+  // when they fit (the window's overview), else the response put up, else
+  // Response 1. The console, the laptop's cards and the dock all read this,
+  // so none of them marks Response 1 while the window shows all of them.
+  const voteWallNow = twoSurfaces && hostPhase === 'VOTE'
+    ? votingWall({ spotlightIndex, wallFocus, answers: stageResponsesReady ? answers : [], profile })
+    : { overview: false, index: null };
 
   /*
     WHERE THE READ-BACK IS, for the dock. On FIELD_NOTES the primary is a page
@@ -6965,6 +6975,8 @@ Focus on actionable business strategy insights.`;
     // The question put back up on the wall: during VOTE, Next response then
     // goes to Response 1 (roundStep), as it does on the Remote.
     wallFocus,
+    // Every answer on the window (the overview): Next response is Response 1.
+    voteOverview: voteWallNow.overview,
     // ASK THE ROOM: the question on screen (live, then its results) and how
     // many asks wait beside the read.
     roomAsk: roundAsks.shown
@@ -8160,7 +8172,7 @@ Focus on actionable business strategy insights.`;
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
         // The stage's readiness guard: no rows (and no press) until this vote's own have landed.
-        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} onWallIndex={wallFocus === 'question' ? null : (spotlightIndex === null ? 0 : spotlightIndex)} onPutOnWall={openSpotlight} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepVote)} title={CW.theBallot} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="VOTE" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden task={consoleTask} questionOnWall={wallFocus === 'question'} onQuestionToWall={putQuestionOnWall} overviewOnWall={voteWallNow.overview} onWallIndex={voteWallNow.index} onPutOnWall={openSpotlight} />;
       case 'RESULTS':
       case 'RESPONSES':
         // `answers` is tallyOrder's rows here: the order the wall and the Remote read the focus index against.
@@ -8638,7 +8650,7 @@ Focus on actionable business strategy insights.`;
                     const label = navigatorLabel(answer, idx, { phase: 'VOTE' });
                     // With two surfaces the wall walks the responses from the
                     // start of voting; this card marks the one it shows.
-                    const showing = twoSurfaces && wallFocus !== 'question' && idx === (spotlightIndex === null ? 0 : spotlightIndex);
+                    const showing = twoSurfaces && idx === voteWallNow.index;
                     return (
                       <div
                         key={idx}
@@ -9144,9 +9156,10 @@ Focus on actionable business strategy insights.`;
                 honest one we do have, and the roll-up sits beneath it. */}
             {hostPhase === 'ENDED' && !isSurvey && (
               <>
-                <div className="kicker">Session complete</div>
+                {/* The words are the room's window's too (RW, 19 Oct 2026), so the two ends cannot drift. */}
+                <div className="kicker">{RW.sessionComplete}</div>
                 <h1 className="hero">
-                  {`${lessonNumber} ${pluralRoundNoun(getHostRoundNoun(), lessonNumber).toLowerCase()} played`}
+                  {RW.roundsPlayed(lessonNumber, getHostRoundNoun())}
                 </h1>
                 {/* IN THE CONTENT FLOW, ABOVE THE PODIUM, UNDROPPABLE.
                     10-ended.html puts its people figure INSIDE the podium's
@@ -9162,7 +9175,7 @@ Focus on actionable business strategy insights.`;
                     yet, so this states what it can rather than a figure that
                     would be 100% by construction. */}
                 <p className="qdetail">
-                  {`${players.length} in the room · the full write-up is in the session report`}
+                  {RW.endedInRoom(players.length)}
                 </p>
 
                 {/* The mockup's second stat card — `Rounds captured · All

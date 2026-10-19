@@ -62,7 +62,8 @@ const STAGE_MOMENTS = [
   ['the wheel landed', () => ask('results', { Wheel: { Slices: [{ id: 'A', label: 'A', text: 'Bold' }, { id: 'B', label: 'B', text: 'Calm' }], Spinner: null, Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'host', Result: 'B', Turns: 5 }] } }), {}],
   ['the run list', () => room({ rows: [POINT(1, { Status: 'sent' }), POINT(2, { Status: 'sent' }), POINT(3, { Status: 'queued' }), RUN] }), {}],
   ['the opening', () => room({ st: { Phase: undefined } }), {}],
-  ['the codes card', () => room(), { codesUp: true }],
+  // The codes beside a live ask: a side panel, the ask and its moves stay (owner, 18 Oct 2026).
+  ['the codes beside an ask', () => ask('live'), { codesUp: true }],
 ];
 
 afterEach(cleanup);

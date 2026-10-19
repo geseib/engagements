@@ -123,6 +123,31 @@ describe('each moment', () => {
     expect(c.secondary).toMatchObject({ action: 'wheel' });
   });
 
+  // QA walk 2026-10-18 C2: one press opened voting on an empty ballot, and
+  // the room's later ideas were refused. With nothing to vote on the button
+  // says why not and what to do instead (C&A disables Start voting at 0).
+  test('C2: ideas with none yet: Open voting is held, saying why and what to do instead', () => {
+    const r = room({ st: { CurrentAskId: '004' }, rows: [{ SK: 'BUILD#ASK#004', Source: 'agent', CreatedAt: ago(600), AskId: '004', Kind: 'suggest', Prompt: 'What stops sign-up?', Detail: '', Options: [], MaxPicks: 3, Status: 'live' }] });
+    const c = controlsFor(r);
+    expect(c.primary).toMatchObject({ action: 'vote', label: W.openVoting, disabled: true, hint: W.noIdeasToVote });
+    expect(W.noIdeasToVote).toMatch(/^No ideas yet/);
+    expect(W.noIdeasToVote).toMatch(/Close without a vote/);
+    expect(c.secondary).toBeNull();
+  });
+
+  // QA walk 2026-10-18 C3: Show results with nobody in the room closed at once
+  // (stillToAct was null at 0 of 0). It arms, and says nobody has joined.
+  test('C3: nobody in the room: Show results arms in place, saying nobody has joined', () => {
+    const r = S.hostView({
+      gameId: '4821', meta: { Title: 'Volunteer sign-up', Details: '' }, sessionState: 'STARTED',
+      room: S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', CurrentAskId: '003' }, { SK: 'BUILD#ASK#003', Source: 'agent', CreatedAt: ago(600), ...CHOICE, Status: 'live' }]),
+      players: [], now: NOW,
+    });
+    const c = controlsFor(r);
+    expect(c.primary).toMatchObject({ action: 'close', label: W.showResults, arm: { text: W.armNobodyHere, confirmLabel: 'Show results anyway', inPlace: true } });
+    expect(W.armNobodyHere).toBe('Nobody has joined yet. Press again to show results.');
+  });
+
   test('voting with votes to come arms Show results with the voting words', () => {
     const r = room({ st: { CurrentAskId: '003' }, rows: [{ SK: 'BUILD#ASK#003', Source: 'agent', CreatedAt: ago(600), ...CHOICE, Kind: 'suggest', Status: 'voting' }, { SK: 'BUILD#VOTE#003#Ana', AskId: '003', PlayerName: 'Ana', Picks: ['r1'], CreatedAt: ago(100) }] });
     const c = controlsFor(r);
@@ -173,11 +198,12 @@ describe('each moment', () => {
     expect(c.tertiary).toBeNull();
   });
 
-  test('the codes card: its one move is to take it down', () => {
-    const c = controlsFor(MOMENTS['results, a winner'](), { codesUp: true, codesBoth: true });
-    expect(c.primary).toMatchObject({ action: 'hide-codes', label: W.hideCodes });
-    expect(c.secondary).toBeNull();
-    expect(controlsFor(MOMENTS.idle(), { codesUp: true }).primary.label).toBe(W.hideCode);
+  // rejects (owner, 18 Oct 2026, as on Call & Answer): the codes replacing the
+  // moment's moves. They are a side panel now; Join, J or Escape take them down.
+  test('the codes up: the moment keeps its own moves', () => {
+    const r = MOMENTS['results, a winner']();
+    expect(controlsFor(r, { codesUp: true, codesBoth: true })).toEqual(controlsFor(r));
+    expect(controlsFor(r, { codesUp: true }).primary.action).not.toBe('hide-codes');
   });
 
   test('ended: no moves', () => {
@@ -202,5 +228,53 @@ describe('each moment', () => {
     expect(c.primary.action).toBe('points-send');
     expect(c.secondary.action).toBe('points-run');
     expect(c.tertiary).toMatchObject({ action: 'points-later', label: W.saveRest });
+    // The console's panel never changes a points vote's three moves.
+    const inline = controlsFor(r, { decideInline: true });
+    expect([inline.primary.action, inline.secondary.action, inline.tertiary.action]).toEqual(['points-send', 'points-run', 'points-later']);
+  });
+});
+
+/*
+  THE DECIDE PANEL INLINE (the two-screen console, B8; owner, 19 Oct 2026,
+  the console mockup's answer (a)). On two screens the console draws the
+  decide panel open beside the board, so the result's second button is Spin
+  the wheel instead of Change before sending; every other move, and every
+  label, is the dock's. This is the parity rule both surfaces test against.
+*/
+describe('decideInline: which second button applies when the decide panel is open', () => {
+  test('results with a winner: Send B to Claude, Spin the wheel beside it (the dock says Change before sending)', () => {
+    const r = MOMENTS['results, a winner']();
+    const dock = controlsFor(r);
+    const inline = controlsFor(r, { decideInline: true });
+    expect(dock.secondary.label).toBe(W.change);
+    expect(inline.primary.label).toBe(dock.primary.label);
+    expect(inline.primary.label).toBe(W.send('B'));
+    expect(inline.secondary).toMatchObject({ action: 'wheel', label: W.spin });
+  });
+
+  test('a tie: Spin the wheel leads, and nothing beside it (the panel is the change)', () => {
+    const inline = controlsFor(MOMENTS['results, a tie'](), { decideInline: true });
+    expect(inline.primary).toMatchObject({ action: 'wheel', label: W.spin });
+    expect(inline.secondary).toBeNull();
+  });
+
+  test('the host picked another option in the panel: the main button sends that one', () => {
+    const inline = controlsFor(MOMENTS['results, a winner'](), { decideInline: true, pickId: 'A' });
+    expect(inline.primary).toMatchObject({ action: 'to-claude', label: W.send('A') });
+    expect(inline.secondary.label).toBe(W.spin);
+    // A pick in a tie gives it something to send.
+    expect(controlsFor(MOMENTS['results, a tie'](), { decideInline: true, pickId: 'B' }).primary.label).toBe(W.send('B'));
+  });
+
+  test('answering for the room: one Send', () => {
+    const inline = controlsFor(MOMENTS['choice live, 3 of 4'](), { decideInline: true, answering: true });
+    expect(inline.primary).toMatchObject({ action: 'to-claude', label: W.sendPlain });
+    expect(inline.secondary).toBeNull();
+  });
+
+  test.each(Object.keys(MOMENTS).filter((n) => !n.startsWith('results')))('every other moment is the dock\'s, word for word: %s', (name) => {
+    const r = MOMENTS[name]();
+    const pick = (c) => [c.primary, c.secondary, c.tertiary].map((x) => (x ? [x.action, x.label, Boolean(x.arm)] : null));
+    expect(pick(controlsFor(r, { decideInline: true }))).toEqual(pick(controlsFor(r)));
   });
 });

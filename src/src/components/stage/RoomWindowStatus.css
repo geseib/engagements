@@ -1,0 +1,34 @@
+/* The room's window on a top line (components/stage/RoomWindowStatus.jsx):
+   Call & Answer's console top line and the Build Room's header. The host
+   surface passes its own button and pill classes (hc-btn / hc-winstat,
+   brm-btn / brm-winstat); this sheet owns only the cluster, the tab link and
+   the note line. Tokens only (styles/roles.css). Measured on the dusk
+   surfaces both hosts draw on (classic skin): the note, --muted #9BA8BE,
+   6.06:1 on --surface #1B2942 and 7.24:1 on --bg #0F1A2E; the tab link,
+   --accent-text #F6A94C, 7.42:1 and 8.86:1.
+   Laptop ladder: the line at 13px (label), the note at 12px (floor). */
+.rws { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.rws-line { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
+.rws-note {
+  min-height: 1.35em;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: right;
+  /* One line, so the header keeps one height whatever the window's state. */
+  white-space: nowrap;
+}
+.rws-tab {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.rws-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rws-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

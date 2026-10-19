@@ -1,8 +1,9 @@
 /**
  * NOTHING BUILD ROOM DOES IS LOST (docs/design/parity/PLAN.md §2.6b; owner,
  * 17 Oct 2026). Every id in buildroom/capabilities.js must have an entry point
- * (`data-capability="<id>"`) on the one-screen page. The two-screen half (the
- * console) joins this file with B8.
+ * (`data-capability="<id>"`) on the one-screen page, and on the two-screen
+ * console (B8; the console mockup's view 4, "Where everything went", whose
+ * table is each entry's `twoScreens`).
  *
  * A capability belongs to a moment: the ask's moves need an ask, What's next
  * needs the time between asks, the opening needs the opening. So the page is
@@ -18,6 +19,7 @@ import {
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import BuildRoomPage from '../buildroom/BuildRoomPage';
 import { CAPABILITIES, CAPABILITY_IDS } from '../buildroom/capabilities';
+import { SURFACES_KEY } from '../config/surfaces';
 
 jest.mock('../utils/reloadPage', () => ({ __esModule: true, default: jest.fn() }));
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn(), getAuthToken: jest.fn(async () => 'id-token') }));
@@ -119,9 +121,45 @@ async function walk(state) {
   return found;
 }
 
+/**
+ * TWO SCREENS (B8): the console, its rail's four slots opened in turn, each
+ * fold, "Look here, privately" to Build and History (1 comes back), then the
+ * Session panel from the Session slot. The laptop stays the console for 2-4.
+ */
+async function walkConsole(state) {
+  window.localStorage.setItem(SURFACES_KEY, 'two');
+  serve(state);
+  window.history.pushState({}, '', `/build?gameId=${GAME}`);
+  render(<BuildRoomPage />);
+  await screen.findAllByText('Volunteer sign-up');
+  expect(document.querySelector('.hc--build')).not.toBeNull();
+  const found = new Set();
+  seenIn(found);
+  document.querySelectorAll('.hc-rail summary').forEach((s) => { fireEvent.click(s); seenIn(found); });
+  document.querySelectorAll('.hc-side .brm-stackhead').forEach((b) => { fireEvent.click(b); seenIn(found); });
+  for (const name of ['Build', 'History']) {
+    fireEvent.click(document.querySelector('.hc-rail summary') || document.body);
+    const door = [...document.querySelectorAll('.hc-rail button')].find((b) => b.textContent === name);
+    if (door) {
+      fireEvent.click(door);
+      seenIn(found);
+      fireEvent.keyDown(window, { key: '1' });
+    }
+  }
+  fireEvent.click(document.querySelector('.hc--build .bc-sess'));
+  const panel = screen.getByRole('dialog', { name: 'Session' });
+  seenIn(found);
+  fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+  seenIn(found);
+  cleanup();
+  window.localStorage.clear();
+  return found;
+}
+
 beforeEach(() => {
   window.API_BASE = API;
   jest.clearAllMocks();
+  window.localStorage.clear();
   getAuthToken.mockImplementation(async () => 'id-token');
 });
 
@@ -132,7 +170,41 @@ test('the list is the §2.6b table: unique ids, each with a name and where it li
     expect(c.id).toMatch(/^[a-z][a-z-]+$/);
     expect(c.name).toBeTruthy();
     expect(c.oneScreen).toBeTruthy();
+    // Where it went on the two-screen console (the mockup's view 4 table).
+    expect(c.twoScreens).toBeTruthy();
   });
+});
+
+test('two screens: every capability has an entry point on the console (the "Where everything went" checklist)', async () => {
+  const all = new Set();
+  const byMoment = {};
+  for (const [name, mk] of MOMENTS) {
+    // eslint-disable-next-line no-await-in-loop
+    const found = await walkConsole(mk());
+    byMoment[name] = [...found].sort();
+    found.forEach((id) => all.add(id));
+  }
+  const missing = CAPABILITIES.filter((c) => !all.has(c.id)).map((c) => `${c.id}: ${c.twoScreens}`);
+  expect({ missing, byMoment }).toEqual({ missing: [], byMoment });
+  expect([...all].filter((id) => !CAPABILITY_IDS.includes(id))).toEqual([]);
+});
+
+test('two screens: the console itself, without the Session panel, carries every capability but the panel\'s own settings', async () => {
+  // The panel's groups (codes, list names, the release switch) live in the panel; everything else is a door on the console.
+  const all = new Set();
+  for (const [, mk] of MOMENTS) {
+    window.localStorage.setItem(SURFACES_KEY, 'two');
+    serve(mk());
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    // eslint-disable-next-line no-await-in-loop
+    await screen.findAllByText('Volunteer sign-up');
+    document.querySelectorAll('.hc-rail summary').forEach((s) => { fireEvent.click(s); seenIn(all); });
+    seenIn(all);
+    cleanup();
+  }
+  const missing = CAPABILITY_IDS.filter((id) => !all.has(id) && id !== 'release-posts');
+  expect(missing).toEqual([]);
 });
 
 test('one screen: every capability has an entry point, and the page names no capability the list lacks', async () => {

@@ -274,6 +274,16 @@ describe('BuildRoom.css geometry contracts', () => {
     expect(block(REPORT_CSS, '.brr .brr-tbl')).toMatch(/table-layout:\s*fixed/);
   });
 
+  // QA walk 2026-10-18 B2: the composer's hidden label (.brm-sr, absolute)
+  // had no positioned ancestor inside the scrolling host column, so it landed
+  // at y=1186 and the whole page scrolled 419 px into a blank band.
+  test('the host columns contain their absolutely placed hidden labels', () => {
+    expect(block(ROOM_CSS, '.brm .brm-sr')).toMatch(/position:\s*absolute/);
+    expect(block(ROOM_CSS, '.brm .brm-hostcol')).toMatch(/position:\s*relative/);
+    // And the fixed-height Host page clips anything absolute that still escapes.
+    expect(ROOM_CSS).toMatch(/@media \(min-width: 1201px\)[\s\S]*?\.brm\.brm-room--host \{[^}]*position:\s*relative[^}]*overflow:\s*hidden/);
+  });
+
   test('a phone gets one column', () => {
     expect(ROOM_CSS).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.brm \.brm-grid[^{]*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/);
   });

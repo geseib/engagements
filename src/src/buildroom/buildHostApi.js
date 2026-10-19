@@ -122,6 +122,13 @@ export function buildApi(gameId) {
     /** The host removes a screenshot. */
     /** Engage staff deleting in another team's room give `reason` (the owner's delete rule, 2026-10-04). */
     deleteImage: (imageId, reason = '') => post(`images/${seg(imageId)}`, { action: 'delete', ...(reason ? { reason } : {}) }),
+    /**
+     * CONSIDER (docs/design/build-room-consider): one thing the room gave, by its
+     * item key (`idea:…`, `resp:ask:id`, `option:ask:label`, `why:ask:id`).
+     * `{ item, go: 'send'|'later', text?, why? }` → `{entry}`;
+     * `{ item, go: 'queue', round: 'vote'|'yesno'|'feedback', prompt? }` → `{idea}` or `{ask}`.
+     */
+    consider: (body) => post('consider', body),
     /** 'direct' | 'suggest' | 'acknowledge' | 'wall' | 'later' | 'dismiss' | 'restore' */
     ideaAction: (ideaId, action, extra = {}) => post(`ideas/${seg(ideaId)}`, { action, ...extra }),
     /** Queue it: the host's own idea, waiting in the queue (step 4). */

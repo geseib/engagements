@@ -15,7 +15,7 @@ const META = { answered: CW.answered, voted: CW.voted, writing: CW.stillWriting,
   toggle) so the host's choice lives in one place: ConsoleRail's state. The
   summary stays the native control, so it is focusable and Enter/Space press it.
 */
-function Section({ id, title, summary, alert = false, open, onToggle, children, link, onLink }) {
+export function Section({ id, title, summary, alert = false, open, onToggle, children, link, onLink }) {
   return (
     <details className="hc-sec" data-section={id} open={open}>
       <summary onClick={(e) => { e.preventDefault(); onToggle(id); }}>

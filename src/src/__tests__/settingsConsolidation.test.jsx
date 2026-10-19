@@ -88,7 +88,8 @@ describe('the Screens group', () => {
     const open = screen.getByRole('link', { name: /Open ↗/ });
     expect(open).toHaveAttribute('href', '/present?gameId=4473');
     expect(open).toHaveAttribute('target', '_blank');
-    expect(screen.getByText('Room\'s window: on, full screen')).toBeInTheDocument();
+    // W2 (walk of 18 Oct): the row's label names the window; the status says its state alone.
+    expect(screen.getByRole('status')).toHaveTextContent(/^On, full screen$/);
   });
 
   test('on one screen there is no room\'s window to open', () => {

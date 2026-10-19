@@ -58,7 +58,8 @@ export function queueItems(room) {
   if (!room) return [];
   const asks = (room.asks || []).filter((a) => a.status === 'proposed')
     .map((a) => ({ type: 'ask', id: `ask:${a.askId}`, from: a.source === 'agent' ? 'claude' : 'you', at: a.createdAt || '', ask: a }));
-  const ideas = (room.ideas || []).filter((i) => i.status === 'new')
+  // A queued idea (Consider's Queue for the room) waits here too, marked, to be ticked into a vote.
+  const ideas = (room.ideas || []).filter((i) => i.status === 'new' || i.status === 'queued')
     .map((i) => ({ type: 'idea', id: `idea:${i.ideaId}`, from: i.source === 'host' ? 'you' : 'room', at: i.createdAt || '', idea: i }));
   // THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts waiting to be released to the room.
   const posts = heldPosts(room)
@@ -846,9 +847,12 @@ export const defaultKind = (ask) => (ask && ask.claudeGets) || (ask && ask.openi
  * screen's panel, the Stage's Send and its Change before sending window). `as` goes only
  * when it differs from the question's own kind: the server's default.
  */
-export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false }) {
+export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false, why = '' }) {
+  const said = String(why || '').trim();
   return {
     action: 'decide', direction: String(direction || '').trim(), chosen, note: String(note || '').trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
+    // The host's why (owner, 19 Oct: "add the why field to send B"): Claude reads it, History keeps it.
+    ...(said ? { why: said } : {}),
     method: decisionMethod(ask, chosen, spoken),
     // Always said when sending, so the line the host read can never disagree with the server's default.
     ...(send ? { as: as || defaultKind(ask) } : {}),
@@ -994,6 +998,33 @@ export function decisionChain(ask, outcome = null) {
 const IDEA_WORDS = Object.freeze({ chosen: W.ideaChosen, 'not-chosen': W.ideaNotChosen, pending: W.ideaInVote });
 const ideaWord = (c) => (c.chosen === true ? IDEA_WORDS.chosen : c.chosen === false ? IDEA_WORDS['not-chosen'] : IDEA_WORDS.pending);
 
+/**
+ * WHAT WENT, AND WHY (docs/design/build-room-consider, frame 4): for an entry
+ * the host sent from one thing the room gave, the room's words (struck through
+ * when the host changed them), what Claude got, the host's why, and its marks.
+ * Null when the entry says none of that (an older send, or a phone's copy of a
+ * direction, whose words stay the host's).
+ */
+export function sentDetail(e) {
+  if (!e || !(e.considered || e.why || e.roomWords)) return null;
+  const roomWords = e.asWritten === false ? e.roomWords || '' : '';
+  const marks = [
+    e.asWritten === false ? W.reworded : e.asWritten === true ? W.historyAsWritten : '',
+    e.liked ? W.likedBy(e.liked) : '',
+  ].filter(Boolean);
+  return { roomWords, got: e.text || '', why: e.why || '', marks };
+}
+
+/** A decision the host sent with a why or in changed words: the same detail (Send B to Claude). */
+function decisionDetail(d) {
+  if (!d || !(d.why || d.roomWords)) return null;
+  return { roomWords: d.roomWords || '', got: d.direction || '', why: d.why || '', marks: d.roomWords ? [W.reworded] : [] };
+}
+
+const deliveryOf = (e) => (e && e.held ? W.forClaudeLater : e && e.deliveredAt ? W.claudeHasIt : W.claudeWaiting);
+/** The ask an item key names (`resp:003:…`, `option:003:B`), or null. */
+const askOfKey = (k) => { const p = String(k || '').split(':'); return p.length === 3 ? p[1] : null; };
+
 /** An idea that went on its own (sent, or written into a direction): its chain. */
 function gaveChain(c, entry) {
   const delivery = entry && entry.deliveredAt ? W.claudeHasIt : W.claudeWaiting;
@@ -1047,11 +1078,15 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt }));
   for (const d of decided) {
     const outcome = d.ask ? outcomeOf(d.ask) : null;
+    const detail = d.ask ? decisionDetail(d.ask.decision) : null;
     const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
     const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
     const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
     items.push({
       id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: W.storyDecided(askNo(d.askId)), text: d.direction || '',
+      // The entries that told Claude about it: a sent mark opens History here (Consider, frame 4).
+      entryIds: (log || []).filter((e) => e.askId === d.askId && e.kind === 'decision').map((e) => e.logId),
+      ...(detail ? { sent: detail } : {}),
       askId: d.askId, imageIds: shown.map((im) => im.imageId), chosenLabels: chosen,
       chain: d.ask ? decisionChain(d.ask, outcome) : [],
       mine: (myIdeas || []).some((i) => i.promotedTo === d.askId),
@@ -1075,11 +1110,31 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     const entryOf = new Map((log || []).map((e) => [e.logId, e]));
     for (const c of gave || []) {
       if (c.askId) continue;
-      const entry = c.logId ? entryOf.get(c.logId) : null;
+      const first = c.logId ? entryOf.get(c.logId) : null;
+      // Held for later, then sent: the entry that carried it says how it went.
+      const entry = first && first.sentAs && entryOf.get(first.sentAs) ? entryOf.get(first.sentAs) : first;
+      const detail = sentDetail(entry);
       items.push({
         id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave',
         heading: c.yours ? W.storyYourIdea : c.from === 'host' ? W.storyHostIdea : W.storyIdea,
-        text: c.text, imageIds: [], chain: gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
+        entryIds: [c.logId, ...(c.alsoIn || [])].filter(Boolean),
+        text: c.text, imageIds: [], chain: detail ? [deliveryOf(entry)] : gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
+        ...(detail ? { sent: detail } : {}),
+      });
+    }
+    // CONSIDERED SENDS (Consider, frame 4): a suggestion, an option or a why the
+    // host sent on its own has its own entry. An idea's send is the idea's entry
+    // above; a held one the host later sent shows once, as the one that carried it.
+    for (const e of log || []) {
+      if (e.kind !== 'direction' || !e.considered || (!e.forAgent && !e.held) || e.sentAs) continue;
+      if (e.from && (e.from.ideaIds || []).length) continue;
+      const detail = sentDetail(e);
+      const askId = askOfKey(((e.from && e.from.items) || [])[0]);
+      items.push({
+        id: `sent:${e.logId}`, entryIds: [e.logId], at: e.createdAt, type: 'gave',
+        heading: W.storyFromRoom(askId ? askNo(askId) : null), text: (detail && detail.roomWords) || e.text || '',
+        imageIds: [], chain: [deliveryOf(e)], mark: e.held ? 'later' : e.asWritten === false ? 'reworded' : 'sent',
+        ...(detail ? { sent: detail } : {}),
       });
     }
   }
@@ -1220,9 +1275,12 @@ export function contributionsOf(room) {
       // Sent on its own. The entry names its idea (H1); an older one is matched by its words.
       const entry = log.find((l) => l.kind === 'idea' && l.ideaId === idea.ideaId)
         || log.find((l) => l.kind === 'idea' && !l.ideaId && (l.forAgent || l.held) && l.text === idea.text);
-      c.mark = entry && entry.held ? 'later' : 'sent';
-      c.asWritten = entry && entry.asWritten === true ? true : null;
-      c.logId = entry ? entry.logId : null;
+      // Sent in other words from Consider: no idea entry, a direction that names it (below) says how it went.
+      if (entry || !dirs.length) {
+        c.mark = entry && entry.held ? 'later' : 'sent';
+        c.asWritten = entry && entry.asWritten === true ? true : null;
+        c.logId = entry ? entry.logId : null;
+      }
     }
     for (const dir of dirs) {
       const mark = dir.held ? 'later' : dir.asWritten === true ? 'sent' : 'reworded';

@@ -31,10 +31,8 @@ import { RunCrewCodeSwitch } from './BuildCrew';
 import { CodeBox, DemoTile, AppList, QuietWarning, demoSlotOf, demoOnStage } from './BuildWifiShare';
 import { askingOf } from './useBuildPlayers';
 import { W } from './words';
-import RoomWindowLink from '../components/stage/RoomWindowLink';
-import { DISPLAY_PROFILES } from '../components/stage/ScreensGroup';
-import { SCREEN_WORDS } from '../config/roomScreen';
-import { presentStatusFrom } from '../config/presentStatus';
+import { DISPLAY_PROFILES, ScreenChoiceRow, RoomWindowRow } from '../components/stage/ScreensGroup';
+import { SCREEN_WORDS, screenWordsFor } from '../config/roomScreen';
 import { presentHref } from '../config/surfaces';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -265,10 +263,12 @@ export const ARM_MS = 6000;
  * the room screen size, which the server holds (`wall.profile`) so every
  * window draws the same. New link retires every open window's link: it asks
  * in place first, the second press within 6 s goes ahead. The parts are the
- * shared Screens group's (ScreensGroup.css, RoomWindowLink, the profiles);
- * the group itself offers one screen or two, which waits for B9's chooser.
+ * shared Screens group's (ScreenChoiceRow, RoomWindowRow, the profiles), so
+ * Where the room watches, the window's state, Open as a tab and the line for
+ * a laptop with no second display read as Call & Answer's do (B9, 19 Oct).
+ * The window's row is drawn whichever is chosen: it is never taken away.
  */
-export function WallScreens({ room, busy, run, api, ended }) {
+export function WallScreens({ room, busy, run, api, ended, choice = null, onChoose = null }) {
   const [armed, setArmed] = useState(false);
   const [said, setSaid] = useState('');
   useEffect(() => {
@@ -278,7 +278,7 @@ export function WallScreens({ room, busy, run, api, ended }) {
   }, [armed]);
   const key = room.wallKey || '';
   const href = key ? presentHref(room.gameId, { type: 'build', k: key }) : '';
-  const status = presentStatusFrom(Number(room.presenting) > 0 ? room.presentDetail : null);
+  const detail = Number(room.presenting) > 0 ? room.presentDetail : null;
   const profile = (room.wall && room.wall.profile) || 'room';
   const rotate = async () => {
     if (!armed) { setArmed(true); setSaid(''); return; }
@@ -290,15 +290,12 @@ export function WallScreens({ room, busy, run, api, ended }) {
     <div className="brm-sp-grp" data-group="screens" data-capability="screens">
       <div className="brm-sp-gh"><h3>{W.screensGroup}</h3><span>{W.screensScope}</span></div>
       <div className="scr">
-        {href && (
-          <div className="scr-row">
-            <div className="scr-k">
-              <span className="scr-label">{SCREEN_WORDS.window}</span>
-              <span className={`scr-hint scr-stat is-${status.tone}`} role="status" title={status.hint}>{status.label}</span>
-            </div>
-            <RoomWindowLink className="scr-open" href={href} title={W.wallOpenHint} data-capability="room-window">{W.wallOpen}</RoomWindowLink>
-          </div>
+        {/* One screen or two (parity PLAN §2.7, B9): the same choice and the same
+            stored value as Call & Answer's, and the Host screen's first question. */}
+        {typeof onChoose === 'function' && href && (
+          <ScreenChoiceRow choice={choice === 'two' ? 'two' : 'classic'} onChoose={onChoose} words={screenWordsFor('build')} />
         )}
+        <RoomWindowRow href={href} detail={detail} linkProps={{ title: W.wallOpenHint, 'data-capability': 'room-window' }} />
         {href && <p className="scr-hint brm-sp-note">{W.wallFollows}</p>}
         <div className="scr-row">
           <div className="scr-k">
@@ -312,6 +309,7 @@ export function WallScreens({ room, busy, run, api, ended }) {
         {href && !ended && (
           <div className="scr-row">
             <div className="scr-k">
+              <span className="scr-label">{W.wallNewLinkLabel}</span>
               <span className="scr-hint" role={armed || said ? 'status' : undefined}>{armed ? W.wallNewLinkWhy : (said || W.wallNewLinkHint)}</span>
             </div>
             <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</button>
@@ -331,6 +329,7 @@ export default function BuildSessionPanel({
   topLine = null, slots = {},
   listNames, onListNames,
   onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowCodes, wifiLink = '',
+  roomChoice = null, onRoomChoice = null,
 }) {
   const panelRef = useRef(null);
   const rootRef = useRef(null);
@@ -509,7 +508,7 @@ export default function BuildSessionPanel({
 
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
-              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} />
+              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} choice={roomChoice} onChoose={onRoomChoice} />
 
               <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
                 <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>

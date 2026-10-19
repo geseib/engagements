@@ -2,6 +2,15 @@
 
 Read-only walk. No code changed; this report and its screenshots were committed afterwards.
 
+**Fixed since (19 Oct 2026, branch `bugfixes-19oct`):**
+
+| # | Commit | What changed |
+|---|---|---|
+| B1 | `16e8708b` | Every ask creation pins the phase the room was in (`phasePin`, `build-room.js`), and `phaseOf` no longer counts opening-step asks as "building". Asking step 1 keeps the room in the opening; only Start building ends it. Tests: `tests/build-room.js` "B1: …" |
+| B2 | `46d9e3d0` | `.brm .brm-hostcol` is `position: relative`, and the fixed-height Host page is `position: relative` over its `overflow: hidden`, so the hidden label can no longer stretch the document. Test: `buildRoomPalette.test.js` |
+| C2 | `9c2b04a8` | Open voting with no ideas is held, and the bar says why and the way on ("No ideas yet, so there is nothing to vote on. Wait for the room, or press Close without a vote on the Host screen."), as C&A's Start voting is at 0. Test: `buildControls.test.js` "C2: …" |
+| C3 | `9c2b04a8` | Show results with nobody in the room (0 of 0) arms in place: "Nobody has joined yet. Press again to show results." Test: `buildControls.test.js` "C3: …" |
+
 - **Where:** https://engage.dev.seibtribe.us, signed in as the QA host (`hosts`). The code was read from `origin/dev` at `b84aa54a`. The dev bundle carries this week's strings, such as Settings › Screens and the shared dock. I could not check the pipeline: there is no AWS CLI in this container.
 - **Sessions I made:**
   - Build Room **8675** (1366×768), with bots Ada, Ben and Cleo joined over HTTP.
@@ -59,7 +68,7 @@ Read-only walk. No code changed; this report and its screenshots were committed 
      - the status hint says "Press F on that window" (`config/presentStatus.js:16`);
      - the placing link says "Click it once to fill the screen" (`RoomWindowLink.jsx:23`).
    - Rewrites are under **Words** and **Two screens** below. None of this is planned.
-5. **Stop the Host page scrolling into a blank cream area.**
+5. **Stop the Host page scrolling into a blank cream area.** *(Fixed in `46d9e3d0`, B2.)*
    - On the first screen, a mouse wheel over the middle column (Waiting for you) scrolls the whole document. It moves 419 px at 1366×768 and 258 px at 1440×900. The header goes off the top, and a blank cream (light-theme) band fills the bottom half (host-1366-wheel-middle.png).
    - Cause: `.brm .brm-sr` is `position: absolute`, and the composer's hidden label ("Tell Claude, or log what the room said") has no positioned ancestor inside the scrolling `.brm-hostcol`. So it lands at y=1186 and stretches the page.
    - The fix is one line: `position: relative` on `.brm-hostcol`. Not planned.
@@ -122,8 +131,8 @@ There is also a **high bug that is not a "cumbersome" item: the opening ends aft
 | # | Sev | Screen / size | Finding | Shot | Standard / C&A |
 |---|---|---|---|---|---|
 | C1 | high | Host | No footer, no "Your part now", no strip on the Host screen. The ask path (1 Ask · 2 The room chose · 3 Settle) is the only "where am I" | host-results-1366 | §1 console, §2 loop + "Your part now" |
-| C2 | high | Stage, Ideas | **Open voting with 0 ideas does not arm.** One press opened voting with no ideas. Bots' later suggestions got 409 "Answers are closed". `armFor` (`buildControls.js:61-69`) arms only `close` and the run list's next step | stage-ideas-live-1366, then stage-open-voting-armed-1366 (taken after the press: it did not arm) and stage-ideas-3-1366 | §3: C&A *disables* Start voting at 0 ("Nobody has answered yet", ca-answer-1366) and arms at 1 of 3 ("2 of 3 still writing. Press again…") |
-| C3 | medium | Stage, choice with 0 players | Show results with 0 of 0 present closed at once (no arm: `stillToAct` returns null when the total is 0) | stage-choice-press-1440 | C&A cannot advance with nobody there |
+| C2 | high | Stage, Ideas | **Fixed in `9c2b04a8`** (held with a reason at 0 ideas). **Open voting with 0 ideas does not arm.** One press opened voting with no ideas. Bots' later suggestions got 409 "Answers are closed". `armFor` (`buildControls.js:61-69`) arms only `close` and the run list's next step | stage-ideas-live-1366, then stage-open-voting-armed-1366 (taken after the press: it did not arm) and stage-ideas-3-1366 | §3: C&A *disables* Start voting at 0 ("Nobody has answered yet", ca-answer-1366) and arms at 1 of 3 ("2 of 3 still writing. Press again…") |
+| C3 | medium | Stage, choice with 0 players | **Fixed in `9c2b04a8`** (arms in place). Show results with 0 of 0 present closed at once (no arm: `stillToAct` returns null when the total is 0) | stage-choice-press-1440 | C&A cannot advance with nobody there |
 | C4 | medium | Session › Settings | Only Screens carries a scope ("Applies now"). The room shows "Who can get in, and what they can open"; Claude and Crew show none; This session shows "Going back, finishing, stopping" | panel-settings-1366, -mid, -end | §4 every section carries its scope |
 | C5 | medium | Session › Settings | Groups are Screens, The room, Claude, Crew, This session. There is no "Your phone as a remote" group | panel-settings-1366 | §4 four groups |
 | C6 | low | Stage | The one-screen Stage shows host-only controls to the room: "Pick this" on every option and ballot row, "Choose this instead" / "Choose this idea instead" on results | stage-ask-live-1366, stage-voting-3-ideas-1366, stage-results-1366 | §1 one screen = public. Kept by design in PLAN §2.5 |
@@ -133,8 +142,8 @@ There is also a **high bug that is not a "cumbersome" item: the opening ends aft
 
 | # | Sev | Screen / size | Finding | Shot |
 |---|---|---|---|---|
-| B1 | **high** | Opening, both sizes | **The opening ends after its first question.** On a new session the wall read says `opening.phase: "opening"`. After "Ask the room to pick" (step 1 of 9) it says `"building"` while the ask is still live. Reproduced on 8301. "The opening" disappears from the right column. After sending, the Now card says "Started building too soon? Back to the opening". Steps 2–9 are skipped, and Claude never receives the "framed the build" Do now. Cause: new sessions never write `Phase: 'opening'` (only `opening/resume` does, `build-room.js:1116`), and `phaseOf` (`build-store.js:189-192`) reads `'building'` as soon as any ask exists. `tests/build-room.js:1210` decides step 1 but never checks the phase, because `seed()` writes no Phase | host-opening-ask-live-1440, host-opening-ask-live-1366, host-after-send-1366 |
-| B2 | medium | Host, 1366 / 1440 | The page itself scrolls 419 px / 258 px into a blank cream area (see top five, item 5). `.brm-sr` label at y=1186 with no positioned ancestor | host-1366-wheel-middle, host-1366-scrolled |
+| B1 | **high** | Opening, both sizes | **Fixed in `16e8708b`.** **The opening ends after its first question.** On a new session the wall read says `opening.phase: "opening"`. After "Ask the room to pick" (step 1 of 9) it says `"building"` while the ask is still live. Reproduced on 8301. "The opening" disappears from the right column. After sending, the Now card says "Started building too soon? Back to the opening". Steps 2–9 are skipped, and Claude never receives the "framed the build" Do now. Cause: new sessions never write `Phase: 'opening'` (only `opening/resume` does, `build-room.js:1116`), and `phaseOf` (`build-store.js:189-192`) reads `'building'` as soon as any ask exists. `tests/build-room.js:1210` decides step 1 but never checks the phase, because `seed()` writes no Phase | host-opening-ask-live-1440, host-opening-ask-live-1366, host-after-send-1366 |
+| B2 | medium | Host, 1366 / 1440 | **Fixed in `46d9e3d0`.** The page itself scrolls 419 px / 258 px into a blank cream area (see top five, item 5). `.brm-sr` label at y=1186 with no positioned ancestor | host-1366-wheel-middle, host-1366-scrolled |
 | B3 | medium | Host composer | Text typed in "Add something" is not carried into the Ask the room dialog: Question is empty. After asking, the composer still holds the old text | host-ideas-compose-1366, host-rate-compose-1440 |
 | B4 | medium | Stage, voting | The voting moment always offers "Spin the wheel" as the secondary, even with 0 ideas on the ballot (`buildScreens.js:531` sets `secondary: instead` unconditionally) | stage-ideas-3-1366 (taken at 0 ideas) |
 | B5 | low | Ask the room dialog | The Ideas / Choose / Rate tabs touch, with no gap. The search box is the first input, so a typed question can land in the search ("No ready question matches") | host-rate-compose-1440 |

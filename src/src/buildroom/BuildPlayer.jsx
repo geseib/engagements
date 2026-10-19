@@ -11,6 +11,7 @@ import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, history
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
+import { MARK_WORDS } from './sentMarks';
 
 /**
  * A BUILD ROOM, ON THE PHONE OF SOMEBODY WHO HAS JOINED ONE.
@@ -74,7 +75,7 @@ export const FEED_KINDS = Object.freeze({
 const DETAIL_KINDS = ['progress', 'showing', 'milestone'];
 const FEED_LENGTH = 8;
 
-const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', later: 'Saved for later', dismissed: 'Not used this time' };
+const IDEA_STATUS = { new: 'With the host', promoted: 'Picked up', acknowledged: 'Seen by the host', later: 'Saved for later', dismissed: 'Not used this time', queued: W.markQueued };
 /**
  * What a phone says about its own idea; one shown on the wall says so (owner,
  * 2026-10-05), and one the host put to a vote says so (step 4).
@@ -971,9 +972,15 @@ function HistoryTab({ view, api, onResult, now }) {
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && (view.myIdeas || []).some((i) => i.aboutLogId === preview.logId));
   // One body for a top-level item and for what a step holds.
+  // WHAT WENT, AND WHY (Consider, frame 6): the room's words struck through when the host
+  // changed them, what Claude got, the host's why; the mark; "yours" on this phone's own idea. No names.
+  const sentMark = (it) => (it.type === 'gave' && ['sent', 'reworded', 'later'].includes(it.mark) ? MARK_WORDS[it.mark] : '');
   const body = (it) => (
     <>
-      <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.text}</p>
+      {sentMark(it) ? <p className="plr-help bpl-story-mark">{it.yours ? `${W.storyYours} · ` : ''}{sentMark(it)}</p> : null}
+      <p className="bpl-text bpl-story-t"><b className="bpl-story-h">{it.heading}</b> · {it.sent && it.sent.roomWords ? <s className="bpl-story-was">{it.sent.roomWords}</s> : it.text}</p>
+      {it.sent && it.sent.roomWords ? <p className="bpl-text bpl-story-got">{`\u2192 ${it.sent.got}`}</p> : null}
+      {it.sent && it.sent.why ? <p className="plr-help bpl-story-why"><b>{W.whyLabel}</b> {it.sent.why}</p> : null}
       {/* Said once: the ideas list marks "yours" when the server sent it (H5). */}
       {it.mine && !(it.ideas || []).some((x) => x.yours) ? <p className="plr-help bpl-story-mine">Your idea was in this vote</p> : null}
       {it.ideas && it.ideas.length ? (

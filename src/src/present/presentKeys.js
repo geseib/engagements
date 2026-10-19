@@ -7,11 +7,24 @@
  * It never moves the round itself — no Start voting, Show results or Next
  * round from a stray key; those stay on the host's dock and the Remote.
  *
- * Pure: `presentKeyStep(snapshot, 'forward' | 'back', { total, overview })`
+ * Pure: `presentKeyStep(snapshot, 'forward' | 'back', { total, overview, vertical })`
  * returns the writes to make, in order — `[]` for "nothing". `total` is how
  * many responses the round has; `overview` is whether every answer fits on
  * the voting overview (config/roomContent.js overviewFits, decided where the
- * wall's model is built). presentControls.js performs them.
+ * wall's model is built); `vertical` is an ↑ / ↓ press. presentControls.js
+ * performs them.
+ *
+ * ↑ ↓ PAGE, → ← STEP, DURING VOTING, ON EITHER SCREEN (19 Oct 2026).
+ *   - One screen (GameHostPage's stage): ↑ ↓ page the ballot
+ *     (components/stage/Pager.jsx, config/stagePaging.js pageIntentFor);
+ *     with a response open (AnswerSpotlight) → ← step the answers; Space and
+ *     → otherwise press the dock's main button (HostActionBar).
+ *   - The room's window (here): ↑ ↓ page what is up — a long answer's parts —
+ *     or do nothing; the overview is one page by definition (it is up only
+ *     when every answer fits). → ← (and Space, PageDown / PageUp, which a
+ *     clicker sends) step the answers. It used to take ↓ as "next answer",
+ *     so the one key paged on the laptop and stepped on the window.
+ * Outside voting ↑ ↓ keep meaning forward and back here.
  *   { kind: 'focus', focus, index?, part?, parts? }  POST /stage-focus
  *   { kind: 'beat', beat }                            POST /stage-beat
  *   { kind: 'page', step: 'next' | 'prev' }          POST /stage-beat (Workie's page)
@@ -47,7 +60,7 @@ function stepResponse(at, dir, total) {
   return null;
 }
 
-export function presentKeyStep(snapshot, dir, { total = 0, overview = false } = {}) {
+export function presentKeyStep(snapshot, dir, { total = 0, overview = false, vertical = false } = {}) {
   const s = snapshot || {};
   const state = String(s.state || '');
   const m = ROUND.exec(state);
@@ -63,6 +76,12 @@ export function presentKeyStep(snapshot, dir, { total = 0, overview = false } = 
   if (phase === 'VOTE') {
     if (n === 0) return [];
     const focused = answerFocus(focus, 'VOTE');
+    if (vertical) {
+      // ↑ ↓ page the answer that is up, by its parts; nothing else to page.
+      if (!focused || focused.parts < 2) return [];
+      if (dir === 'forward') return focused.part < focused.parts - 1 ? [show(focused.index, focused.part + 1, focused.parts)] : [];
+      return focused.part > 0 ? [show(focused.index, focused.part - 1, focused.parts)] : [];
+    }
     if (overview) {
       // ALL THE ANSWERS FIT, so voting opens on all of them (owner, 18 Oct
       // 2026; config/roomContent.js overviewFits): forward puts answer 1 up,

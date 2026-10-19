@@ -1,0 +1,111 @@
+/* THE BUILD ROOM'S LAPTOP ON TWO SCREENS (parity PLAN B8; docs/design/
+   build-room-console, docs/design/build-room-consider frame 1).
+   Call & Answer's console (components/console/HostConsole.css) carries the
+   frame, the type and the colours; this sheet adds only what the Build
+   Room's parts need inside it. Scope: .hc--build. Dusk tokens only; the
+   laptop ladder 12 / 13 / 15 / 19 / 24px. Contrast: every text here is
+   --text or --muted on --bg or --surface, the pairs HostConsole.css already
+   measured (__tests__/hostConsolePalette.test.js); nothing new is tinted
+   under text. */
+
+/* The rail: the Build Room's queue cards are wider than C&A's rows. */
+.hc--build.hc--side { grid-template-columns: 280px minmax(0, 1fr) 260px; }
+@media (min-width: 1600px) { .hc--build.hc--side { grid-template-columns: 300px minmax(0, 1fr) 320px; } }
+.hc--build .bc-slot { padding: 0 14px 12px; min-width: 0; }
+.hc--build .bc-slot .brm-queue, .hc--build .bc-slot .brm-lp { font-size: 13px; }
+.hc--build .bc-slot .brm-idea-acts { flex-wrap: wrap; }
+.hc--build .bc-people { padding: 0 0 8px; }
+.hc--build .bc-people li[data-state="not-yet"] { color: var(--muted); }
+.hc--build .bc-tag { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--muted); border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 6px; padding: 0 6px; }
+.hc--build .bc-links { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin: 0; font-size: 12px; color: var(--muted); }
+.hc--build .bc-links .hc-link, .hc--build .bc-session .hc-link { padding: 0; }
+.hc--build .bc-session .hc-list { padding: 0 0 8px; }
+.hc--build .bc-session li { flex-wrap: wrap; }
+.hc--build .bc-subh { margin: 4px 0 6px; }
+.hc--build .bc-end { color: var(--danger-text); }
+
+/* The top line holds one row at 1366: nothing in it wraps; the session's
+   name gives way (ellipsis, the full name in its title); under 1500px the
+   brand and the chips' key caps go (the keys still work, and say so in the
+   chips' titles). */
+.hc--build .hc-top { gap: 10px; }
+.hc--build .hc-top > * { flex: none; }
+.hc--build .hc-top > .hc-name { flex: 0 1 auto; min-width: 0; }
+.hc--build .hc-top > .hc-spacer { flex: 1 1 0; }
+.hc--build .hc-leave, .hc--build .hc-code { white-space: nowrap; }
+.hc--build .hc-top .rws-line { flex-wrap: nowrap; }
+@media (max-width: 1500px) {
+  .hc--build .hc-brand { display: none; }
+  .hc--build .bc-chip kbd { display: none; }
+}
+
+/* The top line's own parts after the room's window. */
+.hc--build .bc-topx { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
+.hc--build .bc-sees { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc--build .bc-sees-k { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.hc--build .bc-chip { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.hc--build .bc-chip kbd { font: inherit; font-size: 12px; color: var(--muted); margin-left: 6px; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 4px; padding: 0 4px; }
+.hc--build .bc-chip.is-on { border-color: var(--info); background: rgb(var(--info-rgb) / .14); }
+.hc--build .bc-chip:disabled { opacity: .5; cursor: default; }
+.hc--build .bc-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hc--build .hc-top .brm-share, .hc--build .hc-top .brm-chip { font-size: 13px; }
+
+/* The card's held slot keeps the card's height steady with or without a button. */
+.hc--build .hc-now { min-height: 76px; }
+
+/* Claude's one line on top of the main area. */
+.hc--build .bc-claude { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .12); font-size: 15px; }
+.hc--build .bc-claude .hc-muted { font-size: 13px; }
+.hc--build .bc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); align-self: center; flex: none; }
+.hc--build .bc-dot--building { background: var(--info); }
+.hc--build .bc-dot--waiting { background: var(--success); }
+.hc--build .bc-dot--sent { background: var(--accent); }
+.hc--build .bc-dot--paused { background: var(--warn); }
+
+/* The ask: the board, and beside it the moment's panel. */
+.hc--build .bc-askcols { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.hc--build .bc-askcols.is-one { grid-template-columns: minmax(0, 1fr); }
+.hc--build .bc-board { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.hc--build .bc-askrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hc--build .bc-askrow > .brm-detail { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 13px; }
+.hc--build .bc-askrow > .brm-path-row, .hc--build .bc-askrow > .brm-path-edit { display: flex; flex-wrap: wrap; gap: 8px; }
+.hc--build .bc-askside { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.hc--build .bc-askside .brm-decide { margin: 0; border-color: var(--info); }
+.hc--build .bc-detail { margin: 0; }
+.hc--build .bc-note { margin: 0; }
+/* The board at laptop size: the stage's hero letter and its gaps are the
+   wall's (BuildRoom.css --brm-st-*); here they take the laptop ladder, and
+   three options sit in a row. */
+.hc--build .bc-board .brm-stage { padding: 0; background: transparent; border: 0; }
+.hc--build .bc-board .brm-choices { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.hc--build .bc-board .brm-choice { padding: 12px; gap: 8px; }
+.hc--build .bc-board .brm-big { font-size: 24px; line-height: 1; min-width: 0; }
+.hc--build .bc-board .brm-ct { font-size: 15px; font-weight: 700; }
+.hc--build .bc-board .brm-cd { font-size: 13px; }
+.hc--build .bc-board .brm-count { font-size: 13px; }
+.hc--build .bc-board .brm-count b { font-size: 19px; }
+
+/* What's next between asks: Claude's line is the console's own, on top; its
+   copy in the panel and the panel's "Now" heading would say it twice. */
+.hc--build .brm-nowcard > .brm-h5:first-child { display: none; }
+.hc--build .brm-wnext > .brm-claudeline { display: none; }
+
+/* The side column: Now, then the folds; the open fold fills and scrolls. */
+.hc--build .bc-now { flex: none; }
+.hc--build .bc-nowline { margin: 0 0 4px; font-size: 15px; line-height: 1.4; }
+.hc--build .hc-side .brm-stack { flex: 1; }
+.hc--build .hc-side .brm-stackitem { flex: none; }
+.hc--build .hc-side .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; min-height: 240px; }
+.hc--build .hc-side .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.hc--build .hc-side .brm-stackhead { font-size: 13px; white-space: nowrap; }
+@media (max-width: 1599px) { .hc--build .hc-side .brm-stackhint { display: none; } }
+
+/* The main area: the page's own panels, one under another. */
+.hc--build .hc-main > .brm-panel, .hc--build .hc-main > .brm-notice { margin: 0; }
+.hc--build .bc-inmain { display: grid; gap: 10px; }
+.hc--build .bc-inmain-h { display: flex; align-items: center; gap: 12px; }
+.hc--build .bc-inmain-h .brm-btn { margin-left: auto; }
+.hc--build .bc-point .hc-cols { grid-template-columns: minmax(0, 1fr) 280px; }
+
+/* The request strip (a name asked for) and the error bars sit above the main area's work. */
+.hc--build .hc-main > .brm-alert, .hc--build .hc-main > .brm-sp-asking { margin: 0; }

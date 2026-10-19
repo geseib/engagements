@@ -57,16 +57,34 @@ export function splitLeave(controls) {
   };
 }
 
-export default function HostConsole({ top, strip, rail, footer, children }) {
+/*
+  ONE CONSOLE, OTHER USES (parity PLAN §2.6, B8; owner, 19 Oct 2026: "one
+  app, different use cases"). The Build Room's laptop on two screens is this
+  console with its own parts in the same places. Every prop below is optional
+  and leaves Call & Answer's console exactly as it was:
+    variant     a modifier class on the root (`hc--build`)
+    railSlot    the type's own rail, in the rail's place (four Section slots)
+    side        a side column right of the centre (the Build Room's folds)
+    topExtra    the type's own top-line parts, after the room's window
+    onLeave     a way out that is not a round control (the Build Room's Main menu)
+    stripIdle   the strip with nothing live: kept, dimmed (answer (c))
+    mainLabel   the main area's accessible name
+*/
+export default function HostConsole({
+  top, strip, rail, footer, children,
+  variant = '', railSlot = null, side = null, topExtra = null, onLeave: leaveTo = null, stripIdle = false, mainLabel = undefined,
+}) {
   const { controls, leave } = splitLeave(footer && footer.controls);
-  const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : null;
+  const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : leaveTo;
+  const cls = ['hc', variant, side ? 'hc--side' : ''].filter(Boolean).join(' ');
   return (
-    <div className="hc" data-theme="dark" onClick={releasePointerFocus}>
-      <ConsoleTop {...top} onLeave={onLeave} />
-      <div className="hc-loop">{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
-      <ConsoleRail {...rail} />
+    <div className={cls} data-theme="dark" onClick={releasePointerFocus}>
+      <ConsoleTop {...top} onLeave={onLeave}>{topExtra}</ConsoleTop>
+      <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
+      {railSlot || <ConsoleRail {...rail} />}
       <ConsoleFooter {...footer} controls={controls} />
-      <main className="hc-main">{children}</main>
+      <main className="hc-main" aria-label={mainLabel}>{children}</main>
+      {side ? <aside className="hc-side" aria-label="What happened">{side}</aside> : null}
     </div>
   );
 }

@@ -124,7 +124,8 @@ async function openRoom(state, players) {
   await waitFor(() => expect(playerGets().length).toBeGreaterThan(0));
 }
 
-const sessionButton = () => screen.getByRole('button', { name: /^SESSION/i });
+// With a room's window up the laptop is the console (B8): its rail's Session slot opens the same panel.
+const sessionButton = () => screen.queryByRole('button', { name: /^SESSION/i }) || document.querySelector('.hc--build .bc-sess');
 const panel = () => screen.getByRole('dialog', { name: 'Session' });
 const openPanel = () => { fireEvent.click(sessionButton()); return panel(); };
 const openSettings = () => {
@@ -562,15 +563,16 @@ describe('Settings, in four groups', () => {
       expect(within(group()).getByText(/^2 of \d+ opened it$/)).toBeInTheDocument();
       fireEvent.click(within(group()).getByRole('button', { name: 'Show both on the Stage' }));
       expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
-      const card = screen.getByTestId('brm-wallcodes');
-      expect(card.querySelectorAll('.brm-wallcodes-c')).toHaveLength(2);
+      // Both codes as a side panel beside the Stage's moment (owner, 18 Oct 2026).
+      const card = screen.getByTestId('stage-join-panel');
+      expect(card).toHaveClass('is-two');
     });
 
     test('no demo: Show on the Stage opens the card with Join alone', async () => {
       await openRoom(hostState());
       openSettings();
       fireEvent.click(within(group()).getByRole('button', { name: 'Show on the Stage' }));
-      expect(screen.getByTestId('brm-wallcodes')).toHaveClass('is-one');
+      expect(screen.getByTestId('stage-join-panel')).not.toHaveClass('is-two');
     });
 
     test('quiet: the warning under the codes, and Stop sharing stops it', async () => {
@@ -700,10 +702,10 @@ describe('a narrow header (480px and under)', () => {
     window.matchMedia = (q) => ({ matches: /max-width: 480px/.test(q), media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} });
     await openRoom(hostState());
     const header = document.querySelector('.brm-hbar');
-    expect(within(header).queryByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeNull();
+    expect(within(header).queryByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeNull();
     openPanel();
     const top = within(panel()).getByTestId('brm-sp-top');
-    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the QR code` })).toBeInTheDocument();
+    expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
   });
 });
 
@@ -815,7 +817,9 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
     expect(g).not.toBeNull();
     expect(g).toHaveAttribute('data-capability', 'screens');
     expect(within(g).getByText('Applies now')).toBeInTheDocument();
-    const link = within(g).getByRole('link', { name: /Room's window/ });
+    // W2: the row is labelled Room's window; its button reads Open ↗.
+    expect(within(g).getByText("Room's window")).toBeInTheDocument();
+    const link = within(g).getByRole('link', { name: 'Open ↗' });
     expect(link).toHaveAttribute('href', `/present?gameId=${GAME}&type=build&k=${encodeURIComponent(KEY)}`);
     expect(link).toHaveAttribute('data-capability', 'room-window');
     expect(link).toHaveAttribute('target', '_blank');
@@ -824,13 +828,13 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
   test('the window\'s status is the server\'s: on, full screen; not open with no viewer', async () => {
     await openRoom(withWall(hostState()));
     openSettings();
-    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: on, full screen");
+    expect(within(group()).getByRole('status')).toHaveTextContent(/^On, full screen$/);
   });
 
   test('no viewer on the session reads as not open, whatever the detail says', async () => {
     await openRoom(withWall(hostState(), { presenting: 0 }));
     openSettings();
-    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: not open");
+    expect(within(group()).getByRole('status')).toHaveTextContent(/^Not open$/);
   });
 
   test('the room screen size posts build/wall {profile}', async () => {
@@ -873,7 +877,7 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
   test('an older server with no wall key: the size is offered, no link to open', async () => {
     await openRoom(hostState());
     openSettings();
-    expect(within(group()).queryByRole('link', { name: /Room's window/ })).toBeNull();
+    expect(within(group()).queryByRole('link', { name: 'Open ↗' })).toBeNull();
     expect(within(group()).getByRole('combobox')).toBeInTheDocument();
   });
 });

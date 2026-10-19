@@ -249,6 +249,27 @@ describe('every moment', () => {
     expect(container.querySelector('.present-quote figcaption').textContent).toBe('Said in the room');
     expect(container.textContent).not.toMatch(/Provide feedback/);
   });
+  it('the end: rounds played, the room, and the podium once the names are out (19 Oct 2026)', () => {
+    const players = [{ playerName: 'Ada', totalScore: 12 }, { playerName: 'Ben', totalScore: 9 }, { playerName: 'Cleo', totalScore: 4 }];
+    const { container } = drawn(snap({ state: 'ENDED', currentQuestion: 3, authorsRevealed: true }), { players });
+    expect(container.querySelector('.present-hero').textContent).toBe('3 rounds played');
+    expect(container.textContent).toMatch('5 in the room');
+    const pods = [...container.querySelectorAll('.present-pod')];
+    expect(pods.map((p) => p.querySelector('.present-pod-nm').textContent)).toEqual(['Ada', 'Ben', 'Cleo']);
+    expect(container.querySelector('.present-podium').getAttribute('data-attribution')).toBe('revealed');
+    const hidden = drawn(snap({ state: 'ENDED', currentQuestion: 3, authorsRevealed: false }), { players }).container;
+    expect(hidden.querySelector('.present-podium')).toBeNull();
+    expect(hidden.textContent).not.toMatch(/Ada|Ben|Cleo/);
+  });
+  it('a comment put up during results or the read shows on the wall, as on the stage', () => {
+    const comments = [{ text: 'Name the customer.', featured: true, featuredAt: '2026-10-13T10:05:00Z', playerName: 'Said in the room', fromHost: true, anchorKind: 'results' }];
+    const results = drawn(snap({ state: 'RESULTS#005', authorsRevealed: true }), { results: { voteTallies: TALLIES }, comments }).container;
+    expect(results.querySelector('.present-quote blockquote').textContent).toBe('Name the customer.');
+    const read = drawn(snap({ state: 'RESULTS#005', stageBeat: 'field-notes', stageNotes: { page: 0, pages: 2, rev: 1 } }), { summary: { markdownResponse: MD }, comments }).container;
+    expect(read.querySelector('.present-quote blockquote').textContent).toBe('Name the customer.');
+    const none = drawn(snap({ state: 'RESULTS#005', authorsRevealed: true }), { results: { voteTallies: TALLIES }, comments: [] }).container;
+    expect(none.querySelector('.present-quote')).toBeNull();
+  });
   it('feedback names its round and the title, not the question again (owner, 2026-10-13)', () => {
     const { container } = drawn(...EVERY.find(([m]) => m === 'FEEDBACK').slice(1));
     // WHAT THE ROOM SEES (owner, 17 Oct 2026, config/roomContent.js): on Room the

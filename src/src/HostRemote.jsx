@@ -1964,7 +1964,8 @@ function HostRemote() {
                     (PLAN 2.14): the room's screen is /present, which follows
                     the server and needs no link back to this phone, so a
                     reload on either end loses nothing. */}
-                {twoSurfacesHere(gameType) ? (
+                {/* A Build Room's window needs its wall key, which this page never reads. */}
+                {gameType !== 'build' && twoSurfacesHere(gameType) ? (
                   <a
                     className="hr-btn hr-btn--ghost"
                     href={presentHref(gameId)}

@@ -9,6 +9,7 @@
  * sentence case, plain, "phone, laptop or tablet".
  */
 import { SURFACES_KEY } from './surfaces';
+import { FILL_ONCE } from './presentStatus';
 
 export const ROOM_WORDS = Object.freeze({
   heading: 'Where will the room watch?',
@@ -43,11 +44,12 @@ export const ROOM_WORDS = Object.freeze({
  * The recommendation for the answers so far, or null until there is enough
  * to say. `{ choice: 'two' | 'classic', lead, detail }`.
  *   connected: 'yes' | 'no'; picture: 'own' | 'copy' | 'unsure'; private: 'yes' | 'no'
- * Question 3 only changes the wording (§4.7).
+ * Question 3 only changes the wording (§4.7). `type` 'build' words the
+ * one-screen advice for a Build Room, which has no Remote.
  */
-export function recommendRoomScreen({ connected, picture, private: keepPrivate } = {}) {
+export function recommendRoomScreen({ connected, picture, private: keepPrivate } = {}, type = '') {
   if (connected === 'no') {
-    return { choice: 'classic', lead: 'One screen for now.', detail: 'Switch in Setup once the projector is plugged in.' };
+    return { choice: 'classic', lead: 'One screen for now.', detail: type === 'build' ? 'Switch in Session, Settings, Screens once the projector is plugged in.' : 'Switch in Setup once the projector is plugged in.' };
   }
   if (connected !== 'yes' || !picture) return null;
   if (picture === 'own') {
@@ -66,7 +68,7 @@ export function recommendRoomScreen({ connected, picture, private: keepPrivate }
   }
   return keepPrivate === 'no'
     ? { choice: 'classic', lead: 'One screen is the simpler choice.', detail: 'The projector already shows this laptop.' }
-    : { choice: 'classic', lead: 'We recommend one screen.', detail: 'To keep Workie\'s notes private, open the Remote on your phone.' };
+    : { choice: 'classic', lead: 'We recommend one screen.', detail: type === 'build' ? 'Stay on Host while you read what waits for you; the room sees the screens you switch to.' : 'To keep Workie\'s notes private, open the Remote on your phone.' };
 }
 
 /** The stored choice: 'two', 'classic', or null when this browser has not chosen. */
@@ -115,4 +117,37 @@ export const SCREEN_WORDS = Object.freeze({
   quickOne: 'The projector shows this laptop.',
   quickUnchosen: 'Not chosen yet. Pick one, or the lobby will ask.',
   quickBlocked: 'The browser blocked the room\'s window. Open it from Room\'s window ↗ at the top.',
+  // ONE LAPTOP, NO SECOND DISPLAY (owner, 19 Oct 2026, item 4): a tab of this
+  // browser, opened as a placed window is (placed=1), so its first click fills
+  // the screen; then share that tab on the call, or press F on a mirrored projector.
+  openTab: 'Open as a tab',
+  openTabHint: 'Opens the room\'s window in a tab of this browser. Share that tab, or click it once to fill the screen.',
+  noSecondDisplay: 'No second display? Open it in a tab and share that tab, or press F.',
+  fillOnce: FILL_ONCE,
 });
+
+/*
+  THE BUILD ROOM ASKS THE SAME QUESTION (parity PLAN §2.7, B9; owner, 19 Oct
+  2026). The same chooser, the same stored choice; only the words that name
+  what stays private change, because a Build Room has no Workie and no Remote.
+*/
+const BUILD_ROOM_WORDS = Object.freeze({
+  twoBody: 'The room watches a second window on the projector or TV. This laptop stays on Host: Claude\'s questions, the room\'s ideas and what waits for you stay private.',
+  oneBody: 'The projector shows this laptop. Quick to set up, but the room sees the Stage, Build and History you switch to.',
+  q3: 'Should Claude\'s questions and the room\'s ideas stay private to you?',
+  remembers: 'This browser remembers your choice. Change it any time in Session, Settings, Screens.',
+});
+const BUILD_SCREEN_WORDS = Object.freeze({
+  whereHintTwo: 'This laptop stays where it is; 2, 3 and 4 change the room\'s window',
+  whereHintOne: 'The projector shows this laptop',
+});
+
+/** The chooser's words for a game type: Call & Answer's, with the Build Room's own where they differ. */
+export function roomWordsFor(type) {
+  return type === 'build' ? Object.freeze({ ...ROOM_WORDS, ...BUILD_ROOM_WORDS }) : ROOM_WORDS;
+}
+
+/** The Screens group's words for a game type. */
+export function screenWordsFor(type) {
+  return type === 'build' ? Object.freeze({ ...SCREEN_WORDS, ...BUILD_SCREEN_WORDS }) : SCREEN_WORDS;
+}

@@ -56,6 +56,25 @@ describe('voting, when every answer fits the overview (owner, 18 Oct 2026, room-
     expect(presentKeyStep(vote(answerAt(1, 'VOTE', 1, 2)), 'back', O)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0, parts: 2 }]);
     expect(presentKeyStep(vote(answerAt(2, 'VOTE')), 'forward', O)).toEqual([]);
   });
+  // ONE RULE FOR ↑ ↓ ON BOTH SCREENS (19 Oct 2026): on one screen ↑ ↓ page
+  // the list and → ← step; on the room's window ↓ stepped to the next answer.
+  // Now ↑ ↓ (vertical) page what is up, or do nothing; → ← step the answers.
+  it('↑ ↓ with the overview up do nothing (it is one page); → ← still step', () => {
+    const V = { ...O, vertical: true };
+    expect(presentKeyStep(vote(), 'forward', V)).toEqual([]);
+    expect(presentKeyStep(vote(), 'back', V)).toEqual([]);
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE')), 'forward', V)).toEqual([]);
+    expect(presentKeyStep(vote(), 'forward', O)).toEqual([{ kind: 'focus', focus: 'answer', index: 0, part: 0 }]);
+  });
+  it('↑ ↓ page a long answer by its parts, never across to the next answer', () => {
+    const V = { ...O, vertical: true };
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE', 0, 2)), 'forward', V)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 1, parts: 2 }]);
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE', 1, 2)), 'forward', V)).toEqual([]);
+    expect(presentKeyStep(vote(answerAt(1, 'VOTE', 1, 2)), 'back', V)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0, parts: 2 }]);
+    const NV = { total: 3, overview: false, vertical: true };
+    expect(presentKeyStep(vote(), 'forward', NV)).toEqual([]);
+    expect(presentKeyStep(vote(), 'back', NV)).toEqual([]);
+  });
   it('when they do not fit, today\'s stepping holds: answer 1 is up, back from it wraps', () => {
     const N = { total: 3, overview: false };
     expect(presentKeyStep(vote(), 'forward', N)).toEqual([{ kind: 'focus', focus: 'answer', index: 1, part: 0 }]);

@@ -9,6 +9,49 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 19 Oct 2026: Build Room on two screens, Consider with Sent to Claude marks, and fixes on both room types
+
+**Test:** merge of dev `156265f6` (notes in the same commit). Plans: `docs/design/parity/PLAN.md` §2 (B8, B9, §2.9b); mockups `docs/design/build-room-console/` and `docs/design/build-room-consider/`; QA walk `docs/qa/2026-10-18-build-room-walk/`.
+
+### New
+
+- **Build Room on two screens, easy to find** (owner, 19 Oct: "a very difficult experience finding the 2 screen capability or emulating it"):
+  - **Room's window ↗ and its status on the header** (Not open / Open, not full screen / On, full screen), shared with Call & Answer's console; PRESENT on the Stage's dock.
+  - **Where will the room watch?** is asked on the Host screen until you choose, with Help me pick, as Call & Answer asks. Two screens opens the room's window in the same click; Session › Settings › Screens shows and changes it.
+  - **One laptop, no second display:** **Open as a tab** opens the window in a tab that shows *Click anywhere to fill the screen*, with one line saying so: share that tab on a call, or press F. The same for Call & Answer.
+- **The Build Room console** (the laptop on two screens, as approved): "← All sessions", Join, Share demo, Room's window and **The room sees: Stage · Build · History** on the top line (2, 3, 4 and P change only the room's window; See it here shows it on the laptop); the strip of steps, dimmed with a plain label between asks; **Your part now** at the top of the centre with the main button (empty between asks: "No main move now"; on a result, Spin the wheel beside Send); four sections on the left (Waiting for you, People, Later with Points, Session); Now and the folds on the right (Decided, Timeline, Asks, Screenshots, Room brief, History). People ticks who has answered, by name, never what they chose. One screen is unchanged.
+- **Consider, any time** (owner: "have the ability to consider an item where you get a choice to queue up to the room, or send to claude at any time"): on every idea as it arrives, on the reasons people give with a pick or rating, on every option once a vote closes, and in Waiting for you. **Queue for the room** (a yes/no or feedback round that waits until you open it, or Queued for the room until a vote) or **Send to Claude** with the words you choose and a **Why** that Claude reads and History keeps. The normal ask flow is unchanged.
+- **Sent to Claude marks** (owner: "mark any ideas, votes, in history as having been sent to claude… this mark could actually link to the history log"): *Sent to Claude*, *…reworded*, *…for later* and *Queued for the room* on ideas, Waiting for you, vote options, Asks and Decided. Click one: History opens at that entry, highlighted, with the room's words struck through, what Claude got, the why, and how many liked it. Phones show the same entry ("yours" on your own idea), never a name.
+- **Why on Send B:** Direction for Claude (Host screen) and Change before sending (Stage) have the same Why line; changing the room's words suggests one.
+- **Join puts the codes beside the Stage** in Build Room, on the laptop and the room's window, as on Call & Answer (another session's work).
+
+### Fixed
+
+- **The opening ended after its first question** (QA B1): a new room never recorded that it was in its opening. It now runs through every step, and rooms already caught go back to their opening.
+- **The Host page scrolled into a blank band** (QA B2).
+- **Open voting with no ideas** now says why it waits instead of opening an empty vote; **Show results with nobody in** asks you to press again (QA C2, C3).
+- **Call & Answer, two screens:** the console says *All answers · On the wall now* when every answer is on the window (it marked Response 1); the window's end shows rounds played, the room count and the podium, as the stage does; a comment put up during results or the read now shows on the window; ↑ ↓ on the window step through a long answer's parts and never jump to the next answer.
+- The join panel's address wraps before its path, never inside the domain.
+
+### What to look at
+
+1. **A new Build Room** on engage.test: the Host screen asks **Where will the room watch?** Choose **Two screens**: the room's window opens; drag it to the projector and click it once to fill the screen.
+2. **The console:** the laptop shows the top line with *The room sees*, the strip and *Your part now*. Press **3**: the room's window shows Build and the laptop stays put. **See it here** shows it on the laptop; **1** comes back.
+3. **One laptop:** with no second display, **Open as a tab**; the tab says *Click anywhere to fill the screen*.
+4. **The opening:** answer the first question; the opening goes on to the second.
+5. **Consider:** open an Ideas ask; on an arriving idea press **Consider › Send to Claude**, change the words, write a **Why**, send. The idea now says *Sent to Claude, reworded*; click it: History opens at the entry with the old words struck through, the new words and the why. A phone's History shows the same, marked *yours*.
+6. **Queue for the room** on another idea: it waits in Waiting for you as *Queued for the room*.
+7. **Send B with a why:** at a result, open Change before sending, change the words, write a why, send; History shows it.
+8. **Call & Answer, two screens:** voting with all answers on the window, the console says *All answers · On the wall now*; at the end the window shows rounds played and the podium.
+
+### Known gaps
+
+- The room's screens show no Sent to Claude marks (the host's screens do); History on phones and the window shows the entries.
+- The server still accepts opening a vote with no ideas; only the button waits.
+- The Host screen's own ask path (outside the console) still does not arm in place for early moves.
+- The console was checked in Chromium against a local harness at 1366×768 and 1920×1080; not yet walked on a deployed tier.
+- Earlier gaps still open: *Talk about it* is a fixed line; Call keeps one column; the room's window cannot page a long Build Room ask.
+
 ## 18 Oct 2026: room screens redrawn, Claude's posts wait for the host, and remote share
 
 **Test:** merge of dev `8b39973e` (and the notes, help and README commit after it). This is the first push to test since 17 Oct's third; it carries everything dev gained since, from several sessions. Plans: `docs/design/parity/PLAN.md` §2c and §2d; room screens mockup `docs/design/room-content-v2/`; remote share `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`.
