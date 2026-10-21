@@ -94,11 +94,11 @@ export default function PromptVersionsPanel({ api, live, dirty = false, onMadeLi
   };
 
   if (state.loading && state.versions.length === 0) {
-    return <div className="pmgr-ver" data-testid="pmgr-versions"><p className="pmgr-ver-hint">Loading versions…</p></div>;
+    return <div className="pmgr-advisor-body pmgr-ver" data-testid="pmgr-versions"><p className="pmgr-ver-hint">Loading versions…</p></div>;
   }
   if (state.error) {
     return (
-      <div className="pmgr-ver" data-testid="pmgr-versions">
+      <div className="pmgr-advisor-body pmgr-ver" data-testid="pmgr-versions">
         <StatusMessage message={`The versions could not be loaded (${state.error}). Nothing has changed.`} tone="error" />
         <button type="button" className="btn-secondary" onClick={load}>Try again</button>
       </div>
@@ -106,7 +106,7 @@ export default function PromptVersionsPanel({ api, live, dirty = false, onMadeLi
   }
 
   return (
-    <div className="pmgr-ver" data-testid="pmgr-versions">
+    <div className="pmgr-advisor-body pmgr-ver" data-testid="pmgr-versions">
       {state.listingError && (
         <p className="pmgr-ver-hint" data-testid="pmgr-versions-partial">
           Only the versions recorded since version history began are listed — the stored files could not be read

@@ -2356,9 +2356,9 @@ button.plib-chip:disabled { cursor: progress; }
 /* The editor's Edit | Versions tabs. */
 .pmgr .pmgr-tabs {
   display: flex;
+  flex: none;
   gap: 2px;
-  padding: 0 4px;
-  margin: 0 0 12px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--pc-rule);
 }
 .pmgr .pmgr-tab {
@@ -2386,7 +2386,7 @@ button.plib-chip:disabled { cursor: progress; }
   color: var(--pc-muted);
   white-space: nowrap;
 }
-.pmgr .pmgr-repo-body { display: grid; gap: 12px; }
+.pmgr .pmgr-repo-body { display: grid; gap: 12px; align-content: start; }
 .pmgr .pmgr-repo-warn {
   display: flex;
   gap: 8px;
@@ -2423,13 +2423,13 @@ button.plib-chip:disabled { cursor: progress; }
 .pmgr .pmgr-repo-hint { margin-left: auto; font-size: var(--pc-t-label); color: var(--pc-muted); }
 
 /* The Versions tab. */
-.pmgr .pmgr-ver { display: grid; gap: 12px; }
+.pmgr .pmgr-ver { display: grid; gap: 12px; align-content: start; }
 .pmgr .pmgr-ver-tbl { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--pc-t-body); }
-.pmgr .pmgr-ver-col-v { width: 10%; }
-.pmgr .pmgr-ver-col-saved { width: 16%; }
-.pmgr .pmgr-ver-col-by { width: 22%; }
+.pmgr .pmgr-ver-col-v { width: 8%; }
+.pmgr .pmgr-ver-col-saved { width: 14%; }
+.pmgr .pmgr-ver-col-by { width: 20%; }
 .pmgr .pmgr-ver-col-how { width: 22%; }
-.pmgr .pmgr-ver-col-acts { width: 30%; }
+.pmgr .pmgr-ver-col-acts { width: 36%; }
 .pmgr .pmgr-ver-tbl th {
   padding: 0 10px 7px;
   text-align: left;

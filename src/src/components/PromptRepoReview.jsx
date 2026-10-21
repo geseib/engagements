@@ -65,7 +65,7 @@ export default function PromptRepoReview({ prompt, status, onSave, onClose }) {
         <button type="button" className="pmgr-x" onClick={close} aria-label="Close the review">×</button>
       </div>
 
-      <div className="pmgr-repo-body" data-testid="pmgr-repo-review">
+      <div className="pmgr-advisor-body pmgr-repo-body" data-testid="pmgr-repo-review">
         <p className="pmgr-advice-lede">
           From <code>{entry.path}</code>
           {entry.commitDate ? `, as of the deploy of ${shortDate(entry.commitDate)}` : ''}.

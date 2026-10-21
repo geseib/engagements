@@ -161,7 +161,56 @@ export function sectionsChanged(before, after) {
   return { changed, total: b.length || a.length };
 }
 
-const tokenize = (text) => String(text || '').match(/\s+|[^\s]+/g) || [];
+/* A word WITH its trailing whitespace is one token. Splitting the spaces out
+   as tokens of their own lets the alignment match space to space and
+   interleave every other word ("strongest→resistance piece→named"). */
+const tokenize = (text) => String(text || '').match(/^\s+|\S+\s*/g) || [];
+
+/**
+ * Fold a one-word "unchanged" island between two changes into the change, so
+ * a rewritten clause reads as one removal and one addition rather than a
+ * stripe of alternating words — the readable half of a semantic cleanup.
+ */
+function mergeIslands(parts) {
+  let out = parts;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = [];
+    let changed = false;
+    for (let i = 0; i < out.length; i++) {
+      const p = out[i];
+      const island = p.type === 'same' && i > 0 && i < out.length - 1
+        && out[i - 1].type !== 'same' && out[i + 1].type !== 'same'
+        && tokenize(p.text).length <= 1;
+      if (island) {
+        next.push({ type: 'del', text: p.text }, { type: 'add', text: p.text });
+        changed = true;
+      } else {
+        next.push(p);
+      }
+    }
+    // Regroup each run of changes as all its removals, then all its additions.
+    const grouped = [];
+    let del = ''; let add = '';
+    const flush = () => {
+      if (del) grouped.push({ type: 'del', text: del });
+      if (add) grouped.push({ type: 'add', text: add });
+      del = ''; add = '';
+    };
+    for (const p of next) {
+      if (p.type === 'del') del += p.text;
+      else if (p.type === 'add') add += p.text;
+      else {
+        flush();
+        const last = grouped[grouped.length - 1];
+        if (last && last.type === 'same') last.text += p.text; else grouped.push({ ...p });
+      }
+    }
+    flush();
+    out = grouped;
+    if (!changed) break;
+  }
+  return out;
+}
 
 /**
  * A word-level diff: `[{ type: 'same'|'add'|'del', text }]`, runs merged.
@@ -207,7 +256,7 @@ export function wordDiff(before, after) {
   }
 
   push('same', a.slice(endA).join(''));
-  return out;
+  return mergeIslands(out);
 }
 
 /**
