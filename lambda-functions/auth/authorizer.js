@@ -403,6 +403,17 @@ function requiredGroupsForRoute(method, path) {
   if (method === 'GET' && AI_JOB_POLL.test(path)) {
     return ['hosts', 'admins'];
   }
+  // ── AI GENERATION DRAFTS (admin/generation-drafts.js) ────────────────────
+  //
+  // What a host's or an admin's own generation run produced, waiting for them
+  // to accept it. Hosts generate (the builders above are theirs too), so they
+  // review what they generated. Reaching the route is all this decides: the
+  // handler shows a draft only to its creator, acting in its library, and
+  // answers everyone else 404. The template AND a concrete path, since the
+  // handler falls back to `rawPath` when `routeKey` is absent.
+  if (path === 'admin/generation-drafts/{proxy+}' || /^admin\/generation-drafts\/[^/]+(\/[a-z]+)?$/.test(path)) {
+    return ['hosts', 'admins'];
+  }
 
   // All other admin routes require the admins group — including the moderation queue
   // and public library (spec §9): `admin/moderation`, `admin/moderation/{sk}`,
@@ -458,6 +469,17 @@ function requiredGroupsForRoute(method, path) {
   // the accept route is single-use and checks expiry. Every org route stays
   // hosts/admins. tests/invite-routes-pending.js pins both halves.
   if (INVITE_ROUTE.test(path) || MY_INVITES_ROUTE.test(path)) {
+    return ['pending', 'hosts', 'admins'];
+  }
+  // ── THE INBOX (orgs/my-notifications.js) ─────────────────────────────────
+  //
+  // The bell in the console's top line: the caller's OWN notifications and
+  // nothing else, so being signed in is the requirement — `pending` included,
+  // because an invitation waiting for somebody not yet approved is exactly
+  // the kind of thing it shows (docs/design/pending-invite-notice). Named
+  // here, anchored, before the `includes('join'|'answer'|'vote')` rule below
+  // can read a notification id as a participant route.
+  if (path === 'me/notifications/{proxy+}' || /^me\/notifications\/[A-Za-z0-9_~#%.-]+(\/[a-z-]+)?$/.test(path)) {
     return ['pending', 'hosts', 'admins'];
   }
   if (ORG_ROUTE.test(path)) {

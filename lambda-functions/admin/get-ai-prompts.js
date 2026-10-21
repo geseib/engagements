@@ -1,10 +1,15 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { S3Client, ListObjectsV2Command, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
 const { isUsableSummaryPrompt, summaryPromptDefect, inferPromptType, normalizeOutputSections } = require('./shared/prompt-shape');
-const { readablePromptRefs, promptKey } = require('./shared/prompt-access');
-const { callerUserId } = require('./shared/question-set-access');
+const {
+  readablePromptRefs, promptKey, promptBodyKey, findPromptForCaller,
+} = require('./shared/prompt-access');
+const {
+  fieldHashes, listVersions, versionPrefixes, listVersionObjects,
+} = require('./shared/prompt-versions');
+const { callerUserId, requestedScope } = require('./shared/question-set-access');
 const { PLATFORM, ORG, PUBLIC, callerOrgId } = require('./shared/tenant');
 const { decryptItem, decryptValue, isEnvelope } = require('./shared/tenant-crypto');
 
@@ -56,6 +61,18 @@ exports.handler = async (event) => {
     const category = queryParams.category;     // specific category filter
     const status = queryParams.status;         // active, draft, archived
     const promptType = queryParams.promptType; // analysis | generation
+
+    /*
+      ONE PROMPT'S VERSIONS — `?versions=<promptId>` (and `&version=<n>` for
+      one version's text). On this route rather than a new one because the
+      stack is at CloudFormation's resource ceiling (template-clean.yaml).
+      Read access is the list's own: `findPromptForCaller` probes only the
+      libraries this caller may read, so another organisation's Workie is
+      absent here exactly as it is from the list.
+    */
+    if (queryParams.versions) {
+      return await promptVersionsResponse(event, String(queryParams.versions), queryParams);
+    }
 
     console.log(`🔍 Fetching AI prompts - gameType: ${gameType}, category: ${category}, status: ${status}, promptType: ${promptType}`);
 
@@ -216,10 +233,18 @@ exports.handler = async (event) => {
       const synthesizedId = String(prompt.SK || '').replace(/^AIPROMPT#/, '') || undefined;
       const shapeSource = promptContent || prompt;
       const known = Boolean(promptContent) || Boolean(prompt.basePrompt);
+      // The history is for the Versions tab (`?versions=`), not for every row
+      // of every list load; the count is enough here.
+      const { versionHistory, ...row } = prompt;
 
       return {
-        ...prompt,
+        ...row,
+        versionCount: Array.isArray(versionHistory) ? versionHistory.length : 0,
         ...(promptContent ? { promptContent } : {}),
+        // What the live text hashes to, per content field — the library
+        // compares these with src/src/config/repoPrompts.json, which
+        // scripts/build-repo-prompts.js hashes with the same function.
+        ...(promptContent ? { fieldHashes: fieldHashes(promptContent) } : {}),
         // THE OTHER HALF OF THE REFERENCE. `retro` in an organisation and
         // `retro` on the platform are two different Workies, so a client that
         // holds only a promptId cannot address either. Taken from the REF that
@@ -342,3 +367,79 @@ exports.handler = async (event) => {
     };
   }
 };
+
+function respond(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS'
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * `GET /admin/ai-prompts?versions=<promptId>[&version=<n>][&scope=…]`.
+ *
+ * Without `version`: every version, newest first — the row's history plus a
+ * version for every `v<n>.json` object under the prompt's prefix that the
+ * history does not name (saved before history existed: By and How unknown,
+ * Saved from the object's LastModified). See shared/prompt-versions.js.
+ *
+ * With `version`: that one version's text, decrypted for an org Workie, for
+ * the Versions tab's View and Compare with live.
+ */
+async function promptVersionsResponse(event, promptId, queryParams) {
+  const found = await findPromptForCaller(dynamodb, tableName, event, promptId, requestedScope(event), GetCommand);
+  if (!found) return respond(404, { error: `AI prompt not found: ${promptId}` });
+
+  const { ref } = found;
+  let row = found.item;
+  if (ref.orgId) {
+    try { row = await decryptItem(ref.orgId, 'prompt', row); } catch (e) {
+      console.warn(`⚠️ Could not decrypt prompt row ${promptId} for org ${ref.orgId}: ${e.message}`);
+    }
+  }
+
+  let objects = null;
+  let listingError = null;
+  try {
+    objects = await listVersionObjects(s3Client, ListObjectsV2Command, aiPromptsBucket, versionPrefixes(row, promptBodyKey, ref));
+  } catch (e) {
+    listingError = e.message;
+    console.warn(`⚠️ Could not list the versions of ${promptId}: ${e.message}`);
+  }
+  const list = listVersions(row, objects);
+
+  if (queryParams.version !== undefined) {
+    const wanted = Number(queryParams.version);
+    const entry = list.find((v) => v.version === wanted);
+    if (!entry || entry.missing) return respond(404, { error: `Version ${queryParams.version} of this prompt does not exist.` });
+    try {
+      const res = await s3Client.send(new GetObjectCommand({ Bucket: aiPromptsBucket, Key: entry.s3Key }));
+      const parsed = JSON.parse(await res.Body.transformToString());
+      const content = ref.orgId ? await decryptValue(ref.orgId, parsed) : parsed;
+      return respond(200, {
+        promptId, scope: ref.scope, orgId: ref.orgId || null,
+        version: { ...entry, fieldHashes: fieldHashes(content) },
+        content,
+      });
+    } catch (e) {
+      return respond(502, { error: `Version ${wanted} could not be read: ${e.message}` });
+    }
+  }
+
+  return respond(200, {
+    promptId,
+    scope: ref.scope,
+    orgId: ref.orgId || null,
+    liveVersion: Number(row.version) || null,
+    liveS3Key: row.s3Key || null,
+    lastMadeLive: row.lastMadeLive || null,
+    repoSource: row.repoSource || null,
+    versions: list,
+    ...(listingError ? { listingError } : {}),
+  });
+}

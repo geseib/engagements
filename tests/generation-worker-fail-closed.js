@@ -330,8 +330,19 @@ const post = (body) => ({
 const ctx = () => ({ functionName: 'engagedev-admin-ai-generate', getRemainingTimeInMillis: () => 900000 });
 
 const jobRow = (jobId) => ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
-const platformSets = () => [...ddb.values()].filter((row) => row.PK === 'SETS');
-const orgSets = () => [...ddb.values()].filter((row) => row.PK === `ORG#${ORG}#SETS`);
+/*
+  WHERE THE WORK LANDS. A whole-set run writes a DRAFT now, not a set
+  (shared/generation-drafts.js): the set is made only when the person accepts
+  it. So "the org's set" below is a set row OR a finished draft in the org's
+  library, and "the platform library" is the same in Engage's. A draft the
+  POST opened is `generating` until a worker finishes it, and one that ends
+  `failed` holds nothing; neither counts.
+*/
+const landed = (row) => row.status === 'ready';
+const platformSets = () => [...ddb.values()].filter((row) => row.PK === 'SETS'
+  || (row.PK === 'GENDRAFTS' && landed(row)));
+const orgSets = () => [...ddb.values()].filter((row) => row.PK === `ORG#${ORG}#SETS`
+  || (row.PK === `ORG#${ORG}#GENDRAFTS` && landed(row)));
 const isEnvelope = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
   && typeof v.v === 'number' && typeof v.iv === 'string'
   && typeof v.tag === 'string' && typeof v.ct === 'string';

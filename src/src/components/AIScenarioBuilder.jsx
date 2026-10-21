@@ -27,11 +27,10 @@ import FieldLock from './FieldLock';
 import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
-  rememberGenerationJob,
-  recallGenerationJob,
-  forgetGenerationJob,
   resumeIsGone,
 } from '../utils/generationJob';
+import useDraftRun from '../hooks/useDraftRun';
+import DestinationField from './DestinationField';
 
 const API_BASE = window.API_BASE;
 
@@ -53,7 +52,17 @@ const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 // words for it, and the game measures how many words overlap across players.
 const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
 
-function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null }) {
+function AIScenarioBuilder({
+  onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null,
+  /** A run that finished into a draft is reviewed by the page (DraftReview). */
+  onDraftReady = null,
+  /** The libraries this person may save into; read once when not given. */
+  libraries = null,
+}) {
+  /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
+  const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  const runRef = useRef(run);
+  runRef.current = run;
   const [step, setStep] = useState(1);
   const autoStarted = useRef(false);
   const [pendingAutoSubmit, setPendingAutoSubmit] = useState(false);
@@ -511,13 +520,14 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   };
 
   /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
-  const watchJob = useCallback(async (jobId) => {
+  const watchJob = useCallback(async (jobId, headers = {}, startedIn = '') => {
     jobIdRef.current = jobId;
     setIsGenerating(true);
     setTransportError(null);
     setStep(3);
     try {
       const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        headers,
         label: 'Generation',
         onStatus: setGenerationStatus,
         // Show partial results as they land rather than a spinner for minutes.
@@ -528,6 +538,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           }
         }
       });
+      if (runRef.current.handOff(terminal, startedIn)) return;
       setJob(terminal);
       setGeneratedScenarios(Array.isArray(terminal.items) ? terminal.items : []);
       setGeneratedMetadata(null); // Will be generated later
@@ -535,7 +546,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     } catch (error) {
       console.error('AI generation error:', error);
       if (resumeIsGone(error)) {
-        forgetGenerationJob(ENDPOINT);
+        runRef.current.forget();
         jobIdRef.current = null;
         setJob(null);
         setStep(2);
@@ -550,12 +561,12 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   }, []);
 
   useEffect(() => {
-    const stored = recallGenerationJob(ENDPOINT);
+    const stored = runRef.current.stored();
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
     // Remembered with the job, so the review still quotes it after a reload.
     setGuidanceSent(stored.batchGuidance || '');
-    watchJob(stored.jobId);
+    watchJob(stored.jobId, runRef.current.headersFor(stored), stored.libraryKey || '');
   }, [watchJob]);
 
   /*
@@ -570,7 +581,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
     form is shown instead.
   */
   useEffect(() => {
-    if (!appendTo?.autoStart || autoStarted.current) return;
+    // A run already remembered for this set is resumed, not replaced.
+    if (!appendTo?.autoStart || autoStarted.current || run.stored()) return;
     const custom = scenarioTypes.find((t) => /custom/.test(t.id));
     if (!custom) return;
     const kind = appendTo.brief?.roundKind || scenarioConfig.roundKind;
@@ -619,7 +631,7 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
   }, [pendingAutoSubmit, scenarioConfig.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
-    forgetGenerationJob(ENDPOINT);
+    run.forget();
     jobIdRef.current = null;
   };
 
@@ -788,7 +800,8 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
         // ADDING TO A SET'S OWN CATEGORIES: forced at send time, because
         // choosing a topic card resets both fields from the prompt's defaults.
         ...appendCategoryDefaults(appendTo),
-        ...(isAppend(appendTo) ? { appendOnly: true } : {}),
+        // …naming the set, so the server drafts it in THAT set's library.
+        ...(isAppend(appendTo) ? { appendOnly: true, ...(run.appendTarget ? { appendTo: run.appendTarget } : {}) } : {}),
         // THIS BATCH'S GUIDANCE, its own field and never inside customPrompt;
         // the backend places it after the direction and before the topic.
         // Absent when blank.
@@ -817,13 +830,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           customInstructions: generateCustomInstructions(),
           aiContextInstructions: generateAIContextInstructions()
         }
-      }, { label: 'Generation', onStatus: setGenerationStatus });
+      }, { label: 'Generation', onStatus: setGenerationStatus, headers: run.headers });
 
-      rememberGenerationJob(ENDPOINT, jobId, {
+      run.remember(jobId, {
         scenarioType: backendScenarioType,
         ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
       });
-      await watchJob(jobId);
+      await watchJob(jobId, run.headers, run.libraryKey);
     } catch (error) {
       console.error('AI generation error:', error);
       setIsGenerating(false);
@@ -1127,6 +1140,13 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
           {step === 1 && (
             <div className="scenario-type-selection">
               <AppendModeSwitch appendTo={appendTo} />
+              <DestinationField
+                libraries={run.libraries}
+                value={run.destination}
+                onChange={run.setDestination}
+                onAskForLibraries={run.askForLibraries}
+                appendTo={appendTo}
+              />
               {/*
                 TWO CONTROLS, NOT ONE, AND IN THIS ORDER.
 
@@ -1510,7 +1530,9 @@ function AIScenarioBuilder({ onClose, onScenariosGenerated, engagementType = 'ca
                   job={interpreted}
                   noun="scenarios"
                   jobId={jobIdRef.current}
-                  createsSet
+                  createsSet={!isAppend(appendTo)}
+                  draftId={job && job.draftId ? job.draftId : null}
+                  libraryKey={run.libraryKey}
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}

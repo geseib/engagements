@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "webpack serve --mode development --open",
+    "prebuild": "node ../scripts/build-repo-prompts.js",
     "build": "webpack --mode production",
     "test": "jest",
     "test:watch": "jest --watch",

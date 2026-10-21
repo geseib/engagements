@@ -80,7 +80,7 @@
 const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { jobKey, sealJobFields } = require('./generation-jobs');
 const { csvRow, buildCsv, tagsToCsvCell } = require('./csv');
-const { pollFieldsOf, itemsToSurveyCsv } = require('./survey-kinds');
+const { pollFieldsOf, itemsToSurveyCsv, SURVEY_CATEGORY } = require('./survey-kinds');
 const { normalizeRoundKind } = require('./round-kinds');
 const { normalizeSetTags } = require('./set-topics');
 
@@ -489,7 +489,77 @@ function pollsToCsv(items) {
   return itemsToSurveyCsv(rows);
 }
 
+// ─────────────────────────────────────────────── accepting a new-set draft
+//
+// A DRAFT BECOMES A SET ONLY WHEN SOMEBODY ACCEPTS IT (owner, 2026-10-21), and
+// it does so through the same importer, the same CSV writers and the same
+// metadata reading as createSetForJob above — the one difference is WHO it
+// runs as. A worker has no authorizer and replays the caller off the job row;
+// an accept is an authorised request by the person themself, so the importer
+// is handed THEIR authorizer context, and createSetRef, canManageScope and the
+// plan's set allowance all judge the real caller, in the library the draft
+// names (`scope` in the body; the X-Engage-Org header put them there).
+//
+// Reviewed, so it is not an AI draft any more: `reviewedDraft` makes the set
+// active (unless the person chose to leave it off) and stamps `aiReviewedAt`,
+// which is what turns the list's "AI draft" chip off (upload-questions.js).
+
+const CSV_BY_TYPE = {
+  trivia: (items) => triviaToCsv(items),
+  poll: (items) => pollsToCsv(items),
+  survey: (items) => itemsToSurveyCsv(items, { category: SURVEY_CATEGORY }),
+  'call-and-answer': (items) => scenariosToCsv(items),
+  wavelength: (items) => scenariosToCsv(items),
+};
+
+/**
+ * @returns {Promise<{statusCode: number, body: object}>} the importer's answer, parsed
+ */
+async function importDraftAsSet({
+  event, draft, items, activate = true, title = '', topic = '',
+}) {
+  const toCsv = CSV_BY_TYPE[draft.engagementType] || CSV_BY_TYPE['call-and-answer'];
+  const request = draft.request && typeof draft.request === 'object' ? draft.request : {};
+  const metadata = readSetMetadata(request);
+  const setTitle = String(title || metadata.title || draft.title || '').trim().slice(0, MAX_TITLE);
+  if (!setTitle) return { statusCode: 400, body: { error: 'Give the set a name before accepting it.' } };
+  const roundKind = normalizeRoundKind(request.roundKind);
+  const roundKindBrief = String(request.roundKindBrief ?? '').trim();
+  const shelf = String(topic || metadata.topic || '').trim();
+  const body = {
+    fileName: `${setTitle.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.csv`,
+    fileContent: toCsv(items),
+    customTitle: setTitle,
+    customDescription: metadata.description,
+    customInstructions: metadata.customInstructions,
+    aiContextInstructions: metadata.aiContextInstructions,
+    engagementType: draft.engagementType,
+    ...(roundKind && ['call-and-answer', 'wavelength', 'poll'].includes(draft.engagementType) ? { roundKind } : {}),
+    ...(roundKind && roundKindBrief ? { roundKindBrief } : {}),
+    ...(shelf ? { topic: shelf } : {}),
+    ...(metadata.tags.length ? { tags: metadata.tags } : {}),
+    isAIGenerated: true,
+    reviewedDraft: true,
+    ...(activate ? {} : { startInactive: true }),
+    scope: draft.scope,
+    versionNote: `AI: ${items.length} accepted from a draft`,
+  };
+  // eslint-disable-next-line global-require
+  const { handler: uploadQuestions } = require('../upload-questions');
+  const response = await uploadQuestions({
+    requestContext: {
+      authorizer: event && event.requestContext ? event.requestContext.authorizer : undefined,
+      http: { method: 'POST', path: '/admin/upload-questions' },
+    },
+    body: JSON.stringify(body),
+  });
+  let parsed = {};
+  try { parsed = JSON.parse((response && response.body) || '{}'); } catch (e) { parsed = {}; }
+  return { statusCode: (response && response.statusCode) || 500, body: parsed };
+}
+
 module.exports = {
+  importDraftAsSet,
   createSetForJob,
   claimSetCreation,
   readSetMetadata,

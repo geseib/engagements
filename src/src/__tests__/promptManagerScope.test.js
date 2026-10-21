@@ -46,6 +46,10 @@ const CONSUMERS = [
   ['components/PromptOutputSectionsField.jsx', read('components', 'PromptOutputSectionsField.jsx')],
   ['components/PromptBeforeAfter.jsx', read('components', 'PromptBeforeAfter.jsx')],
   ['components/PromptImportReview.jsx', read('components', 'PromptImportReview.jsx')],
+  // Prompt versions (2026-10-21): the repo Review dialog and the editor's
+  // Versions tab, both rendered inside `.pmgr`.
+  ['components/PromptRepoReview.jsx', read('components', 'PromptRepoReview.jsx')],
+  ['components/PromptVersionsPanel.jsx', read('components', 'PromptVersionsPanel.jsx')],
   ['components/PromptLibraryPanel.jsx', read('components', 'PromptLibraryPanel.jsx')],
   ['components/PromptVariableInspector.jsx', read('components', 'PromptVariableInspector.jsx')],
   ['components/PromptPreflightPanel.jsx', read('components', 'PromptPreflightPanel.jsx')],

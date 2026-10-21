@@ -27,6 +27,7 @@ const { promptKey, promptBodyKey } = require('./shared/prompt-access');
 const { callerUserId } = require('./shared/question-set-access');
 const { normalizeGameType, DEFAULT_GAME_TYPE } = require('./shared/game-types');
 const { inferPromptType } = require('./shared/prompt-shape');
+const promptVersions = require('./shared/prompt-versions');
 const { promptNameFromTags, resolveLocalPromptId } = require('./shared/archive-prompt-link');
 const archive = require('./shared/archive-client');
 const snap = require('./shared/archive-snapshot');
@@ -255,6 +256,11 @@ async function restoreLegacyPrompt(archiveId, item, doc) {
       tags: Array.isArray(body.tags) ? body.tags : [],
       s3Key,
       version: 1,
+      latestVersion: 1,
+      versionHistory: [promptVersions.historyEntry({
+        version: 1, s3Key, savedAt: now, by: 'admin import', how: promptVersions.HOW.ARCHIVE,
+        hash: promptVersions.contentHash(body),
+      })],
       createdAt: now,
       updatedAt: now,
       importedFrom: { archiveId, originalId: metadata.promptId, importedAt: now, sourceEnvironment: legacyTier(item.Tags) },

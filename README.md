@@ -82,6 +82,15 @@ npm run build
 
 `npm start` in `src/` runs a local dev server against the dev API.
 
+`npm run build` first runs `scripts/build-repo-prompts.js` (the `prebuild` script), which
+copies the repo's prompt files — `demo-sets/*.prompt.json` and
+`lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
+The admin Prompts library compares each live prompt with that file ("Repo has a newer
+version") and its Review saves the repo's text as a new prompt version. The output is
+committed: after editing a prompt file, run `node scripts/build-repo-prompts.js` and commit
+both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; see
+`lambda-functions/admin/shared/prompt-versions.js`.
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.

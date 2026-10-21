@@ -4,6 +4,8 @@ import PlanLimitNotice from './PlanLimitNotice';
 import ListControls from './ListControls';
 import SetImageBadge from './SetImageBadge';
 import SetShelfBrowse from './SetShelfBrowse';
+import DraftsStrip from './DraftsStrip';
+import { draftsForSet } from '../utils/draftsApi';
 import useListControls from '../hooks/useListControls';
 import {
   setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerTag, setOwnerRank, OWNER_OPTIONS,
@@ -175,6 +177,13 @@ export default function QuestionSetsPanel({
   /** Whether the creation panel below is already open, so the header button
    *  can say which way it goes rather than toggling something invisible. */
   createOpen = false,
+  /**
+   * This person's AI drafts in this library (GET /admin/generation-drafts/list)
+   * and the way into one. A ready draft that adds to a set puts "Review · N"
+   * on that set's row; the strip above the list names every draft waiting.
+   */
+  drafts = [],
+  onOpenDraft,
   children,
 }) {
   /*
@@ -249,6 +258,8 @@ export default function QuestionSetsPanel({
           )}
         </div>
       ) : null}
+
+      <DraftsStrip drafts={drafts} onOpen={onOpenDraft} />
 
       {loading && nothingExists && <p className="qsets-loading">Loading question sets…</p>}
 
@@ -606,8 +617,32 @@ export default function QuestionSetsPanel({
                               ago carries. The state that changes what to DO is
                               the unreviewed one, so that is the one that is named.
                             */}
+                            {/*
+                              A DRAFT WAITING TO JOIN THIS SET — the review tag
+                              the owner asked to "turn off once reviewed": it is
+                              there while a draft is ready, and gone the moment
+                              it is accepted, discarded or expires.
+                            */}
+                            {draftsForSet(drafts, set.id).slice(0, 1).map((d) => (
+                              <button
+                                key={d.draftId}
+                                type="button"
+                                className="qsets-chip qsets-chip--warn"
+                                title="AI-written questions waiting for your review before they join this set"
+                                onClick={() => onOpenDraft && onOpenDraft(d)}
+                                data-testid="set-draft-chip"
+                              >
+                                {d.status === 'generating' ? 'Writing…' : `Review · ${d.produced}`}
+                              </button>
+                            ))}
+                            {/*
+                              REVIEWED IS NOT THE SAME AS SWITCHED ON. A set
+                              accepted from a draft — or saved as a new version
+                              by somebody who read it — carries `aiReviewedAt`,
+                              and asks for no review even while it is off.
+                            */}
                             {set.isAIGenerated && (
-                              set.active === false ? (
+                              set.active === false && !set.aiReviewedAt ? (
                                 <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
                                   AI draft
                                 </span>
@@ -707,13 +742,13 @@ export default function QuestionSetsPanel({
                                   */}
                                   <button
                                     type="button"
-                                    className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false ? ' qsets-btn--primary' : ''}`}
+                                    className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false && !set.aiReviewedAt ? ' qsets-btn--primary' : ''}`}
                                     onClick={() => onEdit && onEdit(set)}
-                                    title={set.isAIGenerated && set.active === false
+                                    title={set.isAIGenerated && set.active === false && !set.aiReviewedAt
                                       ? 'Read what the generator wrote, then switch it on'
                                       : 'Edit this question set'}
                                   >
-                                    {set.isAIGenerated && set.active === false ? 'Review' : 'Edit'}
+                                    {set.isAIGenerated && set.active === false && !set.aiReviewedAt ? 'Review' : 'Edit'}
                                   </button>
                                   {rowCanShare(set) && (
                                     <button

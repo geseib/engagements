@@ -478,9 +478,12 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
       assert.ok(!leak, `the guidance was logged: ${leak && leak.slice(0, 200)}`);
       const stored = [...ddb.values()].find((row) => JSON.stringify(row).includes('SENTINEL-GW-7731'));
       assert.ok(!stored, `the guidance was stored on ${stored && `${stored.PK} / ${stored.SK}`}`);
-      setsMade += [...ddb.values()].filter((row) => row.PK === 'SETS').length;
+      // A new-set run now writes a DRAFT, not a set (shared/generation-drafts.js):
+      // the set is made only when somebody accepts it. The draft is the row
+      // "not on the set" has to hold for.
+      setsMade += [...ddb.values()].filter((row) => String(row.SK).startsWith('DRAFT#')).length;
     }
-    assert.ok(setsMade >= 2, `expected the two non-append runs to create sets, saw ${setsMade}`);
+    assert.ok(setsMade >= 2, `expected the two non-append runs to write drafts, saw ${setsMade}`);
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);

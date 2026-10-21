@@ -186,6 +186,8 @@ export default function QuestionSetEditor({
   onShare,
   /** Ask a person to review a flagged version. Returns a promise; versions reload after. */
   onAppeal,
+  /** Where this set lives, in words, for "Add questions" (QuestionsPanel). */
+  libraryLabel = '',
   onCancel
 }) {
   const setId = questionSet?.id || '';
@@ -1794,6 +1796,7 @@ export default function QuestionSetEditor({
         // The Custom Instructions field as it stands, saved or not, for the
         // Questions tab's preview (QuestionsPanel `detailsInstruction`).
         detailsInstruction={instructions}
+        libraryLabel={libraryLabel}
       />
 
       {/* ================================================= 3. VERSIONS === */}

@@ -33,12 +33,18 @@ const rowKey = (pk, sk) => `${pk}|${sk}`;
 class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
+class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
+class DeleteCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 class InvokeModelCommand { constructor(input) { this.input = input; } }
 class InvokeCommand { constructor(input) { this.input = input; } }
 
 /** Minimal `SET a = :x, #n = :y` applier — enough for the job record. */
 function applyUpdate(item, input) {
-  const expr = String(input.UpdateExpression).replace(/^SET\s+/i, '');
+  const [setPart, removePart = ''] = String(input.UpdateExpression).replace(/^SET\s+/i, '').split(/\s+REMOVE\s+/i);
+  for (const attr of removePart.split(/,\s*/).filter(Boolean)) {
+    delete item[(input.ExpressionAttributeNames || {})[attr.trim()] || attr.trim()];
+  }
+  const expr = setPart;
   for (const part of expr.split(/,\s*/)) {
     const [lhs, rhs] = part.split(/\s*=\s*/);
     const name = (input.ExpressionAttributeNames || {})[lhs] || lhs;
@@ -57,6 +63,12 @@ function conditionHolds(input, item) {
   const condition = String(input.ConditionExpression);
   const notExists = condition.match(/^attribute_not_exists\((\w+)\)$/);
   if (notExists) return item[notExists[1]] === undefined;
+  const exists = condition.match(/^attribute_exists\((\w+)\)$/);
+  if (exists) return item[exists[1]] !== undefined;
+  // `#status = :from0 OR #status = :from1` — a draft's status move (generation-drafts.js).
+  if (/\s+OR\s+/.test(condition)) {
+    return condition.split(/\s+OR\s+/).some((c) => conditionHolds({ ...input, ConditionExpression: c.trim() }, item));
+  }
   const equals = condition.match(/^\s*(#?\w+)\s*=\s*(:\w+)\s*$/);
   if (equals) {
     const attr = (input.ExpressionAttributeNames || {})[equals[1]] || equals[1];
@@ -69,7 +81,22 @@ const docClient = {
   send: async (cmd) => {
     const { Key, Item } = cmd.input;
     if (cmd.kind === 'get') return { Item: state.ddb.get(rowKey(Key.PK, Key.SK)) || undefined };
-    if (cmd.kind === 'put') { state.ddb.set(rowKey(Item.PK, Item.SK), { ...Item }); return {}; }
+    if (cmd.kind === 'put') {
+      const existing = state.ddb.get(rowKey(Item.PK, Item.SK));
+      if (cmd.input.ConditionExpression && !conditionHolds(cmd.input, existing || {})) {
+        throw Object.assign(new Error('The conditional request failed'), { name: 'ConditionalCheckFailedException' });
+      }
+      state.ddb.set(rowKey(Item.PK, Item.SK), { ...Item });
+      return {};
+    }
+    if (cmd.kind === 'delete') { state.ddb.delete(rowKey(Key.PK, Key.SK)); return {}; }
+    if (cmd.kind === 'query') {
+      const v = cmd.input.ExpressionAttributeValues || {};
+      const items = [...state.ddb.values()]
+        .filter((r) => r.PK === v[':pk'] && (!v[':sk'] || String(r.SK).startsWith(v[':sk'])))
+        .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+      return { Items: items.map((r) => ({ ...r })) };
+    }
     if (cmd.kind === 'update') {
       const k = rowKey(Key.PK, Key.SK);
       const existing = state.ddb.get(k) || { ...Key };
@@ -118,7 +145,7 @@ function install() {
     ['@aws-sdk/client-dynamodb', { DynamoDBClient: class {} }],
     ['@aws-sdk/lib-dynamodb', {
       DynamoDBDocumentClient: { from: () => docClient },
-      GetCommand, PutCommand, UpdateCommand,
+      GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand,
     }],
     ['@aws-sdk/client-bedrock-runtime', { BedrockRuntimeClient, InvokeModelCommand }],
     ['@aws-sdk/client-lambda', { LambdaClient, InvokeCommand }],

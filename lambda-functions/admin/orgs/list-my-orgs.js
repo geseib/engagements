@@ -35,6 +35,7 @@ const G = require('./shared/org-guards');
 const tenant = require('../shared/tenant');
 const { ensurePersonalOrg } = require('./shared/personal-org');
 const { myAttention, isAttentionRoute } = require('./my-attention');
+const { myNotifications, isNotificationsRoute } = require('./my-notifications');
 
 /*
   WHICH SWITCHED FEATURES THIS TIER HAS ON (roadmap D6). The console reads it
@@ -123,6 +124,15 @@ exports.handler = async (event) => {
   // GET /me/attention shares this function (no new Lambda): counts per scope
   // for the console's tabs. See my-attention.js.
   if (method === 'GET' && isAttentionRoute(event)) return myAttention(event);
+  // /me/notifications/* — the bell's inbox, on this function too. See my-notifications.js.
+  if (isNotificationsRoute(event)) {
+    try {
+      return await myNotifications(event);
+    } catch (error) {
+      console.error('❌ my-notifications:', error);
+      return G.fail(500, 'The notifications could not be read.');
+    }
+  }
   if (method === 'GET') return listMyOrgs(event);
 
   return G.fail(404, 'Endpoint not found');

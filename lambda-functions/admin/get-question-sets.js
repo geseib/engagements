@@ -203,6 +203,9 @@ exports.handler = async (event) => {
       // showing a date instead of nothing.
       updatedAt: item.updatedAt || item.UpdatedAt,
       isAIGenerated: item.isAIGenerated || false,
+      // Reviewed since it was generated — accepted from a draft, or saved as a
+      // new version by somebody who read it. Turns "AI draft" off in the list.
+      ...(item.aiReviewedAt ? { aiReviewedAt: item.aiReviewedAt } : {}),
       hasImages: item.hasImages === true,
       // UNREADABLE, AND SAYING SO. Projected explicitly because this handler
       // hand-lists its fields — get-ai-prompts.js gets the same flag for free

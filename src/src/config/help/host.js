@@ -195,6 +195,10 @@ const gameSetup = {
           t: 'p',
           text: 'The Edit button says what it will do: "New version" on a set you own, "Fork" on a house set. Neither ever changes a set out from under a session that is running.',
         },
+        {
+          t: 'p',
+          text: 'A set you generate with AI — or questions you add to one — waits as a draft until you review and accept it. The set list shows drafts waiting at the top, the bell in the console\'s top line says when one is ready, and nothing is saved until you accept.',
+        },
       ],
     },
     {

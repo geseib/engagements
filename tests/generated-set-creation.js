@@ -1,6 +1,15 @@
 /**
  * THE SET A GENERATION JOB LEAVES BEHIND — integration test.
  *
+ * SINCE 2026-10-21 A RUN LEAVES A DRAFT, AND A PERSON MAKES THE SET. The
+ * owner: "an approval to accept the work that was created". Every whole-set
+ * run now writes into a draft (shared/generation-drafts.js) and the set is
+ * made when its creator accepts it (admin/generation-drafts.js) — through the
+ * same importer and CSV writers this suite has always held to. `runJob` below
+ * therefore presses accept after every run, as the same person. The history
+ * that follows is why leaving must still produce something; it now does, as a
+ * draft that is notified and kept for thirty days.
+ *
  * THE COMPLAINT THIS EXISTS FOR. The owner ran the AI scenario builder for a
  * set called "World Leaders", was told *"Close — this keeps running"*, left,
  * and came back to no set. Nothing had crashed. The worker wrote ITEMS into the
@@ -216,6 +225,7 @@ const trivia = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivi
 const polls = require(path.join(REPO, 'lambda-functions/admin/ai-generate-polls.js')).handler;
 const questions = require(path.join(REPO, 'lambda-functions/admin/ai-generate-questions.js')).handler;
 const survey = require(path.join(REPO, 'lambda-functions/admin/ai-generate-survey.js')).handler;
+const draftsRoute = require(path.join(REPO, 'lambda-functions/admin/generation-drafts.js')).handler;
 
 if (!process.env.DEBUG) console.log = () => {};
 const say = (...a) => process.stdout.write(a.join(' ') + '\n');
@@ -286,9 +296,9 @@ const ctx = (remainingMs = 900000) => ({
  * of it. That is what makes "the dispatch carries no identity" a real test —
  * a reconstructed event could smuggle one in and nobody would notice.
  */
-async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent) {
+async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent, { accept = { activate: false } } = {}) {
   const started = await handler(starter(body), ctx());
-  const { jobId } = JSON.parse(started.body);
+  const { jobId, draftId } = JSON.parse(started.body);
   const dispatch = dispatched[dispatched.length - 1].payload;
   await handler(dispatch, workerCtx);
   // Polled AS THE STARTER: a job is read only by whoever started it, acting for
@@ -296,7 +306,29 @@ async function runJob(handler, body, workerCtx = ctx(), starter = adminEvent) {
   const polled = await handler(
     { requestContext: { http: { method: 'GET' }, authorizer: starter(body).requestContext.authorizer }, pathParameters: { jobId } },
     ctx());
-  return { started, jobId, dispatch, job: JSON.parse(polled.body) };
+  /*
+    A RUN WRITES A DRAFT, AND A PERSON MAKES THE SET (owner, 2026-10-21).
+    Leaving the builder still produces something — the draft, notified and kept
+    thirty days — and the SET is made when its creator accepts it, through the
+    same importer and the same CSV writers this suite has always held to. So
+    every run here is followed by the accept a person would press, as the same
+    person, unless the case says otherwise. `activate: false` by default: the
+    set lands switched off, which keeps the old draft-set expectations honest
+    and needs no shelf; an active accept is tested on its own.
+  */
+  let accepted = null;
+  if (draftId && accept) {
+    const res = await draftsRoute({
+      requestContext: {
+        http: { method: 'POST', path: `/admin/generation-drafts/${draftId}/accept` },
+        authorizer: starter(body).requestContext.authorizer,
+      },
+      pathParameters: { proxy: `${draftId}/accept` },
+      body: JSON.stringify(accept),
+    });
+    accepted = { statusCode: res.statusCode, body: JSON.parse(res.body) };
+  }
+  return { started, jobId, draftId, dispatch, job: JSON.parse(polled.body), accepted };
 }
 const jobRow = (jobId) => ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
 const isEnvelope = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -378,17 +410,47 @@ const scenarioBody = (overrides = {}) => ({
     // `active: false`, and without it the worker would publish a LIVE set
     // nobody has read — skipping the "AI-Generated Content - Review Required"
     // banner that is the entire point of landing it as a draft.
+    //
+    // SINCE DRAFTS (owner, 2026-10-21): nothing is a set until somebody accepts
+    // it, so the run itself writes NO set row at all; and an accept that chose
+    // "leave it off" lands the set switched off but REVIEWED — `aiReviewedAt`
+    // set, so the list's "AI draft" chip does not ask for a review that has
+    // already happened. Its rows are playable: switching the set on is all it
+    // takes, exactly as a restored set's are.
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(3, 'draft'));
+    const { accepted } = await runJob(scenarios, scenarioBody({ count: 3 }), ctx(), adminEvent, { accept: null });
+    assert.strictEqual(accepted, null);
+    assert.strictEqual(setRows().length, 0, 'the run made a set before anybody accepted it');
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(3, 'draft'));
     await runJob(scenarios, scenarioBody({ count: 3 }));
     const set = setRows()[0];
-    assert.strictEqual(set.active, false, 'the set was created live, not as a draft');
+    assert.strictEqual(set.active, false, 'an accept that chose "leave it off" switched the set on');
     assert.strictEqual(set.isAIGenerated, true, 'the set is not flagged as AI-written');
+    assert.ok(set.aiReviewedAt, 'an accepted draft still reads as unreviewed');
     const rows = questionRows(set.SK.replace('SET#', ''));
     assert.ok(rows.length > 0, 'no question rows were written');
-    for (const row of rows) {
-      assert.strictEqual(row.Active, false, `question ${row.SK} was created active`);
-    }
+  });
+
+  await test('an accept that switches the set on needs a shelf, and with one it is live', async () => {
+    // rejects: activating an unfiled set (upload-questions.js refuses to make
+    // one servable), and an accept that ignores "switch it on".
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'live'));
+    const refused = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: { activate: true } });
+    assert.strictEqual(refused.accepted.statusCode, 400, 'an unfiled set was switched on');
+    assert.strictEqual(setRows().length, 0);
+    const draft = [...ddb.values()].find((r) => r.SK === `DRAFT#${refused.draftId}`);
+    assert.strictEqual(draft.status, 'ready', 'a refused accept did not hand the draft back for review');
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(2, 'live'));
+    await runJob(scenarios, scenarioBody({ count: 2, setMetadata: { ...SCENARIO_META, topic: 'business-work' } }),
+      ctx(), adminEvent, { accept: { activate: true } });
+    const set = setRows()[0];
+    assert.ok(set, 'no set');
+    assert.strictEqual(set.active, true, 'an accepted, filed set was left off');
+    for (const row of questionRows(set.SK.replace('SET#', ''))) assert.strictEqual(row.Active, true);
   });
 
   await test('the set is owned by the caller, not by the Lambda role', async () => {
@@ -523,12 +585,17 @@ const scenarioBody = (overrides = {}) => ({
     reset();
     await mint();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedname'));
-    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    const { jobId, draftId, accepted } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
     const row = jobRow(jobId);
-    assert.ok(isEnvelope(row.createdSetName), `createdSetName at rest was ${JSON.stringify(row.createdSetName)}`);
     assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
-    assert.deepStrictEqual(job.createdSet, { setId: 'worldleaders', setName: 'World Leaders' },
-      'the owner\'s poll did not open the set name');
+    const draft = ddb.get(rowKey('ORG#org_acme#GENDRAFTS', `DRAFT#${draftId}`));
+    assert.ok(isEnvelope(draft.title), `the draft's title at rest was ${JSON.stringify(draft.title)}`);
+    assert.ok(isEnvelope(draft.request), 'the draft\'s brief sat in plaintext');
+    const items = [...ddb.values()].filter((r) => r.PK === `ORG#org_acme#GENDRAFT#${draftId}`);
+    assert.ok(items.length === 2 && items.every((r) => isEnvelope(r.item)), 'a generated question sat in plaintext');
+    assert.ok(!JSON.stringify([draft, ...items]).includes('sealedname'), 'generated content is readable at rest');
+    assert.strictEqual(accepted.body.setId, 'worldleaders');
+    assert.strictEqual(accepted.body.setName, 'World Leaders', 'the owner\'s accept did not open the set name');
   });
 
   await test('an org job\'s set-creation refusal is sealed too, and read back by its owner', async () => {
@@ -537,19 +604,22 @@ const scenarioBody = (overrides = {}) => ({
     ddb.set(rowKey('ORG#org_acme#SETS', 'SET#worldleaders'),
       { PK: 'ORG#org_acme#SETS', SK: 'SET#worldleaders', orgId: 'org_acme' });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'sealedclash'));
-    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
-    assert.match(job.setCreationError || '', /already exists/i, `the refusal was ${JSON.stringify(job.setCreationError)}`);
+    const { jobId, draftId, accepted } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    assert.strictEqual(accepted.statusCode, 400);
+    assert.match(accepted.body.error || '', /already exists/i, `the refusal was ${JSON.stringify(accepted.body)}`);
     const row = jobRow(jobId);
-    assert.ok(isEnvelope(row.setCreationError), `setCreationError at rest was ${JSON.stringify(row.setCreationError)}`);
     assert.ok(!JSON.stringify(row).includes('World Leaders'), 'the set\'s title is readable on the job row');
+    const draft = ddb.get(rowKey('ORG#org_acme#GENDRAFTS', `DRAFT#${draftId}`));
+    assert.strictEqual(draft.status, 'ready', 'a refused accept did not hand the draft back');
+    assert.ok(!JSON.stringify(draft).includes('World Leaders'), 'the title is readable on the draft');
   });
 
   await test('Engage\'s own job names its set in plaintext, as every platform row is', async () => {
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'plainname'));
-    const { jobId, job } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    assert.strictEqual(jobRow(jobId).createdSetName, 'World Leaders');
-    assert.strictEqual(job.createdSet.setName, 'World Leaders');
+    const { draftId, accepted } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(ddb.get(rowKey('GENDRAFTS', `DRAFT#${draftId}`)).title, 'World Leaders');
+    assert.strictEqual(accepted.body.setName, 'World Leaders');
   });
 
   say('\nthe direction travels with the set');
@@ -586,11 +656,11 @@ const scenarioBody = (overrides = {}) => ({
     // is optional anyway.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'typo'));
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2, roundKind: 'sideways' }));
+    const { accepted } = await runJob(scenarios, scenarioBody({ count: 2, roundKind: 'sideways' }));
     const set = setRows()[0];
     assert.ok(set, 'a typo in the round kind destroyed the whole set');
     assert.strictEqual(set.roundKind, undefined, 'an unrecognised kind was written to the row');
-    assert.ok(job.createdSet, 'the job does not report the set it made');
+    assert.strictEqual(accepted.body.setId, 'worldleaders', 'the accept does not report the set it made');
   });
 
   await test('the poll worker carries its direction as well', async () => {
@@ -621,15 +691,32 @@ const scenarioBody = (overrides = {}) => ({
     // before Bedrock; the set-creation claim below is the guard behind that.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(3, 'retry'));
-    const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
+    const { dispatch, draftId } = await runJob(scenarios, scenarioBody({ count: 3 }), ctx(), adminEvent, { accept: null });
+    const calls = bedrockCalls.length;
 
     await scenarios(dispatch, ctx());   // the platform's retry, byte-identical
 
-    assert.strictEqual(setRows().length, 1, 'a retry minted a second set');
-    const row = ddb.get(rowKey('AIJOBS', `AIJOB#${jobId}`));
-    assert.strictEqual(row.setCreationError, undefined,
-      `the retry reported "${row.setCreationError}" over a set that already existed`);
-    assert.strictEqual(row.createdSetId, 'worldleaders');
+    assert.strictEqual(bedrockCalls.length, calls, 'a retry paid for the generation again');
+    const items = [...ddb.values()].filter((r) => r.PK === `GENDRAFT#${draftId}`);
+    assert.strictEqual(items.length, 3, `a retry wrote the draft's questions twice (${items.length})`);
+    assert.strictEqual(setRows().length, 0, 'a retry made a set nobody accepted');
+  });
+
+  await test('a draft is accepted once: a second press makes no second set', async () => {
+    // rejects: an accept with no claim. A double click, or two tabs, would
+    // import the same draft twice — the second refused for a taken name and
+    // reported as a failure over a set that exists.
+    reset();
+    bedrockHandler = () => toolResponse(scenarioItems(3, 'twice'));
+    const { draftId, accepted } = await runJob(scenarios, scenarioBody({ count: 3 }));
+    assert.strictEqual(accepted.statusCode, 200);
+    const again = await draftsRoute({
+      requestContext: { http: { method: 'POST', path: `/admin/generation-drafts/${draftId}/accept` }, authorizer: adminEvent({}).requestContext.authorizer },
+      pathParameters: { proxy: `${draftId}/accept` },
+      body: JSON.stringify({ activate: false }),
+    });
+    assert.strictEqual(again.statusCode, 409, `a second accept answered ${again.statusCode}`);
+    assert.strictEqual(setRows().length, 1, 'a second accept minted a second set');
   });
 
   await test('createSetForJob run twice for one job creates one set', async () => {
@@ -641,8 +728,18 @@ const scenarioBody = (overrides = {}) => ({
     reset();
     const items = scenarioItems(3, 'twice');
     bedrockHandler = () => toolResponse(items);
-    const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }));
+    //
+    // createSetForJob is reached by no generator today — every whole-set run
+    // writes a draft — but it stays the creator for a handler that opts out of
+    // drafts (`writesDrafts: false`), so its own guard is still held here.
+    const { dispatch, jobId } = await runJob(scenarios, scenarioBody({ count: 3 }), ctx(), adminEvent, { accept: null });
     const { createSetForJob, scenariosToCsv } = require(path.join(REPO, 'lambda-functions/admin/shared/generated-set.js'));
+    const spec = { engagementType: () => 'call-and-answer', toCsv: scenariosToCsv };
+    const caller = { userId: 'sub-ada', username: 'ada' };
+    const first = await createSetForJob({
+      dynamodb: docClient, tableName: 'engage-test', jobId, spec, payload: dispatch.payload, items, caller,
+    });
+    assert.ok(first, 'the first call made no set');
 
     const again = await createSetForJob({
       dynamodb: docClient, tableName: 'engage-test', jobId,
@@ -666,14 +763,17 @@ const scenarioBody = (overrides = {}) => ({
     // this ordering exists to prevent.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'order'));
-    const { jobId } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    const updates = writeLog.filter((w) => w.op === 'update' && w.sk === `AIJOB#${jobId}`);
-    const createdAt = updates.findIndex((w) => /createdSetId/.test(w.expr));
-    const terminalAt = updates.findIndex((w) => /:status/.test(w.expr) && /#items/.test(w.expr));
-    assert.ok(createdAt >= 0, 'the set was never recorded on the job');
+    //
+    // NOW: the DRAFT is ready before the job goes terminal, for the same
+    // reason — a client that sees "complete" opens the review, and the review
+    // must find the questions already there.
+    const { jobId, draftId } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: null });
+    const draftReadyAt = writeLog.findIndex((w) => w.op === 'update' && w.sk === `DRAFT#${draftId}` && /#readyAt/.test(w.expr || ''));
+    const terminalAt = writeLog.findIndex((w) => w.op === 'update' && w.sk === `AIJOB#${jobId}`
+      && /:status/.test(w.expr) && /#items/.test(w.expr));
+    assert.ok(draftReadyAt >= 0, 'the draft was never made ready');
     assert.ok(terminalAt >= 0, 'the job never went terminal');
-    assert.ok(createdAt < terminalAt,
-      'the job went terminal before it carried its set — the client would create a second one');
+    assert.ok(draftReadyAt < terminalAt, 'the job went terminal before its draft was ready to review');
   });
 
   await test('the poll payload names the set so the client need not make one', async () => {
@@ -683,9 +783,13 @@ const scenarioBody = (overrides = {}) => ({
     // that exists.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'named'));
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    assert.deepStrictEqual(job.createdSet, { setId: 'worldleaders', setName: 'World Leaders' });
-    assert.strictEqual(job.setCreationError, null);
+    //
+    // NOW: the poll names the DRAFT, so the builder opens its review rather
+    // than offering to "Load into System" — which would make a set behind the
+    // draft's back.
+    const { job, draftId } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: null });
+    assert.strictEqual(job.draftId, draftId, 'the poll does not name the draft');
+    assert.strictEqual(job.createdSet, null, 'a set was reported before anybody accepted one');
   });
 
   await test('a generated question keeps its background on the stored row', async () => {
@@ -693,8 +797,8 @@ const scenarioBody = (overrides = {}) => ({
     reset();
     const items = scenarioItems(2, 'bg').map((it, i) => ({ ...it, background: `zqbg-${i} Git records every change.` }));
     bedrockHandler = () => toolResponse(items);
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    assert.ok(job.createdSet, `no set was created: ${job.setCreationError}`);
+    const { accepted } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(accepted.statusCode, 200, `no set was created: ${JSON.stringify(accepted.body)}`);
     const questionRows = [...ddb.values()].filter((r) => String(r.SK).startsWith('QUESTION#'));
     assert.ok(questionRows.length === 2, `expected 2 question rows, saw ${questionRows.length}`);
     for (const r of questionRows) assert.ok(r.Background, `a row has no Background: ${r.SK}`);
@@ -707,11 +811,12 @@ const scenarioBody = (overrides = {}) => ({
     reset();
     ddb.set(rowKey('SETS', 'SET#worldleaders'), { PK: 'SETS', SK: 'SET#worldleaders', name: 'World Leaders' });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'clash'));
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    assert.strictEqual(job.createdSet, null, 'an existing set was reported as newly created');
-    assert.match(job.setCreationError, /already exists/i);
-    assert.strictEqual(job.status, 'complete', 'a failed set creation must not fail the generation');
-    assert.strictEqual(job.items.length, 2, 'the items were thrown away with the set');
+    const { job, accepted, draftId } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.strictEqual(accepted.statusCode, 400, 'an existing set was reported as newly created');
+    assert.match(accepted.body.error, /already exists/i);
+    assert.strictEqual(job.status, 'complete', 'a refused accept must not fail the generation');
+    const items = [...ddb.values()].filter((r) => r.PK === `GENDRAFT#${draftId}`);
+    assert.strictEqual(items.length, 2, 'the items were thrown away with the refusal');
   });
 
   await test('no title means no set, and the job says why', async () => {
@@ -720,9 +825,18 @@ const scenarioBody = (overrides = {}) => ({
     // the second one is refused — a defect that only appears on the second use.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'untitled'));
-    const { job } = await runJob(scenarios, { scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
+    const { accepted, draftId } = await runJob(scenarios, { scenarioType: 'custom', engagementType: 'call-and-answer', count: 2 });
     assert.strictEqual(setRows().length, 0, 'a set was created with no title');
-    assert.match(job.setCreationError, /title/i);
+    assert.strictEqual(accepted.statusCode, 400);
+    assert.match(accepted.body.error, /name/i);
+    // …and naming it on the review screen is the way out.
+    const named = await draftsRoute({
+      requestContext: { http: { method: 'POST', path: `/admin/generation-drafts/${draftId}/accept` }, authorizer: adminEvent({}).requestContext.authorizer },
+      pathParameters: { proxy: `${draftId}/accept` },
+      body: JSON.stringify({ activate: false, title: 'Named On Review' }),
+    });
+    assert.strictEqual(named.statusCode, 200, named.body);
+    assert.strictEqual(setRows()[0].name, 'Named On Review');
   });
 
   say('\nonly a whole-set generator may create a set');
@@ -781,15 +895,15 @@ const scenarioBody = (overrides = {}) => ({
     // host was shown in the builder and then silently lost from the set.
     reset();
     bedrockHandler = () => toolResponse(surveyItems());
-    const { job } = await runJob(survey, surveyBody());
-    assert.strictEqual(job.setCreationError, null, 'set creation failed: ' + job.setCreationError);
+    const { job, accepted } = await runJob(survey, surveyBody());
+    assert.strictEqual(accepted.statusCode, 200, 'set creation failed: ' + JSON.stringify(accepted.body));
     const sets = setRows();
     assert.strictEqual(sets.length, 1, 'expected one set, found ' + sets.length);
     assert.strictEqual(sets[0].engagementType, 'survey');
-    assert.strictEqual(sets[0].active, false, 'a generated survey must land as a draft');
+    assert.strictEqual(sets[0].active, false, 'a survey accepted "left off" was switched on');
     assert.strictEqual(sets[0].isAIGenerated, true);
     assert.strictEqual(sets[0].questionCount, job.items.length, 'the importer skipped some of the generated rows');
-    assert.ok(job.createdSet, 'the job does not name the set it made');
+    assert.strictEqual(accepted.body.setId, 'feedbacksurvey', 'the accept does not name the set it made');
   });
 
   await test('the survey rows carry their kinds and fields, filed under Survey', async () => {
@@ -805,7 +919,9 @@ const scenarioBody = (overrides = {}) => ({
     assert.strictEqual(rows[2].followUpPrompt, 'What would you cut or add?');
     assert.strictEqual(rows[4].maxLength, 280);
     assert.deepStrictEqual(rows[0].Tags, ['usefulness']);
-    assert.ok(rows.every((r) => r.Active === false), 'a draft survey\'s questions must be inactive too');
+    // Reviewed before it was saved, so its rows are playable the moment the
+    // set is switched on; the set itself is what was left off.
+    assert.ok(rows.every((r) => r.Active === true), 'an accepted survey\'s questions were left unplayable');
   });
 
   await test('a host\'s generated survey lands in their org, its options ciphertext at rest', async () => {
@@ -837,10 +953,12 @@ const scenarioBody = (overrides = {}) => ({
       if (n === 1) return toolResponse(scenarioItems(4, 'salvaged'));
       throw new Error('ValidationException: model unavailable');
     };
-    const { job } = await runJob(scenarios, scenarioBody({ count: perCall + 4 }));
+    const { job, accepted, draftId } = await runJob(scenarios, scenarioBody({ count: perCall + 4 }));
     assert.strictEqual(job.status, 'error', 'the fixture did not actually fail');
     assert.ok(job.items.length > 0, 'the fixture produced nothing to save');
-    assert.ok(job.createdSet, 'a partial run left no draft at all');
+    const draft = ddb.get(rowKey('GENDRAFTS', `DRAFT#${draftId}`));
+    assert.ok(draft, 'a partial run left no draft at all');
+    assert.strictEqual(accepted.statusCode, 200, 'a partial draft could not be accepted');
     assert.strictEqual(setRows()[0].active, false);
     assert.strictEqual(setRows()[0].questionCount, job.items.length);
   });
@@ -924,11 +1042,11 @@ const scenarioBody = (overrides = {}) => ({
         yesLabel: 'Approve', noLabel: 'Decline', unsure: true, tags: ['process'] },
       { kind: 'text', title: 'One word for the quarter', category: 'Launch', placeholder: 'One word', tags: ['mood'] },
     ]);
-    const { job } = await runJob(polls, {
+    const { accepted } = await runJob(polls, {
       topic: 'launch readiness', count: 3, kinds: ['rating', 'yesno', 'text'],
       setMetadata: { title: 'Launch Polls', description: 'd', customInstructions: 'c', aiContextInstructions: 'a' },
     });
-    assert.ok(job.createdSet, `no set was created: ${job.setCreationError}`);
+    assert.strictEqual(accepted.statusCode, 200, `no set was created: ${JSON.stringify(accepted.body)}`);
     const rows = questionRows('launchpolls');
     assert.strictEqual(rows.length, 3, 'a typed poll was skipped on import');
     const byTitle = Object.fromEntries(rows.map((r) => [r.Title, r]));
@@ -992,28 +1110,32 @@ const scenarioBody = (overrides = {}) => ({
     ddb.set(rowKey('ORG#org_acme', 'METADATA'), { ...ddb.get(rowKey('ORG#org_acme', 'METADATA')), PK: 'ORG#org_acme', SK: 'METADATA', orgId: 'org_acme', name: 'Acme', type: 'personal', plan: 'free', status: 'active' });
     ddb.set(rowKey('ORG#org_acme', `USAGE#${period}`), { PK: 'ORG#org_acme', SK: `USAGE#${period}`, orgId: 'org_acme', period, sessionsRun: 0, setsCurrent: 5, setsPeak: 5 });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'capped'));
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
+    //
+    // NOW THE REFUSAL ARRIVES AT ACCEPT, which is when a set is made: the draft
+    // itself never counted against the allowance, so generating was never
+    // blocked by it. The accept answers with the importer's whole 402.
+    const { job, accepted, draftId } = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), hostEvent);
 
-    assert.strictEqual(job.createdSet, null, 'a set was created past the allowance');
+    assert.strictEqual(accepted.statusCode, 402, 'a set was created past the allowance');
     assert.strictEqual(orgSetRows().length, 0);
-    assert.ok(job.setCreationLimit, `no setCreationLimit on the job: ${JSON.stringify(job)}`);
-    assert.strictEqual(job.setCreationLimit.code, 'upgrade_required');
-    assert.strictEqual(job.setCreationLimit.limit.kind, 'sets');
-    // The worker replays the caller's org and role, so the voice is theirs.
-    assert.strictEqual(job.setCreationLimit.resolve.role, 'owner');
-    // An older client still reads the sentence.
-    assert.match(job.setCreationError, /question set/i);
+    assert.strictEqual(accepted.body.code, 'upgrade_required');
+    assert.strictEqual(accepted.body.limit.kind, 'sets');
+    // The accept runs as the caller, so the voice is theirs.
+    assert.strictEqual(accepted.body.resolve.role, 'owner');
+    assert.match(accepted.body.error, /question set/i);
     assert.strictEqual(job.status, 'complete', 'a refused set must not fail the generation');
-    assert.strictEqual(job.items.length, 2, 'the items were thrown away with the refused set');
+    const draft = ddb.get(rowKey('ORG#org_acme#GENDRAFTS', `DRAFT#${draftId}`));
+    assert.strictEqual(draft.status, 'ready', 'the items were thrown away with the refused set');
   });
 
   await test('any other refusal carries no setCreationLimit', async () => {
     reset();
     ddb.set(rowKey('SETS', 'SET#worldleaders'), { PK: 'SETS', SK: 'SET#worldleaders', name: 'World Leaders' });
     bedrockHandler = () => toolResponse(scenarioItems(2, 'clash'));
-    const { job } = await runJob(scenarios, scenarioBody({ count: 2 }));
-    assert.match(job.setCreationError, /already exists/i);
-    assert.strictEqual(job.setCreationLimit, null);
+    const { accepted } = await runJob(scenarios, scenarioBody({ count: 2 }));
+    assert.match(accepted.body.error, /already exists/i);
+    assert.notStrictEqual(accepted.body.code, 'upgrade_required');
+    assert.strictEqual(accepted.statusCode, 400);
   });
 
   say(`\n${passed} passed, ${failed} failed\n`);

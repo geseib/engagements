@@ -116,6 +116,8 @@ function mockApi({ upload = { status: 200, body: { message: 'Successfully create
       return jsonResponse(200, { questionSets: afterCreate && listCalls > 1 ? [...SHELF, CREATED_ROW] : SHELF });
     }
     if (method === 'GET' && url.includes('/admin/ai-prompts')) return jsonResponse(200, { prompts: [] });
+    // The drafts strip (components/DraftsStrip.jsx) reads the server's list.
+    if (method === 'GET' && url.endsWith('/admin/generation-drafts/list')) return jsonResponse(200, { drafts: [] });
     if (method === 'GET' && url.includes('/admin/personas')) return jsonResponse(200, { personas: [] });
     // What the editor reads when the createdSet path opens the draft.
     if (method === 'GET' && /\/question-sets\/[^/]+\/questions$/.test(url)) {
