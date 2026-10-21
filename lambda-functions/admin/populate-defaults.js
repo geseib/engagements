@@ -61,6 +61,11 @@ const tenant = require('./shared/tenant');
 const { promptRefusalMessage, isInternalCall } = require('./shared/prompt-access');
 const { callerUserId } = require('./shared/question-set-access');
 const defaultPrompts = require('./default-ai-prompts.json');
+const promptVersions = require('./shared/prompt-versions');
+
+const DEFAULTS_PATH = promptVersions.DEFAULTS_REPO_PATH;
+/** The content fields a JSON entry carries — what "matches the repo" is judged over. */
+const repoFieldsOf = (entry) => promptVersions.CONTENT_FIELDS.filter((f) => entry && entry[f] !== undefined);
 
 // Generate unique ID for prompts (same as other admin functions)
 const generatePromptId = () => {
@@ -284,9 +289,21 @@ exports.handler = async (event) => {
             );
           }
 
-          // Store prompt template in S3 (matching create-ai-prompt format)
-          const version = 1;
-          const s3Key = `prompts/${gameType}/${promptId}/v${version}.json`;
+          /*
+            A RESEED IS A NEW VERSION, NOT AN OVERWRITE (prompt versions,
+            2026-10-21). This wrote v1.json every time, so an overwrite of a
+            prompt someone had edited here replaced their text with no copy
+            left anywhere — the "no undo" the populate dialog warned about.
+            Now an existing row gets the next free version and keeps every
+            earlier one; a new row starts at v1. The existing row's own
+            gameType spelling builds the key, so its versions stay in one
+            directory.
+          */
+          const reseeding = promptExists && overwrite;
+          const repoKey = promptVersions.defaultsRepoKey(rawGameType, categoryKey);
+          const version = reseeding ? promptVersions.nextVersionNumber(existingPrompt) : 1;
+          const keyGameType = reseeding && existingPrompt.gameType ? existingPrompt.gameType : gameType;
+          const s3Key = `prompts/${keyGameType}/${promptId}/v${version}.json`;
 
           // Use the same structure as create-ai-prompt.js for consistency
           const s3Data = {
@@ -357,7 +374,26 @@ exports.handler = async (event) => {
             createdAt,
             updatedAt: timestamp,
             createdBy: 'system',
-            version: '1.0',
+            // A NUMBER, like every other writer's. This was the string '1.0',
+            // which `'1.0' + 1` turns into '1.01'.
+            version,
+            latestVersion: version,
+            versionHistory: promptVersions.appendHistory(
+              reseeding ? existingPrompt.versionHistory : [],
+              promptVersions.historyEntry({
+                version, s3Key, savedAt: timestamp, by: 'seed', how: promptVersions.HOW.SEED,
+                hash: promptVersions.contentHash(s3Data),
+                repo: { key: repoKey, path: DEFAULTS_PATH },
+              })
+            ),
+            // THE REPO FILE THIS WAS TAKEN FROM — the library matches a seeded
+            // default to its entry in default-ai-prompts.json by this, and
+            // tells "edited here since" from "the repo moved on".
+            repoSource: promptVersions.repoSourceFor(
+              { key: repoKey, path: DEFAULTS_PATH, fields: repoFieldsOf(promptData) },
+              s3Data,
+              { takenAt: timestamp, version }
+            ),
             usageCount: 0
           };
 

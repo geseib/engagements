@@ -1,8 +1,11 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { normalizeGameType } = require('./shared/game-types');
-const { normalizeOutputSections, normalizeAngleWeights, inferPromptType } = require('./shared/prompt-shape');
+const {
+  normalizeOutputSections, normalizeAngleWeights, inferPromptType, isUsableSummaryPrompt,
+} = require('./shared/prompt-shape');
+const versions = require('./shared/prompt-versions');
 const {
   assertTemplateVariablesExist, assertNoBracketDirections, assertReceivesResponses,
 } = require('./shared/template-variable-usage');
@@ -90,7 +93,23 @@ exports.handler = async (event) => {
       status,
       questionSetIds,
       tags,
-      createNewVersion = false
+      createNewVersion = false,
+      // PROMPT VERSIONS (shared/prompt-versions.js). Two body actions on this
+      // one route, because the stack is at CloudFormation's resource ceiling
+      // and a new route is a new function:
+      //   { action: 'make-live', version: n }  — point the row at v<n>; nothing
+      //                                          is written to S3 or deleted.
+      //   { from: 'repo', repoSource, …fields } — the library's Review → Save
+      //                                          as version N: a new version,
+      //                                          live, remembering which repo
+      //                                          file and hash it took.
+      // `versionHow: 'upload'` marks a save whose text came from the
+      // workbench's Upload a revised file; anything else is "Edited here".
+      action,
+      version: requestedVersion,
+      from,
+      repoSource: rawRepoSource,
+      versionHow,
     } = updateData;
 
     /*
@@ -201,6 +220,28 @@ exports.handler = async (event) => {
       ? await decryptItem(cryptoOrgId, 'prompt', found.item)
       : found.item;
     const timestamp = new Date().toISOString();
+
+    if (action === 'make-live') {
+      return await makeVersionLive({
+        event, promptId, ref, cryptoOrgId, currentPrompt, requestedVersion, timestamp,
+      });
+    }
+    if (action !== undefined) {
+      return respond(400, { error: `Unknown action ${JSON.stringify(action)}. The only action is 'make-live'.` });
+    }
+
+    // A save FROM THE REPO names the file it came from. Checked before any
+    // write, so a malformed one changes nothing.
+    const fromRepo = from === 'repo';
+    if (from !== undefined && !fromRepo) {
+      return respond(400, { error: `Unknown source ${JSON.stringify(from)}. The only source is 'repo'.` });
+    }
+    const repoRef = fromRepo ? cleanRepoRef(rawRepoSource) : null;
+    if (fromRepo && !repoRef) {
+      return respond(400, {
+        error: 'A save from the repo must name the repo file it came from (repoSource.key). Nothing was changed.',
+      });
+    }
 
     // Distinguish "not supplied" from "cleared" — the same null-means-skip trap
     // that made question-set edits silently no-op (see the rounds/personas
@@ -402,9 +443,34 @@ exports.handler = async (event) => {
       filename and stored back on the row as its version. Coerced, with a
       non-numeric version restarting at 1 rather than producing `NaN`.
     */
-    const bumpedVersion = (Number.isFinite(Number(currentPrompt.version))
-      ? Number(currentPrompt.version)
-      : 0) + 1;
+    /*
+      AND NEVER A NUMBER ALREADY USED. Once a version can be made live again,
+      `version + 1` is not the next free number: make v1 live while v2 and v3
+      exist and the next save would mint a second v2 OVER the first. See
+      `nextVersionNumber` — `latestVersion`, the history and the live key.
+    */
+    const bumpedVersion = versions.nextVersionNumber(currentPrompt);
+
+    /*
+      A SAVE THAT CHANGES WHAT THE PROMPT SAYS IS A NEW VERSION — every time,
+      not only when a caller remembers `createNewVersion`. The editor never
+      sent it, so every edit used to overwrite v<n> in place and the text it
+      replaced was gone. A save that changes no content (a status chip, a
+      rename, the same text sent back) still rewrites the live object in
+      place: its content is identical, so nothing is lost by it.
+    */
+    const proposedContent = {};
+    for (const f of versions.CONTENT_FIELDS) {
+      const base = currentContent ? currentContent[f] : undefined;
+      if (f === 'outputSections') proposedContent[f] = outputSectionsSupplied ? (outputSections || undefined) : base;
+      else if (f === 'angleWeights') proposedContent[f] = angleWeightsSupplied ? (angleWeights || undefined) : base;
+      else if (f === 'description') proposedContent[f] = description !== undefined ? description : (base ?? currentPrompt.description);
+      else if (f === 'template') proposedContent[f] = template !== undefined ? template : base;
+      else if (f === 'instructions') proposedContent[f] = instructions !== undefined ? instructions : base;
+      else if (f === 'outputFormat') proposedContent[f] = outputFormat !== undefined ? outputFormat : base;
+    }
+    const contentChanged = (touchesContent || description !== undefined || angleWeightsSupplied)
+      && (!currentContent || versions.contentHash(proposedContent) !== versions.contentHash(currentContent));
 
     let newVersion = currentPrompt.version;
     let newS3Key = currentPrompt.s3Key;
@@ -412,7 +478,7 @@ exports.handler = async (event) => {
     // If creating new version or if default prompt is being edited. A prompt
     // whose body lives in S3 but which somehow has no key yet is versioned too,
     // because otherwise there is nowhere to put the text this request supplied.
-    if (promptHasS3Body && (createNewVersion || currentPrompt.isDefault || !currentPrompt.s3Key)) {
+    if (promptHasS3Body && (createNewVersion || contentChanged || currentPrompt.isDefault || !currentPrompt.s3Key)) {
       newVersion = bumpedVersion;
       // SCOPED, like create-ai-prompt.js's s3Key. A hand-built platform-shaped
       // path here would mint this new version of an organisation's Workie into
@@ -454,6 +520,7 @@ exports.handler = async (event) => {
         ...currentContent?.metadata,
         lastModifiedBy: 'admin-interface',
         updateReason: createNewVersion ? 'new-version' : 'edit',
+        ...(newS3Key !== currentPrompt.s3Key ? { how: saveHow(fromRepo, versionHow) } : {}),
         format: (instructions !== undefined || outputFormat !== undefined) ? 'structured' : 
                 currentContent?.metadata?.format || 'legacy'
       }
@@ -597,6 +664,39 @@ exports.handler = async (event) => {
 
       updateExpression.push('s3Key = :s3Key');
       expressionAttributeValues[':s3Key'] = newS3Key;
+    }
+
+    /*
+      THE VERSION HISTORY, in the same write that moves the pointer — see
+      shared/prompt-versions.js for why an array on this row and not rows of
+      their own. Only when a new object was minted: an in-place rewrite of
+      unchanged content is not a version.
+    */
+    const mintedVersion = promptHasS3Body && newS3Key !== currentPrompt.s3Key;
+    if (mintedVersion) {
+      const entry = versions.historyEntry({
+        version: newVersion,
+        s3Key: newS3Key,
+        savedAt: timestamp,
+        by: versions.callerEmail(event) || callerUserId(event) || null,
+        how: saveHow(fromRepo, versionHow),
+        hash: versions.contentHash(updatedContent),
+        repo: repoRef,
+      });
+      updateExpression.push('versionHistory = :versionHistory');
+      expressionAttributeValues[':versionHistory'] = versions.appendHistory(currentPrompt.versionHistory, entry);
+      updateExpression.push('latestVersion = :latestVersion');
+      expressionAttributeValues[':latestVersion'] = Math.max(Number(newVersion) || 0, bumpedVersion - 1);
+    }
+
+    // WHICH REPO FILE, AND WHAT IT SAID. Stored once taken, so the library can
+    // match this prompt to its file without guessing by name, and can tell
+    // "edited here since it was taken" from "the repo moved on".
+    if (fromRepo) {
+      updateExpression.push('repoSource = :repoSource');
+      expressionAttributeValues[':repoSource'] = versions.repoSourceFor(repoRef, updatedContent, {
+        takenAt: timestamp, version: newVersion,
+      });
     }
 
     // Needed by the `REMOVE #ttl` clause below — `ttl` is a DynamoDB reserved word.
@@ -748,7 +848,8 @@ exports.handler = async (event) => {
       scope: ref.scope,
       orgId: ref.orgId || null,
       status: 'updated',
-      message: createNewVersion ? 'New version created successfully' : 'AI prompt updated successfully'
+      newVersion: Boolean(mintedVersion),
+      message: mintedVersion ? `Saved as version ${newVersion}` : 'AI prompt updated successfully'
     };
 
     console.log(`✅ Successfully updated AI prompt: ${promptId}`);
@@ -779,3 +880,155 @@ exports.handler = async (event) => {
     };
   }
 };
+
+function respond(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'PUT, OPTIONS'
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/** How a minted version came to exist — see prompt-versions.js HOW. */
+function saveHow(fromRepo, versionHow) {
+  if (fromRepo) return versions.HOW.REPO;
+  if (versionHow === versions.HOW.UPLOAD) return versions.HOW.UPLOAD;
+  return versions.HOW.EDIT;
+}
+
+/**
+ * The repo file a from-the-repo save names, cleaned, or null. The CONTENT is
+ * the request's own fields, like any other save, and goes through every guard
+ * below; this is only the label — which file, which fields it carries, when
+ * the repo last changed it — and the hash is recomputed here from what is
+ * actually saved, never taken from the client.
+ */
+function cleanRepoRef(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const key = typeof raw.key === 'string' ? raw.key.trim() : '';
+  if (!key || key.length > 300) return null;
+  const pathText = typeof raw.path === 'string' ? raw.path.trim().slice(0, 300) : '';
+  const commitDate = typeof raw.commitDate === 'string' && !Number.isNaN(Date.parse(raw.commitDate))
+    ? raw.commitDate : '';
+  const fields = Array.isArray(raw.fields)
+    ? raw.fields.filter((f) => versions.CONTENT_FIELDS.includes(f))
+    : [];
+  return { key, path: pathText, commitDate, fields };
+}
+
+/*
+  MAKE AN EARLIER VERSION LIVE — `{ action: 'make-live', version: n }`.
+
+  ONE WRITE, AND IT IS A POINTER. The row's `version` and `s3Key` move to v<n>;
+  no S3 object is written, rewritten or deleted, and the version that was live
+  stays in the list, one click from live again. Every reader of a prompt's text
+  follows the row's `s3Key` (game/get-ai-summary.js `fetchPromptFromS3`, the
+  advisor, the archive export), so the next Workie read uses v<n>.
+
+  The row's MIRRORS of the body (description, output sections, round angles —
+  kept so the list and the set's prompt picker need no S3 read) are reset from
+  v<n>'s body in the same write, or the picker would show one version's shape
+  while the engine read another's.
+
+  Refused, changing nothing, when v<n> does not exist, cannot be read, or is
+  not a shape the summary engine can run — a summary prompt made live in that
+  state would silently fall back to the game-type default in every room.
+*/
+async function makeVersionLive({ event, promptId, ref, cryptoOrgId, currentPrompt, requestedVersion, timestamp }) {
+  const target = Number(requestedVersion);
+  if (!Number.isInteger(target) || target < 1) {
+    return respond(400, { error: 'make-live needs a version number (1 or more). Nothing was changed.' });
+  }
+
+  let objects = null;
+  try {
+    objects = await versions.listVersionObjects(
+      s3Client, ListObjectsV2Command, aiPromptsBucket,
+      versions.versionPrefixes(currentPrompt, promptBodyKey, ref),
+    );
+  } catch (e) {
+    console.warn(`⚠️ Could not list the versions of ${promptId}: ${e.message}`);
+  }
+  const entry = versions.listVersions(currentPrompt, objects).find((v) => v.version === target);
+  if (!entry || entry.missing || !entry.s3Key) {
+    return respond(404, { error: `Version ${target} of this prompt does not exist. Nothing was changed.` });
+  }
+  if (entry.live) {
+    return respond(200, {
+      promptId, version: target, s3Key: entry.s3Key, scope: ref.scope, orgId: ref.orgId || null,
+      status: 'unchanged', message: `Version ${target} is already live.`,
+    });
+  }
+
+  let body;
+  try {
+    const res = await s3Client.send(new GetObjectCommand({ Bucket: aiPromptsBucket, Key: entry.s3Key }));
+    const parsed = JSON.parse(await res.Body.transformToString());
+    body = cryptoOrgId ? await decryptValue(cryptoOrgId, parsed) : parsed;
+  } catch (e) {
+    return respond(409, {
+      error: `Version ${target} could not be read (${e.message}), so it was not made live. Nothing was changed.`,
+    });
+  }
+  const promptType = currentPrompt.promptType || inferPromptType(currentPrompt);
+  if (promptType === 'analysis' && !isUsableSummaryPrompt(body)) {
+    return respond(409, {
+      error: `Version ${target} has neither a template nor both halves, so the summary engine could not run it. `
+        + 'It was not made live. Nothing was changed.',
+    });
+  }
+
+  const encrypted = new Set(ENCRYPTED_FIELDS.prompt);
+  const store = async (field, value) => (
+    cryptoOrgId && encrypted.has(field) ? encryptValue(cryptoOrgId, value) : value
+  );
+  const sets = [
+    'version = :version', 's3Key = :s3Key', 'updatedAt = :updatedAt',
+    'latestVersion = :latestVersion', 'lastMadeLive = :lastMadeLive',
+  ];
+  const values = {
+    ':version': target,
+    ':s3Key': entry.s3Key,
+    ':updatedAt': timestamp,
+    ':latestVersion': versions.nextVersionNumber(currentPrompt, (objects || []).map((o) => o.Key)) - 1,
+    ':lastMadeLive': {
+      version: target,
+      from: Number(currentPrompt.version) || versions.versionFromKey(currentPrompt.s3Key) || null,
+      at: timestamp,
+      by: versions.callerEmail(event) || callerUserId(event) || null,
+    },
+    ':liveKey': currentPrompt.s3Key,
+  };
+  // The mirrors. A cleared shape is an empty list / map, as every save writes it.
+  const sections = normalizeOutputSections(body.outputSections);
+  sets.push('outputSections = :outputSections');
+  values[':outputSections'] = await store('outputSections', sections || []);
+  const angles = normalizeAngleWeights(body.angleWeights);
+  sets.push('angleWeights = :angleWeights');
+  values[':angleWeights'] = (angles.ok && angles.weights) || {};
+  if (typeof body.description === 'string') {
+    sets.push('description = :description');
+    values[':description'] = await store('description', body.description);
+  }
+
+  await dynamodb.send(new UpdateCommand({
+    TableName: tableName,
+    Key: promptKey(ref),
+    UpdateExpression: `SET ${sets.join(', ')} REMOVE #ttl`,
+    // Someone else moved the live version between the read and this write:
+    // refuse rather than undo their choice.
+    ConditionExpression: 's3Key = :liveKey',
+    ExpressionAttributeNames: { '#ttl': 'ttl' },
+    ExpressionAttributeValues: values,
+  }));
+
+  console.log(`✅ ${promptId}: v${target} is live (was ${currentPrompt.s3Key})`);
+  return respond(200, {
+    promptId, version: target, s3Key: entry.s3Key, scope: ref.scope, orgId: ref.orgId || null,
+    status: 'updated', message: `Version ${target} is live. The version that was live stays in the list.`,
+  });
+}
