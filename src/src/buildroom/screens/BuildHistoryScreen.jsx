@@ -16,7 +16,7 @@
  *
  * controls: { onOpenAsk(askId) }
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import BuildImage from '../BuildImage';
 import { W } from '../words';
 import {
@@ -27,6 +27,7 @@ import { clockTime, askNumber } from './common';
 import { Timeline } from './Timeline';
 import ClaudeStatus from './ClaudeStatus';
 import { buildRoomContent } from '../roomContentData';
+import { storyHolds } from '../sentMarks';
 
 const HISTORY_FILTERS = [
   { key: 'all', label: 'Everything' },
@@ -45,14 +46,37 @@ function StoryIdeas({ ideas }) {
   );
 }
 
+/**
+ * WHAT WENT TO CLAUDE, AND WHY (docs/design/build-room-consider, frame 4): the
+ * room's words struck through when the host changed them, "→ " what Claude
+ * got, the host's why, and the marks (reworded by the host, sent as written,
+ * liked by N). Without a change, the words once.
+ */
+export function SentBody({ sent, text }) {
+  return (
+    <>
+      {sent.roomWords ? (
+        <>
+          <p className="brm-story-was"><s>{sent.roomWords}</s></p>
+          <p className="brm-story-got">{`\u2192 ${sent.got}`}</p>
+        </>
+      ) : <p className="brm-story-t">{text}</p>}
+      {sent.why && <p className="brm-story-why"><b>{W.whyLabel}</b> {sent.why}</p>}
+      {sent.marks.length > 0 && (
+        <p className="brm-story-marks">{sent.marks.map((m) => <span key={m} className="brm-story-markchip">{m}</span>)}</p>
+      )}
+    </>
+  );
+}
+
 /** "How it was decided" for a decision; "What happened to it" for an idea or an ask still open. */
 const chainLabel = (type) => (type === 'decided' ? 'How it was decided' : 'What happened to it');
 
 /** What a step produced: a small row under it, oldest first. */
-function StoryKid({ kid, onOpen }) {
+function StoryKid({ kid, onOpen, focus = null }) {
   const openable = Boolean(onOpen) && kid.type === 'decided' && kid.askId;
   return (
-    <li className={`brm-story-kid brm-story-kid--${kid.type}`}>
+    <li className={`brm-story-kid brm-story-kid--${kid.type}${storyHolds(kid, focus) ? ' is-focus' : ''}`}>
       <span className="brm-story-kidh">{kid.type === 'decided' ? W.decided : kid.heading}</span>
       {openable
         ? <button type="button" className="brm-story-open brm-story-kidt" aria-label={`Open Ask ${askNumber(kid.askId)}`} onClick={() => onOpen(kid.askId)}>{kid.text}</button>
@@ -70,14 +94,17 @@ function StoryKid({ kid, onOpen }) {
   );
 }
 
-export function StoryItem({ item, onOpen = null }) {
+export function StoryItem({ item, onOpen = null, focus = null }) {
   // A decided item opens its ask's window (History, R1); a click anywhere on
   // it does, except on a link or button of its own.
   const openable = Boolean(onOpen) && item.type === 'decided' && item.askId;
   const isStep = item.type === 'step';
+  // A sent mark opened History here (Consider, frame 4): highlighted.
+  const focused = storyHolds(item, focus);
   return (
     <li
-      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}${item.now ? ' is-now' : ''}`}
+      className={`brm-story-it brm-story-it--${item.type}${openable ? ' is-openable' : ''}${item.now ? ' is-now' : ''}${focused ? ' is-focus' : ''}`}
+      data-entry={item.id}
       onClick={openable ? (e) => { if (!(e.target.closest && e.target.closest('a, button'))) onOpen(item.askId); } : undefined}
     >
       <span className="brm-story-tm">{clockTime(item.at)}</span>
@@ -86,10 +113,10 @@ export function StoryItem({ item, onOpen = null }) {
         {openable
           ? <button type="button" className="brm-story-h brm-story-open" aria-label={`Open Ask ${askNumber(item.askId)}`} onClick={() => onOpen(item.askId)}>{item.heading}</button>
           : <span className="brm-story-h">{item.heading}{isStep && item.dur && <span className="brm-muted">{` · ${item.dur}`}</span>}</span>}
-        {!isStep && <p className="brm-story-t">{item.text}</p>}
+        {!isStep && (item.sent ? <SentBody sent={item.sent} text={item.text} /> : <p className="brm-story-t">{item.text}</p>)}
         {isStep && item.kids.length > 0 && (
           <ul className="brm-story-kids">
-            {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} />)}
+            {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} focus={focus} />)}
           </ul>
         )}
         <StoryIdeas ideas={item.ideas} />
@@ -122,11 +149,20 @@ function Earlier({ n }) {
 }
 
 export default function BuildHistoryScreen({
-  room, now = Date.now(), controls = null, fit = null, profile = 'room',
+  room, now = Date.now(), controls = null, fit = null, profile = 'room', focus = null,
 }) {
   const [chosen, setFilter] = useState('all');
   // The room's window has no filters: it shows the story.
   const filter = controls ? chosen : 'all';
+  // A SENT MARK OPENED HISTORY (Consider, frame 4): Everything, scrolled to the entry, highlighted.
+  const target = focus ? focus.target : null;
+  const mainRef = useRef(null);
+  useEffect(() => {
+    if (!target) return;
+    setFilter('all');
+    const el = mainRef.current && mainRef.current.querySelector('.is-focus');
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+  }, [target, focus && focus.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const onOpenAsk = (controls && controls.onOpenAsk) || null;
   const asks = room.asks || [];
   // What the room gave, each marked (parity PLAN §2.8, H3). "Used" in Made so far is the same list
@@ -150,7 +186,7 @@ export default function BuildHistoryScreen({
   const noop = () => undefined;
   return (
     <div className="brm-screenbody brm-histscreen" data-capability="history">
-      <div className="brm-histmain">
+      <div className="brm-histmain" ref={mainRef}>
         {/* Claude's status, essential on every screen the room sees (owner, 17 Oct 2026). */}
         <ClaudeStatus rc={buildRoomContent('BUILD_HISTORY', profile, room, null, now)} />
         {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
@@ -167,7 +203,7 @@ export default function BuildHistoryScreen({
         ) : <p className="brm-empty">Claude&apos;s screenshots and mockups collect here as it works.</p>)}
         {(filter === 'all' || filter === 'decisions') && (shown.length ? (
           <ol className="brm-story" aria-label={filter === 'decisions' ? 'Decisions' : 'The story so far'}>
-            {storyShown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} />)}
+            {storyShown.map((it) => <StoryItem key={it.id} item={it} onOpen={onOpenAsk} focus={target} />)}
           </ol>
         ) : (
           <p className="brm-empty">{filter === 'decisions' ? 'Nothing decided yet.' : W.nothingYet}</p>

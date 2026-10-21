@@ -529,3 +529,44 @@ describe('review fixes', () => {
     await waitFor(() => expect(lastPost().body).toMatchObject({ detail: 'Both run on the laptop.' }));
   });
 });
+
+/*
+  THE WHY ON SEND B (owner, 19 Oct 2026: "add the why field to send B"). The
+  same Why line as Consider's: Claude reads it with the direction and History
+  keeps it. Optional; an empty one sends nothing extra, so the bodies the
+  Stage and the Host panel post stay equal.
+*/
+describe('the why on Send B', () => {
+  test('Change before sending: changed words prompt a why, and the why goes with the decision', async () => {
+    await openStage();
+    const win = await openEdit();
+    const box = within(win).getByRole('textbox', { name: 'Direction for Claude' });
+    fireEvent.change(box, { target: { value: 'Make it playful, with a light blue gradient' } });
+    expect(within(win).getByText("You changed the room's words. Saying why helps Claude, and the room sees it in History.")).toBeInTheDocument();
+    fireEvent.change(within(win).getByRole('textbox', { name: /Why\?/ }), { target: { value: 'the room agreed plain blue was too drab' } });
+    fireEvent.click(within(win).getByRole('button', { name: 'Send B to Claude' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({
+      action: 'decide', direction: 'Make it playful, with a light blue gradient', why: 'the room agreed plain blue was too drab',
+    }));
+  });
+
+  test('the Host panel sends its why too; with none, the body has no why at all', async () => {
+    const { DecidePanel } = require('../buildroom/BuildRoomPage');
+    rows = baseRows();
+    const view = state();
+    const ask = view.asks.find((x) => x.askId === '004');
+    const askAction = jest.fn(async () => ({ ask: {} }));
+    const run = async (fn) => fn();
+    const { unmount } = render(<DecidePanel ask={ask} busy={false} run={run} api={{ askAction }} playerCount={4} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /Why\?/ }), { target: { value: 'B reads better on old phones' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
+    await waitFor(() => expect(askAction).toHaveBeenCalledTimes(1));
+    expect(askAction.mock.calls[0][1]).toMatchObject({ action: 'decide', chosen: ['B'], why: 'B reads better on old phones' });
+    unmount();
+    render(<DecidePanel ask={ask} busy={false} run={run} api={{ askAction }} playerCount={4} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
+    await waitFor(() => expect(askAction).toHaveBeenCalledTimes(2));
+    expect(askAction.mock.calls[1][1]).not.toHaveProperty('why');
+  });
+});
+

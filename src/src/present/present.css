@@ -801,6 +801,44 @@ html.present-locked body {
 }
 .present .present-quote figcaption b { color: var(--text); font-weight: 600; }
 
+/* ---- the end's podium (PresentEnded): the stage's three cards, on the wall's ladder ---- */
+.present .present-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(28px * var(--fit, 1));
+  margin-top: calc(36px * var(--fit, 1));
+}
+.present .present-pod {
+  border: var(--hair) solid var(--present-line-strong);
+  border-radius: 16px;
+  padding: calc(24px * var(--fit, 1)) calc(28px * var(--fit, 1));
+  background: var(--present-mini);
+  text-align: center;
+  min-width: 0;
+}
+.present .present-pod-pl {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-meta) * var(--fit, 1));
+  letter-spacing: .13em;
+  color: var(--muted);
+}
+/* A name is content: it wraps, never ellipses (stage.css .pod .nm). */
+.present .present-pod-nm {
+  display: block;
+  font-size: calc(var(--L-secondary) * var(--fit, 1));
+  font-weight: 600;
+  margin: .2em 0 .08em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.present .present-pod-sc {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--L-primary) * var(--fit, 1));
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- a question for the room (PresentAsk) ---- */
 .present .present-ask-options { list-style: none; margin: calc(28px * var(--fit, 1)) 0 0; padding: 0; display: flex; flex-direction: column; gap: calc(16px * var(--fit, 1)); }
 /* The options lead with the question (config/roomContent.js): the secondary step. */

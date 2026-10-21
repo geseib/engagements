@@ -130,6 +130,12 @@ export default function HostActionBar({
   };
   const controlIds = [primary?.id, secondary?.id, tertiary?.id].join('|');
   useEffect(() => { disarm(); }, [controlIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  // THE BUTTON STOPPED NEEDING A SECOND PRESS (review #38, 19 Oct 2026). Show
+  // results pressed early arms it; the last ballots then land, the same button
+  // drops its `arm`, and the bar read the armed control's warning text from
+  // nothing: the host page went blank. An armed control without `arm` lets go.
+  const armedStill = [primary, secondary, tertiary].some((c) => c && c.id === armedId && c.arm);
+  useEffect(() => { if (armedId && !armedStill) disarm(); }, [armedId, armedStill]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
   const press = (control) => {
     if (!control) return;
@@ -142,10 +148,10 @@ export default function HostActionBar({
     disarm();
     onAction(control);
   };
-  const armedControl = [primary, secondary, tertiary].find((c) => c && c.id === armedId) || null;
+  const armedControl = [primary, secondary, tertiary].find((c) => c && c.id === armedId && c.arm) || null;
   const labelOf = (control) => (armedId === control.id && control.arm && control.arm.confirmLabel
     ? control.arm.confirmLabel : control.label);
-  const armClass = (control) => (armedId === control.id ? ' is-armed' : '');
+  const armClass = (control) => (armedId === control.id && control.arm ? ' is-armed' : '');
 
   // Space / → advance, so a presenter's clicker drives the room.
   useEffect(() => {

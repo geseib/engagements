@@ -569,6 +569,10 @@ export const W = Object.freeze({
   },
   armRunEarly: (k, j) => `Claude hasn't finished ${k}. Press again to send ${j}.`,
   armStop: 'Press again to stop the list.',
+  /** Show results with nobody in the room (0 of 0, QA 2026-10-18 C3). */
+  armNobodyHere: 'Nobody has joined yet. Press again to show results.',
+  /** Open voting held with no ideas (QA 2026-10-18 C2): why not, and the way on. */
+  noIdeasToVote: 'No ideas yet, so there is nothing to vote on. Wait for the room, or press Close without a vote on the Host screen.',
   /** HOST on the Stage: always home, in one press (D2). */
   hostBack: '← Host',
   hostKeys: 'Host screen (1 or P)',
@@ -602,11 +606,19 @@ export const W = Object.freeze({
   screensScope: 'Applies now',
   wallOpen: "Room's window ↗",
   wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
-  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History.',
+  wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History. While it is open, this laptop stays where it is.',
   wallNewLink: 'New link',
   wallNewLinkArmed: 'New link anyway',
   wallNewLinkWhy: 'Every open window stops until it is opened again from here. Press again to make a new link.',
-  wallNewLinkHint: 'Stops every window opened with the old link.',
+  // W1 (walk of 18 Oct): say why you would press it.
+  wallNewLinkLabel: 'Link shared by mistake?',
+  wallNewLinkHint: 'A new link cuts off every window opened with the old one, so only a window you open again from here shows the room.',
+  // TWO SCREENS ON THE LAPTOP (owner, 19 Oct 2026, item 2): while the room's
+  // window is open, the laptop stays where it is and these send the screen.
+  wallSees: 'The room sees',
+  wallSendTo: (label) => `Show ${label} on the room's window (this laptop stays where it is)`,
+  wallSeeHere: 'See it here',
+  wallSeeHereHint: "Show the room's screen on this laptop too. 1 brings you back to Host.",
   wallNewLinkDone: 'New link made. Open the room’s window again.',
   // THE RELEASE GATE (owner, 17 Oct 2026, parity PLAN §2c): Claude's posts wait in the queue for the host.
   postWants: 'Claude wants to show the room',
@@ -619,6 +631,43 @@ export const W = Object.freeze({
   postsSwitch: "Check Claude's posts before the room sees them",
   postsNote: "On: Claude's updates and screenshots wait in Waiting for you until you release them.",
   alertPosts: (n) => (n === 1 ? 'Claude wants to show 1 thing' : `Claude wants to show ${n} things`),
+  // CONSIDER AND THE SENT MARKS (docs/design/build-room-consider, owner 19 Oct 2026).
+  consider: 'Consider',
+  considerEyebrow: (askNo) => (askNo ? `Consider · from the room · Ask ${askNo}` : 'Consider · from the room'),
+  considerQueue: 'Queue for the room',
+  considerQueueHint: "Yes/no, feedback, or add it to a vote. The room sees the idea's words.",
+  considerSend: 'Send to Claude',
+  considerSendHint: 'Now, or Later. The ask keeps running.',
+  considerWords: "What Claude gets (the room's words to start; change them if you like)",
+  considerWhy: 'Why? (Claude reads this; History keeps it)',
+  decideWhyHint: "You changed the room's words. Saying why helps Claude, and the room sees it in History.",
+  decideWhyPlaceholder: 'Optional: why these words',
+  considerChanged: "You changed the room's words. Saying why helps Claude, and the room sees it in History.",
+  considerEsc: 'Esc closes; nothing is lost',
+  considerRound: 'How the room answers',
+  considerYesNo: 'Yes or no',
+  considerFeedback: 'Feedback',
+  considerToVote: 'Add to a vote',
+  considerToIdeas: 'Add to the open Ideas ask',
+  considerQuestion: 'Your question',
+  considerYesNoQ: 'Should we do this?',
+  considerFeedbackQ: 'What would make this better?',
+  considerVoteNote: 'It waits in Waiting for you, marked Queued for the room. Tick it with others and put them to a vote.',
+  considerAskNote: 'It waits in Waiting for you as a new ask. It opens when you open it.',
+  considerIdeasNote: 'It joins the Ideas ask the room is answering now.',
+  considerDone: 'Queued for the room.',
+  // The tick is an Icon beside the words (BuildConsider SentMark): no glyph in the copy (tests/build-room-copy.js).
+  markSent: 'Sent to Claude',
+  markReworded: 'Sent to Claude, reworded',
+  markLater: 'Sent to Claude, for later',
+  markQueued: 'Queued for the room',
+  markOpens: 'Opens History at this entry',
+  historyAsWritten: 'sent as written',
+  likedBy: (n) => `liked by ${n}`,
+  whyLabel: 'Why:',
+  storyFromRoom: (askNo) => (askNo ? `Ask ${askNo} · from the room` : 'From the room'),
+  historySection: 'History',
+  showingEntry: 'showing the entry',
 });
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */

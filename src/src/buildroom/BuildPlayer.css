@@ -1121,3 +1121,9 @@
 .bpl .bpl-kids { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .bpl .bpl-kids li { font-size: var(--plr-t-secondary); color: var(--bpl-muted); overflow-wrap: anywhere; }
 .bpl .bpl-kids b { color: var(--text); font-weight: 600; }
+
+/* What went to Claude, and why (Consider, frame 6): the room's words struck through, what Claude got, the host's why. */
+.bpl .bpl-story-mark { margin: 0 0 2px; font-weight: 700; }
+.bpl .bpl-story-was { color: var(--muted); }
+.bpl .bpl-story-got { margin: 2px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.bpl .bpl-story-why { margin: 4px 0 0; padding-left: 8px; border-left: 3px solid var(--muted); overflow-wrap: anywhere; }

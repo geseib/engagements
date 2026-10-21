@@ -10,7 +10,20 @@
  * screens offer it.
  */
 export const SURFACES_KEY = 'engage.surfaces';
-export const TWO_SURFACE_TYPES = ['call-and-answer'];
+/*
+  'build' since 19 Oct 2026 (parity PLAN §2.7, B9): the Build Room asks
+  "Where will the room watch?" and stores the same choice. Who reads this:
+    twoSurfacesOn / twoSurfacesHere   GameHostPage and HostRemote, neither of
+                                      which ever holds a Build Room session (it
+                                      lives at /build, BuildRoomPage); HostRemote
+                                      also refuses 'build' itself, since its
+                                      PRESENT link has no wall key
+    QuickstartMenu                    Quick start offers no Build Room sets
+    SessionSetupPanel, GameHostPage   the round types' Settings and Setup
+  The Build Room reads the stored choice through config/roomScreen.js, and its
+  room's window through presentHref(…, { type: 'build', k }).
+*/
+export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
 
 function overrideFrom(search) {
   try {
@@ -32,6 +45,21 @@ export function twoSurfacesOn({ env, search, storage, gameType } = {}) {
   try { stored = storage ? storage.getItem(SURFACES_KEY) : null; } catch (e) { stored = null; }
   if (stored === 'two') return true;
   if (stored === 'classic') return false;
+  return env === 'development';
+}
+
+/**
+ * ONE PAGE, ONE CHOICE (review #38, test 5b908b65): the host page decides from
+ * the choice it holds (read once when it opens, changed only by a choice made
+ * on it), never by re-reading storage on every render. Storage is shared by
+ * every tab in this browser (another host tab, a Build Room, a link carrying
+ * `?surfaces=`), so re-reading it flipped a page set to One screen back to the
+ * console on the next session update with nobody choosing.
+ */
+export function twoSurfacesFor(choice, { gameType, env } = {}) {
+  if (!TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer')) return false;
+  if (choice === 'two') return true;
+  if (choice === 'classic') return false;
   return env === 'development';
 }
 

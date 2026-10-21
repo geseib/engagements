@@ -35,6 +35,8 @@ const CW = Object.freeze({
   theQuestion: 'The question',
   onTheWall: 'On the wall now',
   onTheWallShort: 'On the wall',
+  // Voting on the overview: every answer is on the room's window (19 Oct 2026).
+  allAnswers: 'All answers',
   pressToWall: 'Press a response to put it on the wall.',
   pressToWallOrQuestion: 'Press a response, or the question, to put it on the wall.',
   theBallot: 'The ballot, in the order the room sees it',

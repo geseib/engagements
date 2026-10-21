@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consider and Sent Marks</title>
+<style>
+:root {
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A; --text: #F4EDE4; --muted: #9BA8BE;
+  --primary: #F6A94C; --secondary: #7CA7E6; --success: #4FB286; --success-text: #6FD0A4;
+  --rule: rgba(155,168,190,.22); --claude: #E3926F;
+  --t-floor: 12px; --t-label: 13px; --t-body: 15px; --t-head: 19px; --t-title: 24px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #08101F; color: var(--text); font: 15px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+.page { max-width: 1480px; margin: 0 auto; padding: 24px 16px 80px; }
+.page > h1 { font-size: 22px; margin: 0 0 6px; }
+.lede { color: var(--muted); margin: 0 0 22px; max-width: 980px; }
+.shot { margin: 0 0 44px; }
+.shot > h2 { font-size: 17px; margin: 0 0 4px; }
+.why { color: var(--muted); font-size: 14px; margin: 0 0 12px; max-width: 980px; }
+.laptop { width: 1440px; max-width: 100%; background: var(--bg); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.top { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); font-size: var(--t-label); }
+.top b { font-size: var(--t-body); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 7px; background: var(--surface); color: var(--text); font-size: var(--t-label); white-space: nowrap; }
+.chip.on { border-color: var(--secondary); background: rgba(124,167,230,.16); }
+.chip.ok { color: var(--success-text); border-color: rgba(79,178,134,.5); }
+.grow { flex: 1; }
+.strip { display: flex; gap: 6px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--rule); font-size: var(--t-label); color: var(--muted); }
+.strip .chip.dim { opacity: .55; }
+.body { display: grid; grid-template-columns: 280px 1fr 330px; min-height: 560px; }
+.rail { border-right: 1px solid var(--rule); }
+.slot { padding: 12px 14px; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: var(--t-body); }
+.slot.open { display: block; }
+.slot .n { color: var(--primary); }
+.slot small { color: var(--muted); font-size: var(--t-label); }
+.main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.side { border-left: 1px solid var(--rule); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+.card h3 { margin: 0 0 4px; font-size: var(--t-head); }
+.kicker { font-size: var(--t-floor); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.part { display: flex; align-items: center; gap: 16px; border-color: var(--primary); background: rgba(246,169,76,.08); }
+.part .s { font-size: var(--t-head); flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--text); font-weight: 600; font-size: var(--t-body); white-space: nowrap; }
+.btn.go { background: var(--primary); color: #1B2942; border-color: var(--primary); }
+.btn.claude { border-color: var(--claude); color: #F3B79C; }
+.btn.empty { border-style: dashed; color: var(--muted); background: transparent; font-weight: 500; }
+.btn.sm { padding: 5px 10px; font-size: var(--t-label); }
+.fold { display: flex; justify-content: space-between; padding: 9px 2px; border-bottom: 1px solid var(--rule); font-size: var(--t-body); }
+.note { border-left: 3px solid var(--secondary); padding: 8px 12px; background: rgba(124,167,230,.08); font-size: 14px; color: var(--text); border-radius: 0 8px 8px 0; }
+.note b { color: var(--secondary); }
+.idea { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+.idea .txt { flex: 1; }
+.idea .meta { color: var(--muted); font-size: var(--t-label); }
+.sent { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: var(--t-label); font-weight: 600; color: #F3B79C; border: 1px solid rgba(227,146,111,.6); background: rgba(227,146,111,.10); text-decoration: underline; text-underline-offset: 3px; }
+.queued { display: inline-flex; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: var(--t-label); font-weight: 600; color: var(--secondary); border: 1px solid rgba(124,167,230,.55); }
+.panel { background: var(--surface-2); border: 1px solid var(--secondary); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.opt { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+.opt.on { border-color: var(--claude); }
+.opt h4 { margin: 0 0 4px; font-size: var(--t-body); }
+.opt p { margin: 0; color: var(--muted); font-size: var(--t-label); }
+.field { background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: var(--t-body); }
+.field.why { color: var(--text); }
+.lbl { font-size: var(--t-label); color: var(--muted); margin: 0 0 4px; }
+.hint { font-size: var(--t-label); color: var(--muted); }
+.hist { display: flex; flex-direction: column; gap: 10px; }
+.entry { border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+.entry.hl { border-color: var(--claude); box-shadow: 0 0 0 3px rgba(227,146,111,.25); }
+.entry .when { font-size: var(--t-floor); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.from { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(155,168,190,.5); }
+.to { font-weight: 600; }
+.mark { display: inline-block; font-size: var(--t-floor); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); margin-right: 6px; }
+.callout { font-size: 13px; color: var(--primary); }
+.legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.legend div { background: #0B1426; border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--muted); }
+.legend b { color: var(--text); }
+.phone { width: 390px; background: var(--bg); border: 1px solid var(--rule); border-radius: 26px; padding: 18px 16px; }
+.row2 { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+@media (max-width: 760px) { .body { grid-template-columns: 1fr; } .legend { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Build Room: the console's layout, and considering any idea at any time</h1>
+  <p class="lede">For the owner, 19 Oct. Frame 1 answers question (d), the side columns, and shows what (b) "the main button slot" and (c) "the strip with no ask open" mean. Frames 2–6 are the new request: from any list, consider an item, then queue it to the room or send it to Claude. Every item that reached Claude carries a mark, and the mark opens History at the entry, where it shows what was sent, how the host changed it, and why. The laptop uses the console's real type sizes. The session is invented.</p>
+
+  <!-- 1 -->
+  <section class="shot">
+    <h2>1 · The laptop on two screens: four slots on the left, folds on the right (d)</h2>
+    <p class="why">This matches Call &amp; Answer's console as it shipped on 18 Oct. "Your part now" is a card at the top of the centre, and the main button sits in that card. The left column keeps four slots, as Call &amp; Answer's does. Decided, Timeline, Asks, Screenshots and Room brief fold into the right column instead of becoming more slots.</p>
+    <div class="laptop">
+      <div class="top"><b>Engagements</b><span style="color:var(--muted)">Volunteer sign-up for the food bank</span><span class="grow"></span>
+        <span class="chip">Join <b style="color:var(--primary)">7924</b></span><span class="chip">Share demo · 6 opened</span>
+        <span class="chip">Room's window ↗</span><span class="chip ok">● On, full screen</span>
+        <span style="color:var(--muted)">The room sees:</span><span class="chip on">Stage 2</span><span class="chip">Build 3</span><span class="chip">History 4</span></div>
+      <div class="strip"><span class="chip">✓ Opening</span>›<span class="chip on"><b>Between asks</b></span><span class="chip dim">Ask</span><span class="chip dim">Collect</span><span class="chip dim">Settle</span><span class="chip dim">Send to Claude</span>›<span class="chip">Wrap up</span>
+        <span class="grow"></span><span class="callout">(c) The strip stays with no ask open, dimmed, and the left end says where you are</span></div>
+      <div class="body">
+        <div class="rail">
+          <div class="slot open"><div style="display:flex;justify-content:space-between"><b>▾ Waiting for you</b><span class="n">2</span></div>
+            <small>Claude's question, Maya's idea… (as today)</small></div>
+          <div class="slot"><span>▸ People</span><small>14 here</small></div>
+          <div class="slot"><span>▸ Later</span><small>3 · Points inside</small></div>
+          <div class="slot"><span>▸ Session</span><small style="color:var(--success-text)">● Claude connected</small></div>
+          <div style="padding:12px 14px" class="callout">(d) Four slots, as Call &amp; Answer's left column has</div>
+        </div>
+        <div class="main">
+          <div class="card part"><div><p class="kicker">Your part now</p><div class="s">Open Claude's question, or tell Claude what is next.</div></div>
+            <span class="btn empty">No main move now</span></div>
+          <div class="callout">(b) "The main button slot" is the orange button in this card. Between asks there is no single next move, so the slot stays empty ("No main move now") rather than guessing one. When an ask is open, it holds that ask's next step, for example "Show results".</div>
+          <div class="card" style="display:flex;align-items:center;gap:12px"><div style="flex:1"><h3 style="font-size:var(--t-body)">Open Claude's question</h3><span class="hint">Should each shift show how many spots are left?</span></div><span class="btn sm">Open it</span></div>
+          <div class="card" style="display:flex;align-items:center;gap:12px"><div style="flex:1"><h3 style="font-size:var(--t-body)">Put 2 ideas to a vote</h3></div><span class="btn sm">To a vote</span></div>
+          <div class="card" style="display:flex;align-items:center;gap:12px"><div style="flex:1"><h3 style="font-size:var(--t-body)">Tell Claude</h3><span class="hint">Do now, keep in mind, or ask Claude</span></div><span class="btn sm">Write</span></div>
+        </div>
+        <div class="side">
+          <div class="card"><p class="kicker">Now</p>Last decided, ask 2: <b>a week calendar</b>. Claude has it.</div>
+          <div class="fold"><span>▾ Decided</span><small style="color:var(--muted)">2</small></div>
+          <div class="fold"><span>▸ Timeline</span><small style="color:var(--muted)">18</small></div>
+          <div class="fold"><span>▸ Asks</span><small style="color:var(--muted)">2</small></div>
+          <div class="fold"><span>▸ Screenshots</span><small style="color:var(--muted)">6</small></div>
+          <div class="fold"><span>▸ Room brief</span><small style="color:var(--muted)">5</small></div>
+          <div class="callout">(d) The rest fold here, in the side column</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div><b>(b) the main button slot.</b> The one orange button the host presses next, in the "Your part now" card (Space presses it). Recommended and taken: empty between asks.</div>
+      <div><b>(c) the strip.</b> The row of steps under the top line: Opening › Ask · Collect · Settle · Send to Claude › Wrap up. Recommended and taken: it stays between asks, dimmed.</div>
+      <div><b>(a) and (e), you said yes:</b> on the result, the second button is "Spin the wheel"; while the room votes, People ticks who has answered, by name (never what they chose).</div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="shot">
+    <h2>2 · Ideas arriving in an open Ideas ask: Consider on any one of them</h2>
+    <p class="why">The ask runs as normal (collect, vote, settle). The host doesn't have to wait for it: <b>Consider</b> on any idea, as it arrives, opens the panel in frame 3. The same Consider is on answers arriving in a Rate or Choose ask, on every option after a vote, and on cards in Waiting for you.</p>
+    <div class="laptop">
+      <div class="top"><b>Ask 3 · Ideas · Collecting</b><span style="color:var(--muted)">What would make sign-up feel friendlier?</span><span class="grow"></span><span class="chip">9 of 14 sent ideas</span></div>
+      <div class="main" style="max-width:900px">
+        <div class="idea"><div class="txt">make the background blue<div class="meta">2 min ago · 3 more people liked it</div></div>
+          <span class="sent">✓ Sent to Claude, reworded</span><span class="btn sm">Consider</span></div>
+        <div class="idea"><div class="txt">show a photo of last year's volunteers<div class="meta">1 min ago</div></div>
+          <span class="queued">Queued for the room</span><span class="btn sm">Consider</span></div>
+        <div class="idea"><div class="txt">let people pick a shift before making an account<div class="meta">just now</div></div>
+          <span class="btn sm">Consider</span></div>
+        <div class="idea"><div class="txt">bigger buttons for older phones<div class="meta">just now</div></div>
+          <span class="btn sm">Consider</span></div>
+        <p class="hint">The marks: <span class="sent">✓ Sent to Claude</span> opens History at the entry (frame 4). <span class="queued">Queued for the room</span> means it is waiting in Put it to the room. No names, here or on the wall.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="shot">
+    <h2>3 · Consider: queue it for the room, or send it to Claude, with the why</h2>
+    <p class="why">Two doors. <b>Queue for the room</b> keeps the idea's words and lets you pick the round: yes/no, feedback, or add it to a vote. <b>Send to Claude</b> starts from the room's words, and you can change them. When you change them, a "Why?" line asks you to say why, because Claude reads it and History keeps it. The why is optional; the hint suggests one.</p>
+    <div class="laptop" style="padding:18px">
+      <div class="panel" style="max-width:860px">
+        <div><p class="kicker">Consider · from the room · Ask 3</p><h3 style="margin:0;font-size:var(--t-head)">“make the background blue”</h3></div>
+        <div class="choice">
+          <div class="opt"><h4>Queue for the room</h4><p>Yes/no, feedback, or add it to a vote. The room sees the idea's words.</p></div>
+          <div class="opt on"><h4 style="color:#F3B79C">Send to Claude</h4><p>Now, or Later. The ask keeps running.</p></div>
+        </div>
+        <div><p class="lbl">What Claude gets (the room's words to start; change them if you like)</p>
+          <div class="field">make the background a gradient, light blue to white</div></div>
+        <div><p class="lbl">Why? (Claude reads this; History keeps it)</p>
+          <div class="field why">the room tweaked the suggestion and agreed plain blue was too drab</div>
+          <p class="hint">You changed the room's words. Saying why helps Claude, and the room sees it in History.</p></div>
+        <div style="display:flex;gap:10px;align-items:center"><span class="btn claude">Send to Claude now</span><span class="btn">Later</span><span class="grow"></span><span class="hint">Esc closes; nothing is lost</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="shot">
+    <h2>4 · The mark opens History at the entry</h2>
+    <p class="why">Click <span class="sent">✓ Sent to Claude, reworded</span> anywhere (the ideas list, Decided, Asks, a vote's options) and the History section opens in the side column, scrolled to the entry and highlighted. It shows the room's words, what Claude got, and the why. On one screen the same thing opens in the History panel.</p>
+    <div class="laptop">
+      <div class="body" style="grid-template-columns:1fr 420px;min-height:420px">
+        <div class="main">
+          <div class="idea"><div class="txt">make the background blue<div class="meta">Ask 3 · Ideas</div></div><span class="sent">✓ Sent to Claude, reworded</span></div>
+          <div class="idea"><div class="txt">let people pick a shift before making an account<div class="meta">Ask 3 · Ideas</div></div><span class="sent">✓ Sent to Claude</span></div>
+        </div>
+        <div class="side">
+          <div class="fold"><b>▾ History</b><small style="color:var(--muted)">showing the entry</small></div>
+          <div class="hist">
+            <div class="entry"><div class="when">10:38 · Ask 2 · decided</div>The room chose <b>a week calendar</b>. <span class="mark">chosen by the room</span></div>
+            <div class="entry hl"><div class="when">10:44 · Ask 3 · from the room · sent to Claude</div>
+              <div class="from">make the background blue</div>
+              <div class="to">→ make the background a gradient, light blue to white</div>
+              <div class="note" style="margin-top:8px"><b>Why:</b> the room tweaked the suggestion and agreed plain blue was too drab</div>
+              <div style="margin-top:8px"><span class="mark">reworded by the host</span><span class="mark">liked by 4</span></div></div>
+            <div class="entry"><div class="when">10:46 · Ask 3 · from the room · sent to Claude</div>
+              <div class="to">let people pick a shift before making an account</div>
+              <div style="margin-top:8px"><span class="mark">sent as written</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="shot">
+    <h2>5 · Votes too: an option after a vote carries the same mark</h2>
+    <p class="why">After a Choose or Rate vote, each option has Consider and, once it reached Claude, the mark. That covers sending the runner-up too ("build B as well, later"). The normal Send B to Claude still works and marks B the same way.</p>
+    <div class="laptop" style="padding:16px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:1100px">
+        <div class="card"><p class="kicker">A · 3 votes</p><h3>The pricing page</h3><div style="margin-top:10px;display:flex;gap:8px"><span class="btn sm">Consider</span></div></div>
+        <div class="card" style="border-color:var(--primary)"><p class="kicker" style="color:var(--primary)">B · 9 votes · the room's pick</p><h3>The sign-up flow</h3><div style="margin-top:10px;display:flex;gap:8px;align-items:center"><span class="sent">✓ Sent to Claude</span></div></div>
+        <div class="card"><p class="kicker">C · 2 votes</p><h3>A live demo room</h3><div style="margin-top:10px;display:flex;gap:8px;align-items:center"><span class="sent">✓ Sent to Claude, for later</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="shot">
+    <h2>6 · Phones and the room's window: the same marks, no names</h2>
+    <p class="why">A phone's History shows each sent item with its mark and the why, and marks the player's own idea "yours". The room's window, on History, shows the same entry. Nobody's name appears anywhere.</p>
+    <div class="row2">
+      <div class="phone">
+        <p class="kicker">History</p>
+        <div class="entry hl"><div class="when">10:44 · yours · sent to Claude</div>
+          <div class="from">make the background blue</div>
+          <div class="to">→ make the background a gradient, light blue to white</div>
+          <div class="note" style="margin-top:8px"><b>Why:</b> the room tweaked the suggestion and agreed plain blue was too drab</div></div>
+      </div>
+      <div class="note" style="max-width:520px">Changes to today: the server stores the why next to the provenance stamp (IdeaId, AsWritten, reworded) that History already reads. Each list item looks up its sent entry and links to it. History opens at an entry id. "Queued for the room" is a new state on the idea. Nothing changes in the normal ask flow.</div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

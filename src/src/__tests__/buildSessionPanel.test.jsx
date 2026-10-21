@@ -124,7 +124,8 @@ async function openRoom(state, players) {
   await waitFor(() => expect(playerGets().length).toBeGreaterThan(0));
 }
 
-const sessionButton = () => screen.getByRole('button', { name: /^SESSION/i });
+// With a room's window up the laptop is the console (B8): its rail's Session slot opens the same panel.
+const sessionButton = () => screen.queryByRole('button', { name: /^SESSION/i }) || document.querySelector('.hc--build .bc-sess');
 const panel = () => screen.getByRole('dialog', { name: 'Session' });
 const openPanel = () => { fireEvent.click(sessionButton()); return panel(); };
 const openSettings = () => {
@@ -816,7 +817,9 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
     expect(g).not.toBeNull();
     expect(g).toHaveAttribute('data-capability', 'screens');
     expect(within(g).getByText('Applies now')).toBeInTheDocument();
-    const link = within(g).getByRole('link', { name: /Room's window/ });
+    // W2: the row is labelled Room's window; its button reads Open ↗.
+    expect(within(g).getByText("Room's window")).toBeInTheDocument();
+    const link = within(g).getByRole('link', { name: 'Open ↗' });
     expect(link).toHaveAttribute('href', `/present?gameId=${GAME}&type=build&k=${encodeURIComponent(KEY)}`);
     expect(link).toHaveAttribute('data-capability', 'room-window');
     expect(link).toHaveAttribute('target', '_blank');
@@ -825,13 +828,13 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
   test('the window\'s status is the server\'s: on, full screen; not open with no viewer', async () => {
     await openRoom(withWall(hostState()));
     openSettings();
-    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: on, full screen");
+    expect(within(group()).getByRole('status')).toHaveTextContent(/^On, full screen$/);
   });
 
   test('no viewer on the session reads as not open, whatever the detail says', async () => {
     await openRoom(withWall(hostState(), { presenting: 0 }));
     openSettings();
-    expect(within(group()).getByRole('status')).toHaveTextContent("Room's window: not open");
+    expect(within(group()).getByRole('status')).toHaveTextContent(/^Not open$/);
   });
 
   test('the room screen size posts build/wall {profile}', async () => {
@@ -874,7 +877,7 @@ describe('Screens: the room\'s window (parity PLAN §2.7, B9 in part)', () => {
   test('an older server with no wall key: the size is offered, no link to open', async () => {
     await openRoom(hostState());
     openSettings();
-    expect(within(group()).queryByRole('link', { name: /Room's window/ })).toBeNull();
+    expect(within(group()).queryByRole('link', { name: 'Open ↗' })).toBeNull();
     expect(within(group()).getByRole('combobox')).toBeInTheDocument();
   });
 });

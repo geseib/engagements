@@ -29,6 +29,8 @@
  *   onPick(id)            a pick on the board while the room still answers (asks first),
  *   onHideCodes, onTakeDown, onPointLater, onPointsMove, onRunNext(force), onRunSkip, onRunStop,
  *   onHost, alert         HOST and its count (hostAlert),
+ *   present               { href, presenting, title }: the room's window, the
+ *                         dock's PRESENT (owner, 19 Oct 2026), or null,
  *   onSession, panelOpen, askingCount,
  *   overlayOpen           a dialog of the page is up: the keys are its,
  * }
@@ -323,6 +325,7 @@ export default function BuildStageScreen({
             data-capability={bar.primary ? 'ask-moves' : undefined}
             status={status}
             kbd={kbd}
+            present={c.present || null}
             home={<HostHome alert={c.alert} onHost={c.onHost} />}
             onSetup={c.onSession}
             setupCount={c.askingCount || 0}
