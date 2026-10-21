@@ -781,8 +781,8 @@ const buildRoom = {
           items: [
             { title: 'Open Build Room', text: 'From the welcome screen. Name the build, and say who sets the goal: the room, or you.' },
             { title: 'Install the plugin', text: 'The Connect window shows one command. Run it in a terminal, once per laptop. Run it again when the room says the plugin is out of date.' },
-            { title: 'Start Claude Code', text: 'The second command makes a new folder under ~/build-room, with git, and starts Claude Code there already connected.' },
-            { title: 'Kick off', text: 'Paste the Kick off prompt. Claude reads the room, says what it plans, and starts.' },
+            { title: 'Start Claude Code', text: 'Mint a key, and the start command is copied. Paste it into a terminal: it makes a new folder under ~/build-room, with git, starts Claude Code there and kicks off. Claude reads the room, says what it plans, and starts.' },
+            { title: 'Coming back', text: 'Closed Claude Code, or restarted the laptop? Open Connect Claude Code: it shows one paste that opens Claude Code in the same folder and picks up where it left off, with no new key. Out of date, the same paste updates the plugin first. On another laptop, press Show all the steps.' },
           ],
         },
       ],

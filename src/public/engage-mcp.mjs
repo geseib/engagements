@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.24.2';
+const VERSION = '1.25.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -93,6 +93,17 @@ const tierOf = (session) => (session && TIERS.includes(session.tier) ? session.t
 
 /** The project Claude Code is working in (the plugin's hooks and tools act here). */
 const projectDir = () => process.env.CLAUDE_PROJECT_DIR || process.cwd();
+/**
+ * The project folder as the host's Connect window shows it (1.25.0, owner 18
+ * Oct: "we cant assume they have claude cli running"): "~/build-room/x" under
+ * the home folder; outside it, the folder's name alone. Never the full path,
+ * which carries the laptop's user name.
+ */
+function folderForHost(dir = projectDir(), home = homedir()) {
+  const rel = pathRelative(home, dir);
+  if (rel && !rel.startsWith('..') && !isAbsolutePath(rel)) return `~/${rel.split(pathSep).join('/')}`.slice(0, 200);
+  return String(dir).split(/[\\/]/).filter(Boolean).pop() || '';
+}
 /** Per project: which Build Room this folder is connected to. Never committed. */
 const sessionFile = (dir = projectDir()) => pathJoin(dir, '.engage', 'session.json');
 /** Per laptop and tier: the Engage API this install talks to (written by --install-plugin). */
@@ -235,6 +246,9 @@ async function api(method, path, body, signal, { background = false } = {}) {
         Accept: 'application/json',
         // Node's fetch, never a browser: no CORS preflight, so the API's CORS list needs no change.
         'X-Engage-Plugin': VERSION,
+        // Where this project lives, so the host's Connect window can say how to come back
+        // (1.25.0): relative to the home folder, never a path with the laptop's user name.
+        ...(/^state(\?|$)/.test(path) ? { 'X-Engage-Folder': encodeURIComponent(folderForHost()) } : {}),
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -301,10 +315,12 @@ function errorResult(e, tool) {
         'the host\'s Claude uses share_repo, propose_task, get_share, review_share and announce_merge.',
         'Call room_status: it says which you are.');
     } else if (e.status === 401 || e.status === 403) {
+      // T2 (1.25.0): what to ask the host for, in their words, instead of a bare refusal.
+      const code = CONFIG.gameId || '';
       lines.push('',
-        'The session key was refused. It may have been revoked (minting a new key revokes the old one),',
-        'it may belong to a different session, or the session may have ended. The host can mint a new key',
-        'on the session\'s Build Room page and re-run the "claude mcp add engage …" command it shows.');
+        `This folder's key no longer opens Build Room ${code}: a newer key was minted, it was revoked, or the session has ended.`,
+        'Ask the host for a new start command (Connect Claude Code › Show all the steps) and paste it into a terminal,',
+        `or paste just the new key here: ${slash('kickoff')} eng_${code || '<code>'}_…`);
     } else if (e.status === 404) {
       lines.push('', crew
         ? 'Engage could not find that. Check the shareId or taskId (room_status lists the crew\'s tasks and early looks).'
@@ -521,6 +537,20 @@ function pluginVersionLine(latest) {
   if (cmp === 0) return `Engage plugin ${VERSION}: the latest.`;
   if (cmp > 0) return `Engage plugin ${VERSION} (this Engage knows ${v} as its latest).`;
   return `Engage plugin ${VERSION} is older than the latest, ${v}. Tell the host: they update it from Connect Claude Code in the Build Room, then restart Claude Code here. Until then, features newer than ${VERSION} do not work.`;
+}
+
+/**
+ * RESUMING (1.25.0): kickoff on a room that already has work picks up rather
+ * than planning again. '' for a new room.
+ */
+function resumeLine(st) {
+  const asks = Array.isArray(st.asks) ? st.asks : [];
+  const decided = asks.filter((a) => a.status === 'decided').length;
+  const posts = (Array.isArray(st.log) ? st.log : []).filter((l) => l.by === 'agent' && ['progress', 'milestone', 'showing', 'answer', 'checkpoint'].includes(l.kind));
+  if (!decided && !posts.length) return '';
+  const last = posts.map((l) => String(l.createdAt || '')).sort().pop();
+  const at = last && Number.isFinite(Date.parse(last)) ? new Date(last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  return `RESUMING: Claude has worked here before. ${decided} decision${decided === 1 ? '' : 's'}, ${posts.length} update${posts.length === 1 ? '' : 's'}${at ? `; the last at ${at}` : ''}. Do not post a new plan: say where things stand in one update, pick up the host's latest direction (check_directions), and carry on.`;
 }
 
 function renderState(st) {
@@ -1551,10 +1581,12 @@ function syncPointOutcomes(st) {
 
 const HANDLERS = {
   async room_status(args, ctx) {
-    const st = await api('GET', args && args.kickoff === true ? 'state?kickoff=1' : 'state', undefined, ctx.signal);
+    const kickoff = Boolean(args && args.kickoff === true);
+    const st = await api('GET', kickoff ? 'state?kickoff=1' : 'state', undefined, ctx.signal);
     syncPointOutcomes(st);
     const paused = BACKGROUND ? '' : '\n\nNOT CONNECTED IN THIS WINDOW YET: the room\'s live view of your work and the Wi-Fi share start only after connect. Call connect now (no key needed: it reuses this folder\'s).';
-    return ok(renderState(st) + paused, st.inbox);
+    const resume = kickoff ? resumeLine(st) : '';
+    return ok((resume ? `${resume}\n\n` : '') + renderState(st) + paused, st.inbox);
   },
 
   async ask_room_for_ideas(args, ctx) {
@@ -1802,7 +1834,8 @@ const HANDLERS = {
       : start.fresh ? `Started a new project here: a git repository on main with README.md, DECISIONS.md and .gitignore, committed as "Start: ${s(st.title) || start.name}".`
         : start.stayed || `This folder already had work in it, so the room's work goes on the branch ${start.branch}; its main is untouched.`;
     const pluginLine = plugins.error ? `\nCould not switch this folder to the ${PLUGIN_NAME} plugin (${plugins.error}). The other tiers' plugins still leave this folder alone.` : '';
-    return ok(`Connected this project (${projectDir()}) to Build Room ${m[1]}.\n${startLine}${pluginLine}\n\n${renderState(st)}\n\n` +
+    const resume = resumeLine(st);
+    return ok(`Connected this project (${folderForHost()}) to Build Room ${m[1]}.\n${startLine}${pluginLine}${resume ? `\n${resume}` : ''}\n\n${renderState(st)}\n\n` +
       'How to keep this project tidy is in the ' + SKILL_NAME + ' skill: one commit per decision or milestone with the commit tool, DECISIONS.md and README.md kept current, and every turn saved as a hidden snapshot automatically.', st.inbox);
   },
 
@@ -2224,7 +2257,8 @@ const CLOSE_STEPS = [
 ];
 
 const PROMPTS = [
-  { name: 'kickoff', description: 'Start a Build Room session: read the room, restate the goal, plan out loud and post the plan.', arguments: [] },
+  { name: 'kickoff', description: 'Start or resume a Build Room session: connect, read the room, then plan out loud (new) or pick up where it left off (resumed).',
+    arguments: [{ name: 'key', description: 'The session key from the host\'s start command (eng_…); leave out to reconnect this folder with its saved key', required: false }] },
   { name: 'ideas', description: 'Ask the room for ideas about a topic, wait for the host\'s direction, then act on it.',
     arguments: [{ name: 'topic', description: 'What to ask the room about', required: true }] },
   { name: 'ab-mockups', description: 'Build N labelled variants (Choice A, B, …), let the room choose, then build the decision.',
@@ -2247,10 +2281,15 @@ const PROMPTS = [
 
 function promptText(name, args) {
   switch (name) {
-    case 'kickoff':
+    case 'kickoff': {
+      // 1.25.0 (owner, 18 Oct: "why not just kickoff as well?"): kickoff connects
+      // first, with the key the start command carries or the folder's own.
+      const key = s(args && args.key).trim();
       return [
         'We are starting a Build Room session in Engage: a live room is watching on a projector and will help decide what we build.',
         '',
+        `00. First call the connect tool${key && key !== '$ARGUMENTS' ? ` with key "${key}"` : key === '$ARGUMENTS' ? ' with key "$ARGUMENTS" (if that is empty, call it with no key: it reconnects this folder with its saved key)' : ' with no key (it reconnects this folder with its saved key)'}. If Engage refuses the key, stop and tell me exactly what it says.`,
+        '01. If room_status (step 1) or connect starts with RESUMING, this room already has work: do not plan again. Post one short update on where things stand, call check_directions, act on the host\'s latest direction, and carry on; then wait_for_direction as usual. Skip steps 2 to 6.',
         '0. Follow the ' + SKILL_NAME + ' skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
         '1. Call room_status with kickoff true. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
         '2. Restate the goal to me in one or two plain sentences.',
@@ -2260,6 +2299,7 @@ function promptText(name, args) {
         '5. If there is a meaningful first question for the room, ask it now (ask_room_for_ideas, ask_room_to_choose or ask_room_to_rate). Keep it short enough to read from the back of the room. Then start on any work that does not depend on the answer and call wait_for_room when you need it.',
         '6. If there is no real question yet, start building and post progress as you go.',
       ].join('\n');
+    }
     case 'ideas': {
       const topic = s(args.topic).trim() || '(no topic given — ask me what to ask about)';
       return [
@@ -4308,7 +4348,7 @@ function installPlugin(argv) {
   const plug = pathJoin(root, PLUGIN_NAME);
   const out = (...lines) => process.stdout.write(lines.join('\n') + '\n');
   const claude = (args) => spawnSync('claude', args, { encoding: 'utf8' });
-  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the connect command.'];
+  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the start command.'];
   // Which plugin this is, when it is not prod's: prod's engage is never touched from here.
   const tierNote = TIER === 'prod' ? '' : `This is the ${TIER} site's plugin, ${PLUGIN_NAME}, beside prod's engage: its commands are ${slash('connect')}, ${slash('kickoff')} and the rest.`;
 

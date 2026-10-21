@@ -634,11 +634,13 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await hostCall('POST', 'directions', { text: 'We need an old-school leaderboard' })).status, 201);
     let sent = (await hostCall('GET', 'state')).body.sent;
     assert.deepStrictEqual({ verb: sent.verb, text: sent.text, picked: sent.pickedAt }, { verb: 'told', text: 'We need an old-school leaderboard', picked: null });
+    await new Promise((r) => setTimeout(r, 3));
     await hostCall('POST', 'directions', { text: 'Pair sign-ups', as: 'later' });
     assert.strictEqual((await hostCall('GET', 'state')).body.sent.text, 'We need an old-school leaderboard', 'Later is held, not sent');
     await agentCall('GET', 'inbox');
     sent = (await hostCall('GET', 'state')).body.sent;
     assert.ok(sent.pickedAt && Date.parse(sent.pickedAt) >= Date.parse(sent.at), JSON.stringify(sent));
+    await new Promise((r) => setTimeout(r, 3)); // newer by the clock, not by a coin toss on the row key
     await hostCall('POST', 'directions', { text: 'Which font reads best from the back?', as: 'ask' });
     sent = (await hostCall('GET', 'state')).body.sent;
     assert.deepStrictEqual([sent.verb, sent.pickedAt], ['asked', null]);
@@ -1814,6 +1816,24 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await hostCall('GET', 'state')).body.plugin.outdated, true);
     await agentWith('GET', 'state', { 'x-engage-plugin': S.LATEST_PLUGIN });
     assert.strictEqual((await hostCall('GET', 'state')).body.plugin.outdated, false);
+  });
+  await check('1.25.0: the project folder Claude reports reaches the host\'s Connect window; a phone never sees it', async () => {
+    seed();
+    await agentWith('GET', 'state', { 'x-engage-folder': encodeURIComponent('~/build-room/volunteer sign-up') });
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.folder, '~/build-room/volunteer sign-up');
+    // A later call without it (any other route) keeps it.
+    await agentWith('GET', 'inbox', {});
+    assert.strictEqual((await hostCall('GET', 'state')).body.agent.folder, '~/build-room/volunteer sign-up');
+    const phone = JSON.stringify((await playCall('GET', 'state', { playerName: 'Priya', clientId: 'c-priya' })).body);
+    assert.ok(!phone.includes('~/build-room'), 'a phone saw the folder');
+  });
+  await check('1.25.0: an absolute path, a parent step, control characters or a broken encoding are not kept', async () => {
+    for (const bad of ['/Users/george/build-room/x', 'C:\\Users\\g\\x', '~/../etc', '~/a%0Ab', '%E0%A4%A']) {
+      seed();
+      await agentWith('GET', 'state', { 'x-engage-folder': bad.includes('%') ? bad : encodeURIComponent(bad) });
+      assert.strictEqual((await hostCall('GET', 'state')).body.agent.folder, '', bad);
+    }
+    assert.strictEqual(S.folderOf({ headers: { 'X-Engage-Folder': 'tips' } }), 'tips', 'a folder outside home: its name');
   });
   await check('Claude\'s own view and the phones never carry the plugin or its version', async () => {
     seed();
