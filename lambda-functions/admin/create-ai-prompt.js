@@ -12,6 +12,7 @@ const {
 const { requestedScope, callerUserId } = require('./shared/question-set-access');
 const tenant = require('./shared/tenant');
 const { encryptItem, encryptValue } = require('./shared/tenant-crypto');
+const promptVersions = require('./shared/prompt-versions');
 
 const tableName = process.env.TABLE_NAME;
 const aiPromptsBucket = process.env.AI_PROMPTS_BUCKET;
@@ -398,6 +399,17 @@ exports.handler = async (event) => {
       tags,
       s3Key,
       version,
+      // VERSION 1 OF ITS HISTORY (shared/prompt-versions.js). Metadata, never
+      // prose, so it is not in ENCRYPTED_FIELDS and needs no envelope.
+      latestVersion: version,
+      versionHistory: [promptVersions.historyEntry({
+        version,
+        s3Key,
+        savedAt: timestamp,
+        by: promptVersions.callerEmail(event) || promptStamp.createdBy || null,
+        how: requestBody.versionHow ===promptVersions.HOW.UPLOAD ? promptVersions.HOW.UPLOAD : promptVersions.HOW.EDIT,
+        hash: promptVersions.contentHash(promptContent),
+      })],
       createdAt: timestamp,
       updatedAt: timestamp,
       // WHOSE WORKIE THIS IS — scope, org and creator, written together.
