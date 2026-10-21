@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import HostNotificationsBell from './components/HostNotificationsBell';
 import { twoSurfacesHere, presentHref } from './config/surfaces';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
@@ -1447,6 +1448,9 @@ function HostRemote() {
           />
           <span className="hr-live-word">{connected ? 'Live' : 'Offline'}</span>
         </span>
+        {/* THE BELL (owner, 21 Oct 2026): the host's phone is private, so the
+            inbox rides here too; a click opens the console in a new tab. */}
+        <HostNotificationsBell newTab />
       </header>
       {access.status === ACCESS.OK ? <RemoteStepDots strip={strip} /> : null}
 

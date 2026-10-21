@@ -1,6 +1,7 @@
 import React from 'react';
 import CW from '../../config/consoleWords';
 import RoomWindowStatus from '../stage/RoomWindowStatus';
+import HostNotificationsBell from '../HostNotificationsBell';
 
 /**
  * THE CONSOLE'S TOP LINE (host console spec §3.1): the session's name, the
@@ -41,6 +42,9 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
       {/* A type's own top-line parts (the Build Room's Share demo, The room
           sees and the connection), after the window, in its order. */}
       {children}
+      {/* THE BELL (owner, 21 Oct 2026), last on the line. The laptop's private
+          screen; a click opens the console in a new tab so the session stays put. */}
+      <HostNotificationsBell newTab />
     </header>
   );
 }

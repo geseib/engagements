@@ -197,7 +197,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'A set you generate with AI — or questions you add to one — waits as a draft until you review and accept it. The set list shows drafts waiting at the top, the bell in the console\'s top line says when one is ready, and nothing is saved until you accept.',
+          text: 'A set you generate with AI — or questions you add to one — waits as a draft until you review and accept it. The set list shows drafts waiting at the top, the bell says when one is ready, and nothing is saved until you accept. The bell is on your start screen, in the two-screen console\'s top line and on your phone remote too, never on a screen the room sees; from a session it opens what it points to in a new tab, so the session stays where it is.',
         },
       ],
     },
