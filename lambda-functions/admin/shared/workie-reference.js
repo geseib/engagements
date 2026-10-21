@@ -83,7 +83,9 @@ const ASSEMBLY_LAYERS = Object.freeze([
     name: 'The honesty rule',
     text: 'On every prompt: facts come only from the material, from what the room said, or from general '
       + 'knowledge the model is certain of — never an invented number, name or quotation, nothing invented '
-      + 'about the organisation or event — and a missing piece is worked around, never mentioned.',
+      + 'about the organisation or event — and a missing piece is worked around, never mentioned. It ends '
+      + 'with what a ranking measures: which answers people preferred, not that the room agreed to a plan '
+      + 'or chose an owner.',
   }),
   Object.freeze({
     source: 'briefingLayer',

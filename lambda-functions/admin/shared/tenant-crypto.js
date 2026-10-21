@@ -332,6 +332,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'FullResponse',
     'MarkdownResponse',
     'DebugInfo',
+    // What the read check left (read-check.js): tokens are the read's words.
+    'ReadCheck',
   ]),
 
   /** SK=REPORT#R#nnn (report-store.js): one round of the stored report,

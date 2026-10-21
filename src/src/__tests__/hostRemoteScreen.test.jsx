@@ -314,7 +314,10 @@ describe('the AI read-back on the phone', () => {
       .toBeInTheDocument();
     const summaryCalls = global.fetch.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('ai-summary'));
     expect(summaryCalls.length).toBeGreaterThan(1);
-    expect(summaryCalls.some((u) => /generateNew|\/ai-summary\/host/.test(u))).toBe(false);
+    // Never a generation. The one read of the host's door the phone makes is
+    // the read check's note, a plain GET once the read is here (readCheckClient.js).
+    expect(summaryCalls.some((u) => /generateNew|redo=/.test(u))).toBe(false);
+    expect(summaryCalls.filter((u) => /\/ai-summary\/host/.test(u)).every((u) => !/\?.*(generateNew|debug|promptDebug)/.test(u))).toBe(true);
   }, 10000);
 });
 
