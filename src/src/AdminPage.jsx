@@ -71,8 +71,14 @@ const DRAFTS_SECTION = 'questionsets';
 /** `?draft=<id>` — the bell's deep link into a draft's review (utils/notificationsApi.js). */
 function draftFromSearch() {
   if (typeof window === 'undefined') return null;
-  const id = new URLSearchParams(window.location.search).get('draft');
-  return id && /^[A-Za-z0-9_-]{6,64}$/.test(id) ? { draftId: id, libraryKey: '' } : null;
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('draft');
+  if (!id || !/^[A-Za-z0-9_-]{6,64}$/.test(id)) return null;
+  // `&library=` — a link from the host page or the remote names the draft's
+  // library, read in place without switching the console (notificationsApi hrefFor).
+  const library = params.get('library') || '';
+  const libraryKey = /^[A-Za-z0-9_~-]{1,80}$/.test(library) && library !== getActiveOrgId() ? library : '';
+  return { draftId: id, libraryKey };
 }
 
 const API_BASE = window.API_BASE;
