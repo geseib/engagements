@@ -539,6 +539,9 @@ async function check(name, fn) {
       assert.ok(fs.existsSync(path.join(plug, 'commands', `${c}.md`)), `${c} command`);
     }
     assert.ok(/\$ARGUMENTS/.test(fs.readFileSync(path.join(plug, 'commands', 'connect.md'), 'utf8')));
+    // 1.25.0: kickoff takes the start command's key and connects first.
+    const kick = fs.readFileSync(path.join(plug, 'commands', 'kickoff.md'), 'utf8');
+    assert.ok(/argument-hint: <key>/.test(kick) && /connect tool with key "\$ARGUMENTS"/.test(kick), kick.slice(0, 400));
     // The crew commands: /engage:join <key>, /engage:early-look, /engage:review.
     assert.deepStrictEqual(fs.readdirSync(path.join(plug, 'commands')).sort(),
       ['ab-mockups.md', 'connect.md', 'continue.md', 'early-look.md', 'ideas.md', 'join.md', 'kickoff.md', 'preview.md', 'restore.md', 'review.md', 'share-repo.md', 'wrap-up.md']);
@@ -566,7 +569,7 @@ async function check(name, fn) {
     assert.ok(/share_work/.test(fs.readFileSync(path.join(plug, 'commands', 'early-look.md'), 'utf8')));
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.engage', 'config.json'), 'utf8')), { api: API });
     // With no claude on PATH it says exactly what to type instead, then the next step.
-    assert.ok(/\/plugin marketplace add/.test(r.stdout) && /mint a key and copy the connect command/.test(r.stdout), r.stdout);
+    assert.ok(/\/plugin marketplace add/.test(r.stdout) && /mint a key and copy the start command/.test(r.stdout), r.stdout);
   });
 
   // ── Check, then install / update / "all set" (owner, 2026-10-04) ──────────

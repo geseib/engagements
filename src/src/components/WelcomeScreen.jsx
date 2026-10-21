@@ -1,5 +1,6 @@
 import React from 'react';
 import ActiveOrgSwitcher from './ActiveOrgSwitcher';
+import HostNotificationsBell from './HostNotificationsBell';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 import HelpButton from './HelpButton';
@@ -113,6 +114,9 @@ export default function WelcomeScreen({
                   the console. It draws nothing at all for somebody with a
                   single space, which is most people. */}
               <ActiveOrgSwitcher />
+              {/* THE BELL (owner, 21 Oct 2026): the console's inbox here too.
+                  No session is open on this screen, so a click opens in place. */}
+              <HostNotificationsBell />
               <span className="wel-who-name">{currentUser.attributes?.name || 'Signed in'}</span>
               {isAdmin && <span className="wel-badge">Administrator</span>}
               {/* THE LINK BACK, WHICH ONLY EXISTED IN ONE DIRECTION.

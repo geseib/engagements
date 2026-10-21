@@ -118,6 +118,8 @@ export default function DraftReview({
   const reviewable = draft && (draft.status === DRAFT_STATUS.READY || draft.status === DRAFT_STATUS.FAILED);
   const missing = draft ? Math.max(0, (draft.requested || 0) - items.length) : 0;
   const canRegenerate = draft && engagementType !== 'survey' && GENERATORS[draft.kind];
+  // A new set switched on needs a shelf first (toggle-question-set.js refuses an unfiled live set).
+  const needsShelf = Boolean(draft) && !isAppend && activate && !topic;
 
   // ── keep / leave / edit (free: no model call) ─────────────────────────
   const setDecision = async (seqs, decision) => {
@@ -191,7 +193,7 @@ export default function DraftReview({
       setResult({ mode: 'append', ...out });
     } else {
       const res = await acceptNewSetDraft(draftId, {
-        activate: activate && Boolean(topic),
+        activate,
         title: name.trim(),
         ...(topic ? { topic } : {}),
       }, libraryKey);
@@ -513,21 +515,31 @@ export default function DraftReview({
               <input id="drv-name" className="drv-input" value={name}
                 onChange={(e) => { nameTouched.current = true; setName(e.target.value); }} />
               <label className="drv-label" htmlFor="drv-shelf">Shelf</label>
-              <select id="drv-shelf" className="drv-input" value={topic} onChange={(e) => setTopic(e.target.value)}>
+              <select id="drv-shelf" className="drv-input" value={topic} onChange={(e) => setTopic(e.target.value)}
+                aria-invalid={needsShelf || undefined} aria-describedby={needsShelf ? 'drv-shelf-need' : undefined}>
                 <option value="">Choose a shelf…</option>
                 {SET_TOPIC_IDS.map((id) => <option key={id} value={id}>{SET_TOPICS[id].label}</option>)}
               </select>
+              {/* ACCEPTING SWITCHES IT ON (owner, 21 Oct 2026), so this starts
+                  ticked and is never greyed out. A live set needs a shelf
+                  (toggle-question-set.js), so with it ticked Accept waits for
+                  one and says so, rather than saving the set off unasked
+                  (walk of dev d2ba71d5). */}
               <label className="drv-check">
-                <input type="checkbox" checked={activate && Boolean(topic)} disabled={!topic}
-                  onChange={(e) => setActivate(e.target.checked)} />
-                Switch it on now{!topic && ' (choose a shelf first)'}
+                <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
+                Switch it on now
               </label>
+              {needsShelf && (
+                <p id="drv-shelf-need" className="drv-msg drv-msg--pending" role="status" data-testid="draft-needs-shelf">
+                  Choose a shelf to switch it on, or untick Switch it on now to save it off.
+                </p>
+              )}
             </div>
           )}
           <div className="drv-actions">
             {items.length > 0 && (
               <button type="button" className="drv-btn drv-btn--primary" onClick={accept}
-                disabled={!kept.length || busy === 'accept' || Boolean(blockAccept) || (!isAppend && !name.trim())} data-testid="draft-accept">
+                disabled={!kept.length || busy === 'accept' || Boolean(blockAccept) || (!isAppend && !name.trim()) || needsShelf} data-testid="draft-accept">
                 {busy === 'accept' ? 'Saving…'
                   : isAppend
                     ? `Accept ${kept.length} of ${items.length} — saves version ${(Number(draft.targetVersion) || 0) + 1}`

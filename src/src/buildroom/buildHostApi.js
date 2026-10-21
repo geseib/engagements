@@ -305,8 +305,34 @@ export function projectSlug(title) {
 }
 /** What a host may type as the folder name: the slug's own alphabet, nothing a shell would read. */
 export const cleanFolder = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-/** One paste into a terminal: make the folder, start Claude Code in it, connect. */
-export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "${pluginSlash('connect')} ${key}"`;
+/**
+ * One paste into a terminal: make the folder, start Claude Code in it, and
+ * kick off with the key (plugin 1.25.0: kickoff connects first; owner 18 Oct,
+ * "why not just kickoff as well?"). The key travels once, here.
+ */
+export const startCommand = (folder, key) => `mkdir -p ~/build-room/${folder} && cd ~/build-room/${folder} && claude "${pluginSlash('kickoff')} ${key}"`;
+
+/**
+ * A folder the plugin reported, as a shell would read it: "~/a/b" as is when
+ * it is plain; otherwise quoted after $HOME. '' when there is none, or it is
+ * not under the home folder (the plugin sends only the name then).
+ */
+export function shellFolder(folder) {
+  const f = String(folder || '');
+  if (!f.startsWith('~/')) return '';
+  const rest = f.slice(2);
+  if (/^[A-Za-z0-9._/-]+$/.test(rest)) return `~/${rest}`;
+  return `"$HOME/${rest.replace(/(["\\$`])/g, '\\$1')}"`;
+}
+
+/** COMING BACK (W3): open Claude Code in the folder on kickoff. No key: the folder keeps its own. */
+export const resumeCommand = (folder) => {
+  const cd = shellFolder(folder);
+  return `${cd ? `cd ${cd} && ` : ''}claude "${pluginSlash('kickoff')}"`;
+};
+
+/** W4: the plugin update, then the same reopen, in one paste. */
+export const updateAndResumeCommand = ({ origin, api, folder }) => `${pluginInstallCommand({ origin, api })} \\\n  && ${resumeCommand(folder)}`;
 
 export function connectCommand({ origin, api, key }) {
   const site = String(origin || '').replace(/\/+$/, '');

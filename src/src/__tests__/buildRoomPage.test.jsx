@@ -17,7 +17,11 @@ import {
 } from '@testing-library/react';
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import webSocketClient from '../WebSocketClient';
-import BuildRoomPage, { BuildCreate, stageHint, ConnectPanel } from '../buildroom/BuildRoomPage';
+import BuildRoomPage, {
+  BuildCreate, stageHint, ConnectPanel, connectCase,
+} from '../buildroom/BuildRoomPage';
+import { resumeCommand, shellFolder } from '../buildroom/buildHostApi';
+import { W } from '../buildroom/words';
 import reloadPage from '../utils/reloadPage';
 
 // These pin prod's plugin names (/engage:…). setupTests.js runs every suite as the
@@ -589,57 +593,48 @@ describe('the host side panel', () => {
 });
 
 describe('Connect Claude Code', () => {
-  test('the key is shown once, inside a command with the real API base', async () => {
-    // Claude runs the latest plugin, so step 1 keeps its usual title (an older one reads "Update the Engage plugin").
-    await openRoom(hostState({ st: { AgentPlugin: S.LATEST_PLUGIN } }));
+  test('first time (W1): three steps, and the start command kicks off with the key, shown once', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    // The four steps, in the order they are done (owner, 2026-10-04).
+    // Kickoff takes the key, so there is no fourth step (docs/design/build-room-connect-resume).
     const titles = [...dialog.querySelectorAll('.brm-step-title')].map((n) => n.textContent);
     expect(titles).toEqual([
       'Check for the latest Engage plugin',
       'Mint a key and copy the start command',
       'Paste it into a terminal',
-      'Kick off',
     ]);
-    expect(within(dialog).getByTestId('brm-kickoff').textContent).toBe('/engage:kickoff');
+    expect(within(dialog).getByText(W.startOpens)).toBeInTheDocument();
+    expect(within(dialog).queryByTestId('brm-connect-elsewhere')).toBeNull();
     const writeText = jest.fn(() => Promise.resolve());
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Mint a key and copy the command' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/keys`));
     const command = await within(dialog).findByTestId('brm-command');
     const key = `eng_${GAME}_${'k'.repeat(43)}`;
-    // One click mints AND copies the start command (owner, 2026-10-06): a new
-    // folder named for the session, Claude Code started in it, connected.
-    const start = `mkdir -p ~/build-room/volunteer-sign-up && cd ~/build-room/volunteer-sign-up && claude "/engage:connect ${key}"`;
+    const start = `mkdir -p ~/build-room/volunteer-sign-up && cd ~/build-room/volunteer-sign-up && claude "/engage:kickoff ${key}"`;
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(start));
     expect(within(dialog).getByRole('status').textContent).toMatch(/^Copied\. Paste it into a terminal\./);
     expect(within(dialog).getByTestId('brm-start').textContent).toBe(start);
     delete navigator.clipboard;
     expect(command.textContent).toContain(`--env ENGAGE_KEY=${key}`);
     expect(command.textContent).toContain(`--env ENGAGE_API=${API}`);
-    expect(command.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
-    expect(command.textContent).toContain('claude mcp add engage');
     expect(within(dialog).getByText(/Shown once\./)).toBeInTheDocument();
-    // The plugin route: install once (no key in it), then one line per session.
     const install = within(dialog).getByTestId('brm-install');
-    expect(install.textContent).toContain(`curl -fsSL ${window.location.origin}/engage-mcp.mjs -o ~/.engage-mcp.mjs`);
     expect(install.textContent).toContain(`node ~/.engage-mcp.mjs --install-plugin --api ${API}`);
     expect(install.textContent).not.toContain(key);
-    expect(within(dialog).getByTestId('brm-connect').textContent).toBe(`/engage:connect ${key}`);
+    // Claude Code already open there: the same kickoff, typed inside it.
+    expect(within(dialog).getByTestId('brm-connect').textContent).toBe(`/engage:kickoff ${key}`);
 
-    // Close, reopen: gone.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const again = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     expect(within(again).queryByTestId('brm-command')).toBeNull();
-    expect(within(again).queryByTestId('brm-connect')).toBeNull();
-    expect(within(again).getByTestId('brm-install')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(key);
   });
 
   test('the project folder is named for the session, and the host can rename it before minting', async () => {
-    await openRoom(hostState());
+    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
     fireEvent.click(screen.getAllByRole('button', { name: /Connect Claude Code/ })[0]);
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     const folder = within(dialog).getByLabelText('Project folder');
@@ -650,29 +645,25 @@ describe('Connect Claude Code', () => {
     try {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Mint a key and copy the command' }));
       const key = `eng_${GAME}_${'k'.repeat(43)}`;
-      // Only the slug's own letters reach the shell.
-      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`mkdir -p ~/build-room/shift-picker-rm-rf && cd ~/build-room/shift-picker-rm-rf && claude "/engage:connect ${key}"`));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`mkdir -p ~/build-room/shift-picker-rm-rf && cd ~/build-room/shift-picker-rm-rf && claude "/engage:kickoff ${key}"`));
     } finally {
       delete navigator.clipboard;
     }
   });
 
-  test('revoke, the review setting, and the six prompt cards with their slash commands', async () => {
-    await openRoom(hostState({ keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
+  test('revoke, the review setting, and the prompt cards with their slash commands (all the steps)', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     openMore();
     fireEvent.click(screen.getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
     });
-    // Step 1 (install) and step 4 (kick off), then one per prompt card.
-    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(2 + 7);
-    expect(within(dialog).queryByTestId('brm-share-repo')).toBeNull(); // not a crew room
-
+    // Step 1 (install), then one per prompt card.
+    expect(within(dialog).getAllByRole('button', { name: 'Copy' })).toHaveLength(1 + 7);
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Review Claude's questions/ }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/settings`));
     expect(lastPost().body).toEqual({ reviewAgentAsks: false });
-
     const revoke = within(dialog).getByRole('button', { name: 'Revoke key' });
     await waitFor(() => expect(revoke).not.toBeDisabled());
     fireEvent.click(revoke);
@@ -680,46 +671,80 @@ describe('Connect Claude Code', () => {
   });
 
   const panel = (room, api = {}) => render(
-    <ConnectPanel room={{ settings: {}, ...room }} gameId={GAME} api={{ mintKey: jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' })), revokeKey: jest.fn(), saveSettings: jest.fn(), ...api }} run={(fn) => fn()} busy={false} onClose={() => {}} />,
+    <ConnectPanel room={{ settings: {}, title: 'Volunteer sign-up', ...room }} gameId={GAME} api={{ mintKey: jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' })), revokeKey: jest.fn(), saveSettings: jest.fn(), ...api }} run={(fn) => fn()} busy={false} onClose={() => {}} />,
   );
+  const LATEST = { running: S.LATEST_PLUGIN, latest: S.LATEST_PLUGIN, outdated: false };
+  const quiet = { lastSeenAt: ago(600), folder: '~/build-room/volunteer-sign-up' };
 
-  test('a crew room adds a fifth step: share the repo', () => {
+  test('a crew room adds a fourth step: share the repo', () => {
     panel({ agent: {}, crew: { enabled: true } });
     const titles = [...document.querySelectorAll('.brm-step-title')].map((n) => n.textContent);
-    expect(titles[4]).toBe('Open the project to your crew');
+    expect(titles[3]).toBe('Open the project to your crew');
     expect(screen.getByTestId('brm-share-repo').textContent).toBe('/engage:share-repo');
   });
 
-  test('step 4, Kick off: waiting once Claude connects, done once Claude kicked off', () => {
-    const fourth = () => document.querySelectorAll('.brm-steps--connect > li')[3];
-    const { unmount } = panel({ agent: { lastSeenAt: ago(5) } });
-    expect(fourth().className).toContain('is-wait');
-    unmount();
-    const r2 = panel({ agent: { lastSeenAt: ago(5), kickedOffAt: ago(3) } });
-    expect(fourth().className).toContain('is-done');
-    expect(screen.getByText('Claude has kicked off.')).toBeInTheDocument();
-    r2.unmount();
+  test('which window: first time, connected now, coming back, out of date, all the steps', () => {
+    const now = Date.parse(NOW);
+    expect(connectCase({ agent: {} }, now)).toBe('first');
+    expect(connectCase({ agent: { lastSeenAt: ago(10) } }, now)).toBe('now');
+    // The plugin's background report counts as checking in.
+    expect(connectCase({ agent: { lastSeenAt: ago(600) }, lan: { reportedAt: ago(8) } }, now)).toBe('now');
+    expect(connectCase({ agent: { lastSeenAt: ago(60) } }, now)).toBe('back');
+    expect(connectCase({ agent: { lastSeenAt: ago(60) }, plugin: { outdated: true } }, now)).toBe('update');
+    expect(connectCase({ agent: { lastSeenAt: ago(5) }, plugin: { outdated: true } }, now)).toBe('update');
+    expect(connectCase({ agent: { lastSeenAt: ago(60) } }, now, { showAll: true })).toBe('all');
+    expect(connectCase({ agent: {} }, now, { showAll: true })).toBe('first');
   });
 
-  test('step 4 with an older plugin: done once Claude has posted to the room or listened', () => {
-    const fourth = () => document.querySelectorAll('.brm-steps--connect > li')[3];
-    const r1 = panel({ agent: { lastSeenAt: ago(5), listenedAt: ago(4) } });
-    expect(fourth().className).toContain('is-done');
-    r1.unmount();
-    const r2 = panel({ agent: { lastSeenAt: ago(5) }, log: [{ logId: 'l1', kind: 'progress', text: 'Set up the folder', by: 'agent' }] });
-    expect(fourth().className).toContain('is-done');
-    r2.unmount();
+  test('coming back (W3): one paste, cd into the reported folder and kick off, no key; or type kickoff inside', () => {
+    panel({ agent: quiet, plugin: LATEST });
+    expect(screen.getByTestId('brm-connect-back')).toHaveTextContent(/Claude worked here, last at .*In ~\/build-room\/volunteer-sign-up\. Claude Code is not connected now\./);
+    expect(screen.getByTestId('brm-return').textContent).toBe('cd ~/build-room/volunteer-sign-up && claude "/engage:kickoff"');
+    expect(screen.getByText(W.reopens)).toBeInTheDocument();
+    expect(screen.getByText(W.typeInsteadKick('/engage:kickoff'))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mint a/ })).toBeNull();
   });
 
-  test('with Claude connected on a live key, minting again warns that it disconnects', async () => {
-    const mintKey = jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' }));
-    panel({ agent: { lastSeenAt: ago(5), key: { keyId: 'k1', createdAt: ago(600) } } }, { mintKey });
-    expect(screen.getByText(/Key minted .*A new key stops it\./)).toBeInTheDocument();
+  test('coming back with no folder reported (an older plugin): the guess, and no cd', () => {
+    panel({ agent: { lastSeenAt: ago(600) }, plugin: LATEST });
+    expect(screen.getByTestId('brm-return').textContent).toBe('claude "/engage:kickoff"');
+    expect(screen.getByText(W.reopensNoFolder('~/build-room/volunteer-sign-up'))).toBeInTheDocument();
+  });
+
+  test('a folder with spaces is quoted after $HOME; outside the home folder there is no cd', () => {
+    expect(resumeCommand('~/My Projects/sign up')).toBe('cd "$HOME/My Projects/sign up" && claude "/engage:kickoff"');
+    expect(resumeCommand('~/a/"x"$y')).toBe('cd "$HOME/a/\\"x\\"\\$y" && claude "/engage:kickoff"');
+    expect(resumeCommand('volunteer-sign-up')).toBe('claude "/engage:kickoff"');
+    expect(shellFolder('~/build-room/x')).toBe('~/build-room/x');
+  });
+
+  test('out of date (W4): the update and the reopen in one paste', () => {
+    panel({ agent: quiet, plugin: { running: '1.22.0', latest: S.LATEST_PLUGIN, outdated: true } });
+    const cmd = screen.getByTestId('brm-return').textContent;
+    expect(cmd).toContain(`node ~/.engage-mcp.mjs --install-plugin --api ${API}`);
+    expect(cmd.trim().endsWith('&& cd ~/build-room/volunteer-sign-up && claude "/engage:kickoff"')).toBe(true);
+    expect(screen.getByText(W.closeFirst)).toBeInTheDocument();
+    expect(screen.getByTestId('brm-ver')).toHaveTextContent('1.22.0');
+  });
+
+  test('connected now (W2): nothing to do; the reopen and all the steps are folded away', () => {
+    panel({ agent: { ...quiet, lastSeenAt: ago(5) }, plugin: LATEST });
+    expect(screen.getByTestId('brm-connect-now')).toHaveTextContent('Connected now');
+    expect(screen.getByTestId('brm-connect-now')).toHaveTextContent('in ~/build-room/volunteer-sign-up');
+    expect(screen.getByText(W.restartOrMove).closest('details')).not.toHaveAttribute('open');
+  });
+
+  test('another laptop (W5): Show all the steps, with the files-elsewhere note and Back', () => {
+    panel({ agent: { ...quiet, key: { keyId: 'k1', createdAt: ago(600) } }, plugin: LATEST });
+    fireEvent.click(screen.getByRole('button', { name: W.showAllSteps }));
+    expect(screen.getByTestId('brm-connect-elsewhere')).toHaveTextContent(W.filesElsewhereHead);
+    expect([...document.querySelectorAll('.brm-step-title')].map((n) => n.textContent)[1]).toBe('Mint a key and copy the start command');
+    // Minting again still warns that the old key stops.
     fireEvent.click(screen.getByRole('button', { name: 'Mint a new key and copy the command' }));
-    expect(mintKey).not.toHaveBeenCalled();
     expect(screen.getByText('The old key stops at once.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
-    expect(mintKey).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: W.backToReturn }));
+    expect(screen.getByTestId('brm-return')).toBeInTheDocument();
   });
 });
 

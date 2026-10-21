@@ -54,6 +54,20 @@ export function destinationOf(link) {
   return { libraryKey, url: '/admin' };
 }
 
+/**
+ * WHERE A NOTIFICATION GOES FROM OUTSIDE THE CONSOLE (the host page and the
+ * remote, owner 21 Oct 2026: "add the bell to the host page and remote too").
+ * Those pages cannot switch the console's library in place, and writing the
+ * shared active library from a live session page would move the session's own
+ * requests. So a draft's link carries its library in the address
+ * (`&library=`), which the console's review reads without switching.
+ */
+export function hrefFor(link) {
+  const { libraryKey, url } = destinationOf(link);
+  if (link && link.type === 'draft' && libraryKey) return `${url}&library=${encodeURIComponent(libraryKey)}`;
+  return url;
+}
+
 /** "3 days left" / "today" — a draft's notification says how long is left. */
 export function daysLeftLabel(daysLeft) {
   if (daysLeft === null || daysLeft === undefined) return '';

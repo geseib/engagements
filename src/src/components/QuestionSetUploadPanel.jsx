@@ -453,7 +453,7 @@ export default function QuestionSetUploadPanel({
             <span className="qsets-route-nm">Generate with AI</span>
             <p className="qsets-route-when">
               Best when you have a topic and no source material. It writes the questions and
-              leaves you a draft to read — a generated set arrives switched off on purpose.
+              leaves you a draft to review: nothing is saved until you accept it, and the bell says when it is ready.
             </p>
           <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onOpenBuilder && onOpenBuilder(engagementType)}>
             <Icon name="Sparkle" weight="duotone" size={14} color="currentColor" />

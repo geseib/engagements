@@ -74,7 +74,7 @@ const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', c => { raw += c; });
   req.on('end', () => {
-    const rec = { method: req.method, url: req.url, auth: req.headers.authorization, plugin: req.headers['x-engage-plugin'], body: raw ? JSON.parse(raw) : undefined };
+    const rec = { method: req.method, url: req.url, auth: req.headers.authorization, plugin: req.headers['x-engage-plugin'], folder: req.headers['x-engage-folder'], body: raw ? JSON.parse(raw) : undefined };
     requests.push(rec);
     const send = (status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     if (errorPluginNote) return send(404, { error: 'no such ask', pluginNote: errorPluginNote });
@@ -527,6 +527,27 @@ const hardStop = setTimeout(() => {
     assert.ok(urls.some((u) => u.endsWith('/build/state?kickoff=1')), urls.join(' '));
     assert.ok(urls.some((u) => u.endsWith('/build/state')), urls.join(' '));
   });
+  await check('1.25.0: kickoff connects first, with the start command\'s key or the folder\'s own, and resumes a room with work', async () => {
+    const withKey = (await mcp.request('prompts/get', { name: 'kickoff', arguments: { key: 'eng_4321_abc' } })).result.messages[0].content.text;
+    assert.ok(/First call the connect tool with key "eng_4321_abc"/.test(withKey), withKey);
+    assert.ok(/RESUMING/.test(withKey) && /do not plan again/.test(withKey), withKey);
+    const noKey = (await mcp.request('prompts/get', { name: 'kickoff', arguments: {} })).result.messages[0].content.text;
+    assert.ok(/First call the connect tool with no key/.test(noKey), noKey);
+  });
+  await check('1.25.0: room_status with kickoff says RESUMING when the room has work; a plain room_status does not', async () => {
+    const k = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: { kickoff: true } }));
+    assert.ok(/^RESUMING: Claude has worked here before\. 1 decision, /.test(k), k.slice(0, 200));
+    const plain = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+    assert.ok(!/RESUMING/.test(plain), plain.slice(0, 200));
+  });
+  await check('1.25.0: the state read names the folder for the host, never a full path', async () => {
+    const r = requests.filter((q) => /\/build\/state/.test(q.url)).pop();
+    assert.ok(r && r.folder, 'the folder header is sent on state reads');
+    const folder = decodeURIComponent(r.folder);
+    assert.ok(folder && !folder.startsWith('/') && !folder.includes(require('os').homedir() + '/'), folder);
+    const other = requests.filter((q) => !/\/build\/state/.test(q.url) && q.folder);
+    assert.deepStrictEqual(other, [], 'only state reads carry it');
+  });
   await check('the kickoff prompt has Claude call room_status with kickoff', async () => {
     const r = await mcp.request('prompts/get', { name: 'kickoff', arguments: {} });
     assert.ok(/room_status with kickoff true/.test(r.result.messages[0].content.text), r.result.messages[0].content.text);
@@ -596,7 +617,7 @@ const hardStop = setTimeout(() => {
     const r = await mcp.request('tools/call', { name: 'check_directions', arguments: {} });
     const t = textOf(r);
     assert.strictEqual(r.result.isError, true);
-    assert.ok(/401/.test(t) && /Key revoked/.test(t) && /revoked/.test(t) && /mint a new key/.test(t), t);
+    assert.ok(/401/.test(t) && /Key revoked/.test(t) && /revoked/.test(t) && /no longer opens Build Room 4321/.test(t) && /new start command/.test(t), t);
   });
 
   console.log('\n3b. talking points, research, ideas, run items, the repo folder');

@@ -1002,12 +1002,30 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.24.2';
+const LATEST_PLUGIN = '1.25.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
 /** A clean x.y.z or ''. The header is the caller's word; nothing else is kept. */
 const cleanPluginVersion = (v) => (/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(v || '').trim()) ? String(v).trim() : '');
+/**
+ * WHERE THE PROJECT LIVES (plugin 1.25.0, owner 18 Oct: the Connect window's
+ * "coming back" paste). The plugin sends it on its state reads, relative to
+ * the home folder ("~/build-room/x") or the folder's name alone. Kept only if
+ * it is plain: no control characters, never an absolute path.
+ */
+const FOLDER_HEADER = 'x-engage-folder';
+function folderOf(event) {
+  const h = (event && event.headers) || {};
+  const k = Object.keys(h).find((x) => x.toLowerCase() === FOLDER_HEADER);
+  if (!k) return '';
+  let v = '';
+  try { v = decodeURIComponent(String(h[k] || '')); } catch { return ''; }
+  v = v.trim();
+  if (!v || v.length > 200 || /[\u0000-\u001f\u007f]/.test(v) || v.startsWith('/') || /^[A-Za-z]:[\\/]/.test(v) || v.split('/').includes('..')) return '';
+  return v;
+}
+
 /** The version a request announced, from any header casing. */
 function pluginVersionOf(event) {
   const h = (event && event.headers) || {};
@@ -1044,6 +1062,8 @@ function agentStatus(stateRow, keys, now) {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
     listening: Number.isFinite(heard) && Date.parse(now) - heard < AGENT_LISTENING_MS,
     lastSeenAt: s.AgentSeenAt || null,
+    // The project folder Claude last reported (plugin 1.25.0); '' from an older plugin.
+    folder: typeof s.AgentFolder === 'string' ? s.AgentFolder : '',
     // CONNECT STEP 4 (owner, 2026-10-07): when Claude ran /engage:kickoff
     // (room_status with kickoff), and, for older plugins that never say so,
     // when it last listened for the host.
@@ -2254,7 +2274,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
-  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
