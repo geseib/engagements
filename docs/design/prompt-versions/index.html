@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Versions</title>
+<style>
+:root {
+  --bg: #FBF7F1; --surface: #FFFFFF; --surface-2: #F1EDE4; --text: #1B2942; --muted: #5E6167;
+  --rule: #E4DED3; --amber: #9A5B18; --amber-bg: #FBEBD6; --blue: #2F5E9E; --blue-bg: #E3ECF8;
+  --green: #1C7350; --green-bg: #DDF1E7; --red: #A23B35; --add: #E3F3EA; --del: #FBE3E1;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #E9E4DA; color: var(--text); font: 15px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+.page { max-width: 1340px; margin: 0 auto; padding: 24px 16px 80px; }
+.page > h1 { font-size: 22px; margin: 0 0 6px; }
+.lede { color: var(--muted); margin: 0 0 22px; max-width: 960px; }
+.shot { margin: 0 0 44px; }
+.shot > h2 { font-size: 17px; margin: 0 0 4px; }
+.why { color: var(--muted); font-size: 14px; margin: 0 0 12px; max-width: 960px; }
+.screen { background: var(--bg); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.head h3 { margin: 0; font-size: 19px; }
+.crumb { color: var(--muted); font-size: 13px; }
+.grow { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--rule); border-radius: 7px; background: var(--surface); color: var(--text); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.btn.primary { background: var(--text); color: #fff; border-color: var(--text); }
+.btn.warn { border-color: var(--amber); color: var(--amber); }
+.btn.link { border: 0; background: none; color: var(--blue); padding: 0; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.notice { margin: 14px 18px 0; padding: 10px 14px; border-radius: 8px; background: var(--blue-bg); color: var(--text); font-size: 14px; display: flex; gap: 12px; align-items: center; }
+.notice b { color: var(--blue); }
+table { width: calc(100% - 36px); margin: 14px 18px 18px; border-collapse: collapse; table-layout: fixed; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+th { text-align: left; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--rule); }
+td { padding: 0 12px; height: 44px; border-bottom: 1px solid var(--rule); font-size: 15px; vertical-align: middle; }
+td small { color: var(--muted); font-size: 13px; }
+.chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--rule); color: var(--muted); white-space: nowrap; }
+.chip.repo { background: var(--amber-bg); color: var(--amber); border-color: #E9C79A; }
+.chip.live { background: var(--green-bg); color: var(--green); border-color: #A9D9C1; }
+.chip.ok { color: var(--green); }
+.body { padding: 18px; display: grid; gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+.card h4 { margin: 0 0 8px; font-size: 15px; }
+.card h4 span { color: var(--muted); font-weight: 500; font-size: 13px; }
+.diff { font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.diff del { background: var(--del); text-decoration: line-through; color: var(--red); }
+.diff ins { background: var(--add); text-decoration: none; color: var(--green); }
+.foot { display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--rule); background: var(--surface); }
+.hint { color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.tab { padding: 10px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab.on { color: var(--text); border-color: var(--text); font-weight: 600; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.callout { font-size: 13px; color: var(--amber); }
+.armed { color: var(--amber); font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Prompt versions, and updates from the repo</h1>
+  <p class="lede">For the owner, 21 Oct. Prompts get versions as question sets have them. The prompt files kept in the repo travel with each deploy, so the library can say when one differs from what is live. Nothing is ever overwritten: every change is a new version, and any earlier version can be made live again. The admin console's own type sizes and paper style; the prompts are the real four that need the next-steps fix.</p>
+
+  <!-- 1 -->
+  <section class="shot">
+    <h2>1 · The library says which prompts have a newer version in the repo</h2>
+    <p class="why">A notice above the table counts them, and each row carries the mark in its State column. "Repo has a newer version" appears only when the live text differs from the repo's file for that prompt; it never updates anything by itself.</p>
+    <div class="screen">
+      <div class="head"><span class="crumb">Admin ›</span><h3>Prompts</h3><span class="grow"></span><span class="btn">Download</span><span class="btn primary">+ New prompt</span></div>
+      <div class="notice"><b>4 prompts</b> have a newer version in the repo, from the deploy of 21 Oct.<span class="grow"></span><span class="btn link">Show only these</span></div>
+      <table>
+        <colgroup><col style="width:40%"><col style="width:16%"><col style="width:14%"><col style="width:20%"><col style="width:10%"></colgroup>
+        <thead><tr><th>Prompt</th><th>Type</th><th>Version</th><th>State</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>Workie - The Transfer Reader</b> <small>· Lessons from Different Schools</small></td><td>Call &amp; Answer</td><td>v1</td><td><span class="chip repo">Repo has a newer version</span></td><td><span class="btn">Review</span></td></tr>
+          <tr><td><b>Workie - The Direction Advisor</b> <small>· What We Should Be Known For</small></td><td>Call &amp; Answer</td><td>v1</td><td><span class="chip repo">Repo has a newer version</span></td><td><span class="btn">Review</span></td></tr>
+          <tr><td><b>Workie - The Redline Reader</b> <small>· The Rules We Wrote Down</small></td><td>Call &amp; Answer</td><td>v1</td><td><span class="chip repo">Repo has a newer version</span></td><td><span class="btn">Review</span></td></tr>
+          <tr><td><b>Workie - The Verdict Board</b> <small>· Ready or Not</small></td><td>Call &amp; Answer</td><td>v2</td><td><span class="chip ok">Matches the repo</span></td><td><span class="btn">Open</span></td></tr>
+          <tr><td><b>Call &amp; Answer default</b> <small>· built in</small></td><td>Call &amp; Answer</td><td>v3</td><td><span class="chip repo">Repo has a newer version</span></td><td><span class="btn">Review</span></td></tr>
+          <tr><td><b>Steve Jobs on the product</b> <small>· written here</small></td><td>Call &amp; Answer</td><td>v4</td><td><span class="chip">Not in the repo</span></td><td><span class="btn">Open</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="shot">
+    <h2>2 · Review the repo's version, then save it as a new version</h2>
+    <p class="why">Each part of the prompt shows what changes, with the words added and removed. If someone edited the live prompt here since the repo file was written, a warning says so and saving keeps their version in the history. Save as version 2 makes it live; version 1 stays, one click from live again.</p>
+    <div class="screen">
+      <div class="head"><span class="crumb">Prompts › Workie - The Transfer Reader ›</span><h3>Newer version in the repo</h3><span class="grow"></span><span class="chip">Live: v1, imported 15 Aug</span></div>
+      <div class="body">
+        <div class="card"><h4>Instructions <span>— changed · 812 → 846 words</span></h4>
+          <div class="diff">11. <del>EVERY NEXT STEP IS ASSIGNABLE. One sentence each: an owner, then the first action one person can finish inside a week.</del><ins>EVERY NEXT STEP IS A SUGGESTION THE ROOM HAS NOT AGREED TO. One sentence each, starting **Suggested**: a role an answer implies, then a first action one person could finish inside a week. Use a number, a duration or a limit only if an answer contains it.</ins>
+…</div></div>
+        <div class="card"><h4>Sections <span>— 2 of 4 changed</span></h4>
+          <div class="diff">Discussion topics: One question must be <del>the strongest piece of resistance</del><ins>the resistance named by the most answers (if tied, the highest-ranked)</ins> from the second section, handed back to the room unresolved.
+Next steps → <ins>Suggested next steps</ins>: <del>Format: the owner, a colon,</del><ins>Format: **Suggested**, the role, a colon,</ins> then the first action…</div></div>
+        <div class="card"><h4>Output format <span>— unchanged</span></h4></div>
+      </div>
+      <div class="foot"><span class="btn">Not now</span><span class="grow"></span><span class="hint">Version 1 stays in the history; you can make it live again.</span><span class="btn primary">Save as version 2</span></div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="shot">
+    <h2>3 · Versions, in the prompt editor</h2>
+    <p class="why">A Versions tab beside Edit lists every version: when, who, and how it was made (an edit, an upload, the repo). View one, compare it with the live one, or make it live again (press twice). Sessions already running keep reading the live version; nothing is deleted.</p>
+    <div class="screen">
+      <div class="head"><span class="crumb">Prompts ›</span><h3>Workie - The Transfer Reader</h3><span class="grow"></span><span class="btn">Download for an agent</span><span class="btn">Upload a revised file</span></div>
+      <div class="tabs"><span class="tab">Edit</span><span class="tab">Preview</span><span class="tab on">Versions · 3</span></div>
+      <table>
+        <colgroup><col style="width:9%"><col style="width:18%"><col style="width:20%"><col style="width:23%"><col style="width:30%"></colgroup>
+        <thead><tr><th>Version</th><th>Saved</th><th>By</th><th>How</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><b>v3</b></td><td>21 Oct, 14:02</td><td>george@seibtribe.com</td><td>Edited here <span class="chip live">Live</span></td><td><span class="btn">View</span></td></tr>
+          <tr><td><b>v2</b></td><td>21 Oct, 13:40</td><td>george@seibtribe.com</td><td>From the repo (deploy 21 Oct)</td><td><span class="btn">View</span> <span class="btn">Compare with live</span> <span class="btn warn">Make live</span></td></tr>
+          <tr><td><b>v1</b></td><td>15 Aug, 19:10</td><td>admin import</td><td>Imported from the archive</td><td><span class="btn">View</span> <span class="btn">Compare with live</span> <span class="btn warn">Make v1 live again?</span></td></tr>
+        </tbody>
+      </table>
+      <div class="foot"><span class="armed">Press again to make v1 live. v3 stays in the list.</span><span class="grow"></span><span class="hint">A Workie read already written keeps the version that wrote it, shown in the report.</span></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>
