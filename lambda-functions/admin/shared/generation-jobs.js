@@ -117,7 +117,7 @@ function isCallersJob(job, { kind, userId, orgId }) {
  * empty `items` from the row's first write.
  */
 async function createJob(dynamodb, tableName, {
-  jobId, kind, requested, request = {}, caller = {}, sealFor = '',
+  jobId, kind, requested, request = {}, caller = {}, sealFor = '', draftId = '',
 }) {
   const now = new Date().toISOString();
   const content = await sealJobFields(sealFor, { items: [], request });
@@ -149,6 +149,11 @@ async function createJob(dynamodb, tableName, {
     ...(caller.orgId ? { callerOrgId: caller.orgId } : {}),
     ...(caller.orgRole ? { callerOrgRole: caller.orgRole } : {}),
     requested,
+    // THE DRAFT THIS RUN WRITES INTO (shared/generation-drafts.js), when it
+    // writes into one. An id, plaintext like every key; the worker reads it
+    // back through workerCaller, because its own invocation carries no
+    // authority to name one.
+    ...(draftId ? { draftId } : {}),
     completed: 0,
     phase: 'Queued',
     items: content.items,
@@ -328,6 +333,7 @@ async function workerCaller(dynamodb, tableName, jobId) {
     username: row.callerUsername,
     orgId: row.callerOrgId,
     orgRole: row.callerOrgRole,
+    ...(row.draftId ? { draftId: row.draftId } : {}),
   };
 }
 
@@ -415,6 +421,9 @@ function jobToResponse(item) {
     // The importer's 402 when the refusal was the stored-set allowance, whole
     // (generated-set.js) — so the builder can say who can fix it.
     setCreationLimit: item.setCreationLimit || null,
+    // The draft the run is writing into: where the review lives, on this
+    // device or any other, for thirty days (shared/generation-drafts.js).
+    draftId: item.draftId || null,
     updatedAt: item.updatedAt,
   };
 }

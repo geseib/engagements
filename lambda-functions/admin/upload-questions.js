@@ -118,7 +118,22 @@ async function deleteKeys(keys) {
   }
 }
 
+/*
+  THE AI DRAFTS FAMILY RIDES ON THIS FUNCTION. `/admin/generation-drafts/...`
+  (admin/generation-drafts.js) accepts a draft into a set through this very
+  importer, and lives here rather than in a Lambda of its own because the
+  stack is near CloudFormation's 500-resource limit — the same reason
+  /me/attention rides on the orgs function.
+*/
+const isDraftsRoute = (event) => /\/admin\/generation-drafts(\/|$)/.test(
+  String(event?.requestContext?.http?.path || event?.rawPath || ''),
+);
+
 exports.handler = async (event) => {
+  if (isDraftsRoute(event)) {
+    // eslint-disable-next-line global-require
+    return require('./generation-drafts').handler(event);
+  }
   try {
     let payload;
     try {
@@ -135,6 +150,14 @@ exports.handler = async (event) => {
     // switching the set on is all it takes. Strictly `true` — this is a publish decision, and
     // "true" as a string is a caller bug to be seen, not a value to be guessed at.
     const startInactive = payload.startInactive === true;
+
+    // AN AI DRAFT SOMEBODY HAS ALREADY REVIEWED (admin/generation-drafts.js,
+    // accept). It is still AI-written — `isAIGenerated` stays, as provenance —
+    // but it is not a draft any more: the review happened before it was saved,
+    // so it is saved switched on (unless `startInactive` asks otherwise) and
+    // stamped `aiReviewedAt`, which turns the list's "AI draft" chip off.
+    const reviewedDraft = payload.reviewedDraft === true && isAIGenerated === true;
+    const startsAsAIDraft = Boolean(isAIGenerated) && !reviewedDraft;
 
     // THE SET'S DIRECTION — what the room is asked to DO with each item, which
     // is a different question from what the set is ABOUT. Validated against the
@@ -228,7 +251,7 @@ exports.handler = async (event) => {
     */
     const topicOffered = !(payload.topic === undefined || payload.topic === null
       || (typeof payload.topic === 'string' && payload.topic.trim() === ''));
-    const mustBeFiled = !isReplace && !(isAIGenerated || startInactive);
+    const mustBeFiled = !isReplace && !(startsAsAIDraft || startInactive);
     const setTopic = normalizeSetTopic(payload.topic);
     if (!setTopic && (mustBeFiled || topicOffered)) {
       return badRequest(setTopicRefusal(payload.topic));
@@ -1124,7 +1147,8 @@ exports.handler = async (event) => {
         note: versionNote,
       }],
       // AI-generated content starts inactive, and so does a set restored from a legacy backup.
-      active: (isAIGenerated || startInactive) ? false : true,
+      active: (startsAsAIDraft || startInactive) ? false : true,
+      ...(reviewedDraft ? { aiReviewedAt: new Date().toISOString() } : {}),
       createdAt: new Date().toISOString(),
       // WHO MADE IT — `createdBy` (Cognito sub) plus `createdByName` for
       // display. This is the field the edit and delete rules read; without it a
@@ -1234,7 +1258,7 @@ exports.handler = async (event) => {
         OrderInCategory: categoryRelativeNumber,
         QuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Use CSV value or category counter
         CategoryQuestionNumber: question.QuestionNumber || categoryCounters[categoryId], // Same as QuestionNumber
-        Active: isAIGenerated ? false : true  // AI-generated questions start as inactive
+        Active: startsAsAIDraft ? false : true  // AI-generated questions start as inactive until reviewed
       };
 
       // Add engagement-type specific fields to database item
@@ -1388,6 +1412,10 @@ exports.handler = async (event) => {
       // The snapshot entry (legacy -> v1) only exists in memory until now; if it
       // was taken, seed versions[] with it rather than an empty list.
       const seed = Array.isArray(existingMeta.versions) ? existingMeta.versions : [];
+      // SAVING A VERSION OF AN AI DRAFT IS REVIEWING IT. Somebody opened the
+      // generated set, worked on it and saved — so the list's "AI draft" chip,
+      // which asks exactly that of them, turns off (QuestionSetsPanel.jsx).
+      const markReviewed = existingMeta.isAIGenerated === true && !existingMeta.aiReviewedAt;
 
       try {
         await db.send(new UpdateCommand({
@@ -1401,7 +1429,8 @@ exports.handler = async (event) => {
             'SET #activeVersion = :v, '
             + '#versions = list_append(if_not_exists(#versions, :seed), :entry), '
             + '#questionCount = :qc, #categoryCount = :cc, #hasImages = :hi, '
-            + '#sourceFile = :src, #updatedAt = :now, #engagementType = :et',
+            + '#sourceFile = :src, #updatedAt = :now, #engagementType = :et'
+            + (markReviewed ? ', #aiReviewedAt = :now' : ''),
           ExpressionAttributeNames: {
             '#activeVersion': 'activeVersion',
             '#versions': 'versions',
@@ -1410,7 +1439,8 @@ exports.handler = async (event) => {
             '#hasImages': 'hasImages',
             '#sourceFile': 'sourceFile',
             '#updatedAt': 'updatedAt',
-            '#engagementType': 'engagementType'
+            '#engagementType': 'engagementType',
+            ...(markReviewed ? { '#aiReviewedAt': 'aiReviewedAt' } : {}),
           },
           ExpressionAttributeValues: {
             ':v': targetVersion,

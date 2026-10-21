@@ -47,10 +47,18 @@ const rowKey = (pk, sk) => `${pk}|${sk}`;
 class GetCommand { constructor(input) { this.kind = 'get'; this.input = input; } }
 class PutCommand { constructor(input) { this.kind = 'put'; this.input = input; } }
 class UpdateCommand { constructor(input) { this.kind = 'update'; this.input = input; } }
+// The draft a run writes into (shared/generation-drafts.js) lists its items
+// with a Query and replaces a regenerated category with Deletes.
+class QueryCommand { constructor(input) { this.kind = 'query'; this.input = input; } }
+class DeleteCommand { constructor(input) { this.kind = 'delete'; this.input = input; } }
 
-/** Minimal `SET a = :x, #n = :y` applier — enough for the job record. */
+/** Minimal `SET a = :x, #n = :y [REMOVE #r]` applier — enough for the job record. */
 function applyUpdate(item, input) {
-  const expr = String(input.UpdateExpression).replace(/^SET\s+/i, '');
+  const [setPart, removePart = ''] = String(input.UpdateExpression).replace(/^SET\s+/i, '').split(/\s+REMOVE\s+/i);
+  for (const attr of removePart.split(/,\s*/).filter(Boolean)) {
+    delete item[(input.ExpressionAttributeNames || {})[attr.trim()] || attr.trim()];
+  }
+  const expr = setPart;
   for (const part of expr.split(/,\s*/)) {
     const [lhs, rhs] = part.split(/\s*=\s*/);
     const name = (input.ExpressionAttributeNames || {})[lhs] || lhs;
@@ -64,6 +72,15 @@ const docClient = {
     assert.strictEqual(TableName, 'engage-test', 'handler wrote to the wrong table');
     if (cmd.kind === 'get') return { Item: ddb.get(rowKey(Key.PK, Key.SK)) || undefined };
     if (cmd.kind === 'put') { ddb.set(rowKey(Item.PK, Item.SK), { ...Item }); return {}; }
+    if (cmd.kind === 'delete') { ddb.delete(rowKey(Key.PK, Key.SK)); return {}; }
+    if (cmd.kind === 'query') {
+      const v = cmd.input.ExpressionAttributeValues || {};
+      return {
+        Items: [...ddb.values()]
+          .filter((r) => r.PK === v[':pk'] && (!v[':sk'] || String(r.SK).startsWith(v[':sk'])))
+          .sort((a, b) => String(a.SK).localeCompare(String(b.SK))),
+      };
+    }
     if (cmd.kind === 'update') {
       const k = rowKey(Key.PK, Key.SK);
       const existing = ddb.get(k) || { ...Key };
@@ -78,7 +95,7 @@ const docClient = {
 stub('@aws-sdk/client-dynamodb', { DynamoDBClient: class {} });
 stub('@aws-sdk/lib-dynamodb', {
   DynamoDBDocumentClient: { from: () => docClient },
-  GetCommand, PutCommand, UpdateCommand,
+  GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand,
 });
 
 // ---- Bedrock --------------------------------------------------------------
