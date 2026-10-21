@@ -323,6 +323,46 @@ What the room said, and what it adds up to.
       ],
     },
     {
+      /*
+        PROMPT VERSIONS AND UPDATES FROM THE REPO (owner, 2026-10-21;
+        docs/design/prompt-versions/). What shipped: every content save is a
+        new version; the editor's Versions tab lists them and makes one live;
+        the library marks prompts the repo has a newer version of, and Review
+        saves the repo's text as a new version. Nothing is deleted.
+      */
+      title: 'Versions, and updates from the repo',
+      icon: 'ArrowCounterClockwise',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Every save that changes what a prompt says is a new version. The version that was live is kept, word for word, and nothing is ever overwritten or deleted. Changing only the status or the name is not a new version.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'The Versions tab', text: 'In the prompt editor, beside Edit. Each version says when it was saved, by whom, and how: Edited here, Uploaded a file, From the repo, Imported from the archive or Seeded default. Versions saved before version history began say "Before version history".' },
+            { title: 'View and Compare with live', text: 'View shows that version\'s text. Compare with live puts it beside the live one, part by part.' },
+            { title: 'Make live', text: 'Press it twice: the first press asks, the second makes that version live. The version that was live stays in the list, one press from live again. The next Workie read uses the live version; summaries already written keep what they were given.' },
+          ],
+        },
+        { t: 'h', text: 'Updates from the repo' },
+        {
+          t: 'p',
+          text: 'The prompt files kept in the repo — the demo sets\' Workies and the built-in defaults — travel with every deploy. The library compares each prompt with its file and says so in the State column: Repo has a newer version, Matches the repo, or Not in the repo. A notice above the table counts the ones the repo has newer, and Show only these lists just them. Nothing is updated by itself.',
+        },
+        {
+          t: 'p',
+          text: 'Review shows each part of the prompt — instructions, output format, sections and anything else the file carries — as changed or unchanged, with the words added and removed. Save as version N makes the repo\'s text a new version and makes it live; Not now changes nothing.',
+        },
+        {
+          t: 'note',
+          tone: 'warn',
+          title: 'Edited here since it was taken from the repo',
+          text: 'When someone changed the live prompt here after it was last taken from the repo, Review says so. Saving still keeps their version in the history, so it can be made live again.',
+        },
+      ],
+    },
+    {
       title: 'When the output is wrong',
       icon: 'Wrench',
       blocks: [

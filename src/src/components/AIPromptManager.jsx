@@ -19,6 +19,10 @@ import PromptLibraryPanel from './PromptLibraryPanel';
 import PromptReadOnlyView, { PROMPTS_READ_ONLY_NOTE } from './PromptReadOnlyView';
 import AIPromptAdvisor from './AIPromptAdvisor';
 import PromptImportReview from './PromptImportReview';
+import PromptRepoReview from './PromptRepoReview';
+import PromptVersionsPanel from './PromptVersionsPanel';
+import { loadRepoPrompts } from '../config/repoPrompts';
+import { repoStatusOf } from '../utils/repoPromptMatch';
 import {
   buildWorkieBundle, bundleFileName, parseWorkieBundle, checkBundleFits, takeFromBundle,
 } from '../utils/workieBundle';
@@ -202,8 +206,24 @@ const formFor = (prompt) => ({
  * that opened as the stored prompt, so the measure is simply what it opened
  * with.)
  */
-function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, onCancel }) {
+function AIPromptEditor({
+  prompt, isNew = false, initialView = 'edit', onSave, onCancel, onVersionMadeLive,
+}) {
   const [formData, setFormData] = useState(() => formFor(prompt));
+  /*
+    HOW THE TEXT BEING SAVED CAME TO BE — the Versions tab's "How". An upload
+    taken into the draft marks it 'upload' until the save; everything else is
+    "Edited here". Kept out of formData so it never makes the draft dirty.
+  */
+  const [saveHow, setSaveHow] = useState('edit');
+  /** How many versions the Versions tab found, once it has looked. */
+  const [versionCount, setVersionCount] = useState(null);
+  const versionsPromptId = prompt ? prompt.promptId : undefined;
+  const versionsScope = prompt ? prompt.scope : undefined;
+  const versionsApi = useMemo(
+    () => (versionsPromptId ? makeVersionsApi({ promptId: versionsPromptId, scope: versionsScope }) : null),
+    [versionsPromptId, versionsScope],
+  );
 
   /*
     THREE VIEWS OF ONE DIALOG — the form, the workbench (Improve) and an
@@ -468,6 +488,7 @@ function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, o
 
   const takeIncoming = () => {
     setFormData(incoming.next);
+    setSaveHow('upload');
     setIncoming(null);
     setImproveKey((k) => k + 1);
     setImproveMounted(false);
@@ -477,6 +498,11 @@ function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, o
   const dialogTitle = view === 'improve'
     ? `Improve “${formData.name || 'this prompt'}”`
     : (view === 'import' ? 'Upload a revised prompt' : (isNew ? 'Create New AI Prompt' : 'Edit AI Prompt'));
+
+  /* The Edit | Versions tabs — only for a prompt that exists, and only in the
+     two views they switch between (the workbench and an upload's review are
+     their own views with their own way back). */
+  const showTabs = Boolean(versionsApi) && !isNew && (view === 'edit' || view === 'versions');
 
   // Every token the author has written, for the "In your prompt" mark in the
   // inspector. Unknown ones are included deliberately — a token you invented is
@@ -573,7 +599,7 @@ function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, o
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(saveHow === 'upload' ? { ...formData, versionHow: 'upload' } : formData)
       });
 
       if (!response.ok) {
@@ -765,6 +791,43 @@ function AIPromptEditor({ prompt, isNew = false, initialView = 'edit', onSave, o
             ×
           </button>
         </div>
+
+        {showTabs && (
+          <div className="pmgr-tabs" role="tablist" aria-label="Prompt editor views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'edit'}
+              className={`pmgr-tab${view === 'edit' ? ' pmgr-tab--on' : ''}`}
+              onClick={() => setView('edit')}
+              data-testid="pmgr-tab-edit"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'versions'}
+              className={`pmgr-tab${view === 'versions' ? ' pmgr-tab--on' : ''}`}
+              onClick={() => setView('versions')}
+              data-testid="pmgr-tab-versions"
+            >
+              Versions{versionCount !== null ? ` · ${versionCount}` : ''}
+            </button>
+          </div>
+        )}
+
+        {view === 'versions' && versionsApi && (
+          <div className="pmgr-wb-view" data-testid="pmgr-versions-view">
+            <PromptVersionsPanel
+              api={versionsApi}
+              live={prompt}
+              dirty={isDirty}
+              onCount={setVersionCount}
+              onMadeLive={(version) => onVersionMadeLive && onVersionMadeLive(prompt, version)}
+            />
+          </div>
+        )}
 
         {/* Outside the scrolling form, so the answer to a click in the head is
             in view wherever the form is scrolled to. */}
@@ -1311,6 +1374,32 @@ function saveTextFile(fileName, text) {
   if (typeof window.URL.revokeObjectURL === 'function') window.URL.revokeObjectURL(url);
 }
 
+/**
+ * THE VERSIONS TAB'S THREE CALLS, on the two existing prompt routes — the
+ * stack is at CloudFormation's resource ceiling, so versions ride on
+ * `GET admin/ai-prompts?versions=<id>` and `PUT admin/ai-prompts/<id>`
+ * (get-ai-prompts.js / update-ai-prompt.js).
+ */
+function makeVersionsApi({ promptId, scope }) {
+  const id = encodeURIComponent(promptId);
+  const scopeQs = scope ? `&scope=${encodeURIComponent(scope)}` : '';
+  const read = async (response) => {
+    if (!response.ok) throw new Error(await refusalReason(response));
+    return response.json();
+  };
+  return {
+    list: async () => read(await authFetch(`${API_BASE}admin/ai-prompts?versions=${id}${scopeQs}`)),
+    get: async (version) => read(await authFetch(
+      `${API_BASE}admin/ai-prompts?versions=${id}&version=${encodeURIComponent(version)}${scopeQs}`
+    )),
+    makeLive: async (version) => read(await authFetch(`${API_BASE}admin/ai-prompts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'make-live', version, ...(scope ? { scope } : {}) }),
+    })),
+  };
+}
+
 // Main AI Prompt Manager Component
 /**
  * What a refused write says, in the server's words. The routes answer
@@ -1386,6 +1475,50 @@ function AIPromptManager({ readOnly = false }) {
   useEffect(() => {
     fetchPrompts();
   }, []);
+
+  /*
+    THE REPO'S PROMPT FILES (config/repoPrompts.js) and the mark each row gets
+    from them — docs/design/prompt-versions/ frame 1. Engage mode only: the
+    read-only mount offers no Review, so it draws no repo marks either.
+  */
+  const [repoEntries, setRepoEntries] = useState([]);
+  const [reviewing, setReviewing] = useState(null);
+  useEffect(() => {
+    if (readOnly) return undefined;
+    let live = true;
+    loadRepoPrompts().then(({ prompts: entries }) => { if (live) setRepoEntries(entries || []); });
+    return () => { live = false; };
+  }, [readOnly]);
+  const repoStatusFor = useCallback((p) => repoStatusOf(p, repoEntries), [repoEntries]);
+
+  /** The Review screen's save: the repo's text as a new, live version. */
+  const saveFromRepo = async (prompt, entry) => {
+    const response = await authFetch(`${API_BASE}admin/ai-prompts/${prompt.promptId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'repo',
+        repoSource: { key: entry.key, path: entry.path, fields: entry.fields, commitDate: entry.commitDate || undefined },
+        ...entry.values,
+        ...(prompt.scope ? { scope: prompt.scope } : {}),
+      }),
+    });
+    if (!response.ok) throw new Error(await refusalReason(response));
+    const result = await response.json();
+    setReviewing(null);
+    await fetchPrompts();
+    setNotice(
+      `“${prompt.name}” is now version ${result.version}, from the repo, and it is live. `
+      + `Version ${Number(prompt.version) || 'the old one'} stays in its history.`
+    );
+  };
+
+  /** A version made live from the editor's Versions tab: the list is stale now. */
+  const handleVersionMadeLive = async (prompt, version) => {
+    setEditingPrompt(null);
+    await fetchPrompts();
+    setNotice(`Version ${version} of “${prompt.name}” is live. The version that was live stays in its history.`);
+  };
 
   const fetchPrompts = async () => {
     setIsLoading(true);
@@ -1728,7 +1861,18 @@ function AIPromptManager({ readOnly = false }) {
         busyPromptId={togglingId}
         onCopyToArchive={readOnly ? undefined : copyPromptToArchive}
         copyingPromptId={copyingToArchiveId}
+        repoStatusFor={readOnly || repoEntries.length === 0 ? undefined : repoStatusFor}
+        onReviewRepo={readOnly ? undefined : (target, status) => setReviewing({ prompt: target, status })}
       />
+
+      {reviewing && (
+        <PromptRepoReview
+          prompt={reviewing.prompt}
+          status={reviewing.status}
+          onSave={saveFromRepo}
+          onClose={() => setReviewing(null)}
+        />
+      )}
 
       {viewingPrompt && (
         <PromptReadOnlyView
@@ -1753,6 +1897,7 @@ function AIPromptManager({ readOnly = false }) {
           isNew={isCreating}
           initialView={isCreating ? 'edit' : editorView}
           onSave={handleSavePrompt}
+          onVersionMadeLive={handleVersionMadeLive}
           onCancel={() => {
             setEditingPrompt(null);
             setIsCreating(false);
@@ -1951,10 +2096,10 @@ function AIPromptManager({ readOnly = false }) {
           <h3 id="pmgr-populate-title">Rewrite the built-in prompts?</h3>
           <p>
             This writes the built-in prompt for every category. It matches on <strong>name</strong>:
-            any prompt here whose name matches a built-in is <strong>replaced by the built-in
-            text, keeping its id</strong> — so question sets pinned to it keep working and start
-            reading something different. Edits made to those prompts are not kept and there is
-            no undo.
+            any prompt here whose name matches a built-in gets <strong>the built-in text as a new
+            version, keeping its id</strong> — so question sets pinned to it keep working and start
+            reading something different. The text it had is kept as the previous version, in the
+            prompt&apos;s Versions tab, and can be made live again.
           </p>
           <p>
             Each engagement type keeps the default it has now: a built-in becomes the default
