@@ -59,6 +59,21 @@ import {
   SECTION_PARAM, sectionFromSearch, searchForSection, searchMatchesSection,
 } from './config/adminSection';
 import { uploadGeneratedSet, generatedSetPendingNotice } from './utils/generatedSetUpload';
+import NotificationsBell from './components/NotificationsBell';
+import DraftReview from './components/DraftReview';
+import { listDrafts, waitingDrafts } from './utils/draftsApi';
+import { librariesFrom } from './utils/libraries';
+import { destinationOf } from './utils/notificationsApi';
+
+/** The section a draft's review is a place in. */
+const DRAFTS_SECTION = 'questionsets';
+
+/** `?draft=<id>` — the bell's deep link into a draft's review (utils/notificationsApi.js). */
+function draftFromSearch() {
+  if (typeof window === 'undefined') return null;
+  const id = new URLSearchParams(window.location.search).get('draft');
+  return id && /^[A-Za-z0-9_-]{6,64}$/.test(id) ? { draftId: id, libraryKey: '' } : null;
+}
 
 const API_BASE = window.API_BASE;
 
@@ -315,6 +330,16 @@ function AdminPage() {
   const [eventPlace, setEventPlace] = useState(null);
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [activeOrgId, setActiveOrgIdState] = useState(() => getActiveOrgId());
+  /*
+    AI DRAFTS (docs/design/ai-generation-review). `drafts` are this person's
+    drafts in the library the console is standing in — for the sets list's
+    strip and chips and the nav badge. `draftPlace` is a draft's review open as
+    a PLACE in Question sets, like the editor; `?draft=` opens it from the bell.
+    `notifyNonce` re-reads the bell after something here changed what waits.
+  */
+  const [drafts, setDrafts] = useState([]);
+  const [draftPlace, setDraftPlace] = useState(() => draftFromSearch());
+  const [notifyNonce, setNotifyNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -707,6 +732,73 @@ function AdminPage() {
     setActiveOrgId(key);
     window.location.assign('/admin');
   };
+  /* ── AI DRAFTS AND THE BELL ─────────────────────────────────────────── */
+
+  /** Open a draft's review as a place in Question sets. */
+  const openDraft = (draftId, libraryKey = '') => {
+    setEditMode(false);
+    setEditingSetId('');
+    setEditingSetScope('');
+    setDraftPlace({ draftId, libraryKey });
+    if (activeTab !== DRAFTS_SECTION) handleNavigate(DRAFTS_SECTION);
+  };
+
+  /** Leave the review; drop `?draft=` so a reload does not reopen it. */
+  const closeDraft = () => {
+    setDraftPlace(null);
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('draft')) {
+        params.delete('draft');
+        const q = params.toString();
+        window.history.replaceState(window.history.state, '', `${window.location.pathname}${q ? `?${q}` : ''}`);
+      }
+    }
+  };
+
+  /** A draft decided, discarded or restored: the list, the chips and the bell move. */
+  const draftChanged = () => {
+    fetchQuestionSets();
+    setNotifyNonce((n) => n + 1);
+  };
+
+  /*
+    A builder's run finished into a draft: the builder closes and the review
+    opens here. A draft in another library is reviewed THERE (every request
+    names its library), without moving the console.
+  */
+  const handleDraftReady = ({ draftId, libraryKey = '' }) => {
+    setShowAIScenarioBuilder(false);
+    setShowTriviaAIBuilder(false);
+    setShowPollAIBuilder(false);
+    setShowSurveyAIBuilder(false);
+    fetchDrafts();
+    setNotifyNonce((n) => n + 1);
+    openDraft(draftId, libraryKey && libraryKey !== activeOrgId ? libraryKey : '');
+  };
+
+  /*
+    WHERE A NOTIFICATION GOES. Its link names a library and a place. In this
+    library, it opens in place; in another, the console switches library —
+    a full load, the tenancy guarantee handleSwitchOrg describes — and the
+    address carries the place.
+  */
+  const openNotification = (item) => {
+    const link = item && item.link;
+    const { libraryKey, url } = destinationOf(link);
+    const target = link && link.type === 'invites'
+      ? ((orgs.find((o) => o.type === 'personal') || {}).orgId || '')
+      : libraryKey;
+    if (target && target !== activeOrgId) {
+      setActiveOrgId(target);
+      window.location.assign(url);
+      return;
+    }
+    if (link && link.type === 'draft') { openDraft(link.draftId); return; }
+    if (link && link.type === 'section' && link.section) { handleNavigate(link.section); return; }
+    handleNavigate('overview');
+  };
+
   const handleCreatePersonal = async () => {
     try {
       const res = await authFetch(adminApiUrl('orgs'), {
@@ -964,6 +1056,8 @@ function AdminPage() {
       // …and the event builder is the Events section's.
       setEventPlace(null);
       setCreatingEvent(false);
+      // …and a draft's review is Question sets'.
+      setDraftPlace(null);
     }
     setActiveTab(sectionId);
     setSectionAsked(true);
@@ -1193,9 +1287,20 @@ function AdminPage() {
 
   useEffect(() => {
     fetchQuestionSets();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only
+
+  const fetchDrafts = async () => {
+    try {
+      const res = await listDrafts();
+      if (res.ok) setDrafts(Array.isArray(res.data.drafts) ? res.data.drafts : []);
+    } catch (error) {
+      // The list still works without them; the bell still says what waits.
+      console.error('Error fetching AI drafts:', error);
+    }
+  };
 
   const fetchQuestionSets = async () => {
+    fetchDrafts();
     try {
       // Use admin endpoint to get all question sets (including inactive)
       const res = await authFetch(`${API_BASE}admin/question-sets`);
@@ -1646,7 +1751,11 @@ function AdminPage() {
                 count: questionSets.length || undefined,
                 // The one number in this console that decays if nobody looks:
                 // sets the check sent back. Absent when zero (spec §10.3).
-                badge: questionSets.filter((s) => s.share && s.share.status === 'flagged').length || undefined,
+                // …and AI drafts waiting for this person to review, in this
+                // library (docs/design/ai-generation-review). Both decay the
+                // moment somebody acts, which is what a badge is for.
+                badge: (questionSets.filter((s) => s.share && s.share.status === 'flagged').length
+                  + waitingDrafts(drafts).length) || undefined,
               };
             }
             // Sets waiting on a human. Absent (not "0") until the read lands
@@ -1686,6 +1795,14 @@ function AdminPage() {
             />
           ) : null
         }
+        /* THE BELL — one inbox for every library this person works in. */
+        notifications={(
+          <NotificationsBell
+            libraries={librariesFrom(orgs, isStaff)}
+            onOpen={openNotification}
+            refreshKey={notifyNonce}
+          />
+        )}
         narrowOk={resolvedTab === 'overview'}
         activeId={resolvedTab}
         onNavigate={handleNavigate}
@@ -1699,6 +1816,8 @@ function AdminPage() {
             ? (billingPlace === 'history'
               ? { parentLabel: 'Plan & usage', onBack: () => setBillingPlace('') }
               : { parentLabel: 'Billing history', onBack: () => setBillingPlace('history') })
+            : draftPlace && resolvedTab === DRAFTS_SECTION
+            ? { parentLabel: 'Question sets', onBack: closeDraft }
             : editingSet
             ? { parentLabel: 'Question sets', onBack: handleCancelEdit }
             : (scoreCardId && resolvedTab === 'publiclibrary'
@@ -1710,12 +1829,15 @@ function AdminPage() {
             ? (eventPlace.title || `Event ${eventPlace.code}`)
             : billingPlace && resolvedTab === 'billing'
             ? (billingPlace === 'history' ? 'Billing history' : `Invoice · ${periodLabel(billingPlace)}`)
+            : draftPlace && resolvedTab === DRAFTS_SECTION
+            ? 'Review AI draft'
             : editingSet
             ? editingSet.name || editingSet.id
             : (scoreCardId && resolvedTab === 'publiclibrary' ? 'Score card' : section.title)
         }
         subtitle={
-          (eventPlace && resolvedTab === 'events') || (billingPlace && resolvedTab === 'billing') || editingSet || (scoreCardId && resolvedTab === 'publiclibrary')
+          (eventPlace && resolvedTab === 'events') || (billingPlace && resolvedTab === 'billing') || editingSet
+            || (draftPlace && resolvedTab === DRAFTS_SECTION) || (scoreCardId && resolvedTab === 'publiclibrary')
             ? undefined
             : section.subtitle
         }
@@ -1737,7 +1859,7 @@ function AdminPage() {
           editor paints a dusk card onto a #FBF7F1 field.
           Pinned in __tests__/questionSetEditorPalette.test.js.
         */
-        contentTheme={editingSet ? 'dark' : section.contentTheme || 'light'}
+        contentTheme={editingSet ? 'dark' : (draftPlace && resolvedTab === DRAFTS_SECTION ? 'dark' : section.contentTheme || 'light')}
         actions={(
           <>
             {resolvedTab === 'events' && activeOrg && !eventPlace && eventsTeamPlan && (
@@ -1752,7 +1874,31 @@ function AdminPage() {
           </>
         )}
       >
-        {editingSet ? (
+        {draftPlace && resolvedTab === DRAFTS_SECTION ? (
+          /*
+            A DRAFT'S REVIEW IS A PLACE, like the editor: it replaces the list,
+            carries a breadcrumb back, and Decide later loses nothing — the
+            draft is on the server for thirty days.
+          */
+          <DraftReview
+            key={draftPlace.draftId}
+            draftId={draftPlace.draftId}
+            libraryKey={draftPlace.libraryKey}
+            libraries={librariesFrom(orgs, isStaff)}
+            onClose={() => { closeDraft(); draftChanged(); }}
+            onChanged={draftChanged}
+            onOpenSet={(setId) => {
+              closeDraft();
+              if (draftPlace.libraryKey && draftPlace.libraryKey !== activeOrgId) {
+                setActiveOrgId(draftPlace.libraryKey);
+                window.location.assign('/admin?section=questionsets');
+                return;
+              }
+              fetchQuestionSets();
+              handleEditQuestionSet({ id: setId, scope: '' });
+            }}
+          />
+        ) : editingSet ? (
           /*
             THE DETAIL PLACE. The editor replaces the work area rather than
             being appended below the list it came from, which is the whole of
@@ -1783,6 +1929,7 @@ function AdminPage() {
             canShare={orgConsole && editingSet.canManage !== false}
             onShare={(version) => setSharing({ set: { ...editingSet, promptScope: promptScopeOf(editingSet) }, version })}
             onAppeal={handleAppeal}
+            libraryLabel={onPlatform ? 'Engage' : (activeOrg ? (activeOrg.type === 'personal' ? 'Your space' : activeOrg.name) : '')}
           />
         ) : (
           <>
@@ -1931,6 +2078,8 @@ function AdminPage() {
                  the "Who can see it" column nor the row action. */
               showVisibility={orgConsole}
               onShare={handleShareSet}
+              drafts={drafts}
+              onOpenDraft={(draft) => openDraft(draft.draftId)}
               createOpen={isCreateOpen}
             >
               {/*
@@ -2384,6 +2533,8 @@ function AdminPage() {
         <AIScenarioBuilder
           onClose={() => setShowAIScenarioBuilder(false)}
           onScenariosGenerated={handleScenariosGenerated}
+          onDraftReady={handleDraftReady}
+          libraries={librariesFrom(orgs, isStaff)}
           engagementType={engagementType}
         />
       )}
@@ -2393,6 +2544,8 @@ function AdminPage() {
         <TriviaAIBuilder
           onClose={() => setShowTriviaAIBuilder(false)}
           onTriviaGenerated={handleTriviaGenerated}
+          onDraftReady={handleDraftReady}
+          libraries={librariesFrom(orgs, isStaff)}
         />
       )}
 
@@ -2401,6 +2554,8 @@ function AdminPage() {
         <PollAIBuilder
           onClose={() => setShowPollAIBuilder(false)}
           onPollGenerated={handlePollGenerated}
+          onDraftReady={handleDraftReady}
+          libraries={librariesFrom(orgs, isStaff)}
         />
       )}
 
@@ -2409,6 +2564,8 @@ function AdminPage() {
         <SurveyAIBuilder
           onClose={() => setShowSurveyAIBuilder(false)}
           onSurveyGenerated={handleSurveyGenerated}
+          onDraftReady={handleDraftReady}
+          libraries={librariesFrom(orgs, isStaff)}
         />
       )}
 

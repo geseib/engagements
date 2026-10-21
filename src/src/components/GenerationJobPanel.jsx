@@ -3,6 +3,7 @@ import Icon from './Icon';
 import { warningsMayBeIncomplete } from '../utils/generationJob';
 import PlanLimitNotice from './PlanLimitNotice';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
+import { cancelDraft } from '../utils/draftsApi';
 import './GenerationJobPanel.css';
 
 /**
@@ -32,11 +33,11 @@ import './GenerationJobPanel.css';
  *     for liveness; the sentence says why. A smoothly filling bar would be
  *     inventing motion that does not exist.
  *
- *  3. THERE IS NO CANCEL BUTTON, and the panel says why. No cancel route exists
- *     in template-clean.yaml, and the worker never re-reads the job row between
- *     passes — it checks only getRemainingTimeInMillis() — so even a flag
- *     written by a new endpoint would be invisible to it. A Cancel button would
- *     stop you watching while the model calls and their cost continued.
+ *  3. A RUN WITH NO DRAFT HAS NO CANCEL BUTTON, and the panel says why: the
+ *     job row carries no flag the worker reads. A run that writes into a DRAFT
+ *     does — the worker reads `cancelRequested` between passes
+ *     (shared/generation-drafts.js) — so DraftRunning below offers a real
+ *     Stop. A button that does not do what it says is still never drawn.
  *
  *  4. THE WARNING LIST MAY BE SHORT. `failJob` does not write `warnings`, so a
  *     failed job shows only what the last successful progress write persisted.
@@ -58,6 +59,17 @@ export default function GenerationJobPanel({
    * new coat.
    */
   createsSet = false,
+  /**
+   * THE DRAFT THIS RUN WRITES INTO (shared/generation-drafts.js), or null.
+   * Since 2026-10-21 every builder run writes one: nothing is saved until the
+   * person accepts it, the bell says when it is ready, and it is kept thirty
+   * days. When present, the "If you leave" list says exactly that — replacing
+   * the "the set gets made without you" promise an addition could not keep —
+   * and Stop is real: the worker reads it between passes.
+   */
+  draftId = null,
+  /** The library the draft is in, for Stop's request. */
+  libraryKey = '',
   // The client's own running commentary — POST retries, "reconnecting…" — which
   // is not on the wire and has no `phase` to carry it.
   statusLine = '',
@@ -105,6 +117,20 @@ export default function GenerationJobPanel({
     outcome, phase, items, completed, requested, warnings, error, shortfall, promptSource,
     createdSet, setCreationError, setCreationLimit,
   } = job;
+
+  if (outcome === 'running' && draftId) {
+    return (
+      <DraftRunning
+        job={job}
+        noun={noun}
+        jobId={jobId}
+        draftId={draftId}
+        libraryKey={libraryKey}
+        statusLine={statusLine}
+        onKeepRunning={onKeepRunning}
+      />
+    );
+  }
 
   if (outcome === 'running') {
     return (
@@ -390,6 +416,92 @@ export default function GenerationJobPanel({
           &ldquo;{createdSet.setName}&rdquo; from the question set list.
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * A RUN THAT WRITES INTO A DRAFT, while it runs. The same bar as below, and a
+ * "leave" list that promises only what happens: the draft is kept, the bell
+ * says when it is ready, nothing is saved until it is accepted. Stop sets the
+ * draft's flag; the pass already running finishes and is kept.
+ */
+function DraftRunning({
+  job, noun, jobId, draftId, libraryKey, statusLine, onKeepRunning,
+}) {
+  const [stopping, setStopping] = React.useState(false);
+  const [stopError, setStopError] = React.useState('');
+  const { phase, completed, requested } = job;
+  const stop = async () => {
+    setStopping(true);
+    setStopError('');
+    try {
+      const res = await cancelDraft(draftId, libraryKey);
+      if (!res.ok) { setStopping(false); setStopError(res.data.error || 'Could not stop it.'); }
+    } catch (e) {
+      setStopping(false);
+      setStopError(e.message);
+    }
+  };
+  return (
+    <section className="gjp gjp-running" data-testid="gjp-draft-running">
+      <div className="gjp-head">
+        <span className="gjp-bignum">
+          {completed}
+          {requested > 0 && <span className="gjp-of">&thinsp;/&thinsp;{requested}</span>}
+        </span>
+        <div className="gjp-headtext">
+          <p className="gjp-phase">{stopping ? 'Stopping after this pass…' : (phase || statusLine || 'Starting generation…')}</p>
+          <p className="gjp-sub">
+            {jobId && <>Job <span className="gjp-mono">{jobId}</span> &middot; </>}
+            runs on the server
+          </p>
+        </div>
+      </div>
+      <div
+        className="gjp-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={requested || undefined}
+        aria-valuenow={requested ? completed : undefined}
+        aria-label={`Generated ${completed}${requested ? ` of ${requested}` : ''}`}
+      >
+        <i className="gjp-fill" style={{ width: requested > 0 ? `${Math.min(100, Math.round((completed / requested) * 100))}%` : '0%' }} />
+        <i className="gjp-sweep" aria-hidden="true" />
+      </div>
+      <h4 className="gjp-h4">If you leave</h4>
+      <div className="gjp-acts">
+        {onKeepRunning && (
+          <button type="button" className="btn-primary" onClick={onKeepRunning}>
+            Close &mdash; you&rsquo;ll be notified
+          </button>
+        )}
+        <button type="button" className="btn-secondary" onClick={stop} disabled={stopping}>
+          {stopping ? 'Stopping…' : 'Stop'}
+        </button>
+      </div>
+      {stopError && <p className="gjp-errmsg">{stopError}</p>}
+      <ul className="gjp-leave">
+        <li>
+          <Icon name="Check" weight="bold" size={16} color="var(--gjp-ok)" />
+          <span>The run keeps going on the server; this window is only watching it.</span>
+        </li>
+        <li>
+          <Icon name="Check" weight="bold" size={16} color="var(--gjp-ok)" />
+          <span>
+            <b>Everything it writes waits in a draft</b> for thirty days, on any device. The bell
+            in the top line says when it is ready, and the {noun} wait there for you to review.
+          </span>
+        </li>
+        <li>
+          <Icon name="Check" weight="bold" size={16} color="var(--gjp-ok)" />
+          <span>Nothing is saved, and no set changes, until you accept it.</span>
+        </li>
+        <li>
+          <Icon name="Check" weight="bold" size={16} color="var(--gjp-ok)" />
+          <span>Stop finishes the pass already running and keeps what it wrote.</span>
+        </li>
+      </ul>
     </section>
   );
 }

@@ -54,7 +54,10 @@ const { normalizeRoundKind, roundKindDirection } = require('./shared/round-kinds
 const { createSetForJob, scenariosToCsv } = require('./shared/generated-set');
 const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 const { callerUsername } = require('./shared/require-admin');
-const { callerUserId } = require('./shared/question-set-access');
+const {
+  callerUserId, findSetForCaller, requireSetManager, setScopeOf, setOrgOf,
+} = require('./shared/question-set-access');
+const drafts = require('./shared/generation-drafts');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
@@ -355,6 +358,19 @@ async function runWorker(event, context) {
   // asked (shared/generation-jobs.js). Absent for Engage's own library.
   const sealFor = caller.orgId || '';
 
+  // THE DRAFT THIS RUN WRITES INTO — see shared/generation-handler.js, which
+  // does the same; this file keeps its own copy of the flow.
+  let draftRun = null;
+  let stoppedByRequest = false;
+  try {
+    draftRun = await drafts.openDraftRun({ db: dynamodb, table: tableName, caller });
+  } catch (error) {
+    await failJob(dynamodb, tableName, jobId, error.message);
+    return;
+  }
+  const seedTitles = draftRun ? draftRun.seedTitles : [];
+  for (const t of seedTitles) keptTokenSets.push(new Set(titleTokens(t)));
+
   try {
     const {
       scenarioType, engagementType = 'call-and-answer', prompt, count, difficulty, promptId,
@@ -428,6 +444,10 @@ async function runWorker(event, context) {
         warnings.push(`Stopped after ${produced.length} of ${total} to stay inside the function time limit. Run again to generate more.`);
         break;
       }
+      if (draftRun && await draftRun.cancelled()) {
+        stoppedByRequest = true;
+        break;
+      }
 
       const chunkPrompt = buildPrompt({
         template,
@@ -439,7 +459,7 @@ async function runWorker(event, context) {
         customPrompt,
         categories,
         mustHaveCategories,
-        alreadyUsedTitles: produced.map((s) => s.title),
+        alreadyUsedTitles: [...seedTitles, ...produced.map((s) => s.title)],
         roundKind,
         roundKindBrief,
         batchGuidance,
@@ -462,7 +482,7 @@ async function runWorker(event, context) {
             prompt: buildPrompt({
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
-              alreadyUsedTitles: produced.map((s) => s.title),
+              alreadyUsedTitles: [...seedTitles, ...produced.map((s) => s.title)],
               roundKind, roundKindBrief, batchGuidance,
             }),
             tool,
@@ -473,6 +493,7 @@ async function runWorker(event, context) {
         }
       }
 
+      if (draftRun) draftRun.addUsage(result && result.__usage);
       const batch = Array.isArray(result?.items) ? result.items : [];
       if (batch.length === 0) {
         warnings.push('A generation pass returned no items; stopping early.');
@@ -500,6 +521,7 @@ async function runWorker(event, context) {
         warnings,
         sealFor,
       });
+      if (draftRun) await draftRun.progress(produced);
 
       // No forward progress means another pass will not help either.
       if (added === 0) {
@@ -522,9 +544,21 @@ async function runWorker(event, context) {
   // change exists for, and the set it makes is inactive, so a short draft plays
   // nowhere until a human reviews it. `createSetForJob` does nothing when
   // `produced` is empty and never throws.
-  await createSetForJob({
-    dynamodb, tableName, jobId, spec: SET_CREATION, payload, items: produced, caller,
-  });
+  //
+  // A DRAFTED RUN MAKES NO SET: its items wait for the person to accept them.
+  if (draftRun) {
+    try {
+      await draftRun.finish({
+        produced, warnings, error: generationError, promptSource, stoppedByRequest,
+      });
+    } catch (error) {
+      console.error(`❌ Job ${jobId} could not finish its draft:`, error);
+    }
+  } else {
+    await createSetForJob({
+      dynamodb, tableName, jobId, spec: SET_CREATION, payload, items: produced, caller,
+    });
+  }
 
   if (generationError) {
     await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced, sealFor });
@@ -575,11 +609,21 @@ exports.handler = async (event, context) => {
     if (!userId) return json(401, { error: 'This request carried no signed-in user. Sign in again and retry.' });
 
     if (!event.body) return json(400, { error: 'No request body provided' });
-    const payload = JSON.parse(event.body);
+    const requestBody = JSON.parse(event.body);
 
-    const requested = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
     const jobId = newJobId();
     const orgId = callerOrgId(event);
+
+    // INTO A DRAFT, in the library it will be saved into (shared/generation-drafts.js).
+    const prepared = await drafts.prepareDraftRun({
+      db: dynamodb, table: tableName, event, payload: requestBody, kind: 'scenarios',
+      engagementType: SET_CREATION.engagementType(requestBody),
+      jobId, tokensPerItem: perItemTokens(SET_CREATION.engagementType(requestBody)), maxCount: MAX_COUNT,
+      findSetForCaller, requireSetManager, setScopeOf, setOrgOf, json,
+    });
+    if (prepared && prepared.response) return prepared.response;
+    const payload = prepared ? prepared.payload : requestBody;
+    const requested = Math.min(Math.max(parseInt(payload.count, 10) || 1, 1), MAX_COUNT);
 
     await createJob(dynamodb, tableName, {
       jobId,
@@ -590,6 +634,7 @@ exports.handler = async (event, context) => {
         engagementType: payload.engagementType,
         count: requested,
       },
+      draftId: prepared ? prepared.draftId : '',
       // Sealed from the row's first write for a caller acting inside an
       // organisation; Engage's own library stays plaintext.
       sealFor: orgId,
@@ -628,11 +673,21 @@ exports.handler = async (event, context) => {
       // polling a job that will never start deserves an explanation.
       console.error('❌ Failed to dispatch generation worker:', error);
       await failJob(dynamodb, tableName, jobId, `Could not start generation worker: ${error.message}`);
+      if (prepared) await drafts.abandonRun(dynamodb, tableName, prepared.lib, prepared.draftId, `Could not start generation: ${error.message}`);
       return json(500, { error: `Could not start generation: ${error.message}`, jobId });
     }
 
     console.log(`🚀 Dispatched scenario generation job ${jobId} for ${requested} items`);
-    return json(202, { jobId, status: 'queued', requested });
+    return json(202, {
+      jobId,
+      status: 'queued',
+      requested,
+      ...(prepared ? {
+        draftId: prepared.draftId,
+        destination: { scope: prepared.lib.scope, orgId: prepared.lib.orgId },
+        estimatedOutputTokens: requested * perItemTokens(SET_CREATION.engagementType(payload)),
+      } : {}),
+    });
   } catch (error) {
     console.error('❌ AI scenario generation error:', error);
     return json(500, { error: `Failed to generate scenarios: ${error.message || 'unexpected error'}` });

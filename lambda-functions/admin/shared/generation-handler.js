@@ -31,6 +31,10 @@ const {
   openJob, isCallersJob, workerCaller, claimJob,
 } = require('./generation-jobs');
 const { createSetForJob } = require('./generated-set');
+const drafts = require('./generation-drafts');
+const {
+  findSetForCaller, requireSetManager, setScopeOf, setOrgOf,
+} = require('./question-set-access');
 const { callerUsername } = require('./require-admin');
 const { callerUserId } = require('./question-set-access');
 const { callerOrgId, callerOrgRole } = require('./tenant');
@@ -86,6 +90,11 @@ function makeGenerationHandler(config) {
     // when upload-questions.js began importing the survey CSV.
     // See shared/generated-set.js.
     setCreation = null,
+    // WRITES INTO A DRAFT (shared/generation-drafts.js). Every whole-set
+    // generator does: a new set is made only when its draft is accepted, and
+    // an "Add questions" run waits there for the person instead of for an open
+    // editor. The two single-purpose helpers on this factory never do.
+    writesDrafts = Boolean(setCreation),
   } = config;
 
   const tableName = process.env.TABLE_NAME;
@@ -127,6 +136,20 @@ function makeGenerationHandler(config) {
     // asked (generation-jobs.js). Absent for Engage's own library.
     const sealFor = caller.orgId || '';
 
+    // THE DRAFT THIS RUN WRITES INTO, when the POST made one. A draft that has
+    // gone (discarded, expired) fails the job rather than letting the items
+    // land somewhere nobody asked for.
+    let draftRun = null;
+    let stoppedByRequest = false;
+    try {
+      draftRun = await drafts.openDraftRun({ db: dynamodb, table: tableName, caller });
+    } catch (error) {
+      await failJob(dynamodb, tableName, jobId, error.message);
+      return;
+    }
+    const seedTitles = draftRun ? draftRun.seedTitles : [];
+    for (const t of seedTitles) keptTokenSets.push(new Set(titleTokens(t)));
+
     try {
       const { total, config: reqConfig } = parseRequest(payload);
       const perCall = itemsPerCall(tokenKind);
@@ -153,11 +176,17 @@ function makeGenerationHandler(config) {
           warnings.push(`Stopped after ${produced.length} of ${total} to stay inside the function time limit. Run again to generate more.`);
           break;
         }
+        // STOP, READ BETWEEN PASSES. A call already in flight is paid for and
+        // kept; the next one is simply not made.
+        if (draftRun && await draftRun.cancelled()) {
+          stoppedByRequest = true;
+          break;
+        }
 
         const promptFor = (count) => buildPrompt({
           config: reqConfig,
           count,
-          alreadyUsedTitles: produced.map(titleOf).filter(Boolean),
+          alreadyUsedTitles: [...seedTitles, ...produced.map(titleOf).filter(Boolean)],
           isFirstPass,
         });
 
@@ -183,6 +212,8 @@ function makeGenerationHandler(config) {
             throw error;
           }
         }
+
+        if (draftRun) draftRun.addUsage(result && result.__usage);
 
         // Set-level output (e.g. an improved survey title) is asked for on the
         // FIRST pass only — re-deriving it per chunk invites the model to
@@ -226,6 +257,7 @@ function makeGenerationHandler(config) {
           meta,
           sealFor,
         });
+        if (draftRun) await draftRun.progress(produced);
 
         // No forward progress means another pass will not help either.
         if (added === 0) {
@@ -249,9 +281,23 @@ function makeGenerationHandler(config) {
     // and the set it produces is inactive, so a short draft plays nowhere until
     // a human reviews it. `createSetForJob` does nothing when `produced` is
     // empty and never throws.
-    await createSetForJob({
-      dynamodb, tableName, jobId, spec: setCreation, payload, items: produced, caller,
-    });
+    //
+    // A DRAFTED RUN MAKES NO SET. Its items wait in the draft until the person
+    // accepts them (shared/generation-drafts.js) — which is also why a draft
+    // does not count against the plan's set allowance.
+    if (draftRun) {
+      try {
+        await draftRun.finish({
+          produced, warnings, error: generationError, stoppedByRequest,
+        });
+      } catch (error) {
+        console.error(`❌ Job ${jobId} could not finish its draft:`, error);
+      }
+    } else {
+      await createSetForJob({
+        dynamodb, tableName, jobId, spec: setCreation, payload, items: produced, caller,
+      });
+    }
 
     if (generationError) {
       await failJob(dynamodb, tableName, jobId, generationError.message, { items: produced, sealFor });
@@ -297,14 +343,30 @@ function makeGenerationHandler(config) {
       if (!userId) return json(401, { error: 'This request carried no signed-in user. Sign in again and retry.' });
 
       if (!event.body) return json(400, { error: 'No request body provided' });
-      const payload = JSON.parse(event.body);
+      const requestBody = JSON.parse(event.body);
 
-      const { total } = parseRequest(payload);
       const jobId = newJobId();
       const orgId = callerOrgId(event);
 
+      // INTO A DRAFT, in the library it will be saved into — or a refusal, when
+      // the caller stands in no library they may write to.
+      const prepared = writesDrafts
+        ? await drafts.prepareDraftRun({
+          db: dynamodb, table: tableName, event, payload: requestBody, kind,
+          engagementType: setCreation && typeof setCreation.engagementType === 'string'
+            ? setCreation.engagementType
+            : (requestBody.engagementType || kind),
+          jobId, tokensPerItem: perItemTokens(tokenKind),
+          findSetForCaller, requireSetManager, setScopeOf, setOrgOf, json,
+        })
+        : null;
+      if (prepared && prepared.response) return prepared.response;
+      const payload = prepared ? prepared.payload : requestBody;
+      const { total } = parseRequest(payload);
+
       await createJob(dynamodb, tableName, {
         jobId, kind, requested: total, request: { kind, count: total },
+        draftId: prepared ? prepared.draftId : '',
         // Sealed from the row's first write for a caller acting inside an
         // organisation; Engage's own library stays plaintext.
         sealFor: orgId,
@@ -345,11 +407,21 @@ function makeGenerationHandler(config) {
         // client polling a job that will never start deserves an explanation.
         console.error('❌ Failed to dispatch generation worker:', error);
         await failJob(dynamodb, tableName, jobId, `Could not start generation worker: ${error.message}`);
+        if (prepared) await drafts.abandonRun(dynamodb, tableName, prepared.lib, prepared.draftId, `Could not start generation: ${error.message}`);
         return json(500, { error: `Could not start generation: ${error.message}`, jobId });
       }
 
       console.log(`🚀 Dispatched ${kind} generation job ${jobId} for ${total} items`);
-      return json(202, { jobId, status: 'queued', requested: total });
+      return json(202, {
+        jobId,
+        status: 'queued',
+        requested: total,
+        ...(prepared ? {
+          draftId: prepared.draftId,
+          destination: { scope: prepared.lib.scope, orgId: prepared.lib.orgId },
+          estimatedOutputTokens: total * perItemTokens(tokenKind),
+        } : {}),
+      });
     } catch (error) {
       console.error(`❌ AI ${kind} generation error:`, error);
       return json(500, { error: `Failed to generate ${kind}: ${error.message || 'unexpected error'}` });

@@ -399,9 +399,55 @@ const aiBuilders = {
           items: [
             { title: 'Describe it', text: 'Theme, audience, tone, how many questions.' },
             { title: 'Let it fill the form', text: 'The assistant can fill the metadata fields from your description. Lock any field you have already decided and it will be left alone.' },
-            { title: 'Generate', text: 'Longer sets run as a job — you do not have to sit and watch it.' },
-            { title: 'Review before you ship it', text: 'Read the questions. This is the step people skip.' },
+            { title: 'Choose where it is saved', text: 'Your space, a team you belong to, or — for Engage staff — Engage\'s shared library. The builder shows the library it will use and lets you change it. Adding questions to a set always saves into that set\'s own library.' },
+            { title: 'Generate', text: 'It runs on the server as a job. Close the builder whenever you like: everything it writes waits in a draft, and the bell in the top line tells you when it is ready.' },
+            { title: 'Review, then accept', text: 'Keep or leave out each question, edit any of them, regenerate one category. Nothing is saved until you accept.' },
           ],
+        },
+      ],
+    },
+    {
+      title: 'Drafts, the bell, and the review',
+      icon: 'Bell',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Every generation run — a new set, or questions added to an existing one — writes into a draft in the library it will be saved into. A draft is yours alone until you accept it: nobody else in the team sees it.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'The bell', text: 'The bell in the top line counts what is waiting for you. A ready draft is there with a link straight to its review, whichever library you are in, and so are invitations, people waiting for approval and sets the content check sent back.' },
+            { title: 'In the list', text: 'Question sets shows the drafts waiting in the library you are in, and a set with questions waiting to join it carries a "Review" tag. The tag goes away as soon as the draft is accepted, discarded or expires.' },
+            { title: 'Stop', text: 'While it runs, Stop finishes the pass already being written and keeps it. Nothing after that is paid for.' },
+            { title: 'Regenerate', text: 'Regenerate one category, or generate the questions that did not arrive, into the same draft. These are the only review buttons that call the model, and each says how big it is first. Reading, keeping, leaving out and editing cost nothing.' },
+          ],
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'Thirty days, with a reminder',
+          text: 'A draft waits thirty days. Five days before it runs out the bell lights up again. A discarded draft can be restored for seven days; an accepted one is kept for thirty as the record of what was accepted.',
+        },
+      ],
+    },
+    {
+      title: 'Accepting, and taking it back',
+      icon: 'ArrowCounterClockwise',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'A new set', text: 'Accept saves the set in the library the draft names, switched on (it needs a shelf for that) or left off if you untick it. It counts against your set allowance from then — never before.' },
+            { title: 'Questions for an existing set', text: 'Accept writes ONE new version of the set with the kept questions. The previous version is kept, and Undo puts it back while the new one is still the live one. Sessions already running keep the version they started on.' },
+            { title: 'Discard', text: 'Writes nothing to any set. Restore it from the list within seven days if you change your mind.' },
+          ],
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'Public comes after',
+          text: 'You cannot generate straight into the public library. Save the set in your space or a team first, then publish it from there — publishing runs its own check.',
         },
       ],
     },

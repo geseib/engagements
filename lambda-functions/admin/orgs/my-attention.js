@@ -72,7 +72,8 @@ async function flaggedSets(orgId) {
   return rows.filter((r) => r && r.share && r.share.status === 'flagged').length;
 }
 
-async function teamPeople(orgId, nowMs, org) {
+/** The two halves of "people", kept apart for the inbox (my-notifications.js). */
+async function teamPeopleParts(orgId, nowMs, org) {
   const [members, invites] = await Promise.all([G.listMembers(orgId), G.listInvites(orgId)]);
   // A Free team cannot approve, so its waiting invitees are not its to act on.
   const awaiting = G.canApproveHosting(org)
@@ -81,6 +82,11 @@ async function teamPeople(orgId, nowMs, org) {
   const runningOut = invites.map((row) => G.publicInvite(row, nowMs))
     .filter((i) => i.expired || (typeof i.daysUntilExpiry === 'number' && i.daysUntilExpiry <= RUNNING_OUT_DAYS))
     .length;
+  return { awaiting, runningOut };
+}
+
+async function teamPeople(orgId, nowMs, org) {
+  const { awaiting, runningOut } = await teamPeopleParts(orgId, nowMs, org);
   return awaiting + runningOut;
 }
 
@@ -176,4 +182,8 @@ async function myAttention(event, { now = new Date() } = {}) {
 
 const isAttentionRoute = (event) => /\/me\/attention$/.test(String(event?.requestContext?.http?.path || event?.rawPath || ''));
 
-module.exports = { myAttention, isAttentionRoute, setCognito, RUNNING_OUT_DAYS };
+module.exports = {
+  myAttention, isAttentionRoute, setCognito, RUNNING_OUT_DAYS,
+  // For the inbox, which says WHAT waits rather than how many.
+  flaggedSets, teamPeopleParts, capReached, pendingAccounts, planRequestsWaiting, ADMIN_ROLES,
+};

@@ -130,6 +130,14 @@
 
 .qsets-loading { color: var(--muted); }
 .qsets-dim { color: var(--muted); }
+
+/* AI DRAFTS WAITING (components/DraftsStrip.jsx): the success alert, holding a
+   short list — one line per draft, its way in at the end of the line. */
+.qsets-drafts { align-items: flex-start; }
+.qsets-drafts > .qsets-grow { min-width: 0; }
+.qsets-drafts-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.qsets-drafts-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.qsets-drafts-list li > span:first-child { flex: 1 1 260px; min-width: 0; }
 .qsets-mono { font-family: var(--qsets-font-mono); font-size: 14px; }
 
 /* -------------------------------------------------------------- controls -- */

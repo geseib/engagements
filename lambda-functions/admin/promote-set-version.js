@@ -9,6 +9,32 @@ const {
 const { requireSetManager, findSetForCaller, requestedScope } = require('./shared/question-set-access');
 const { PLATFORM } = require('./shared/tenant');
 const { dispatchHouseCheck } = require('./shared/house-check');
+const tenant = require('./shared/tenant');
+const { recordAudit, markAuditOutcome } = require('./shared/audit-log');
+const { decryptItem } = require('./shared/tenant-crypto');
+
+/**
+ * THE ROLLBACK IS AUDITED (owner, 2026-10-21: "reversible … after, via
+ * versioning", with accept, discard, restore and rollback in the log). Written
+ * BEFORE the flip, as every audited action is, so a log that cannot be written
+ * refuses the promote. The set's name is sealed by the audit log itself.
+ */
+async function auditPromote(event, found, meta, version) {
+  const orgId = found.ref.scope === tenant.ORG ? found.ref.orgId : '';
+  let title = typeof meta.name === 'string' ? meta.name : '';
+  if (orgId && meta.name && typeof meta.name === 'object') {
+    try { title = (await decryptItem(orgId, 'set', { name: meta.name })).name || ''; } catch (e) { title = ''; }
+  }
+  const role = tenant.deleteRole(event, { orgId, createdBy: meta.createdBy })
+    || (orgId ? 'host' : 'platform-admin');
+  return recordAudit(db, {
+    orgId,
+    action: 'set.promote-version',
+    actor: tenant.deleteActor(event, role),
+    target: { type: 'question-set', id: found.ref.setId || meta.SK || 'set', title: String(title || '') },
+    detail: { toVersion: version, fromVersion: toVersion(meta.activeVersion) },
+  });
+}
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -120,6 +146,8 @@ exports.handler = async (event) => {
     const entry = (Array.isArray(meta.versions) ? meta.versions : [])
       .find((v) => toVersion(v && v.version) === version) || {};
 
+    const auditRef = await auditPromote(event, found, meta, version);
+    try {
     await db.send(new UpdateCommand({
       TableName: tableName,
       Key: setMetadataKey(found.ref),
@@ -141,6 +169,10 @@ exports.handler = async (event) => {
         ':now': new Date().toISOString()
       }
     }));
+    } catch (flipError) {
+      await markAuditOutcome(db, auditRef, 'failed');
+      throw flipError;
+    }
 
     console.log(`⬆️ Promoted "${setId}" to v${version} (was v${toVersion(meta.activeVersion) ?? 'legacy'})`);
 
