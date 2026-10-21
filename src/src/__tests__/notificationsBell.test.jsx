@@ -90,3 +90,14 @@ test('nothing waiting says so, and shows no count', async () => {
   expect(await screen.findByText(/Nothing is waiting for you/)).toBeInTheDocument();
   expect(screen.queryByTestId('nbell-count')).toBeNull();
 });
+
+// rejects (walk of dev d2ba71d5): the bell's link from another section landing
+// on the bare Question sets list. handleNavigate closes the review it leaves,
+// so AdminPage's openDraft must navigate BEFORE it opens the review.
+test('AdminPage opens a draft after navigating to Question sets, not before', () => {
+  // eslint-disable-next-line global-require
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'AdminPage.jsx'), 'utf8');
+  const body = src.slice(src.indexOf('const openDraft = ('), src.indexOf('const closeDraft = ('));
+  expect(body.indexOf('handleNavigate(DRAFTS_SECTION)')).toBeGreaterThan(-1);
+  expect(body.indexOf('handleNavigate(DRAFTS_SECTION)')).toBeLessThan(body.indexOf('setDraftPlace({ draftId, libraryKey })'));
+});

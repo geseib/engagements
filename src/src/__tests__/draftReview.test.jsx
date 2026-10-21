@@ -92,13 +92,21 @@ test('leaving one out is saved as you go, and accept saves only what is kept, sw
   expect(sent).toEqual({ activate: true, title: 'Presidents Trivia', topic: 'history' });
 });
 
-test('without a shelf it can only be saved switched off', async () => {
+// rejects (walk of dev d2ba71d5; owner, 21 Oct 2026: "accepting switches it
+// on"): a plain Accept with no shelf saving the set switched off unasked.
+test('switched on by default: with no shelf Accept waits and says why; unticking saves it off', async () => {
   api(header(), {
     'POST /admin/generation-drafts/draft123abc/accept': json(200, { accepted: true, setId: 's', setName: 'S', active: false, kept: 3 }),
   });
   render(<DraftReview draftId="draft123abc" libraryKey="org_team" libraries={LIBS} />);
   await screen.findByTestId('draft-accept');
-  expect(screen.getByRole('checkbox', { name: /Switch it on now/ })).toBeDisabled();
+  const on = screen.getByRole('checkbox', { name: /Switch it on now/ });
+  expect(on).toBeChecked();
+  expect(on).not.toBeDisabled();
+  expect(screen.getByTestId('draft-accept')).toBeDisabled();
+  expect(screen.getByTestId('draft-needs-shelf')).toHaveTextContent(/Choose a shelf to switch it on/);
+  fireEvent.click(on);
+  expect(screen.queryByTestId('draft-needs-shelf')).toBeNull();
   fireEvent.click(screen.getByTestId('draft-accept'));
   await screen.findByText(/switched off for now/);
   expect(calls.find((c) => c.url.endsWith('/accept')).body.activate).toBe(false);

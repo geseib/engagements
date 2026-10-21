@@ -736,11 +736,15 @@ function AdminPage() {
 
   /** Open a draft's review as a place in Question sets. */
   const openDraft = (draftId, libraryKey = '') => {
+    // NAVIGATE FIRST, THEN OPEN: handleNavigate closes any place open in the
+    // section it leaves (setDraftPlace(null)), and the two updates batch, so
+    // the other order opened the review and closed it in one render — the
+    // bell's link from Overview landed on the bare list (walk of dev d2ba71d5).
+    if (activeTab !== DRAFTS_SECTION) handleNavigate(DRAFTS_SECTION);
     setEditMode(false);
     setEditingSetId('');
     setEditingSetScope('');
     setDraftPlace({ draftId, libraryKey });
-    if (activeTab !== DRAFTS_SECTION) handleNavigate(DRAFTS_SECTION);
   };
 
   /** Leave the review; drop `?draft=` so a reload does not reopen it. */
