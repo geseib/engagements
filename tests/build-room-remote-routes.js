@@ -359,7 +359,14 @@ const rkeys = () => [...store.values()].filter((x) => String(x.SK).startsWith('B
     await host('POST', 'share', { remote: true });
     await report(remoteLive({ Priya: 1, Ana: 2 }));
     const v = (await host('GET', 'state')).body;
-    assert.deepStrictEqual(v.lan.remote.people, [{ name: 'Ana', devices: 2 }, { name: 'Priya', devices: 1 }]);
+    assert.deepStrictEqual(v.lan.remote.people, [{ name: 'Ana', devices: 2, near: null }, { name: 'Priya', devices: 1, near: null }]);
+  });
+  await check('1.24.2: the plugin\'s "on this network" counts reach the host and are kept on the row', async () => {
+    await report({ ...remoteLive({ Priya: 1, Ana: 2 }), near: { Ana: 1, Priya: 0 } });
+    const v = (await host('GET', 'state')).body;
+    assert.deepStrictEqual(v.lan.remote.people.map((p) => [p.name, p.near]), [['Ana', 1], ['Priya', 0]]);
+    const raw = JSON.stringify(row('BUILD#LAN'));
+    assert.ok(raw.includes('RemoteNear'), 'kept on the row');
   });
   await check('a reopened tunnel (new address) is a new since, so phones refetch', async () => {
     const before = row('BUILD#LAN').RemoteLiveSince;

@@ -13,7 +13,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
-import { wifiState, demoRunnable, remoteState, remotePeople } from './wifiShare';
+import {
+  wifiState, demoRunnable, remoteState, remotePeople, remoteWhere, personWhere,
+} from './wifiShare';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
 
@@ -100,6 +102,8 @@ function Address({ link, note, copy = true }) {
 export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, onShowWall, offer = false }) {
   const s = wifiState(lan, now);
   const rs = remoteState(lan);
+  // On this network or elsewhere (plugin 1.24.2); null when there is no hint.
+  const where = rs === 'live' ? remoteWhere(remotePeople(lan)) : null;
   const map = (lan && lan.map) || [];
   const panelRef = useRef(null);
   useKeepOnScreen(panelRef, true, s.state);
@@ -156,7 +160,10 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
   } else {
     body = (
       <>
-        <p className="brm-wifipanel-stat">{rs === 'live' ? W.remoteOpenedOf(s.open, here) : W.shareOpenedOf(s.open, here)}</p>
+        <p className="brm-wifipanel-stat">
+          {rs === 'live' ? W.remoteOpenedOf(s.open, here) : W.shareOpenedOf(s.open, here)}
+          {rs === 'live' && where && <span className="brm-wifipanel-where">{' \u00b7 '}{W.remoteWhereCounts(where.near, where.away)}</span>}
+        </p>
         {rs === 'live' && <RemotePeople people={remotePeople(lan)} busy={busy} run={run} api={api} />}
         <Address link={link} note={W.shareWhoShort} />
         {s.open < here && rs !== 'live' && <p className="brm-wifipanel-say">{W.shareNotAll(s.open, here)}</p>}
@@ -237,6 +244,7 @@ export function RemotePeople({ people, busy, run, api }) {
         <li key={p.name} className={p.devices > 1 ? 'is-many' : ''}>
           <span className="brm-wifipanel-who" title={p.name}>{p.name}</span>
           <span className="brm-wifipanel-dev">{W.remoteDevices(p.devices)}</span>
+          {personWhere(p) && <span className={`brm-wifipanel-place${p.near > 0 ? ' is-near' : ''}`}>{personWhere(p)}</span>}
           {p.devices > 1 && (
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(p.name)}>
               {sure === p.name ? W.remoteRemoveSure(p.name) : W.remoteRemove}
@@ -245,6 +253,7 @@ export function RemotePeople({ people, busy, run, api }) {
         </li>
       ))}
       {more > 0 && <li className="brm-wifipanel-more">{W.remoteMore(more)}</li>}
+      {remoteWhere(people) && <li className="brm-wifipanel-note">{W.remoteWhereNote}</li>}
     </ul>
   );
 }

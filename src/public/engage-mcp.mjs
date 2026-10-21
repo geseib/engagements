@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.24.1';
+const VERSION = '1.24.2';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -2941,6 +2941,8 @@ const REMOTE_WAITERS_MAX = 200;
 const remote = {
   gateway: null, target: '', keys: new Map(), wrong: new Set(), lastCheckAt: 0,
   devices: new Map(), address: '', error: '', waiters: [], scopes: null,
+  // This laptop's public address (1.24.2): what a device "on this network" comes from.
+  self: { v4: '', v6: '' }, selfAt: 0, selfBusy: false,
   // The tunnel (below): 'none' | 'starting' | 'live'; its own error, kept
   // apart from the target's; no new tunnel before retryAt (Cloudflare limits
   // how fast they are created: SPIKE.md).
@@ -3010,7 +3012,8 @@ const remoteLock = Object.freeze({
     if (!player) return;
     const device = cookieValue(req, REMOTE_DEVICE_COOKIE) || 'no-device-cookie';
     if (!remote.devices.has(player)) remote.devices.set(player, new Map());
-    remote.devices.get(player).set(device, Date.now());
+    // Cloudflare names the visitor's public address; only cloudflared reaches this port.
+    remote.devices.get(player).set(device, { at: Date.now(), near: nearLaptop(req.headers['cf-connecting-ip']) });
   },
   blocked: remoteBlocked,
   publicOrigin: () => remote.address,
@@ -3027,10 +3030,80 @@ function remoteDeviceCounts() {
   const now = Date.now();
   const out = {};
   for (const [player, devices] of remote.devices) {
-    for (const [d, at] of devices) if (now - at > LAN_SEEN_MS) devices.delete(d);
+    for (const [d, seen] of devices) if (now - seen.at > LAN_SEEN_MS) devices.delete(d);
     if (devices.size) out[player] = Math.min(devices.size, 50); else remote.devices.delete(player);
   }
   return out;
+}
+
+/**
+ * Of each person's devices, how many came from this laptop's own public
+ * address (1.24.2, owner 21 Oct: "i cant tell who is connect local vs
+ * remote"). Undefined until the laptop knows its address: no hint, rather than
+ * everyone "elsewhere". Counts only; the addresses stay on this laptop.
+ */
+function remoteNearCounts() {
+  if (!remote.self.v4 && !remote.self.v6) return undefined;
+  const out = {};
+  for (const [player, devices] of remote.devices) {
+    let n = 0;
+    for (const seen of devices.values()) if (seen.near) n += 1;
+    out[player] = Math.min(n, 50);
+  }
+  return out;
+}
+
+// THIS LAPTOP'S PUBLIC ADDRESS, from Cloudflare's own trace page (the company
+// the tunnel already goes through). IPv4 is compared whole; IPv6 by its first
+// 64 bits, the network part every device on one Wi-Fi shares.
+const SELF_IP_URLS = (process.env.ENGAGE_SELF_IP_URLS || 'https://1.1.1.1/cdn-cgi/trace,https://[2606:4700:4700::1111]/cdn-cgi/trace').split(',').map((x) => x.trim()).filter(Boolean);
+const SELF_IP_EVERY_MS = Math.max(1000, Number(process.env.ENGAGE_SELF_IP_EVERY_MS) || 5 * 60 * 1000);
+
+/** The first four groups of an IPv6 address, without leading zeros ("2001:db8:0:1"); '' when not one. */
+export function v6Network(ip) {
+  const a = String(ip || '').trim().toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+  if (!a.includes(':') || /[^0-9a-f:.]/.test(a)) return '';
+  const [head, tail] = a.includes('::') ? a.split('::') : [a, null];
+  const left = head ? head.split(':') : [];
+  const right = tail === null ? [] : (tail ? tail.split(':') : []);
+  const groups = tail === null ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  if (groups.length < 4 || groups.slice(0, 4).some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return '';
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':');
+}
+
+/** Whether a visitor's address is on this laptop's network. False when either side is unknown. */
+export function nearAddress(ip, self) {
+  const a = String(ip || '').trim();
+  if (!a || !self) return false;
+  if (a.includes(':')) {
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(a);
+    if (mapped) return Boolean(self.v4) && mapped[1] === self.v4;
+    return Boolean(self.v6) && v6Network(a) === self.v6;
+  }
+  return Boolean(self.v4) && a === self.v4;
+}
+const nearLaptop = (ip) => nearAddress(ip, remote.self);
+
+/** Ask Cloudflare's trace page which address this laptop leaves from. Quiet on failure. */
+async function refreshSelfAddress() {
+  if (remote.selfBusy || Date.now() - remote.selfAt < SELF_IP_EVERY_MS) return;
+  remote.selfBusy = true;
+  try {
+    const found = { v4: '', v6: '' };
+    for (const url of SELF_IP_URLS) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const m = /^ip=(.+)$/m.exec(await res.text());
+        const ip = m ? m[1].trim() : '';
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) found.v4 = ip;
+        else if (v6Network(ip)) found.v6 = v6Network(ip);
+      } catch { /* this family is not reachable from here */ }
+    }
+    remote.self = found;
+    remote.selfAt = Date.now();
+  } finally {
+    remote.selfBusy = false;
+  }
 }
 
 function closeRemote() {
@@ -3082,13 +3155,17 @@ async function syncRemote(wanted, target, keys, scopes) {
     if (!remote.gateway && !remote.error) remote.error = `Every port from ${REMOTE_PORT} is in use on this laptop.`;
   }
   ensureTunnel();
+  // Who is "on this network" (1.24.2): keep the laptop's own address current while it is live.
+  if (remote.tunnelState === 'live') refreshSelfAddress().catch(() => {});
 }
 
 /** The report's remote block. 'live' only with a reachable tunnel address (Task 5). */
 function remoteReport() {
   const error = remote.error || remote.tunnelError;
   const status = !remote.gateway && !error ? 'off' : (error ? 'failed' : (remote.address ? 'live' : 'off'));
-  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error, devices: remote.gateway ? remoteDeviceCounts() : {} };
+  const devices = remote.gateway ? remoteDeviceCounts() : {};
+  const near = status === 'live' ? remoteNearCounts() : undefined;
+  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error, devices, ...(near ? { near } : {}) };
 }
 
 // ── The tunnel: cloudflared, fetched once, one per session ───────────────────
@@ -3326,6 +3403,7 @@ function ensureTunnel() {
           if (gen !== remote.gen) return;
           remote.address = got; remote.tunnelState = 'live';
           log('remote share live');
+          refreshSelfAddress().catch(() => {});
           return;
         }
         why = r.why;
