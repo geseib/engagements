@@ -458,6 +458,12 @@ export const W = Object.freeze({
   remoteWifiFine: 'People here on the Wi-Fi are not affected.',
   remoteOpenedOf: (n, joined) => `${n} opened it \u00b7 ${joined} joined`,
   remoteDevices: (n) => (n === 1 ? '1 device' : `${n} devices`),
+  // On this network or elsewhere (plugin 1.24.2): the same public address as this laptop, or not.
+  remoteOnNetwork: 'on this network',
+  remoteElsewhere: 'elsewhere',
+  remoteSplit: (near, away) => `${near} on this network, ${away} elsewhere`,
+  remoteWhereCounts: (near, away) => `${near} on this network \u00b7 ${away} elsewhere`,
+  remoteWhereNote: '\u201cOn this network\u201d means the same internet address as this laptop, usually the room\u2019s Wi\u2011Fi. A phone on mobile data shows as elsewhere.',
   remoteMore: (n) => `and ${n} more`,
   remoteRemove: 'Remove',
   remoteRemoveSure: (name) => `Remove ${name}?`,

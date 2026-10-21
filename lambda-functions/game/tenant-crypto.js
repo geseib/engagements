@@ -544,7 +544,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   // The Wi-Fi share (build-lan.js): the local and Wi-Fi addresses, the key
   // that opens the gateway, and the plugin's last error. Remote share: the
   // tunnel's address, its last error, and who opened it (names).
-  buildLan: Object.freeze(['Map', 'Key', 'Error', 'RemoteAddress', 'RemoteError', 'RemoteDevices']),
+  buildLan: Object.freeze(['Map', 'Key', 'Error', 'RemoteAddress', 'RemoteError', 'RemoteDevices', 'RemoteNear']),
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md):
   // a point's words and sources, a request's subject, and the run list's items.
   buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),

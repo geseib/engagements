@@ -2354,7 +2354,7 @@ async function updateLan(ctx, set) {
 }
 
 /** Every remote field back to "nothing yet": a switch either way makes the old tunnel dead. */
-const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteLiveSince: null });
+const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteNear: null, RemoteLiveSince: null });
 
 /**
  * The host's switch: `{on}` turns sharing on or off; `{remote}` opens it to
@@ -2411,6 +2411,7 @@ async function shareReport(ctx, body) {
   await updateLan(ctx, set);
   const changed = ['Status', 'Key', 'Open', 'Error', 'RemoteStatus', 'RemoteAddress', 'RemoteTarget', 'RemoteSupported'].some((k) => before[k] !== v[k])
     || JSON.stringify(before.RemoteDevices || {}) !== JSON.stringify(v.RemoteDevices || {})
+    || JSON.stringify(before.RemoteNear || null) !== JSON.stringify(v.RemoteNear || null)
     || !sameMap(before.Map || [], v.Map)
     || JSON.stringify(before.Declared || {}) !== JSON.stringify(v.Declared);
   if (changed) {

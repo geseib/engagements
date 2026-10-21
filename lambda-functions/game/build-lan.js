@@ -223,7 +223,7 @@ function lanScopes(room) {
 /** The remote block of a report. A plugin before 1.19.0 sends none: it cannot share remotely. */
 function normalizeRemote(remote) {
   if (remote === undefined || remote === null) {
-    return { value: { RemoteSupported: false, RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {} } };
+    return { value: { RemoteSupported: false, RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteNear: {} } };
   }
   const m = remote || {};
   const status = String(m.status || '');
@@ -241,6 +241,18 @@ function normalizeRemote(remote) {
     const clean = String(name).replace(/\s+/g, ' ').trim().slice(0, 60);
     if (clean && n > 0) devices[clean] = n;
   }
+  // 1.24.2 (owner, 21 Oct: "i cant tell who is connect local vs remote"): of each
+  // person's devices, how many came from the laptop's own public address. A hint
+  // the plugin works out on the laptop; the addresses never leave it. Absent from
+  // an older plugin, or before the laptop knows its own address: no hint at all.
+  const near = {};
+  const nearEntries = Object.entries(m.near && typeof m.near === 'object' ? m.near : {});
+  if (nearEntries.length > MAX_PEOPLE) return { error: 'remote.near lists too many people' };
+  for (const [name, n] of nearEntries) {
+    if (!Number.isInteger(n) || n < 0 || n > MAX_DEVICES) return { error: 'remote.near must be counts' };
+    const clean = String(name).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (clean && devices[clean]) near[clean] = Math.min(n, devices[clean]);
+  }
   return { value: {
     RemoteSupported: true,
     RemoteStatus: status,
@@ -248,6 +260,7 @@ function normalizeRemote(remote) {
     RemoteTarget: target ? hostOf(target).origin : '',
     RemoteError: String(m.error || '').replace(/\s+/g, ' ').trim().slice(0, 200),
     RemoteDevices: status === 'live' ? devices : {},
+    RemoteNear: status === 'live' && m.near && typeof m.near === 'object' ? near : null,
   } };
 }
 
@@ -452,7 +465,12 @@ function lanHostView(row, now, { withKey: showKey = false, room = null } = {}) {
 function remoteHostView(r, now) {
   const status = remoteStatus(r, now);
   const people = status === 'live'
-    ? Object.entries(r.RemoteDevices || {}).map(([name, devices]) => ({ name, devices }))
+    ? Object.entries(r.RemoteDevices || {}).map(([name, devices]) => ({
+      name,
+      devices,
+      // How many of them are on the laptop's network; null when there is no hint.
+      near: r.RemoteNear && typeof r.RemoteNear === 'object' ? Math.min(Number(r.RemoteNear[name]) || 0, devices) : null,
+    }))
       .sort((a, b) => b.devices - a.devices || a.name.localeCompare(b.name))
     : [];
   let error = '';

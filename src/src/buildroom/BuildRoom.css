@@ -1171,6 +1171,12 @@
 .brm .brm-wifipanel-who { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .brm .brm-wifipanel-dev { color: var(--muted); white-space: nowrap; }
 .brm .brm-wifipanel-people li.is-many .brm-wifipanel-dev { color: var(--accent-text); font-weight: 700; }
+/* On this network or elsewhere (plugin 1.24.2): words, never colour alone. */
+.brm .brm-wifipanel-place { color: var(--muted); white-space: nowrap; }
+.brm .brm-wifipanel-place.is-near { color: var(--brm-success-text); }
+.brm .brm-wifipanel-where { color: var(--muted); font-weight: 400; }
+.brm .brm-wifipanel-people li.brm-wifipanel-note { color: var(--muted); font-size: var(--brm-t-label); min-height: 0; padding-top: 4px; }
+.brm .brm-wifipanel-people li { flex-wrap: wrap; }
 .brm .brm-wifipanel-people li > .brm-btn { margin-left: auto; }
 .brm .brm-wifipanel-more { color: var(--muted); }
 
