@@ -36,14 +36,17 @@ export const describeHttpError = (status, lambdaError, label) => {
 // expired session nor a missing group fixes itself on retry. Returns the
 // parsed JSON body on success.
 export const postGenerationBatch = async (url, payload, options = {}) => {
-  const { label = 'Batch 1', onStatus = () => {}, maxRetries = 2 } = options;
+  // `headers` — extra request headers. The AI builders pass the DESTINATION
+  // library here (X-Engage-Org), so a run lands where the person chose rather
+  // than wherever the console happens to stand (utils/libraries.js).
+  const { label = 'Batch 1', onStatus = () => {}, maxRetries = 2, headers: extraHeaders = {} } = options;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let response;
     try {
       response = await authFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...extraHeaders },
         body: JSON.stringify(payload)
       });
     } catch (networkError) {
@@ -121,9 +124,9 @@ const POLL_TIMEOUT_MS = 16 * 60 * 1000;
 
 // Kick off a generation job. Returns { jobId, requested }.
 export const startGenerationJob = async (url, payload, options = {}) => {
-  const { label = 'Generation', onStatus = () => {} } = options;
+  const { label = 'Generation', onStatus = () => {}, headers = {} } = options;
   onStatus('Starting generation...');
-  const result = await postGenerationBatch(url, payload, { label, onStatus });
+  const result = await postGenerationBatch(url, payload, { label, onStatus, headers });
   if (!result?.jobId) {
     throw new Error(`${label}: server did not return a job id`);
   }
@@ -164,6 +167,9 @@ export const pollGenerationJob = async (url, jobId, options = {}) => {
     intervalMs = POLL_INTERVAL_MS,
     timeoutMs = POLL_TIMEOUT_MS,
     isCancelled = () => false,
+    // The job is read in the library it was started in (generation-jobs.js,
+    // isCallersJob compares the org), so the poll carries the same header.
+    headers = {},
   } = options;
 
   const startedAt = Date.now();
@@ -190,7 +196,7 @@ export const pollGenerationJob = async (url, jobId, options = {}) => {
 
     let job;
     try {
-      const response = await authFetch(`${url}/${encodeURIComponent(jobId)}`, { method: 'GET' });
+      const response = await authFetch(`${url}/${encodeURIComponent(jobId)}`, { method: 'GET', headers });
       if (response.status === 404) {
         // NOT a transient failure, and it must not be swallowed by the
         // reconnect counter below (it used to be: the throw was inside this

@@ -1,0 +1,175 @@
+/* ============================================================================
+   THE BELL — components/NotificationsBell.jsx, in the console's top line.
+
+   A dusk surface inside .adm-top (AdminShell declares data-theme="dark"), so
+   every colour is a ROLE (styles/roles.css): --text, --muted, --surface,
+   --surface-2, --accent for the count and the unread dot, --rule for the
+   borders. No literal, no --primary (tests/skinLiteralsPalette.test.js).
+
+   The ladder is the console's (AdminShell.css): 12 floor (the count, the
+   meta line), 13 for secondary lines, 15 for a notification's title. The
+   button is 32px square, over the 24px target.
+
+   THE PANEL is a popover, not a modal: it closes on Escape, an outside click,
+   the X, and a bottom Close — the dialog-exits rule (engage-design
+   hard-rules §2), kept even though nothing in it can be lost.
+   ========================================================================== */
+
+.nbell {
+  --nbell-t-floor: 12px;
+  --nbell-t-label: 13px;
+  --nbell-t-body: 15px;
+  --nbell-w: 380px;
+  position: relative;
+  flex: none;
+}
+
+.nbell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.nbell-btn:hover { background: var(--row-hover); color: var(--text); }
+.nbell-btn--some { color: var(--text); }
+.nbell-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.nbell-count {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--nbell-t-floor);
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.nbell-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: var(--nbell-w);
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(var(--shade-rgb) / .45);
+  overflow: hidden;
+}
+
+.nbell-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.nbell-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--nbell-t-body);
+  font-weight: 700;
+  color: var(--text);
+}
+.nbell-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.nbell-x:hover { background: var(--row-hover); color: var(--text); }
+
+.nbell-link {
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+  color: var(--accent-text);
+  font-size: var(--nbell-t-label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nbell-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+.nbell-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.nbell-item:hover,
+.nbell-item:focus-visible { background: var(--row-hover); outline: none; }
+.nbell-item > svg { flex: none; margin-top: 3px; color: var(--muted); }
+
+.nbell-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+.nbell-item--unread .nbell-dot { background: var(--accent); }
+
+.nbell-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.nbell-line { font-size: var(--nbell-t-body); line-height: 1.35; color: var(--text); }
+.nbell-item--unread .nbell-line { font-weight: 700; }
+.nbell-body { font-size: var(--nbell-t-label); line-height: 1.4; color: var(--muted); }
+.nbell-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: var(--nbell-t-floor);
+  color: var(--muted);
+}
+
+.nbell-empty,
+.nbell-error {
+  margin: 0;
+  padding: 16px 12px;
+  font-size: var(--nbell-t-label);
+  color: var(--muted);
+}
+.nbell-error { color: var(--danger-text); }
+
+.nbell-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px;
+  border-top: 1px solid var(--rule);
+}

@@ -80,6 +80,13 @@ export default function AdminShell({
   */
   orgSwitcher = null,
   /*
+    THE BELL (components/NotificationsBell.jsx) — one inbox for everything
+    waiting on this person, in every library they work in. A ReactNode like
+    the switcher, and beside it: both answer "what is going on", and the bell
+    must be reachable from every section without opening one.
+  */
+  notifications = null,
+  /*
     THE SCOPE ROW (docs/design/admin-landing): one row of tabs under the top
     bar, spanning the nav and the work area — Personal, each team, Engage. In
     the console it REPLACES `orgSwitcher`; a ReactNode for the same reason.
@@ -191,6 +198,8 @@ export default function AdminShell({
           "which organisation, then which environment" — narrowing, in the
           order somebody actually asks it.
         */}
+        {notifications}
+
         {orgSwitcher}
 
         {environment && (

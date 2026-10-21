@@ -99,6 +99,8 @@ function mockApi({
   hangDelete = false,
   /** The quickstart route's answer, so the 403 path can be driven too. */
   quickstartStatus = 200,
+  /** This person's AI drafts in this library (GET /admin/generation-drafts/list). */
+  drafts = [],
 } = {}) {
   let listCalls = 0;
   // THE THREE ROUTES A HOST IS REFUSED, counted rather than left to throw.
@@ -114,6 +116,15 @@ function mockApi({
     if (method === 'GET' && /\/admin\/question-sets$/.test(url)) {
       listCalls += 1;
       return jsonResponse(200, { questionSets: typeof sets === 'function' ? sets(listCalls) : sets });
+    }
+    // THE DRAFTS STRIP reads the server, and a draft's review reads one.
+    if (method === 'GET' && url.endsWith('/admin/generation-drafts/list')) {
+      return jsonResponse(200, { drafts });
+    }
+    if (method === 'GET' && /\/admin\/generation-drafts\/[^/]+$/.test(url)) {
+      const id = url.split('/').pop();
+      const found = drafts.find((d) => d.draftId === id);
+      return found ? jsonResponse(200, { draft: found, items: [] }) : jsonResponse(404, { error: 'gone' });
     }
     // The editor's own reads and writes.
     if (method === 'GET' && /\/question-sets\/[^/]+\/questions$/.test(url)) {
@@ -1143,34 +1154,46 @@ describe('a generation is visible in the list, running and finished', () => {
   });
 
   /*
-    A JOB THE PERSON STARTED, remembered in localStorage by the builder that
-    started it (utils/generationJob.js). The list can read every slot, so the
-    strip appears whether or not the builder that wrote it is still mounted.
+    A RUN THE PERSON STARTED — read from the SERVER now (GET
+    /admin/generation-drafts/list), not from this browser's memory: every run
+    writes a draft kept thirty days, so the strip is the same on every device
+    and still there days later (owner, 2026-10-21).
   */
+  const RUNNING = {
+    draftId: 'draft-run-1', status: 'generating', mode: 'new', title: 'Onboarding Scenarios',
+    engagementType: 'call-and-answer', produced: 3, requested: 10, daysLeft: 30,
+  };
+  const READY = { ...RUNNING, draftId: 'draft-ready-1', status: 'ready', produced: 10, daysLeft: 28 };
+
   // rejects: the list staying silent for the minutes a generation takes.
   test('a running generation is announced in the list', async () => {
-    window.localStorage.setItem('engage.generationJob.ai-generate-scenarios',
-      JSON.stringify({ jobId: 'job-1', startedAt: Date.now() }));
-    await openDialog();
-    expect(screen.getByText(/generating/i)).toBeInTheDocument();
+    await openDialog({}, { drafts: [RUNNING] });
+    expect(await screen.findByText(/Writing 3 of 10 questions/i)).toBeInTheDocument();
+  });
+
+  // rejects: a finished draft that only the bell knows about.
+  test('a ready draft is announced with its way in, and how long it is kept', async () => {
+    await openDialog({}, { drafts: [READY] });
+    const strip = await screen.findByTestId('drafts-strip');
+    expect(strip).toHaveTextContent('An AI draft is waiting for your review');
+    expect(strip).toHaveTextContent('kept 28 more days');
+    expect(within(strip).getByRole('button', { name: 'Review' })).toBeInTheDocument();
   });
 
   // rejects: telling the person something is running and giving them no way to
   // look at it — which is the state the report describes.
-  test('the running strip takes you to the generation', async () => {
-    window.localStorage.setItem('engage.generationJob.ai-generate-scenarios',
-      JSON.stringify({ jobId: 'job-1', startedAt: Date.now() }));
-    await openDialog();
-    fireEvent.click(screen.getByRole('button', { name: /review the generation/i }));
+  test('the strip opens the draft\'s review', async () => {
+    await openDialog({}, { drafts: [READY] });
+    fireEvent.click(within(await screen.findByTestId('drafts-strip')).getByRole('button', { name: 'Review' }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /AI .* builder/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Review AI draft/i })).toBeInTheDocument();
     });
   });
 
-  // rejects: a stale slot from a job that finished days ago showing for ever.
-  test('nothing is announced when no job is remembered', async () => {
+  // rejects: a strip for drafts that do not exist.
+  test('nothing is announced when no draft is waiting', async () => {
     await openDialog();
-    expect(screen.queryByText(/generating/i)).toBeNull();
+    expect(screen.queryByTestId('drafts-strip')).toBeNull();
   });
 });
 

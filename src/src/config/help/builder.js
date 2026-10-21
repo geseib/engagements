@@ -153,18 +153,22 @@ const ai = {
       ],
     },
     {
-      title: 'Longer sets run as a job',
+      title: 'It runs as a job, into a draft',
       icon: 'Timer',
       blocks: [
         {
           t: 'p',
-          text: 'A large set is not generated while you wait. It runs in the background and appears when it is done, so you can close the dialog and get on with something else.',
+          text: 'A set is not generated while you wait. It runs on the server and writes into a draft, so you can close the dialog and get on with something else. The bell in the top line tells you when the draft is ready, on any device, and the draft waits thirty days for you to review it.',
+        },
+        {
+          t: 'p',
+          text: 'Before it starts, the builder shows where the set will be saved — your space, a team, or Engage for Engage staff — and lets you change it. Questions added to an existing set always go into that set\'s library. Public is not a choice here: publish a set once it is saved.',
         },
         {
           t: 'note',
           tone: 'info',
-          title: 'A name collision refuses rather than overwrites',
-          text: 'If a set of that name already exists the job is refused. Nothing you already have is replaced by a generator.',
+          title: 'Nothing is saved until you accept',
+          text: 'Not the set, and not a new version of one. If a set of the same name already exists when you accept, you are asked for another name; nothing you already have is replaced.',
         },
       ],
     },

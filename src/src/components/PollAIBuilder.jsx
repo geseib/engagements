@@ -18,11 +18,10 @@ import FieldLock from './FieldLock';
 import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
-  rememberGenerationJob,
-  recallGenerationJob,
-  forgetGenerationJob,
   resumeIsGone,
 } from '../utils/generationJob';
+import useDraftRun from '../hooks/useDraftRun';
+import DestinationField from './DestinationField';
 import SurveyQuestionFields from './SurveyQuestionFields';
 import { convertKind } from '../config/surveyKinds';
 import {
@@ -41,7 +40,17 @@ const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-polls`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.poll;
 
-function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
+function PollAIBuilder({
+  onClose, onPollGenerated, appendTo = null,
+  /** A run that finished into a draft is reviewed by the page (DraftReview). */
+  onDraftReady = null,
+  /** The libraries this person may save into; read once when not given. */
+  libraries = null,
+}) {
+  /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
+  const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  const runRef = useRef(run);
+  runRef.current = run;
   const appendMode = appendTo?.mode;
   const [step, setStep] = useState(1);
   const [pollConfig, setPollConfig] = useState({
@@ -131,13 +140,14 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
   const autoStarted = useRef(false);
 
   /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
-  const watchJob = useCallback(async (jobId) => {
+  const watchJob = useCallback(async (jobId, headers = {}, startedIn = '') => {
     jobIdRef.current = jobId;
     setIsGenerating(true);
     setTransportError(null);
     setStep(2);
     try {
       const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        headers,
         label: 'Generation',
         onStatus: setGenerationStatus,
         // Show polls as they land rather than a spinner for minutes.
@@ -148,13 +158,14 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
           }
         }
       });
+      if (runRef.current.handOff(terminal, startedIn)) return;
       setJob(terminal);
       setGeneratedPolls(Array.isArray(terminal.items) ? terminal.items : []);
       setCurrentPollIndex(0);
     } catch (error) {
       console.error('AI poll generation error:', error);
       if (resumeIsGone(error)) {
-        forgetGenerationJob(ENDPOINT);
+        runRef.current.forget();
         jobIdRef.current = null;
         setJob(null);
         setStep(1);
@@ -169,10 +180,10 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
   }, []);
 
   useEffect(() => {
-    const stored = recallGenerationJob(ENDPOINT);
+    const stored = runRef.current.stored();
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
-    watchJob(stored.jobId);
+    watchJob(stored.jobId, runRef.current.headersFor(stored), stored.libraryKey || '');
   }, [watchJob]);
 
   /**
@@ -221,11 +232,14 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
         // it folds in the operator's own words for a `custom` round kind,
         // which the Lambda never sees.
         // ADDING makes no set: the items come back and the editor appends them.
-        ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
-      }, { label: 'Generation', onStatus: setGenerationStatus });
+        // …and names the set, so the server drafts it in THAT set's library.
+        ...(isAppend(appendTo)
+          ? { appendOnly: true, ...(run.appendTarget ? { appendTo: run.appendTarget } : {}) }
+          : { setMetadata: buildSetMetadata() })
+      }, { label: 'Generation', onStatus: setGenerationStatus, headers: run.headers });
 
-      rememberGenerationJob(ENDPOINT, jobId, { topic: pollConfig.topic });
-      await watchJob(jobId);
+      run.remember(jobId, { topic: pollConfig.topic });
+      await watchJob(jobId, run.headers, run.libraryKey);
     } catch (error) {
       console.error('AI poll generation error:', error);
       setIsGenerating(false);
@@ -234,13 +248,14 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
   };
 
   useEffect(() => {
-    if (!appendTo?.autoStart || autoStarted.current || !pollConfig.topic.trim()) return;
+    // A run already remembered for this set is resumed, not replaced.
+    if (!appendTo?.autoStart || autoStarted.current || !pollConfig.topic.trim() || run.stored()) return;
     autoStarted.current = true;
     handleConfigSubmit();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
-    forgetGenerationJob(ENDPOINT);
+    run.forget();
     jobIdRef.current = null;
   };
 
@@ -444,6 +459,13 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
             <div className="poll-configuration">
               <h3>Configure Your Poll Questions</h3>
               <AppendModeSwitch appendTo={appendTo} />
+              <DestinationField
+                libraries={run.libraries}
+                value={run.destination}
+                onChange={run.setDestination}
+                onAskForLibraries={run.askForLibraries}
+                appendTo={appendTo}
+              />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -624,7 +646,9 @@ function PollAIBuilder({ onClose, onPollGenerated, appendTo = null }) {
                   job={interpreted}
                   noun="poll questions"
                   jobId={jobIdRef.current}
-                  createsSet
+                  createsSet={!isAppend(appendTo)}
+                  draftId={job && job.draftId ? job.draftId : null}
+                  libraryKey={run.libraryKey}
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}
