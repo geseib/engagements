@@ -1,8 +1,78 @@
 # AI generation: durable jobs, a notification, review, and accept into a new version
 
-Status: **design, for the owner's decision.** No application code changed.
-Written 2026-10-21 on `working/build-room-host-redesign`. Mockup: `index.html` in this
-folder (the review screen, the notification, the destination picker).
+Status: **decided and built (2026-10-21)** on `working/build-room-host-redesign`, not deployed.
+Parts 1 and 2 below are the investigation and the design as written for the decision. **The owner's
+decisions and what was actually built are in "Decisions and what was built" just below; where the
+two differ, that section wins.** Mockup: `index.html` in this folder.
+
+## Decisions and what was built
+
+### The owner's decisions (2026-10-21)
+
+1. **A brand-new generated set waits as a draft** until accepted, so it does not count against the
+   set allowance before then.
+2. **Accepting a new set switches it on**, with an option to leave it off.
+3. **Retention:** ready drafts are kept 30 days with a reminder at day 25; discards can be restored
+   for 7 days; accepted drafts are kept 30 days as a record.
+4. **No email.** Instead, **one general notifications icon** (an inbox with a bell and a count) in
+   the app's top line. It covers question sets, the organisation, requests to the user, and so on;
+   each entry, clicked, goes where it needs to go. It is built general: a notification store and
+   route, kinds, read/unread, a deep link, a TTL. AI drafts are the first producer.
+5. **Visibility:** a draft, before acceptance, is visible **only to its creator**. Once accepted it
+   is an ordinary set or version in its library, and the library's normal rules apply.
+6. **Destination default** (chosen by the main session; not answered by the owner): the library the
+   console is in — Engage in the Engage console, the person's own space otherwise, and a team when
+   they are working in that team. Always shown, changeable, offering only libraries the person may
+   write to.
+7. **Build everything**, every phase.
+
+### What was built
+
+**Server.**
+
+| Piece | Where |
+|---|---|
+| Draft rows: header `<scope>GENDRAFTS / DRAFT#<id>`, items `<scope>GENDRAFT#<id> / ITEM#<nnnn>` | `lambda-functions/admin/shared/generation-drafts.js`; keys in `tenant.js` (`draftsIndexPk`, `draftItemsPk`; public refused) |
+| Sealing | `tenant-crypto.js` entities `draft` (title, request, warnings, error), `draftItem` (item), `notification` (title, body); platform rows plaintext |
+| TTL | generating/ready/failed: 30 days from the last run finishing; discarded: 7 days; accepted: 30 days. Items carry the header's ttl and are rewritten with it on every transition |
+| Every whole-set run writes a draft | `shared/generation-handler.js` (trivia, polls, survey) and `ai-generate-scenarios.js`: POST validates the destination (`X-Engage-Org`) or the target set (`requireSetManager`) **before** any model call; the worker writes items as passes land, reads Stop between passes, seeds already-used titles, records token usage, notifies the creator. No set is created by a run any more |
+| Regenerate one category / the remainder | the same generation POST with `{ draftId, regenerate: { category, count } \| { remaining: true } }`, rebuilt from the brief stored on the draft |
+| Draft routes | `/admin/generation-drafts/{proxy+}` (GET, POST) on the **upload-questions** function (`upload-questions.js` dispatches to `admin/generation-drafts.js`): `list`, `{id}`, `{id}/items`, `{id}/cancel`, `{id}/accept`, `{id}/discard`, `{id}/restore`, `{id}/undo` |
+| Accept, new set | server-side through the importer, as the caller, `reviewedDraft: true` → active unless left off (activating needs a shelf), stamped `aiReviewedAt`; the plan's 402 arrives here |
+| Accept, adding to a set | claim (audited first; one claim, stale after 5 min) → the browser runs the editor's own merge and saves ONE new version through the importer's replace (`src/src/utils/draftAccept.js`) → complete, or release on a failed save |
+| Undo after accepting an addition | `{id}/undo`: only the creator, only this accept, only while the version it wrote is live; runs the promote handler in-process (ownership guard, empty-version probe, audit). The general promote route stays Engage staff's |
+| Audit | `draft.accept`, `draft.discard`, `draft.restore` (before the action; `Outcome` stamped on failure); `set.promote-version` on every promote, including undo |
+| Notifications | `shared/notifications.js`: `USER#<sub>#NOTIFY / NOTE#<key>`, one row per thing (e.g. `draft#<id>`), kind, link, read, ttl = the draft's expiry (else 30 days); lazy day-25 reminder (turns unread again 5 days before expiry, no scheduler); removed when the draft is decided |
+| Inbox route | `/me/notifications/{proxy+}` (GET, POST) on the **orgs** function beside `/me/attention`: `list`, `{id}/read`, `read-all` |
+| Live entries fed into the bell | invitations to your verified email; people waiting for hosting approval and invitations running out (team owners/admins); the plan's session cap reached (owners/admins); sets the content check sent back (any member); and for Engage staff accounts waiting, plan requests waiting, sets in Moderation — all computed from what `/me/attention` already counts, so the bell and the scope tabs agree |
+| "AI draft" tag | means `isAIGenerated && !active && !aiReviewedAt`; saving a version of an AI set also stamps `aiReviewedAt` |
+| Batch guidance | still never stored, on a draft or anywhere (`shared/batch-guidance.js`); a regenerate is sent its own |
+| Resources | no new Lambda; four HttpApi events (two per proxy family); `kms:Decrypt` added to the promote function (it now seals its audit entry) |
+
+**Browser.**
+
+| Piece | Where |
+|---|---|
+| The bell | `components/NotificationsBell.jsx` in `AdminShell`'s top line; count of unread; a click marks a stored entry read and goes where it points, switching library first when it must (`utils/notificationsApi.js`, `destinationOf`) |
+| The review | `components/DraftReview.jsx`: destination named; keep/leave/edit per question (saved as you go); per-category keep-all; regenerate a category or the remainder with its token estimate; Stop while running; accept (name, shelf, switch on) or accept into a set (one new version, Undo); discard (7-day restore); decided drafts show what was decided and the way back |
+| Where the review opens | a place in the console's Question sets (`?draft=<id>` deep link); a dialog over the set editor (QuestionsPanel); a dialog over the host's set dialog |
+| The list | `components/DraftsStrip.jsx` above the sets (waiting, running, restorable), "Review · N" on a set's row, nav badge counts waiting drafts with flagged sets |
+| Builders | `hooks/useDraftRun.js` shared by all four: destination (`DestinationField`, list read only when asked), slot keyed by set, resume instead of auto-starting a second run, hand-off to the review; the running panel promises a draft and the bell, with a real Stop |
+| Help | `config/help/admin.js` (AI builders: drafts, the bell, accept and undo, public after), `builder.js`, `host.js` |
+
+### Hooks left for later
+
+- **The host's own screens** (`GameHostPage`, the remote) have no bell; the console's top line is
+  the only one. `NotificationsBell` is self-contained and can be dropped into any top line.
+- **More stored producers.** Anything that should notify can call `notifications.notify(db, { sub,
+  key, kind, orgId, title, body, link, expiresAt })`. Natural next ones: a share decided by the
+  content check or by Moderation (today a live entry only while flagged), a plan request decided,
+  a member approved, an archive restore finished.
+- **Team admins seeing a teammate's pending draft**: deliberately not built (decision 5).
+- **A new set's undo** is deleting it from the list; only additions have a version to go back to.
+
+---
+
 
 ## The owner's report
 
@@ -281,8 +351,8 @@ notification system.
    new-set draft, a placeholder row in the list, in the destination library, reading
    "*Generating… 8 of 20*" or "*Ready to review*".
 4. **Overview** landing (`OverviewPanel`): one line under "Needs you".
-5. *Optional, for the owner to decide:* an email when a draft becomes ready, and a reminder at day
-   25. This costs one SES send per draft. SES is not wired for this today.
+5. ~~An email when a draft becomes ready~~ — **decided: no email.** The general bell in the top
+   line carries it instead, with the day-25 reminder (see "Decisions and what was built").
 
 Every surface names the destination ("in Your space", "in Northwind team", "in Engage").
 
@@ -405,9 +475,8 @@ header.
 **Who can see a draft.**
 
 - **Its creator**, always.
-- **Org admins and owners of that org**, read only, and they may discard it. This is new, and the
-  owner should decide it: today only the creator can read a job (`isCallersJob`). A draft that
-  lasts 30 days in a team library should not be invisible to the team's admin.
+- ~~Org admins and owners of that org~~ — **decided: no.** Before acceptance a draft is its
+  creator's alone; once accepted it is an ordinary set or version in its library.
 - **Engage staff in Engage mode**, for platform drafts.
 - **Accepting into an existing set** needs `requireSetManager` on that set at accept time, not
   only at start time.
@@ -532,6 +601,8 @@ after discard, org-admin visibility and (if chosen) email.
 12. **Help and README.** `config/help/*` describes the flow, and `helpContent.test.js` passes.
 
 ## Open questions for the owner
+
+**Answered 2026-10-21** — see "Decisions and what was built" at the top. Kept for the record.
 
 1. **New-set drafts.** Should a brand-new generated set also wait as a draft (proposed), instead of
    being created inactive straight away (today, the "World Leaders" fix)? The proposal means the
