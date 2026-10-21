@@ -7,7 +7,9 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { WifiChip, SharePanel } from '../buildroom/BuildWifiShare';
-import { remoteState, remotePeople, wifiState } from '../buildroom/wifiShare';
+import {
+  remoteState, remotePeople, wifiState, remoteWhere, personWhere,
+} from '../buildroom/wifiShare';
 import { W } from '../buildroom/words';
 
 const NOW = '2026-10-16T12:00:00.000Z';
@@ -127,5 +129,32 @@ describe('the words', () => {
     // A function's source carries its template, so its words are checked too.
     const all = Object.values(W).map((v) => String(v)).join('\n');
     expect(all).not.toMatch(/tunnel/i);
+  });
+});
+
+describe('on this network or elsewhere (plugin 1.24.2; owner 21 Oct: "i cant tell who is connect local vs remote")', () => {
+  const NEAR = [
+    { name: 'Sam Ortiz', devices: 2, near: 1 }, { name: 'Priya N.', devices: 1, near: 1 }, { name: 'Joe', devices: 1, near: 0 },
+  ];
+  test('a person is on this network when any of their devices is; null when any person has no hint', () => {
+    expect(remoteWhere(NEAR)).toEqual({ near: 2, away: 1 });
+    expect(remoteWhere([{ name: 'A', devices: 1, near: null }])).toBeNull();
+    expect(remoteWhere([])).toBeNull();
+  });
+  test('each row says where, in words; mixed devices are counted', () => {
+    expect(NEAR.map(personWhere)).toEqual(['1 on this network, 1 elsewhere', 'on this network', 'elsewhere']);
+    expect(personWhere({ name: 'A', devices: 1, near: null })).toBe('');
+  });
+  test('the panel: the counts beside who opened it, each row placed, and what "on this network" means', () => {
+    const { d } = panel(remote({ people: NEAR }));
+    expect(within(d).getByText(/2 on this network · 1 elsewhere/)).toBeInTheDocument();
+    const list = within(d).getByRole('list', { name: 'Who opened it remotely' });
+    expect(within(list).getByText('Joe').closest('li')).toHaveTextContent('elsewhere');
+    expect(within(list).getByText('Priya N.').closest('li')).toHaveTextContent('on this network');
+    expect(within(list).getByText(W.remoteWhereNote)).toBeInTheDocument();
+  });
+  test('an older plugin (no hint): nothing is said about where anyone is', () => {
+    const { d } = panel(remote({ people: PEOPLE }));
+    expect(d.textContent).not.toMatch(/on this network|elsewhere/);
   });
 });

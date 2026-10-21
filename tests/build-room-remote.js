@@ -205,8 +205,20 @@ check('remote live: who opened it, most devices first, then by name', () => {
   const v = L.lanHostView(remoteRow({ RemoteDevices: { Jordan: 1, Sam: 2, Priya: 1 } }), NOW, { withKey: true });
   assert.deepStrictEqual(v.remote, {
     wanted: true, status: 'live', error: '',
-    people: [{ name: 'Sam', devices: 2 }, { name: 'Jordan', devices: 1 }, { name: 'Priya', devices: 1 }],
+    people: [{ name: 'Sam', devices: 2, near: null }, { name: 'Jordan', devices: 1, near: null }, { name: 'Priya', devices: 1, near: null }],
   });
+});
+check('1.24.2: how many of each person\'s devices are on the laptop\'s network; null when the plugin gives no hint', () => {
+  const v = L.lanHostView(remoteRow({ RemoteDevices: { Sam: 2, Priya: 1, Joe: 1 }, RemoteNear: { Sam: 1, Priya: 1, Joe: 0 } }), NOW, {});
+  assert.deepStrictEqual(v.remote.people.map((p) => [p.name, p.devices, p.near]), [['Sam', 2, 1], ['Joe', 1, 0], ['Priya', 1, 1]]);
+});
+check('near in a report: counts, never more than the person\'s devices, dropped for a name with no devices; absent stays null', () => {
+  const r = report({ ...goodRemote, devices: { Sam: 2, Priya: 1 }, near: { Sam: 5, Priya: 0, Ghost: 1 } }).value;
+  assert.deepStrictEqual(r.RemoteNear, { Sam: 2, Priya: 0 });
+  assert.strictEqual(report(goodRemote).value.RemoteNear, null, 'an older plugin: no hint');
+  assert.ok(report({ ...goodRemote, near: { Sam: -1 } }).error);
+  assert.ok(report({ ...goodRemote, near: { Sam: 'x' } }).error);
+  assert.strictEqual(report({ ...goodRemote, status: 'off', address: '', near: { Sam: 1 } }).value.RemoteNear, null, 'only while live');
 });
 check('remote failed: the reason; no people', () => {
   const v = L.lanHostView(remoteRow({ RemoteStatus: 'failed', RemoteError: 'Cloudflare said no' }), NOW, {});
