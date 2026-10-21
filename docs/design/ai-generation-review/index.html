@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Draft Review</title>
+<style>
+/* Mockup only. Dusk tokens from src/src/styles.css:9-55; ladder 12/13/15/19/24/30. */
+:root{--bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+--primary:#F6A94C;--secondary:#7CA7E6;--success:#4FB286;--danger-text:#EF8C86;--rule:rgba(244,237,228,.12)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:19px;margin:32px 0 12px}h3{font-size:15px;margin:0}
+.muted{color:var(--muted)}.small{font-size:13px}.fine{font-size:12px;color:var(--muted)}
+.shell{display:grid;grid-template-columns:200px 1fr;gap:0;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.nav{background:var(--surface);padding:12px 0}
+.nav div{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;font-size:13px}
+.nav .on{background:var(--surface-2)}
+.badge{background:var(--primary);color:#0F1A2E;border-radius:999px;font-size:12px;font-weight:700;padding:0 8px;min-width:20px;text-align:center}
+.work{padding:16px 20px;background:var(--bg);min-width:0}
+.alert{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:rgba(246,169,76,.12);border:1px solid rgba(246,169,76,.45);border-radius:8px;padding:10px 12px;font-size:13px}
+.alert b{color:var(--text)}
+.btn{border:1px solid var(--rule);background:var(--surface-2);color:var(--text);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--primary);color:#0F1A2E;border-color:var(--primary);font-weight:600}
+.btn.ghost{background:transparent}
+.btn.danger{background:transparent;color:var(--danger-text);border-color:rgba(239,140,134,.5)}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+td,th{padding:8px;border-bottom:1px solid var(--rule);text-align:left;height:36px}
+th{color:var(--muted);font-weight:500}
+.chip{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;border:1px solid var(--rule);color:var(--muted)}
+.chip.review{border-color:var(--primary);color:var(--primary)}
+.dest{display:inline-flex;gap:6px;align-items:center;background:var(--surface-2);border-radius:6px;padding:2px 8px;font-size:13px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px;margin-top:12px}
+.cat{border-top:1px solid var(--rule);padding-top:12px;margin-top:12px}
+.cathead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.q{display:grid;grid-template-columns:24px 1fr auto;gap:10px;padding:8px 0;border-bottom:1px dashed var(--rule);align-items:start}
+.q.out{opacity:.5}.q .t{font-weight:600}
+.defect{color:var(--danger-text);font-size:12px}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
+.toast{background:var(--surface-2);border-left:3px solid var(--success);border-radius:6px;padding:10px 12px;font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+select{background:var(--surface-2);color:var(--text);border:1px solid var(--rule);border-radius:6px;padding:4px 8px;font-size:13px}
+@media (max-width:720px){.shell{grid-template-columns:1fr}.nav{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI generation review</h1>
+  <p class="muted small">Mockup for docs/design/ai-generation-review/README.md. These are not live screens.</p>
+
+  <h2>1 · Coming back: the notification</h2>
+  <div class="shell">
+    <div class="nav">
+      <div>Overview</div>
+      <div class="on">Question sets <span class="badge" title="2 drafts ready to review">2</span></div>
+      <div>Sessions</div><div>Moderation</div><div>Audit log</div>
+    </div>
+    <div class="work">
+      <div class="alert" role="status">
+        <span>✦ <b>2 AI drafts are ready to review</b> in <span class="dest">Northwind team</span>.
+        <i>History Quiz</i>: 20 questions in 2 new categories, ready 3 days ago. Kept until 14 Nov.</span>
+        <button class="btn primary">Review</button>
+      </div>
+      <table>
+        <thead><tr><th>Set</th><th>Library</th><th>Questions</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>History Quiz</td><td><span class="chip">Team</span></td><td>40</td><td><span class="chip review">Review · 20</span></td><td><button class="btn primary">Review</button></td></tr>
+          <tr><td><i>Ocean Science Trivia</i> <span class="fine">(new, not saved yet)</span></td><td><span class="chip">Team</span></td><td>15 drafted</td><td><span class="chip review">Review · 15</span></td><td><button class="btn primary">Review</button></td></tr>
+          <tr><td>Team Retro Prompts</td><td><span class="chip">Yours</span></td><td>24</td><td><span class="chip">AI</span></td><td><button class="btn">Edit</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>2 · The review screen</h2>
+  <div class="card">
+    <p class="fine">Question sets › History Quiz › AI draft</p>
+    <div class="cathead">
+      <div>
+        <h3 style="font-size:19px">20 questions in 2 new categories</h3>
+        <p class="small muted" style="margin:4px 0">Saves into <span class="dest">History Quiz · Northwind team</span>. Generated 18 Oct by George. Draft kept until 14 Nov.
+        Guidance: “include at least one question on the Silk Road”. Written with the <i>trivia-history</i> prompt.</p>
+      </div>
+      <button class="btn danger">Discard draft</button>
+    </div>
+
+    <div class="cat">
+      <div class="cathead">
+        <label><input type="checkbox" checked> <b>Ancient Trade</b> <span class="muted small">· new category · 10 · keep 9</span></label>
+        <button class="btn ghost">↻ Regenerate this category <span class="fine">(≈ 7k tokens)</span></button>
+      </div>
+      <div class="q"><input type="checkbox" checked aria-label="Keep"><div><div class="t">Which city anchored the western end of the Silk Road?</div><div class="small muted">A Rome · B Antioch ✓ · C Carthage · D Athens</div></div><button class="btn ghost">Edit</button></div>
+      <div class="q out"><input type="checkbox" aria-label="Keep"><div><div class="t">What did the Phoenicians trade most?</div><div class="defect">Correct answer names option E, which this set does not have. Left out until fixed.</div></div><button class="btn ghost">Edit</button></div>
+      <p class="fine">+ 8 more</p>
+    </div>
+
+    <div class="cat">
+      <div class="cathead">
+        <label><input type="checkbox" checked> <b>Medieval Europe</b> <span class="muted small">· new category · 10 · keep 10</span></label>
+        <button class="btn ghost">↻ Regenerate this category</button>
+      </div>
+      <p class="fine">10 questions</p>
+    </div>
+
+    <div class="foot">
+      <span class="small muted">Nothing in the set changes until you accept. Version 4 stays live meanwhile.</span>
+      <span style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn">Decide later</button>
+        <button class="btn primary">Accept 19 of 20 → save version 5</button>
+      </span>
+    </div>
+  </div>
+
+  <h2>3 · After accept</h2>
+  <div class="toast"><span>✓ Version 5 of <b>History Quiz</b> saved in Northwind team with 59 questions. Version 4 is kept.</span><button class="btn">Undo: switch back to v4</button></div>
+
+  <h2>4 · Starting a new set: the destination</h2>
+  <div class="card">
+    <label class="small">Save into
+      <select><option>Your space</option><option selected>Northwind team</option><option>Engage (shared library, staff only)</option></select>
+    </label>
+    <p class="fine">Public is not a choice here. Once the set is saved, publish it from Your space or a team, and Engage checks it first.
+    You’ll be notified when the draft is ready, and nothing is saved until you accept it.</p>
+  </div>
+</div>
+</body>
+</html>
