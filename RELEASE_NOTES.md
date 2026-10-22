@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 22 Oct 2026: Help rewritten with a ? on every screen, Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes
 
-**Test:** merge of dev `DEVCOMMIT` (help refresh, ready questions by kind of build, and the Workie, prompts and drafts work from `1225bdf2`). Plans and reviews: [geseib/engagements#44](https://github.com/geseib/engagements/issues/44) (help), `docs/help-refresh/`, [geseib/engagements#38](https://github.com/geseib/engagements/issues/38), `docs/design/workie-grounding/STEP0.md`, `docs/design/prompt-versions/`, `docs/design/ai-generation-review/`.
+**Test:** merge of dev `d1564358` (help refresh, ready questions by kind of build, and the Workie, prompts and drafts work from `1225bdf2`). Plans and reviews: [geseib/engagements#44](https://github.com/geseib/engagements/issues/44) (help), `docs/help-refresh/`, [geseib/engagements#38](https://github.com/geseib/engagements/issues/38), `docs/design/workie-grounding/STEP0.md`, `docs/design/prompt-versions/`, `docs/design/ai-generation-review/`.
 
 ### New
 
