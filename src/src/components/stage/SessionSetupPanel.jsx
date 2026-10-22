@@ -18,12 +18,21 @@ import PlayersList from './PlayersList';
 import WorkieSettings from './WorkieSettings';
 import { nextRoundPickersApply } from '../../config/workieOptions';
 import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 import LateList from '../LateList';
 import LW from '../../config/lateWords';
 import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
 import ScreensGroup from './ScreensGroup';
 import { TWO_SURFACE_TYPES } from '../../config/surfaces';
+
+/** The header `?`'s section for each tab (config/help/screens.js). */
+export const TAB_HELP = {
+  players: 'host-session-players',
+  questions: 'host-session-questions',
+  history: 'host-session-rounds',
+  settings: 'host-session-settings',
+};
 
 /**
  * Everything the host needs and the room does not, behind one dock button.
@@ -516,9 +525,13 @@ export default function SessionSetupPanel({
             `onShowHowToPlay` stays where it is in Settings and is a different
             thing — that one puts an explanation on the PROJECTOR for everyone
             to read. This one is documentation on the host's own screen.
+
+            ITS GUIDES OPEN AT THE TAB THAT IS SHOWING (Help Phase 3): one `?`
+            in the header, never a second inside a tab, and it answers "what
+            do I do here" for whichever tab the host is looking at.
           */}
           <HelpButton
-            section="host"
+            {...helpFor(TAB_HELP[tab] || 'host-session-panel')}
             variant="inline"
             size="small"
             tooltip="Help and feedback"
@@ -942,7 +955,13 @@ export default function SessionSetupPanel({
 
               {late ? (
                 <div className="late-section">
-                  <h3 className="late-heading">{LW.heading}</h3>
+                  {/* The late list has a guide of its own, so its heading
+                      carries a `?` that opens it (Help Phase 3); the header's
+                      `?` opens the Rounds tab's. */}
+                  <div className="late-heading-row">
+                    <h3 className="late-heading">{LW.heading}</h3>
+                    <HelpButton {...helpFor('host-late-items')} variant="inline" size="small" tooltip={`Help: ${LW.heading}`} className="setup-panel__help" />
+                  </div>
                   <LateList {...late} />
                 </div>
               ) : null}

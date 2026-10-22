@@ -332,6 +332,8 @@ const ENCRYPTED_FIELDS = Object.freeze({
     'FullResponse',
     'MarkdownResponse',
     'DebugInfo',
+    // What the read check left (read-check.js): tokens are the read's words.
+    'ReadCheck',
   ]),
 
   /** SK=REPORT#R#nnn (report-store.js): one round of the stored report,
@@ -412,6 +414,26 @@ const ENCRYPTED_FIELDS = Object.freeze({
   job: Object.freeze([
     'request', 'items', 'meta', 'result', 'createdSetName', 'setCreationError',
   ]),
+
+  /** An AI generation DRAFT's header: PK=<scope>GENDRAFTS, SK=DRAFT#<id>
+   *  (admin/shared/generation-drafts.js). `title` is the set's name — the one
+   *  the set row seals as `name` — and `request` is the builder's whole brief,
+   *  pasted source material included. `warnings` and `error` quote both back.
+   *  Status, counts, ids, the target set's id and the token usage stay
+   *  readable: they are how a draft is found and listed at all. */
+  draft: Object.freeze(['title', 'request', 'warnings', 'error']),
+
+  /** One generated question in a draft: PK=<scope>GENDRAFT#<id>, SK=ITEM#<n>.
+   *  `item` is the whole generated object — title, detail, options, answer
+   *  notes, category — sealed as one value, because every field of it is the
+   *  content a question row seals one by one. `decision` and `edited` stay
+   *  readable: they are the reviewer's switches, not content. */
+  draftItem: Object.freeze(['item']),
+
+  /** A row in a person's inbox: PK=USER#<sub>#NOTIFY. Sealed under the org it
+   *  is about when there is one — a draft's notification names the set — and
+   *  stored as written for Engage's own library, as every platform row is. */
+  notification: Object.freeze(['title', 'body']),
 
   /** A comment on one section of a round's report:
    *  SK=COMMENT#<nnn>#<anchorKind>#<anchorRef>#<commentId>.
@@ -528,7 +550,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *   summary, files and commit, and the PR link), buildComment (reactions
    *   and replies), buildReview (the host's Claude's review). The repo and
    *   base branch ride in buildState.Crew. */
-  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment', 'Brief', 'BriefDraft']),
+  buildState: Object.freeze(['Outcome', 'Crew', 'WallComment', 'Brief', 'BriefDraft', 'AgentFolder', 'Ready']),
   buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel', 'ClaudeNote', 'FromLater']),
   buildResponse: Object.freeze(['Text', 'Why']),
   buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote', 'Why', 'RoomWords']),
@@ -544,7 +566,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   // The Wi-Fi share (build-lan.js): the local and Wi-Fi addresses, the key
   // that opens the gateway, and the plugin's last error. Remote share: the
   // tunnel's address, its last error, and who opened it (names).
-  buildLan: Object.freeze(['Map', 'Key', 'Error', 'RemoteAddress', 'RemoteError', 'RemoteDevices']),
+  buildLan: Object.freeze(['Map', 'Key', 'Error', 'RemoteAddress', 'RemoteError', 'RemoteDevices', 'RemoteNear']),
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md):
   // a point's words and sources, a request's subject, and the run list's items.
   buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),

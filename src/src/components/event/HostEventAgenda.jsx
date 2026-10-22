@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Icon from '../Icon';
+import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 import EventBuilder from '../EventBuilder';
 import { authFetch } from '../../auth/authFetch';
 import { adminApiUrl } from '../../utils/adminApi';
@@ -55,6 +57,9 @@ export default function HostEventAgenda({ code }) {
           <p className="hea-kicker">{`Event ${code} · agenda`}</p>
           <h1 className="hea-title" title={title || undefined}>{title || 'Agenda'}</h1>
         </div>
+        {/* The agenda guide's page section (Help Phase 3); the item dialogs
+            carry the adding-items one. */}
+        <HelpButton {...helpFor('event-agenda')} variant="inline" size="small" tooltip="Help: the agenda" className="help-button-quiet" />
         <button
           type="button"
           className="hea-btn hea-btn--primary"

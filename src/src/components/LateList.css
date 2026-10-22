@@ -25,3 +25,6 @@
 .late-close { display: grid; gap: 6px; justify-items: start; padding-top: 8px; border-top: 1px solid rgb(var(--glow-rgb) / .12); }
 .late-section { margin: 12px 0 16px; }
 .late-heading { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+/* The heading and its `?` (the late guide's own section), one row. */
+.late-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
+.late-heading-row .late-heading { margin: 0; }

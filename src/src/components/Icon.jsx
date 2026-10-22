@@ -9,6 +9,7 @@ import {
   ArrowSquareOut,
   ArrowUp,
   ArrowsClockwise,
+  Bell,
   Books,
   Brain,
   Broadcast,
@@ -126,6 +127,7 @@ import {
  * add any new icon to the map below. Unknown names fall back to Circle so a typo never crashes.
  */
 export const ICONS = {
+  Bell,
   Ear,
   PaperPlaneTilt,
   GitBranch,

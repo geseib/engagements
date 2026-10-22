@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import AIScenarioBuilder from './AIScenarioBuilder';
 import TriviaAIBuilder from './TriviaAIBuilder';
 import PollAIBuilder from './PollAIBuilder';
@@ -14,7 +16,9 @@ import {
   isUnreadableSet, unreadableSetName,
   UNREADABLE_LABEL, UNREADABLE_REASON, UNREADABLE_SUB,
 } from '../utils/unreadableSet';
-import { recallAllGenerationJobs } from '../utils/generationJob';
+import DraftsStrip from './DraftsStrip';
+import DraftReview from './DraftReview';
+import { listDrafts } from '../utils/draftsApi';
 import { uploadGeneratedSet, generatedSetPendingNotice } from '../utils/generatedSetUpload';
 import PlanLimitNotice from './PlanLimitNotice';
 import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerTag';
@@ -142,14 +146,26 @@ export default function HostQuestionSetsDialog({
   */
   const [builder, setBuilder] = useState(null);   // 'scenario' | 'trivia' | 'poll' | 'survey'
   /*
-    GENERATIONS THE PERSON STARTED, read from the slots the builders already
-    write (utils/generationJob.js). Read once on mount rather than polled: this
-    strip says "something you started is running, here is the way back to it",
-    and the builder it opens is what actually polls. A second poller here would
-    double the request rate on a job that is already being watched.
+    GENERATIONS THE PERSON STARTED — now read from the SERVER (GET
+    /admin/generation-drafts/list), not from this browser's memory: every run
+    writes a draft that lasts thirty days, so the strip is the same on every
+    device and still there days later. Read when the dialog opens and whenever
+    a builder closes; the review it opens is what polls a running one.
   */
-  const [runningJobs, setRunningJobs] = useState([]);
-  useEffect(() => { setRunningJobs(recallAllGenerationJobs()); }, [builder]);
+  const [drafts, setDrafts] = useState([]);
+  const [reviewDraft, setReviewDraft] = useState(null);
+  const refreshDrafts = useCallback(async () => {
+    try {
+      const res = await listDrafts();
+      if (res && res.ok) setDrafts((res.data && res.data.drafts) || []);
+    } catch (e) { /* the bell still says what waits */ }
+  }, []);
+  useEffect(() => { refreshDrafts(); }, [builder, refreshDrafts]);
+  /** A builder's run finished into a draft: review it here. */
+  const openDraftReview = ({ draftId, libraryKey = '' }) => {
+    setBuilder(null);
+    setReviewDraft({ draftId, libraryKey });
+  };
 
   /*
     THE FOUR BUILDERS, ONE DOOR. QuestionSetUploadPanel hands back the format
@@ -158,20 +174,6 @@ export default function HostQuestionSetsDialog({
     call-and-answer is a scenario generation and every unlisted future type is
     closer to that than to trivia.
   */
-  /*
-    Which builder wrote a remembered slot. The slot key is the endpoint's last
-    path segment (utils/generationJob.js), so this maps back the same way
-    `openBuilder` maps forward — and an unrecognised slot opens the scenario
-    builder rather than nothing, for the same reason `openBuilder` defaults
-    there.
-  */
-  const builderKeyFor = (slot) => {
-    if (String(slot).includes('trivia')) return 'trivia';
-    if (String(slot).includes('poll')) return 'poll';
-    if (String(slot).includes('survey')) return 'survey';
-    return 'call-and-answer';
-  };
-
   const openBuilder = (type) => {
     if (type === 'trivia') setBuilder('trivia');
     else if (type === 'poll') setBuilder('poll');
@@ -438,6 +440,8 @@ export default function HostQuestionSetsDialog({
             as your administrator left it.
           </p>
         </div>
+        {/* The setup guide's question-set section (Help Phase 3). */}
+        <HelpButton {...helpFor('host-question-sets')} variant="inline" size="small" tooltip="Help: question sets" className="help-button-quiet" />
         {/*
           THE SAME `×` IN THE SAME CORNER as the editor this dialog opens and as
           QuestionsPanel's question dialog inside that. It replaced a text
@@ -501,23 +505,7 @@ export default function HostQuestionSetsDialog({
           `role="status"` and not `alert`: this is progress, not a problem, and
           an assertive live region would interrupt a screen reader mid-row.
         */}
-        {runningJobs.length > 0 && (
-          <div className="qsets-alert qsets-alert--success" role="status">
-            <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
-            <span>
-              {runningJobs.length === 1
-                ? 'Generating a question set. It keeps running if you close this.'
-                : `Generating ${runningJobs.length} question sets. They keep running if you close this.`}
-            </span>
-            <button
-              type="button"
-              className="qsets-btn qsets-btn--sm qsets-btn--primary"
-              onClick={() => openBuilder(builderKeyFor(runningJobs[0].key))}
-            >
-              Review the generation
-            </button>
-          </div>
-        )}
+        <DraftsStrip drafts={drafts} onOpen={(d) => setReviewDraft({ draftId: d.draftId, libraryKey: '' })} />
 
         {error && (
           <div className="qsets-alert qsets-alert--error" role="alert">
@@ -643,7 +631,7 @@ export default function HostQuestionSetsDialog({
                       */}
                       {!set.active && (
                         <span className="qsets-sub">
-                          {set.isAIGenerated
+                          {set.isAIGenerated && !set.aiReviewedAt
                             ? 'Generated — review it, then switch it on'
                             : 'Not offered in the picker'}
                         </span>
@@ -664,7 +652,7 @@ export default function HostQuestionSetsDialog({
                       {/* Badged only where it changes what to DO: a generated
                           set nobody has read. Once it is switched on it is an
                           ordinary set and the badge would be noise. */}
-                      {!set.active && set.isAIGenerated && (
+                      {!set.active && set.isAIGenerated && !set.aiReviewedAt && (
                         <span className="qsets-chip qsets-chip--warn" title="Written by the generator and not reviewed yet.">
                           Draft
                         </span>
@@ -746,10 +734,10 @@ export default function HostQuestionSetsDialog({
                           <>
                             <button
                               type="button"
-                              className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated ? ' qsets-btn--primary' : ''}`}
+                              className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated && !set.aiReviewedAt ? ' qsets-btn--primary' : ''}`}
                               onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                             >
-                              {!set.active && set.isAIGenerated ? 'Review' : 'Edit questions'}
+                              {!set.active && set.isAIGenerated && !set.aiReviewedAt ? 'Review' : 'Edit questions'}
                             </button>
                             <button
                               type="button"
@@ -950,13 +938,14 @@ export default function HostQuestionSetsDialog({
               engagementType={newSetType}
               onClose={() => setBuilder(null)}
               onScenariosGenerated={finishBuilder}
+              onDraftReady={openDraftReview}
             />
           )}
           {builder === 'trivia' && (
-            <TriviaAIBuilder onClose={() => setBuilder(null)} onTriviaGenerated={finishBuilder} />
+            <TriviaAIBuilder onClose={() => setBuilder(null)} onTriviaGenerated={finishBuilder} onDraftReady={openDraftReview} />
           )}
           {builder === 'poll' && (
-            <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} />
+            <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} onDraftReady={openDraftReview} />
           )}
           {builder === 'survey' && (
             /* THE PHASE 0 FIX (surveys phases 0+1, fix 2). This used to be
@@ -964,9 +953,43 @@ export default function HostQuestionSetsDialog({
                was the whole callback and a finished generation opened nothing.
                The survey worker now creates a draft set like the other three,
                so it finishes through the same finishBuilder. */
-            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={finishBuilder} />
+            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={finishBuilder} onDraftReady={openDraftReview} />
           )}
         </>
+      )}
+
+      {reviewDraft && (
+        /* THE ONE REVIEW SCREEN (components/DraftReview.jsx), over this
+           dialog the way the builders are. Accepting a new set lands it in
+           the list below; nothing is saved until then. */
+        <Modal
+          overlayClassName="qsets qsets-scrim qsets-scrim--over"
+          contentClassName="qsets-modal qsets-modal--wide"
+          labelledBy="host-draft-review-title"
+          onClose={() => { setReviewDraft(null); refreshDrafts(); }}
+          theme="dark"
+        >
+          <header>
+            <Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />
+            <div className="qsets-grow">
+              <h2 id="host-draft-review-title">Review AI draft</h2>
+              <p className="qsets-dim">Nothing is saved until you accept.</p>
+            </div>
+            <button type="button" className="qs-dialog-close" aria-label="Close the review" title="Close"
+              onClick={() => { setReviewDraft(null); refreshDrafts(); }}>×</button>
+          </header>
+          <div className="qsets-modal-body">
+            <DraftReview
+              draftId={reviewDraft.draftId}
+              libraryKey={reviewDraft.libraryKey}
+              onClose={() => { setReviewDraft(null); refreshDrafts(); }}
+              onChanged={() => { load(); refreshDrafts(); }}
+            />
+          </div>
+          <footer>
+            <button type="button" className="qsets-btn" onClick={() => { setReviewDraft(null); refreshDrafts(); }}>Close</button>
+          </footer>
+        </Modal>
       )}
 
       {editingQuestions && (

@@ -30,7 +30,10 @@ import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
-import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
+import {
+  isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady, rankSetsForKind, KIND_NAMES,
+} from './readyQuestions';
+import { useReadyForClaude } from './readyForClaude';
 import { OpeningPanel, BriefPath } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
@@ -41,6 +44,8 @@ import { useKeepOnScreen } from './keepOnScreen';
 import HostAlert from './BuildHostAlert';
 import { W } from './words';
 import InfoTip from './InfoTip';
+import HelpButton from '../components/HelpButton';
+import { helpFor } from '../config/help/screens';
 import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
 import { ShownPointCard, TakeDownOffer } from './BuildPointStage';
@@ -64,7 +69,7 @@ import { presentStatusFrom, windowIsOpen } from '../config/presentStatus';
 import { presentHref } from '../config/surfaces';
 import { openRoomWindow } from '../present/roomWindow';
 import {
-  pluginInstallCommand, pluginConnectCommand, projectSlug, cleanFolder, startCommand, hostImageUrl, apiBase, buildApi,
+  pluginInstallCommand, projectSlug, cleanFolder, startCommand, resumeCommand, shellFolder, hostImageUrl, apiBase, buildApi,
   createBuildSession, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
@@ -290,6 +295,8 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
       <form className="brm-card brm-create" onSubmit={submit} aria-labelledby="brm-create-title">
         <div className="brm-dh">
           <h1 id="brm-create-title">New Build Room</h1>
+          {/* The Build Room guide's setting-up section (Help Phase 3). */}
+          <HelpButton {...helpFor('build-create')} variant="inline" size="small" tooltip="Help: New Build Room" className="help-button-quiet brm-dh-help" />
           <a className="brm-x" href="/" aria-label="Close"><Icon name="X" size={16} /></a>
         </div>
         <p className="brm-sub">A room of people and your own Claude Code build something together. Claude asks the room at real decision points; you shape every answer before it reaches Claude.</p>
@@ -349,6 +356,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
   const loadImage = useCallback((imageId) => hostImageUrl(gameId, imageId), [gameId]);
   const [room, setRoom] = useState(null);
+  // The room's ready questions for Claude, once it has said what it is making (question-sets plan step 4).
+  useReadyForClaude(room, api, { ended: Boolean(room && room.state === 'ENDED') });
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1801,7 +1810,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} buildKind={room.buildKind || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
@@ -2224,6 +2233,9 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
   );
 }
 
+/** The header `?`'s section per screen (config/help/screens.js). The Stage's is in its dock. */
+export const SCREEN_HELP = { host: 'build-host', build: 'build-build', history: 'build-history' };
+
 /**
  * THE HEADER, the same on all four screens: the title, the screens, the open
  * ask, Claude's status, the join code. On the Host screen it adds the live
@@ -2311,6 +2323,19 @@ function RoomHeader({
       )}
       <div className="brm-hbar-tools">
         {!tucked && <HeaderTools {...tools} />}
+        {/* HELP (Help Phase 3): the section for the screen that is showing,
+            beside SESSION as on the other engagements' panels. It names
+            nobody and shows nothing of the session, so it may sit in the
+            header the room sees on Build and History; it opens on this
+            laptop, never the room's window. */}
+        <HelpButton
+          {...helpFor(SCREEN_HELP[screen] || 'build-host')}
+          variant="inline"
+          size="small"
+          tooltip="Help and feedback"
+          className="help-button-quiet brm-help"
+          reports={{ context: 'host', gameId: room.gameId }}
+        />
         {/* SESSION (owner, 2026-10-09): the same word and key as the other
             engagements, last on the right where the three-dot menu was. */}
         <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
@@ -3506,10 +3531,12 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
 
 // ── Dialogs ─────────────────────────────────────────────────────────────────
 
-function DialogHead({ id, title, onClose }) {
+// `help`: a screen id (config/help/screens.js); its `?` sits beside the X.
+function DialogHead({ id, title, onClose, help = '' }) {
   return (
     <div className="brm-dh">
       <h2 className="brm-h" id={id}>{title}</h2>
+      {help ? <HelpButton {...helpFor(help)} variant="inline" size="small" tooltip={`Help: ${title}`} className="help-button-quiet brm-dh-help" /> : null}
       <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
     </div>
   );
@@ -3529,42 +3556,120 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
   );
 }
 
+/** "Connected now" (W2): the plugin checked in within this long. It reports every 4-15 s while connected. */
+export const CONNECTED_NOW_MS = 30 * 1000;
+
+/**
+ * WHICH CONNECT WINDOW (docs/design/build-room-connect-resume, owner 18 Oct:
+ * "we cant assume they have claude cli running ... think through full
+ * scenarios"). Every case is one paste that opens Claude Code in the right
+ * folder on kickoff:
+ *   'first'  W1  Claude has never called in: install, mint, start command
+ *   'now'    W2  the plugin checked in within 30 s: nothing to do
+ *   'back'   W3  worked here, quiet now: cd into the folder and kick off
+ *   'update' W4  as W3, with the plugin update in front (connected or not)
+ *   'all'    W5  the host asked for every step (another laptop, folder gone)
+ */
+export function connectCase(room, now, { showAll = false } = {}) {
+  const agent = (room && room.agent) || {};
+  const everConnected = Boolean(agent.lastSeenAt);
+  if (!everConnected) return 'first';
+  if (showAll) return 'all';
+  // Out of date wins even while connected: the update is the one thing to do.
+  if (room.plugin && room.plugin.outdated) return 'update';
+  const heard = Math.max(Date.parse(agent.lastSeenAt || '') || 0, Date.parse((room.lan && room.lan.reportedAt) || '') || 0);
+  return heard && new Date(now).getTime() - heard < CONNECTED_NOW_MS ? 'now' : 'back';
+}
+
+/** The plugin line: what runs and whether it is the latest. */
+function PluginVersionLine({ plugin }) {
+  const p = plugin || {};
+  const latest = p.latest || '';
+  if (p.outdated && latest) {
+    return (
+      <p className="brm-ver" data-testid="brm-ver">
+        {p.running ? (
+          <>
+            <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{p.running}</b></span>
+            <span className="brm-ver-k" aria-hidden="true">·</span>
+            <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+          </>
+        ) : (
+          <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{W.pluginOlder(latest)}</b></span>
+        )}
+      </p>
+    );
+  }
+  if (p.running) {
+    return (
+      <p className="brm-ver" data-testid="brm-ver">
+        <span><span className="brm-ver-k">{W.pluginRunning}</span> <b>{p.running}</b></span>
+        <span className="brm-ver-ok">{W.pluginCurrent}</span>
+      </p>
+    );
+  }
+  return latest ? (
+    <p className="brm-ver" data-testid="brm-ver">
+      <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
+      <span className="brm-ver-k">{W.pluginUnknown}</span>
+    </p>
+  ) : null;
+}
+
+/** W3 and W4's one step: the paste that brings Claude Code back in its folder. */
+function ReturnStep({ room, folder, update, install }) {
+  const cmd = update ? `${install} \\\n  && ${resumeCommand(folder)}` : resumeCommand(folder);
+  const kick = pluginCommand('kickoff');
+  const guess = `~/build-room/${projectSlug(room.title)}`;
+  return (
+    <ol className="brm-steps brm-steps--connect">
+      <li className={update ? 'is-old' : 'is-wait'} data-step="return">
+        <span className="brm-n">1</span>
+        <div className="brm-step-body">
+          <span className="brm-step-title">{update ? W.pasteUpdateReturn : W.pasteToReturn}</span>
+          <pre className="brm-cmd" data-testid="brm-return">{cmd}</pre>
+          <div className="brm-row brm-gap">
+            <CopyButton text={cmd} label="Copy" className="brm-btn brm-btn--sm brm-btn--primary" />
+            <span className="brm-hint">{update ? W.closeFirst : (shellFolder(folder) ? W.reopens : W.reopensNoFolder(guess))}</span>
+          </div>
+          {!update && <p className="brm-hint">{W.typeInsteadKick(kick)}</p>}
+        </div>
+      </li>
+    </ol>
+  );
+}
+
 export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall = false }) {
   // THE KEY IS SHOWN ONCE: it lives in this component's state only, and is
   // gone when the panel closes. The server stores only its sha256.
-  //
-  // FOUR STEPS, IN THE ORDER THEY ARE DONE (owner, 2026-10-04): check for the
-  // latest plugin (installs, updates, or says you are all set), mint a key and
-  // copy the connect command, paste it into Claude Code, kick off. A crew room
-  // adds a fifth: share the repo. Everything else is folded away below them.
   const [minted, setMinted] = useState(null);
   const [copied, setCopied] = useState('');
   const [confirmMint, setConfirmMint] = useState(false);
-  // Opened from "Claude's plugin is out of date. Update": the cursor starts at the install step.
-  const installStep = useRef(null);
+  const [showAll, setShowAll] = useState(false);
+  // The window changes by itself when Claude Code goes quiet (W2 → W3) or calls in.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!atInstall || !installStep.current) return;
-    const btn = installStep.current.querySelector('summary, button');
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+  const which = minted && Boolean((room.agent || {}).lastSeenAt) ? 'all' : connectCase(room, now, { showAll });
+  // Opened from "Claude's plugin is out of date. Update": the cursor starts at the update.
+  const top = useRef(null);
+  useEffect(() => {
+    if (!atInstall || !top.current) return;
+    const btn = top.current.querySelector('[data-step] button, [data-step] summary');
     if (btn) btn.focus();
-    if (installStep.current.scrollIntoView) installStep.current.scrollIntoView({ block: 'nearest' });
+    if (top.current.scrollIntoView) top.current.scrollIntoView({ block: 'nearest' });
   }, [atInstall]);
   const agent = room.agent || {};
   const liveKey = agent.key;
   const connected = Boolean(agent.lastSeenAt);
-  // STEP 4 (owner, 2026-10-07): green once Claude ran /engage:kickoff. An
-  // older plugin never says so; it counts once Claude has posted to the room
-  // or listened for the host.
-  const kickedOff = Boolean(agent.kickedOffAt) || (connected && (Boolean(agent.listenedAt) || (room.log || []).some((l) => l.by === 'agent')));
   const crew = Boolean(room.crew && room.crew.enabled);
   const command = minted ? connectCommand({ origin: window.location.origin, api: apiBase(), key: minted.key }) : '';
   const install = pluginInstallCommand({ origin: window.location.origin, api: apiBase() });
-  // THE PLUGIN'S VERSION (docs/design/build-room-before-you-start, owner
-  // 2026-10-10): what the server knows from room.plugin. Out of date: Copy is
-  // the one orange. Up to date: the command folds away. Otherwise only the
-  // latest is known, until Claude calls in.
   const plugin = room.plugin || {};
-  const latest = plugin.latest || '';
-  const ver = plugin.outdated && latest ? 'old' : plugin.running && !plugin.outdated ? 'ok' : 'unknown';
+  const ver = plugin.outdated && plugin.latest ? 'old' : plugin.running && !plugin.outdated ? 'ok' : 'unknown';
+  const reported = agent.folder || '';
   const installBody = (
     <>
       <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
@@ -3575,16 +3680,15 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
       {ver !== 'old' && <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>}
     </>
   );
-  const connectLine = minted ? pluginConnectCommand(minted.key) : '';
   // THE START CAP (owner, 2026-10-06): a new folder named for the project,
   // ~/build-room/<name>; the host may rename it before copying.
   const [folder, setFolder] = useState(() => projectSlug(room.title));
   const folderName = cleanFolder(folder) || projectSlug(room.title);
   const startLine = minted ? startCommand(folderName, minted.key) : '';
-  const kickoff = pluginCommand('kickoff');
+  const kickWithKey = minted ? `${pluginCommand('kickoff')} ${minted.key}` : '';
   const shareRepo = pluginCommand('share-repo');
 
-  // Mint, then copy the connect command in the same click. A browser may refuse
+  // Mint, then copy the start command in the same click. A browser may refuse
   // the copy once the click is a network round-trip old; the command is shown
   // either way, with its own Copy button.
   const mint = async () => {
@@ -3601,139 +3705,153 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     setMinted(null);
     setCopied('');
   };
-
   const step = (done, wait) => (done ? 'is-done' : wait ? 'is-wait' : '');
   const mintLabel = liveKey ? 'Mint a new key and copy the command' : 'Mint a key and copy the command';
+  const lastAt = agent.lastSeenAt ? clockTime(agent.lastSeenAt) : '';
+  const showAllRow = (
+    <p className="brm-hint brm-otherlaptop">
+      {W.otherLaptop}{' '}
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setShowAll(true)}>{W.showAllSteps}</button>
+    </p>
+  );
 
-  return (
-    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
-      <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
-      <p className="brm-sub">{W.connectIntro}</p>
+  // W1 and W5: the whole path, three steps (kickoff takes the key, so there is no fourth).
+  const allSteps = (
+    <ol className="brm-steps brm-steps--connect">
+      <li className={ver === 'old' ? 'is-old' : step(connected && which !== 'all', false)} data-step="install">
+        <span className="brm-n">1</span>
+        <div className="brm-step-body">
+          <span className="brm-step-title">{ver === 'old' ? W.pluginUpdateTitle : W.pluginCheckTitle}</span>
+          <PluginVersionLine plugin={plugin} />
+          {ver === 'ok' ? (
+            <details className="brm-verfold">
+              <summary>{W.installElsewhere}</summary>
+              {installBody}
+            </details>
+          ) : installBody}
+        </div>
+      </li>
 
-      <ol className="brm-steps brm-steps--connect">
-        <li className={ver === 'old' ? 'is-old' : step(connected, false)} ref={installStep} data-step="install">
-          <span className="brm-n">1</span>
-          <div className="brm-step-body">
-            <span className="brm-step-title">{ver === 'old' ? W.pluginUpdateTitle : W.pluginCheckTitle}</span>
-            {ver === 'unknown' && latest && (
-              <p className="brm-ver" data-testid="brm-ver">
-                <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
-                <span className="brm-ver-k">{W.pluginUnknown}</span>
-              </p>
-            )}
-            {ver === 'ok' && (
-              <p className="brm-ver" data-testid="brm-ver">
-                <span><span className="brm-ver-k">{W.pluginRunning}</span> <b>{plugin.running}</b></span>
-                <span className="brm-ver-ok">{W.pluginCurrent}</span>
-              </p>
-            )}
-            {ver === 'old' && (
-              <p className="brm-ver" data-testid="brm-ver">
-                {plugin.running ? (
-                  <>
-                    <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{plugin.running}</b></span>
-                    <span className="brm-ver-k" aria-hidden="true">·</span>
-                    <span><span className="brm-ver-k">{W.pluginLatest}</span> <b>{latest}</b></span>
-                  </>
-                ) : (
-                  <span><span className="brm-ver-k">{W.pluginRunning}</span> <b className="brm-ver-old">{W.pluginOlder(latest)}</b></span>
-                )}
-              </p>
-            )}
-            {ver === 'ok' ? (
-              <details className="brm-verfold">
-                <summary>{W.installElsewhere}</summary>
-                {installBody}
-              </details>
-            ) : installBody}
-          </div>
-        </li>
-
-        <li className={step(Boolean(minted) || connected, !minted && !connected)}>
-          <span className="brm-n">2</span>
-          <div className="brm-step-body">
-            <span className="brm-step-title">Mint a key and copy the start command</span>
-            <label className="brm-field">
-              <span className="brm-lbl">Project folder</span>
-              <span className="brm-row brm-gap">
-                <span className="brm-mono">~/build-room/</span>
-                <input className="brm-input brm-input--sm" aria-label="Project folder" value={folder} maxLength={60} onChange={(e) => setFolder(e.target.value)} />
-              </span>
-              <span className="brm-hint">{W.newFolder}</span>
-            </label>
-            {minted ? (
+      <li className={step(Boolean(minted), !minted)}>
+        <span className="brm-n">2</span>
+        <div className="brm-step-body">
+          <span className="brm-step-title">Mint a key and copy the start command</span>
+          <label className="brm-field">
+            <span className="brm-lbl">Project folder</span>
+            <span className="brm-row brm-gap">
+              <span className="brm-mono">~/build-room/</span>
+              <input className="brm-input brm-input--sm" aria-label="Project folder" value={folder} maxLength={60} onChange={(e) => setFolder(e.target.value)} />
+            </span>
+            <span className="brm-hint">{W.newFolder}</span>
+          </label>
+          {minted ? (
+            <>
+              <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--accent-text)" />
+                <div><b>{W.shownOnce}</b> {W.lostIt}</div>
+              </div>
+              <pre className="brm-cmd" data-testid="brm-start">{startLine}</pre>
+              <div className="brm-row brm-gap">
+                <CopyButton text={startLine} label="Copy again" />
+                <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
+              </div>
+              <p className="brm-hint">{W.alreadyOpenKick}</p>
+              <pre className="brm-cmd" data-testid="brm-connect">{kickWithKey}</pre>
+              <div className="brm-row brm-gap"><CopyButton text={kickWithKey} label="Copy" /></div>
+            </>
+          ) : liveKey ? (
+            <p className="brm-hint brm-block">
+              {W.keyMinted(clockTime(liveKey.createdAt), liveKey.lastUsedAt ? clockTime(liveKey.lastUsedAt) : '')}
+            </p>
+          ) : null}
+          <div className="brm-row brm-gap">
+            {confirmMint ? (
               <>
-                <div className="brm-keywarn"><Icon name="Lock" size={16} color="var(--primary)" />
-                  <div><b>{W.shownOnce}</b> {W.lostIt}</div>
-                </div>
-                <pre className="brm-cmd" data-testid="brm-start">{startLine}</pre>
-                <div className="brm-row brm-gap">
-                  <CopyButton text={startLine} label="Copy again" />
-                  <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
-                </div>
-                <p className="brm-hint">{W.alreadyOpen}</p>
-                <pre className="brm-cmd" data-testid="brm-connect">{connectLine}</pre>
-                <div className="brm-row brm-gap"><CopyButton text={connectLine} label="Copy" /></div>
+                <span className="brm-hint">{W.oldKeyStops}</span>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
               </>
-            ) : liveKey ? (
-              <p className="brm-hint brm-block">
-                {W.keyMinted(clockTime(liveKey.createdAt), liveKey.lastUsedAt ? clockTime(liveKey.lastUsedAt) : '')}
-              </p>
-            ) : null}
-            <div className="brm-row brm-gap">
-              {confirmMint ? (
-                <>
-                  <span className="brm-hint">{W.oldKeyStops}</span>
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
-                </>
-              ) : !minted && (
-                <button type="button" className={`brm-btn brm-btn--sm${connected ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
-                  {mintLabel}
-                </button>
-              )}
-              {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
-            </div>
+            ) : !minted && (
+              // One orange: the update's Copy when the plugin is out of date, otherwise Mint.
+              <button type="button" className={`brm-btn brm-btn--sm${ver === 'old' ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
+                {mintLabel}
+              </button>
+            )}
+            {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
           </div>
-        </li>
+        </div>
+      </li>
 
-        <li className={step(connected, Boolean(minted) && !connected)}>
-          <span className="brm-n">3</span>
-          <div className="brm-step-body">
-            <span className="brm-step-title">Paste it into a terminal</span>
-            <span className="brm-hint">{connected
-              ? 'Claude Code has called in.'
-              : W.makesFolder(folderName)}</span>
-          </div>
-        </li>
+      <li className={step(false, Boolean(minted))}>
+        <span className="brm-n">3</span>
+        <div className="brm-step-body">
+          <span className="brm-step-title">Paste it into a terminal</span>
+          <span className="brm-hint">{W.startOpens}</span>
+        </div>
+      </li>
 
-        <li className={step(kickedOff, connected && !kickedOff)}>
+      {crew && (
+        <li className={step(false, false)}>
           <span className="brm-n">4</span>
           <div className="brm-step-body">
-            <span className="brm-step-title">Kick off</span>
-            {kickedOff && <span className="brm-hint">Claude has kicked off.</span>}
-            <pre className="brm-cmd" data-testid="brm-kickoff">{kickoff}</pre>
+            <span className="brm-step-title">Open the project to your crew</span>
+            <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
             <div className="brm-row brm-gap">
-              <CopyButton text={kickoff} label="Copy" />
+              <CopyButton text={shareRepo} label="Copy" />
               <span className="brm-hint">{W.runInClaude}</span>
             </div>
           </div>
         </li>
+      )}
+    </ol>
+  );
 
-        {crew && (
-          <li className={step(false, false)}>
-            <span className="brm-n">5</span>
-            <div className="brm-step-body">
-              <span className="brm-step-title">Open the project to your crew</span>
-              <pre className="brm-cmd" data-testid="brm-share-repo">{shareRepo}</pre>
-              <div className="brm-row brm-gap">
-                <CopyButton text={shareRepo} label="Copy" />
-                <span className="brm-hint">{W.runInClaude}</span>
-              </div>
-            </div>
-          </li>
+  let body;
+  if (which === 'now') {
+    body = (
+      <>
+        <div className="brm-connback is-now" data-testid="brm-connect-now">
+          <span className="brm-connback-dot" aria-hidden="true" />
+          <div><b>{W.connectedNow}</b><span>{W.connectedNowIn(reported)}</span></div>
+        </div>
+        <PluginVersionLine plugin={plugin} />
+        <details className="brm-verfold">
+          <summary>{W.restartOrMove}</summary>
+          <ReturnStep room={room} folder={reported} update={false} install={install} />
+          {showAllRow}
+        </details>
+      </>
+    );
+  } else if (which === 'back' || which === 'update') {
+    body = (
+      <>
+        <div className="brm-connback" data-testid="brm-connect-back">
+          <span className="brm-connback-dot" aria-hidden="true" />
+          <div><b>{W.workedHere(lastAt)}</b><span>{W.inFolderNotNow(reported)}</span></div>
+        </div>
+        <PluginVersionLine plugin={plugin} />
+        <ReturnStep room={room} folder={reported} update={which === 'update'} install={install} />
+        {showAllRow}
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="brm-sub">{W.connectIntro}</p>
+        {which === 'all' && showAll && (
+          <div className="brm-notice brm-unheard" data-testid="brm-connect-elsewhere">
+            <b>{W.filesElsewhereHead}</b> {W.filesElsewhereBody}
+            {!minted && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setShowAll(false)}>{W.backToReturn}</button>}
+          </div>
         )}
-      </ol>
+        {allSteps}
+      </>
+    );
+  }
+
+  return (
+    <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
+      <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} help="build-connect" />
+      <div ref={top} className="brm-connect-body" data-connect={which}>{body}</div>
 
       <label className="brm-check brm-field">
         <input
@@ -3862,7 +3980,7 @@ export function askedIndex(asks) {
   return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
 }
 
-function ReadyLibrary({ api, asks, selectedKey, onPick }) {
+function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
   const [sets, setSets] = useState(null);
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
@@ -3876,11 +3994,14 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
         if (!live) return;
         const ready = (list || []).filter((st) => isBuildRoomSet(st) && ['call-and-answer', 'poll'].includes(st.engagementType));
         setSets(ready);
-        if (ready.length) setActive(setKey(ready[0]));
+        // The sets for the room's kind of build first, then the general ones (question-sets plan step 3).
+        const r = rankSetsForKind(ready, buildKind);
+        const lead = [...r.first, ...r.general, ...r.other][0];
+        if (lead) setActive(setKey(lead));
       })
       .catch(() => { if (live) setSets([]); });
     return () => { live = false; };
-  }, [api]);
+  }, [api, buildKind]);
   const set = (sets || []).find((st) => setKey(st) === active) || null;
   useEffect(() => {
     if (!set || loaded[active]) return undefined;
@@ -3914,15 +4035,29 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   return (
     <aside className="brm-lib" aria-label="Ready questions">
       <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {sets.length > 1 && (
-        <div className="brm-qfilters" role="group" aria-label="Ready sets">
-          {sets.map((st) => (
-            <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
-              {st.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {sets.length > 1 && (() => {
+        // THE KIND OF BUILD (question-sets plan step 3): its sets first, then the general
+        // ones; sets for other kinds fold away once the room has said what it is making.
+        const r = rankSetsForKind(sets, buildKind);
+        const shownSets = buildKind ? [...r.first, ...r.general] : [...r.general, ...r.other];
+        const chip = (st) => (
+          <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
+            {st.name}
+          </button>
+        );
+        return (
+          <>
+            {buildKind && r.first.length > 0 && <p className="brm-hint">{W.readyForKind(KIND_NAMES[buildKind] || buildKind)}</p>}
+            {shownSets.length > 0 && <div className="brm-qfilters" role="group" aria-label="Ready sets">{shownSets.map(chip)}</div>}
+            {buildKind && r.other.length > 0 && (
+              <details className="brm-verfold" open={r.other.some((st) => setKey(st) === active)}>
+                <summary>{W.otherSets(r.other.length)}</summary>
+                <div className="brm-qfilters" role="group" aria-label="Other sets">{r.other.map(chip)}</div>
+              </details>
+            )}
+          </>
+        );
+      })()}
       {cats.length > 1 && (
         <div className="brm-qfilters" role="group" aria-label="Categories">
           {['all', ...cats].map((c) => (
@@ -3953,7 +4088,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], buildKind = '', api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
   // The window opens with the cursor in the question and the starter questions beside it.
   const questionRef = useRef(null);
@@ -4005,7 +4140,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <ReadyLibrary api={api} asks={asks} buildKind={buildKind} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">

@@ -82,6 +82,15 @@ npm run build
 
 `npm start` in `src/` runs a local dev server against the dev API.
 
+`npm run build` first runs `scripts/build-repo-prompts.js` (the `prebuild` script), which
+copies the repo's prompt files — `demo-sets/*.prompt.json` and
+`lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
+The admin Prompts library compares each live prompt with that file ("Repo has a newer
+version") and its Review saves the repo's text as a new prompt version. The output is
+committed: after editing a prompt file, run `node scripts/build-repo-prompts.js` and commit
+both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; see
+`lambda-functions/admin/shared/prompt-versions.js`.
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.
@@ -105,13 +114,23 @@ reusing `components/console/*`). **Consider** (`POST …/build/consider`, `Build
 queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` marks what
 reached Claude and links each mark to its History entry.
 
+Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
+not in the material, claims the vote does not support, next steps written as decided and
+generic filler trigger one rewrite (`get-ai-summary.js`); what remains is stored as
+`ReadCheck` and shown to the host only (`GET …/ai-summary/host`).
+
 What every room screen shows, per moment and room screen size, is decided in one place:
 `src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
 
 ## Documentation
 
-- **Users**: the help guides inside the app (the Help button, and `/help` on the site).
-  Their content is `src/src/config/help/`; `src/src/__tests__/helpContent.test.js` checks it.
+- **Users**: the help guides inside the app. Every private screen has a **?** that opens
+  the guide section for that screen; `/help` on the site has them all, with `#section`
+  links. The content is `src/src/config/help/`, one file per area; `screens.js` maps each
+  screen to its section. Never on a screen the room sees. Rules and the area map:
+  `docs/help-refresh/STRUCTURE.md`. Checks: `helpContent.test.js`, `helpGuardrails.test.js`
+  (retired words, labels, length) and `helpScreenWiring.test.jsx`; before a push to test,
+  `node scripts/help-drift.js` lists guides whose code changed since they were written.
 - **Reviewers**: `RELEASE_NOTES.md`, one entry per push to test: what changed, what was
   fixed, and what to look at. It is updated before every push to test, with the help
   and this README.

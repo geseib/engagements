@@ -60,7 +60,7 @@ import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -127,6 +127,7 @@ import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import ReadPanel from './components/console/panels/ReadPanel';
+import { fetchReadCheck } from './utils/readCheckClient';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import CW from './config/consoleWords';
 import { consolePeopleFor } from './config/consoleRail';
@@ -473,6 +474,8 @@ function GameHostPage() {
     chosen, which is when the lobby asks. `roomScreenOpen` reopens the choice.
   */
   const [roomScreenChoice, setRoomScreenChoice] = useState(() => {
+    // A ?surfaces= in the address is a choice: twoSurfacesHere stores it first.
+    try { twoSurfacesHere('call-and-answer'); } catch (e) { /* no window */ }
     try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
   });
   const [roomScreenOpen, setRoomScreenOpen] = useState(false);
@@ -1171,7 +1174,9 @@ function GameHostPage() {
     another surface's choice arrives as `stageProfileChanged` or on a reload.
     With the switch off, the profile stays this browser's own, as before.
   */
-  const twoSurfaces = twoSurfacesHere(currentGameType);
+  // This page's choice, never storage re-read per render (review #38: another
+  // tab's write flipped One screen back to the console). config/surfaces.js.
+  const twoSurfaces = twoSurfacesFor(roomScreenChoice, { gameType: currentGameType, env: typeof window !== 'undefined' ? window.ENV : undefined });
   // For the socket handlers, registered once: which kind of host page this is now.
   const twoSurfacesRef = useRef(twoSurfaces);
   twoSurfacesRef.current = twoSurfaces;
@@ -2246,6 +2251,12 @@ function GameHostPage() {
 
       if (response.ok) {
         const summaryData = await response.json();
+        // THE READ CHECK'S NOTE is served on the host's door only
+        // (utils/readCheckClient.js). The debug read already came through it.
+        if (!gameDebugMode && (summaryData.markdownResponse || summaryData.summary)) {
+          const readCheck = await fetchReadCheck({ fetchFn: authFetch, apiBase: API_BASE, gameId, questionId });
+          if (readCheck) summaryData.readCheck = readCheck;
+        }
         // Update local state with fetched data
         setAiSummaries(prev => ({
           ...prev,
@@ -2285,6 +2296,8 @@ function GameHostPage() {
       // AISummaryStatus says so instead of presenting it as the read.
       fallback: summary.fallback === true,
       fallbackReason: summary.fallbackReason || null,
+      // Host-only (the host's door): drawn on the console and the Session panel, never the stage.
+      readCheck: summary.readCheck || null,
       prompt: gameDebugMode ? summary.debugPrompt : undefined,
       debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
     });
@@ -8013,6 +8026,15 @@ Focus on actionable business strategy insights.`;
   // top) because the overlay terms read it long before this point.
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
   /*
+    WHICH SECTION THE HOST'S `?` OPENS (Help Phase 3; ids in
+    config/help/screens.js). The one-screen dock and the console's top line
+    each carry one. While Workie's read is up it is What we heard's own
+    section; on a survey, the survey guide's; otherwise the screen's.
+  */
+  const helpMoment = consoleMoment === 'READ' ? 'host-what-we-heard' : (isSurvey ? 'host-survey' : '');
+  const dockHelp = helpMoment || 'host-dock';
+  const consoleHelp = helpMoment || 'host-console';
+  /*
     LATE & NOT REVIEWED, in the rail's shape (late items Task 4): what waits,
     in the list's order. The rail shows the first few with their buttons; its
     count is the server's.
@@ -8128,7 +8150,7 @@ Focus on actionable business strategy insights.`;
        whichever beat the wall is on (the strip marks Ask while it is open,
        and the room still sees what it saw). */
     if (consoleComposer) {
-      return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} />;
+      return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
     }
     if (viewStep) {
       return (
@@ -8179,7 +8201,7 @@ Focus on actionable business strategy insights.`;
         return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
@@ -8230,6 +8252,7 @@ Focus on actionable business strategy insights.`;
             onJoin: () => setQrMode('pinned'),
             presentHref: gameId ? presentHref(gameId) : '',
             presentDetail,
+            help: consoleHelp,
           }}
           strip={workflow ? {
             strip: workflow,
@@ -8384,6 +8407,7 @@ Focus on actionable business strategy insights.`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
+            help={dockHelp}
             onAgenda={eventCode ? goToAgenda : undefined}
             present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}
@@ -9408,6 +9432,8 @@ Focus on actionable business strategy insights.`;
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
             modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
+            // The read check's note, beside Redo: on one screen the only host-only place for it.
+            readCheck: hostPhase === 'FIELD_NOTES' && currentAIInsights ? currentAIInsights.readCheck : null,
           }}
         />
       )}

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -17,17 +19,28 @@ import FieldLock from './FieldLock';
 import { BUILDER_FORM_FIELDS } from '../config/builderFormFields';
 import {
   interpretGenerationJob,
-  rememberGenerationJob,
-  recallGenerationJob,
-  forgetGenerationJob,
   resumeIsGone,
 } from '../utils/generationJob';
+import useDraftRun from '../hooks/useDraftRun';
+import DestinationField from './DestinationField';
 
 const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-trivia`;
 const ASSIST_FORM = BUILDER_FORM_FIELDS.trivia;
 
-function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
+function TriviaAIBuilder({
+  onClose, onTriviaGenerated, appendTo = null,
+  /** A run that finished into a draft is reviewed by the page (DraftReview). */
+  onDraftReady = null,
+  /** The libraries this person may save into; read once when not given. */
+  libraries = null,
+}) {
+  /* WHERE, THE SLOT, AND THE HAND-OFF — the same in every builder
+     (hooks/useDraftRun.js). A ref, so the memoised job watcher reads the
+     current one. */
+  const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  const runRef = useRef(run);
+  runRef.current = run;
   const [step, setStep] = useState(1);
   const [triviaConfig, setTriviaConfig] = useState({
     // ADDING TO A SET starts from the brief that set was made from.
@@ -130,13 +143,14 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
    * answer and carries `items`, `completed`, `requested` and `warnings`. Only
    * transport failures throw, and of those only a 404 means the job is gone.
    */
-  const watchJob = useCallback(async (jobId) => {
+  const watchJob = useCallback(async (jobId, headers = {}, startedIn = '') => {
     jobIdRef.current = jobId;
     setIsGenerating(true);
     setTransportError(null);
     setStep(2);
     try {
       const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        headers,
         label: 'Generation',
         onStatus: setGenerationStatus,
         // Show questions as they land rather than a spinner for minutes.
@@ -147,6 +161,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
           }
         }
       });
+      // A DRAFT IS REVIEWED BY THE PAGE, on one screen for every builder.
+      if (runRef.current.handOff(terminal, startedIn)) return;
       setJob(terminal);
       setGeneratedTrivia(Array.isArray(terminal.items) ? terminal.items : []);
       setCurrentTriviaIndex(0);
@@ -155,7 +171,7 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
       if (resumeIsGone(error)) {
         // The job row's 3-day TTL is stamped only at creation and never
         // refreshed, so a stored id expiring is ordinary. Not an error screen.
-        forgetGenerationJob(ENDPOINT);
+        runRef.current.forget();
         jobIdRef.current = null;
         setJob(null);
         setStep(1);
@@ -175,12 +191,12 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
   // forever — while the client's own timeout message advised reopening the
   // builder to check, which nothing made possible.
   useEffect(() => {
-    const stored = recallGenerationJob(ENDPOINT);
+    const stored = runRef.current.stored();
     if (!stored) return;
     setGenerationStatus('Reconnecting to the job you left…');
     // Remembered with the job, so the review still quotes it after a reload.
     setGuidanceSent(stored.batchGuidance || '');
-    watchJob(stored.jobId);
+    watchJob(stored.jobId, runRef.current.headersFor(stored), stored.libraryKey || '');
   }, [watchJob]);
 
   const handleConfigSubmit = async () => {
@@ -219,14 +235,17 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
         // browser and sent, rather than re-derived in the Lambda, so there is
         // one author of this copy and not two that drift.
         // ADDING makes no set: the items come back and the editor appends them.
-        ...(isAppend(appendTo) ? { appendOnly: true } : { setMetadata: buildSetMetadata() })
-      }, { label: 'Generation', onStatus: setGenerationStatus });
+        // …and names the set, so the server drafts it in THAT set's library.
+        ...(isAppend(appendTo)
+          ? { appendOnly: true, ...(run.appendTarget ? { appendTo: run.appendTarget } : {}) }
+          : { setMetadata: buildSetMetadata() })
+      }, { label: 'Generation', onStatus: setGenerationStatus, headers: run.headers });
 
-      rememberGenerationJob(ENDPOINT, jobId, {
+      run.remember(jobId, {
         topic: triviaConfig.topic,
         ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
       });
-      await watchJob(jobId);
+      await watchJob(jobId, run.headers, run.libraryKey);
     } catch (error) {
       console.error('AI trivia generation error:', error);
       setIsGenerating(false);
@@ -236,13 +255,15 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
 
   /** Done with this job: stop offering to resume it. */
   useEffect(() => {
-    if (!appendTo?.autoStart || autoStarted.current || !triviaConfig.topic.trim()) return;
+    // A RUN ALREADY REMEMBERED FOR THIS SET IS RESUMED, NOT REPLACED: starting
+    // a fresh one here paid for a second generation and forgot the first.
+    if (!appendTo?.autoStart || autoStarted.current || !triviaConfig.topic.trim() || run.stored()) return;
     autoStarted.current = true;
     handleConfigSubmit();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismissJob = () => {
-    forgetGenerationJob(ENDPOINT);
+    run.forget();
     jobIdRef.current = null;
   };
 
@@ -446,6 +467,8 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
       <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
+          {/* The AI builders' guide (Help Phase 3), beside the X. */}
+          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
           <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 
@@ -454,6 +477,13 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
             <div className="trivia-configuration">
               <h3>Configure Your Trivia Questions</h3>
               <AppendModeSwitch appendTo={appendTo} />
+              <DestinationField
+                libraries={run.libraries}
+                value={run.destination}
+                onChange={run.setDestination}
+                onAskForLibraries={run.askForLibraries}
+                appendTo={appendTo}
+              />
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -614,7 +644,9 @@ function TriviaAIBuilder({ onClose, onTriviaGenerated, appendTo = null }) {
                   job={interpreted}
                   noun="questions"
                   jobId={jobIdRef.current}
-                  createsSet
+                  createsSet={!isAppend(appendTo)}
+                  draftId={job && job.draftId ? job.draftId : null}
+                  libraryKey={run.libraryKey}
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}

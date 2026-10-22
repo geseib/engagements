@@ -25,6 +25,8 @@
  */
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
+import HelpButton from '../components/HelpButton';
+import { helpFor } from '../config/help/screens';
 import PlayersList from '../components/stage/PlayersList';
 import { copyText } from '../utils/copyText';
 import { RunCrewCodeSwitch } from './BuildCrew';
@@ -453,6 +455,16 @@ export default function BuildSessionPanel({
         <div className="brm-sp-head">
           <h2 className="brm-sp-title">Session</h2>
           <span className={`brm-sp-ws${connected ? ' is-up' : ''}`} aria-live="polite">{connected ? 'Connected' : 'Connecting…'}</span>
+          {/* Help and close, the two things you reach for when lost, as on the
+              other engagements' Session panel (Help Phase 3). */}
+          <HelpButton
+            {...helpFor('build-session-panel')}
+            variant="inline"
+            size="small"
+            tooltip="Help and feedback"
+            className="help-button-quiet"
+            reports={{ context: 'host', gameId: room.gameId }}
+          />
           <button type="button" className="brm-sp-x" aria-label="Close the session panel" onClick={onClose}><Icon name="X" size={16} /></button>
         </div>
 

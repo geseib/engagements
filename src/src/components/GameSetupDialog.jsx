@@ -88,6 +88,8 @@ import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
 import { BUILD_KIND, EVENT_KIND, kindLabel } from '../config/engagementKinds';
 import pricing from '../../../lambda-functions/game/pricing';
@@ -522,6 +524,9 @@ export default function GameSetupDialog({
             ? 'Edit session'
             : (isFirstEngagement ? 'New engagement' : 'Start a new engagement')}
         </h2>
+        {/* The create section of the setup guide (Help Phase 3), beside the X
+            and as quiet as it; the Advanced fold carries its own. */}
+        <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
         {/*
           THE X — reported missing: "when editing, there is no 'x' to close the
           box without saving changes." It goes through requestClose(), exactly

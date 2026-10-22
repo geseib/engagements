@@ -33,6 +33,8 @@ import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
 } from '../utils/addQuestions';
 import { briefFromSet } from '../utils/appendMode';
+import DraftReview from './DraftReview';
+import { listDrafts, draftsForSet, draftNoun, DRAFT_STATUS } from '../utils/draftsApi';
 import {
   editableRows,
   blankRow,
@@ -187,6 +189,12 @@ export default function QuestionsPanel({
    * Details panel beside it, the saved instruction stands in.
    */
   detailsInstruction,
+  /**
+   * The words for the library this set is in ("Your space", "Northwind",
+   * "Engage"), for "Add questions" to say where they go. Optional: without
+   * it the sentence names the set alone.
+   */
+  libraryLabel = '',
 }) {
   const setId = questionSet?.id || '';
   const setName = questionSet?.name || setId;
@@ -259,6 +267,15 @@ export default function QuestionsPanel({
   // are held to the same one they were generated under.
   const [showAdd, setShowAdd] = useState(false);
   const [addBuilder, setAddBuilder] = useState(null); // { mode, categories }
+  /*
+    AI DRAFTS FOR THIS SET (docs/design/ai-generation-review). An "Add
+    questions" run writes into a draft on the server; it is reviewed in
+    DraftReview, over the editor, and becomes ONE new version when accepted.
+    `setDrafts` are this person's drafts waiting to join this set, so the
+    editor can say so even days later; `reviewDraft` is the one open.
+  */
+  const [setDrafts, setSetDrafts] = useState([]);
+  const [reviewDraft, setReviewDraft] = useState(null);
   // { mode: 'fork' | 'subset', title, rows, topic, tags }
   const [newSetDialog, setNewSetDialog] = useState(null);
   /* Same reason as `formError` above, and the same mistake this dialog made:
@@ -397,6 +414,17 @@ export default function QuestionsPanel({
     // engagementType decides how a row is read (a poll's through pollRow). It
     // is the set's own type and does not change under a loaded set.
   }, [setId, engagementType]);
+
+  /* This person's drafts waiting to join THIS set. A failed read is silence,
+     never an error: the bell still says what waits. */
+  const refreshSetDrafts = useCallback(async () => {
+    if (!setId) return;
+    try {
+      const res = await listDrafts();
+      if (res && res.ok) setSetDrafts(draftsForSet((res.data && res.data.drafts) || [], setId));
+    } catch (error) { /* nothing to say */ }
+  }, [setId]);
+  useEffect(() => { refreshSetDrafts(); }, [refreshSetDrafts]);
 
   const closeForm = useCallback(() => {
     setDraft(null);
@@ -762,6 +790,18 @@ export default function QuestionsPanel({
     } finally {
       setSaving(false);
     }
+  };
+
+  /** A builder's run finished into a draft: review it here, over the editor. */
+  const openDraftReview = ({ draftId, libraryKey = '' }) => {
+    setAddBuilder(null);
+    setShowAdd(false);
+    setReviewDraft({ draftId, libraryKey });
+    refreshSetDrafts();
+  };
+  const closeDraftReview = () => {
+    setReviewDraft(null);
+    refreshSetDrafts();
   };
 
   const openAddBuilder = (mode, plan = {}) => {
@@ -1648,6 +1688,19 @@ export default function QuestionsPanel({
       )}
 
       {status.text && <StatusMessage message={status.text} tone={status.tone} />}
+      {/* A DRAFT WAITING TO JOIN THIS SET — said here, in the set, days later
+          and on any device; the way in is beside it. */}
+      {setDrafts.filter((d) => d.status === DRAFT_STATUS.READY).map((d) => (
+        <div key={d.draftId} className="qs-panel-actions" data-testid="set-draft-waiting">
+          <StatusMessage
+            tone="pending"
+            message={`${d.produced} AI-written ${draftNoun(d.engagementType)} are waiting to join this set. Nothing changes until you accept them.`}
+          />
+          <button type="button" className="btn-primary btn-small" onClick={() => setReviewDraft({ draftId: d.draftId, libraryKey: '' })}>
+            Review
+          </button>
+        </div>
+      ))}
 
       {/* Save is also here, at the bottom of the list, because a long set puts
           the dirty bar off screen exactly when it matters most. */}
@@ -1769,14 +1822,19 @@ export default function QuestionsPanel({
           brief: briefFromSet(questionSet || {}),
           // "Am I adding 25 or growing to 25?" — the builder states both.
           existingTotal: live.length,
+          // WHICH SET, so the server drafts the run in that set's own library
+          // and can check, at the start and at accept, that it is still yours.
+          setId,
+          scope: questionSet?.scope || '',
+          libraryLabel,
           onModeChange: (mode) => setAddBuilder((current) => (current ? { ...current, mode } : current)),
         };
         const close = () => setAddBuilder(null);
         if (engagementType === 'trivia') {
-          return <TriviaAIBuilder appendTo={appendTo} onClose={close} onTriviaGenerated={acceptGenerated} />;
+          return <TriviaAIBuilder appendTo={appendTo} onClose={close} onTriviaGenerated={acceptGenerated} onDraftReady={openDraftReview} />;
         }
         if (engagementType === 'poll') {
-          return <PollAIBuilder appendTo={appendTo} onClose={close} onPollGenerated={acceptGenerated} />;
+          return <PollAIBuilder appendTo={appendTo} onClose={close} onPollGenerated={acceptGenerated} onDraftReady={openDraftReview} />;
         }
         return (
           <AIScenarioBuilder
@@ -1784,9 +1842,47 @@ export default function QuestionsPanel({
             engagementType={engagementType}
             onClose={close}
             onScenariosGenerated={acceptGenerated}
+            onDraftReady={openDraftReview}
           />
         );
       })(), document.body)}
+
+      {/*
+        THE REVIEW OF A DRAFT FOR THIS SET — the same screen the console's
+        Question sets place and the bell open. Accepting writes ONE new version
+        through the same save this editor uses; with unsaved edits here it is
+        held back, because that version would not carry them.
+      */}
+      {reviewDraft && (
+        <Modal
+          overlayClassName="qsets qsets-scrim"
+          contentClassName="qsets-modal qsets-modal--wide"
+          labelledBy="qs-draft-review-title"
+          onClose={closeDraftReview}
+          theme="dark"
+        >
+          <header>
+            <Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />
+            <div className="qsets-grow">
+              <h2 id="qs-draft-review-title">Review AI draft</h2>
+              <p className="qsets-dim">Questions waiting to join “{setName}”. Nothing changes until you accept.</p>
+            </div>
+            <button type="button" className="qs-dialog-close" onClick={closeDraftReview} aria-label="Close the review" title="Close">×</button>
+          </header>
+          <div className="qsets-modal-body">
+            <DraftReview
+              draftId={reviewDraft.draftId}
+              libraryKey={reviewDraft.libraryKey}
+              blockAccept={dirty ? 'This set has unsaved edits. Save or discard them first, so the new version carries them.' : ''}
+              onClose={closeDraftReview}
+              onChanged={async () => { await load(); refreshSetDrafts(); if (onChanged) onChanged(); }}
+            />
+          </div>
+          <footer>
+            <button type="button" className="qsets-btn" onClick={closeDraftReview}>Close</button>
+          </footer>
+        </Modal>
+      )}
 
       {showPull && (
         <QuestionPullDialog

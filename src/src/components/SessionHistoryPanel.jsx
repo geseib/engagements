@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import './SessionHistoryPanel.css';
 import Icon from './Icon';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import SetImageBadge from './SetImageBadge';
 import { formatWhen, countOrDash } from '../config/tableCells';
 import {
@@ -227,6 +229,9 @@ export default function SessionHistoryPanel({
               : 'Read a report from a session that has been played.'}
           </p>
         </div>
+        {/* The setup guide's sessions-list section (Help Phase 3); in
+            reports mode the same list, so the same section. */}
+        <HelpButton {...helpFor('host-sessions')} variant="inline" size="small" tooltip="Help: your sessions" className="help-button-quiet shist__help" />
         <button
           type="button"
           className="shist__close"

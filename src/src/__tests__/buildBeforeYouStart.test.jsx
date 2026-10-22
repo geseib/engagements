@@ -16,7 +16,9 @@
 import React from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, screen, within } from '@testing-library/react';
+import {
+  render, screen, within, fireEvent,
+} from '@testing-library/react';
 import MarketingBuildRoomPage from '../marketing/BuildRoomPage';
 import { BuildCreate, ConnectPanel, HOW_IT_WORKS } from '../buildroom/BuildRoomPage';
 import { W } from '../buildroom/words';
@@ -143,21 +145,27 @@ describe('Connect Claude Code, step 1: the plugin version', () => {
     expect(primaries()[0].textContent).toMatch(/Mint a key/);
   });
 
-  test('up to date: a green tick, the version, the command folded, no orange', () => {
-    panel({ agent: { lastSeenAt: new Date().toISOString() }, plugin: { running: '1.16.0', latest: '1.16.0', outdated: false } });
+  // A Claude that worked here before: all the steps are one press away (W5).
+  const allSteps = () => fireEvent.click(screen.getByRole('button', { name: W.showAllSteps }));
+  const before = { lastSeenAt: new Date(Date.now() - 10 * 60 * 1000).toISOString() };
+
+  test('up to date, all the steps: the version, the command folded, Mint the one orange', () => {
+    panel({ agent: before, plugin: { running: '1.16.0', latest: '1.16.0', outdated: false } });
+    allSteps();
     const s = step1();
-    expect(s.className).toContain('is-done');
     expect(within(s).getByTestId('brm-ver').textContent).toBe(`${W.pluginRunning} 1.16.0${W.pluginCurrent}`);
     const fold = s.querySelector('details');
     expect(fold).not.toBeNull();
     expect(fold.open).toBe(false);
     expect(fold.querySelector('summary').textContent).toBe(W.installElsewhere);
     expect(within(fold).getByTestId('brm-install')).toBeInTheDocument();
-    expect(primaries()).toHaveLength(0);
+    expect(primaries()).toHaveLength(1);
+    expect(primaries()[0].textContent).toMatch(/Mint a/);
   });
 
-  test('out of date: the title changes, both versions show, Copy is the one orange', () => {
-    panel({ agent: { lastSeenAt: new Date().toISOString() }, plugin: { running: '1.15.0', latest: '1.16.0', outdated: true } });
+  test('out of date, all the steps: the title changes, both versions show, Copy is the one orange', () => {
+    panel({ agent: before, plugin: { running: '1.15.0', latest: '1.16.0', outdated: true } });
+    allSteps();
     const s = step1();
     expect(s.className).toContain('is-old');
     expect(s.querySelector('.brm-step-title').textContent).toBe(W.pluginUpdateTitle);
@@ -170,14 +178,16 @@ describe('Connect Claude Code, step 1: the plugin version', () => {
     expect(within(s).getByText(W.pluginRerun)).toBeInTheDocument();
   });
 
-  test('out of date without a version: "older than" the latest', () => {
-    panel({ agent: { lastSeenAt: new Date().toISOString() }, plugin: { running: '', latest: '1.16.0', outdated: true } });
-    expect(within(step1()).getByTestId('brm-ver').textContent).toBe(`${W.pluginRunning} ${W.pluginOlder('1.16.0')}`);
+  test('out of date without a version (W4): "older than" the latest', () => {
+    panel({ agent: before, plugin: { running: '', latest: '1.16.0', outdated: true } });
+    expect(screen.getByTestId('brm-ver').textContent).toBe(`${W.pluginRunning} ${W.pluginOlder('1.16.0')}`);
   });
 
-  test('opened from Update: focus lands on the orange Copy', () => {
-    panel({ agent: { lastSeenAt: new Date().toISOString() }, plugin: { running: '1.15.0', latest: '1.16.0', outdated: true } }, { atInstall: true });
+  test('opened from Update (W4): focus lands on the orange Copy of the one paste', () => {
+    panel({ agent: before, plugin: { running: '1.15.0', latest: '1.16.0', outdated: true } }, { atInstall: true });
+    expect(primaries()).toHaveLength(1);
     expect(document.activeElement).toBe(primaries()[0]);
+    expect(document.querySelector('[data-step="return"]').contains(primaries()[0])).toBe(true);
   });
 
   test('the command is the tier\'s own', () => {

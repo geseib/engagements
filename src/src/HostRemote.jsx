@@ -2,12 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import HostNotificationsBell from './components/HostNotificationsBell';
+import HelpButton from './components/HelpButton';
+import { helpFor } from './config/help/screens';
 import { twoSurfacesHere, presentHref } from './config/surfaces';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
+import ReadCheckNote from './components/ReadCheckNote';
+import { fetchReadCheck } from './utils/readCheckClient';
 import { authFetch } from './auth/authFetch';
 import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
@@ -183,6 +188,8 @@ function HostRemote() {
   const [snapshot, setSnapshot] = useState(null);
   const [roster, setRoster] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
+  // The read check's note (utils/readCheckClient.js): host's door only.
+  const [readCheck, setReadCheck] = useState(null);
   /*
     THE ROUND'S RESPONSES, so the host can pick one to put on the wall.
 
@@ -646,6 +653,23 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFieldNotes, notes.ready]);
+
+  /*
+    THE READ CHECK'S NOTE, once the read is here. The notes come from the
+    public read above, which never carries it; this one authenticated read of
+    the host's door does (get-ai-summary.js returns ReadCheck there only). A
+    failure is silence: the note is an aid, never a reason to lose the read.
+  */
+  useEffect(() => { setReadCheck(null); }, [gameId, round]);
+  const readStamp = aiSummary ? (aiSummary.generatedAt || 'read') : '';
+  useEffect(() => {
+    if (!gameId || !onFieldNotes || !notes.ready || !readStamp) return undefined;
+    let cancelled = false;
+    fetchReadCheck({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((rc) => {
+      if (!cancelled && activeGameRef.current === gameId) setReadCheck(rc);
+    });
+    return () => { cancelled = true; };
+  }, [gameId, onFieldNotes, notes.ready, readStamp]);
 
   /* -------------------------------------------------------- the feedback round */
 
@@ -1447,6 +1471,20 @@ function HostRemote() {
           />
           <span className="hr-live-word">{connected ? 'Live' : 'Offline'}</span>
         </span>
+        {/* HELP (Help Phase 3): the remote's own section of the two-screens
+            guide, and the same `?` reports a bug, as on the laptop. A phone:
+            44px whatever the pointer reports (HostRemote.css). */}
+        <HelpButton
+          {...helpFor('host-remote')}
+          variant="inline"
+          size="small"
+          tooltip="Help and feedback"
+          className="help-button-quiet hr-help"
+          reports={{ context: 'host', gameId: gameId || undefined }}
+        />
+        {/* THE BELL (owner, 21 Oct 2026): the host's phone is private, so the
+            inbox rides here too; a click opens the console in a new tab. */}
+        <HostNotificationsBell newTab />
       </header>
       {access.status === ACCESS.OK ? <RemoteStepDots strip={strip} /> : null}
 
@@ -1677,6 +1715,7 @@ function HostRemote() {
                         </ul>
                       </div>
                     )}
+                    <ReadCheckNote readCheck={readCheck} className="hr-notes-foot hr-notes-check" />
                     <p className="hr-notes-foot">
                       Full notes, next steps and every response are in the session report.
                     </p>

@@ -129,6 +129,72 @@ const OPENING_KINDS = Object.freeze([
   { title: 'A document or guide', detail: 'A plan, a how-to, a proposal' },
   { title: 'Figure something out', detail: 'Compare, test an idea, decide' },
 ]);
+/**
+ * KINDS OF BUILD (docs/superpowers/plans/2026-10-22-build-room-question-sets.md,
+ * owner 22 Oct: "different questions for a training site, vs a game, vs a
+ * paper"). One list for step 1's answer, the question sets' `for-<kind>` tags
+ * and the starters. Step 1 keeps its six options for the wheel; an answer, even
+ * an edited option ("A training site", "A paper"), is read into a kind by its
+ * words, first match wins, and anything else is no kind ('').
+ */
+const BUILD_KINDS = Object.freeze([
+  { key: 'training', words: /\b(training|course|lessons?|onboarding|teach\w*|tutorial|learn\w*)\b/ },
+  { key: 'dashboard', words: /\b(dashboards?|metrics|kpis?|charts?|data)\b/ },
+  { key: 'game', words: /\b(games?|play|quiz)\b/ },
+  { key: 'document', words: /\b(documents?|guides?|papers?|plans?|proposals?|essays?|how-?to|report|memo|write-?up)\b/ },
+  { key: 'tool', words: /\b(tools?|scripts?|automations?|automate|helpers?|saves? time)\b/ },
+  { key: 'app', words: /\b(apps?|application)\b/ },
+  { key: 'website', words: /\b(websites?|web ?pages?|pages?|sites?|landing)\b/ },
+  { key: 'explore', words: /\b(figure|compare|test an idea|decide|explore|research|experiment)\b/ },
+]);
+const BUILD_KIND_KEYS = Object.freeze(BUILD_KINDS.map((k) => k.key));
+function kindKeyOf(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t.trim()) return '';
+  const hit = BUILD_KINDS.find((k) => k.words.test(t));
+  return hit ? hit.key : '';
+}
+/** The room's kind of build, from the brief's What are we making? line; '' until it is answered. */
+const buildKindOf = (state) => kindKeyOf(briefView(state).lines.kind);
+
+/**
+ * READY QUESTIONS FOR CLAUDE (plan step 4): the matching sets' askable
+ * questions, handed over by the host's page once the kind is known. Plain
+ * words only, capped; sealed in a team's room with the state row.
+ */
+const READY_LIMITS = Object.freeze({ sets: 3, questions: 40, prompt: 300, name: 80, category: 60, option: 120, options: 6 });
+const READY_ASK_KINDS = Object.freeze(['suggest', 'choice', 'rating']);
+function normalizeReady(body) {
+  const b = body || {};
+  const kind = BUILD_KIND_KEYS.includes(b.kind) ? b.kind : '';
+  if (!Array.isArray(b.sets)) return { error: 'sets must be a list' };
+  let left = READY_LIMITS.questions;
+  const sets = [];
+  for (const st of b.sets.slice(0, READY_LIMITS.sets)) {
+    if (!st || typeof st !== 'object') continue;
+    const name = cleanText(st.name, READY_LIMITS.name);
+    const questions = [];
+    for (const q of (Array.isArray(st.questions) ? st.questions : [])) {
+      if (left <= 0) break;
+      if (!q || !READY_ASK_KINDS.includes(q.kind)) continue;
+      const prompt = cleanText(q.prompt, READY_LIMITS.prompt);
+      if (!prompt) continue;
+      const options = q.kind === 'choice'
+        ? (Array.isArray(q.options) ? q.options : []).map((o) => cleanText(o, READY_LIMITS.option)).filter(Boolean).slice(0, READY_LIMITS.options)
+        : [];
+      if (q.kind === 'choice' && options.length < 2) continue;
+      questions.push({ kind: q.kind, prompt, category: cleanText(q.category, READY_LIMITS.category), ...(options.length ? { options } : {}) });
+      left -= 1;
+    }
+    if (name && questions.length) sets.push({ name, questions });
+  }
+  return { value: { kind, sets } };
+}
+const readyView = (state) => {
+  const r = state && state.Ready;
+  return r && typeof r === 'object' ? { kind: r.kind || '', sets: Array.isArray(r.sets) ? r.sets : [], at: r.at || null } : null;
+};
+
 /** The brief's opening lines, beside Who it is for (forWhom) and Never (Keep in mind). */
 const BRIEF_LINES = Object.freeze(['kind', 'problem', 'good', 'proof', 'firstBuild', 'tools', 'look']);
 
@@ -1002,12 +1068,30 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.24.1';
+const LATEST_PLUGIN = '1.25.1';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
 /** A clean x.y.z or ''. The header is the caller's word; nothing else is kept. */
 const cleanPluginVersion = (v) => (/^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(String(v || '').trim()) ? String(v).trim() : '');
+/**
+ * WHERE THE PROJECT LIVES (plugin 1.25.0, owner 18 Oct: the Connect window's
+ * "coming back" paste). The plugin sends it on its state reads, relative to
+ * the home folder ("~/build-room/x") or the folder's name alone. Kept only if
+ * it is plain: no control characters, never an absolute path.
+ */
+const FOLDER_HEADER = 'x-engage-folder';
+function folderOf(event) {
+  const h = (event && event.headers) || {};
+  const k = Object.keys(h).find((x) => x.toLowerCase() === FOLDER_HEADER);
+  if (!k) return '';
+  let v = '';
+  try { v = decodeURIComponent(String(h[k] || '')); } catch { return ''; }
+  v = v.trim();
+  if (!v || v.length > 200 || /[\u0000-\u001f\u007f]/.test(v) || v.startsWith('/') || /^[A-Za-z]:[\\/]/.test(v) || v.split('/').includes('..')) return '';
+  return v;
+}
+
 /** The version a request announced, from any header casing. */
 function pluginVersionOf(event) {
   const h = (event && event.headers) || {};
@@ -1044,6 +1128,8 @@ function agentStatus(stateRow, keys, now) {
     connected: Number.isFinite(seen) && Date.parse(now) - seen < AGENT_ACTIVE_MS,
     listening: Number.isFinite(heard) && Date.parse(now) - heard < AGENT_LISTENING_MS,
     lastSeenAt: s.AgentSeenAt || null,
+    // The project folder Claude last reported (plugin 1.25.0); '' from an older plugin.
+    folder: typeof s.AgentFolder === 'string' ? s.AgentFolder : '',
     // CONNECT STEP 4 (owner, 2026-10-07): when Claude ran /engage:kickoff
     // (room_status with kickoff), and, for older plugins that never say so,
     // when it last listened for the host.
@@ -1706,6 +1792,10 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     // Claude's copy has no Later list: it hears an item only when the host sends it.
     brief: isAgent ? { ...briefView(room.state), later: [] } : briefView(room.state),
     opening: openingView(room.state, room),
+    // The kind of build (plan 2026-10-22): which question sets come first, for the host and for Claude.
+    buildKind: buildKindOf(room.state),
+    // The host's ready questions for Claude (plan step 4): all of them for Claude, a summary for the host.
+    ready: isAgent ? readyView(room.state) : (() => { const r = readyView(room.state); return r ? { kind: r.kind, count: r.sets.reduce((n, x) => n + x.questions.length, 0), names: r.sets.map((x) => x.name), at: r.at } : null; })(),
     briefDraft: isAgent ? null : draftView(room.state),
     images: room.images.map(imageView),
     points: isAgent ? pointsClaudeView(room, { role: 'agent' }) : pointsHostView(room),
@@ -2254,7 +2344,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
-  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, cleanPluginVersion, pluginVersionOf, pluginNoteFor, pluginView,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,

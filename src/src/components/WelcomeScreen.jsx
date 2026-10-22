@@ -1,8 +1,10 @@
 import React from 'react';
 import ActiveOrgSwitcher from './ActiveOrgSwitcher';
+import HostNotificationsBell from './HostNotificationsBell';
 import PendingInvites from './PendingInvites';
 import './WelcomeScreen.css';
 import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import BrandMark from './BrandMark';
 import WelcomeEvents from './WelcomeEvents';
 
@@ -113,6 +115,9 @@ export default function WelcomeScreen({
                   the console. It draws nothing at all for somebody with a
                   single space, which is most people. */}
               <ActiveOrgSwitcher />
+              {/* THE BELL (owner, 21 Oct 2026): the console's inbox here too.
+                  No session is open on this screen, so a click opens in place. */}
+              <HostNotificationsBell />
               <span className="wel-who-name">{currentUser.attributes?.name || 'Signed in'}</span>
               {isAdmin && <span className="wel-badge">Administrator</span>}
               {/* THE LINK BACK, WHICH ONLY EXISTED IN ONE DIRECTION.
@@ -148,9 +153,10 @@ export default function WelcomeScreen({
                   request a feature, ask for help (HelpButton's `reports`).
                   Last in the row, where the same control sits in the session
                   panel's header and the console's. No session is open on this
-                  screen, so a report from here carries no game id. */}
+                  screen, so a report from here carries no game id. Its guides
+                  open at the start screen's own section (Help Phase 3). */}
               <HelpButton
-                section="host"
+                {...helpFor('host-start')}
                 variant="inline"
                 size="small"
                 tooltip="Help and feedback"

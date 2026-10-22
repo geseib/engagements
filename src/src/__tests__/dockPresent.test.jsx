@@ -23,7 +23,7 @@ test('no present prop, no link', () => {
 
 test('PRESENT opens /present in a new window', () => {
   render(<Dock status="Ready" onSetup={() => {}} present={{ href: '/present?gameId=5479', presenting: 0 }} />);
-  const link = screen.getByRole('link', { name: 'Open the Presentation in a new window' });
+  const link = screen.getByRole('link', { name: "Open the room's window in a new window" });
   expect(link.getAttribute('href')).toBe('/present?gameId=5479');
   expect(link.getAttribute('target')).toBe('_blank');
   expect(link.getAttribute('rel')).toMatch(/noopener/);
@@ -41,7 +41,8 @@ test('PRESENTING once a Presentation is connected', () => {
 test('the host page offers it only under the two-surface switch', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
   expect(src).toMatch(/present=\{twoSurfaces && gameId \? \{ href: presentHref\(gameId\), presenting \} : null\}/);
-  expect(src).toMatch(/const twoSurfaces = twoSurfacesHere\(currentGameType\)/);
+  // The page decides from the choice it holds (review #38), not storage re-read per render.
+  expect(src).toMatch(/const twoSurfaces = twoSurfacesFor\(roomScreenChoice, \{ gameType: currentGameType/);
 });
 
 test('the Remote swaps Big screen for Present only under the switch', () => {

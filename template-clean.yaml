@@ -1452,6 +1452,25 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoAuthorizer
+        # THE BELL'S INBOX (orgs/my-notifications.js): list, mark read, mark
+        # all read. On this function, beside /me/attention whose counts it
+        # names, for the resource limit.
+        MyNotificationsGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /me/notifications/{proxy+}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        MyNotificationsPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /me/notifications/{proxy+}
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -5247,6 +5266,27 @@ Resources:
             Method: POST
             Auth:
               Authorizer: CognitoAuthorizer
+        # AI GENERATION DRAFTS (admin/generation-drafts.js, dispatched from
+        # upload-questions.js): list, read, keep/leave/edit, stop, accept,
+        # discard, restore. On this function because accepting a new-set draft
+        # IS an import, and because the stack is near CloudFormation's
+        # 500-resource limit: one proxy family, two methods, no new Lambda.
+        AdminGenerationDraftsGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/generation-drafts/{proxy+}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        AdminGenerationDraftsPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RestApi
+            Path: /admin/generation-drafts/{proxy+}
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -5609,6 +5649,15 @@ Resources:
             - Effect: Allow
               Action: lambda:InvokeFunction
               Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-check-question-set'
+        # A promote is a rollback and is AUDITED (shared/audit-log.js), with the
+        # set's name sealed under the organisation's key — and the name is read
+        # off the set row, sealed, to write it. So this function unwraps that
+        # org's data key, with the orgId context the key policy demands.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
       Environment:
         Variables:
           CHECK_FUNCTION_NAME: !Sub '${StackName}-check-question-set'

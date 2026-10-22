@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import DeleteReasonField from './DeleteReasonField';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
@@ -458,6 +460,8 @@ export default function EventItemDialog({
                 : `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`)}
             </p>
           </div>
+          {/* The agenda guide's adding-items section (Help Phase 3). */}
+          <HelpButton {...helpFor('event-builder')} variant="inline" size="small" tooltip="Help: agenda items" className="help-button-quiet" />
           <button type="button" className="evb-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
         </header>
 

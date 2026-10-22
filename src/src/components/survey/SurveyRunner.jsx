@@ -346,7 +346,7 @@ export default function SurveyRunner({
   // The session's own name in the bar, from GET /survey — or nothing at all.
   const sessionTitle = (survey && typeof survey.title === 'string' && survey.title.trim()) || null;
   const shell = (props, body) => (
-    <PlayerShell who={playerName} online={online} banner={banners} category={sessionTitle} {...props}>
+    <PlayerShell who={playerName} online={online} banner={banners} category={sessionTitle} help="player-survey" {...props}>
       {body}
     </PlayerShell>
   );

@@ -36,6 +36,9 @@ function lateAnswersLayer(lateAnswers, { hidden }) {
   ].join('\n');
 }
 const { consensusLabel } = require('./consensus');
+// Workie's after-writing check (read-check.js; workie-grounding STEP0): numbers,
+// room-level claims and decided-sounding next steps the material does not support.
+const { checkRead, collectMaterial, revisionNote, issueKinds } = require('./read-check');
 // buildWavelengthProse lives in wavelength.js WITH the engine, not here.
 // promptPreflight.test.js extracts "the hardcoded fallback" by slicing from
 // this file's FIRST backtick character, so nothing above the real fallback
@@ -1002,6 +1005,11 @@ const handle = async (event, context) => {
       const refusal = await refuseUnlessHost(event, gameId, { generateNew, debug, promptDebug, followUps, redo });
       if (refusal) return refusal;
     }
+    // Past refuseUnlessHost on the host route: the caller drives this session.
+    // Only then is the read check's note (ReadCheck) returned — never on the
+    // public read the phones, the wall and /present make.
+    const hostRoute = !workerMode && HOST_ROUTE.test(
+      (event.requestContext && event.requestContext.routeKey) || event.routeKey || event.rawPath || '');
 
     // DEV'S MODEL PICKER (summary-models.js). `staffPicker` is false off the
     // host route, off dev and for anybody outside `admins`; then `model` and
@@ -1172,6 +1180,10 @@ const handle = async (event, context) => {
           generatedAt: existingSummary.Item.GeneratedAt,
           fromCache: true
         };
+        // The read check's note, for the host only (read-check.js).
+        if (hostRoute && existingSummary.Item.ReadCheck) {
+          responseData.readCheck = existingSummary.Item.ReadCheck;
+        }
         // Staff on dev also get the picker and the row's model attributes.
         if (staffPicker) {
           Object.assign(responseData, modelFieldsOf(existingSummary.Item), { modelPicker: modelPickerInfo() });
@@ -2046,6 +2058,9 @@ const handle = async (event, context) => {
       // Which angle this round was read from (round-angles.js). Plaintext, like
       // PersonaSource: a word from a fixed list, never the room's content.
       ...(summaryData.angle ? { Angle: summaryData.angle } : {}),
+      // What the read check left (read-check.js): kinds and the read's own
+      // words, so sealed with the read (ENCRYPTED_FIELDS.aiSummary).
+      ...(summaryData.readCheck ? { ReadCheck: summaryData.readCheck } : {}),
       // The template, not Workie's read (buildFallback). Plaintext flags like
       // Angle: a boolean and a word from FALLBACK_REASONS, never content.
       ...(summaryData.fallback ? { Fallback: true, FallbackReason: summaryData.fallbackReason || null } : {}),
@@ -3678,6 +3693,34 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   // WHAT CONTEXT THIS SUMMARY WAS WRITTEN WITH — yes/no flags, never the
   // content (question-background spec §4; generalises briefingUsed). Stored
   // plaintext on the summary row like PersonaSource, and shown to the host.
+  /*
+    WHAT THE READ CHECK COMPARES THE REPLY AGAINST (read-check.js): the same
+    values the template got — every variable, the host's and the set's
+    context, the briefing, the late answers and the angle's standings — and
+    the vote as consensus.js and the tally saw it. Built once, here, from the
+    values that went into the prompt; never logged.
+  */
+  const readMaterial = collectMaterial(templateVars, [
+    eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, hostLayer,
+    (Array.isArray(lateAnswers) ? lateAnswers : []).map((a) => (a && a.answer) || ''),
+  ]);
+  const readVote = {
+    points: rankedAnswers.map((a) => Number(a.score) || 0),
+    rankCount: rankedAnswers.length,
+    votes: votes ? votes.length : 0,
+    answered: answers.length,
+    joined: joinedCount,
+    round: parseInt(paddedQuestionNumber, 10),
+    consensus: consensusLevel,
+    // Names only to recognise "<Name> will …"; on a hidden round they are the placeholder.
+    names: hidden ? [] : playerNames,
+    // Trivia: everyone right is the one "everyone" the round can show.
+    unanimous: gameType === 'trivia'
+      ? (totalParticipants > 0 && correctCount === totalParticipants)
+      : (gameType === 'wavelength' ? commonWords.length > 0 : undefined),
+  };
+  const readVoice = `${persona.voice || ''}\n${voiceLayer}`;
+
   const contextUsed = {
     background: Boolean(background),
     setNote: Boolean(String(questionSetAiContext || '').trim()),
@@ -3925,6 +3968,49 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       }
     }
 
+    /*
+      THE READ CHECK (read-check.js; docs/design/workie-grounding/STEP0.md).
+      Review #38: a "15-minute hold" no answer held, "the strongest
+      resistance" the vote never measured, a next step with an owner the room
+      never chose. After the reply lands it is checked against the material;
+      a reply with issues is written ONCE more — the same prompt, the reply,
+      and a note naming the exact words — and checked again. The better of the
+      two is kept (fewer issues, tally slips counted too; the rewrite on a
+      tie). What is left goes on the row as ReadCheck, for the host only.
+      Kinds and counts in the log, never a token: tokens are the read's words.
+    */
+    let readCheck = null;
+    try {
+      const vet = (text) => checkRead({ read: text, material: readMaterial, vote: readVote, voice: readVoice });
+      const first = vet(aiResponse);
+      const firstIssues = first.issues;
+      readCheck = { checked: true, rewritten: false, first: firstIssues.length, issues: firstIssues };
+      if (firstIssues.length) {
+        console.log(`🔎 READ CHECK: ${firstIssues.length} issue(s) ${JSON.stringify(issueKinds(firstIssues))} — asking for one revision`);
+        try {
+          const revised = await askModel(`${prompt}\n\nYOUR PREVIOUS REPLY:\n${aiResponse}\n\n${revisionNote(firstIssues)}`);
+          const again = vet(revised).issues;
+          const revisedSlips = mismatchesIn(revised).length;
+          if (again.length + revisedSlips <= firstIssues.length + tallyCheck.mismatches) {
+            aiResponse = revised;
+            tallyCheck = { ...tallyCheck, mismatches: revisedSlips };
+            readCheck = { ...readCheck, rewritten: true, issues: again };
+          }
+          console.log(`🔎 READ CHECK: kept the ${readCheck.rewritten ? 'revision' : 'first reply'}, `
+            + `${readCheck.issues.length} issue(s) left ${JSON.stringify(issueKinds(readCheck.issues))}`);
+        } catch (e) {
+          // The first reply is a real read; keep it, and say the rewrite failed.
+          readCheck.rewriteError = true;
+          console.warn(JSON.stringify({ event: 'ai-summary-read-check-rewrite-failed', error: (e && e.name) || 'Error', kinds: issueKinds(firstIssues) }));
+        }
+      }
+      readCheck.issues = readCheck.issues.map((i) => ({ kind: i.kind, token: i.token }));
+    } catch (e) {
+      // The check never costs the room its read.
+      console.warn(JSON.stringify({ event: 'ai-summary-read-check-failed', error: (e && e.name) || 'Error' }));
+      readCheck = null;
+    }
+
     // Parse the structured response
     const parsed = parseAIResponse(aiResponse, { customShape });
 
@@ -3944,6 +4030,8 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
       // Dev's picker only: what was asked for, latency, tokens, fallback.
       ...(recordModel ? { modelMeta: modelMeta() } : {}),
       tallyCheck,
+      // What the read check found and whether the rewrite was kept (host only).
+      ...(readCheck ? { readCheck } : {}),
       // Whose voice this section is in. Persisted onto the AISummary item so a
       // report generated weeks later can attribute it — by then the game's
       // PersonaId may have been switched again, or the persona edited.

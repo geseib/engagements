@@ -215,6 +215,44 @@ function reportsIndexPk(orgId) {
   return id ? `ORG#${id}#REPORTS` : REPORTS_PLATFORM_PK;
 }
 
+/**
+ * AI GENERATION DRAFTS (docs/design/ai-generation-review). What a generation
+ * run produced, waiting for the person who asked to accept it into a version.
+ *
+ *   PK: <scope>GENDRAFTS            SK: DRAFT#<id>    the draft's header
+ *   PK: <scope>GENDRAFT#<id>        SK: ITEM#<nnnn>   one generated question
+ *
+ * In the library the work will be saved into — `GENDRAFTS` for Engage's own,
+ * `ORG#<org>#GENDRAFTS` for a team or a personal space — so a draft is listed
+ * with the library it belongs to and sealed under that library's key. PUBLIC
+ * is refused: a set becomes public only by publishing a saved version, never
+ * by generating straight into the public library.
+ */
+function draftScopePrefix(scope, orgId) {
+  if (scope === PUBLIC) throw new Error('tenant: a generation draft is never public');
+  return scopePrefix(scope, orgId);
+}
+function draftsIndexPk(scope, orgId) {
+  return `${draftScopePrefix(scope, orgId)}GENDRAFTS`;
+}
+function draftItemsPk(scope, orgId, draftId) {
+  const id = clean(draftId);
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) throw new Error('tenant: draftItemsPk requires a draft id');
+  return `${draftScopePrefix(scope, orgId)}GENDRAFT#${id}`;
+}
+
+/**
+ * ONE PERSON'S NOTIFICATIONS — the inbox behind the bell in the console's top
+ * line. Per account, not per library: one inbox says what waits in every place
+ * the person works, and each row names its own library (and is sealed under it
+ * when it is a team's).
+ */
+function notificationsPk(sub) {
+  const id = clean(sub);
+  if (!id) throw new Error('tenant: notificationsPk requires a user');
+  return `USER#${id}#NOTIFY`;
+}
+
 const orgPk = (orgId) => `ORG#${clean(orgId)}`;
 const userPk = (sub) => `USER#${clean(sub)}`;
 /** The platform's index of organisations. Carries no tenant content. */
@@ -595,6 +633,7 @@ module.exports = {
   GAMES_RESERVATION_PK, ORGS_INDEX_PK, REPORTS_PLATFORM_PK, reportsIndexPk,
   scopePrefix, setsMetadataPk, setStatsPk, setContentPk, promptsMetadataPk, personasPk, gamesIndexPk, orgPk, userPk,
   eventsIndexPk, eventPk,
+  draftsIndexPk, draftItemsPk, notificationsPk,
   callerOrgId, callerOrgRole, callerOrgIds, callerGroups, isPlatformAdmin,
   roleAtLeast, readableScopes, canManageScope,
   callerMayDriveSession, callerMayManageEvent,

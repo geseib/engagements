@@ -62,11 +62,22 @@ describe('no builder decides the outcome from how many items came back', () => {
       // rejects: dropping G5.1. Without the stored id, closing the modal loses
       // the job forever and the client's own timeout copy — "reopen the builder
       // to check" — is impossible to act on.
+      //
+      // THE SLOT MOVED INTO ONE HOOK (hooks/useDraftRun.js, 2026-10-21), keyed
+      // by set as well as by builder, so the four builders reach it through
+      // `run.remember / run.stored / run.forget`. Both halves are held: each
+      // builder uses the hook for all three, and the hook is what calls the
+      // storage functions.
       const source = read('components', file);
-      expect(source).toContain('rememberGenerationJob');
-      expect(source).toContain('recallGenerationJob');
-      expect(source).toContain('forgetGenerationJob');
+      expect(source).toContain('useDraftRun(');
+      expect(source).toMatch(/run\.remember\(/);
+      expect(source).toMatch(/\.stored\(\)/);
+      expect(source).toMatch(/\.forget\(\)/);
       expect(source).toContain('resumeIsGone');
+      const hook = read('hooks', 'useDraftRun.js');
+      expect(hook).toContain('rememberGenerationJob');
+      expect(hook).toContain('recallGenerationJob');
+      expect(hook).toContain('forgetGenerationJob');
     });
   }
 });

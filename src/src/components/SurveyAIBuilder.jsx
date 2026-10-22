@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -8,11 +10,10 @@ import GeneratedItemsTable from './GeneratedItemsTable';
 import StatusMessage from './StatusMessage';
 import {
   interpretGenerationJob,
-  rememberGenerationJob,
-  recallGenerationJob,
-  forgetGenerationJob,
   resumeIsGone,
 } from '../utils/generationJob';
+import useDraftRun from '../hooks/useDraftRun';
+import DestinationField from './DestinationField';
 import {
   SURVEY_KINDS,
   surveyKindMeta,
@@ -38,6 +39,7 @@ import './SurveyAIBuilder.css';
 
 const API_BASE = window.API_BASE;
 const ENDPOINT = `${API_BASE}admin/ai-generate-survey`;
+
 
 const EMPTY_FORM = { source: '', goal: '', title: '', customPrompt: '' };
 
@@ -85,7 +87,17 @@ function listed(items) {
  * form the editor uses, so there is one form, not two". A generated survey is
  * reviewed here (leave out, change kind) and edited in the set.
  */
-function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
+function SurveyAIBuilder({
+  onClose, onSurveyGenerated,
+  /** A run that finished into a draft is reviewed by the page (DraftReview). */
+  onDraftReady = null,
+  /** The libraries this person may save into; read once when not given. */
+  libraries = null,
+}) {
+  /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
+  const run = useDraftRun({ endpoint: ENDPOINT, appendTo: null, libraries, onDraftReady });
+  const runRef = useRef(run);
+  runRef.current = run;
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(EMPTY_FORM);
   const [kinds, setKinds] = useState(DEFAULT_SURVEY_KINDS);
@@ -120,13 +132,14 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   };
 
   /** See TriviaAIBuilder.watchJob — same contract, same reasons. */
-  const watchJob = useCallback(async (jobId) => {
+  const watchJob = useCallback(async (jobId, headers = {}, startedIn = '') => {
     jobIdRef.current = jobId;
     setIsGenerating(true);
     setTransportError(null);
     setStep(2);
     try {
       const terminal = await pollGenerationJob(ENDPOINT, jobId, {
+        headers,
         label: 'Survey generation',
         onStatus: setGenerationStatus,
         onProgress: (update) => {
@@ -136,13 +149,14 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
           }
         }
       });
+      if (runRef.current.handOff(terminal, startedIn)) return;
       setJob(terminal);
       setItems(Array.isArray(terminal.items) ? terminal.items : []);
       setDraftedKinds([]);
     } catch (error) {
       console.error('AI survey generation error:', error);
       if (resumeIsGone(error)) {
-        forgetGenerationJob(ENDPOINT);
+        runRef.current.forget();
         jobIdRef.current = null;
         setJob(null);
         setStep(1);
@@ -157,13 +171,13 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   }, []);
 
   useEffect(() => {
-    const stored = recallGenerationJob(ENDPOINT);
+    const stored = runRef.current.stored();
     if (!stored) return;
     if (stored.title) {
       setCopyRef.current = { title: stored.title, description: stored.description || '' };
     }
     setGenerationStatus('Reconnecting to the job you left…');
-    watchJob(stored.jobId);
+    watchJob(stored.jobId, runRef.current.headersFor(stored), stored.libraryKey || '');
   }, [watchJob]);
 
   const handleConfigSubmit = async () => {
@@ -195,10 +209,10 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
         // reads its name from `setMetadata.title` — with no title it creates
         // nothing and the operator lands on the manual path instead.
         setMetadata: { title, description },
-      }, { label: 'Survey generation', onStatus: setGenerationStatus });
+      }, { label: 'Survey generation', onStatus: setGenerationStatus, headers: run.headers });
 
-      rememberGenerationJob(ENDPOINT, jobId, { title, description });
-      await watchJob(jobId);
+      run.remember(jobId, { title, description });
+      await watchJob(jobId, run.headers, run.libraryKey);
     } catch (error) {
       console.error('AI survey generation error:', error);
       setIsGenerating(false);
@@ -207,7 +221,7 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
   };
 
   const dismissJob = () => {
-    forgetGenerationJob(ENDPOINT);
+    run.forget();
     jobIdRef.current = null;
   };
 
@@ -371,6 +385,8 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
               <p className="sab-sub">The job runs on the server, so you can close this once it starts.</p>
             )}
           </div>
+          {/* The AI builders' guide (Help Phase 3), beside the X. */}
+          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
           <button
             type="button"
             className="close-button"
@@ -388,6 +404,12 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
               {/* Only ever set on step 1 by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
+              <DestinationField
+                libraries={run.libraries}
+                value={run.destination}
+                onChange={run.setDestination}
+                onAskForLibraries={run.askForLibraries}
+              />
 
               <div className="sab-field">
                 <label className="sab-lab" htmlFor="sab-source">
@@ -512,6 +534,8 @@ function SurveyAIBuilder({ onClose, onSurveyGenerated }) {
                   noun="questions"
                   jobId={jobIdRef.current}
                   createsSet
+                  draftId={job && job.draftId ? job.draftId : null}
+                  libraryKey={run.libraryKey}
                   statusLine={generationStatus}
                   transportError={transportError}
                   onKeepRunning={onClose}

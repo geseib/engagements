@@ -7,6 +7,8 @@
 .scr-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4em .8em; }
 .scr-k { display: flex; flex-direction: column; gap: .1em; min-width: 0; flex: 1 1 14em; }
 .scr-label { font-weight: 600; }
+/* The label's `?` (Help Phase 3), on the label's line. */
+.scr-label:has(.scr-help) { display: flex; align-items: center; gap: .5em; }
 .scr-hint { color: var(--muted); font-size: .87em; line-height: 1.35; }
 .scr-stat.is-success { color: var(--text); }
 .scr-stat.is-warn { color: var(--accent-text); }

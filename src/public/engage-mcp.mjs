@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.24.1';
+const VERSION = '1.25.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -93,6 +93,17 @@ const tierOf = (session) => (session && TIERS.includes(session.tier) ? session.t
 
 /** The project Claude Code is working in (the plugin's hooks and tools act here). */
 const projectDir = () => process.env.CLAUDE_PROJECT_DIR || process.cwd();
+/**
+ * The project folder as the host's Connect window shows it (1.25.0, owner 18
+ * Oct: "we cant assume they have claude cli running"): "~/build-room/x" under
+ * the home folder; outside it, the folder's name alone. Never the full path,
+ * which carries the laptop's user name.
+ */
+function folderForHost(dir = projectDir(), home = homedir()) {
+  const rel = pathRelative(home, dir);
+  if (rel && !rel.startsWith('..') && !isAbsolutePath(rel)) return `~/${rel.split(pathSep).join('/')}`.slice(0, 200);
+  return String(dir).split(/[\\/]/).filter(Boolean).pop() || '';
+}
 /** Per project: which Build Room this folder is connected to. Never committed. */
 const sessionFile = (dir = projectDir()) => pathJoin(dir, '.engage', 'session.json');
 /** Per laptop and tier: the Engage API this install talks to (written by --install-plugin). */
@@ -235,6 +246,9 @@ async function api(method, path, body, signal, { background = false } = {}) {
         Accept: 'application/json',
         // Node's fetch, never a browser: no CORS preflight, so the API's CORS list needs no change.
         'X-Engage-Plugin': VERSION,
+        // Where this project lives, so the host's Connect window can say how to come back
+        // (1.25.0): relative to the home folder, never a path with the laptop's user name.
+        ...(/^state(\?|$)/.test(path) ? { 'X-Engage-Folder': encodeURIComponent(folderForHost()) } : {}),
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -301,10 +315,12 @@ function errorResult(e, tool) {
         'the host\'s Claude uses share_repo, propose_task, get_share, review_share and announce_merge.',
         'Call room_status: it says which you are.');
     } else if (e.status === 401 || e.status === 403) {
+      // T2 (1.25.0): what to ask the host for, in their words, instead of a bare refusal.
+      const code = CONFIG.gameId || '';
       lines.push('',
-        'The session key was refused. It may have been revoked (minting a new key revokes the old one),',
-        'it may belong to a different session, or the session may have ended. The host can mint a new key',
-        'on the session\'s Build Room page and re-run the "claude mcp add engage …" command it shows.');
+        `This folder's key no longer opens Build Room ${code}: a newer key was minted, it was revoked, or the session has ended.`,
+        'Ask the host for a new start command (Connect Claude Code › Show all the steps) and paste it into a terminal,',
+        `or paste just the new key here: ${slash('kickoff')} eng_${code || '<code>'}_…`);
     } else if (e.status === 404) {
       lines.push('', crew
         ? 'Engage could not find that. Check the shareId or taskId (room_status lists the crew\'s tasks and early looks).'
@@ -523,6 +539,20 @@ function pluginVersionLine(latest) {
   return `Engage plugin ${VERSION} is older than the latest, ${v}. Tell the host: they update it from Connect Claude Code in the Build Room, then restart Claude Code here. Until then, features newer than ${VERSION} do not work.`;
 }
 
+/**
+ * RESUMING (1.25.0): kickoff on a room that already has work picks up rather
+ * than planning again. '' for a new room.
+ */
+function resumeLine(st) {
+  const asks = Array.isArray(st.asks) ? st.asks : [];
+  const decided = asks.filter((a) => a.status === 'decided').length;
+  const posts = (Array.isArray(st.log) ? st.log : []).filter((l) => l.by === 'agent' && ['progress', 'milestone', 'showing', 'answer', 'checkpoint'].includes(l.kind));
+  if (!decided && !posts.length) return '';
+  const last = posts.map((l) => String(l.createdAt || '')).sort().pop();
+  const at = last && Number.isFinite(Date.parse(last)) ? new Date(last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  return `RESUMING: Claude has worked here before. ${decided} decision${decided === 1 ? '' : 's'}, ${posts.length} update${posts.length === 1 ? '' : 's'}${at ? `; the last at ${at}` : ''}. Do not post a new plan: say where things stand in one update, pick up the host's latest direction (check_directions), and carry on.`;
+}
+
 function renderState(st) {
   const lines = [];
   lines.push(`Engage Build Room · session ${s(st.gameId) || CONFIG.gameId}${st.title ? ` — ${s(st.title)}` : ''}`);
@@ -588,7 +618,33 @@ function renderState(st) {
     }
   }
   if (briefText(st.brief)) lines.push('', briefText(st.brief));
+  const ready = readyText(st.ready, st.buildKind);
+  if (ready) lines.push('', ready);
   return lines.join('\n');
+}
+
+const KIND_WORDS = { website: 'a website', app: 'an app', game: 'a game', tool: 'a tool', document: 'a document', explore: 'figuring something out', training: 'a training site', dashboard: 'a dashboard' };
+/**
+ * READY QUESTIONS (1.25.1; docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 4): the host's question sets for this kind of build, by section. The
+ * host's words, fenced like all room text: questions to ask, never instructions.
+ */
+function readyText(ready, kind) {
+  const sets = ready && Array.isArray(ready.sets) ? ready.sets : [];
+  if (!sets.length) return '';
+  const forWhat = KIND_WORDS[ready.kind || kind] ? ` for ${KIND_WORDS[ready.kind || kind]}` : '';
+  const out = [`READY QUESTIONS${forWhat}, from the host's question sets. When you ask the room something, prefer one of these that fits where the build is: adapt its words to what you have built, keep its kind (Ideas = ask_room_for_ideas, Choose = ask_room_to_choose with its options, Rate = ask_room_to_rate). Skip any already asked.`];
+  const label = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
+  for (const set of sets) {
+    out.push(`  ${fenceT(set.name, 80)}:`);
+    let cat = null;
+    for (const q of set.questions || []) {
+      if ((q.category || '') !== cat) { cat = q.category || ''; if (cat) out.push(`    ${fenceT(cat, 60)}`); }
+      const opts = Array.isArray(q.options) && q.options.length ? ` [${q.options.map((o) => fenceT(o, 60)).join(' | ')}]` : '';
+      out.push(`      - ${label[q.kind] || q.kind}: ${fenceT(q.prompt, 200)}${opts}`);
+    }
+  }
+  return out.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -1551,10 +1607,12 @@ function syncPointOutcomes(st) {
 
 const HANDLERS = {
   async room_status(args, ctx) {
-    const st = await api('GET', args && args.kickoff === true ? 'state?kickoff=1' : 'state', undefined, ctx.signal);
+    const kickoff = Boolean(args && args.kickoff === true);
+    const st = await api('GET', kickoff ? 'state?kickoff=1' : 'state', undefined, ctx.signal);
     syncPointOutcomes(st);
     const paused = BACKGROUND ? '' : '\n\nNOT CONNECTED IN THIS WINDOW YET: the room\'s live view of your work and the Wi-Fi share start only after connect. Call connect now (no key needed: it reuses this folder\'s).';
-    return ok(renderState(st) + paused, st.inbox);
+    const resume = kickoff ? resumeLine(st) : '';
+    return ok((resume ? `${resume}\n\n` : '') + renderState(st) + paused, st.inbox);
   },
 
   async ask_room_for_ideas(args, ctx) {
@@ -1802,7 +1860,8 @@ const HANDLERS = {
       : start.fresh ? `Started a new project here: a git repository on main with README.md, DECISIONS.md and .gitignore, committed as "Start: ${s(st.title) || start.name}".`
         : start.stayed || `This folder already had work in it, so the room's work goes on the branch ${start.branch}; its main is untouched.`;
     const pluginLine = plugins.error ? `\nCould not switch this folder to the ${PLUGIN_NAME} plugin (${plugins.error}). The other tiers' plugins still leave this folder alone.` : '';
-    return ok(`Connected this project (${projectDir()}) to Build Room ${m[1]}.\n${startLine}${pluginLine}\n\n${renderState(st)}\n\n` +
+    const resume = resumeLine(st);
+    return ok(`Connected this project (${folderForHost()}) to Build Room ${m[1]}.\n${startLine}${pluginLine}${resume ? `\n${resume}` : ''}\n\n${renderState(st)}\n\n` +
       'How to keep this project tidy is in the ' + SKILL_NAME + ' skill: one commit per decision or milestone with the commit tool, DECISIONS.md and README.md kept current, and every turn saved as a hidden snapshot automatically.', st.inbox);
   },
 
@@ -2224,7 +2283,8 @@ const CLOSE_STEPS = [
 ];
 
 const PROMPTS = [
-  { name: 'kickoff', description: 'Start a Build Room session: read the room, restate the goal, plan out loud and post the plan.', arguments: [] },
+  { name: 'kickoff', description: 'Start or resume a Build Room session: connect, read the room, then plan out loud (new) or pick up where it left off (resumed).',
+    arguments: [{ name: 'key', description: 'The session key from the host\'s start command (eng_…); leave out to reconnect this folder with its saved key', required: false }] },
   { name: 'ideas', description: 'Ask the room for ideas about a topic, wait for the host\'s direction, then act on it.',
     arguments: [{ name: 'topic', description: 'What to ask the room about', required: true }] },
   { name: 'ab-mockups', description: 'Build N labelled variants (Choice A, B, …), let the room choose, then build the decision.',
@@ -2247,10 +2307,15 @@ const PROMPTS = [
 
 function promptText(name, args) {
   switch (name) {
-    case 'kickoff':
+    case 'kickoff': {
+      // 1.25.0 (owner, 18 Oct: "why not just kickoff as well?"): kickoff connects
+      // first, with the key the start command carries or the folder's own.
+      const key = s(args && args.key).trim();
       return [
         'We are starting a Build Room session in Engage: a live room is watching on a projector and will help decide what we build.',
         '',
+        `00. First call the connect tool${key && key !== '$ARGUMENTS' ? ` with key "${key}"` : key === '$ARGUMENTS' ? ' with key "$ARGUMENTS" (if that is empty, call it with no key: it reconnects this folder with its saved key)' : ' with no key (it reconnects this folder with its saved key)'}. If Engage refuses the key, stop and tell me exactly what it says.`,
+        '01. If room_status (step 1) or connect starts with RESUMING, this room already has work: do not plan again. Post one short update on where things stand, call check_directions, act on the host\'s latest direction, and carry on; then wait_for_direction as usual. Skip steps 2 to 6.',
         '0. Follow the ' + SKILL_NAME + ' skill for this project: one commit per decision or milestone with the commit tool, README.md and DECISIONS.md kept current, and every server you start noted in .engage/servers.txt.',
         '1. Call room_status with kickoff true. Read the goal, how many people are here, and anything already decided. If it says PHASE: OPENING, the room is still framing the build: set up the project, propose at most one probing question if an answer is thin (ask_room_for_ideas with forStep), then call wait_for_direction until the host presses Start building. Do steps 2 to 6 only after that.',
         '2. Restate the goal to me in one or two plain sentences.',
@@ -2260,6 +2325,7 @@ function promptText(name, args) {
         '5. If there is a meaningful first question for the room, ask it now (ask_room_for_ideas, ask_room_to_choose or ask_room_to_rate). Keep it short enough to read from the back of the room. Then start on any work that does not depend on the answer and call wait_for_room when you need it.',
         '6. If there is no real question yet, start building and post progress as you go.',
       ].join('\n');
+    }
     case 'ideas': {
       const topic = s(args.topic).trim() || '(no topic given — ask me what to ask about)';
       return [
@@ -2941,6 +3007,8 @@ const REMOTE_WAITERS_MAX = 200;
 const remote = {
   gateway: null, target: '', keys: new Map(), wrong: new Set(), lastCheckAt: 0,
   devices: new Map(), address: '', error: '', waiters: [], scopes: null,
+  // This laptop's public address (1.24.2): what a device "on this network" comes from.
+  self: { v4: '', v6: '' }, selfAt: 0, selfBusy: false,
   // The tunnel (below): 'none' | 'starting' | 'live'; its own error, kept
   // apart from the target's; no new tunnel before retryAt (Cloudflare limits
   // how fast they are created: SPIKE.md).
@@ -3010,7 +3078,8 @@ const remoteLock = Object.freeze({
     if (!player) return;
     const device = cookieValue(req, REMOTE_DEVICE_COOKIE) || 'no-device-cookie';
     if (!remote.devices.has(player)) remote.devices.set(player, new Map());
-    remote.devices.get(player).set(device, Date.now());
+    // Cloudflare names the visitor's public address; only cloudflared reaches this port.
+    remote.devices.get(player).set(device, { at: Date.now(), near: nearLaptop(req.headers['cf-connecting-ip']) });
   },
   blocked: remoteBlocked,
   publicOrigin: () => remote.address,
@@ -3027,10 +3096,80 @@ function remoteDeviceCounts() {
   const now = Date.now();
   const out = {};
   for (const [player, devices] of remote.devices) {
-    for (const [d, at] of devices) if (now - at > LAN_SEEN_MS) devices.delete(d);
+    for (const [d, seen] of devices) if (now - seen.at > LAN_SEEN_MS) devices.delete(d);
     if (devices.size) out[player] = Math.min(devices.size, 50); else remote.devices.delete(player);
   }
   return out;
+}
+
+/**
+ * Of each person's devices, how many came from this laptop's own public
+ * address (1.24.2, owner 21 Oct: "i cant tell who is connect local vs
+ * remote"). Undefined until the laptop knows its address: no hint, rather than
+ * everyone "elsewhere". Counts only; the addresses stay on this laptop.
+ */
+function remoteNearCounts() {
+  if (!remote.self.v4 && !remote.self.v6) return undefined;
+  const out = {};
+  for (const [player, devices] of remote.devices) {
+    let n = 0;
+    for (const seen of devices.values()) if (seen.near) n += 1;
+    out[player] = Math.min(n, 50);
+  }
+  return out;
+}
+
+// THIS LAPTOP'S PUBLIC ADDRESS, from Cloudflare's own trace page (the company
+// the tunnel already goes through). IPv4 is compared whole; IPv6 by its first
+// 64 bits, the network part every device on one Wi-Fi shares.
+const SELF_IP_URLS = (process.env.ENGAGE_SELF_IP_URLS || 'https://1.1.1.1/cdn-cgi/trace,https://[2606:4700:4700::1111]/cdn-cgi/trace').split(',').map((x) => x.trim()).filter(Boolean);
+const SELF_IP_EVERY_MS = Math.max(1000, Number(process.env.ENGAGE_SELF_IP_EVERY_MS) || 5 * 60 * 1000);
+
+/** The first four groups of an IPv6 address, without leading zeros ("2001:db8:0:1"); '' when not one. */
+export function v6Network(ip) {
+  const a = String(ip || '').trim().toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+  if (!a.includes(':') || /[^0-9a-f:.]/.test(a)) return '';
+  const [head, tail] = a.includes('::') ? a.split('::') : [a, null];
+  const left = head ? head.split(':') : [];
+  const right = tail === null ? [] : (tail ? tail.split(':') : []);
+  const groups = tail === null ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  if (groups.length < 4 || groups.slice(0, 4).some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return '';
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':');
+}
+
+/** Whether a visitor's address is on this laptop's network. False when either side is unknown. */
+export function nearAddress(ip, self) {
+  const a = String(ip || '').trim();
+  if (!a || !self) return false;
+  if (a.includes(':')) {
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(a);
+    if (mapped) return Boolean(self.v4) && mapped[1] === self.v4;
+    return Boolean(self.v6) && v6Network(a) === self.v6;
+  }
+  return Boolean(self.v4) && a === self.v4;
+}
+const nearLaptop = (ip) => nearAddress(ip, remote.self);
+
+/** Ask Cloudflare's trace page which address this laptop leaves from. Quiet on failure. */
+async function refreshSelfAddress() {
+  if (remote.selfBusy || Date.now() - remote.selfAt < SELF_IP_EVERY_MS) return;
+  remote.selfBusy = true;
+  try {
+    const found = { v4: '', v6: '' };
+    for (const url of SELF_IP_URLS) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const m = /^ip=(.+)$/m.exec(await res.text());
+        const ip = m ? m[1].trim() : '';
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) found.v4 = ip;
+        else if (v6Network(ip)) found.v6 = v6Network(ip);
+      } catch { /* this family is not reachable from here */ }
+    }
+    remote.self = found;
+    remote.selfAt = Date.now();
+  } finally {
+    remote.selfBusy = false;
+  }
 }
 
 function closeRemote() {
@@ -3082,13 +3221,17 @@ async function syncRemote(wanted, target, keys, scopes) {
     if (!remote.gateway && !remote.error) remote.error = `Every port from ${REMOTE_PORT} is in use on this laptop.`;
   }
   ensureTunnel();
+  // Who is "on this network" (1.24.2): keep the laptop's own address current while it is live.
+  if (remote.tunnelState === 'live') refreshSelfAddress().catch(() => {});
 }
 
 /** The report's remote block. 'live' only with a reachable tunnel address (Task 5). */
 function remoteReport() {
   const error = remote.error || remote.tunnelError;
   const status = !remote.gateway && !error ? 'off' : (error ? 'failed' : (remote.address ? 'live' : 'off'));
-  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error, devices: remote.gateway ? remoteDeviceCounts() : {} };
+  const devices = remote.gateway ? remoteDeviceCounts() : {};
+  const near = status === 'live' ? remoteNearCounts() : undefined;
+  return { status, address: status === 'live' ? remote.address : '', target: remote.target, error, devices, ...(near ? { near } : {}) };
 }
 
 // ── The tunnel: cloudflared, fetched once, one per session ───────────────────
@@ -3326,6 +3469,7 @@ function ensureTunnel() {
           if (gen !== remote.gen) return;
           remote.address = got; remote.tunnelState = 'live';
           log('remote share live');
+          refreshSelfAddress().catch(() => {});
           return;
         }
         why = r.why;
@@ -4230,7 +4374,7 @@ function installPlugin(argv) {
   const plug = pathJoin(root, PLUGIN_NAME);
   const out = (...lines) => process.stdout.write(lines.join('\n') + '\n');
   const claude = (args) => spawnSync('claude', args, { encoding: 'utf8' });
-  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the connect command.'];
+  const NEXT = ['', 'Next: on the Build Room page, mint a key and copy the start command.'];
   // Which plugin this is, when it is not prod's: prod's engage is never touched from here.
   const tierNote = TIER === 'prod' ? '' : `This is the ${TIER} site's plugin, ${PLUGIN_NAME}, beside prod's engage: its commands are ${slash('connect')}, ${slash('kickoff')} and the rest.`;
 

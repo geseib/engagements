@@ -248,6 +248,15 @@
 .brm .brm-ver .brm-ver-old { color: var(--danger-text); }
 .brm .brm-ver-ok { color: var(--brm-success-text); font-weight: 600; font-size: var(--brm-t-label); }
 .brm .brm-verfold { display: grid; gap: 8px; min-width: 0; }
+/* The Connect window by case (docs/design/build-room-connect-resume): coming back, or connected now. */
+.brm .brm-connect-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.brm .brm-connback { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--brm-tint-amber); border: 1px solid var(--brm-line-amber); }
+.brm .brm-connback.is-now { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
+.brm .brm-connback-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-text); margin-top: 6px; flex: none; }
+.brm .brm-connback.is-now .brm-connback-dot { background: var(--brm-success-text); }
+.brm .brm-connback > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brm .brm-connback span:not(.brm-connback-dot) { color: var(--muted); font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-otherlaptop { margin: 0; }
 .brm .brm-verfold > summary { cursor: pointer; color: var(--secondary); font-size: var(--brm-t-label); font-weight: 600; width: fit-content; }
 .brm .brm-verfold > summary:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 4px; }
 /* Connect Claude Code: each step carries its own title, command and copy
@@ -508,6 +517,9 @@
 .brm .brm-modal--sm { width: min(460px, 100%); }
 .brm .brm-dh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .brm .brm-dh h1 { margin: 0; font-size: var(--brm-t-title); }
+/* A dialog head's `?` (Help Phase 3) takes the X's push right; the X sits beside it. */
+.brm .brm-dh .brm-dh-help { margin-left: auto; }
+.brm .brm-dh .brm-dh-help + .brm-x { margin-left: 0; }
 .brm .brm-keywarn {
   display: flex; gap: 10px; align-items: flex-start;
   background: var(--brm-tint-amber-soft); border: 1px solid var(--brm-line-amber);
@@ -1171,6 +1183,12 @@
 .brm .brm-wifipanel-who { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .brm .brm-wifipanel-dev { color: var(--muted); white-space: nowrap; }
 .brm .brm-wifipanel-people li.is-many .brm-wifipanel-dev { color: var(--accent-text); font-weight: 700; }
+/* On this network or elsewhere (plugin 1.24.2): words, never colour alone. */
+.brm .brm-wifipanel-place { color: var(--muted); white-space: nowrap; }
+.brm .brm-wifipanel-place.is-near { color: var(--brm-success-text); }
+.brm .brm-wifipanel-where { color: var(--muted); font-weight: 400; }
+.brm .brm-wifipanel-people li.brm-wifipanel-note { color: var(--muted); font-size: var(--brm-t-label); min-height: 0; padding-top: 4px; }
+.brm .brm-wifipanel-people li { flex-wrap: wrap; }
 .brm .brm-wifipanel-people li > .brm-btn { margin-left: auto; }
 .brm .brm-wifipanel-more { color: var(--muted); }
 
@@ -1588,6 +1606,17 @@
 }
 .brm .brm-info { width: 20px; height: 20px; margin-left: 6px; padding: 0; border-radius: 50%; border: 1px solid var(--brm-rule); background: none; color: var(--muted); font: 700 var(--brm-t-floor)/1 var(--font-ui); cursor: help; }
 .brm .brm-info:hover, .brm .brm-info:focus-visible { border-color: var(--primary); color: var(--text); }
+/* InfoTip's popover (help refresh Phase 0): the advice, visible, on a tap, a
+   click, Enter/Space or a mouse hover — a title alone never shows on touch.
+   Roles only. Under the "i", wrapping, never wider than the screen. */
+.brm .brm-info-wrap { position: relative; display: inline-block; }
+.brm .brm-info-pop {
+  position: absolute; z-index: 60; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(280px, 80vw); padding: 8px 10px;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--rule-strong); border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(var(--shade-rgb) / .4);
+  font: 600 13px/1.4 var(--font-ui); letter-spacing: 0; text-align: left; text-transform: none; white-space: normal;
+}
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
 .brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
 .brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }

@@ -31,6 +31,28 @@ export function remotePeople(lan) {
   return remoteState(lan) === 'live' ? ((lan.remote && lan.remote.people) || []) : [];
 }
 
+/**
+ * ON THIS NETWORK OR ELSEWHERE (plugin 1.24.2, owner 21 Oct: "i cant tell who
+ * is connect local vs remote"). The plugin compares each device's public
+ * address with the laptop's own. A person counts as on this network when any
+ * of their devices is. Null when the plugin gives no hint (older, or it does
+ * not know its own address yet): then nothing is said rather than a guess.
+ */
+export function remoteWhere(people) {
+  const list = people || [];
+  if (!list.length || list.some((p) => typeof p.near !== 'number')) return null;
+  const near = list.filter((p) => p.near > 0).length;
+  return { near, away: list.length - near };
+}
+
+/** One person's place: "on this network", "elsewhere", or both counted. '' with no hint. */
+export function personWhere(p) {
+  if (!p || typeof p.near !== 'number') return '';
+  if (p.near >= p.devices) return W.remoteOnNetwork;
+  if (p.near <= 0) return W.remoteElsewhere;
+  return W.remoteSplit(p.near, p.devices - p.near);
+}
+
 export function wifiState(lan, now) {
   const l = lan || {};
   // Remote live with the Wi-Fi share not (a wired laptop has no Wi-Fi address):

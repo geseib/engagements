@@ -51,6 +51,8 @@ import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import BriefingField from './BriefingField';
 import Icon from './Icon';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import './GameSetupDialog.css';
 
 /** "None picked, so all 4 are in · 12 questions" — what will be asked, not the chips. */
@@ -280,6 +282,11 @@ export default function SessionOptions({
       </summary>
 
       <div className="gsd-adv-body">
+        {/* The fold's own guide section (Help Phase 3). Inside the open fold,
+            not in the summary: a button in a <summary> toggles the fold. */}
+        <div className="gsd-adv-help">
+          <HelpButton {...helpFor('host-create-advanced')} variant="inline" size="small" tooltip="Help: Advanced" className="help-button-quiet" />
+        </div>
         {/* Checked against this dialog's own type picker, not the live
             game's `currentGameType`, which still names whatever is on
             screen until the new game is created. A survey's Names takes

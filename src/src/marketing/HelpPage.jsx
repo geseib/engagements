@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import MarketingShell from './MarketingShell';
-import DocRenderer from '../components/documentation/DocRenderer';
+import DocRenderer, { scrollToHelpSection } from '../components/documentation/DocRenderer';
 import {
   HELP_ROLES, ROLE_BY_ID, GUIDE_BY_ID, ROLE_ID_BY_GUIDE_ID, resolveHelpTarget, searchHelp,
 } from '../config/help';
@@ -32,7 +32,23 @@ export function helpTargetFromPath(pathname) {
   return { kind: 'home', id: 'home' };
 }
 
+/**
+ * `/help/<role>/<guide>#<section>` (help refresh Phase 0): the hash is a
+ * section id from the corpus, and the page scrolls to it on load and on every
+ * hash change. A hash that names no section of that guide is ignored, so the
+ * guide opens at its top.
+ */
+export function helpSectionFromHash(guideId, hash) {
+  const id = String(hash || '').replace(/^#/, '');
+  if (!guideId || !id) return null;
+  const target = resolveHelpTarget(guideId, decodeURIComponent(id));
+  return target.kind === 'guide' && target.id === guideId && target.section ? target.section : null;
+}
+
 export function helpHref(target) {
+  if (target.kind === 'guide' && target.section) {
+    return `/help/${ROLE_ID_BY_GUIDE_ID[target.id]}/${target.id}#${target.section}`;
+  }
   if (target.kind === 'guide') return `/help/${ROLE_ID_BY_GUIDE_ID[target.id]}/${target.id}`;
   if (target.kind === 'role') return `/help/${target.id}`;
   return '/help';
@@ -178,12 +194,25 @@ export default function HelpPage() {
     : (guide ? ROLE_BY_ID[ROLE_ID_BY_GUIDE_ID[guide.id]] : null);
   const pageTitle = guide ? guide.title : (role ? `${role.title} help` : HELP_PAGE.title);
   const searching = term.trim().length > 0;
+  const [section, setSection] = useState(() => helpSectionFromHash(guide && guide.id, window.location.hash));
+  const bodyRef = useRef(null);
+
+  useEffect(() => {
+    if (!guide) return undefined;
+    const onHash = () => setSection(helpSectionFromHash(guide.id, window.location.hash));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [guide]);
+
+  useEffect(() => {
+    if (guide && section && !searching) scrollToHelpSection(bodyRef.current, guide.id, section);
+  }, [guide, section, searching]);
 
   return (
     <MarketingShell title={pageTitle} current="help">
       <div className="mk-shell mk-help">
         <Sidebar activeGuide={guide ? guide.id : null} term={term} onTermChange={setTerm} />
-        <article className="mk-help-body">
+        <article className="mk-help-body" ref={bodyRef}>
           {searching ? (
             <>
               {/* Fix round 1, finding 2: a search used to render no h1 at
@@ -221,7 +250,7 @@ export default function HelpPage() {
 
               {target.kind === 'guide' && guide && (
                 <>
-                  <DocRenderer guide={guide} />
+                  <DocRenderer guide={guide} activeSection={section} />
                   <p className="mk-muted mk-help-doc-footer">{HELP_PAGE.guideFooter}</p>
                 </>
               )}

@@ -150,7 +150,7 @@ describe('1. the room\'s window on the header and the Stage', () => {
     await openRoom(hostState());
     fireEvent.keyDown(window, { key: '2' });
     const dock = document.querySelector('footer.dock');
-    const present = within(dock).getByRole('link', { name: /Open the Presentation/ });
+    const present = within(dock).getByRole('link', { name: /Open the room's window/ });
     expect(present).toHaveAttribute('href', WALL);
     expect(present).toHaveAttribute('title', "Room's window: not open");
     // HOST and SESSION stay the last two, as D1-D2 hold them.

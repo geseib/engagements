@@ -5,6 +5,9 @@ import { matchesListFilters } from '../config/listControls';
 import useListControls from '../hooks/useListControls';
 import { promptOwnerTag, promptOwnerRank, PROMPT_OWNER_OPTIONS } from '../utils/setOwnerTag';
 import { promptLibraryLabel, promptLibraryTitle } from './PromptReadOnlyView';
+import {
+  REPO_STATE, REPO_STATE_LABEL, newestRepoDate, shortDate,
+} from '../utils/repoPromptMatch';
 
 /**
  * THE PROMPT LIBRARY — the list half of the Prompts admin section.
@@ -124,7 +127,7 @@ function canonicalStatus(status) {
     the dropdown offers three statuses and the row holds a fourth, so it is
     invisible under every option except "All".
 */
-function promptListConfig(categoryKey) {
+function promptListConfig(categoryKey, repoStatusFor) {
   return {
     searchFields: ['name', 'description', (prompt) => prompt.tags],
     axes: {
@@ -140,6 +143,11 @@ function promptListConfig(categoryKey) {
       // WHOSE IT IS: Team / Engage / Public. Three, not four — prompts do not
       // record their author, see promptOwnerTag in utils/setOwnerTag.js.
       owner: { get: (prompt) => promptOwnerTag(prompt) },
+      // THE REPO MARK (prompt versions, 2026-10-21): "Show only these" on the
+      // notice narrows to `newer`. Only on a mount that can say it.
+      ...(repoStatusFor ? {
+        repo: { get: (prompt) => ((repoStatusFor(prompt) || {}).state || '') },
+      } : {}),
     },
     // OPT-IN, with no defaultSort: applyListControls sorts only when the chosen
     // key matches, so a page that never picks one keeps the order the prompts
@@ -357,9 +365,19 @@ export default function PromptLibraryPanel({
   onCopyToArchive,
   /** The promptId whose archive copy is in flight, so one click is one export. */
   copyingPromptId = null,
+  /**
+   * THE REPO'S VERSION OF EACH PROMPT — `(prompt) => { state, entry, … } | null`
+   * (utils/repoPromptMatch.js `repoStatusOf`). With it the table gains a
+   * Version column, a repo mark in State, and the notice above the table
+   * (docs/design/prompt-versions/ frame 1). Without it — the generation
+   * library, the read-only mount — none of that is drawn.
+   */
+  repoStatusFor,
+  /** Open the Review screen for a prompt the repo has a newer version of. */
+  onReviewRepo,
 }) {
   const {
-    search = '', gameType = 'all', category = 'all', status = 'all', owner = 'all', sort = '',
+    search = '', gameType = 'all', category = 'all', status = 'all', owner = 'all', sort = '', repo = 'all',
   } = filters || {};
 
   const catOptions = useMemo(() => (categoryOptions || []).map(asOption), [categoryOptions]);
@@ -382,11 +400,17 @@ export default function PromptLibraryPanel({
     another empty screen is not an exit, so a candidate is only offered when it
     produces rows, counted with the same predicate the list uses.
   */
-  const config = useMemo(() => promptListConfig(categoryKey), [categoryKey]);
+  const config = useMemo(() => promptListConfig(categoryKey, repoStatusFor), [categoryKey, repoStatusFor]);
   const filterState = useMemo(
-    () => ({ search, gameType, category, status, owner, sort }),
-    [search, gameType, category, status, owner, sort]
+    () => ({ search, gameType, category, status, owner, sort, ...(repoStatusFor ? { repo } : {}) }),
+    [search, gameType, category, status, owner, sort, repo, repoStatusFor]
   );
+  /* The prompts the repo has a newer version of, and the newest repo date
+     among them — "from the deploy of <date>". */
+  const repoNewer = useMemo(() => (repoStatusFor
+    ? prompts.map((p) => ({ p, s: repoStatusFor(p) })).filter((x) => x.s && x.s.state === REPO_STATE.NEWER)
+    : []), [prompts, repoStatusFor]);
+  const repoNoticeDate = shortDate(newestRepoDate(repoNewer.map((x) => x.s.entry)));
   const { shown, drops, activeFilterCount, set, clearAll } = useListControls(prompts, config, {
     value: filterState,
     onChange: onFilterChange,
@@ -396,6 +420,7 @@ export default function PromptLibraryPanel({
       category: (value) => `${categoryHeading}: ${catLabel(value)}`,
       status: (value) => `Status: ${STATUS_LABEL[value] || value}`,
       owner: (value) => `Owner: ${(PROMPT_OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
+      repo: (value) => REPO_STATE_LABEL[value] || value,
     },
   });
 
@@ -515,6 +540,31 @@ export default function PromptLibraryPanel({
         </div>
       </div>
 
+      {/*
+        THE REPO NOTICE — frame 1. Counts the prompts whose live text differs
+        from their file in the repo, names when the repo last changed one, and
+        offers the one filter that matters. It never updates anything: each
+        row's Review does, and only on Save.
+      */}
+      {repoStatusFor && (repoNewer.length > 0 || repo !== 'all') && (
+        <div className="plib-repo-notice" role="status" data-testid="plib-repo-notice">
+          <span>
+            <strong>{repoNewer.length} prompt{repoNewer.length === 1 ? '' : 's'}</strong>
+            {' '}{repoNewer.length === 1 ? 'has' : 'have'} a newer version in the repo
+            {repoNoticeDate ? `, from the deploy of ${repoNoticeDate}` : ''}.
+          </span>
+          {repo === REPO_STATE.NEWER ? (
+            <button type="button" className="plib-btn-link" onClick={() => set({ repo: 'all' })} data-testid="plib-repo-showall">
+              Show all prompts
+            </button>
+          ) : (
+            <button type="button" className="plib-btn-link" onClick={() => set({ repo: REPO_STATE.NEWER })} data-testid="plib-repo-only">
+              Show only these
+            </button>
+          )}
+        </div>
+      )}
+
       {loading && nothingExists && <div className="loading-state">Loading prompts...</div>}
 
       {!loading && nothingExists && (
@@ -580,18 +630,21 @@ export default function PromptLibraryPanel({
       )}
 
       {!nothingExists && shown.length > 0 && (
-        <table className="plib-tbl">
+        <table className={`plib-tbl${repoStatusFor ? ' plib-tbl--versions' : ''}`}>
           <thead>
             <tr>
               <th className="plib-col-name">Prompt</th>
               <th className="plib-col-type">Type</th>
               <th className="plib-col-cat">{categoryHeading}</th>
+              {repoStatusFor && <th className="plib-col-ver">Version</th>}
               <th className="plib-col-state">State</th>
               <th className="plib-col-acts" />
             </tr>
           </thead>
           <tbody>
-            {shown.map((prompt) => (
+            {shown.map((prompt) => {
+              const repoStatus = repoStatusFor ? repoStatusFor(prompt) : null;
+              return (
               <tr key={prompt.promptId || prompt.name}>
                 <td>
                   {/* `title=` because `.plib-nm` ellipsizes under
@@ -616,8 +669,25 @@ export default function PromptLibraryPanel({
                 <td className="plib-cat">
                   {prompt[categoryKey] ? catLabel(prompt[categoryKey]) : '—'}
                 </td>
+                {repoStatusFor && (
+                  <td className="plib-ver" data-testid={`plib-ver-${prompt.promptId}`}>
+                    {Number(prompt.version) > 0 ? `v${Number(prompt.version)}` : '—'}
+                  </td>
+                )}
                 <td>
                   <div className="plib-states">
+                    {repoStatus && (
+                      <span
+                        className={`plib-chip plib-chip--repo-${repoStatus.state}`}
+                        data-testid={`plib-repo-${prompt.promptId}`}
+                        title={repoStatus.entry
+                          ? `${repoStatus.entry.path}${repoStatus.state === REPO_STATE.NEWER
+                            ? ` — ${repoStatus.changed.length} part${repoStatus.changed.length === 1 ? '' : 's'} differ` : ''}`
+                          : 'No prompt file in the repo is this prompt.'}
+                      >
+                        {REPO_STATE_LABEL[repoStatus.state]}
+                      </span>
+                    )}
                     {showOwner && (
                       <span className="plib-chip" title={promptLibraryTitle(prompt)}>
                         {promptLibraryLabel(prompt)}
@@ -659,6 +729,17 @@ export default function PromptLibraryPanel({
                 </td>
                 <td>
                   <div className="plib-rowact">
+                    {onReviewRepo && repoStatus && repoStatus.state === REPO_STATE.NEWER && (
+                      <button
+                        type="button"
+                        className="plib-btn plib-btn--repo"
+                        onClick={() => onReviewRepo(prompt, repoStatus)}
+                        data-testid={`plib-review-${prompt.promptId}`}
+                        title="Read what the repo's version changes, then save it as a new version — or not."
+                      >
+                        Review
+                      </button>
+                    )}
                     {onView && (
                       <button
                         type="button"
@@ -746,7 +827,8 @@ export default function PromptLibraryPanel({
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './QuestionSetEditor.css';
 import Icon from './Icon';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import Modal from './Modal';
 import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
@@ -186,6 +188,8 @@ export default function QuestionSetEditor({
   onShare,
   /** Ask a person to review a flagged version. Returns a promise; versions reload after. */
   onAppeal,
+  /** Where this set lives, in words, for "Add questions" (QuestionsPanel). */
+  libraryLabel = '',
   onCancel
 }) {
   const setId = questionSet?.id || '';
@@ -1794,6 +1798,7 @@ export default function QuestionSetEditor({
         // The Custom Instructions field as it stands, saved or not, for the
         // Questions tab's preview (QuestionsPanel `detailsInstruction`).
         detailsInstruction={instructions}
+        libraryLabel={libraryLabel}
       />
 
       {/* ================================================= 3. VERSIONS === */}
@@ -1807,6 +1812,8 @@ export default function QuestionSetEditor({
           <span className="qs-panel-note">
             Every replace keeps the version it replaced, so a bad CSV is one promote away from undone
           </span>
+          {/* The question-sets guide's versions section (Help Phase 3). */}
+          <HelpButton {...helpFor('admin-set-versions')} variant="inline" size="small" tooltip="Help: versions" className="help-button-quiet" />
         </div>
 
         {versions.length === 0 ? (

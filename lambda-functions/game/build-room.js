@@ -1068,6 +1068,23 @@ async function ideaAction(ctx, ideaId, body) {
 }
 
 /**
+ * READY QUESTIONS FOR CLAUDE (docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 4). The host's page reads the question sets (Claude cannot: they are
+ * the team's library) and, once the room's kind of build is known, hands the
+ * matching sets' askable questions over. Claude's room_status lists them.
+ * Body: { kind, sets: [{ name, questions: [{ kind, prompt, category, options? }] }] }.
+ * Not announced: nothing the room or the host's screens show changes.
+ */
+async function saveReady(ctx, body) {
+  const norm = S.normalizeReady(body);
+  if (norm.error) return fail(400, norm.error);
+  const value = { ...norm.value, at: new Date().toISOString() };
+  const sealed = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { Ready: value })).Ready : value;
+  await touchState(ctx, { set: { Ready: sealed }, bump: false });
+  return reply(200, { ready: { kind: value.kind, count: value.sets.reduce((n, x) => n + x.questions.length, 0), at: value.at } });
+}
+
+/**
  * CONSIDER (docs/design/build-room-consider, frames 2-5; owner, 19 Oct 2026).
  * One thing the room gave (an idea, a suggestion, an option, a why), at any
  * moment, without touching the ask it came from:
@@ -1551,7 +1568,11 @@ async function agentTouch(ctx, event, role) {
   } else {
     // The plugin's version rides every call (X-Engage-Plugin); the host's Session panel reads it back.
     const version = S.pluginVersionOf(event);
-    await touchState(ctx, { set: { AgentSeenAt: now, ...(version ? { AgentPlugin: version } : {}) } }).catch(() => {});
+    // Where the project lives (plugin 1.25.0, on its state reads only): the host's
+    // "coming back" paste. Sealed in a team's room, like the brief.
+    const folder = S.folderOf(event);
+    const sealedFolder = folder && ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { AgentFolder: folder })).AgentFolder : folder;
+    await touchState(ctx, { set: { AgentSeenAt: now, ...(version ? { AgentPlugin: version } : {}), ...(folder ? { AgentFolder: sealedFolder } : {}) } }).catch(() => {});
   }
   if (auth.agentKeyHash) {
     await db.send(new UpdateCommand({
@@ -2354,7 +2375,7 @@ async function updateLan(ctx, set) {
 }
 
 /** Every remote field back to "nothing yet": a switch either way makes the old tunnel dead. */
-const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteLiveSince: null });
+const REMOTE_CLEARED = Object.freeze({ RemoteStatus: 'off', RemoteAddress: '', RemoteTarget: '', RemoteError: '', RemoteDevices: {}, RemoteNear: null, RemoteLiveSince: null });
 
 /**
  * The host's switch: `{on}` turns sharing on or off; `{remote}` opens it to
@@ -2411,6 +2432,7 @@ async function shareReport(ctx, body) {
   await updateLan(ctx, set);
   const changed = ['Status', 'Key', 'Open', 'Error', 'RemoteStatus', 'RemoteAddress', 'RemoteTarget', 'RemoteSupported'].some((k) => before[k] !== v[k])
     || JSON.stringify(before.RemoteDevices || {}) !== JSON.stringify(v.RemoteDevices || {})
+    || JSON.stringify(before.RemoteNear || null) !== JSON.stringify(v.RemoteNear || null)
     || !sameMap(before.Map || [], v.Map)
     || JSON.stringify(before.Declared || {}) !== JSON.stringify(v.Declared);
   if (changed) {
@@ -3117,6 +3139,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'log' && b) return hostOnly() || editLog(ctx, b, body);
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
   if (a === 'consider' && !b) return hostOnly() || considerItem(ctx, body);
+  if (a === 'ready' && !b) return hostOnly() || saveReady(ctx, body);
   if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);

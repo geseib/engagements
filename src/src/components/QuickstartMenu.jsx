@@ -3,6 +3,8 @@ import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
 import PlanLimitNotice from './PlanLimitNotice';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
 import { SCREEN_WORDS } from '../config/roomScreen';
@@ -249,7 +251,14 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   // success, so blocking the key would only trap someone whose request failed.
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') onClose?.();
+      if (event.key !== 'Escape') return;
+      // Escape inside another dialog (the help this header's `?` opens) is
+      // that dialog's; it must not close Quick start behind it as well.
+      const t = event.target;
+      const inOther = t && typeof t.closest === 'function' && t.closest('[role="dialog"]')
+        && !t.closest('.quickstart-modal');
+      if (inOther) return;
+      onClose?.();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -288,6 +297,8 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
             <p>Creates the session and starts it in one press. Nothing else to fill in.</p>
           </div>
 
+          {/* Quick start's section of the setup guide (Help Phase 3). */}
+          <HelpButton {...helpFor('host-quick-start')} variant="inline" size="small" tooltip="Help: Quick start" className="help-button-quiet" />
           {/* The glyph is decorative; the name is on the button. Without it a
               screen reader announced this control as "multiplication sign". */}
           <button

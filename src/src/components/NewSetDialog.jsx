@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import Modal from './Modal';
 import Icon from './Icon';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
@@ -50,6 +52,8 @@ export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...pa
           <h2 id="qsets-new-title">New question set</h2>
           <p className="qsets-dim">Pick the kind of round, then generate it, start from a template, or upload a file.</p>
         </div>
+        {/* The question-sets guide's new-set section (Help Phase 3). */}
+        <HelpButton {...helpFor('admin-new-set')} variant="inline" size="small" tooltip="Help: new question set" className="help-button-quiet" />
         <button
           type="button"
           className="qs-dialog-close"

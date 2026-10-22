@@ -138,6 +138,12 @@
   background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
+/* The bar's `?` (Help Phase 3): a phone target, 44px on any pointer. */
+.hr-bar .help-button.hr-help {
+  width: 44px;
+  height: 44px;
+}
+
 /* ----------------------------------------------------------------- body */
 
 .hr-body {

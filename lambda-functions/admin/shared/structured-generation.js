@@ -361,7 +361,14 @@ async function invokeStructured(bedrockClient, InvokeModelCommand, { prompt, too
       throw err;
     }
 
-    return extractToolInput(responseBody);
+    const input = extractToolInput(responseBody);
+    // WHAT THE CALL COST, carried beside the answer rather than in it: a
+    // draft shows the tokens its run actually used (shared/generation-drafts.js).
+    // Non-enumerable, so nothing that spreads or serialises the answer sees it.
+    if (input && typeof input === 'object' && responseBody && responseBody.usage) {
+      Object.defineProperty(input, '__usage', { value: responseBody.usage, enumerable: false });
+    }
+    return input;
   };
 
   // retryWithBackoff only re-attempts throttling; anything else throws on the

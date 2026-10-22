@@ -31,6 +31,7 @@ const {
 } = require('./set-version');
 const { batchDeleteKeys } = require('./ddb-delete');
 const { promptKey, promptBodyKey } = require('./prompt-access');
+const promptVersions = require('./prompt-versions');
 const { resolveLocalPromptId } = require('./archive-prompt-link');
 const { normalizeGameType, DEFAULT_GAME_TYPE } = require('./game-types');
 const { copyMediaIn } = require('./archive-media');
@@ -238,8 +239,12 @@ async function restorePromptSnapshot(deps, envelope, ctx) {
   const existing = found && found.Item;
   const gameType = normalizeGameType(metadata.gameType) || DEFAULT_GAME_TYPE;
   const numeric = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
-  // A version number neither tier has used, so no body key from either history is overwritten.
-  const version = Math.max(numeric(existing && existing.version), numeric(metadata.version)) + 1;
+  // A version number neither tier has used, so no body key from either history is overwritten —
+  // including one made live again here (prompt-versions.js nextVersionNumber).
+  const version = Math.max(
+    existing ? promptVersions.nextVersionNumber(existing) - 1 : 0,
+    numeric(metadata.version),
+  ) + 1;
   const isDefault = existing ? existing.isDefault === true : false;
   const status = metadata.status || 'draft';
 
@@ -269,6 +274,16 @@ async function restorePromptSnapshot(deps, envelope, ctx) {
     ...(ctx.restoredBy ? { restoredBy: ctx.restoredBy } : {}),
   };
   if (s3Key) row.s3Key = s3Key; else delete row.s3Key;
+  // THIS TIER'S HISTORY, never the other tier's: a history carried in the
+  // backup names s3 keys in another bucket. The restore is one more version.
+  delete row.versionHistory;
+  if (s3Key) {
+    row.latestVersion = version;
+    row.versionHistory = promptVersions.appendHistory(existing && existing.versionHistory, promptVersions.historyEntry({
+      version, s3Key, savedAt: now, by: 'admin import', how: promptVersions.HOW.ARCHIVE,
+      hash: promptVersions.contentHash(envelope.body),
+    }));
+  }
   await db.send(new PutCommand({ TableName: tableName, Item: row }));
   return { kind: 'prompt', id: promptId, name: row.name || promptId, mode: existing ? 'new-version' : 'created', version, status, isDefault };
 }
