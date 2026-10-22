@@ -40,15 +40,12 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 
 /** Today's occurrences. SHRINK ONLY. */
 const BANNED_ALLOWLIST = {
-  'player-getting-started': { 'big screen': 1 },
-  'player-scoring': { 'word cloud': 1 },
   'host-quick-start': { 'the AI summary': 2, 'big screen': 1, 'the wall': 1 },
   'host-game-setup': { projector: 1 },
   'host-late-items': { 'the wall': 2 },
   'host-two-screens': { projector: 6, 'big screen': 1, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
   'host-build-room': { projector: 1, PRESENT: 1 },
-  'technical-requirements': { 'display profile': 2, 'big screen': 1 },
 };
 
 /* PRESENT is the dock's old name for the room's window (decision 1). It is a
@@ -137,7 +134,7 @@ const UNIT_CAP = 120;
 
 /** guide#section → today's words. SHRINK ONLY. */
 const LONG_SECTIONS = {
-  'player-playing#answering': 481,
+  'player-playing#answering': 469,
   'host-quick-start#step-3-run-rounds': 273,
   'host-game-setup#settings-before-you-start': 435,
   'host-player-management#handing-name-over': 274,

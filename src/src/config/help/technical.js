@@ -22,11 +22,16 @@ const troubleshooting = {
         {
           t: 'table',
           head: ['What they see', 'What it means'],
+          /*
+            Wording from lambda-functions/game/session-gate.js (403 not started,
+            404 "Game not found") and JoinCodeEntry.jsx:63 (/join). The gate
+            never refuses an ended session, so there is no "ended" message: the
+            player gets in and sees the closing screen.
+          */
           rows: [
-            ['"This session has not started yet"', 'It was created but not started. Created sessions are not joinable. Press Start.'],
-            ['"We do not recognise that code"', 'Wrong four digits — a 0 read as an 8 across a room is the usual cause. Check against the host screen.'],
+            ['"This game has not been started yet"', 'It was created but not started. Created sessions are not joinable. Press **Start**, then they press **Join Game** again.'],
+            ['"Game not found", or "Nothing is running under…"', 'Wrong four digits — a 0 read as an 8 across a room is the usual cause. Check against the room\'s screen.'],
             ['"That name is taken"', 'Another device holds that name. Either pick a different one or ask the host to hand it over.'],
-            ['"This session has ended"', 'It is over. Nothing left to join.'],
             ['The QR does nothing', 'Some camera apps will not open a link from a QR without a tap. Read out the four-digit code instead.'],
           ],
         },
@@ -45,8 +50,8 @@ const troubleshooting = {
           t: 'steps',
           items: [
             { title: 'Check the connection badge', text: 'The session panel header says Connected or Connecting…. Stuck on Connecting is the tell.' },
-            { title: 'Reload the affected screen', text: 'A player reloads and rejoins with the same name; nothing is lost.' },
-            { title: 'Fall back to polling', text: 'On a network that blocks WebSockets, the admin Settings section has a switch to poll over HTTP instead. Slower, but it works through most guest wifi.' },
+            { title: 'Reload the affected screen', text: 'A player reloads, taps **Rejoin as** their name, and nothing is lost.' },
+            { title: 'Try another network', text: 'Some guest wifi blocks live connections. A player who stays stuck can switch to mobile data. The polling switch in the admin console\'s Settings only changes the browser it is set in, so it will not fix a room.' },
           ],
         },
       ],
@@ -135,9 +140,9 @@ const requirements = {
         {
           t: 'list',
           items: [
-            'A laptop driving the big screen, signed in as a host.',
+            'A laptop signed in as a host, connected to the screen the room watches.',
             'Optionally a phone as the remote — scan the QR under "Your phone as a remote" in the Settings tab.',
-            'A screen the back of the room can read. Set the display profile to match it before people arrive.',
+            'A screen the back of the room can read. Set **Room screen size** under Screens in the Settings tab to match it before people arrive.',
           ],
         },
       ],
@@ -149,7 +154,7 @@ const requirements = {
       blocks: [
         {
           t: 'p',
-          text: 'Live updates use a WebSocket. Most networks allow it; some corporate guest networks do not, and the fallback to HTTP polling is a switch in the admin Settings section.',
+          text: 'Live updates use a WebSocket. Most networks allow it; some corporate guest networks do not. No setting fixes this for a whole room; a phone that stays stuck can switch to mobile data.',
         },
         {
           t: 'note',
@@ -167,8 +172,8 @@ const requirements = {
         {
           t: 'list',
           items: [
-            'Set the display profile to "Call — screen share".',
-            'Share the browser window showing the session.',
+            'Set **Room screen size** to "Call — screen share" (Settings tab, under Screens).',
+            'On two screens, choose **Open as a tab** to open the room\'s window in a tab, and share that tab. On one screen, share the browser window showing the stage.',
             'Put the join URL in the chat as well as the QR — nobody can scan a QR that is inside their own screen share.',
             'People still join on their own devices, exactly as they would in a room.',
           ],
