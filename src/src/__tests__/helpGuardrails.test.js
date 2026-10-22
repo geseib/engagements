@@ -42,9 +42,8 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 const BANNED_ALLOWLIST = {
   'host-quick-start': { 'the AI summary': 2, 'big screen': 1, 'the wall': 1 },
   'host-game-setup': { projector: 1 },
-  'host-late-items': { 'the wall': 2 },
+  'host-late-items': { 'the wall': 1 },
   'host-two-screens': { projector: 6, 'big screen': 1, 'the wall': 7 },
-  'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
   'host-build-room': { projector: 1, PRESENT: 1 },
 };
 
@@ -137,10 +136,8 @@ const LONG_SECTIONS = {
   'player-playing#answering': 469,
   'host-quick-start#step-3-run-rounds': 273,
   'host-game-setup#settings-before-you-start': 435,
-  'host-player-management#handing-name-over': 274,
   'host-two-screens#laptop-console': 552,
   'host-two-screens#phone-remote': 264,
-  'host-reporting#what-we-heard': 344,
   'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
 };
@@ -148,7 +145,6 @@ const LONG_SECTIONS = {
 const LONG_UNITS = {
   'player-playing#answering': 133,
   'host-game-setup#settings-before-you-start': 184,
-  'host-reporting#what-we-heard': 144,
   'host-build-room#during-after': 301,
 };
 

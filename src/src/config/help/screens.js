@@ -21,7 +21,7 @@
 export const HELP_FOR_SCREEN = {
   /* ---- screens that already have a help button ---- */
   'host-start': { guide: 'host-quick-start', section: 'the-shape' },            // WelcomeScreen (opens the host role today)
-  'host-session-panel': { guide: 'host-running-engagements', section: 'session-panel' }, // SessionSetupPanel (opens the host role today)
+  'host-session-panel': { guide: 'host-session-panel', section: 'session-panel' }, // SessionSetupPanel (opens the host role today)
   'player-page': { guide: 'player-getting-started', section: 'session-looks-like' }, // PlayerShell (opens the player role today)
   'admin-console': { guide: 'admin-getting-started', section: 'console-sections' }, // AdminPage header (opens the admin role today)
   'admin-prompts': { guide: 'admin-ai-prompts', section: 'two-kinds-one-library' }, // AdminPage prompt library cards
@@ -37,14 +37,14 @@ export const HELP_FOR_SCREEN = {
   'host-room-screen-chooser': { guide: 'host-game-setup', section: 'settings-before-you-start' },
 
   /* ---- host: running the room (one screen) ---- */
-  'host-stage': { guide: 'host-quick-start', section: 'step-3-run-rounds' },
-  'host-dock': { guide: 'host-quick-start', section: 'step-3-run-rounds' },
+  'host-stage': { guide: 'host-running-engagements', section: 'the-stage' },
+  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },
   'host-session-players': { guide: 'host-player-management', section: 'players-tab' },
-  'host-session-questions': { guide: 'host-running-engagements', section: 'choosing-ask-next' },
-  'host-session-rounds': { guide: 'host-running-engagements', section: 'going-back-over-round' },
-  'host-session-settings': { guide: 'host-game-setup', section: 'settings-before-you-start' },
+  'host-session-questions': { guide: 'host-session-panel', section: 'choosing-ask-next' },
+  'host-session-rounds': { guide: 'host-session-panel', section: 'going-back-over-round' },
+  'host-session-settings': { guide: 'host-session-panel', section: 'settings-tab' },
   'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' },
-  'host-what-we-heard': { guide: 'host-reporting', section: 'what-we-heard' },
+  'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' },
   'host-session-report': { guide: 'host-reporting', section: 'session-report' },
   'host-survey': { guide: 'host-quick-start', section: 'step-3-run-rounds' },
 
@@ -120,7 +120,7 @@ export const HELP_FOR_SCREEN = {
  * real one. Phase 3 retargets each and deletes it from this list.
  */
 export const PROVISIONAL_SCREENS = [
-  'host-create-advanced', 'host-sessions', 'host-room-screen-chooser', 'host-dock', 'host-survey',
+  'host-create-advanced', 'host-sessions', 'host-room-screen-chooser', 'host-survey',
   'event-builder', 'event-agenda', 'event-stage',
   'admin-new-set', 'admin-public-library', 'admin-events', 'admin-members', 'admin-activity',
   'admin-data-privacy',

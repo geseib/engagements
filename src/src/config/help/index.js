@@ -153,6 +153,12 @@ export const HELP_ALIASES = {
 export const HELP_SECTION_MOVES = {
   'host-running-engagements#laptop-console': 'host-two-screens#laptop-console',
   'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
+  // Phase 2 (W3): the Session panel got its own guide, and What we heard left
+  // the report guide for one with Ask the room and the feedback round.
+  'host-running-engagements#session-panel': 'host-session-panel#session-panel',
+  'host-running-engagements#choosing-ask-next': 'host-session-panel#choosing-ask-next',
+  'host-running-engagements#going-back-over-round': 'host-session-panel#going-back-over-round',
+  'host-reporting#what-we-heard': 'host-what-we-heard#what-we-heard',
 };
 
 /** The section of a guide with that id, or null. */
