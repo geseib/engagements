@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 22 Oct 2026 (later): Ask Claude for questions in a Build Room
 
-**Test:** merge of dev `DEVCOMMIT`. Plan: `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (step 7). Everything in the entry below is already on test; this push adds only what is here.
+**Test:** merge of dev `15fd6c0d`. Plan: `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (step 7). Everything in the entry below is already on test; this push adds only what is here.
 
 ### New
 
