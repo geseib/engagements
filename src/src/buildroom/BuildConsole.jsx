@@ -203,7 +203,9 @@ export default function BuildConsole({
   return (
     <HostConsole
       variant="hc--build"
-      top={top}
+      /* The top line's `?` opens the Build Room console's own section (Help
+         Phase 3), not Call & Answer's. */
+      top={{ help: 'build-console', ...top }}
       topExtra={topExtra}
       onLeave={onLeave}
       strip={strip}

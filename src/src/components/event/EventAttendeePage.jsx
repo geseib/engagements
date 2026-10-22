@@ -13,6 +13,10 @@ import {
 import '../PlayerSurface.css';
 import './EventAttendeePage.css';
 
+/* Every screen of the event's own page opens the agenda's help section (Help
+   Phase 3). An item's session is PlayerPage, which opens its own by state. */
+const EventShell = (props) => <PlayerShell help="player-event" {...props} />;
+
 /**
  * THE ATTENDEE'S PAGE — /play?event=<code> (events M2–M4).
  * docs/design/agenda-redesign: p-05a (before the day), p-05 (between items),
@@ -311,15 +315,15 @@ export default function EventAttendeePage({ code }) {
 
   if (phase === 'loading') {
     return (
-      <PlayerShell phase="join" volume="rest" ctx="Event" centre>
+      <EventShell phase="join" volume="rest" ctx="Event" centre>
         <h1 className="plr-h1">Opening the event…</h1>
-      </PlayerShell>
+      </EventShell>
     );
   }
 
   if (phase === 'missing' || phase === 'error') {
     return (
-      <PlayerShell phase="join" volume="rest" ctx="Event" centre>
+      <EventShell phase="join" volume="rest" ctx="Event" centre>
         <div className="evp">
           <h1 className="plr-h1">
             {phase === 'missing' ? `Nothing is running with ${code}.` : 'Could not open the event.'}
@@ -335,13 +339,13 @@ export default function EventAttendeePage({ code }) {
               : <button type="button" className="plr-linkish" onClick={() => window.location.reload()}>Try again</button>}
           </p>
         </div>
-      </PlayerShell>
+      </EventShell>
     );
   }
 
   if (phase === 'name') {
     return (
-      <PlayerShell
+      <EventShell
         phase="join"
         volume="act"
         ctx={title}
@@ -390,7 +394,7 @@ export default function EventAttendeePage({ code }) {
             <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
           </form>
         </div>
-      </PlayerShell>
+      </EventShell>
     );
   }
 
@@ -404,7 +408,7 @@ export default function EventAttendeePage({ code }) {
   if (shownView === 'item' && beat && current && current.itemId === beat) {
     const pos = positionOf(items, current.itemId);
     return withSession(
-      <PlayerShell phase="ask" volume="watch" ctx={barCtx(current)} who={who} online={online} centre>
+      <EventShell phase="ask" volume="watch" ctx={barCtx(current)} who={who} online={online} centre>
         <div className="evp evp-beat">
           <p className="evp-kick">
             <ItemTypeIcon type={current.type} />
@@ -418,7 +422,7 @@ export default function EventAttendeePage({ code }) {
             </p>
           )}
         </div>
-      </PlayerShell>
+      </EventShell>
     );
   }
 
@@ -440,7 +444,7 @@ export default function EventAttendeePage({ code }) {
     // PAUSED (D1): the host went back to the agenda; answers are kept.
     if (state === 'paused') {
       return withSession(
-        <PlayerShell
+        <EventShell
           phase="rest"
           volume="rest"
           ctx={barCtx(current)}
@@ -459,7 +463,7 @@ export default function EventAttendeePage({ code }) {
               host resumes.
             </p>
           </div>
-        </PlayerShell>
+        </EventShell>
       );
     }
 
@@ -470,7 +474,7 @@ export default function EventAttendeePage({ code }) {
     // A BREAK (p-09): when to be back.
     if (state === 'live' && isBreak(current.type)) {
       return withSession(
-        <PlayerShell phase="rest" volume="rest" ctx={title} who={who} online={online} centre>
+        <EventShell phase="rest" volume="rest" ctx={title} who={who} online={online} centre>
         <div className="evp">
           <p className="evp-when">Break</p>
           <h1 className="plr-h1">Back at {returnAtOf(current)}</h1>
@@ -480,7 +484,7 @@ export default function EventAttendeePage({ code }) {
           </p>
           {nextLine}
         </div>
-        </PlayerShell>
+        </EventShell>
       );
     }
 
@@ -492,7 +496,7 @@ export default function EventAttendeePage({ code }) {
         ? (talk ? `${current.ledBy} is presenting.` : `Led by ${current.ledBy}.`)
         : '';
       return withSession(
-        <PlayerShell phase="rest" volume="watch" ctx={title} who={who} online={online}>
+        <EventShell phase="rest" volume="watch" ctx={title} who={who} online={online}>
         <div className="evp">
           <p className="evp-when">
             Now{pos ? ` · ${pos.n} of ${pos.of}` : ''} · {talk ? 'A talk' : typeLabel(current.type)}
@@ -513,7 +517,7 @@ export default function EventAttendeePage({ code }) {
           )}
           {nextLine}
         </div>
-        </PlayerShell>
+        </EventShell>
       );
     }
   }
@@ -531,7 +535,7 @@ export default function EventAttendeePage({ code }) {
   else lede = 'This page switches by itself when the host starts the next item.';
 
   return withSession(
-    <PlayerShell
+    <EventShell
       phase={ended ? 'done' : 'rest'}
       volume="rest"
       ctx={title}
@@ -580,7 +584,7 @@ export default function EventAttendeePage({ code }) {
           </p>
         )}
       </div>
-    </PlayerShell>
+    </EventShell>
   );
 }
 

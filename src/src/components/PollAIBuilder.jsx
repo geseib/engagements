@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -451,6 +453,8 @@ function PollAIBuilder({
       <div className="modal-content poll-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add polls to “${appendTo.setName}”` : 'AI Poll Builder'}</h2>
+          {/* The AI builders' guide (Help Phase 3), beside the X. */}
+          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
           <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 

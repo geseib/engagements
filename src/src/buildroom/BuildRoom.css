@@ -517,6 +517,9 @@
 .brm .brm-modal--sm { width: min(460px, 100%); }
 .brm .brm-dh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .brm .brm-dh h1 { margin: 0; font-size: var(--brm-t-title); }
+/* A dialog head's `?` (Help Phase 3) takes the X's push right; the X sits beside it. */
+.brm .brm-dh .brm-dh-help { margin-left: auto; }
+.brm .brm-dh .brm-dh-help + .brm-x { margin-left: 0; }
 .brm .brm-keywarn {
   display: flex; gap: 10px; align-items: flex-start;
   background: var(--brm-tint-amber-soft); border: 1px solid var(--brm-line-amber);

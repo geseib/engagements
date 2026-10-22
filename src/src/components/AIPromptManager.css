@@ -2484,6 +2484,8 @@ button.plib-chip:disabled { cursor: progress; }
 .pmgr .pmgr-ver-foot { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .pmgr .pmgr-ver-armed { font-size: var(--pc-t-label); font-weight: 700; color: var(--pc-silent); }
 .pmgr .pmgr-ver-hint { font-size: var(--pc-t-label); color: var(--pc-muted); }
+/* The Versions view's `?` (Help Phase 3), at its top right. */
+.pmgr .pmgr-ver-help { display: flex; justify-content: flex-end; }
 
 /* ============================================================================
    RESPONSIVE. Every rule inside is rooted at its scope, same as above.

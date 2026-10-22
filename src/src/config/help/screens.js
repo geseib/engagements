@@ -12,45 +12,48 @@
  * (__tests__/helpScreens.test.js). Ids are kebab-case: `<surface>-<screen>`.
  *
  * PROVISIONAL entries point at the best section that exists today, because the
- * section they really want is written in Phase 2. Phase 3 retargets them and
- * removes them from `PROVISIONAL_SCREENS`; it also adds the buttons. Nothing
+ * section they really want is not written yet. Every id here is referenced by
+ * a component (helpScreenWiring.test.js), so an id with no screen fails. Nothing
  * here is shown on a screen the room sees (the stage, the room's window, the
  * Build Room's wall): a help button is for the host's or the player's own
  * screen only.
  */
 export const HELP_FOR_SCREEN = {
-  /* ---- screens that already have a help button ---- */
-  'host-start': { guide: 'host-quick-start', section: 'start-screen' },         // WelcomeScreen (opens the host role today)
-  'host-session-panel': { guide: 'host-session-panel', section: 'session-panel' }, // SessionSetupPanel (opens the host role today)
-  'player-page': { guide: 'player-getting-started', section: 'session-looks-like' }, // PlayerShell (opens the player role today)
-  'admin-console': { guide: 'admin-getting-started', section: 'console-sections' }, // AdminPage header (opens the admin role today)
+  /* ---- the bars' `?` (each also a menu to report a bug) ---- */
+  'host-start': { guide: 'host-quick-start', section: 'start-screen' },         // WelcomeScreen
+  'host-session-panel': { guide: 'host-session-panel', section: 'session-panel' }, // SessionSetupPanel, before a tab is known
+  'player-page': { guide: 'player-getting-started', section: 'session-looks-like' }, // PlayerShell, with no state of its own
+  'admin-console': { guide: 'admin-getting-started', section: 'console-sections' }, // AdminPage header, with no section
   'admin-prompts': { guide: 'admin-ai-prompts', section: 'two-kinds-one-library' }, // AdminPage prompt library cards
   'admin-settings-realtime': { guide: 'admin-settings', section: 'real-time-communication' }, // AdminPage Settings
 
   /* ---- host: setting up ---- */
-  'host-create': { guide: 'host-game-setup', section: 'create-engagement' },
-  'host-create-advanced': { guide: 'host-game-setup', section: 'advanced' },
-  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },
-  'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' },
-  'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },
-  'host-reports': { guide: 'host-reporting', section: 'session-report' },
-  'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' },
+  'host-create': { guide: 'host-game-setup', section: 'create-engagement' },    // GameSetupDialog head
+  'host-create-advanced': { guide: 'host-game-setup', section: 'advanced' },     // SessionOptions (the Advanced fold, also in EventItemDialog)
+  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // QuickstartMenu header
+  'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' }, // HostQuestionSetsDialog header
+  'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },       // SessionHistoryPanel header
+  'host-reports': { guide: 'host-reporting', section: 'session-report' },        // HostReportsDialog header; AdminPage Reports
+  'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' }, // RoomScreenChooser head
 
-  /* ---- host: running the room (one screen) ---- */
-  'host-stage': { guide: 'host-running-engagements', section: 'the-stage' },
-  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },
+  /* ---- host: running the room (one screen) ----
+     No entry for the stage itself: the room sees it. Its help is the dock's,
+     the host's own control, and the dock opens What we heard or the survey's
+     section while those are up (GameHostPage `dockHelp`). */
+  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // Dock (GameHostPage)
+  // The Session panel's header `?` opens the tab that is showing.
   'host-session-players': { guide: 'host-player-management', section: 'players-tab' },
   'host-session-questions': { guide: 'host-session-panel', section: 'choosing-ask-next' },
   'host-session-rounds': { guide: 'host-session-panel', section: 'going-back-over-round' },
   'host-session-settings': { guide: 'host-session-panel', section: 'settings-tab' },
-  'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' },
-  'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' },
-  'host-session-report': { guide: 'host-reporting', section: 'session-report' },
-  'host-survey': { guide: 'host-surveys', section: 'while-it-collects' },
+  'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' }, // LateList head
+  'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' }, // dock and console, on the READ moment
+  'host-session-report': { guide: 'host-reporting', section: 'session-report' }, // GameReport toolbar
+  'host-survey': { guide: 'host-surveys', section: 'while-it-collects' },        // dock, on a survey
 
   /* ---- host: two screens and the phone ---- */
-  'host-console': { guide: 'host-two-screens', section: 'laptop-console' },
-  'host-remote': { guide: 'host-two-screens', section: 'phone-remote' },
+  'host-console': { guide: 'host-two-screens', section: 'laptop-console' },     // ConsoleTop (GameHostPage)
+  'host-remote': { guide: 'host-two-screens', section: 'phone-remote' },        // HostRemote bar
 
   /* ---- host: events ---- */
   // The builder's add and edit dialogs (EventBuilder, EventItemDialog), the
@@ -60,16 +63,18 @@ export const HELP_FOR_SCREEN = {
   'event-agenda': { guide: 'host-event-agenda', section: 'the-agenda-page' },
   'event-stage': { guide: 'host-event-day', section: 'the-board' },
 
-  /* ---- admin console: your space and teams ---- */
+  /* ---- admin console: your space and teams ----
+     The console's header `?` opens the section that is showing (AdminPage
+     `adminHelpScreen`); the dialogs and panels below carry their own. */
   'admin-overview': { guide: 'admin-getting-started', section: 'overview' },
   'admin-question-sets': { guide: 'admin-question-sets', section: 'the-list' },
-  'admin-new-set': { guide: 'admin-question-sets', section: 'new-set' },
+  'admin-new-set': { guide: 'admin-question-sets', section: 'new-set' },        // NewSetDialog head
   'admin-set-editor': { guide: 'builder-manual', section: 'trivia-question' },
-  'admin-set-versions': { guide: 'admin-question-sets', section: 'versions-not-overwrites' },
-  'admin-public-library': { guide: 'glossary', section: 'owner-tags' },
+  'admin-set-versions': { guide: 'admin-question-sets', section: 'versions-not-overwrites' }, // QuestionSetEditor Versions
+  'admin-public-library': { guide: 'admin-public-library', section: 'using-public-sets' },
   'admin-sessions': { guide: 'admin-game-management', section: 'sessions-list' },
   'admin-events': { guide: 'admin-game-management', section: 'events-list' },
-  'admin-prompt-versions': { guide: 'admin-ai-prompts', section: 'versions' },
+  'admin-prompt-versions': { guide: 'admin-ai-prompts', section: 'versions' },  // PromptVersionsPanel
   'admin-members': { guide: 'admin-members', section: 'who-is-here' },
   'admin-activity': { guide: 'admin-activity', section: 'reading-activity' },
   'admin-plan': { guide: 'host-plan', section: 'where-to-see-it' },
@@ -90,11 +95,13 @@ export const HELP_FOR_SCREEN = {
   'staff-engage-settings': { guide: 'admin-staff-platform', section: 'engage-settings' },
 
   /* ---- AI ---- */
-  'ai-builders': { guide: 'admin-ai-builders', section: 'what-builders-do' },
-  'ai-draft-review': { guide: 'ai-drafts', section: 'drafts-bell-review' },
-  'ai-bell': { guide: 'ai-drafts', section: 'the-bell' },
+  'ai-builders': { guide: 'admin-ai-builders', section: 'what-builders-do' },   // the four AI builders' heads
+  'ai-draft-review': { guide: 'ai-drafts', section: 'drafts-bell-review' },     // AdminPage header, on a draft
+  'ai-bell': { guide: 'ai-drafts', section: 'the-bell' },                       // NotificationsBell panel head
 
-  /* ---- Build Room (host) ---- */
+  /* ---- Build Room (host) ----
+     The header `?` opens the screen that is showing (Host, Build, History);
+     the Stage's is in its dock, as Call & Answer's is. */
   'build-create': { guide: 'host-build-room', section: 'setting-up' },
   'build-connect': { guide: 'build-room-claude', section: 'connecting-claude' },
   'build-host': { guide: 'build-room-running', section: 'the-host-screen' },
@@ -104,7 +111,9 @@ export const HELP_FOR_SCREEN = {
   'build-session-panel': { guide: 'host-build-room', section: 'session-panel' },
   'build-console': { guide: 'build-room-two-screens', section: 'console' },
 
-  /* ---- players ---- */
+  /* ---- players ----
+     PlayerShell's `?` takes a `help` id per state; a shell given none opens
+     `player-join` while joining and `player-page` otherwise. */
   'player-join': { guide: 'player-joining', section: 'getting-in' },
   'player-name-taken': { guide: 'player-joining', section: 'name-taken' },
   'player-join-errors': { guide: 'player-joining', section: 'other-things-join-screen' },
@@ -119,13 +128,11 @@ export const HELP_FOR_SCREEN = {
 };
 
 /**
- * Screens whose entry points at a stand-in section until Phase 2 writes the
- * real one. Phase 3 retargets each and deletes it from this list.
+ * Screens whose entry points at a stand-in section until a writer adds the
+ * real one. Empty since Phase 3; kept so a future stand-in has a place to go
+ * and helpScreens.test.js still reads it.
  */
-export const PROVISIONAL_SCREENS = [
-  'host-create-advanced', 'host-sessions', 'host-room-screen-chooser',
-  'admin-public-library',
-];
+export const PROVISIONAL_SCREENS = [];
 
 /**
  * The props a HelpButton needs for a screen: `{ guide, section }`.

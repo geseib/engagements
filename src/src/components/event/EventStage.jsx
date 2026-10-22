@@ -3,6 +3,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import Stage from '../stage/Stage';
 import Modal from '../Modal';
 import Icon from '../Icon';
+import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 import { getEvent, runEvent, readDeck, turnPage } from '../../utils/eventsApi';
 import { navigateTo } from '../../auth/navigate';
 import { loadProfile } from '../../config/displayProfile';
@@ -765,6 +767,9 @@ export default function EventStage({ code }) {
       )}
       {plan && !ended && <span className="kbd" aria-hidden="true">SPACE</span>}
       {plan && <button type="button" className="btn" disabled={busy} onClick={plan.run}>{plan.label}</button>}
+      {/* Help (Help Phase 3): the event-day guide's board section, in the dock
+          with the host's other controls, as on a session's stage (Dock.jsx). */}
+      <HelpButton {...helpFor('event-stage')} variant="inline" size="small" tooltip="Help" className="dock-more dock-help" />
       {focused ? (
         <button type="button" className="dock-more" onClick={() => setFocus('agenda')} aria-label="Back to the agenda — the phones stay where they are">
           <span className="dock-more-lbl">AGENDA</span>

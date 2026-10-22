@@ -179,3 +179,51 @@
   margin: 4px 6px;
   background: rgba(155, 168, 190, 0.24);
 }
+
+/* ── THE QUIET `?` ─────────────────────────────────────────────────────────
+   Help Phase 3 put a `?` on every private screen, each opening its own guide
+   section (config/help/screens.js). Most of those headers are dusk or paper
+   cards with a quiet X beside them, where the blue circle above reads as a
+   stray browser control. `className="help-button-quiet"` is the one re-tint
+   they share: roles only (styles/roles.css), so it follows the theme of the
+   card it sits in, and no literal colour. Two classes, so it wins over the
+   base whatever order the sheets land in. A surface that needs another size
+   adds its own class beside this one. */
+.help-button.help-button-quiet {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.help-button.help-button-quiet:hover,
+.help-button.help-button-quiet[aria-expanded="true"] {
+  background: var(--row-hover);
+  color: var(--text);
+  transform: none;
+  box-shadow: none;
+}
+
+.help-button.help-button-quiet:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* In a `space-between` head (the AI builders'), the `?` takes the free space
+   and sits beside the X rather than in the middle of the bar. */
+.help-button.help-button-push {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+/* A finger, not a pointer: 44px, the floor for a phone target. */
+@media (pointer: coarse) {
+  .help-button.help-button-quiet {
+    width: 44px;
+    height: 44px;
+  }
+}

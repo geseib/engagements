@@ -1,6 +1,8 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import RoomWindowLink from './RoomWindowLink';
 import CompletionFlag from './CompletionFlag';
+import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 
 /**
  * The dock — the `.dock` grid area, and the room's one persistent action
@@ -121,10 +123,10 @@ function useCrowded(ref, deps) {
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
-  setupProps = null, children, ...rest
+  setupProps = null, help = '', children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, children]);
   // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
   // part of the status ("1 late answer kept", or "Review" at the end), and
   // opens the host's late list. Only when the status really ends with it.
@@ -161,6 +163,17 @@ export default function Dock({
       {typeof kbd === 'string' && (
         <span className="kbd" aria-hidden="true" data-off={kbd ? undefined : ''}>{kbd || 'SPACE'}</span>
       )}
+      {/*
+        HELP (Help Phase 3): `help` is a screen id from config/help/screens.js,
+        and the `?` opens that guide section on the host's screen, in the
+        modal. The stage around the dock is the room's and carries no help;
+        the dock is the host's control, so its `?` sits with AGENDA and
+        SESSION, shaped like them, and only where a caller asks for it.
+        Before them: `home` and SESSION are always the last two.
+      */}
+      {help ? (
+        <HelpButton {...helpFor(help)} variant="inline" size="small" tooltip="Help" className="dock-more dock-help" />
+      ) : null}
       {/*
         LAST IN THE DOCK, AND ON PURPOSE.
 

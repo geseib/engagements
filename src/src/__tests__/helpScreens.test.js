@@ -109,8 +109,10 @@ describe('HELP_FOR_SCREEN', () => {
   });
 
   test('the screens the inventories list as lacking help all have an entry', () => {
+    // 'host-stage' was here: Help Phase 3 deleted it, because the stage is
+    // the room's and carries no help; the dock's `?` (host-dock) is its help.
     [
-      'host-start', 'host-create', 'host-quick-start', 'host-stage', 'host-dock',
+      'host-start', 'host-create', 'host-quick-start', 'host-dock',
       'host-session-players', 'host-session-questions', 'host-session-rounds', 'host-session-settings',
       'host-console', 'host-remote', 'event-builder', 'event-agenda', 'event-stage',
       'ai-builders', 'ai-draft-review',

@@ -332,6 +332,8 @@ export default function BuildStageScreen({
             setupCountLabel={W.askingSr}
             setupOpen={Boolean(c.panelOpen)}
             setupProps={{ 'data-capability': 'settings' }}
+            /* The host's dock only: the wall's (no controls, below) has no `?`. */
+            help="build-stage"
           >
             <HostActionBar controls={bar} onAction={doMove} bigScreen shortcutsEnabled={shortcutsOn} ignoreKey={keepKey} />
           </Dock>

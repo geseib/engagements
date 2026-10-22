@@ -8026,6 +8026,15 @@ Focus on actionable business strategy insights.`;
   // top) because the overlay terms read it long before this point.
   const consoleMoment = hostControls.step ? hostControls.step.moment : 'UNKNOWN';
   /*
+    WHICH SECTION THE HOST'S `?` OPENS (Help Phase 3; ids in
+    config/help/screens.js). The one-screen dock and the console's top line
+    each carry one. While Workie's read is up it is What we heard's own
+    section; on a survey, the survey guide's; otherwise the screen's.
+  */
+  const helpMoment = consoleMoment === 'READ' ? 'host-what-we-heard' : (isSurvey ? 'host-survey' : '');
+  const dockHelp = helpMoment || 'host-dock';
+  const consoleHelp = helpMoment || 'host-console';
+  /*
     LATE & NOT REVIEWED, in the rail's shape (late items Task 4): what waits,
     in the list's order. The rail shows the first few with their buttons; its
     count is the server's.
@@ -8243,6 +8252,7 @@ Focus on actionable business strategy insights.`;
             onJoin: () => setQrMode('pinned'),
             presentHref: gameId ? presentHref(gameId) : '',
             presentDetail,
+            help: consoleHelp,
           }}
           strip={workflow ? {
             strip: workflow,
@@ -8397,6 +8407,7 @@ Focus on actionable business strategy insights.`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
+            help={dockHelp}
             onAgenda={eventCode ? goToAgenda : undefined}
             present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}

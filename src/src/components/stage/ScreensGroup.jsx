@@ -3,6 +3,8 @@ import { SCREEN_WORDS as W } from '../../config/roomScreen';
 import { presentStatusFrom } from '../../config/presentStatus';
 import { willPlace } from '../../present/roomWindow';
 import RoomWindowLink, { RoomWindowTab } from './RoomWindowLink';
+import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 import './ScreensGroup.css';
 
 /**
@@ -27,12 +29,18 @@ import './ScreensGroup.css';
  */
 
 /** One screen or two: the segment, with the hint for the current choice. `words` may override the hints. */
-export function ScreenChoiceRow({ choice = 'classic', onChoose = () => {}, words = W }) {
+export function ScreenChoiceRow({ choice = 'classic', onChoose = () => {}, words = W, help = '' }) {
   const two = choice === 'two';
   return (
     <div className="scr-row" data-row="where">
       <div className="scr-k">
-        <span className="scr-label">{words.where}</span>
+        {/* `help`: the screen id whose section explains one screen or two
+            (Help Phase 3). Here rather than on the lobby's chooser, which on
+            one screen is drawn on the stage the room watches. */}
+        <span className="scr-label">
+          {words.where}
+          {help ? <HelpButton {...helpFor(help)} variant="inline" size="small" tooltip={`Help: ${words.where}`} className="help-button-quiet scr-help" /> : null}
+        </span>
         <span className="scr-hint">{two ? words.whereHintTwo : words.whereHintOne}</span>
       </div>
       <div className="scr-seg" role="group" aria-label={words.where}>
@@ -90,7 +98,7 @@ export default function ScreensGroup({
   const sizeId = useId();
   return (
     <div className="scr">
-      {offerChoice ? <ScreenChoiceRow choice={choice} onChoose={onChoose} /> : null}
+      {offerChoice ? <ScreenChoiceRow choice={choice} onChoose={onChoose} help="host-room-screen-chooser" /> : null}
       {offerChoice && two && presentHref ? <RoomWindowRow href={presentHref} detail={presentDetail} /> : null}
       <div className="scr-row">
         <div className="scr-k">

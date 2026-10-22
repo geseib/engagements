@@ -20,6 +20,8 @@
  */
 import React, { useEffect, useState } from 'react';
 import Icon from './Icon';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import StatusMessage from './StatusMessage';
 import RankIcon from './RankIcon';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -173,6 +175,9 @@ function GameReport({
             <Icon name="FloppyDisk" weight="bold" size={16} />
             {isSaving ? 'Saving…' : 'Save report'}
           </button>
+          {/* The reporting guide's report section (Help Phase 3). Last in
+              the tools, after the primary; on screen only, like them. */}
+          <HelpButton {...helpFor('host-session-report')} variant="inline" size="small" tooltip="Help: the session report" className="help-button-quiet" />
         </div>
       </div>
 

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import Icon from './Icon';
 import {
   listNotifications, markNotificationRead, markAllNotificationsRead, daysLeftLabel,
@@ -67,12 +69,21 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
     return () => { window.removeEventListener('focus', onFocus); clearInterval(timer); };
   }, [load]);
 
-  /* Outside click and Escape close it, and Escape hands focus back. */
+  /* Outside click and Escape close it, and Escape hands focus back. Not a
+     click or a key inside another dialog: the help its `?` opens is portalled
+     to <body>, and closing the panel under it would unmount that help. */
   useEffect(() => {
     if (!open) return undefined;
-    const onDown = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    const inOtherDialog = (t) => Boolean(t && typeof t.closest === 'function' && t.closest('[role="dialog"]')
+      && !(rootRef.current && rootRef.current.contains(t)));
+    const onDown = (e) => {
+      if (inOtherDialog(e.target)) return;
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    };
     const onKey = (e) => {
-      if (e.key === 'Escape') { setOpen(false); if (buttonRef.current) buttonRef.current.focus(); }
+      if (e.key !== 'Escape' || inOtherDialog(e.target)) return;
+      setOpen(false);
+      if (buttonRef.current) buttonRef.current.focus();
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -127,6 +138,8 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
             {storedUnread && (
               <button type="button" className="nbell-link" onClick={readAll}>Mark all read</button>
             )}
+            {/* The bell's own section of the drafts guide (Help Phase 3). */}
+            <HelpButton {...helpFor('ai-bell')} variant="inline" size="small" tooltip="Help: notifications" className="help-button-quiet" />
             <button type="button" className="nbell-x" aria-label="Close notifications" onClick={() => setOpen(false)}>
               <Icon name="X" weight="bold" size={14} color="currentColor" />
             </button>

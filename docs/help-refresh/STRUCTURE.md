@@ -100,28 +100,34 @@ that answers "what do I do on this screen?"; if the right section does not exist
 point at the nearest one and add the id to `PROVISIONAL_SCREENS`. `helpScreens.test.js`
 fails an entry whose guide or section does not exist.
 
-Screen ids today (provisional ones marked *): `host-start`, `host-session-panel`,
+Screen ids today: `host-start`, `host-session-panel`,
 `player-page`, `admin-console`, `admin-prompts`, `admin-settings-realtime`, `host-create`,
-`host-create-advanced`*, `host-quick-start`, `host-question-sets`, `host-sessions`*,
-`host-reports`, `host-room-screen-chooser`*, `host-stage`, `host-dock`*,
+`host-create-advanced`, `host-quick-start`, `host-question-sets`, `host-sessions`,
+`host-reports`, `host-room-screen-chooser`, `host-dock`,
 `host-session-players`, `host-session-questions`, `host-session-rounds`,
 `host-session-settings`, `host-late-items`, `host-what-we-heard`, `host-session-report`,
-`host-survey`*, `host-console`, `host-remote`, `event-builder`*, `event-agenda`*,
-`event-stage`*, `admin-overview`, `admin-question-sets`, `admin-new-set`*,
-`admin-set-editor`, `admin-set-versions`, `admin-public-library`*, `admin-sessions`,
-`admin-events`*, `admin-prompt-versions`, `admin-members`*, `admin-activity`*,
-`admin-plan`, `admin-data-privacy`*, `admin-settings`, `staff-organisations`*,
-`staff-observability`*, `staff-plan-requests`*, `staff-discount-codes`*,
-`staff-shared-library`*, `staff-public-library`*, `staff-prompts`, `staff-moderation`*,
-`staff-accounts`, `staff-archive`, `staff-engage-settings`*, `ai-builders`,
-`ai-draft-review`, `ai-bell`, `build-create`, `build-connect`, `build-host`*,
-`build-stage`*, `build-build`*, `build-history`*, `build-session-panel`*,
-`build-console`*, `player-join`, `player-name-taken`, `player-join-errors`,
+`host-survey`, `host-console`, `host-remote`, `event-builder`, `event-agenda`,
+`event-stage`, `admin-overview`, `admin-question-sets`, `admin-new-set`,
+`admin-set-editor`, `admin-set-versions`, `admin-public-library`, `admin-sessions`,
+`admin-events`, `admin-prompt-versions`, `admin-members`, `admin-activity`,
+`admin-plan`, `admin-data-privacy`, `admin-settings`, `staff-organisations`,
+`staff-observability`, `staff-plan-requests`, `staff-discount-codes`,
+`staff-shared-library`, `staff-public-library`, `staff-prompts`, `staff-moderation`,
+`staff-accounts`, `staff-archive`, `staff-engage-settings`, `ai-builders`,
+`ai-draft-review`, `ai-bell`, `build-create`, `build-connect`, `build-host`,
+`build-stage`, `build-build`, `build-history`, `build-session-panel`,
+`build-console`, `player-join`, `player-name-taken`, `player-join-errors`,
 `player-lobby`, `player-answering`, `player-voting`, `player-results`, `player-end`,
-`player-survey`*, `player-event`*, `player-build-room`*.
+`player-survey`, `player-event`, `player-build-room`.
 
-Phase 0 wired only AdminPage's three inline buttons to `helpFor`. Phase 3 adds the rest
-of the buttons, retargets the provisional entries and removes them from the list.
+Phase 3 (22 Oct 2026) wired every id to a screen and emptied `PROVISIONAL_SCREENS`.
+The bars' `?` pick their id from what is showing: the Session panel by tab (`TAB_HELP`),
+the admin console by section (`adminHelpScreen`), the Build Room header by screen
+(`SCREEN_HELP`), the player page by state (`playerHelpScreen`, PlayerShell's `help`).
+`host-stage` was deleted: the stage is the room's, and the dock's `?` is its help.
+`helpScreenWiring.test.jsx` fails an id no component names, a named id not in the map,
+and any help on PresentPage, `present/` (the Build wall included) or `stage/Stage.jsx`.
+
 **Never put a help button on a screen the room sees** (the stage, the room's window, the
 Build Room's wall).
 

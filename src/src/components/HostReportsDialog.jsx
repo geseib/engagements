@@ -1,5 +1,7 @@
 import React from 'react';
 import Modal from './Modal';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import Icon from './Icon';
 import ReportsPanel from './ReportsPanel';
 
@@ -24,6 +26,8 @@ export default function HostReportsDialog({ onClose }) {
           <h2 id="hrp-title">Your reports</h2>
           <p className="qsets-dim">Saved from a session's report screen. They stay after the session has expired.</p>
         </div>
+        {/* The reporting guide's saved-reports help (Help Phase 3). */}
+        <HelpButton {...helpFor('host-reports')} variant="inline" size="small" tooltip="Help: reports" className="help-button-quiet" />
         <button
           type="button"
           className="qs-dialog-close"

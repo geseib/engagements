@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import PromptBeforeAfter from './PromptBeforeAfter';
 import StatusMessage from './StatusMessage';
 import {
@@ -107,6 +109,10 @@ export default function PromptVersionsPanel({ api, live, dirty = false, onMadeLi
 
   return (
     <div className="pmgr-advisor-body pmgr-ver" data-testid="pmgr-versions">
+      {/* The prompts guide's versions section (Help Phase 3). */}
+      <div className="pmgr-ver-help">
+        <HelpButton {...helpFor('admin-prompt-versions')} variant="inline" size="small" tooltip="Help: prompt versions" className="help-button-quiet" />
+      </div>
       {state.listingError && (
         <p className="pmgr-ver-hint" data-testid="pmgr-versions-partial">
           Only the versions recorded since version history began are listed — the stored files could not be read

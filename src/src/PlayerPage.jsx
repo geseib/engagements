@@ -92,6 +92,23 @@ const LookUpCue = ({ children }) => (
 */
 export { PlayerShell };
 
+/*
+  WHICH SECTION THE BAR'S `?` OPENS in a round session (Help Phase 3; the ids
+  are config/help/screens.js's). Read off the server's state rather than the
+  shell's `phase`, which is a paint ("ask" covers a submitted answer and an
+  Ask the room question alike). A player writing a comment is in the results'
+  feedback section whatever the state moved on to.
+*/
+export function playerHelpScreen(gameState = '', commenting = false) {
+  const state = String(gameState || '');
+  if (commenting) return 'player-results';
+  if (state === 'ENDED') return 'player-end';
+  if (state.startsWith('ASK#')) return 'player-answering';
+  if (state.startsWith('VOTE#')) return 'player-voting';
+  if (state.startsWith('RESULTS#')) return 'player-results';
+  return 'player-lobby';
+}
+
 // Utility function to calculate proper rankings with tie handling
 const calculatePlayerRankings = (players) => {
   // Sort players by score (descending)
@@ -2952,6 +2969,7 @@ function PlayerPage({ event = null } = {}) {
         phase="join"
         volume="rest"
         ctx="Joining"
+        help={eventJoinError ? 'player-join-errors' : 'player-event'}
         centre
         dock={eventJoinError ? (
           <button type="button" className="plr-btn" onClick={() => attemptEventJoin(String(event.gameId))}>
@@ -2987,6 +3005,7 @@ function PlayerPage({ event = null } = {}) {
         phase="join"
         volume="act"
         ctx="Join a session"
+        help="player-name-taken"
         /* The refusal's two ways out belong in the dock, exactly as the rejoin
            prompt's do twenty lines below. They rendered inside `.plr-stage`
            until now, which is the one screen on this surface where a player is
@@ -3072,6 +3091,7 @@ function PlayerPage({ event = null } = {}) {
           phase="join"
           volume="act"
           ctx="Private session"
+          help="player-join-errors"
           dock={(
             <>
               <button type="submit" form="plr-access-form" className="plr-btn">
@@ -3130,6 +3150,7 @@ function PlayerPage({ event = null } = {}) {
         phase="join"
         volume="act"
         ctx="Join a session"
+        help={joinError ? 'player-join-errors' : 'player-join'}
         dock={(
           <>
             <button type="submit" form="plr-join-form" className="plr-btn">
@@ -3378,7 +3399,7 @@ function PlayerPage({ event = null } = {}) {
      the composer says so. */
   if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound) {
     return (
-      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner}>
+      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner} help="player-results">
         <FeedbackRoundPanel
           round={feedbackRound}
           questionNumber={feedbackNumber}
@@ -4651,6 +4672,7 @@ function PlayerPage({ event = null } = {}) {
       banner={offlineBanner || lateBanner || missedBanner}
       centre={centre}
       dock={dock}
+      help={playerHelpScreen(gameState, myFeedbackShowing)}
       /* Reading one response in full.
 
          MOUNTED ONCE, ONCE PER PAGE rather than once per view — `answers` is
