@@ -44,7 +44,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'Ask the room turns a follow-up into a question for the room: Ideas, Choose or Rate. For Rate you name the scale\'s two ends: pick a pair in "1 means" or "5 means" (Disagree to Agree, No to Yes, Low to High, Unlikely to Likely, Hard to Easy), or Custom to type your own. The phones, the wall and the report all show them.',
+          text: 'Ask the room turns a follow-up into a question for the room: Ideas, Choose or Rate. Comments opens a feedback round instead, with names shown. For Rate you name the scale\'s two ends: pick a pair in "1 means" or "5 means" (such as Disagree to Agree), or Custom to type your own. The phones, the wall and the report all show them.',
         },
         {
           t: 'p',

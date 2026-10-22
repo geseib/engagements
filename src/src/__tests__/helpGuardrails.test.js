@@ -42,11 +42,10 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 const BANNED_ALLOWLIST = {
   'player-getting-started': { 'big screen': 1 },
   'player-scoring': { 'word cloud': 1 },
-  'host-quick-start': { 'the AI summary': 2, 'big screen': 1, 'the wall': 2 },
-  'host-game-setup': { 'New version': 1, Fork: 1, 'display profile': 1, projector: 1 },
-  'host-running-engagements': { 'SETUP control': 1 },
+  'host-quick-start': { 'the AI summary': 2, 'big screen': 1, 'the wall': 1 },
+  'host-game-setup': { projector: 1 },
   'host-late-items': { 'the wall': 2 },
-  'host-two-screens': { projector: 7, 'big screen': 2, 'the wall': 7 },
+  'host-two-screens': { projector: 6, 'big screen': 1, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
   'host-build-room': { projector: 1, PRESENT: 1 },
   'technical-requirements': { 'display profile': 2, 'big screen': 1 },
@@ -143,15 +142,15 @@ const LONG_SECTIONS = {
   'host-game-setup#settings-before-you-start': 435,
   'host-player-management#handing-name-over': 274,
   'host-two-screens#laptop-console': 552,
-  'host-two-screens#phone-remote': 268,
-  'host-reporting#what-we-heard': 345,
+  'host-two-screens#phone-remote': 264,
+  'host-reporting#what-we-heard': 344,
   'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {
   'player-playing#answering': 133,
-  'host-game-setup#settings-before-you-start': 192,
+  'host-game-setup#settings-before-you-start': 184,
   'host-reporting#what-we-heard': 144,
   'host-build-room#during-after': 301,
 };
