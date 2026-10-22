@@ -110,7 +110,7 @@ Screen ids today: `host-start`, `host-session-panel`,
 `event-stage`, `admin-overview`, `admin-question-sets`, `admin-new-set`,
 `admin-set-editor`, `admin-set-versions`, `admin-public-library`, `admin-sessions`,
 `admin-events`, `admin-prompt-versions`, `admin-members`, `admin-activity`,
-`admin-plan`, `admin-data-privacy`, `admin-settings`, `staff-organisations`,
+`admin-plan`, `admin-data-privacy`, `admin-settings`, `staff-overview`, `staff-organisations`,
 `staff-observability`, `staff-plan-requests`, `staff-discount-codes`,
 `staff-shared-library`, `staff-public-library`, `staff-prompts`, `staff-moderation`,
 `staff-accounts`, `staff-archive`, `staff-engage-settings`, `ai-builders`,
@@ -118,7 +118,7 @@ Screen ids today: `host-start`, `host-session-panel`,
 `build-stage`, `build-build`, `build-history`, `build-session-panel`,
 `build-console`, `player-join`, `player-name-taken`, `player-join-errors`,
 `player-lobby`, `player-answering`, `player-voting`, `player-results`, `player-end`,
-`player-survey`, `player-event`, `player-build-room`.
+`player-survey`, `player-survey-comments`, `player-event`, `player-build-room`.
 
 Phase 3 (22 Oct 2026) wired every id to a screen and emptied `PROVISIONAL_SCREENS`.
 The bars' `?` pick their id from what is showing: the Session panel by tab (`TAB_HELP`),
@@ -215,8 +215,8 @@ it fits. The worst: `host-build-room#during-after` (1,437 words, one item of 303
 (`session`), question set (`question-set`), Yours / Team / Engage / Public (`owner-tags`),
 Your space (`your-space`), team (`team`), the stage (`the-stage`), the room's window
 (`rooms-window`), room screen size (`room-screen-size`), Session panel (`session-panel`),
-the dock (`the-dock`), Workie (`workie`), What we heard (`what-we-heard`), Ask the room
-(`ask-the-room`), draft / AI draft (`draft`), the bell (`the-bell`), Build Room
+the dock (`the-dock`), Workie (`workie`), What we heard (`what-we-heard`), Workie's read (`workies-read`),
+Ask the room (`ask-the-room`), Topic / Shelf (`topic`), draft / AI draft (`draft`), the bell (`the-bell`), Build Room
 (`build-room`), Claude Code plugin (`claude-code-plugin`), event (`event`). Each term's UI
 source is cited in the file's header comment.
 

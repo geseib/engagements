@@ -106,6 +106,8 @@ describe('§3 the per-state pickers pick real ids', () => {
     // Each staff section opens its own staff section, not the customer's.
     expect(adminHelpScreen({ tab: 'questionsets', onPlatform: true })).toBe('staff-shared-library');
     expect(adminHelpScreen({ tab: 'users', onPlatform: true })).toBe('staff-accounts');
+    expect(adminHelpScreen({ tab: 'overview', onPlatform: true })).toBe('staff-overview');
+    expect(adminHelpScreen({ tab: 'overview' })).toBe('admin-overview');
     expect(adminHelpScreen({ tab: 'members' })).toBe('admin-members');
     expect(adminHelpScreen({ tab: 'questionsets', editingSet: true })).toBe('admin-set-editor');
     expect(adminHelpScreen({ tab: 'questionsets', draftOpen: true })).toBe('ai-draft-review');

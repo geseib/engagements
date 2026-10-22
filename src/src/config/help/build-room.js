@@ -417,7 +417,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the room\'s screens at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. Your Timeline marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
+          text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the stage or the room\'s window at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. Your Timeline marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
         },
         { t: 'p', text: 'To let posts straight through, switch it off in the Session panel, Settings, Claude.' },
       ],
@@ -665,7 +665,7 @@ const wrapUp = {
             'Screenshots along the way, and Version history: each commit Claude made on your laptop.',
             'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what.',
             'Host notes are left out, because a report gets handed round.',
-            '**Save report** keeps it as a PDF, listed in Reports, as for any session: see Results and reports.',
+            '**Save report** keeps it as a PDF, listed in Reports, as for any session: see The session report › Saving and sharing a report.',
           ],
         },
       ],

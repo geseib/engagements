@@ -129,9 +129,9 @@ const aiBuilders = {
           t: 'table',
           head: ['Builder', 'What you fill in'],
           rows: [
-            ['Trivia', 'A topic, the audience, the difficulty, how many categories and questions in each (up to 100), four to six answer choices, one to three correct answers, categories it must include, and anything else it must follow.'],
+            ['Trivia', 'A topic, the audience, the difficulty, how many categories and questions in each (up to 100 in all), four to six answer choices, one to three correct answers, categories it must include, and anything else it must follow.'],
             ['Poll', '**What will the room do with each one?** (the direction), then a topic, a category, the audience, how many, and **Kinds of poll question**: pick from choices, rate, yes or no, open answer.'],
-            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50), and the base prompt, which you may edit.'],
+            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50 in all), and the base prompt, which you may edit.'],
             ['Survey', 'The session\'s outline or deck, **What do you want to find out?**, **Kinds of question**, how many (up to 20), a name, and **Anything else Workie must obey**.'],
           ],
         },
@@ -361,7 +361,7 @@ const drafts = {
         {
           t: 'list',
           items: [
-            { title: 'A new set', text: 'Check **Set name**, choose a **Shelf**, and leave **Switch it on now** ticked to make it live at once (it needs a shelf) or untick it to save it switched off. Then press Accept. A name already used in that library is refused; change it and accept again.' },
+            { title: 'A new set', text: 'Check **Set name**, choose a **Shelf** (the set\'s topic, which people browse and filter by), and leave **Switch it on now** ticked to make it live at once (it needs a shelf) or untick it to save it switched off. Then press Accept. A name already used in that library is refused; change it and accept again.' },
             { title: 'Questions for a set you have', text: 'Accept saves one new version of the set with the questions you kept. The version before is kept, and **Undo** puts it back while the new one is still the live one. Sessions already running keep the version they started on.' },
             { title: 'Later', text: 'Every version is in the set\'s Versions, so you can go back to one there too (see Question sets).' },
           ],
@@ -463,7 +463,7 @@ const workie = {
         {
           t: 'list',
           items: [
-            { title: 'After a round', text: 'It writes What we heard: what the room said, questions worth asking next, and next steps. The host guide What we heard covers reading it, redoing it and turning a question into Ask the room. When a survey closes, it groups the open answers into themes.' },
+            { title: 'After a round', text: 'It writes What we heard: what the room said, questions worth asking next, and next steps. The host guide What we heard covers reading it, redoing it and turning a question into Ask the room. When a survey closes, it writes What we heard over the whole survey.' },
             { title: 'When you make a set', text: 'It writes the questions in the AI builders, and drafts single questions in the set editor. See AI builders.' },
             { title: 'Before a session', text: 'It turns a document you give it into a short briefing (Call & Answer).' },
           ],

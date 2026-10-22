@@ -87,7 +87,10 @@ const members = {
       yet" under their address), and the team is not on Free
       (org-guards.js canApproveHosting; never in a personal space). The
       roster note: "an owner or admin can approve those here, and Engage can
-      still refuse."
+      still refuse." A new team is Free until its Organisation plan request
+      is approved (create-org.js). An invitee with no account: /invite/{token}
+      (InviteAcceptPage.jsx) sends them to sign in or register
+      (auth/RegisterForm.jsx "Create account") and accepts on arrival.
     */
     {
       id: 'approve-hosting',
@@ -96,11 +99,11 @@ const members = {
       blocks: [
         {
           t: 'p',
-          text: 'Someone new to Engage cannot run sessions until they are approved. If they joined through your team\'s invitation, their row says cannot host yet and an owner or admin can press **Approve hosting**. The Overview lists them under Awaiting approval too.',
+          text: 'Someone new to Engage cannot run sessions until they are approved. A newcomer opens the invitation link you sent, chooses **Create account** with the address you invited, and is in the team when they arrive. Their row then says cannot host yet, and an owner or admin can press **Approve hosting**. The Overview lists them under Awaiting approval too.',
         },
         {
           t: 'p',
-          text: 'The button appears only once the team is on a paid plan. Anyone else, and everyone on the free plan, is approved by Engage staff. Engage can still refuse.',
+          text: 'The button is missing until the team is on a paid plan, and a new team stays on the free plan until Engage approves its Organisation plan request. Until then, and for anyone who did not join by invitation, Engage staff approve hosting. Engage can still refuse.',
         },
       ],
     },
@@ -220,7 +223,7 @@ const planUsage = {
           t: 'note',
           tone: 'info',
           title: 'Nothing stops mid-session',
-          text: 'A limit only stops you starting a new session. A room already in front of you keeps working to the end.',
+          text: 'A limit only stops you creating a new session. A session already created can still be started, and a room already in front of you keeps working to the end.',
         },
       ],
     },
@@ -327,7 +330,7 @@ const dataPrivacy = {
       admin/shared/generation-drafts.js READY_DAYS 30, DISCARD_RESTORE_DAYS 7.
       Invitations: 14 days (TeamPanel). Change-log entries: a year
       (utils/auditCopy.js RETENTION_LINE). Question sets do not expire.
-      The Sessions page subtitle still says "7 days after last play".
+      The Sessions page subtitle says the same (consoleSections.js, AdminPage.jsx).
     */
     {
       id: 'sessions-expire',
@@ -341,7 +344,7 @@ const dataPrivacy = {
             ['A session that was never started', '90 days from when it was created.'],
             ['A session that was started', '7 days from when it started. Its answers, votes and players go with it.'],
             ['A saved report', '90 days from saving, or a year if you chose **Keep for 1 year**. It outlives its session. The Overview warns you a week before one goes.'],
-            ['An AI draft', '30 days, waiting for your review. A discarded draft can be restored for 7 days.'],
+            ['An AI draft', 'See Drafts and the bell › How long drafts are kept.'],
             ['An invitation', '14 days, unless it is accepted or revoked.'],
             ['Change log entries', 'A year.'],
             ['Question sets', 'Until someone deletes them.'],
@@ -385,7 +388,11 @@ const dataPrivacy = {
     /*
       PrivacyPanel "Leaving": "Export everything" and "Delete <name>" render
       disabled because AdminPage mounts PrivacyPanel without onExport or
-      onDelete (checked on dev: both disabled=true). Described as they are.
+      onDelete (checked on dev: both disabled=true). Described as they are;
+      the Export note still says "Available at any time". No private contact
+      route exists in the app: the help menu's Report a bug / Request a
+      feature / Ask for help all post to admin/create-github-issue (public
+      GitHub issues), so none is named here.
     */
     {
       id: 'leaving',
@@ -394,7 +401,7 @@ const dataPrivacy = {
       blocks: [
         {
           t: 'p',
-          text: 'Under Leaving, **Export everything** (every set, session, response and report as files) and Delete are shown but cannot be pressed from the console yet. To take everything or to close a team, use Report an issue in the help to ask Engage.',
+          text: 'Under Leaving, **Export everything** (every set, session, response and report as files) and Delete are shown, but neither can be pressed yet, although the note beside Export says it is available at any time. To take everything or to close a team, ask through your team\'s owner or your Engage contact.',
         },
         {
           t: 'p',

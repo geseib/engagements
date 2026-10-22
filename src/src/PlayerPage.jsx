@@ -3399,7 +3399,7 @@ function PlayerPage({ event = null } = {}) {
      the composer says so. */
   if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound) {
     return (
-      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner} help="player-results">
+      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner} help="player-survey-comments">
         <FeedbackRoundPanel
           round={feedbackRound}
           questionNumber={feedbackNumber}

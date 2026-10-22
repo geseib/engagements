@@ -19,6 +19,9 @@
     Workie                       config/consoleSections.js:167 ("what Workie says afterwards")
     What we heard                components/stage/Rail.jsx:37, components/GameReport.jsx:698
     Ask the room                 config/followUpWords.js:95
+                                 (only where template FollowUpAsks is on: dev and test
+                                 buildspecs; prod takes the 'off' default and shows
+                                 Request feedback, GameHostPage.jsx asksEnabled)
     draft (AI draft)             components/QuestionSetsPanel.jsx:647, components/DraftReview.jsx:249
     the bell                     components/NotificationsBell.jsx:124 ("Notifications")
     Build Room                   components/WelcomeScreen.jsx:223
@@ -37,6 +40,11 @@
     phone remote                 SessionSetupPanel "Your phone as a remote"; HostRemote.jsx
     direction                    buildroom/words.js:49 ("Send to Claude"), :281 ("your last direction")
     crew                         buildroom/BuildSessionPanel.jsx:574 ("Open to a crew")
+  Added in Phase 4 (22 Oct 2026):
+    Workie's read                config/consoleWords.js:45 (readTitle), present/PresentMoments.jsx:499
+    Topic / Shelf                components/SetTopicField.jsx ("Topic *"), DraftReview.jsx:517 and
+                                 HostQuestionSetsDialog.jsx:545 ("Shelf"); a live set needs one
+                                 (toggle-question-set.js)
   Checked in W11: draft now says what the list really shows (DraftsStrip.jsx
   "An AI draft is waiting for your review."; the "AI draft" chip on a set row
   is a generated set not yet reviewed, QuestionSetsPanel.jsx:647).
@@ -194,11 +202,27 @@ const glossary = {
       ],
     },
     {
+      id: 'workies-read',
+      title: 'Workie\'s read',
+      icon: 'Sparkle',
+      blocks: [
+        { t: 'p', text: 'Another name for What we heard. Your laptop console and the room\'s window label it Workie\'s read.' },
+      ],
+    },
+    {
       id: 'ask-the-room',
       title: 'Ask the room',
       icon: 'Question',
       blocks: [
-        { t: 'p', text: 'Turns one of Workie\'s questions, or your own, into a quick question for the room: Ideas, Choose or Rate. You find it beside What we heard.' },
+        { t: 'p', text: 'Turns one of Workie\'s questions, or your own, into a quick question for the room: Ideas, Choose or Rate. You find it beside What we heard in Call & Answer. Some sites do not offer it; there you get Request feedback, a round of comments, instead.' },
+      ],
+    },
+    {
+      id: 'topic',
+      title: 'Topic (Shelf)',
+      icon: 'Books',
+      blocks: [
+        { t: 'p', text: 'The broad subject a question set is filed under, picked from a fixed list. People browse and filter sets by it, and a set needs one to be switched on. Some screens, such as Your question sets and the review of an AI draft, call it Shelf; it is the same field. Tags are your own extra words beside it.' },
       ],
     },
     {

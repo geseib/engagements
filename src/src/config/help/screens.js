@@ -33,7 +33,7 @@ export const HELP_FOR_SCREEN = {
   'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // QuickstartMenu header
   'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' }, // HostQuestionSetsDialog header
   'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },       // SessionHistoryPanel header
-  'host-reports': { guide: 'host-reporting', section: 'session-report' },        // HostReportsDialog header; AdminPage Reports
+  'host-reports': { guide: 'host-reporting', section: 'saving-report' },         // HostReportsDialog header; AdminPage Reports
   'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' }, // RoomScreenChooser head
 
   /* ---- host: running the room (one screen) ----
@@ -53,7 +53,7 @@ export const HELP_FOR_SCREEN = {
 
   /* ---- host: two screens and the phone ---- */
   'host-console': { guide: 'host-two-screens', section: 'laptop-console' },     // ConsoleTop (GameHostPage)
-  'host-remote': { guide: 'host-two-screens', section: 'phone-remote' },        // HostRemote bar
+  'host-remote': { guide: 'host-two-screens', section: 'remote-controls' },     // HostRemote bar
 
   /* ---- host: events ---- */
   // The builder's add and edit dialogs (EventBuilder, EventItemDialog), the
@@ -69,7 +69,7 @@ export const HELP_FOR_SCREEN = {
   'admin-overview': { guide: 'admin-getting-started', section: 'overview' },
   'admin-question-sets': { guide: 'admin-question-sets', section: 'the-list' },
   'admin-new-set': { guide: 'admin-question-sets', section: 'new-set' },        // NewSetDialog head
-  'admin-set-editor': { guide: 'builder-manual', section: 'trivia-question' },
+  'admin-set-editor': { guide: 'admin-question-sets', section: 'editor' },
   'admin-set-versions': { guide: 'admin-question-sets', section: 'versions-not-overwrites' }, // QuestionSetEditor Versions
   'admin-public-library': { guide: 'admin-public-library', section: 'using-public-sets' },
   'admin-sessions': { guide: 'admin-game-management', section: 'sessions-list' },
@@ -77,11 +77,12 @@ export const HELP_FOR_SCREEN = {
   'admin-prompt-versions': { guide: 'admin-ai-prompts', section: 'versions' },  // PromptVersionsPanel
   'admin-members': { guide: 'admin-members', section: 'who-is-here' },
   'admin-activity': { guide: 'admin-activity', section: 'reading-activity' },
-  'admin-plan': { guide: 'host-plan', section: 'where-to-see-it' },
+  'admin-plan': { guide: 'admin-plan-usage', section: 'this-month' },
   'admin-data-privacy': { guide: 'admin-data-privacy', section: 'whats-recorded' },
   'admin-settings': { guide: 'admin-settings', section: 'browser-only' },
 
   /* ---- admin console: Engage staff ---- */
+  'staff-overview': { guide: 'admin-staff-console', section: 'needs-engage' },  // AdminPage STAFF_SECTION_HELP overview
   'staff-organisations': { guide: 'admin-staff-organisations', section: 'organisations' },
   'staff-observability': { guide: 'admin-staff-platform', section: 'observability' },
   'staff-plan-requests': { guide: 'admin-staff-organisations', section: 'plan-requests' },
@@ -123,6 +124,7 @@ export const HELP_FOR_SCREEN = {
   'player-results': { guide: 'player-feedback', section: 'results-feedback' },
   'player-end': { guide: 'player-feedback', section: 'after-the-end' },
   'player-survey': { guide: 'player-surveys', section: 'answering' },
+  'player-survey-comments': { guide: 'player-surveys', section: 'comments-afterwards' }, // a closed survey's comment round
   'player-event': { guide: 'player-events', section: 'the-agenda' },
   'player-build-room': { guide: 'player-build-room', section: 'joining' },
 };

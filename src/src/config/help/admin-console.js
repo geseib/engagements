@@ -76,8 +76,9 @@ const gettingStarted = {
       setActiveOrgId + reload /admin, which lands on Overview. The choice is
       localStorage (auth/authFetch.js) and the host screens read the same key
       (ActiveOrgSwitcher on WelcomeScreen and HostRemote). CreateOrgDialog.jsx:
-      "Create a team", Name, "Create team"; Engage approves new organisations
-      by hand and the team runs on Free until then.
+      "Create a team", Name, "Create team"; create-org.js writes the team
+      'active' on Free and files the Organisation plan request, which Engage
+      approves by hand (admin-staff-organisations#organisations).
     */
     {
       id: 'switching-space',
@@ -93,7 +94,7 @@ const gettingStarted = {
           items: [
             { title: 'Pick a tab', text: 'The console reloads in that space and opens its Overview. Sets, sessions and members are always those of the space you picked.' },
             { title: 'It is remembered', text: 'This browser keeps your choice, and your host screens use the same one: a session you create is created in the space you last picked.' },
-            { title: 'Start a team', text: '**+ New team** opens **Create a team**. Give it a name and press **Create team**. Engage approves new organisations by hand, usually within a day; until then the team runs on the free plan.' },
+            { title: 'Start a team', text: '**+ New team** opens **Create a team**. Give it a name and press **Create team**. The team starts at once, on the free plan. Creating it also asks Engage for the Organisation plan, which Engage approves by hand, usually within a day.' },
           ],
         },
         {
@@ -249,7 +250,7 @@ const questionSets = {
           t: 'table',
           head: ['Tag', 'Buttons', 'What happens'],
           rows: [
-            ['Yours, Team', '**Edit**, **Share**, **Delete**', 'You change the set itself. Anyone in a team can edit the team\'s sets.'],
+            ['Yours, Team', '**Edit**, **Share**, **Delete**', 'You change the set itself. Anyone in a team can edit the team\'s sets, but only its owners and admins can share one (Sharing and the public library › Sharing a set publicly).'],
             ['Engage, Public', '**Open**, **Copy**', 'Open reads it in the editor; saving there makes your own copy. Copy makes one straight away. The original never changes.'],
           ],
         },
@@ -639,7 +640,7 @@ const gameManagement = {
           items: [
             { title: '**New event**', text: 'Name it first, then build its agenda.' },
             { title: '**Upcoming** and **Past**', text: 'Switch between events from today on and earlier ones. Search by title, place or code.' },
-            { title: 'The row', text: 'When it is, how many items, who can join (invite only, or anyone with the code), its code, and its state: Draft (no items yet), Scheduled, Running or Ended, with how many joined.' },
+            { title: 'The row', text: 'When it is, how many items, who can join, its code, and its state: Draft (no items yet), Scheduled, Running or Ended, with how many joined.' },
             { title: '**Open**', text: 'Opens the event\'s agenda. Building it and running it on the day are in the host guides.' },
           ],
         },

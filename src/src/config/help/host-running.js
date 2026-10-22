@@ -133,7 +133,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: '**Start voting** puts up **Vote for the best response**, the question, and every answer with a number, so people can name one out loud. No names and no points show while the room votes, whatever the Names setting.',
+          text: '**Start voting** puts up **Vote for the best response**, the question, and every answer with a number, so people can name one out loud. No names and no points show on the stage while the room votes, whatever the Names setting. With **Show who wrote each response from the start** on, the phones\' ballots and your own lists do carry names.',
         },
         {
           t: 'list',
@@ -269,7 +269,7 @@ const running = {
           t: 'list',
           items: [
             '**Open session report** is the main button: see The session report.',
-            'People can still add comments to rounds for 24 hours: see Late answers and comments.',
+            'People can still add comments to rounds for a while afterwards: see Late answers and comments › What is kept.',
           ],
         },
         {
@@ -350,7 +350,7 @@ const sessionPanel = {
           rows: [
             ['**Queue**', 'Adds it to the end of the running order. The round on screen carries on.'],
             ['**Ask next**', 'Puts it at the top of the running order. It is asked when the current round ends.'],
-            ['**Ask now**', 'Puts it on the room\'s screen straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
+            ['**Ask now**', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
           ],
         },
       ],
@@ -458,7 +458,7 @@ const byType = {
         { t: 'phases', gameType: 'call-and-answer' },
         {
           t: 'p',
-          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote, the only one that can run on two screens, and the only one with Ask the room after Workie\'s read. How points are earned is in the players\' Scoring guide.',
+          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote, the only one that can run on two screens, and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide.',
         },
       ],
     },
@@ -500,7 +500,7 @@ const byType = {
           t: 'note',
           tone: 'info',
           title: 'And surveys?',
-          text: 'A survey has no rounds: you open it, people answer at their own pace, and you close it. See the survey guide for hosts.',
+          text: 'A survey has no rounds: you open it, people answer at their own pace, and you close it. See Running a survey.',
         },
       ],
     },
@@ -549,7 +549,7 @@ const lateItems = {
             ['**Show on the wall**', 'Puts it up for the room. Offered only while the room is on that item\'s round; it then reads "Reviewed with the room".'],
             ['**Mark reviewed**', 'You have read it yourself; it reads "Reviewed by the host".'],
             ['Not reviewed', 'Nobody has looked at it yet.'],
-            ['**Close comments**', 'After the session ends, stops new comments before the 24 hours are up.'],
+            ['**Close comments**', 'After the session ends, stops new comments before their time runs out.'],
           ],
         },
       ],
@@ -574,6 +574,12 @@ const playerManagement = {
   icon: 'UsersThree',
   summary: 'Handing a name over, removing someone who left, and what neither of those destroys.',
   sections: [
+    /*
+      components/stage/PlayersList.jsx:107-170. The Session panel passes no
+      onLock/onRefuse (SessionSetupPanel.jsx ~613), so its rows show Unlock
+      name | Let them take it, and Remove; the Build Room's panel adds Not now
+      and Lock again (BuildSessionPanel.jsx:416-420; grant-handover.js).
+    */
     {
       id: 'players-tab',
       title: 'The Players tab',
@@ -585,7 +591,7 @@ const playerManagement = {
         },
         {
           t: 'p',
-          text: 'Each row carries two actions. Both are about people, not about scores — neither one can take points away from anybody.',
+          text: 'Each row carries two actions: **Unlock name** (it reads **Let them take it** when someone is asking) and **Remove**. In a Build Room a row can also show **Not now**, to turn down someone asking for the name, or **Lock again**, to close an unlock nobody has taken yet. All of them are about people, not about scores; none can take points away from anybody.',
         },
       ],
     },
@@ -639,7 +645,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'When it was just a coincidence',
-          text: 'Do nothing. The other Sam already has "Pick a different name" in front of them, which is the correct outcome.',
+          text: 'Do nothing (in a Build Room, press **Not now**). The other Sam already has "Pick a different name" in front of them, which is the correct outcome.',
         },
       ],
     },

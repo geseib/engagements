@@ -98,7 +98,7 @@ const gettingStarted = {
           t: 'list',
           items: [
             { title: 'Your answers, while the room votes', text: 'Shown as numbers: Response 1, Response 2. Nobody, the host included, sees who wrote what until voting closes. Then names go up with the results.' },
-            { title: 'If the host shows names from the start', text: 'Some hosts turn names on for the whole session. Then answers and ballots carry names from the first moment.' },
+            { title: 'If the host shows names from the start', text: 'Some hosts turn names on for the whole session. Then answers and ballots on phones carry names from the first moment. The main screen still shows no names while the room votes.' },
             { title: 'Your comments', text: 'A comment on a round carries your name, and the composer says so before you post.' },
           ],
         },
@@ -755,7 +755,7 @@ const feedback = {
         },
         {
           t: 'p',
-          text: 'Comments stay open for 24 hours after the end, or until the host closes them. After that you can close the page; if the host publishes a summary, they share the link themselves.',
+          text: 'Comments stay open for 24 hours after the end, or until the host closes them. After that you can close the page; if the host saves a report for you, they share the link themselves.',
         },
       ],
     },

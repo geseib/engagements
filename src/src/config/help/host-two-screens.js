@@ -140,7 +140,7 @@ const twoScreens = {
         {
           t: 'steps',
           items: [
-            { title: 'Connect the room\'s display', text: 'Plug in the TV or the room\'s screen as a second display, set to extend your desktop rather than mirror it.' },
+            { title: 'Connect the room\'s display', text: 'Plug in the room\'s TV or display as a second display, set to extend your desktop rather than mirror it.' },
             { title: 'Open it', text: 'Press **Room\'s window ↗** on the console\'s top line (or **Open ↗** in Settings, under Screens). Quick start on two screens opens it for you as the session starts.' },
             { title: 'Put it on the room\'s display', text: 'In Chrome or Edge with a second display, it opens there and fills it. The first time, the browser asks to manage windows on all your displays: allow it. In other browsers, or if you say no, it opens beside you: drag it across.' },
             { title: 'Fill the screen', text: 'Click the room\'s window once. While it shows **Click anywhere to fill the screen**, that click makes it full screen. F does the same anywhere, and F again leaves full screen.' },

@@ -12,7 +12,7 @@
   Checked on dev 22 Oct on a phone viewport: join, send an idea, suggest two
   ideas, vote, results, decided, the end.
   "On the wall" and "the big screen" appear on some phone screens; they are
-  retired words in help, so this guide says "the room's screen".
+  retired words in help, so this guide says "the main screen".
 */
 
 const playerBuildRoom = {
@@ -82,7 +82,7 @@ const playerBuildRoom = {
       blocks: [
         {
           t: 'p',
-          text: '**Send an idea to the host** is there on every screen. Type it and press **Send idea**. The host sees your name with it; the room\'s screen does not.',
+          text: '**Send an idea to the host** is there on every screen. Type it and press **Send idea**. The host sees your name with it; the main screen does not.',
         },
         {
           t: 'p',
@@ -118,7 +118,7 @@ const playerBuildRoom = {
       blocks: [
         {
           t: 'p',
-          text: 'The host sees your name beside your ideas and answers, and who has answered or voted. The room\'s screen shows ideas and votes without names, unless the host chooses to list names in the room count. History on every screen leaves out who sent an idea.',
+          text: 'The host sees your name beside your ideas and answers, and who has answered or voted. The main screen shows ideas and votes without names, unless the host chooses to list names in the room count. History on every screen leaves out who sent an idea.',
         },
       ],
     },

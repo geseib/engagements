@@ -42,12 +42,12 @@ const heard = {
             'While Workie writes, the dock shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
             'A long read comes in pages ("Reading page 1 of 4"). **Next page** or → turns the page; ← goes back, and from the first page back to the results.',
             'The second button, "Start round 2", skips the rest. If Workie suggested questions you have not asked, it asks for a second press first.',
-            'On the last page, **Ask the room** opens the composer when suggestions are waiting ("1 ask ready"); otherwise the main button starts the next round.',
+            'On the last page, **Ask the room** opens the composer when suggestions are waiting ("1 ask ready"); otherwise the main button starts the next round. Where Ask the room is not offered, see Asking the room a quick question.',
           ],
         },
         {
           t: 'p',
-          text: 'If the read fails, the stage says so with **Try again**. If Workie could not run and a plain summary stands in, it reads "Workie\'s read didn\'t run" with **Redo**. **Redo the read on screen**, in the Session panel\'s Settings, rewrites the read now in the voice and approach chosen there.',
+          text: 'If the read fails, the stage says so with **Try again**. If Workie could not run and a plain count stands in, it reads "Workie\'s read didn\'t run" with **Redo**. **Redo the read on screen**, in the Session panel\'s Settings, rewrites the read now in the voice and approach chosen there.',
         },
       ],
     },
@@ -84,7 +84,7 @@ const heard = {
       blocks: [
         {
           t: 'p',
-          text: 'In Call & Answer, **Ask the room** opens a composer. Open it from the dock on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
+          text: 'In Call & Answer, **Ask the room** opens a composer. Some sites do not offer it; there you get **Request feedback** instead (A round of comments, below). Open it from the dock on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
         },
         {
           t: 'steps',
@@ -97,7 +97,7 @@ const heard = {
         },
         {
           t: 'p',
-          text: 'One question can be open at a time. Where Ask the room is not offered, the read\'s last page has **Request feedback** instead.',
+          text: 'One question can be open at a time.',
         },
       ],
     },
@@ -204,7 +204,8 @@ const reporting = {
       and the passkey… separately", "You can find both again under Reports.
       Saving this session again keeps the same passkey.", "Anyone on your team
       can open it from Reports without a passkey.", "Download PDF", "Done").
-      save-report.js: retention 90 / 365 days from saving.
+      save-report.js: retention 90 / 365 days from saving. The list:
+      components/ReportsPanel.jsx (search, type, retention, sort; Share, PDF).
     */
     {
       id: 'saving-report',
@@ -225,7 +226,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'A saved report outlives its session. Find it again, with its link and passkey, under Reports on your start screen. Saving the same session again keeps the same passkey.',
+          text: 'A saved report outlives its session. **Reports** on your start screen, and the Reports section of the console, list every saved report with when it was saved and how long it is kept. Search, filter and sort them; **Share** gives its link and passkey again, and **PDF** downloads it. Saving the same session again keeps the same passkey.',
         },
       ],
     },
@@ -241,13 +242,8 @@ const reporting = {
       icon: 'CalendarBlank',
       blocks: [
         {
-          t: 'table',
-          head: ['What', 'Kept for'],
-          rows: [
-            ['A session you created but never started', '90 days from when you created it'],
-            ['A session that has started', '7 days from the start'],
-            ['A saved report', '90 days or 1 year from when you saved it, whatever happens to the session'],
-          ],
+          t: 'p',
+          text: 'In short: a session lasts 7 days from its start (90 days from creation if it never starts), and a saved report 90 days or a year from saving. Everything, in one table: Data & privacy › How long things are kept.',
         },
         {
           t: 'note',

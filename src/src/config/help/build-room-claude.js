@@ -46,7 +46,7 @@ const claude = {
       title: 'Connecting the first time',
       icon: 'Terminal',
       blocks: [
-        { t: 'p', text: 'Open **Connect Claude Code** (on the Host screen, or the Session panel, Settings, Claude). Claude Code runs on this laptop and joins the room. Three steps:' },
+        { t: 'p', text: 'Open **Connect Claude Code** (on the Host screen, or the Session panel, Settings, Claude). Claude Code runs on this laptop and joins the room. The commands are written for a Mac or Linux terminal. Three steps:' },
         {
           t: 'steps',
           items: [

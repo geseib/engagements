@@ -171,7 +171,7 @@ describe('a free personal space at its limit', () => {
     const foot = container.querySelector('.bill-notebox--foot');
     expect(foot.textContent)
       .toContain('The session you are running right now is not affected.');
-    expect(foot.textContent).toContain('A limit only ever stops you STARTING one.');
+    expect(foot.textContent).toContain('A limit only ever stops you CREATING one.');
   });
 
   // rejects: showing a free space an invoice. A personal plan does not meter,

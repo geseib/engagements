@@ -502,7 +502,7 @@ export default function BillingPanel({
       {!metered ? (
         <p className="bill-notebox bill-notebox--foot">
           <b>The session you are running right now is not affected.</b> A limit only ever stops
-          you STARTING one. Nothing interrupts a room that is already in front of you — joining,
+          you CREATING one. Nothing interrupts a room that is already in front of you — joining,
           answering, voting and results keep working to the end, every time.
         </p>
       ) : null}

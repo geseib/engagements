@@ -42,7 +42,7 @@ const quickStart = {
             { title: 'Create the session', text: 'On the start screen choose **Create engagement**: a title, a format and a question set. Nobody can join yet.' },
             { title: 'Start it', text: 'Your sessions list opens. Press **Start** on the new session: the join code and QR go up, and people join from their phones.' },
             { title: 'Run the rounds', text: 'You move the room on from your own screen; every phone follows. The Running the room guide covers this.' },
-            { title: 'Read what the room said', text: 'Results after each round, What we heard from Workie on Call & Answer rounds, and the session report. See Results and reports.' },
+            { title: 'Read what the room said', text: 'Results after each round, What we heard from Workie, and the session report. See What we heard and Ask the room, and The session report.' },
           ],
         },
         {
@@ -85,7 +85,7 @@ const quickStart = {
         },
         {
           t: 'p',
-          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Question sets & team** (or **Admin console** for an administrator), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
+          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Question sets & team** (**Admin console** if you are Engage staff), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
         },
         {
           t: 'note',
@@ -182,9 +182,9 @@ const quickStart = {
       blocks: [
         {
           t: 'p',
-          text: 'After each round the room sees the results. On Call & Answer rounds Workie writes What we heard: what the room said, questions worth asking next and next steps. The session report gathers every round, and you can save it to keep after the session expires.',
+          text: 'After each round the room sees the results, then Workie writes What we heard: what the room said, questions worth asking next and next steps. The session report gathers every round, and you can save it to keep after the session expires.',
         },
-        { t: 'p', text: 'Results and reports covers all of it.' },
+        { t: 'p', text: 'What we heard and Ask the room covers the read; The session report covers the report and saving it.' },
       ],
     },
     {
@@ -196,7 +196,7 @@ const quickStart = {
           t: 'faq',
           items: [
             { q: 'Someone joined late. Is that a problem?', a: 'No. They play from the round they arrive on. They cannot score for rounds that already happened.' },
-            { q: 'Someone lost their connection.', a: 'They reopen the link and enter the same name. Their answers and points come back with them.' },
+            { q: 'Someone lost their connection.', a: 'On the same phone and browser they reopen the link and tap **Rejoin as** their name; their answers and points come back with them. On another device the name is taken, and you hand it over: see Managing players › Handing a name over.' },
             { q: 'How many people can play?', a: 'Plenty. The discussion works best somewhere between 5 and 50; past that, reading answers out stops being possible.' },
             { q: 'Can I run the same set again?', a: 'Yes. Each session is a fresh room, and playing a set does not change it.' },
             { q: 'Can I go back to a round we already did?', a: 'Yes. The Rounds tab of the Session panel holds every round played, with its answers and What we heard.' },
@@ -290,6 +290,10 @@ const gameSetup = {
       until you end). Workie: "Workie's voice" (Adapt to the session
       (recommended)), "Summary approach", "Instructions for Workie" (500).
       What people see when they join: "Event details" (300).
+      Names with anonymity off: phones' ballots (PlayerPage displayLabelFor)
+      and the host's lists name authors from the start
+      (SessionSetupPanel.jsx:1088-1091); the room's side never does during
+      VOTE (config/navigatorOrder.js navigatorLabel).
     */
     {
       id: 'advanced',
@@ -303,11 +307,11 @@ const gameSetup = {
         {
           t: 'list',
           items: [
-            { title: 'Anonymous responses (Call & Answer)', text: 'On by default: until voting closes nobody, you included, sees who wrote which answer. Off, every answer carries its author\'s name from the moment voting opens.' },
+            { title: 'Anonymous responses (Call & Answer)', text: 'On by default: until voting closes nobody, you included, sees who wrote which answer. Off, names show from the start on people\'s phones, ballots included, and in your own lists; the stage and the room\'s window never show names while the room votes.' },
             { title: 'Names (survey)', text: '**Anonymous**, **Who finished** or **Named**. People\'s phones tell them which before they answer, so it is fixed once the survey opens.' },
             { title: 'Shuffle the question order', text: 'On by default: questions are drawn at random from your categories. Off, they are asked in order, one category at a time.' },
             { title: 'Goal', text: 'How many questions you plan to ask. When the room reaches it you are told, and you can keep going. Blank plays until you end the session.' },
-            { title: 'Workie', text: '**Workie\'s voice** (it adapts to the session unless you pick one), **Summary approach** (how Workie sums up each round) and **Instructions for Workie** (rules it follows in every summary).' },
+            { title: 'Workie', text: '**Workie\'s voice** (it adapts to the session unless you pick one), **Summary approach** (how Workie sums up each round) and **Instructions for Workie** (rules it follows every time it writes What we heard).' },
             { title: 'Event details', text: 'A sentence or two people see after they join. Workie reads it too.' },
           ],
         },
@@ -363,7 +367,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'A set marked Not offered in the picker is switched off and is not in the Create engagement list. A set Workie wrote that nobody has read yet is marked Draft and offers **Review** instead of **Edit questions**.',
+          text: 'A set marked Not offered in the picker is switched off and is not in the Create engagement list. An unfinished set, one Workie wrote that nobody has reviewed yet, is marked **Draft** and offers **Review** instead of **Edit questions**.',
         },
       ],
     },
@@ -417,7 +421,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Administrators choose the rest of the menu in the console.',
+          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets.',
         },
       ],
     },
@@ -498,7 +502,7 @@ const gameSetup = {
             { title: 'Joining', text: 'The join link, to paste into a video call\'s chat.' },
           ],
         },
-        { t: 'p', text: 'Running the room explains each setting; Two screens and your phone covers the remote.' },
+        { t: 'p', text: 'The Session panel › The Settings tab explains each setting; Two screens and your phone covers the remote.' },
       ],
     },
     /*
@@ -532,7 +536,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'A Build Room continues on its own page. An event has one row; open it to see its items. Saved reports are under **Reports** on the start screen, covered in Results and reports.',
+          text: 'A Build Room continues on its own page. An event has one row; open it to see its items. Saved reports are under **Reports** on the start screen: see The session report › Saving and sharing a report.',
         },
       ],
     },

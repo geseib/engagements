@@ -114,7 +114,7 @@ const ADMIN_SECTIONS = [
     label: 'Sessions',
     icon: 'GameController',
     title: 'Sessions',
-    subtitle: 'What hosts have run. Data here expires: 90 days from creation, 7 days after last play.',
+    subtitle: 'What hosts have run. Data here expires: 90 days from creation, or 7 days from the start once started.',
     contentTheme: 'dark',
   },
   {
@@ -220,7 +220,7 @@ const SECTION_HELP = {
   settings: 'admin-settings',
 };
 const STAFF_SECTION_HELP = {
-  overview: 'admin-overview',
+  overview: 'staff-overview',
   orgs: 'staff-organisations',
   observability: 'staff-observability',
   planrequests: 'staff-plan-requests',
