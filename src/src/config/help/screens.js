@@ -46,7 +46,7 @@ export const HELP_FOR_SCREEN = {
   'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' },
   'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' },
   'host-session-report': { guide: 'host-reporting', section: 'session-report' },
-  'host-survey': { guide: 'host-quick-start', section: 'step-3-run-rounds' },
+  'host-survey': { guide: 'host-surveys', section: 'while-it-collects' },
 
   /* ---- host: two screens and the phone ---- */
   'host-console': { guide: 'host-two-screens', section: 'laptop-console' },
@@ -110,7 +110,7 @@ export const HELP_FOR_SCREEN = {
   'player-voting': { guide: 'player-voting', section: 'voting' },
   'player-results': { guide: 'player-feedback', section: 'results-feedback' },
   'player-end': { guide: 'player-feedback', section: 'after-the-end' },
-  'player-survey': { guide: 'player-playing', section: 'answering' },
+  'player-survey': { guide: 'player-surveys', section: 'answering' },
   'player-event': { guide: 'glossary', section: 'event' },
   'player-build-room': { guide: 'player-build-room', section: 'joining' },
 };
@@ -120,12 +120,12 @@ export const HELP_FOR_SCREEN = {
  * real one. Phase 3 retargets each and deletes it from this list.
  */
 export const PROVISIONAL_SCREENS = [
-  'host-create-advanced', 'host-sessions', 'host-room-screen-chooser', 'host-survey',
+  'host-create-advanced', 'host-sessions', 'host-room-screen-chooser',
   'event-builder', 'event-agenda', 'event-stage',
   'admin-public-library', 'admin-events',
   'staff-organisations', 'staff-observability', 'staff-plan-requests', 'staff-discount-codes',
   'staff-shared-library', 'staff-public-library', 'staff-moderation', 'staff-engage-settings',
-  'player-survey', 'player-event',
+  'player-event',
 ];
 
 /**

@@ -489,7 +489,7 @@ const playing = {
         {
           t: 'list',
           items: [
-            { title: 'Survey', text: 'Several questions you answer at your own pace, then send. You can go back and change your answers until the host closes the survey.' },
+            { title: 'Survey', text: 'Several questions you answer at your own pace: see Answering a survey.' },
             { title: 'Build Room', text: 'The room builds an app with the host\'s Claude: suggest ideas, choose between options, rate. Open the demo opens the app itself, on the room\'s Wi-Fi, or from anywhere when the host has opened it to people who are not there. That button is yours alone; if the host removes you, it stops working. History marks what reached Claude, and when the host changed the room\'s words it shows what Claude got and why; your own ideas say yours. It never shows who sent anything.' },
           ],
         },

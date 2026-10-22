@@ -39,6 +39,7 @@ const COVERS = {
   'player-voting': [`${S}/PlayerPage.jsx`, `${L}/game/submit-vote.js`],
   'player-feedback': [`${S}/PlayerPage.jsx`, `${S}/components/RoundReport.jsx`],
   'player-trouble': [`${S}/PlayerPage.jsx`, `${S}/components/joinResult.js`, `${S}/config/lateWords.js`],
+  'player-surveys': [`${S}/components/survey`, `${S}/config/surveyNames.js`, `${S}/components/FeedbackRoundPanel.jsx`, `${L}/game/survey-kinds.js`],
   // hosts: setting up
   'host-quick-start': [`${S}/components/WelcomeScreen.jsx`, `${S}/components/GameSetupDialog.jsx`, `${S}/components/QuickstartMenu.jsx`, `${S}/components/stage/Dock.jsx`],
   'host-game-setup': [`${S}/components/GameSetupDialog.jsx`, `${S}/components/HostQuestionSetsDialog.jsx`, `${S}/components/stage/ScreensGroup.jsx`, `${S}/config/roomScreen.js`, `${S}/config/displayProfile.js`],
@@ -50,6 +51,8 @@ const COVERS = {
   'host-player-management': [`${S}/components/stage/PlayersList.jsx`, `${S}/components/JoinNameCollision.jsx`],
   // hosts: two screens and the phone
   'host-two-screens': [`${S}/components/console`, `${S}/present`, `${S}/PresentPage.jsx`, `${S}/HostRemote.jsx`, `${S}/components/stage/RoomWindowStatus.jsx`, `${S}/config/consoleWords.js`],
+  // hosts: surveys
+  'host-surveys': [`${S}/components/stage/SurveyCollecting.jsx`, `${S}/components/stage/SurveyWalkthrough.jsx`, `${S}/components/SurveyResultsPanel.jsx`, `${S}/components/survey/results`, `${S}/config/surveyNames.js`, `${S}/config/hostControls.js`, `${S}/hooks/useSurveyProgress.js`, `${L}/game/survey-host.js`],
   // hosts: results and reports
   'host-reporting': [`${S}/components/GameReport.jsx`, `${S}/components/RoundReport.jsx`, `${S}/components/ReportsPanel.jsx`, `${S}/components/AISummaryStatus.jsx`, `${S}/components/console/panels/ReadPanel.jsx`, `${L}/game/save-report.js`],
   'host-what-we-heard': [`${S}/components/console/panels/ReadPanel.jsx`, `${S}/components/AskComposer.jsx`, `${S}/components/FeedbackRoundPanel.jsx`, `${S}/config/followUpWords.js`],
