@@ -792,7 +792,48 @@ async function markUndone(db, table, draft, { now = new Date() } = {}) {
   });
 }
 
+// ── A draft written somewhere else: a set Claude wrote in a Build Room ─────
+/**
+ * CLAUDE'S QUESTION SET, FOR REVIEW (docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 7; owner 22 Oct: "a button request that gets back from claude code an
+ * artifact in the repo/folder that we can use as a question set"). No run:
+ * the items are already written, so the draft is made READY at once, in the
+ * caller's library, with the caller as its creator, and the bell says so. From
+ * there it is any other new-set draft: keep, leave, edit, accept, undo.
+ */
+async function createReadyDraft(db, table, {
+  event, title, engagementType, items, tags = [], description = '', source = null, now = new Date(),
+}) {
+  const sub = tenant.callerUserId(event);
+  if (!sub) return { status: 401, error: 'Sign in again and retry.' };
+  const lib = callerLibrary(event);
+  if (!lib) return { status: 403, error: 'You cannot save sets in this library.' };
+  // eslint-disable-next-line global-require
+  const draftId = require('crypto').randomBytes(9).toString('base64url');
+  const creator = { sub, name: clean(event?.requestContext?.authorizer?.lambda?.username) };
+  const draft = await createDraft(db, table, {
+    draftId, lib, kind: engagementType === 'poll' ? 'poll' : 'scenarios', engagementType, mode: 'new',
+    requested: items.length,
+    request: { setMetadata: { title, description, tags }, ...(source ? { source } : {}) },
+    title, creator, jobId: '', tokensPerItem: 0, now,
+  });
+  const nextSeq = await putItems(db, table, draft, items, { startSeq: 1, batch: 1, ttl: Number(draft.ttl) });
+  const at = now.toISOString();
+  await db.send(new UpdateCommand({
+    TableName: table,
+    Key: headerKey(lib, draftId),
+    UpdateExpression: 'SET #status = :ready, #produced = :n, #nextSeq = :seq, #readyAt = :at, #updatedAt = :at',
+    ConditionExpression: '#status = :generating',
+    ExpressionAttributeNames: { '#status': 'status', '#produced': 'produced', '#nextSeq': 'nextSeq', '#readyAt': 'readyAt', '#updatedAt': 'updatedAt' },
+    ExpressionAttributeValues: { ':ready': STATUS.READY, ':generating': STATUS.GENERATING, ':n': items.length, ':seq': nextSeq, ':at': at },
+  }));
+  const ready = { ...draft, status: STATUS.READY, produced: items.length, nextSeq, readyAt: at, updatedAt: at };
+  await notifyCreator(db, ready, { status: STATUS.READY, produced: items.length, requested: items.length, ttl: Number(draft.ttl), now });
+  return { draft: headerToWire(ready, { now }) };
+}
+
 module.exports = {
+  createReadyDraft,
   markUndone,
   STATUS,
   READY_DAYS,

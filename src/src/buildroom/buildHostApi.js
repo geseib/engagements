@@ -174,6 +174,10 @@ export function buildApi(gameId) {
     pointRequest: (kind, subject) => post('points/requests', { kind, subject }),
     /** Cancel a request that is stuck. → `{request}` */
     cancelPointRequest: (requestId) => post(`points/requests/${seg(requestId)}`, { action: 'cancel' }),
+    /** A question set Claude wrote (question-sets plan step 7): `saved` or `remove`. */
+    claudeSetAction: (setId, action) => post(`question-sets/${seg(setId)}`, { action }),
+    /** One of its drafts into the AI drafts review behind the bell (admin/generation-drafts.js from-build). */
+    draftFromBuild: (body) => call('admin/generation-drafts/from-build', { method: 'POST', body }),
     /** `'remove'|'later'|'show'|'hide'|'send'` → `{point, ideasAbout?, ideaIds?}` */
     pointAction: (pointId, action) => post(`points/${seg(pointId)}`, { action }),
     /** Several points to Claude as ONE direction. → `{sent:[ids]}` */

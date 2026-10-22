@@ -48,6 +48,7 @@ const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 
 const tenant = require('./shared/tenant');
 const drafts = require('./shared/generation-drafts');
+const { normalizeTags } = require('./shared/tags');
 const { recordAudit, markAuditOutcome } = require('./shared/audit-log');
 const { importDraftAsSet } = require('./shared/generated-set');
 const { findSetForCaller, requireSetManager } = require('./shared/question-set-access');
@@ -330,12 +331,58 @@ async function restore(event, id) {
   return json(200, { restored: true });
 }
 
+/**
+ * POST from-build — a question set Claude wrote in a Build Room, as a draft to
+ * review (docs/superpowers/plans/2026-10-22-build-room-question-sets.md step 7).
+ * Body: { title, engagementType: 'call-and-answer'|'poll', items, tags?, description?, gameId? }.
+ * Call and Answer items: { title, detail?, category }. Poll items: { title,
+ * detail?, category, kind: 'choice', options (2-6) } or { ..., kind: 'rating', scale: '1-5' }.
+ */
+const FROM_BUILD_TYPES = ['call-and-answer', 'poll'];
+async function fromBuild(event) {
+  const b = body(event);
+  if (!b) return json(400, { error: 'Send JSON.' });
+  const engagementType = String(b.engagementType || '');
+  if (!FROM_BUILD_TYPES.includes(engagementType)) return json(400, { error: 'engagementType must be call-and-answer or poll' });
+  const title = String(b.title || '').trim().slice(0, 200);
+  if (!title) return json(400, { error: 'Give the set a name.' });
+  const raw = Array.isArray(b.items) ? b.items : [];
+  if (!raw.length || raw.length > drafts.MAX_ITEMS) return json(400, { error: `Send 1 to ${drafts.MAX_ITEMS} questions.` });
+  const text = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const items = [];
+  for (const it of raw) {
+    const t = text(it && it.title, 300);
+    if (!t) return json(400, { error: 'Every question needs its words.' });
+    const base = { title: t, detail: text(it.detail, 600), category: text(it.category, 60) || 'General' };
+    if (engagementType === 'call-and-answer') { items.push(base); continue; }
+    if (it.kind === 'choice') {
+      const options = (Array.isArray(it.options) ? it.options : []).map((o) => text(o, 120)).filter(Boolean);
+      if (options.length < 2 || options.length > 6) return json(400, { error: 'A choice needs 2 to 6 options.' });
+      items.push({ ...base, kind: 'choice', options });
+    } else if (it.kind === 'rating') {
+      items.push({ ...base, kind: 'rating', scale: '1-5' });
+    } else {
+      return json(400, { error: 'A poll question here is a choice or a rating.' });
+    }
+  }
+  const tags = normalizeTags(Array.isArray(b.tags) ? b.tags : []);
+  const gameId = /^\d{1,10}$/.test(String(b.gameId || '')) ? String(b.gameId) : '';
+  const out = await drafts.createReadyDraft(db(), table(), {
+    event, title, engagementType, items, tags,
+    description: text(b.description, 500),
+    source: { type: 'build-room', ...(gameId ? { gameId } : {}) },
+  });
+  if (out.error) return json(out.status, { error: out.error });
+  return json(201, { draft: out.draft });
+}
+
 exports.handler = async (event) => {
   const method = event?.requestContext?.http?.method || event?.httpMethod || 'GET';
   if (method === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
   try {
     const { id, action } = routeOf(event);
     if (method === 'GET' && id === 'list') return await list(event);
+    if (method === 'POST' && id === 'from-build' && !action) return await fromBuild(event);
     if (!id || id === 'list') return json(404, { error: 'Not found.' });
     if (method === 'GET' && !action) return await getOne(event, id);
     if (method === 'POST') {

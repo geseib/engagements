@@ -1650,7 +1650,9 @@ async function takeInbox(ctx, role) {
         ExpressionAttributeNames: { '#st': 'Status' },
         ExpressionAttributeValues: { ':now': now, ':working': 'working' },
       }));
-      const verb = r.Kind === 'research' ? 'Research this for the room, with sources' : 'Give the room ideas for where to go next';
+      const verb = r.Kind === 'research' ? 'Research this for the room, with sources'
+        : r.Kind === 'questions' ? QUESTIONS_VERB
+          : 'Give the room ideas for where to go next';
       out.push({
         id: r.ReqId, kind: r.Kind, requestId: r.ReqId, subject: r.Subject || '',
         text: `${verb}: ${r.Subject || ''}`, from: 'request', as: 'do-now', askId: null, shareId: null, createdAt: r.CreatedAt,
@@ -2571,7 +2573,7 @@ async function postPoints(ctx, role, body) {
 
 /** A Research or Ideas request, for the host's Claude (forBuilder empty) or one builder's. */
 async function createPointRequest(ctx, forBuilder, body) {
-  const norm = S.normalizePointRequest(body);
+  const norm = S.normalizePointRequest(body, { builder: Boolean(forBuilder) });
   if (norm.error) return fail(400, norm.error);
   const room = await loadRoom(ctx);
   const now = new Date(nextMs(room.preqs)).toISOString();
@@ -2590,6 +2592,59 @@ async function createPointRequest(ctx, forBuilder, body) {
     CreatedAt: now,
   });
   return done(ctx, 201, { request: S.requestView(row) });
+}
+
+/**
+ * ASK CLAUDE FOR QUESTIONS (docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 7). What Claude reads with a `questions` request: the plugin's
+ * build-room skill says what a good set is; Claude writes it as a file in the
+ * repo, commits it, and sends it with share_question_set.
+ */
+const QUESTIONS_VERB = 'Write a question set for the room (the build-room skill, Writing a question set: save it as build-room/questions/<kind>-<name>.json, commit it, then call share_question_set with this requestId and the file). About';
+
+/**
+ * POST question-sets (Claude): the set it wrote. Kept on the room for the host
+ * to use at once or save to their sets (the AI drafts review behind the bell);
+ * the request it answers, if any, is done. Body: { requestId?, name, kind?,
+ * questions: [{ kind: 'ideas'|'choose'|'rate', prompt, category, detail?, options? }], file? }.
+ */
+async function postClaudeSet(ctx, body) {
+  const norm = S.normalizeClaudeSet(body);
+  if (norm.error) return fail(400, norm.error);
+  const room = await loadRoom(ctx);
+  if ((room.qsets || []).length >= 20) return fail(409, 'This room already has 20 question sets from Claude; the host can remove some');
+  const now = new Date(nextMs(room.qsets || [])).toISOString();
+  const reqId = String((body || {}).requestId || '');
+  const req = reqId ? (room.preqs || []).find((r) => r.ReqId === reqId && r.Kind === 'questions' && !r.ForBuilder) : null;
+  const sk = S.SK.qset(now);
+  const v = norm.value;
+  const row = await put(ctx, {
+    SK: sk, QSetId: sk.slice('BUILD#QSET#'.length).replace('#', '-'),
+    Title: v.name, Kind: v.kind || S.buildKindOf(room.state), Questions: v.questions,
+    ...(v.file ? { File: v.file } : {}), ...(req ? { ReqId: req.ReqId } : {}), CreatedAt: now,
+  });
+  if (req && !['done', 'failed'].includes(req.Status)) await put(ctx, { ...req, Status: 'done', Count: v.questions.length, UpdatedAt: now });
+  await logEntry(ctx, { kind: 'progress', text: `Claude wrote a question set: ${v.name} (${v.questions.length} questions)`, by: 'system', hostOnly: true });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(201, { set: S.claudeSetView(row), dropped: v.dropped });
+}
+
+/** The host: `saved` once it went to their bell as a draft; `remove` drops it from the room. */
+async function claudeSetAction(ctx, setId, body) {
+  const room = await loadRoom(ctx);
+  const row = (room.qsets || []).find((r) => r.QSetId === setId);
+  if (!row) return fail(404, 'No such question set');
+  const action = String((body || {}).action || '');
+  if (action === 'saved') {
+    const saved = await put(ctx, { ...row, SavedAt: new Date().toISOString() });
+    return done(ctx, 200, { set: S.claudeSetView(saved) });
+  }
+  if (action === 'remove') {
+    await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: row.SK } }));
+    return done(ctx, 200, { removed: true });
+  }
+  return fail(400, 'action must be saved or remove');
 }
 
 /** The host gives up on a request Claude has not finished (it will not be delivered or answered). */
@@ -3122,6 +3177,9 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'activity' && !b) return role === 'agent' ? postActivity(ctx, body) : fail(403, 'Only Claude reports its activity');
   if (a === 'points' && !b) return role === 'agent' ? postPoints(ctx, role, body) : fail(403, 'Claude posts the points; the host curates them');
   if (a === 'points' && b === 'requests' && !c) return hostOnly() || createPointRequest(ctx, '', body);
+  // Question sets Claude writes for the room (question-sets plan step 7).
+  if (a === 'question-sets' && !b) return role === 'agent' ? postClaudeSet(ctx, body) : fail(403, 'Claude sends the question set; the host saves it');
+  if (a === 'question-sets' && b && !c) return hostOnly() || claudeSetAction(ctx, b, body);
   if (a === 'points' && b === 'requests' && c && !d) return hostOnly() || pointRequestAction(ctx, c, body);
   if (a === 'points' && b === 'send' && !c) return hostOnly() || sendPoints(ctx, body);
   if (a === 'points' && b === 'vote' && !c) return hostOnly() || pointsVote(ctx, body);

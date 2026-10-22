@@ -571,6 +571,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   // a point's words and sources, a request's subject, and the run list's items.
   buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),
   buildPointReq: Object.freeze(['Subject']),
+  buildQSet: Object.freeze(['Title', 'Questions', 'File']),
   buildRun: Object.freeze(['Items']),
 
   /** CALL & ANSWER FOLLOW-UP ASKS (docs/design/ca-followup-asks SPEC §5): one

@@ -397,6 +397,17 @@ export const W = Object.freeze({
   // Question sets by kind of build (plan 2026-10-22): a set tagged for-game is for a game.
   readyForKind: (kind) => `Sets for ${kind} first.`,
   otherSets: (n) => `Other sets (${n})`,
+  // Ask Claude for questions (question-sets plan step 7).
+  askClaudeForQuestions: 'Ask Claude for questions',
+  askClaudeWhat: 'What should they cover? (optional)',
+  askClaudeSend: 'Ask Claude',
+  askClaudeDefault: (kind) => `Questions for ${kind || 'this build'}, for every part of the session`,
+  claudeWritingSet: 'Claude is writing a question set. It appears here, marked From Claude.',
+  fromClaudeChip: (name) => `From Claude: ${name}`,
+  fromClaudeUnsaved: 'From Claude, not saved yet. Ask from it now, or save it to your sets.',
+  saveClaudeSet: 'Save to my sets',
+  claudeSetSaved: 'In your bell to review. Accept it there to keep it.',
+  claudeSetFile: (file) => `Claude kept it in the project as ${file}.`,
   ratingScale: '1 needs work \u00b7 5 great',
   claudeGetsAs: 'Claude gets it as',
   // Copy pass 2026-10-10: Connect, Wrap up, End

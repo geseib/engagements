@@ -237,6 +237,21 @@ const running = {
       ],
     },
     {
+      id: 'questions-from-claude',
+      title: 'Ask Claude for questions',
+      icon: 'Sparkle',
+      blocks: [
+        { t: 'p', text: 'In Ask the room\'s ready questions, **Ask Claude for questions** asks your Claude to write a question set for this kind of build, by section. Say what it should cover, or leave it blank. Needs plugin 1.26.0.' },
+        {
+          t: 'list',
+          items: [
+            { title: 'Where it lands', text: 'Claude keeps it in the project under build-room/questions and sends it. It appears first in the ready questions, marked **From Claude**, and you can ask from it straight away.' },
+            { title: 'Keeping it', text: '**Save to my sets** puts it in your bell as a draft: a Call and Answer set for its Ideas questions, a Poll set for its Choose and Rate ones, tagged for its kind. Keep, change or leave each question, then accept it to have it in every session.' },
+          ],
+        },
+      ],
+    },
+    {
       id: 'claudes-questions',
       title: 'Claude\'s questions',
       icon: 'ChatCircleText',

@@ -9,6 +9,32 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 22 Oct 2026 (later): Ask Claude for questions in a Build Room
+
+**Test:** merge of dev `15fd6c0d`. Plan: `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (step 7). Everything in the entry below is already on test; this push adds only what is here.
+
+### New
+
+- **Ask Claude for questions** (plugin **1.26.0**). In a Build Room, Ask the room's ready questions has **Ask Claude for questions**: say what they should cover, or leave it blank, and **Ask Claude**. Claude writes a question set for this kind of build, section by section, keeps it in the project under `build-room/questions/`, commits it and sends it. It appears first in the ready questions, marked **From Claude**, and you can ask from it at once.
+- **Save to my sets** turns Claude's set into drafts in your bell: a Call & Answer set for its Ideas questions and a Poll set for its Choose and Rate ones, tagged `build-room` and for its kind. Review and accept them like any AI draft; nothing reaches your library until you do.
+- The help's Build Room guides have a section on it (*Running a Build Room › Ask Claude for questions*).
+
+### Fixed
+
+- Claude's set now takes its name from its **Title**, which a team's room keeps sealed like its other content; it used a field that is never sealed.
+
+### What to look at
+
+1. **Update the plugin** from Connect Claude Code (1.26.0) and restart Claude Code.
+2. In a Build Room, after the opening's first step, open **Ask the room**; in the ready questions press **Ask Claude for questions**, type a topic, **Ask Claude**. The line says Claude is writing; the set appears first, marked **From Claude**. Ask one of its questions.
+3. Press **Save to my sets**: the bell shows the drafts. Open one, accept it, and find the set in your question sets tagged `build-room`.
+4. In the project folder, `build-room/questions/` holds the file and git shows Claude's commit.
+
+### Known gaps
+
+- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project) ([#45](https://github.com/geseib/engagements/issues/45)).
+- Everything in the entry below, including the help gaps, still applies.
+
 ## 22 Oct 2026: Help rewritten with a ? on every screen, Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes
 
 **Test:** merge of dev `d1564358` (help refresh, ready questions by kind of build, and the Workie, prompts and drafts work from `1225bdf2`). Plans and reviews: [geseib/engagements#44](https://github.com/geseib/engagements/issues/44) (help), `docs/help-refresh/`, [geseib/engagements#38](https://github.com/geseib/engagements/issues/38), `docs/design/workie-grounding/STEP0.md`, `docs/design/prompt-versions/`, `docs/design/ai-generation-review/`.
