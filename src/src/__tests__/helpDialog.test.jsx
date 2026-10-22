@@ -121,7 +121,8 @@ describe('opening at a section', () => {
 
   test('every section of a rendered guide carries its id', () => {
     render(<HelpSystem section="player-playing" onClose={() => {}} />);
-    ['answering', 'held-back', 'voting', 'reading-long-answer'].forEach((id) => {
+    // Phase 2 (W1): voting and reading-long-answer moved to player-voting.
+    ['answering', 'call-and-answer', 'trivia', 'held-back'].forEach((id) => {
       expect(document.querySelector(`[data-section-id="${id}"]`)).toBeTruthy();
     });
   });

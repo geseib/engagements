@@ -155,6 +155,9 @@ export const HELP_SECTION_MOVES = {
   'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
   // Phase 2 (W8): how long things are kept lives with Data & privacy now.
   'admin-getting-started#sessions-expire': 'admin-data-privacy#sessions-expire',
+  // Phase 2 (W1): voting got its own player guide.
+  'player-playing#voting': 'player-voting#voting',
+  'player-playing#reading-long-answer': 'player-voting#reading-long-answer',
 };
 
 /** The section of a guide with that id, or null. */
