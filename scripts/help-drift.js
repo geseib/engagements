@@ -36,23 +36,34 @@ const COVERS = {
   'player-joining': [`${S}/components/JoinCodeEntry.jsx`, `${S}/components/JoinNameCollision.jsx`, `${S}/components/joinResult.js`],
   'player-playing': [`${S}/PlayerPage.jsx`, `${S}/components/survey`, `${S}/config/lateWords.js`],
   'player-scoring': [`${S}/components/stage/scoreboard`, `${L}/game/get-results.js`],
+  'player-voting': [`${S}/PlayerPage.jsx`, `${L}/game/submit-vote.js`],
+  'player-feedback': [`${S}/PlayerPage.jsx`, `${S}/components/RoundReport.jsx`],
+  'player-trouble': [`${S}/PlayerPage.jsx`, `${S}/components/joinResult.js`, `${S}/config/lateWords.js`],
   // hosts: setting up
   'host-quick-start': [`${S}/components/WelcomeScreen.jsx`, `${S}/components/GameSetupDialog.jsx`, `${S}/components/QuickstartMenu.jsx`, `${S}/components/stage/Dock.jsx`],
   'host-game-setup': [`${S}/components/GameSetupDialog.jsx`, `${S}/components/HostQuestionSetsDialog.jsx`, `${S}/components/stage/ScreensGroup.jsx`, `${S}/config/roomScreen.js`, `${S}/config/displayProfile.js`],
   // hosts: running the room
   'host-running-engagements': [`${S}/components/stage/SessionSetupPanel.jsx`, `${S}/components/QuestionsPanel.jsx`, `${S}/components/PastRound.jsx`, `${S}/GameHostPage.jsx`],
+  'host-session-panel': [`${S}/components/stage/SessionSetupPanel.jsx`, `${S}/components/stage/ScreensGroup.jsx`],
+  'host-stage-by-type': [`${S}/GameHostPage.jsx`, `${S}/components/stage`, `${S}/config/roomContent.js`],
   'host-late-items': [`${S}/components/LateList.jsx`, `${S}/components/ReportLate.jsx`, `${S}/config/lateWords.js`],
   'host-player-management': [`${S}/components/stage/PlayersList.jsx`, `${S}/components/JoinNameCollision.jsx`],
   // hosts: two screens and the phone
   'host-two-screens': [`${S}/components/console`, `${S}/present`, `${S}/PresentPage.jsx`, `${S}/HostRemote.jsx`, `${S}/components/stage/RoomWindowStatus.jsx`, `${S}/config/consoleWords.js`],
   // hosts: results and reports
   'host-reporting': [`${S}/components/GameReport.jsx`, `${S}/components/RoundReport.jsx`, `${S}/components/ReportsPanel.jsx`, `${S}/components/AISummaryStatus.jsx`, `${S}/components/console/panels/ReadPanel.jsx`, `${L}/game/save-report.js`],
+  'host-what-we-heard': [`${S}/components/console/panels/ReadPanel.jsx`, `${S}/components/AskComposer.jsx`, `${S}/components/FeedbackRoundPanel.jsx`, `${S}/config/followUpWords.js`],
   'host-plan': [`${S}/components/BillingPanel.jsx`, `${S}/components/UsageMeter.jsx`, `${L}/websocket/session-count.js`],
   // Build Room
   'host-build-room': [`${S}/buildroom`, `${S}/present/buildwall`, `src/public/engage-mcp.mjs`],
   // admin console
   'admin-getting-started': [`${S}/AdminPage.jsx`, `${S}/components/AdminShell.jsx`, `${S}/config/consoleSections.js`],
   'admin-question-sets': [`${S}/components/QuestionSetsPanel.jsx`, `${S}/components/QuestionSetEditor.jsx`, `${S}/components/QuestionSetUploadPanel.jsx`, `${S}/components/ArchivePanel.jsx`],
+  'admin-public-library': [`${S}/components/PublicLibraryPanel.jsx`, `${L}/admin`],
+  'admin-members': [`${S}/components/TeamPanel.jsx`],
+  'admin-activity': [`${S}/components/UsageStatsPanel.jsx`, `${S}/config/consoleSections.js`],
+  'admin-plan-usage': [`${S}/components/BillingPanel.jsx`, `${S}/components/PlanRequestDialog.jsx`, `${S}/components/LeavePlanDialog.jsx`, `${S}/components/UsageMeter.jsx`],
+  'admin-data-privacy': [`${S}/components/PrivacyPanel.jsx`, `${L}/game/session-ttl.js`, `${L}/game/save-report.js`],
   'admin-game-management': [`${S}/AdminPage.jsx`],
   'admin-settings': [`${S}/AdminPage.jsx`],
   // AI
