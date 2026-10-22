@@ -41,7 +41,6 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 /** Today's occurrences. SHRINK ONLY. */
 const BANNED_ALLOWLIST = {
   'host-late-items': { 'the wall': 1 },
-  'host-build-room': { projector: 1, PRESENT: 1 },
 };
 
 /* PRESENT is the dock's old name for the room's window (decision 1). It is a
@@ -130,12 +129,10 @@ const UNIT_CAP = 120;
 
 /** guide#section → today's words. SHRINK ONLY. */
 const LONG_SECTIONS = {
-  'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {
-  'host-build-room#during-after': 301,
 };
 
 const sections = guides.flatMap((g) => g.sections.map((s) => [`${g.id}#${s.id}`, s]));

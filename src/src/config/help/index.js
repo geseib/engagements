@@ -164,6 +164,10 @@ export const HELP_SECTION_MOVES = {
   'host-running-engagements#choosing-ask-next': 'host-session-panel#choosing-ask-next',
   'host-running-engagements#going-back-over-round': 'host-session-panel#going-back-over-round',
   'host-reporting#what-we-heard': 'host-what-we-heard#what-we-heard',
+  // Phase 2 (W7): the one Build Room guide became six. host-build-room keeps
+  // its id (the setup guide); its connecting and during-and-after sections left.
+  'host-build-room#connecting-claude': 'build-room-claude#connecting-claude',
+  'host-build-room#during-after': 'build-room-running#the-host-screen',
 };
 
 /** The section of a guide with that id, or null. */

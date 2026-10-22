@@ -92,14 +92,14 @@ export const HELP_FOR_SCREEN = {
   'ai-bell': { guide: 'glossary', section: 'the-bell' },
 
   /* ---- Build Room (host) ---- */
-  'build-create': { guide: 'host-build-room', section: 'before-start' },
-  'build-connect': { guide: 'host-build-room', section: 'connecting-claude' },
-  'build-host': { guide: 'host-build-room', section: 'during-after' },
-  'build-stage': { guide: 'host-build-room', section: 'during-after' },
-  'build-build': { guide: 'host-build-room', section: 'during-after' },
-  'build-history': { guide: 'host-build-room', section: 'during-after' },
-  'build-session-panel': { guide: 'host-build-room', section: 'during-after' },
-  'build-console': { guide: 'host-build-room', section: 'during-after' },
+  'build-create': { guide: 'host-build-room', section: 'setting-up' },
+  'build-connect': { guide: 'build-room-claude', section: 'connecting-claude' },
+  'build-host': { guide: 'build-room-running', section: 'the-host-screen' },
+  'build-stage': { guide: 'build-room-running', section: 'room-screens' },
+  'build-build': { guide: 'build-room-running', section: 'room-screens' },
+  'build-history': { guide: 'build-room-running', section: 'marks-and-history' },
+  'build-session-panel': { guide: 'host-build-room', section: 'session-panel' },
+  'build-console': { guide: 'build-room-two-screens', section: 'console' },
 
   /* ---- players ---- */
   'player-join': { guide: 'player-joining', section: 'getting-in' },
@@ -112,7 +112,7 @@ export const HELP_FOR_SCREEN = {
   'player-end': { guide: 'player-feedback', section: 'after-the-end' },
   'player-survey': { guide: 'player-playing', section: 'answering' },
   'player-event': { guide: 'glossary', section: 'event' },
-  'player-build-room': { guide: 'player-playing', section: 'answering' },
+  'player-build-room': { guide: 'player-build-room', section: 'joining' },
 };
 
 /**
@@ -125,8 +125,7 @@ export const PROVISIONAL_SCREENS = [
   'admin-public-library', 'admin-events',
   'staff-organisations', 'staff-observability', 'staff-plan-requests', 'staff-discount-codes',
   'staff-shared-library', 'staff-public-library', 'staff-moderation', 'staff-engage-settings',
-  'build-host', 'build-stage', 'build-build', 'build-history', 'build-session-panel', 'build-console',
-  'player-survey', 'player-event', 'player-build-room',
+  'player-survey', 'player-event',
 ];
 
 /**
