@@ -25,10 +25,10 @@ const manual = {
           t: 'list',
           items: [
             { title: 'Title', text: 'The short version, for lists and for the round header.' },
-            { title: 'Question', text: 'The full text, as the room will read it.' },
+            { title: 'Question detail', text: 'The full text, as the room will read it.' },
             { title: 'Options', text: 'A to D, and E and F when the question needs them: up to six. Make the wrong ones plausible or the round is not a round.' },
             { title: 'Correct answer', text: 'Which option is right. Getting this wrong is the worst bug a set can have — it is wrong in public, with points attached.' },
-            { title: 'Answer details', text: 'The explanation, revealed with the answer. This is the reveal field — see below.' },
+            { title: 'Reveal (shown only after the round)', text: 'The explanation, revealed with the answer. See below.' },
             { title: 'Category and difficulty', text: 'Used for filtering and for pacing.' },
           ],
         },
@@ -43,8 +43,8 @@ const manual = {
           t: 'list',
           items: [
             { title: 'Title', text: 'The prompt itself, usually. Short enough to project.' },
-            { title: 'Detail', text: 'The background — why you are asking, what frame to answer in.' },
-            { title: 'Custom instructions', text: 'Guidance for the answer. "One sentence", "as your worst self", "assume it already failed".' },
+            { title: 'Detail shown to the room', text: 'The background — why you are asking, what frame to answer in.' },
+            { title: 'Instruction shown to the room', text: 'Guidance for the answer. "One sentence", "as your worst self", "assume it already failed".' },
             { title: 'Category', text: 'For filtering.' },
           ],
         },
@@ -74,12 +74,12 @@ const manual = {
         },
         {
           t: 'p',
-          text: 'That is what the answer-details field is for. It is never shown to players while they are answering, so it is safe to put the spoiler there — and it is handed to the AI at results time, so the summary can compare what the room said against what was actually true, and then reveal it.',
+          text: 'That is what the **Reveal (shown only after the round)** field is for. It is never shown to players while they are answering, so it is safe to put the spoiler there — and it is handed to the AI at results time, so the summary can compare what the room said against what was actually true, and then reveal it.',
         },
         { t: 'h', text: 'It is not only for trivia' },
         {
           t: 'p',
-          text: 'The name says "answer details" and the job is wider than that. Any kind of session can use it. An art round with no right answer still has a real title worth revealing at the end.',
+          text: 'Any kind of session can use it. An art round with no right answer still has a real title worth revealing at the end.',
         },
         {
           t: 'note',

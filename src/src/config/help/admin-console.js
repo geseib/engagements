@@ -29,11 +29,13 @@ const gettingStarted = {
           t: 'table',
           head: ['Section', 'Who sees it', 'What lives there'],
           rows: [
-            ['Question sets, Sessions, Public library', 'Everyone in a team or space', 'The sets, what was run, and sets other organisations have published.'],
+            ['Overview, Question sets, Sessions, Public library', 'Everyone in a team or space', 'What is waiting on you, the sets, what was run, and sets other organisations have published.'],
+            ['Events', 'Everyone in a team or space, where events are turned on', 'One join code for a whole agenda of sessions and breaks.'],
             ['Members', 'Teams', 'Who can build and run sessions here.'],
-            ['Prompts', 'Team owners and admins, read-only', 'What the AI is told. Only Engage staff change prompts.'],
+            ['Activity', 'Team owners and admins', 'What the team ran, by month.'],
+            ['Prompts', 'Team owners and admins, and your own space, read-only', 'What the AI is told. Only Engage staff change prompts.'],
             ['Plan & usage, Data & privacy', 'Team owners and admins, and your own space', 'What this month costs; who has opened what, and how to take everything with you.'],
-            ['Organisations, Observability, Plan requests, Discount codes, Shared library, Prompts, Public library, Moderation, Accounts, Archive', 'Engage staff, switched to Engage', 'Running the platform. A team\'s content is not reachable from here.'],
+            ['Overview, Organisations, Observability, Plan requests, Discount codes, Shared library, Prompts, Public library, Moderation, Accounts, Archive, Engage settings', 'Engage staff, switched to Engage', 'Running the platform. A team\'s content is not reachable from here.'],
             ['Settings', 'Everyone, at the foot of the menu', 'Three switches, stored in this browser only.'],
           ],
         },
@@ -46,7 +48,7 @@ const gettingStarted = {
       blocks: [
         {
           t: 'p',
-          text: 'Check Accounts. Registration puts new people in the pending group and leaves them there — a host who has signed up and cannot create anything is almost always someone nobody moved into hosts.',
+          text: 'Registration puts new people in the pending group and leaves them there — a host who has signed up and cannot create anything is almost always someone nobody moved into hosts. Team owners and admins approve someone they invited with **Approve hosting** in Members. Engage staff approve everyone else in Accounts.',
         },
         {
           t: 'table',
@@ -54,7 +56,8 @@ const gettingStarted = {
           rows: [
             ['admins', 'Engage staff: the Engage sections of this console.'],
             ['hosts', 'Create and run sessions, and manage their own question sets.'],
-            ['pending', 'Sign in and nothing else. Waiting for an admin.'],
+            ['pending', 'Sign in and nothing else. Waiting for approval.'],
+            ['Disabled (not a group)', 'Nothing: they cannot sign in. Reject and Disable in Accounts put people here, and the account is kept.'],
           ],
         },
       ],
@@ -106,11 +109,11 @@ const questionSets = {
       blocks: [
         {
           t: 'p',
-          text: 'Editing a set creates a new version rather than changing the one already in use. A session that is running is never altered underneath the host running it, and a set that produced last quarter\'s results still produced them.',
+          text: 'Saving the questions creates a new version rather than changing the one already in use. A session that is running is never altered underneath the host running it, and a set that produced last quarter\'s results still produced them. The set\'s **Details** are different: they are saved in place, for anyone hosting from it.',
         },
         {
           t: 'p',
-          text: 'For hosts the same rule shows up as two different buttons: "New version" on a set they own, "Fork" on a house set. Both give them something they can edit without touching what everyone else is playing.',
+          text: 'On a set you manage, the list offers **Edit**, and the Questions panel saves as the next version ("Save as version 4"). On a set that belongs to someone else it offers **Open** and **Copy**; saving it says **Save as my own copy…** and leaves the original alone.',
         },
       ],
     },
@@ -159,7 +162,7 @@ const questionSets = {
       blocks: [
         {
           t: 'p',
-          text: 'The archive is shared: dev, test and prod all read and write the same store. That is how a set built on dev reaches prod — export it to the archive from one, import it on the other.',
+          text: 'Engage staff only. The Archive section is shared: dev, test and prod all read and write the same store. That is how one of Engage\'s sets built on dev reaches prod — export it to the archive from one, import it on the other. A team\'s or a personal space\'s sets do not go through the archive.',
         },
         {
           t: 'note',
@@ -185,13 +188,13 @@ const gameManagement = {
       blocks: [
         {
           t: 'p',
-          text: 'Every session on this environment: who ran it, what set it used, when, and how far it got. Useful for "did that offsite actually happen" and for finding a report someone has lost.',
+          text: 'Every session run in the team or space you are working in: who ran it, what set it used, when, and how far it got. Useful for "did that offsite actually happen" and for finding a report someone has lost.',
         },
         {
           t: 'note',
           tone: 'warn',
           title: 'It is not a backup',
-          text: 'Rows disappear on expiry — 90 days from creation, or 7 days once the session has started. Anything that matters gets its report saved; saved reports are listed under Reports.',
+          text: 'Rows disappear on expiry — 90 days from creation, or 7 days once the session has started. Anything that matters gets its report saved; saved reports are listed under Reports on the host welcome screen.',
         },
       ],
     },
