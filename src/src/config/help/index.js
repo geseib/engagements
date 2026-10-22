@@ -153,6 +153,8 @@ export const HELP_ALIASES = {
 export const HELP_SECTION_MOVES = {
   'host-running-engagements#laptop-console': 'host-two-screens#laptop-console',
   'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
+  // Phase 2 (W8): how long things are kept lives with Data & privacy now.
+  'admin-getting-started#sessions-expire': 'admin-data-privacy#sessions-expire',
 };
 
 /** The section of a guide with that id, or null. */

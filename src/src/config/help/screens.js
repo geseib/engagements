@@ -58,19 +58,19 @@ export const HELP_FOR_SCREEN = {
   'event-stage': { guide: 'glossary', section: 'event' },
 
   /* ---- admin console: your space and teams ---- */
-  'admin-overview': { guide: 'admin-getting-started', section: 'console-sections' },
-  'admin-question-sets': { guide: 'admin-question-sets', section: 'what-a-set-is' },
-  'admin-new-set': { guide: 'admin-question-sets', section: 'what-a-set-is' },
+  'admin-overview': { guide: 'admin-getting-started', section: 'overview' },
+  'admin-question-sets': { guide: 'admin-question-sets', section: 'the-list' },
+  'admin-new-set': { guide: 'admin-question-sets', section: 'new-set' },
   'admin-set-editor': { guide: 'builder-manual', section: 'trivia-question' },
   'admin-set-versions': { guide: 'admin-question-sets', section: 'versions-not-overwrites' },
   'admin-public-library': { guide: 'glossary', section: 'owner-tags' },
   'admin-sessions': { guide: 'admin-game-management', section: 'sessions-list' },
   'admin-events': { guide: 'glossary', section: 'event' },
   'admin-prompt-versions': { guide: 'admin-ai-prompts', section: 'versions' },
-  'admin-members': { guide: 'admin-getting-started', section: 'console-sections' },
-  'admin-activity': { guide: 'admin-getting-started', section: 'console-sections' },
+  'admin-members': { guide: 'admin-members', section: 'who-is-here' },
+  'admin-activity': { guide: 'admin-activity', section: 'reading-activity' },
   'admin-plan': { guide: 'host-plan', section: 'where-to-see-it' },
-  'admin-data-privacy': { guide: 'admin-getting-started', section: 'console-sections' },
+  'admin-data-privacy': { guide: 'admin-data-privacy', section: 'whats-recorded' },
   'admin-settings': { guide: 'admin-settings', section: 'browser-only' },
 
   /* ---- admin console: Engage staff ---- */
@@ -122,8 +122,7 @@ export const HELP_FOR_SCREEN = {
 export const PROVISIONAL_SCREENS = [
   'host-create-advanced', 'host-sessions', 'host-room-screen-chooser', 'host-dock', 'host-survey',
   'event-builder', 'event-agenda', 'event-stage',
-  'admin-new-set', 'admin-public-library', 'admin-events', 'admin-members', 'admin-activity',
-  'admin-data-privacy',
+  'admin-public-library', 'admin-events',
   'staff-organisations', 'staff-observability', 'staff-plan-requests', 'staff-discount-codes',
   'staff-shared-library', 'staff-public-library', 'staff-moderation', 'staff-engage-settings',
   'build-host', 'build-stage', 'build-build', 'build-history', 'build-session-panel', 'build-console',
