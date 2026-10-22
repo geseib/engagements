@@ -394,6 +394,9 @@ export const W = Object.freeze({
   noteForClaudePrivate: 'Note for Claude (private)',
   askedInAsk: (n) => `Asked in ask ${n}.`,
   noReadyQuestions: 'No ready questions. Tag a set build-room.',
+  // Question sets by kind of build (plan 2026-10-22): a set tagged for-game is for a game.
+  readyForKind: (kind) => `Sets for ${kind} first.`,
+  otherSets: (n) => `Other sets (${n})`,
   ratingScale: '1 needs work \u00b7 5 great',
   claudeGetsAs: 'Claude gets it as',
   // Copy pass 2026-10-10: Connect, Wrap up, End

@@ -21,6 +21,35 @@
 export const BUILD_ROOM_TAG = 'build-room';
 export const isBuildRoomSet = (set) => ((set && set.tags) || []).some((t) => String(t).toLowerCase() === BUILD_ROOM_TAG);
 
+/**
+ * WHICH KINDS OF BUILD A SET IS FOR (docs/superpowers/plans/2026-10-22-build-room-question-sets.md):
+ * its `for-<kind>` tags (tags are kebab-case: `for-game`, `for-training`). None: any kind.
+ */
+export const forKindsOf = (set) => ((set && set.tags) || [])
+  .map((t) => String(t).toLowerCase())
+  .filter((t) => t.startsWith('for-') && t.length > 4)
+  .map((t) => t.slice(4));
+
+/**
+ * The library's order once the room's kind is known: the sets for it, then the
+ * general ones (no `for-` tag), then the rest, which the library folds away.
+ * Before the kind is known, every set is shown, the general ones first.
+ */
+export function rankSetsForKind(sets, kind) {
+  const list = sets || [];
+  const general = list.filter((st) => !forKindsOf(st).length);
+  if (!kind) return { first: [], general, other: list.filter((st) => forKindsOf(st).length) };
+  const first = list.filter((st) => forKindsOf(st).includes(kind));
+  const other = list.filter((st) => forKindsOf(st).length && !forKindsOf(st).includes(kind));
+  return { first, general, other };
+}
+
+/** The kinds of build, as the library and the host read them (build-store.js BUILD_KINDS). */
+export const KIND_NAMES = Object.freeze({
+  website: 'a website', app: 'an app', game: 'a game', tool: 'a tool', document: 'a document or paper',
+  explore: 'figuring something out', training: 'a training site', dashboard: 'a dashboard',
+});
+
 /** The room's names for its three kinds. */
 export const ASKED_AS = Object.freeze({ suggest: 'Ideas', choice: 'Choose', rating: 'Rate' });
 
