@@ -20,7 +20,7 @@
  */
 export const HELP_FOR_SCREEN = {
   /* ---- screens that already have a help button ---- */
-  'host-start': { guide: 'host-quick-start', section: 'the-shape' },            // WelcomeScreen (opens the host role today)
+  'host-start': { guide: 'host-quick-start', section: 'start-screen' },         // WelcomeScreen (opens the host role today)
   'host-session-panel': { guide: 'host-running-engagements', section: 'session-panel' }, // SessionSetupPanel (opens the host role today)
   'player-page': { guide: 'player-getting-started', section: 'session-looks-like' }, // PlayerShell (opens the player role today)
   'admin-console': { guide: 'admin-getting-started', section: 'console-sections' }, // AdminPage header (opens the admin role today)
@@ -28,13 +28,13 @@ export const HELP_FOR_SCREEN = {
   'admin-settings-realtime': { guide: 'admin-settings', section: 'real-time-communication' }, // AdminPage Settings
 
   /* ---- host: setting up ---- */
-  'host-create': { guide: 'host-quick-start', section: 'step-1-create' },
-  'host-create-advanced': { guide: 'host-game-setup', section: 'settings-before-you-start' },
+  'host-create': { guide: 'host-game-setup', section: 'create-engagement' },
+  'host-create-advanced': { guide: 'host-game-setup', section: 'advanced' },
   'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },
   'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' },
-  'host-sessions': { guide: 'host-quick-start', section: 'the-shape' },
+  'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },
   'host-reports': { guide: 'host-reporting', section: 'session-report' },
-  'host-room-screen-chooser': { guide: 'host-game-setup', section: 'settings-before-you-start' },
+  'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' },
 
   /* ---- host: running the room (one screen) ---- */
   'host-stage': { guide: 'host-quick-start', section: 'step-3-run-rounds' },
