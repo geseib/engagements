@@ -48,6 +48,8 @@ In the same push, before the merge into `test`:
 
 `tests/release-notes.js` checks the notes' shape. It cannot check that they are current;
 that is on whoever pushes.
+`node scripts/help-drift.js` lists, per help guide, the commits to the code it covers since
+the guide last changed (advisory); read the guides it names before writing the help step.
 
 ## **WHAT COUNTS AS A DEPLOY — read this before believing the template**
 
