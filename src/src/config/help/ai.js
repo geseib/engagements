@@ -10,160 +10,6 @@
  * fix.
  */
 
-const gettingStarted = {
-  id: 'admin-getting-started',
-  title: 'Getting started',
-  icon: 'Gear',
-  summary: 'The console\'s sections, who sees which, and what each of them owns.',
-  sections: [
-    {
-      title: 'What the console is for',
-      icon: 'Buildings',
-      blocks: [
-        {
-          t: 'p',
-          text: 'The console shows what your role allows in the team or space you are working in. Engage staff switch to Engage, at the top of the console, for the Engage sections; the two are never on screen together.',
-        },
-        {
-          t: 'table',
-          head: ['Section', 'Who sees it', 'What lives there'],
-          rows: [
-            ['Question sets, Sessions, Public library', 'Everyone in a team or space', 'The sets, what was run, and sets other organisations have published.'],
-            ['Members', 'Teams', 'Who can build and run sessions here.'],
-            ['Prompts', 'Team owners and admins, read-only', 'What the AI is told. Only Engage staff change prompts.'],
-            ['Plan & usage, Data & privacy', 'Team owners and admins, and your own space', 'What this month costs; who has opened what, and how to take everything with you.'],
-            ['Organisations, Observability, Plan requests, Discount codes, Shared library, Prompts, Public library, Moderation, Accounts, Archive', 'Engage staff, switched to Engage', 'Running the platform. A team\'s content is not reachable from here.'],
-            ['Settings', 'Everyone, at the foot of the menu', 'Three switches, stored in this browser only.'],
-          ],
-        },
-      ],
-    },
-    {
-      title: 'The first thing to do',
-      icon: 'UsersThree',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Check Accounts. Registration puts new people in the pending group and leaves them there — a host who has signed up and cannot create anything is almost always someone nobody moved into hosts.',
-        },
-        {
-          t: 'table',
-          head: ['Group', 'Can'],
-          rows: [
-            ['admins', 'Engage staff: the Engage sections of this console.'],
-            ['hosts', 'Create and run sessions, and manage their own question sets.'],
-            ['pending', 'Sign in and nothing else. Waiting for an admin.'],
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Sessions expire',
-      icon: 'CalendarBlank',
-      blocks: [
-        {
-          t: 'note',
-          tone: 'warn',
-          title: '90 days, or 7 once started',
-          text: 'Session data is kept 90 days from creation, or 7 days once the session has started, whichever comes first. The Sessions list is not an archive. Save the report while the session still exists; a saved report is kept 90 days or a year.',
-        },
-      ],
-    },
-  ],
-};
-
-const questionSets = {
-  id: 'admin-question-sets',
-  title: 'Question sets',
-  icon: 'Books',
-  summary: 'Creating, versioning, importing, and what quickstart does.',
-  sections: [
-    {
-      title: 'What a set is',
-      icon: 'Books',
-      blocks: [
-        {
-          t: 'p',
-          text: 'A named collection of questions of one kind, tagged by category. A session plays one set. Everything a host can choose at setup comes from here.',
-        },
-        { t: 'gameTypes' },
-        {
-          t: 'note',
-          tone: 'info',
-          title: 'Running a survey',
-          text: 'A survey session collects answers at each person’s own pace: the host opens it, people answer on their phones, and the host closes it when the room is done. Names is chosen when the session is created — Anonymous, Who finished or Named — and cannot change once the survey opens, because it decides what is recorded, not just what is shown.',
-        },
-      ],
-    },
-    {
-      title: 'Versions, not overwrites',
-      icon: 'FloppyDisk',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Editing a set creates a new version rather than changing the one already in use. A session that is running is never altered underneath the host running it, and a set that produced last quarter\'s results still produced them.',
-        },
-        {
-          t: 'p',
-          text: 'For hosts the same rule shows up as two different buttons: "New version" on a set they own, "Fork" on a house set. Both give them something they can edit without touching what everyone else is playing.',
-        },
-      ],
-    },
-    {
-      title: 'Quickstart',
-      icon: 'Lightning',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Marking a set for quickstart puts it on the host welcome screen\'s Quick start menu — the one-tap list for when someone needs ten minutes of something now.',
-        },
-        {
-          t: 'p',
-          text: 'Click the set\'s quickstart tag in the list to toggle it. The click is the change; there is no dialog and no save. Hosts can do the same on their own set list.',
-        },
-        {
-          t: 'note',
-          tone: 'tip',
-          title: 'Keep it short',
-          text: 'A quickstart menu with thirty entries is a set list with extra steps. The value is that it fits on one screen.',
-        },
-      ],
-    },
-    {
-      title: 'Pictures in questions',
-      icon: 'Image',
-      blocks: [
-        {
-          t: 'p',
-          text: 'A question can carry a picture — the Picture field on the question editor. Art rounds are the obvious case: the image is the question, and the text asks what people make of it.',
-        },
-        {
-          t: 'note',
-          tone: 'tip',
-          title: 'Pair a picture with a reveal',
-          text: 'A picture round is much better when the set also fills in the withheld detail — the real title, the artist, the year — so the AI can reveal it after everyone has committed to an answer. See the Builder guides.',
-        },
-      ],
-    },
-    {
-      title: 'Moving sets between environments',
-      icon: 'Package',
-      blocks: [
-        {
-          t: 'p',
-          text: 'The archive is shared: dev, test and prod all read and write the same store. That is how a set built on dev reaches prod — export it to the archive from one, import it on the other.',
-        },
-        {
-          t: 'note',
-          tone: 'warn',
-          title: 'A set carries its prompt by name',
-          text: 'Prompt ids are per-environment, so the link between a set and its generation prompt is carried across by prompt NAME. Import the prompt before the set, or the set arrives with nothing linked.',
-        },
-      ],
-    },
-  ],
-};
-
 const prompts = {
   id: 'admin-ai-prompts',
   title: 'Prompts',
@@ -171,6 +17,7 @@ const prompts = {
   summary: 'The two kinds of prompt, their statuses, and the difference between Retire and Copy to archive.',
   sections: [
     {
+      id: 'two-kinds-one-library',
       title: 'Two kinds, one library',
       icon: 'Sparkle',
       blocks: [
@@ -188,6 +35,7 @@ const prompts = {
       ],
     },
     {
+      id: 'statuses',
       title: 'Statuses',
       icon: 'ListChecks',
       blocks: [
@@ -215,6 +63,7 @@ const prompts = {
         the list, precisely because the previous single button did both and the
         word "Archive" was doing double duty.
       */
+      id: 'retire-or-copy',
       title: 'Retire and Copy to archive are different things',
       icon: 'Package',
       blocks: [
@@ -243,6 +92,7 @@ const prompts = {
       ],
     },
     {
+      id: 'analysis-output',
       title: 'What an analysis prompt must produce',
       icon: 'FileText',
       blocks: [
@@ -268,6 +118,7 @@ What the room said, and what it adds up to.
       ],
     },
     {
+      id: 'placeholders',
       title: 'Placeholders',
       icon: 'ChartBar',
       blocks: [
@@ -303,6 +154,7 @@ What the room said, and what it adds up to.
       ],
     },
     {
+      id: 'managing-them',
       title: 'Managing them',
       icon: 'ListChecks',
       blocks: [
@@ -330,6 +182,7 @@ What the room said, and what it adds up to.
         the library marks prompts the repo has a newer version of, and Review
         saves the repo's text as a new version. Nothing is deleted.
       */
+      id: 'versions',
       title: 'Versions, and updates from the repo',
       icon: 'ArrowCounterClockwise',
       blocks: [
@@ -363,6 +216,7 @@ What the room said, and what it adds up to.
       ],
     },
     {
+      id: 'output-wrong',
       title: 'When the output is wrong',
       icon: 'Wrench',
       blocks: [
@@ -387,6 +241,7 @@ const aiBuilders = {
   summary: 'Generating a question set, and checking it before anyone plays it.',
   sections: [
     {
+      id: 'what-builders-do',
       title: 'What the builders do',
       icon: 'MagicWand',
       blocks: [
@@ -407,6 +262,7 @@ const aiBuilders = {
       ],
     },
     {
+      id: 'drafts-bell-review',
       title: 'Drafts, the bell, and the review',
       icon: 'Bell',
       blocks: [
@@ -432,6 +288,7 @@ const aiBuilders = {
       ],
     },
     {
+      id: 'accepting-taking-back',
       title: 'Accepting, and taking it back',
       icon: 'ArrowCounterClockwise',
       blocks: [
@@ -452,6 +309,7 @@ const aiBuilders = {
       ],
     },
     {
+      id: 'reviewing-output',
       title: 'Reviewing what came back',
       icon: 'MagnifyingGlass',
       blocks: [
@@ -473,6 +331,7 @@ const aiBuilders = {
       ],
     },
     {
+      id: 'generation-prompts',
       title: 'Generation prompts shape the output',
       icon: 'Sparkle',
       blocks: [
@@ -485,91 +344,113 @@ const aiBuilders = {
   ],
 };
 
-const gameManagement = {
-  id: 'admin-game-management',
-  title: 'Sessions',
-  icon: 'GameController',
-  summary: 'What hosts have run, and what you can tell from it.',
+/**
+ * THE TWO BUILDER GUIDES — for whoever writes the questions, who may be an
+ * admin, may be a host with their own set, and is doing a different job from
+ * either while they are doing it.
+ *
+ * The reveal section is the reason this role's guides needed writing rather
+ * than folding into Admin. The withheld-detail field is the single most
+ * misunderstood thing in a question set: it shipped populated but untagged, so
+ * the AI was told to reveal something the editor never offered a way to fill
+ * in, and rooms watched the AI promise a reveal that never arrived.
+ */
+
+const ai = {
+  id: 'builder-ai',
+  title: 'Building with AI',
+  icon: 'MagicWand',
+  summary: 'Getting a usable set out of a generator, and what to check before anyone plays it.',
   sections: [
     {
-      title: 'The Sessions list',
-      icon: 'GameController',
+      id: 'describing-it',
+      title: 'Describing what you want',
+      icon: 'ChatCircleText',
       blocks: [
         {
           t: 'p',
-          text: 'Every session on this environment: who ran it, what set it used, when, and how far it got. Useful for "did that offsite actually happen" and for finding a report someone has lost.',
+          text: 'The generator is much better with constraints than with adjectives. "Fun questions about technology" produces exactly what you would expect. Say who the room is, what you want them arguing about, and how long you have.',
+        },
+        {
+          t: 'list',
+          items: [
+            'Who is in the room — a team, a conference, a family at Christmas.',
+            'What the session is actually for — warm-up, retrospective, teaching something.',
+            'The tone, in words you would use to a person.',
+            'How many questions, and roughly how long each should take.',
+          ],
         },
         {
           t: 'note',
-          tone: 'warn',
-          title: 'It is not a backup',
-          text: 'Rows disappear on expiry — 90 days from creation, or 7 days once the session has started. Anything that matters gets its report saved; saved reports are listed under Reports.',
+          tone: 'tip',
+          title: 'Lock the fields you have already decided',
+          text: 'The assistant can fill the metadata from your description, and a locked field is left alone. Lock the name and the category list, then let it regenerate the rest as many times as you like.',
         },
       ],
     },
     {
-      title: 'When a host says it went wrong',
-      icon: 'Wrench',
+      id: 'runs-as-a-job',
+      title: 'It runs as a job, into a draft',
+      icon: 'Timer',
       blocks: [
+        {
+          t: 'p',
+          text: 'A set is not generated while you wait. It runs on the server and writes into a draft, so you can close the dialog and get on with something else. The bell in the top line tells you when the draft is ready, on any device, and the draft waits thirty days for you to review it.',
+        },
+        {
+          t: 'p',
+          text: 'Before it starts, the builder shows where the set will be saved — your space, a team, or Engage for Engage staff — and lets you change it. Questions added to an existing set always go into that set\'s library. Public is not a choice here: publish a set once it is saved.',
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'Nothing is saved until you accept',
+          text: 'Not the set, and not a new version of one. If a set of the same name already exists when you accept, you are asked for another name; nothing you already have is replaced.',
+        },
+      ],
+    },
+    {
+      id: 'before-anyone-plays',
+      title: 'Before you let anyone play it',
+      icon: 'MagnifyingGlass',
+      blocks: [
+        {
+          t: 'note',
+          tone: 'warn',
+          title: 'Check the answer keys',
+          text: 'A generated trivia question can be fluent and wrong. It will be wrong in front of a room, with points riding on it, and you will be the one arguing with somebody who knows the real answer.',
+        },
         {
           t: 'list',
           items: [
-            { title: '"Players could not join"', text: 'Check the session was started, not merely created. Created sessions are not joinable and the QR is not up yet.' },
-            { title: '"Nothing updated on screen"', text: 'Real-time updates ride a WebSocket. On a restrictive network it falls back to polling — Settings has the switch.' },
-            { title: '"The AI said nothing"', text: 'Check the set has an analysis prompt linked, and that the prompt is Active.' },
-            { title: '"The reveal never happened"', text: 'The question\'s withheld-detail field is empty. That is the set, not the session.' },
+            'Exactly one option is right, and the other three are plausible.',
+            'The answer-details field is filled in, especially on any round meant to end in a reveal.',
+            'The categories are a usable handful, not twenty synonyms.',
+            'Nothing is subtly about the wrong country, decade or company.',
           ],
         },
       ],
     },
-  ],
-};
-
-const settings = {
-  id: 'admin-settings',
-  title: 'Settings',
-  icon: 'Gear',
-  summary: 'Three switches, and the important thing about all three.',
-  sections: [
     {
-      title: 'They are stored in this browser only',
-      icon: 'Warning',
-      blocks: [
-        {
-          t: 'note',
-          tone: 'warn',
-          title: 'Nobody else gets your settings',
-          text: 'These are local to the browser you set them in. Turning polling on here does not turn it on for a host on another machine, and clearing site data resets them. They are for diagnosing, not for configuring the platform.',
-        },
-      ],
-    },
-    {
-      title: 'Real-time communication',
-      icon: 'Broadcast',
+      id: 'same-problem-every-time',
+      title: 'If it keeps coming out wrong the same way',
+      icon: 'Sparkle',
       blocks: [
         {
           t: 'p',
-          text: 'WebSocket is the default: the server pushes changes and screens follow the host without refreshing. Turn it off and the app polls over HTTP instead — slower and chattier, but it survives networks that block WebSockets. Corporate guest wifi is the usual reason to reach for it.',
-        },
-      ],
-    },
-    {
-      title: 'Debug settings',
-      icon: 'Bug',
-      blocks: [
-        {
-          t: 'p',
-          text: '"Show AI Prompts in Debug Mode" prints the prompt actually sent to the model above the AI output, in both the results page and the AI-ify dialog — with every placeholder already substituted. When the AI says something inexplicable, this is where the explanation is.',
+          text: 'Repeated, consistent problems are the generation prompt rather than your description. Too long, too corporate, always four options when you asked for three — fix the prompt once in the Prompts section and every future set inherits the fix.',
         },
       ],
     },
   ],
 };
 
-export const ADMIN_ROLE = {
-  id: 'admin',
-  title: 'For admins',
-  icon: 'Gear',
-  blurb: 'The console: question sets, members, plans, prompts and the shared archive.',
-  guides: [gettingStarted, questionSets, prompts, aiBuilders, gameManagement, settings],
+/**
+ * The ai area. Assembled into roles by ./index.js (ROLE_AREAS); see
+ * docs/help-refresh/STRUCTURE.md for the map and the conventions.
+ * AI: the builders, drafts and the bell, prompts, Workie. Two roles read it.
+ */
+export const AREA = {
+  id: 'ai',
+  guides: { admin: [prompts, aiBuilders], builder: [ai] },
 };

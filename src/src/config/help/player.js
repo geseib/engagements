@@ -19,6 +19,7 @@ const gettingStarted = {
   summary: 'What this is, and what you need. Which is almost nothing.',
   sections: [
     {
+      id: 'what-you-need',
       title: 'What you need',
       icon: 'DeviceMobile',
       blocks: [
@@ -38,6 +39,7 @@ const gettingStarted = {
       ],
     },
     {
+      id: 'session-looks-like',
       title: 'What a session looks like',
       icon: 'GameController',
       blocks: [
@@ -58,6 +60,7 @@ const gettingStarted = {
       ],
     },
     {
+      id: 'who-sees-your-name',
       title: 'Who sees your name',
       icon: 'EyeSlash',
       blocks: [
@@ -83,6 +86,7 @@ const joining = {
   summary: 'Getting in, getting back in, and what to do when your name is taken.',
   sections: [
     {
+      id: 'getting-in',
       title: 'Getting in',
       icon: 'MapPin',
       blocks: [
@@ -104,6 +108,7 @@ const joining = {
       ],
     },
     {
+      id: 'lost-the-page',
       title: 'If you lose the page',
       icon: 'ArrowsClockwise',
       blocks: [
@@ -123,6 +128,7 @@ const joining = {
         buttons are quoted exactly as `JoinNameCollision.jsx` renders them,
         because a player reading this is looking at those buttons right now.
       */
+      id: 'name-taken',
       title: 'When your name is taken',
       icon: 'Lock',
       blocks: [
@@ -157,6 +163,7 @@ const joining = {
       ],
     },
     {
+      id: 'other-things-join-screen',
       title: 'Other things the join screen might say',
       icon: 'Warning',
       blocks: [
@@ -181,6 +188,7 @@ const playing = {
   summary: 'Answering, voting, and reading long answers on a small screen.',
   sections: [
     {
+      id: 'answering',
       title: 'Answering',
       icon: 'ChatCircleText',
       blocks: [
@@ -224,6 +232,7 @@ const playing = {
       ],
     },
     {
+      id: 'held-back',
       title: 'Some rounds hold something back',
       icon: 'EyeSlash',
       blocks: [
@@ -238,6 +247,7 @@ const playing = {
       ],
     },
     {
+      id: 'voting',
       title: 'Voting',
       icon: 'Medal',
       blocks: [
@@ -260,6 +270,7 @@ const playing = {
       ],
     },
     {
+      id: 'reading-long-answer',
       title: 'Reading a long answer',
       icon: 'MagnifyingGlass',
       blocks: [
@@ -290,6 +301,7 @@ const scoring = {
   summary: 'Where points come from, and why the scoreboard moved.',
   sections: [
     {
+      id: 'points-earned',
       title: 'How points are earned',
       icon: 'Medal',
       blocks: [
@@ -317,6 +329,7 @@ const scoring = {
       ],
     },
     {
+      id: 'scoreboard',
       title: 'The scoreboard',
       icon: 'ChartLineUp',
       blocks: [
@@ -350,10 +363,11 @@ const scoring = {
   ],
 };
 
-export const PLAYER_ROLE = {
+/**
+ * The player area. Assembled into roles by ./index.js (ROLE_AREAS); see
+ * docs/help-refresh/STRUCTURE.md for the map and the conventions.
+ */
+export const AREA = {
   id: 'player',
-  title: 'For players',
-  icon: 'UsersThree',
-  blurb: 'You scanned a code and you are in the room. Start here.',
-  guides: [gettingStarted, joining, playing, scoring],
+  guides: { player: [gettingStarted, joining, playing, scoring] },
 };

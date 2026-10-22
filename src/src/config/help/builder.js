@@ -17,6 +17,7 @@ const manual = {
   summary: 'The fields, what each one is for, and the one everybody leaves empty.',
   sections: [
     {
+      id: 'trivia-question',
       title: 'A trivia question',
       icon: 'Brain',
       blocks: [
@@ -34,6 +35,7 @@ const manual = {
       ],
     },
     {
+      id: 'open-answer-question',
       title: 'An open-answer question',
       icon: 'ChatCircleText',
       blocks: [
@@ -62,6 +64,7 @@ const manual = {
         revealed (or the creator of the question set really) until after they
         have responded with their thoughts."*
       */
+      id: 'holding-back',
       title: 'Holding something back until they have answered',
       icon: 'EyeSlash',
       blocks: [
@@ -93,6 +96,7 @@ const manual = {
       ],
     },
     {
+      id: 'pictures',
       title: 'Pictures',
       icon: 'Image',
       blocks: [
@@ -103,6 +107,7 @@ const manual = {
       ],
     },
     {
+      id: 'categories',
       title: 'Categories',
       icon: 'ListChecks',
       blocks: [
@@ -121,95 +126,12 @@ const manual = {
   ],
 };
 
-const ai = {
-  id: 'builder-ai',
-  title: 'Building with AI',
-  icon: 'MagicWand',
-  summary: 'Getting a usable set out of a generator, and what to check before anyone plays it.',
-  sections: [
-    {
-      title: 'Describing what you want',
-      icon: 'ChatCircleText',
-      blocks: [
-        {
-          t: 'p',
-          text: 'The generator is much better with constraints than with adjectives. "Fun questions about technology" produces exactly what you would expect. Say who the room is, what you want them arguing about, and how long you have.',
-        },
-        {
-          t: 'list',
-          items: [
-            'Who is in the room — a team, a conference, a family at Christmas.',
-            'What the session is actually for — warm-up, retrospective, teaching something.',
-            'The tone, in words you would use to a person.',
-            'How many questions, and roughly how long each should take.',
-          ],
-        },
-        {
-          t: 'note',
-          tone: 'tip',
-          title: 'Lock the fields you have already decided',
-          text: 'The assistant can fill the metadata from your description, and a locked field is left alone. Lock the name and the category list, then let it regenerate the rest as many times as you like.',
-        },
-      ],
-    },
-    {
-      title: 'It runs as a job, into a draft',
-      icon: 'Timer',
-      blocks: [
-        {
-          t: 'p',
-          text: 'A set is not generated while you wait. It runs on the server and writes into a draft, so you can close the dialog and get on with something else. The bell in the top line tells you when the draft is ready, on any device, and the draft waits thirty days for you to review it.',
-        },
-        {
-          t: 'p',
-          text: 'Before it starts, the builder shows where the set will be saved — your space, a team, or Engage for Engage staff — and lets you change it. Questions added to an existing set always go into that set\'s library. Public is not a choice here: publish a set once it is saved.',
-        },
-        {
-          t: 'note',
-          tone: 'info',
-          title: 'Nothing is saved until you accept',
-          text: 'Not the set, and not a new version of one. If a set of the same name already exists when you accept, you are asked for another name; nothing you already have is replaced.',
-        },
-      ],
-    },
-    {
-      title: 'Before you let anyone play it',
-      icon: 'MagnifyingGlass',
-      blocks: [
-        {
-          t: 'note',
-          tone: 'warn',
-          title: 'Check the answer keys',
-          text: 'A generated trivia question can be fluent and wrong. It will be wrong in front of a room, with points riding on it, and you will be the one arguing with somebody who knows the real answer.',
-        },
-        {
-          t: 'list',
-          items: [
-            'Exactly one option is right, and the other three are plausible.',
-            'The answer-details field is filled in, especially on any round meant to end in a reveal.',
-            'The categories are a usable handful, not twenty synonyms.',
-            'Nothing is subtly about the wrong country, decade or company.',
-          ],
-        },
-      ],
-    },
-    {
-      title: 'If it keeps coming out wrong the same way',
-      icon: 'Sparkle',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Repeated, consistent problems are the generation prompt rather than your description. Too long, too corporate, always four options when you asked for three — fix the prompt once in the Prompts section and every future set inherits the fix.',
-        },
-      ],
-    },
-  ],
-};
-
-export const BUILDER_ROLE = {
+/**
+ * The builder area. Assembled into roles by ./index.js (ROLE_AREAS); see
+ * docs/help-refresh/STRUCTURE.md for the map and the conventions.
+ * Writing questions by hand.
+ */
+export const AREA = {
   id: 'builder',
-  title: 'For builders',
-  icon: 'Buildings',
-  blurb: 'Writing the questions, by hand or with the AI.',
-  guides: [manual, ai],
+  guides: { builder: [manual] },
 };

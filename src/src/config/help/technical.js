@@ -15,6 +15,7 @@ const troubleshooting = {
   summary: 'What is actually wrong, arranged by whose screen is showing it.',
   sections: [
     {
+      id: 'players-cannot-get-in',
       title: 'Players cannot get in',
       icon: 'Lock',
       blocks: [
@@ -32,6 +33,7 @@ const troubleshooting = {
       ],
     },
     {
+      id: 'screens-not-keeping-up',
       title: 'Screens are not keeping up',
       icon: 'Broadcast',
       blocks: [
@@ -50,6 +52,7 @@ const troubleshooting = {
       ],
     },
     {
+      id: 'ai-not-useful',
       title: 'The AI did not say anything useful',
       icon: 'Sparkle',
       blocks: [
@@ -66,6 +69,7 @@ const troubleshooting = {
       ],
     },
     {
+      id: 'signing-in',
       title: 'Signing in',
       icon: 'UserCircle',
       blocks: [
@@ -86,6 +90,7 @@ const troubleshooting = {
       ],
     },
     {
+      id: 'data-vanished',
       title: 'Data that has vanished',
       icon: 'CalendarBlank',
       blocks: [
@@ -107,6 +112,7 @@ const requirements = {
   summary: 'Devices, browsers, network, and the room itself.',
   sections: [
     {
+      id: 'players',
       title: 'Players',
       icon: 'DeviceMobile',
       blocks: [
@@ -122,6 +128,7 @@ const requirements = {
       ],
     },
     {
+      id: 'hosts',
       title: 'Hosts',
       icon: 'Monitor',
       blocks: [
@@ -136,6 +143,7 @@ const requirements = {
       ],
     },
     {
+      id: 'network',
       title: 'The network',
       icon: 'Broadcast',
       blocks: [
@@ -152,6 +160,7 @@ const requirements = {
       ],
     },
     {
+      id: 'video-call',
       title: 'Running it on a video call',
       icon: 'Airplane',
       blocks: [
@@ -169,10 +178,11 @@ const requirements = {
   ],
 };
 
-export const TECHNICAL_ROLE = {
+/**
+ * The technical area. Assembled into roles by ./index.js (ROLE_AREAS); see
+ * docs/help-refresh/STRUCTURE.md for the map and the conventions.
+ */
+export const AREA = {
   id: 'technical',
-  title: 'Technical',
-  icon: 'Wrench',
-  blurb: 'When something is not working.',
-  guides: [troubleshooting, requirements],
+  guides: { technical: [troubleshooting, requirements] },
 };

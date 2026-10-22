@@ -1,8 +1,23 @@
-import { PLAYER_ROLE } from './player';
-import { HOST_ROLE } from './host';
-import { ADMIN_ROLE } from './admin';
-import { BUILDER_ROLE } from './builder';
-import { TECHNICAL_ROLE } from './technical';
+import { AREA as player } from './player';
+import { AREA as playerSurveys } from './player-surveys';
+import { AREA as playerEvents } from './player-events';
+import { AREA as buildRoomParticipant } from './build-room-participant';
+import { AREA as hostSetup } from './host-setup';
+import { AREA as hostRunning } from './host-running';
+import { AREA as hostTwoScreens } from './host-two-screens';
+import { AREA as hostSurveys } from './host-surveys';
+import { AREA as hostEvents } from './host-events';
+import { AREA as hostReports } from './host-reports';
+import { AREA as buildRoom } from './build-room';
+import { AREA as buildRoomClaude } from './build-room-claude';
+import { AREA as hostPlan } from './host-plan';
+import { AREA as adminConsole } from './admin-console';
+import { AREA as adminTeam } from './admin-team';
+import { AREA as adminStaff } from './admin-staff';
+import { AREA as ai } from './ai';
+import { AREA as builder } from './builder';
+import { AREA as technical } from './technical';
+import { AREA as glossary } from './glossary';
 
 /**
  * THE WHOLE HELP CORPUS, AND THE ONLY LIST OF IT.
@@ -20,11 +35,70 @@ import { TECHNICAL_ROLE } from './technical';
  * guide is advertised because it is here, and it is renderable because it is
  * here.
  *
+ * ONE FILE PER AREA (help refresh Phase 0, 22 Oct 2026). The guides live in
+ * area files (`./host-setup.js`, `./ai.js`, …) so the writers of different
+ * areas never edit the same file. Each area exports `AREA = { id, guides }`,
+ * where `guides` is keyed by ROLE: an area can feed more than one role (`ai`
+ * feeds admin and builder). The roles below say which areas they read, in
+ * order, and a role's guides are those areas' guides for it, concatenated.
+ * The full map is docs/help-refresh/STRUCTURE.md.
+ *
  * Ordered players-first. The old home screen listed Admin, Host, Player,
  * Builder, Technical — the org chart, not the room. Most people who ever open
  * this are holding a phone and trying to answer a question.
  */
-export const HELP_ROLES = [PLAYER_ROLE, HOST_ROLE, ADMIN_ROLE, BUILDER_ROLE, TECHNICAL_ROLE];
+const ROLE_DEFS = [
+  {
+    id: 'player',
+    title: 'For players',
+    icon: 'UsersThree',
+    blurb: 'You scanned a code and you are in the room. Start here.',
+    areas: [player, playerSurveys, playerEvents, buildRoomParticipant],
+  },
+  {
+    id: 'host',
+    title: 'For hosts',
+    icon: 'GameController',
+    blurb: 'Running a session in front of a room.',
+    areas: [
+      hostSetup, hostRunning, hostTwoScreens, hostSurveys, hostEvents,
+      hostReports, buildRoom, buildRoomClaude, hostPlan,
+    ],
+  },
+  {
+    id: 'admin',
+    title: 'For admins',
+    icon: 'Gear',
+    blurb: 'The console: question sets, members, plans, prompts and the shared archive.',
+    areas: [adminConsole, ai, adminTeam, adminStaff],
+  },
+  {
+    id: 'builder',
+    title: 'For builders',
+    icon: 'Buildings',
+    blurb: 'Writing the questions, by hand or with the AI.',
+    areas: [builder, ai],
+  },
+  {
+    /* The glossary ("Words we use") is one guide, here, last. A guide may
+       belong to one role only (guide ids are unique across roles), so instead
+       of a copy under every role the home screen and the modal footer link to
+       it directly. */
+    id: 'technical',
+    title: 'Technical',
+    icon: 'Wrench',
+    blurb: 'When something is not working.',
+    areas: [technical, glossary],
+  },
+];
+
+/** Every area, in the order the roles read them (each once). */
+export const HELP_AREAS = [...new Set(ROLE_DEFS.flatMap((role) => role.areas))];
+
+export const HELP_ROLES = ROLE_DEFS.map(({ areas, ...role }) => ({
+  ...role,
+  guides: areas.flatMap((area) => (area.guides && area.guides[role.id]) || []),
+}));
 
 export const ROLE_BY_ID = Object.fromEntries(HELP_ROLES.map((role) => [role.id, role]));
 
@@ -35,6 +109,11 @@ export const GUIDE_BY_ID = Object.fromEntries(
 /** Which role owns a guide — for the breadcrumb, and for search result labels. */
 export const ROLE_ID_BY_GUIDE_ID = Object.fromEntries(
   HELP_ROLES.flatMap((role) => role.guides.map((guide) => [guide.id, role.id]))
+);
+
+/** Which area file a guide lives in — for the drift report and STRUCTURE.md. */
+export const AREA_ID_BY_GUIDE_ID = Object.fromEntries(
+  HELP_AREAS.flatMap((area) => Object.values(area.guides || {}).flat().map((g) => [g.id, area.id]))
 );
 
 /**
@@ -49,7 +128,8 @@ export const ROLE_ID_BY_GUIDE_ID = Object.fromEntries(
  *
  * Aliases rather than renaming the call sites, because these ids are also in
  * URLs and in muscle memory. The rule the test enforces is only that every
- * alias resolves to something real.
+ * alias resolves to something real. When a guide is split or renamed, its old
+ * id goes here so no link breaks.
  */
 export const HELP_ALIASES = {
   'ai-prompts': 'admin-ai-prompts',
@@ -59,25 +139,74 @@ export const HELP_ALIASES = {
   billing: 'host-plan',
   players: 'host-player-management',
   troubleshooting: 'technical-troubleshooting',
+  // Phase 0: the two-screen and phone-remote sections left host-running-engagements.
+  'two-screens': 'host-two-screens',
+  'phone-remote': 'host-two-screens',
+  words: 'glossary',
 };
 
 /**
- * Where a `section` prop should land: a guide, a role index, or home.
+ * SECTIONS THAT MOVED BETWEEN GUIDES, old `guide#section` → new. A section
+ * keeps its id when it moves; the guide part is what changes, and an address
+ * written against the old guide still lands on the words.
+ */
+export const HELP_SECTION_MOVES = {
+  'host-running-engagements#laptop-console': 'host-two-screens#laptop-console',
+  'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
+};
+
+/** The section of a guide with that id, or null. */
+export function findSection(guideId, sectionId) {
+  const guide = GUIDE_BY_ID[guideId];
+  if (!guide || !sectionId) return null;
+  return guide.sections.find((s) => s.id === sectionId) || null;
+}
+
+/**
+ * Where a `section` prop should land: a guide, a role index, or home — and,
+ * for a guide, optionally one of its sections.
+ *
+ * Takes `id` as a role id, a guide id, an alias, or `guide#section`; a second
+ * argument is a section id within the guide. The result carries `section` only
+ * when that section really exists, so a stale section id lands at the top of
+ * the right guide rather than nowhere.
  *
  * Never returns null. An id nobody recognises goes home rather than to a dead
  * screen — the old default branch rendered a box apologising for content that
  * was never coming, which reads as a broken product rather than a wrong link.
  */
-export function resolveHelpTarget(id) {
+export function resolveHelpTarget(id, sectionId) {
   if (!id) return { kind: 'home', id: 'home' };
-  const key = String(id);
-  if (key === 'home') return { kind: 'home', id: 'home' };
+  let key = String(id);
+  let section = sectionId ? String(sectionId) : '';
+  const hash = key.indexOf('#');
+  if (hash >= 0) {
+    if (!section) section = key.slice(hash + 1);
+    key = key.slice(0, hash);
+  }
+  if (key === 'home' || !key) return { kind: 'home', id: 'home' };
   if (ROLE_BY_ID[key]) return { kind: 'role', id: key };
-  if (GUIDE_BY_ID[key]) return { kind: 'guide', id: key };
-  const aliased = HELP_ALIASES[key];
-  if (aliased && GUIDE_BY_ID[aliased]) return { kind: 'guide', id: aliased };
-  if (aliased && ROLE_BY_ID[aliased]) return { kind: 'role', id: aliased };
-  return { kind: 'home', id: 'home' };
+
+  let guideId = null;
+  if (GUIDE_BY_ID[key]) guideId = key;
+  else if (HELP_ALIASES[key] && GUIDE_BY_ID[HELP_ALIASES[key]]) guideId = HELP_ALIASES[key];
+  else if (HELP_ALIASES[key] && ROLE_BY_ID[HELP_ALIASES[key]]) return { kind: 'role', id: HELP_ALIASES[key] };
+
+  if (section) {
+    const moved = HELP_SECTION_MOVES[`${guideId || key}#${section}`];
+    if (moved) {
+      const [g, s] = moved.split('#');
+      if (findSection(g, s)) return { kind: 'guide', id: g, section: s };
+    }
+  }
+  if (!guideId) return { kind: 'home', id: 'home' };
+  if (section && findSection(guideId, section)) return { kind: 'guide', id: guideId, section };
+  return { kind: 'guide', id: guideId };
+}
+
+/** The DOM id a rendered section carries. Prefixed: section ids are short words. */
+export function sectionDomId(guideId, sectionId) {
+  return `help-${guideId}--${sectionId}`;
 }
 
 /**
