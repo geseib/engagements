@@ -48,7 +48,7 @@ const BANNED_ALLOWLIST = {
   'host-late-items': { 'the wall': 2 },
   'host-two-screens': { projector: 7, 'big screen': 2, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
-  'host-build-room': { projector: 1, 'the wall': 1, PRESENT: 1 },
+  'host-build-room': { projector: 1, PRESENT: 1 },
   'admin-question-sets': { 'New version': 1, Fork: 1 },
   'technical-requirements': { 'display profile': 2, 'big screen': 1 },
 };
@@ -154,7 +154,7 @@ const LONG_UNITS = {
   'player-playing#answering': 133,
   'host-game-setup#settings-before-you-start': 192,
   'host-reporting#what-we-heard': 144,
-  'host-build-room#during-after': 303,
+  'host-build-room#during-after': 301,
 };
 
 const sections = guides.flatMap((g) => g.sections.map((s) => [`${g.id}#${s.id}`, s]));
