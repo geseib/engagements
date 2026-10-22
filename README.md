@@ -104,6 +104,14 @@ listing); a project can name its demo and mockups in `.engage/share.json`, and e
 session takes its Wi-Fi ports from a block set by its code (`ENGAGE_LAN_PORT` overrides). **Remote share** (off by default) opens the demo to people who are not on the Wi-Fi: the plugin runs a pinned, hash-checked `cloudflared` quick tunnel per session behind a key per person (design `docs/superpowers/specs/2026-10-16-build-room-remote-share-design.md`; `tests/engage-remote-gateway.js`, `tests/engage-cloudflared-fetch.js`).
 Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.js`).
 
+**Question sets in a Build Room** (plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md`):
+Ask the room's ready questions list every Call & Answer or Poll set tagged `build-room`,
+ordered by a `for-<kind>` tag once the room has said what it is making. **Ask Claude for
+questions** (plugin 1.26.0) has Claude write a set into the project
+(`build-room/questions/<kind>-<name>.json`), commit it and send it (`POST build/question-sets`,
+kept as `BUILD#QSET#` rows, sealed for teams); **Save to my sets** turns it into AI drafts
+through `POST /admin/generation-drafts/from-build`, which the host accepts from the bell.
+
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
 Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the
 choice is `engage.surfaces`, shared with Call & Answer): public, read-only, no names
