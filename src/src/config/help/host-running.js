@@ -202,7 +202,7 @@ const running = {
             { keys: 'S', text: 'Show or hide the scoreboard (Trivia and Call & Answer).' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up.' },
             { keys: '\\', text: 'Open and close the Session panel.' },
-            { keys: 'F', text: 'Full screen, and back.' },
+            { keys: 'F', text: 'Full screen, and back again. Esc also leaves.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
           ],
         },

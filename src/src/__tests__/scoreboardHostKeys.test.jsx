@@ -153,7 +153,7 @@ describe('the keys are written down where the host looks for them', () => {
   test('the host guide lists them too', () => {
     const items = JSON.stringify(HOST_ROLE);
     expect(items).toMatch(/"keys":"S","text":"Show or hide the scoreboard/);
-    expect(items).toMatch(/"keys":"V","text":"With the scoreboard up, change its look/);
+    expect(items).toMatch(/"keys":"V","text":"Change the scoreboard's look while it is up/);
   });
 });
 

@@ -409,7 +409,7 @@ const twoScreens = {
           t: 'steps',
           items: [
             { title: 'Open it', text: 'In the Session panel\'s Settings tab (on the console: Session tools, then **Settings**), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
-            { title: 'Sign in', text: 'On a team session, as any host or admin of that team; it does not have to be the account on this laptop. On a personal account, as you. The box under the QR names who is signed in on this laptop. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.' },
+            { title: 'Sign in', text: 'On a team session, as any host or admin of that team; it does not have to be the account on this laptop. On a personal account, as you. Only your account can drive this session. The box under the QR names who is signed in on this laptop. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.' },
             { title: 'If the phone refuses', text: 'Press **Sign in as someone else**, pick the session\'s team if the phone offers a team switcher, or **Enter a different code**.' },
           ],
         },

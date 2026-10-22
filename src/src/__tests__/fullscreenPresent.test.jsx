@@ -211,7 +211,7 @@ describe('where F is bound', () => {
   });
 
   test('the host help lists F with the other stage keys', () => {
-    const help = read('config', 'help', 'host-setup.js') // the keys block moved here in the help Phase 0 split;
+    const help = read('config', 'help', 'host-running.js') // the keys block moved here in help Phase 2 (W3, Dock and keys);
     expect(help).toMatch(/\{ keys: 'F', text: 'Full screen, and back again\. Esc also leaves\./);
   });
 });

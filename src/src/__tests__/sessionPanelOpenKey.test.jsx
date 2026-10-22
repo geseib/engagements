@@ -163,7 +163,7 @@ describe('useSessionPanelKey + the real SessionSetupPanel', () => {
 describe('the key is written down where the host looks for it', () => {
   test('the host guide lists \\', () => {
     const items = JSON.stringify(HOST_ROLE);
-    expect(items).toContain('"keys":"\\\\","text":"Open and close the session panel."');
+    expect(items).toContain('"keys":"\\\\","text":"Open and close the Session panel."');
   });
 });
 
