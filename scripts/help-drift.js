@@ -81,10 +81,12 @@ const COVERS = {
   'admin-settings': [`${S}/AdminPage.jsx`],
   // AI
   'admin-ai-prompts': [`${S}/components/PromptLibraryPanel.jsx`, `${S}/components/AIPromptManager.jsx`, `${S}/components/PromptVersionsPanel.jsx`, `${S}/components/PromptRepoReview.jsx`, `${S}/config/templateVariables.js`],
-  'admin-ai-builders': [`${S}/components/TriviaAIBuilder.jsx`, `${S}/components/PollAIBuilder.jsx`, `${S}/components/SurveyAIBuilder.jsx`, `${S}/components/AIScenarioBuilder.jsx`, `${S}/components/DraftReview.jsx`, `${S}/components/DraftsStrip.jsx`, `${S}/components/NotificationsBell.jsx`],
-  'builder-ai': [`${S}/components/TriviaAIBuilder.jsx`, `${S}/components/PollAIBuilder.jsx`, `${S}/components/DraftReview.jsx`],
+  'admin-ai-builders': [`${S}/components/TriviaAIBuilder.jsx`, `${S}/components/PollAIBuilder.jsx`, `${S}/components/SurveyAIBuilder.jsx`, `${S}/components/AIScenarioBuilder.jsx`, `${S}/components/DestinationField.jsx`, `${S}/components/GenerationJobPanel.jsx`, `${S}/components/AddQuestionsDialog.jsx`],
+  'ai-drafts': [`${S}/components/DraftReview.jsx`, `${S}/components/DraftsStrip.jsx`, `${S}/components/NotificationsBell.jsx`, `${S}/components/HostNotificationsBell.jsx`, `${S}/utils/notificationsApi.js`, `${L}/admin/shared/generation-drafts.js`, `${L}/admin/orgs/my-notifications.js`],
+  'ai-workie': [`${S}/components/WorkieContextHint.jsx`, `${S}/components/BriefingField.jsx`, `${S}/components/SessionOptions.jsx`, `${S}/components/QuestionSetEditor.jsx`, `${L}/game/get-ai-summary.js`],
+  'builder-ai': [`${S}/components/AIFormAssist.jsx`, `${S}/components/FieldLock.jsx`, `${S}/components/QuestionsPanel.jsx`, `${S}/components/QuestionSetUploadPanel.jsx`],
   // builders
-  'builder-manual': [`${S}/components/QuestionSetEditor.jsx`, `${S}/components/QuestionImageField.jsx`, `${S}/components/TriviaBuilder.jsx`, `${S}/components/CallAnswerBuilder.jsx`],
+  'builder-manual': [`${S}/components/QuestionsPanel.jsx`, `${S}/components/QuestionImageField.jsx`, `${S}/components/SurveyQuestionFields.jsx`, `${S}/components/CategoryPicker.jsx`],
   // technical
   'technical-troubleshooting': [`${S}/components/JoinCodeEntry.jsx`, `${S}/auth`, `${S}/utils`],
   'technical-requirements': [`${S}/config/displayProfile.js`, `${S}/config/roomScreen.js`],

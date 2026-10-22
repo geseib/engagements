@@ -129,7 +129,6 @@ const UNIT_CAP = 120;
 
 /** guide#section → today's words. SHRINK ONLY. */
 const LONG_SECTIONS = {
-  'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {
