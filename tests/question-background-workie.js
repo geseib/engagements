@@ -394,7 +394,10 @@ const around = (raw, needle) => {
   await check('the honesty rule is the spec\'s text', () => assert.strictEqual(HONESTY_RULE,
     'Facts come from the material above, from what the room said, or from general knowledge you are certain '
     + 'of. Never invent numbers, names, quotations, or anything about this organisation or event. When something '
-    + 'you would like is missing, work with what you have and do not mention that it is missing.'));
+    + 'you would like is missing, work with what you have and do not mention that it is missing.\n'
+    // The one-line fact sheet (workie-grounding STEP0, 21 Oct 2026): what a ranking measures.
+    + 'A ranking shows which answers people preferred among these, not that the room agreed to a plan or '
+    + 'chose an owner. Say what the vote shows, as the counts and points above show it.'));
   await check('backgroundLine labels a Background, and is empty for nothing', () => {
     assert.strictEqual(backgroundLine(`  ${BG}  `), LABEL + BG);
     for (const v of [undefined, null, '', '   ', 42, {}]) assert.strictEqual(backgroundLine(v), '');

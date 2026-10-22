@@ -1,5 +1,6 @@
 import React from 'react';
 import { ModelPickerControls } from './ModelCompare';
+import ReadCheckNote from '../ReadCheckNote';
 
 /**
  * WORKIE'S HOST OPTIONS, IN THE SESSION PANEL — not on the stage.
@@ -28,6 +29,11 @@ import { ModelPickerControls } from './ModelCompare';
  * `modelPicker` (useModelPicker) adds "Redo with…" and Compare beside Redo —
  * only when the server said dev's staff picker is on, so for everyone else,
  * and everywhere but dev, this section is exactly what it was.
+ *
+ * THE READ CHECK'S NOTE beside Redo (`readCheck`, from the host's door only):
+ * on one screen this panel is the host's only place for it — the stage is the
+ * room's (components/AISummaryStatus.jsx draws on it), so the note is never
+ * drawn there.
  */
 export default function WorkieSettings({
   roundNoun = 'question',
@@ -44,6 +50,7 @@ export default function WorkieSettings({
   onRedo = null,
   redoBusy = false,
   modelPicker = null,
+  readCheck = null,
 }) {
   const noun = String(roundNoun || 'question').toLowerCase();
   const hasAnything = showNextRound || briefed || typeof onRedo === 'function';
@@ -67,6 +74,7 @@ export default function WorkieSettings({
             </button>
           </div>
           <p className="setup-note">Rewrites What We Heard now, in the voice and approach set below.</p>
+          <ReadCheckNote readCheck={readCheck} className="setup-note" />
           {modelPicker && modelPicker.info && <ModelPickerControls picker={modelPicker} />}
         </>
       )}

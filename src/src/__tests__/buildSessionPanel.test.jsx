@@ -733,16 +733,16 @@ describe('the plugin update notice (owner, 2026-10-10): the Host screen only', (
     expect(within(line).getByRole('button', { name: 'Update' })).toBeInTheDocument();
   });
 
-  test('Update opens Connect Claude Code at the install step and puts the panel away', async () => {
+  test('Update opens Connect Claude Code on the one paste (update, then reopen) and puts the panel away', async () => {
     await openRoom(hostState({ st: OLD }));
     openSettings();
     fireEvent.click(within(within(panel()).getByTestId('brm-plugin-out')).getByRole('button', { name: 'Update' }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
-    const step = dialog.querySelector('[data-step="install"]');
+    const step = dialog.querySelector('[data-step="return"]');
     expect(step).not.toBeNull();
     expect(step.contains(document.activeElement)).toBe(true);
-    expect(within(step).getByTestId('brm-install')).toBeInTheDocument();
+    expect(within(step).getByTestId('brm-return').textContent).toContain('--install-plugin');
   });
 
   test('a Claude that never said its version (older than the header) counts as out of date', async () => {

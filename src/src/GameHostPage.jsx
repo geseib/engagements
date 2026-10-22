@@ -127,6 +127,7 @@ import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import ReadPanel from './components/console/panels/ReadPanel';
+import { fetchReadCheck } from './utils/readCheckClient';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import CW from './config/consoleWords';
 import { consolePeopleFor } from './config/consoleRail';
@@ -2250,6 +2251,12 @@ function GameHostPage() {
 
       if (response.ok) {
         const summaryData = await response.json();
+        // THE READ CHECK'S NOTE is served on the host's door only
+        // (utils/readCheckClient.js). The debug read already came through it.
+        if (!gameDebugMode && (summaryData.markdownResponse || summaryData.summary)) {
+          const readCheck = await fetchReadCheck({ fetchFn: authFetch, apiBase: API_BASE, gameId, questionId });
+          if (readCheck) summaryData.readCheck = readCheck;
+        }
         // Update local state with fetched data
         setAiSummaries(prev => ({
           ...prev,
@@ -2289,6 +2296,8 @@ function GameHostPage() {
       // AISummaryStatus says so instead of presenting it as the read.
       fallback: summary.fallback === true,
       fallbackReason: summary.fallbackReason || null,
+      // Host-only (the host's door): drawn on the console and the Session panel, never the stage.
+      readCheck: summary.readCheck || null,
       prompt: gameDebugMode ? summary.debugPrompt : undefined,
       debugPrompt: gameDebugMode ? summary.debugPrompt : undefined
     });
@@ -8132,7 +8141,7 @@ Focus on actionable business strategy insights.`;
        whichever beat the wall is on (the strip marks Ask while it is open,
        and the room still sees what it saw). */
     if (consoleComposer) {
-      return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} />;
+      return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
     }
     if (viewStep) {
       return (
@@ -8183,7 +8192,7 @@ Focus on actionable business strategy insights.`;
         return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} />;
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
@@ -9412,6 +9421,8 @@ Focus on actionable business strategy insights.`;
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
             modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
+            // The read check's note, beside Redo: on one screen the only host-only place for it.
+            readCheck: hostPhase === 'FIELD_NOTES' && currentAIInsights ? currentAIInsights.readCheck : null,
           }}
         />
       )}

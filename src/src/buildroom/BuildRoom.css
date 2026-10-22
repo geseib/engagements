@@ -248,6 +248,15 @@
 .brm .brm-ver .brm-ver-old { color: var(--danger-text); }
 .brm .brm-ver-ok { color: var(--brm-success-text); font-weight: 600; font-size: var(--brm-t-label); }
 .brm .brm-verfold { display: grid; gap: 8px; min-width: 0; }
+/* The Connect window by case (docs/design/build-room-connect-resume): coming back, or connected now. */
+.brm .brm-connect-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.brm .brm-connback { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--brm-tint-amber); border: 1px solid var(--brm-line-amber); }
+.brm .brm-connback.is-now { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
+.brm .brm-connback-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-text); margin-top: 6px; flex: none; }
+.brm .brm-connback.is-now .brm-connback-dot { background: var(--brm-success-text); }
+.brm .brm-connback > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brm .brm-connback span:not(.brm-connback-dot) { color: var(--muted); font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-otherlaptop { margin: 0; }
 .brm .brm-verfold > summary { cursor: pointer; color: var(--secondary); font-size: var(--brm-t-label); font-weight: 600; width: fit-content; }
 .brm .brm-verfold > summary:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 4px; }
 /* Connect Claude Code: each step carries its own title, command and copy

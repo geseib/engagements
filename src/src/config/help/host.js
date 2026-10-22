@@ -612,6 +612,12 @@ const reporting = {
           text: 'Read one out. It is usually a better prompt for discussion than anything you would think of while also running the session.',
         },
         {
+          t: 'note',
+          tone: 'info',
+          title: '"Workie used words the room\'s answers don\'t support"',
+          text: 'After Workie writes, Engage checks the read against what it was given: a number no answer, question or count contains (a "15-minute hold" nobody proposed), a claim about the room the vote does not show ("strongest", "unanimous", "everyone agreed" when the points were split), and a next step written as already decided ("The route lead will run…") when the room only ranked answers. If it finds any, Workie rewrites the read once. If words are still left, you see one small line naming them: on the console beside the read on two screens, in the Session panel\'s Workie section beside Redo on one screen, and on the phone remote. Redo, or edit what you say aloud, before the read goes up. Only you see the line; the wall, the room\'s window and the players never do.',
+        },
+        {
           t: 'p',
           text: 'Ask the room turns a follow-up into a question for the room: Ideas, Choose or Rate. For Rate you name the scale\'s two ends: pick a pair in "1 means" or "5 means" (Disagree to Agree, No to Yes, Low to High, Unlikely to Likely, Hard to Easy), or Custom to type your own. The phones, the wall and the report all show them.',
         },
@@ -785,8 +791,8 @@ const buildRoom = {
           items: [
             { title: 'Open Build Room', text: 'From the welcome screen. Name the build, and say who sets the goal: the room, or you.' },
             { title: 'Install the plugin', text: 'The Connect window shows one command. Run it in a terminal, once per laptop. Run it again when the room says the plugin is out of date.' },
-            { title: 'Start Claude Code', text: 'The second command makes a new folder under ~/build-room, with git, and starts Claude Code there already connected.' },
-            { title: 'Kick off', text: 'Paste the Kick off prompt. Claude reads the room, says what it plans, and starts.' },
+            { title: 'Start Claude Code', text: 'Mint a key, and the start command is copied. Paste it into a terminal: it makes a new folder under ~/build-room, with git, starts Claude Code there and kicks off. Claude reads the room, says what it plans, and starts.' },
+            { title: 'Coming back', text: 'Closed Claude Code, or restarted the laptop? Open Connect Claude Code: it shows one paste that opens Claude Code in the same folder and picks up where it left off, with no new key. Out of date, the same paste updates the plugin first. On another laptop, press Show all the steps.' },
           ],
         },
       ],

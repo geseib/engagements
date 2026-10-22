@@ -33,7 +33,7 @@ describe('the commands the Connect window shows', () => {
     window.ENV = 'development';
     expect(pluginInstallCommand({ origin: 'https://engage.dev.example', api: API })).toMatch(/--install-plugin --api https:\/\/api\.example\.test\/dev\/ --tier dev$/);
     expect(pluginConnectCommand('eng_1_x')).toBe('/engage-dev:connect eng_1_x');
-    expect(startCommand('tips', 'eng_1_x')).toBe('mkdir -p ~/build-room/tips && cd ~/build-room/tips && claude "/engage-dev:connect eng_1_x"');
+    expect(startCommand('tips', 'eng_1_x')).toBe('mkdir -p ~/build-room/tips && cd ~/build-room/tips && claude "/engage-dev:kickoff eng_1_x"');
   });
   test('prod: exactly what it was before tiers', () => {
     window.ENV = 'production';

@@ -1551,7 +1551,11 @@ async function agentTouch(ctx, event, role) {
   } else {
     // The plugin's version rides every call (X-Engage-Plugin); the host's Session panel reads it back.
     const version = S.pluginVersionOf(event);
-    await touchState(ctx, { set: { AgentSeenAt: now, ...(version ? { AgentPlugin: version } : {}) } }).catch(() => {});
+    // Where the project lives (plugin 1.25.0, on its state reads only): the host's
+    // "coming back" paste. Sealed in a team's room, like the brief.
+    const folder = S.folderOf(event);
+    const sealedFolder = folder && ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { AgentFolder: folder })).AgentFolder : folder;
+    await touchState(ctx, { set: { AgentSeenAt: now, ...(version ? { AgentPlugin: version } : {}), ...(folder ? { AgentFolder: sealedFolder } : {}) } }).catch(() => {});
   }
   if (auth.agentKeyHash) {
     await db.send(new UpdateCommand({
