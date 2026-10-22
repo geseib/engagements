@@ -54,6 +54,10 @@ const COVERS = {
   'host-reporting': [`${S}/components/GameReport.jsx`, `${S}/components/RoundReport.jsx`, `${S}/components/ReportsPanel.jsx`, `${S}/components/AISummaryStatus.jsx`, `${S}/components/console/panels/ReadPanel.jsx`, `${L}/game/save-report.js`],
   'host-what-we-heard': [`${S}/components/console/panels/ReadPanel.jsx`, `${S}/components/AskComposer.jsx`, `${S}/components/FeedbackRoundPanel.jsx`, `${S}/config/followUpWords.js`],
   'host-plan': [`${S}/components/BillingPanel.jsx`, `${S}/components/UsageMeter.jsx`, `${L}/websocket/session-count.js`],
+  // events
+  'host-event-agenda': [`${S}/components/WelcomeEvents.jsx`, `${S}/components/EventDetailsDialog.jsx`, `${S}/components/EventBuilder.jsx`, `${S}/components/EventItemDialog.jsx`, `${S}/components/event/HostEventAgenda.jsx`, `${S}/config/runningOrder.js`, `${L}/websocket/events/agenda-rules.js`],
+  'host-event-day': [`${S}/components/event/EventStage.jsx`, `${S}/components/event/eventDisplay.js`, `${S}/components/stage/Dock.jsx`, `${L}/websocket/events/run.js`],
+  'player-events': [`${S}/components/event/EventAttendeePage.jsx`, `${S}/components/event/eventDisplay.js`, `${S}/hooks/useJoinCode.js`, `${L}/websocket/events/get-agenda.js`, `${L}/websocket/events/attendees.js`],
   // Build Room
   'host-build-room': [`${S}/buildroom`, `${S}/present/buildwall`, `src/public/engage-mcp.mjs`],
   'build-room-running': [`${S}/buildroom`],
