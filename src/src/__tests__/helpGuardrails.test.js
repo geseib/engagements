@@ -41,7 +41,6 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 /** Today's occurrences. SHRINK ONLY. */
 const BANNED_ALLOWLIST = {
   'host-late-items': { 'the wall': 2 },
-  'host-two-screens': { projector: 6, 'big screen': 1, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
   'host-build-room': { projector: 1, PRESENT: 1 },
 };
@@ -134,8 +133,6 @@ const UNIT_CAP = 120;
 const LONG_SECTIONS = {
   'player-playing#answering': 469,
   'host-player-management#handing-name-over': 274,
-  'host-two-screens#laptop-console': 552,
-  'host-two-screens#phone-remote': 264,
   'host-reporting#what-we-heard': 344,
   'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
