@@ -59,7 +59,7 @@ const quickStart = {
           items: [
             'Choose **Create engagement** on the welcome screen.',
             'Give it an event title — this is what the room sees on the big screen.',
-            'Pick the kind of session, and a question set of that kind.',
+            'Pick a **Format**, and a **Question set** of that format.',
             'Narrow it by category if you want a subset of the questions.',
           ],
         },
@@ -69,7 +69,7 @@ const quickStart = {
           t: 'note',
           tone: 'info',
           title: 'A set belongs to one kind',
-          text: 'The set list filters to the kind you picked, so you cannot accidentally run a trivia set as a poll. If the list looks empty, the kind is probably not the one you meant.',
+          text: 'The set list filters to the format you picked, so you cannot accidentally run a trivia set as a poll. If the list looks empty, the format is probably not the one you meant.',
         },
       ],
     },
@@ -149,7 +149,7 @@ const quickStart = {
         {
           t: 'list',
           items: [
-            { title: 'What the room backed', text: 'The ideas first, ranked by the room\'s votes: each idea in full as the headline, a bar for how much the room backed it compared with the top idea, and a small credit line with the points and the name (the name only while names show). Long ideas shrink to fit; if they still do not fit, the wall shows the top ones and says "and N more ideas".' },
+            { title: 'What the room backed', text: 'The ideas first, ranked by the room\'s votes: each idea in full as the headline, a bar for how much the room backed it compared with the top idea, and, while names show, a small credit line with the points and the name. Long ideas shrink to fit; if they still do not fit, the room sees the top ones and "and N more answers".' },
             { title: 'The scoreboard', text: 'Cumulative across the session, and no longer on the results screen: bring it up when you want it with S, or Show scoreboard in the People section on two screens.' },
             { title: 'The question', text: 'Press the question line above the cards (or "The question" row in the console) to put it back up on the wall.' },
             { title: 'The AI summary', text: 'Themes, follow-up questions and suggested next steps, written from what the room actually said.' },
@@ -195,13 +195,13 @@ const gameSetup = {
         {
           t: 'list',
           items: [
-            { title: 'House sets', text: 'Provided for everyone. You cannot edit them, but you can fork one and edit your copy.' },
-            { title: 'Your own sets', text: 'Ones you created or forked. Editing one of these creates a new version rather than overwriting what you have already played.' },
+            { title: 'House sets', text: 'Provided for everyone. You cannot edit them, but you can take your own copy and edit that.' },
+            { title: 'Your own sets', text: 'Ones you created or copied. Editing one of these creates a new version rather than overwriting what you have already played.' },
           ],
         },
         {
           t: 'p',
-          text: 'The Edit button says what it will do: "New version" on a set you own, "Fork" on a house set. Neither ever changes a set out from under a session that is running.',
+          text: 'On a set you own, **Edit questions** changes its questions and **Rename** its name; an AI draft not yet reviewed shows **Review** instead. A house set offers **Copy and edit**, and the original stays untouched. None of these ever changes a set out from under a session that is running.',
         },
         {
           t: 'p',
@@ -220,7 +220,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'You control what is on it. In your set list, click a set\'s quickstart tag to put it on the menu or take it off — the tag\'s tooltip reads "Show this set in the host\'s quickstart menu". No dialog, no save button; the click is the change.',
+          text: 'You control what is on it. In your set list, click a set\'s **Quickstart** tag to put it on the menu or take it off — the tag\'s tooltip reads "Click to offer this set on the quickstart menu". No dialog, no save button; the click is the change.',
         },
       ],
     },
@@ -249,7 +249,7 @@ const gameSetup = {
         { t: 'h', text: 'Screens: where the room watches, and room screen size' },
         {
           t: 'p',
-          text: 'The Screens group, first in Settings and at the top of Setup on the step strip, says whether the room watches this laptop (one screen) or a separate window (two screens), opens the room\'s window, and sets the room screen size (it used to be called Display profile). You can switch between one and two screens mid-session from Setup. Get the size right before people arrive — it is the difference between a readable session and a squinting one.',
+          text: 'The Screens group, first in Settings (and, on two screens, at the top of Setup on the step strip), says whether the room watches this laptop (one screen) or a separate window (two screens), opens the room\'s window, and sets the room screen size. Two screens is for Call & Answer only, outside events. You can switch between one and two screens mid-session there. Get the size right before people arrive — it is the difference between a readable session and a squinting one.',
         },
         {
           t: 'table',
@@ -263,13 +263,13 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The size also decides how much the room is shown. On every size the room sees only what it needs, large. When a question or lesson is up, the title and the lesson lead, and the question to answer sits in a "Your turn" band; the general instruction ("answer on your phone") is left off, because the top line already says where to answer. While voting the room sees every answer, numbered, or one at a time when they are long; at results the room\'s pick reads in full with the bars behind the answers, and no vote counts while names are hidden. Call, read on people\'s own screens, adds the general instruction. In a Build Room each option shows its detail, the tally stays hidden until the vote closes, a long ask pages, and Claude\'s status line is always there. Show the QR puts the join code in a panel beside what is up, instead of covering it; click an answer, or step with → and ←, to put one up, and Esc goes back to all of them. The same rule holds on one screen and on the room\'s window.',
+          text: 'In Call & Answer, the size also decides how much the room is shown. On every size the room sees only what it needs, large. When a question or lesson is up, the title and the lesson lead, and the question to answer sits in a "Your turn" band; the general instruction ("answer on your phone") is left off, because the top line already says where to answer. While voting the room sees every answer, numbered, or one at a time when they are long; at results the room\'s pick reads in full with the bars behind the answers, and no vote counts while names are hidden. Call, read on people\'s own screens, adds the general instruction. In a Build Room each option shows its detail, the tally stays hidden until the vote closes, a long ask pages, and Claude\'s status line is always there. Show the QR puts the join code in a panel beside what is up, instead of covering it; click an answer, or step with → and ←, to put one up, and Esc goes back to all of them.',
         },
         { t: 'h', text: 'Names' },
         {
           t: 'list',
           items: [
-            { title: 'Show who wrote each response', text: 'Off by default on voted rounds — answers stay anonymous until voting closes, so people vote on the answer and not the author.' },
+            { title: 'Show who wrote each response from the start', text: 'Off by default on voted rounds — answers stay anonymous until voting closes, so people vote on the answer and not the author.' },
             { title: 'Name who is still waiting', text: 'Whether the room sees who has not answered yet. Gentle nudge, or public pressure, depending on the room.' },
           ],
         },

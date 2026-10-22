@@ -34,13 +34,13 @@ const twoScreens = {
       blocks: [
         {
           t: 'p',
-          text: 'When the room watches a separate window (Room\'s window ↗, dragged onto the projector), your laptop stops showing a copy of the wall. It shows your console: what you need for the step, and nothing the room needs.',
+          text: 'Two screens is for Call & Answer, outside events. When the room watches a separate window (Room\'s window ↗, dragged onto the projector), your laptop stops showing a copy of the wall. It shows your console: what you need for the step, and nothing the room needs.',
         },
         {
           t: 'table',
           head: ['Part', 'What it is for'],
           rows: [
-            ['Top line', '← All sessions (in the lobby and at the end: back to your sessions; this one keeps running and Continue brings you back), the join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
+            ['Top line', '← All sessions (in the lobby and at the end: back to the start screen; this one keeps running and Continue brings you back), the join code (press it to put the code on the wall), Room\'s window ↗, and whether that window is really up.'],
             ['The loop', 'The round\'s steps. Press one to look at it privately; the room stays where it is until you press Back to the room.'],
             ['Left rail', 'Round queue, People (with Show scoreboard / Hide scoreboard), Late & not reviewed, Session tools. The one that matters for the step opens by itself.'],
             ['Your part now', 'At the top of the centre: what to do next, the one count for the step, what the wall shows next, and the buttons.'],
@@ -52,9 +52,9 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'On, full screen', text: 'Connected, visible and full screen. You are ready.' },
-            { title: 'Open, not full screen', text: 'Click the room\'s window once to fill the screen (or press F). The laptop says so under the status, as text.' },
+            { title: 'Open, not full screen', text: 'Click the room\'s window once to fill the screen (or press F). The laptop says so under the status.' },
             { title: 'Hidden', text: 'The window is minimised or behind another tab.' },
-            { title: 'Not open', text: 'Press it to open one, then drag it onto the projector.' },
+            { title: 'Not open', text: 'Press it to open one.' },
           ],
         },
         {
@@ -67,7 +67,7 @@ const twoScreens = {
           t: 'note',
           tone: 'tip',
           title: 'Chrome or Edge with a second display: it opens there for you',
-          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen (it says so at the bottom until you do). Quick start shows where the room watches before you pick a set, and on two screens it opens the room\'s window as the session starts. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
+          text: 'With the projector or TV connected as a second display (extended, not mirrored), Room\'s window ↗ opens the window on that display and fills it. The first time, the browser asks to "manage windows on all your displays": allow it. Then click the room\'s window once and it goes full screen. With a Call & Answer set on it, Quick start shows where the room watches before you pick one, and on two screens it opens the room\'s window as the session starts. In other browsers, or if you say no, it opens beside you: drag it onto the projector and press F.',
         },
         {
           t: 'note',
@@ -101,7 +101,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'The round view', text: 'Advance the beat, see how many have answered, and jump to the big-screen pad.' },
+            { title: 'The round view', text: 'Advance the beat, see how many have answered, and choose the next question.' },
             { title: 'Players', text: 'Everyone in the room, in score order — the same list as the desktop panel.' },
             { title: 'Rounds', text: 'Everything played so far, so you can look up what someone said in round two without turning round.' },
             { title: 'Questions', text: 'The set, and what to ask next.' },
@@ -115,7 +115,7 @@ const twoScreens = {
         },
         {
           t: 'p',
-          text: 'The phone has no Settings tab, deliberately: the join QR, the categories and Switch game are all on the round view already, one tap away.',
+          text: 'The phone has no Settings tab, deliberately: **Join code**, **Categories** and **Back to Menu** are on its Session card, one tap away.',
         },
       ],
     },

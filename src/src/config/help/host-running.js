@@ -28,7 +28,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Everything you need mid-session is behind one panel. Press \\ to open and close it, or use the SETUP control on the dock.',
+          text: 'Everything you need mid-session is behind one panel. Press \\ to open and close it, or press **SESSION** on the dock.',
         },
         {
           t: 'table',
@@ -37,7 +37,7 @@ const running = {
             ['Players', 'Who is here, who has answered, and the two things you can do about a person.'],
             ['Questions', 'Categories, and choosing what to ask next instead of taking the next one in order.'],
             ['Rounds', 'Everything already played, plus the session report.'],
-            ['Settings', 'Four groups, most used first: Screens (one or two screens, the room\'s window, room screen size), Your phone as a remote, The rounds (names, pace, feedback, scoreboard style), and Joining. Session details and the keyboard shortcuts fold away below.'],
+            ['Settings', 'Four groups, most used first: Screens (one or two screens, the room\'s window, room screen size), Your phone as a remote, The rounds (names, feedback, report, Workie, pace, scoreboard style), and Joining. "Session: back to menu, end it, sign out" and the keyboard shortcuts fold away below.'],
           ],
         },
       ],
@@ -49,7 +49,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'You do not have to take the questions in order. The Questions tab lists them with an asked/unasked tag, a search box for titles, and a "Choose the next question" action — useful when the conversation has gone somewhere and you want to follow it.',
+          text: 'You do not have to take the questions in order. Under "Choose the next question", the Questions tab lists them with an Asked tag and a search box for titles. **Ask now** puts one up straight away; **Queue** adds it to the running order and **Ask next** puts it at the top. Useful when the conversation has gone somewhere and you want to follow it.',
         },
       ],
     },
