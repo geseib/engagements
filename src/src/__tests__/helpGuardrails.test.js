@@ -49,7 +49,6 @@ const BANNED_ALLOWLIST = {
   'host-two-screens': { projector: 7, 'big screen': 2, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
   'host-build-room': { projector: 1, PRESENT: 1 },
-  'admin-question-sets': { 'New version': 1, Fork: 1 },
   'technical-requirements': { 'display profile': 2, 'big screen': 1 },
 };
 
@@ -147,7 +146,7 @@ const LONG_SECTIONS = {
   'host-two-screens#phone-remote': 268,
   'host-reporting#what-we-heard': 345,
   'host-build-room#during-after': 1437,
-  'admin-ai-prompts#versions': 326,
+  'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {

@@ -18,19 +18,19 @@ const prompts = {
   sections: [
     {
       id: 'two-kinds-one-library',
-      title: 'Two kinds, one library',
+      title: 'Two kinds, two libraries',
       icon: 'Sparkle',
       blocks: [
         {
           t: 'list',
           items: [
-            { title: 'Generation prompts', text: 'Used by the AI builders to write questions. They shape what a generated set looks like.' },
-            { title: 'Analysis prompts', text: 'Used during a session to summarise what the room said. They shape what the AI reads out after a round.' },
+            { title: 'Question set generator prompts', text: 'Used by the AI builders to write questions. They shape what a generated set looks like.' },
+            { title: 'Engagement results prompts', text: 'Used during a session to summarise what the room said. They shape what Workie says after a round.' },
           ],
         },
         {
           t: 'p',
-          text: 'Both live in the same library and are filtered by type, kind of session, category and status.',
+          text: 'Prompts shows the two as cards; choose one to open its library. Each library can be searched and filtered by kind of session, category, status and owner (Team, Engage or Public).',
         },
       ],
     },
@@ -163,7 +163,7 @@ What the room said, and what it adds up to.
           items: [
             { title: 'Default', text: 'Each kind of session has a default prompt — the one used when nothing more specific is linked.' },
             { title: 'Active or draft', text: 'Only active prompts are offered where a prompt is chosen. Draft keeps a prompt without putting it in front of anyone.' },
-            { title: 'Editing', text: 'Engage staff edit prompts, switched to Engage. Team owners and admins can read them. A change applies to the next round that runs, not to summaries already generated.' },
+            { title: 'Editing', text: 'Engage staff edit prompts, switched to Engage. Team owners and admins can read them, and so can you in your own space. A change applies to the next round that runs, not to summaries already generated.' },
           ],
         },
         {
@@ -188,7 +188,7 @@ What the room said, and what it adds up to.
       blocks: [
         {
           t: 'p',
-          text: 'Every save that changes what a prompt says is a new version. The version that was live is kept, word for word, and nothing is ever overwritten or deleted. Changing only the status or the name is not a new version.',
+          text: 'Only in the **Engagement results prompts** library, for Engage staff: every save that changes what a prompt says is a new version. The live version is kept word for word; nothing is overwritten or deleted. Changing only the status or the name is not a new version.',
         },
         {
           t: 'list',
@@ -201,7 +201,7 @@ What the room said, and what it adds up to.
         { t: 'h', text: 'Updates from the repo' },
         {
           t: 'p',
-          text: 'The prompt files kept in the repo — the demo sets\' Workies and the built-in defaults — travel with every deploy. The library compares each prompt with its file and says so in the State column: Repo has a newer version, Matches the repo, or Not in the repo. A notice above the table counts the ones the repo has newer, and Show only these lists just them. Nothing is updated by itself.',
+          text: 'The prompt files kept in the repo — the demo sets\' Workies and the built-in defaults — travel with every deploy. The library compares each prompt with its file in the State column: Repo has a newer version, Matches the repo, or Not in the repo. A notice above the table counts the ones the repo has newer, and Show only these lists just them. Nothing is updated by itself.',
         },
         {
           t: 'p',
@@ -211,7 +211,7 @@ What the room said, and what it adds up to.
           t: 'note',
           tone: 'warn',
           title: 'Edited here since it was taken from the repo',
-          text: 'When someone changed the live prompt here after it was last taken from the repo, Review says so. Saving still keeps their version in the history, so it can be made live again.',
+          text: 'When someone changed the live prompt here after it was last taken from the repo, Review says so. Saving still keeps their version in the history.',
         },
       ],
     },
@@ -253,7 +253,7 @@ const aiBuilders = {
           t: 'steps',
           items: [
             { title: 'Describe it', text: 'Theme, audience, tone, how many questions.' },
-            { title: 'Let it fill the form', text: 'The assistant can fill the metadata fields from your description. Lock any field you have already decided and it will be left alone.' },
+            { title: 'Let it fill the form', text: 'Except in the survey builder, the assistant can fill the metadata fields from your description. Lock any field you have already decided and it will be left alone.' },
             { title: 'Choose where it is saved', text: 'Your space, a team you belong to, or — for Engage staff — Engage\'s shared library. The builder shows the library it will use and lets you change it. Adding questions to a set always saves into that set\'s own library.' },
             { title: 'Generate', text: 'It runs on the server as a job. Close the builder whenever you like: everything it writes waits in a draft, and the bell in the top line tells you when it is ready.' },
             { title: 'Review, then accept', text: 'Keep or leave out each question, edit any of them, regenerate one category. Nothing is saved until you accept.' },
@@ -384,7 +384,7 @@ const ai = {
           t: 'note',
           tone: 'tip',
           title: 'Lock the fields you have already decided',
-          text: 'The assistant can fill the metadata from your description, and a locked field is left alone. Lock the name and the category list, then let it regenerate the rest as many times as you like.',
+          text: 'Except in the survey builder, the assistant can fill the metadata from your description, and a locked field is left alone. Lock the name and the category list, then let it regenerate the rest as many times as you like.',
         },
       ],
     },
@@ -424,7 +424,7 @@ const ai = {
           t: 'list',
           items: [
             'Exactly one option is right, and the other three are plausible.',
-            'The answer-details field is filled in, especially on any round meant to end in a reveal.',
+            'The **Reveal (shown only after the round)** field is filled in, especially on any round meant to end in a reveal.',
             'The categories are a usable handful, not twenty synonyms.',
             'Nothing is subtly about the wrong country, decade or company.',
           ],
