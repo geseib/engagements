@@ -40,8 +40,7 @@ const guides = HELP_ROLES.flatMap((role) => role.guides);
 
 /** Today's occurrences. SHRINK ONLY. */
 const BANNED_ALLOWLIST = {
-  'host-late-items': { 'the wall': 2 },
-  'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
+  'host-late-items': { 'the wall': 1 },
   'host-build-room': { projector: 1, PRESENT: 1 },
 };
 
@@ -131,14 +130,11 @@ const UNIT_CAP = 120;
 
 /** guide#section → today's words. SHRINK ONLY. */
 const LONG_SECTIONS = {
-  'host-player-management#handing-name-over': 274,
-  'host-reporting#what-we-heard': 344,
   'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {
-  'host-reporting#what-we-heard': 144,
   'host-build-room#during-after': 301,
 };
 

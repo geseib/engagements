@@ -1,90 +1,259 @@
 /**
- * THE HOST GUIDES. (This header was shared by every host guide before the
- * Phase 0 split into area files; it still holds for each of them.)
+ * AFTER THE RESULTS: WHAT WE HEARD, ASK THE ROOM, THE FEEDBACK ROUND, AND THE
+ * REPORT (help refresh Phase 2, workstream W3).
  *
- * Only one of these existed. It had also drifted from the product in two ways
- * that mattered, both of which came from restating things the code already
- * knows: it told hosts that trivia runs a VOTE phase which is "automatic — no
- * voting needed" (there is no vote phase in `GAME_TYPES.trivia.phases` to
- * automate), and it named three question set types out of five. The phase
- * flows and the type table are `{ t: 'phases' }` and `{ t: 'gameTypes' }`
- * blocks now — derived from `config/gameTypes.js`, so the same drift cannot
- * happen twice.
- *
- * Every control named here is quoted from the surface it lives on. A host
- * reading this is looking at the panel while they read.
+ * Workie is introduced in the glossary; these guides use the word. Labels are
+ * quoted from the code; citations sit above each section. Checked on dev
+ * (22 Oct 2026) in a one-screen Call & Answer session: the four-page read,
+ * "1 ask ready", the composer (Rate suggestion, Comments kind), the comments
+ * beat with a featured comment, the report and its Save dialog.
  */
 
-const reporting = {
-  id: 'host-reporting',
-  title: 'Results and reports',
-  icon: 'ChartBar',
-  summary: 'The AI summary, the session report, and what happens to the data afterwards.',
+/*
+  WHAT WE HEARD. Dock words: config/roundWords.js via roundStep.js READ
+  (RW.showTheRead disabled + RW.workieWriting before the read; RW.nextPage;
+  "Reading page 1 of 4 · 1 ask ready"; last page: RW.askTheRoom as primary
+  when asks are unsent, else "Start round N" with RW.askTheRoom, or
+  RW.requestFeedback where the follow-up asks switch is off — template
+  FollowUpAsks, on for dev and test only). Mid-read secondary "Start round N"
+  arms with RW.armUnasked. AISummaryStatus.jsx: "Workie is reading the
+  responses…", failure "Try again", template "Workie's read didn't run" +
+  "Redo". Icons beside a point: GameHostPage askAddon / FW.afterTheRead.
+  Workie reads every round type's results (roundStep RESULTS primary).
+*/
+const heard = {
+  id: 'host-what-we-heard',
+  title: 'What we heard and Ask the room',
+  icon: 'Ear',
+  summary: 'Workie\'s read of a round, the questions it suggests for the room, and a round of comments.',
   sections: [
     {
       id: 'what-we-heard',
-      title: 'What the AI writes',
+      title: 'Reading What we heard with the room',
       icon: 'Sparkle',
       blocks: [
         {
           t: 'p',
-          text: 'After a round, the AI reads what the room actually said and writes a summary of it — themes, follow-up questions, and suggested next steps. It is generated from the responses in front of it, not from a template.',
+          text: 'After the results, **What we heard** puts up Workie\'s read of the round: what the room said, how it voted, topics worth discussing and next steps, written from the answers in front of it. It comes after every type\'s results.',
         },
         {
-          t: 'note',
-          tone: 'tip',
-          title: 'The follow-up questions are the useful part',
-          text: 'Read one out. It is usually a better prompt for discussion than anything you would think of while also running the session.',
-        },
-        {
-          t: 'note',
-          tone: 'info',
-          title: '"Workie used words the room\'s answers don\'t support"',
-          text: 'After Workie writes, Engage checks the read against what it was given: a number no answer, question or count contains (a "15-minute hold" nobody proposed), a claim about the room the vote does not show ("strongest", "unanimous", "everyone agreed" when the points were split), and a next step written as already decided ("The route lead will run…") when the room only ranked answers. If it finds any, Workie rewrites the read once. If words are still left, you see one small line naming them: on the console beside the read on two screens, in the Session panel\'s Workie section beside Redo on one screen, and on the phone remote. Redo, or edit what you say aloud, before the read goes up. Only you see the line; the wall, the room\'s window and the players never do.',
+          t: 'list',
+          items: [
+            'While Workie writes, the dock shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
+            'A long read comes in pages ("Reading page 1 of 4"). **Next page** or → turns the page; ← goes back, and from the first page back to the results.',
+            'The second button, "Start round 2", skips the rest. If Workie suggested questions you have not asked, it asks for a second press first.',
+            'On the last page, **Ask the room** opens the composer when suggestions are waiting ("1 ask ready"); otherwise the main button starts the next round.',
+          ],
         },
         {
           t: 'p',
-          text: 'Ask the room turns a follow-up into a question for the room: Ideas, Choose or Rate. Comments opens a feedback round instead, with names shown. For Rate you name the scale\'s two ends: pick a pair in "1 means" or "5 means" (such as Disagree to Agree), or Custom to type your own. The phones, the wall and the report all show them.',
-        },
-        {
-          t: 'p',
-          text: 'On rounds that withhold something — the real title, the actual number, what happened next — the AI is given the withheld detail so it can compare the room\'s answers against it and reveal it afterwards. That only works if the question set filled the field in; if the AI promises a reveal that never comes, that is the set to fix, not the session.',
+          text: 'If the read fails, the stage says so with **Try again**. If Workie could not run and a plain summary stands in, it reads "Workie\'s read didn\'t run" with **Redo**. **Redo the read on screen**, in the Session panel\'s Settings, rewrites the read now in the voice and approach chosen there.',
         },
       ],
     },
     {
+      id: 'read-check',
+      title: 'When Workie says more than the room did',
+      icon: 'Warning',
+      blocks: [
+        {
+          t: 'note',
+          tone: 'info',
+          title: '"Workie used words the room\'s answers don\'t support"',
+          text: 'After Workie writes, Engage checks the read against what it was given: a number no answer, question or count contains, a claim about the room the vote does not show ("unanimous" when the points were split), and a next step written as already decided when the room only ranked answers. If it finds any, Workie rewrites the read once. Any words still left are named in one small line: beside Redo in the Session panel\'s Workie settings, on the two-screen console beside the read, and on the phone remote. Redo, or change what you say aloud. Only you see the line; it is never part of the read the room sees.',
+        },
+        {
+          t: 'p',
+          text: 'On rounds that hold something back (the real title, the actual number, what happened next), Workie is given the held-back detail so it can compare the room\'s answers with it and reveal it in the read. That only works if the question set filled the detail in; a reveal that never comes is the set to fix, not the session.',
+        },
+      ],
+    },
+    /*
+      AskComposer.jsx with config/followUpWords.js: FW.askTheRoom, "Workie
+      suggests" cards ("from Discussion topics, point 2"), FW.startFromBlank,
+      KIND (KINDS + COMMENTS_KIND, KIND_LINES), FW.statement / FW.question,
+      "Back to Workie's words", ENDS_WORDS ("1 means", "5 means", "Custom…"),
+      FW.fromTheRead, FW.whyWorkie, FW.whatRoomSees, PRIVACY_LINES,
+      FW.sendToRoom / FW.commentsSend, FW.finishFirst. Call & Answer only
+      (GameHostPage asksEnabled).
+    */
+    {
+      id: 'ask-the-room',
+      title: 'Asking the room a quick question',
+      icon: 'Question',
+      blocks: [
+        {
+          t: 'p',
+          text: 'In Call & Answer, **Ask the room** opens a composer. Open it from the dock on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
+        },
+        {
+          t: 'steps',
+          items: [
+            'Pick one of the cards under **Workie suggests**, or **Start from blank**.',
+            'Choose the kind: **Ideas** (short written answers), **Choose** (one of 2 to 4 options) or **Rate** (a statement rated 1 to 5). All three are anonymous. **Comments** opens a feedback round instead.',
+            'Edit the words; **Back to Workie\'s words** undoes your edits. For Rate, pick what **1 means** and **5 means** (Disagree to Agree, No to Yes…) or **Custom…** to type both. **Words from the read** lets you click a line to use it.',
+            'Check **What the room sees**, then **Send to the room**.',
+          ],
+        },
+        {
+          t: 'p',
+          text: 'One question can be open at a time. Where Ask the room is not offered, the read\'s last page has **Request feedback** instead.',
+        },
+      ],
+    },
+    /*
+      AskStage.jsx: "Question for the room · Rate", FW.answeredOn, FW.theRoomsAnswer,
+      FW.averageOf5, ideas picked for the room (FW.pickForWall, FW.ideasCount).
+      Dock (roundStep ROOM_QUESTION / ROOM_RESULTS): RW.showResults with in-place
+      arm, RW.cancelQuestion; then "Start round N" and RW.askAnother; yourPart
+      ROOM_RESULTS "Pick the ideas to show."
+    */
+    {
+      id: 'room-question',
+      title: 'While the room answers your question',
+      icon: 'ChatCircleText',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            'The stage shows the question and how many have answered ("2 of 6 answered on their phone, laptop or tablet").',
+            '**Show results** puts up the room\'s answer: the count for each option, or how the room rated the statement. Pressed early it asks in place. **Cancel the question** takes it back and returns to the read.',
+            'For Ideas, nothing is shown until you pick: click an idea to put it up for the room, click again to take it down.',
+            'Then start the next round, or **Ask another question**.',
+          ],
+        },
+        {
+          t: 'p',
+          text: 'Answers that arrive after you show the results are kept but not counted: see Late answers and comments.',
+        },
+      ],
+    },
+    /*
+      The feedback beat: FW.commentsSend "Open comments" / RW.requestFeedback;
+      FeedbackWall.jsx ("What do you make of it?", "Provide feedback on the
+      round from your phone, laptop or tablet.", featured quote, click to take
+      down, "Said in the room"); RoomMeter arrivals (last three, no names, click
+      to feature; off with the Feedback setting), RoomNote ("Said in the room",
+      "Type what someone said", "Add"); dock RW.feedbackOpen, RW.backToRead,
+      "Start round N". Report: GameReport "Comments", "Shown to the room".
+    */
+    {
+      id: 'feedback-round',
+      title: 'A round of comments',
+      icon: 'ChatCircleText',
+      blocks: [
+        {
+          t: 'p',
+          text: '**Open comments** (the Comments kind) or **Request feedback** asks the room what it makes of the round. The stage says **What do you make of it?** and people comment from their phones on the read, the results or any answer. Comments carry the writer\'s name.',
+        },
+        {
+          t: 'list',
+          items: [
+            'The room meter counts comments and, with the Feedback setting on, shows the latest few without names. Click one to put it up for the room with its writer; click the quote to take it down.',
+            'Someone said something good out loud? Type it under **Said in the room** and press **Add**. It goes in as said in the room.',
+            '**Back to what we heard** returns to the read and closes comments on every phone; the main button starts the next round.',
+          ],
+        },
+        {
+          t: 'p',
+          text: 'Every comment is in the round\'s part of the session report, marked when it was shown to the room.',
+        },
+      ],
+    },
+  ],
+};
+
+/*
+  THE SESSION REPORT. Opened by the Rounds tab's "Session report"
+  (SessionSetupPanel ~940 → handleViewReports → this session's report), the
+  ENDED primary RW.openReport, or the Sessions list (W2). GameReport.jsx
+  toolbar: "Back to session", "All session reports", "Print", "Save report";
+  sections "About this session", "Who was here", per round (the task, "AI
+  Analysis", answers with places and points, "Comments", "Arrived late"),
+  "Final Scores". Built fresh each time (create-report is a POST).
+*/
+const reporting = {
+  id: 'host-reporting',
+  title: 'The session report',
+  icon: 'FileText',
+  summary: 'Opening the report, saving it to keep or share, and how long a session and a saved report last.',
+  sections: [
+    {
       id: 'session-report',
-      title: 'The session report',
+      title: 'Opening the session report',
       icon: 'FileText',
       blocks: [
         {
           t: 'p',
-          text: 'Session report is at the top of the Rounds tab, above the rounds it summarises. It pulls the whole session together — every round, the responses, the scores and the AI summaries — in one document you can keep.',
+          text: 'Open it from **Session report** at the top of the Rounds tab, from **Open session report** when the session ends, or from Sessions on your start screen. It is built fresh each time, so you can open it during the session as often as you like; opening it ends nothing.',
         },
         {
           t: 'p',
-          text: 'You can generate it at any point, during the session or after it. It is not a final action and running it does not end anything.',
+          text: 'It holds what the session was about, who was there, then each round: the question and the task, Workie\'s read, every answer with its place and points, the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores.',
         },
         {
           t: 'p',
-          text: 'Answers and comments that arrived late appear under "Arrived late" in each round, with their labels. See Late answers and comments.',
-        },
-        {
-          t: 'p',
-          text: '**Save report** keeps it as a PDF: **Keep for 90 days**, or **Keep for 1 year**. A saved report outlives the session. Find it again under Reports on the welcome screen, with the link and passkey for anyone without an account.',
+          text: 'Along the top: **Back to session**, **All session reports**, **Print** and **Save report**.',
         },
       ],
     },
+    /*
+      GameReport.jsx save dialog ("How long should it be kept?", "Keep for 90
+      days" / "Keep for 1 year" with their deletion lines, "Save");
+      ReportSavedDialog.jsx ("Report saved", Link, Passkey, "send them the link
+      and the passkey… separately", "You can find both again under Reports.
+      Saving this session again keeps the same passkey.", "Anyone on your team
+      can open it from Reports without a passkey.", "Download PDF", "Done").
+      save-report.js: retention 90 / 365 days from saving.
+    */
+    {
+      id: 'saving-report',
+      title: 'Saving and sharing a report',
+      icon: 'FloppyDisk',
+      blocks: [
+        {
+          t: 'steps',
+          items: [
+            'Press Save report, at the top of the report.',
+            'Choose **Keep for 90 days**, or **Keep for 1 year** for a report you will come back to. Each is deleted automatically that long after you save it.',
+            'Press Save. **Report saved** shows a link and a passkey.',
+          ],
+        },
+        {
+          t: 'p',
+          text: 'Someone who is not signed in needs both the link and the passkey; send them separately (the passkey by text or out loud) so a forwarded link alone opens nothing. **Download PDF** keeps a copy on your computer. Anyone on your team can open the report from Reports without a passkey.',
+        },
+        {
+          t: 'p',
+          text: 'A saved report outlives its session. Find it again, with its link and passkey, under Reports on your start screen. Saving the same session again keeps the same passkey.',
+        },
+      ],
+    },
+    /*
+      session-ttl.js (game/ and websocket/): created → +90 days; started →
+      started + 7 days (game/session-start.js). Deletion is lazy (up to ~48h).
+      The report is rebuilt from the session (create-report), so it cannot be
+      made once the session is gone. Saved reports: save-report.js 90 / 365.
+    */
     {
       id: 'how-long-data-lasts',
       title: 'How long the data lasts',
       icon: 'CalendarBlank',
       blocks: [
         {
+          t: 'table',
+          head: ['What', 'Kept for'],
+          rows: [
+            ['A session you created but never started', '90 days from when you created it'],
+            ['A session that has started', '7 days from the start'],
+            ['A saved report', '90 days or 1 year from when you saved it, whatever happens to the session'],
+          ],
+        },
+        {
           t: 'note',
           tone: 'warn',
-          title: 'Sessions expire',
-          text: 'A session is kept for 90 days from creation, or for 7 days once it has started, whichever comes first. If the results matter, save the report while the session still exists.',
+          title: 'Save the report within the week',
+          text: 'When a session expires, its answers, rounds and report go with it, and the report can no longer be made. If the results matter, save the report while the session still exists. A session can linger a day or two past its time; do not count on that.',
         },
       ],
     },
@@ -94,9 +263,10 @@ const reporting = {
 /**
  * The host-reports area. Assembled into roles by ./index.js (ROLE_AREAS); see
  * docs/help-refresh/STRUCTURE.md for the map and the conventions.
- * Results, What we heard, the session report, saved reports.
+ * What we heard, Ask the room, the feedback round, the session report, saved
+ * reports, and how long the data lasts.
  */
 export const AREA = {
   id: 'host-reports',
-  guides: { host: [reporting] },
+  guides: { host: [heard, reporting] },
 };
