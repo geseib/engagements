@@ -2305,7 +2305,7 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
 
   // ASK CLAUDE FOR QUESTIONS (question-sets plan step 7).
   const QSET = {
-    SK: 'BUILD#QSET#0000000000001#q1', QSetId: '0000000000001-q1', Name: 'Game questions', Kind: 'game',
+    SK: 'BUILD#QSET#0000000000001#q1', QSetId: '0000000000001-q1', Title: 'Game questions', Kind: 'game',
     File: 'build-room/questions/game-questions.json', CreatedAt: ago(30),
     Questions: [
       { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },

@@ -2620,7 +2620,7 @@ async function postClaudeSet(ctx, body) {
   const v = norm.value;
   const row = await put(ctx, {
     SK: sk, QSetId: sk.slice('BUILD#QSET#'.length).replace('#', '-'),
-    Name: v.name, Kind: v.kind || S.buildKindOf(room.state), Questions: v.questions,
+    Title: v.name, Kind: v.kind || S.buildKindOf(room.state), Questions: v.questions,
     ...(v.file ? { File: v.file } : {}), ...(req ? { ReqId: req.ReqId } : {}), CreatedAt: now,
   });
   if (req && !['done', 'failed'].includes(req.Status)) await put(ctx, { ...req, Status: 'done', Count: v.questions.length, UpdatedAt: now });

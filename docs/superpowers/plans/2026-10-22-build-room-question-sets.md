@@ -65,7 +65,7 @@ And: *"yes, add it to the plan and build 1–4 first."*
 - Claude: the build-room skill's Writing a question set; the file
   `build-room/questions/<kind>-<name>.json`; the tool `share_question_set` (path checked under
   build-room/questions/, at most 64 KB, valid JSON) posts it to `POST build/question-sets`.
-- Server: kept as `BUILD#QSET#` (sealed for teams: Name, Questions, File), what a room cannot
+- Server: kept as `BUILD#QSET#` (sealed for teams: Title, Questions, File), what a room cannot
   ask dropped and said why, the request marked done, a host-only timeline line. The host's
   read carries `claudeSets`; Claude, phones and the wall do not.
 - Library: Claude's sets first, marked From Claude (dashed), askable at once. Save to my sets

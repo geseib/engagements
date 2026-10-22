@@ -234,7 +234,7 @@ function normalizeClaudeSet(body) {
 /** The host's view of one: everything, and whether it went to their bell. */
 const claudeSetView = (r) => ({
   setId: r.QSetId,
-  name: r.Name || '',
+  name: r.Title || '',
   kind: r.Kind || '',
   questions: Array.isArray(r.Questions) ? r.Questions : [],
   file: r.File || '',
