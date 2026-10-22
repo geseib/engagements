@@ -27,7 +27,7 @@ const gettingStarted = {
           t: 'features',
           items: [
             { icon: 'DeviceMobile', title: 'Any device', text: 'Phone, tablet or laptop. Whatever is in your hand.' },
-            { icon: 'LinkSimple', title: 'A link or a code', text: 'Scan the QR on the big screen, or type the four digits.' },
+            { icon: 'LinkSimple', title: 'A link or a code', text: 'Scan the QR the host puts up, or type the four digits.' },
             { icon: 'UserCircle', title: 'No account', text: 'Players never sign in. Only hosts and admins do.' },
             { icon: 'Broadcast', title: 'A network', text: 'Anything that loads a web page will do.' },
           ],
@@ -51,8 +51,8 @@ const gettingStarted = {
           t: 'steps',
           items: [
             { title: 'A question appears', text: 'Type an answer, pick an option, or place a word — depending on the kind of session.' },
-            { title: 'Everyone answers', text: 'The host can see how many people are done, but not what you wrote, until the round closes.' },
-            { title: 'Sometimes the room votes', text: 'On Call & Answer rounds you rank other people\'s answers. Not on trivia, polls or wavelength.' },
+            { title: 'Everyone answers', text: 'The host sees how many people are done. Their own screen may also show the answers as they come in, usually without names.' },
+            { title: 'Sometimes the room votes', text: 'On Call & Answer rounds you rank the room\'s answers. Not on trivia, polls or wavelength.' },
             { title: 'Results', text: 'Scores, the best answers, and a summary the AI wrote from what the room said.' },
           ],
         },
@@ -94,9 +94,9 @@ const joining = {
           t: 'steps',
           items: [
             { title: 'Scan the QR code', text: 'It is on the host\'s screen. Your camera app will offer the link.' },
-            { title: 'Or type the code', text: 'Four digits, shown next to the QR. There are no letters in it.' },
+            { title: 'Or type the code', text: 'Four digits, under the QR, labelled Session code. There are no letters in it.' },
             { title: 'Type your name', text: 'Whatever the room will recognise you by.' },
-            { title: 'Join', text: 'That is the whole of it. No password, no email, no account.' },
+            { title: 'Join', text: 'Press **Join Game**. That is the whole of it. No password, no email, no account.' },
           ],
         },
         {
@@ -112,13 +112,24 @@ const joining = {
       title: 'If you lose the page',
       icon: 'ArrowsClockwise',
       blocks: [
+        /*
+          The session knows a player by this browser (components/joinResult.js
+          getClientId), not by name alone. Same browser: PlayerPage's "Welcome
+          back." prompt with "Rejoin as {name}". Another device: join-game.js
+          answers NAME_TAKEN. "Are you the Sam already here?" is only for
+          sessions older than identity stamping (JoinNameCollision.jsx header).
+        */
         {
           t: 'p',
-          text: 'Reopen the link and enter the same name. Your answers and your points are still there — the session remembers you by name, not by browser tab.',
+          text: 'Reopen the link on the same phone and browser. Your screen says "Welcome back." Tap **Rejoin as** your name, and your answers and points come back with you. The session knows you by this browser, not by your name alone.',
         },
         {
           t: 'p',
-          text: 'If the site asks "Are you the Sam already here?", that is this exact case: it cannot tell whether you are the same Sam coming back or a second Sam. Answer honestly. "Yes — rejoin as Sam" picks your history back up.',
+          text: 'On a different phone or browser, the same name gets "That name is taken". Ask the host to hand it over (below).',
+        },
+        {
+          t: 'p',
+          text: 'Now and then the site asks "Are you the Sam already here?" instead. Answer honestly: "Yes — rejoin as Sam" picks your history back up.',
         },
       ],
     },
@@ -170,10 +181,16 @@ const joining = {
         {
           t: 'faq',
           items: [
-            { q: 'This session has not started yet', a: 'The host has created it but not opened the doors. Wait — your screen will let you in by itself once they start it.' },
-            { q: 'This session has ended', a: 'It is over. The results may still be on the host\'s screen, but there is nothing left to join.' },
-            { q: 'We do not recognise that code', a: 'Check the four digits against the host\'s screen. It is easy to read a 0 as an 8 across a room.' },
-            { q: 'You appear to be offline', a: 'Your connection dropped. The page reconnects on its own once you have signal again.' },
+            /*
+              Wording from lambda-functions/game/session-gate.js (not started:
+              403 message; not found: 404 "Game not found"), JoinCodeEntry.jsx:63
+              (/join), and PlayerPage's offline banner. The gate never refuses an
+              ended session: the player gets in and sees the closing screen.
+            */
+            { q: 'This game has not been started yet', a: 'The host has created the session but not started it. Wait until they do, then press **Join Game** again.' },
+            { q: 'Game not found, or Nothing is running under…', a: 'Check the four digits against the room\'s screen. It is easy to read a 0 as an 8 across a room.' },
+            { q: 'Offline. Reconnecting.', a: 'Your connection dropped. The page catches up on its own when it comes back. You do not need to refresh, and refreshing would lose anything you typed but did not send.' },
+            { q: 'The session has already ended', a: 'You can still get in. You land on its closing screen.' },
           ],
         },
       ],
@@ -202,20 +219,25 @@ const playing = {
             { title: 'Call & Answer', text: 'A text box. Write as much or as little as you like — the interesting answers are usually not the shortest.' },
             { title: 'Trivia', text: 'Usually four options, up to six. Pick one. There is a right answer and you will see it at the end of the round.' },
             { title: 'Poll', text: 'One question: pick an option, give a rating, say yes or no, or write a short answer. There is no right answer; the room\'s result goes up on the main screen.' },
-            { title: 'Wavelength', text: 'A word or a short phrase. Everyone\'s words become one cloud — the fun is in how much the room overlaps.' },
+            { title: 'Wavelength', text: 'Up to ten words. A word counts only when everyone says it, so pick the obvious ones. The result shows the words the room shared.' },
             { title: 'Survey', text: 'Several questions you answer at your own pace, then send. You can go back and change your answers until the host closes the survey.' },
             { title: 'Build Room', text: 'The room builds an app with the host\'s Claude: suggest ideas, choose between options, rate. Open the demo opens the app itself, on the room\'s Wi-Fi, or from anywhere when the host has opened it to people who are not there. That button is yours alone; if the host removes you, it stops working. History marks what reached Claude, and when the host changed the room\'s words it shows what Claude got and why; your own ideas say yours. It never shows who sent anything.' },
           ],
         },
+        /*
+          Answers lock on submit: PlayerPage's receipt says "This is locked for
+          the round." Only an answer held while offline ("Waiting for the
+          connection.") can still be changed, with "Change my answer".
+        */
         {
           t: 'note',
           tone: 'tip',
-          title: 'You can change your answer until the round closes',
-          text: 'Submitting is not final. Come back and edit it while the round is still open — the host sees that you have answered, not what you keep changing it to.',
+          title: 'Your answer is locked once you submit',
+          text: 'If you were offline when you pressed submit, your screen says "Waiting for the connection." and offers **Change my answer** until it sends.',
         },
         {
           t: 'p',
-          text: 'Once you have submitted, your screen tells you it is waiting for everyone else. Switching apps or locking your phone does not lose your answer.',
+          text: 'Your screen then shows what you sent. Reloading the page or locking your phone does not lose it.',
         },
         {
           t: 'note',
@@ -253,7 +275,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'On Call & Answer rounds, once everyone has answered the room ranks the answers. Your own answer is marked "Yours", and you may rank it like any other.',
+          text: 'On Call & Answer rounds, once the host opens voting the room ranks the answers. Your own answer is marked "Yours", and you may rank it like any other.',
         },
         { t: 'h', text: 'Two ways to do it' },
         {
@@ -265,7 +287,7 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'You can switch between the two at any point before voting closes, and change your ranking as often as you like.',
+          text: 'You can switch between the two and change your ranking as often as you like until you press **Submit Votes**. After that your ballot is locked for the round.',
         },
       ],
     },
@@ -276,7 +298,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'Tap any answer to open it full-screen. Then use Previous and Next to walk through the rest without going back to the list each time.',
+          text: 'On the **Detailed Vote** ballot, tap an answer\'s text or **Show all** to open it full-screen. Then use Previous and Next to walk through the rest without going back to the list each time.',
         },
         {
           t: 'keys',
@@ -316,15 +338,15 @@ const scoring = {
             ['Call & Answer', 'Votes from the room: 3 points for each first-place vote, 2 for second, 1 for third.'],
             ['Trivia', 'Getting it right, plus a speed bonus of up to 5 points: the faster a right answer, the bigger it is.'],
             ['Poll', 'None. A poll counts opinions; nobody scores.'],
-            ['Wavelength', 'None. The shared word cloud is the result.'],
+            ['Wavelength', 'None. The result shows which words the room landed on together.'],
             ['Survey', 'None.'],
           ],
         },
         {
           t: 'note',
           tone: 'info',
-          title: 'You cannot vote for yourself',
-          text: 'The ballot leaves your own answer out. Points on an open round come from other people rating your answer, which is the whole point of them being anonymous while the vote is open.',
+          title: 'Your own answer is on the ballot',
+          text: 'It is marked Yours, and you can rank it like any other. Points on a voted round come from how the room ranks your answer, which is why names stay hidden while the vote is open.',
         },
       ],
     },
@@ -346,7 +368,7 @@ const scoring = {
             },
             {
               q: 'I dropped out and came back. Did I lose my points?',
-              a: 'No. Rejoin with the same name and your score comes back with you.',
+              a: 'No. Rejoin from the same phone and browser and your score comes back with you. On another device, ask the host to hand your name over.',
             },
             {
               q: 'The host removed me from the list. Did that wipe my score?',
