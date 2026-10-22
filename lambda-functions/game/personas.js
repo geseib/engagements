@@ -439,7 +439,7 @@ const REGISTER_BLOCK =
   genericness the register block exists to stop.
 */
 const OPENING_MOVES = [
-  'Open mid-thought, as if the mic caught you already reacting to the strongest response.',
+  'Open mid-thought, as if the mic caught you already reacting to the top-ranked response.',
   'Open with the single best phrase a participant wrote, quoted verbatim, then react to it.',
   'Open with a number that jumps out of this round, and why it matters.',
   'Open with a short, punchy verdict on the round — a few words — then spend the section earning it.',
@@ -726,10 +726,19 @@ const withholdBackground = (text, background) => {
  * among the last words the model reads whatever the template says — and
  * withholdBriefing above, which cuts from the briefing's heading to the end,
  * never takes it with it.
+ *
+ * RANKING_FACT, the one-line fact sheet (docs/design/workie-grounding/STEP0.md,
+ * owner 21 Oct 2026): the vote facts already reach Workie; what it lacked was
+ * what a ranking MEASURES. Review #38's read turned a ranking into "the
+ * strongest resistance" and a plan with an owner. It rides at the end of the
+ * honesty rule, so it is on every prompt the rule is.
  */
+const RANKING_FACT = 'A ranking shows which answers people preferred among these, not that the room agreed to '
+  + 'a plan or chose an owner. Say what the vote shows, as the counts and points above show it.';
 const HONESTY_RULE = 'Facts come from the material above, from what the room said, or from general knowledge '
   + 'you are certain of. Never invent numbers, names, quotations, or anything about this organisation or event. '
-  + 'When something you would like is missing, work with what you have and do not mention that it is missing.';
+  + 'When something you would like is missing, work with what you have and do not mention that it is missing.\n'
+  + RANKING_FACT;
 
 /**
  * Resolve which voice to use.
@@ -899,6 +908,7 @@ module.exports = {
   backgroundLine,
   withholdBackground,
   HONESTY_RULE,
+  RANKING_FACT,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
   resolveOutputSections,

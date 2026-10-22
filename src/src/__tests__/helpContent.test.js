@@ -216,6 +216,9 @@ describe('§6 the features that shipped today are documented', () => {
     ['the arrows for the tenth response onward', /there is no 10 key/],
     ['the session report on the Rounds tab', /session report/],
     ['pictures on a question', /picture/],
+    // Workie's after-writing check (read-check.js): what the host-only line means.
+    ['the read check\'s host-only note', /workie used words the room's answers don't support/],
+    ['that only the host sees it', /only you see the line/],
   ])('%s', (_label, pattern) => {
     expect(corpus()).toMatch(pattern);
   });

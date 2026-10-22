@@ -9,6 +9,8 @@ import RemoteCategoryList from './components/RemoteCategoryList';
 import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
+import ReadCheckNote from './components/ReadCheckNote';
+import { fetchReadCheck } from './utils/readCheckClient';
 import { authFetch } from './auth/authFetch';
 import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
@@ -184,6 +186,8 @@ function HostRemote() {
   const [snapshot, setSnapshot] = useState(null);
   const [roster, setRoster] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
+  // The read check's note (utils/readCheckClient.js): host's door only.
+  const [readCheck, setReadCheck] = useState(null);
   /*
     THE ROUND'S RESPONSES, so the host can pick one to put on the wall.
 
@@ -647,6 +651,23 @@ function HostRemote() {
     const timer = setInterval(load, AI_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, onFieldNotes, notes.ready]);
+
+  /*
+    THE READ CHECK'S NOTE, once the read is here. The notes come from the
+    public read above, which never carries it; this one authenticated read of
+    the host's door does (get-ai-summary.js returns ReadCheck there only). A
+    failure is silence: the note is an aid, never a reason to lose the read.
+  */
+  useEffect(() => { setReadCheck(null); }, [gameId, round]);
+  const readStamp = aiSummary ? (aiSummary.generatedAt || 'read') : '';
+  useEffect(() => {
+    if (!gameId || !onFieldNotes || !notes.ready || !readStamp) return undefined;
+    let cancelled = false;
+    fetchReadCheck({ fetchFn: authFetch, apiBase: apiBase(), gameId }).then((rc) => {
+      if (!cancelled && activeGameRef.current === gameId) setReadCheck(rc);
+    });
+    return () => { cancelled = true; };
+  }, [gameId, onFieldNotes, notes.ready, readStamp]);
 
   /* -------------------------------------------------------- the feedback round */
 
@@ -1681,6 +1702,7 @@ function HostRemote() {
                         </ul>
                       </div>
                     )}
+                    <ReadCheckNote readCheck={readCheck} className="hr-notes-foot hr-notes-check" />
                     <p className="hr-notes-foot">
                       Full notes, next steps and every response are in the session report.
                     </p>

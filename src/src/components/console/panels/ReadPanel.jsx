@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import MarkdownRenderer from '../../MarkdownRenderer';
 import CW from '../../../config/consoleWords';
 import { prosePageSlice } from '../../../config/stagePaging';
+import ReadCheckNote from '../../ReadCheckNote';
 
 /**
  * Workie's read, as the host works with it (host console spec): the whole read,
@@ -16,6 +17,10 @@ import { prosePageSlice } from '../../../config/stagePaging';
  * carries an accent bar along its left edge and "On the wall" on its first
  * line, and is scrolled into view when the page changes. Without a page the
  * read is drawn whole, as before.
+ *
+ * THE READ CHECK'S NOTE (`readCheck`, from the host's door only): one small
+ * line under the heading when Workie's read still uses words the answers do
+ * not support. The console is the host's screen; the wall never draws it.
  */
 function slicesOf(markdown, budget) {
   const first = prosePageSlice(markdown, 0, budget);
@@ -43,13 +48,14 @@ function ReadSlices({ markdown, page, budget, askAddon }) {
   });
 }
 
-export default function ReadPanel({ kicker, markdown, askAddon = null, afterRead = null, composer = null, page = null, budget = null }) {
+export default function ReadPanel({ kicker, markdown, askAddon = null, afterRead = null, composer = null, page = null, budget = null, readCheck = null }) {
   const sliced = Number.isInteger(page) && Number(budget) > 0 && Boolean(markdown);
   const read = (
     <div className="hc-card">
       {/* "The wall shows this page" only beside a read that exists: while Workie
           is still writing there is nothing on the wall to point at (review #38). */}
       <h3 className="hc-card-h">{sliced || !String(markdown || '').trim() ? CW.readTitle : `${CW.readTitle} · ${CW.readOnWall}`}</h3>
+      {String(markdown || '').trim() ? <ReadCheckNote readCheck={readCheck} className="hc-muted" /> : null}
       {sliced
         ? <ReadSlices markdown={markdown} page={page} budget={budget} askAddon={askAddon} />
         : <MarkdownRenderer content={markdown || ''} className="hc-md" listItemAddon={askAddon} />}

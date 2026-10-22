@@ -9,6 +9,41 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 22 Oct 2026: Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes
+
+**Test:** merge of dev `1225bdf2` (and the notes commit after it; later dev commits are named in the push). Plans and reviews: [geseib/engagements#38](https://github.com/geseib/engagements/issues/38), `docs/design/workie-grounding/STEP0.md`, `docs/design/prompt-versions/`, `docs/design/ai-generation-review/`.
+
+### New
+
+- **Workie checks its read before the room sees it** (owner: "we dont want that just injected as part of a fluffy GenAI language"). After Workie writes, code compares the read with what the room was given and said. It looks for numbers that are not in the material ("15-minute"), claims the vote does not support ("strongest", "unanimous", "the room agreed"), next steps written as already decided, and generic filler. Anything in the persona's own voice is exempt, so a character keeps its catchphrases. If something trips, Workie rewrites once with the exact words named; the extra call happens only then. Whatever survives shows the host a note, never the room: *Workie used words the room's answers don't support: …* (two-screen console, the Session panel's Workie section on one screen, the phone remote). Every prompt now also says that a ranking shows which answers people preferred, not that the room agreed to a plan.
+- **Next steps are suggestions.** Step 0 of the grounding work found the cause of the review's invented "15-minute hold": the prompts' own rule demanded an owner and a concrete action for every step, which four answers could not supply. In the repo, the demo sets' prompts and the built-in defaults now ask for steps starting **Suggested**, never written as decided, with no number, duration or limit an answer did not give; "the strongest piece of resistance" becomes "the resistance named by the most answers". Live prompts change only when an admin applies the repo's version (next item).
+- **Prompt versions, as question sets have them.** Admin › Prompts shows a Version column. The library says which prompts have a newer version in the repo (the prompt files ship with each deploy); **Review** shows each changed part word by word and **Save as version N** makes it live while the old one stays. The editor's **Versions** tab lists every version with when, who and how; **Compare with live** and **Make live** (press twice) put any earlier one back. Every save that changes a prompt's content is now a new version (before, edits overwrote the text in place), and Populate defaults no longer overwrites an edited default.
+- **AI drafts and the bell** (another session). Every AI builder run now writes a draft in the library it will be saved into; nothing touches a set until its owner accepts it. The draft review keeps, leaves or edits each question, regenerates a category or the rest, and accepts as a new set (switched on, with a shelf) or as one new version of an existing set, with Undo and a 7-day restore after discard. **The bell** collects drafts, invitations and flagged sets in one inbox on the admin console, the host's start screen, the two-screen console and the phone remote; never on a screen the room sees.
+- **Connect window by case** (another session, plugin **1.25.0**): one paste for the first time, coming back, an out-of-date plugin, or another laptop; Claude Code resumes a room that already has work.
+- **Share demo says who is here and who is elsewhere** while remote share is on (plugin 1.24.2): counts per person, "on this network" or "elsewhere".
+
+### Fixed
+
+- **The host page went blank on an early Show results** (review #38, P2): pressing early asked for a second press; when the last ballots landed the button stopped needing it and the bar read a warning that was gone. It now lets go.
+- **One screen flipped back to Two** (review #38, P2): the host page re-read a choice that every tab in the browser shares. It now keeps the choice made on it.
+- **"The wall shows this page" beside an empty read** while Workie is writing (review #38): said only once there is a read.
+- AI drafts: the bell's link landed on the bare list; accepting saved a new set switched off unasked.
+
+### What to look at
+
+1. **Update the plugin** from Connect Claude Code (1.25.0) and restart Claude Code.
+2. **Prompts:** Admin › Prompts shows "*N* prompts have a newer version in the repo". Open **Review** on *Workie - The Transfer Reader*: rule 11 and the sections now ask for **Suggested** steps; **Save as version 2**. Its **Versions** tab lists v1 and v2; **Compare with live**, then **Make live** on v1 and back to v2.
+3. **Workie's read:** run a round of *Lessons from Different Schools* (or Redo one). Next steps start **Suggested** and carry no number the answers did not give. If a read still uses an unsupported word, the console's read and the phone remote show the note; the room's window and the stage never do.
+4. **Review #38's repro:** with 2 of 4 voted press **Show results**, then let the last ballots land: the host stays up. Choose **One screen**, keep a second host tab open, run a round: it stays on One screen.
+5. **AI drafts:** generate questions into a set, leave, come back through **the bell**, review, accept into the set as a new version, then **Undo**.
+
+### Known gaps
+
+- Reports do not yet record which prompt version wrote a read.
+- The check compares numbers by value: a "2" anywhere in the material lets "two weeks" pass. Commitments are checked only under a Next steps heading.
+- The prompt fixes reach a tier only when an admin applies the repo's version there.
+- Earlier gaps still open: *Talk about it* is a fixed line; Call keeps one column; the room's window cannot page a long Build Room ask.
+
 ## 19 Oct 2026: Build Room on two screens, Consider with Sent to Claude marks, and fixes on both room types
 
 **Test:** merge of dev `156265f6` (notes in the same commit). Plans: `docs/design/parity/PLAN.md` §2 (B8, B9, §2.9b); mockups `docs/design/build-room-console/` and `docs/design/build-room-consider/`; QA walk `docs/qa/2026-10-18-build-room-walk/`.
