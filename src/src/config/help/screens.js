@@ -80,7 +80,7 @@ export const HELP_FOR_SCREEN = {
   'staff-discount-codes': { guide: 'admin-getting-started', section: 'console-sections' },
   'staff-shared-library': { guide: 'glossary', section: 'owner-tags' },
   'staff-public-library': { guide: 'glossary', section: 'owner-tags' },
-  'staff-prompts': { guide: 'admin-ai-prompts', section: 'managing-them' },
+  'staff-prompts': { guide: 'admin-ai-prompts', section: 'managing-them' },         // "Editing prompts (Engage staff)"
   'staff-moderation': { guide: 'admin-getting-started', section: 'console-sections' },
   'staff-accounts': { guide: 'admin-getting-started', section: 'first-thing' },
   'staff-archive': { guide: 'admin-question-sets', section: 'moving-between-environments' },
@@ -88,8 +88,8 @@ export const HELP_FOR_SCREEN = {
 
   /* ---- AI ---- */
   'ai-builders': { guide: 'admin-ai-builders', section: 'what-builders-do' },
-  'ai-draft-review': { guide: 'admin-ai-builders', section: 'drafts-bell-review' },
-  'ai-bell': { guide: 'glossary', section: 'the-bell' },
+  'ai-draft-review': { guide: 'ai-drafts', section: 'drafts-bell-review' },
+  'ai-bell': { guide: 'ai-drafts', section: 'the-bell' },
 
   /* ---- Build Room (host) ---- */
   'build-create': { guide: 'host-build-room', section: 'setting-up' },

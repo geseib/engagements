@@ -168,6 +168,11 @@ export const HELP_SECTION_MOVES = {
   // its id (the setup guide); its connecting and during-and-after sections left.
   'host-build-room#connecting-claude': 'build-room-claude#connecting-claude',
   'host-build-room#during-after': 'build-room-running#the-host-screen',
+  // Phase 2 (W9): drafts, the review and accepting left the builders guide for
+  // "Drafts and the bell".
+  'admin-ai-builders#drafts-bell-review': 'ai-drafts#drafts-bell-review',
+  'admin-ai-builders#accepting-taking-back': 'ai-drafts#accepting-taking-back',
+  'admin-ai-builders#reviewing-output': 'ai-drafts#reviewing-output',
 };
 
 /** The section of a guide with that id, or null. */
