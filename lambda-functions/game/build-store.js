@@ -190,6 +190,59 @@ function normalizeReady(body) {
   }
   return { value: { kind, sets } };
 }
+/**
+ * A QUESTION SET CLAUDE WROTE (question-sets plan step 7; owner 22 Oct: "a
+ * button request that gets back from claude code an artifact in the
+ * repo/folder that we can use as a question set"). The plugin sends the file
+ * Claude wrote. Kept as the room can ask it: Ideas, Choose with 2 to 6
+ * options, Rate on 1 to 5; anything else is dropped and said why. At most 60
+ * questions; the host saves it to their sets through the AI drafts review.
+ */
+const QSET_LIMITS = Object.freeze({ questions: 60, prompt: 300, detail: 600, name: 80, category: 60, option: 120, options: 6, file: 200 });
+const QSET_KIND_WORDS = Object.freeze({ ideas: 'suggest', suggest: 'suggest', choose: 'choice', choice: 'choice', rate: 'rating', rating: 'rating' });
+function normalizeClaudeSet(body) {
+  const b = body || {};
+  const name = cleanText(b.name, QSET_LIMITS.name);
+  if (!name) return { error: 'Give the set a name' };
+  if (!Array.isArray(b.questions) || !b.questions.length) return { error: 'questions must be a list of questions' };
+  const kind = BUILD_KIND_KEYS.includes(b.kind) ? b.kind : '';
+  const questions = [];
+  const dropped = [];
+  b.questions.slice(0, QSET_LIMITS.questions * 2).forEach((q, i) => {
+    const n = i + 1;
+    if (!q || typeof q !== 'object') { dropped.push(`${n}: not a question`); return; }
+    const k = QSET_KIND_WORDS[String(q.kind || '').toLowerCase()];
+    const prompt = cleanText(q.prompt || q.question, QSET_LIMITS.prompt);
+    if (!prompt) { dropped.push(`${n}: no question text`); return; }
+    if (!k) { dropped.push(`${n}: "${String(q.kind || '').slice(0, 20)}" is not Ideas, Choose or Rate`); return; }
+    const options = k === 'choice'
+      ? (Array.isArray(q.options) ? q.options : []).map((o) => cleanText(o, QSET_LIMITS.option)).filter(Boolean)
+      : [];
+    if (k === 'choice' && (options.length < 2 || options.length > QSET_LIMITS.options)) { dropped.push(`${n}: a choice needs 2 to 6 options`); return; }
+    if (questions.length >= QSET_LIMITS.questions) { dropped.push(`${n}: more than ${QSET_LIMITS.questions} questions`); return; }
+    questions.push({
+      kind: k, prompt,
+      category: cleanText(q.category || q.section, QSET_LIMITS.category) || 'While building',
+      ...(cleanText(q.detail, QSET_LIMITS.detail) ? { detail: cleanText(q.detail, QSET_LIMITS.detail) } : {}),
+      ...(options.length ? { options } : {}),
+    });
+  });
+  if (!questions.length) return { error: `None of these can be asked in a Build Room (${dropped.slice(0, 3).join('; ')})` };
+  const file = String(b.file || '').replace(/\\/g, '/').slice(0, QSET_LIMITS.file);
+  return { value: { name, kind, questions, dropped, file: /^[A-Za-z0-9._/ -]+$/.test(file) && !file.split('/').includes('..') ? file : '' } };
+}
+/** The host's view of one: everything, and whether it went to their bell. */
+const claudeSetView = (r) => ({
+  setId: r.QSetId,
+  name: r.Name || '',
+  kind: r.Kind || '',
+  questions: Array.isArray(r.Questions) ? r.Questions : [],
+  file: r.File || '',
+  requestId: r.ReqId || null,
+  savedAt: r.SavedAt || null,
+  createdAt: r.CreatedAt || null,
+});
+
 const readyView = (state) => {
   const r = state && state.Ready;
   return r && typeof r === 'object' ? { kind: r.kind || '', sets: Array.isArray(r.sets) ? r.sets : [], at: r.at || null } : null;
@@ -438,6 +491,8 @@ const SK = Object.freeze({
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md).
   point: (iso) => `BUILD#POINT#${timeKey(iso)}`,
   preq: (iso) => `BUILD#PREQ#${timeKey(iso)}`,
+  // A question set Claude wrote for the room (question-sets plan step 7).
+  qset: (iso) => `BUILD#QSET#${timeKey(iso)}`,
   run: 'BUILD#RUN',
   // The Host alert's seen: its own row, versioned, so two devices never overwrite each other.
   seen: 'BUILD#SEEN',
@@ -476,6 +531,7 @@ function entityForSk(sk) {
   if (sk.startsWith('BUILD#IMG#')) return 'buildImage';
   if (sk.startsWith('BUILD#POINT#')) return 'buildPoint';
   if (sk.startsWith('BUILD#PREQ#')) return 'buildPointReq';
+  if (sk.startsWith('BUILD#QSET#')) return 'buildQSet';
   if (sk === SK.run) return 'buildRun';
   // Crew mode (build-crew.js), named here so the store needs no import of it.
   if (sk.startsWith('BUILD#BLD#')) return 'buildBuilder';
@@ -618,7 +674,7 @@ function roomFromRows(rows) {
   const room = {
     state: null, activity: null, lan: null, asks: [], resps: [], answers: [], votes: [], logs: [], ideas: [], keys: [], images: [],
     builders: [], tasks: [], shares: [], comments: [], reviews: [], points: [], preqs: [], run: null, seen: null,
-    rkeys: [],
+    rkeys: [], qsets: [],
   };
   for (const r of rows || []) {
     const sk = String(r.SK || '');
@@ -636,6 +692,7 @@ function roomFromRows(rows) {
     else if (sk.startsWith('BUILD#IMG#')) room.images.push(r);
     else if (sk.startsWith('BUILD#POINT#')) room.points.push(r);
     else if (sk.startsWith('BUILD#PREQ#')) room.preqs.push(r);
+    else if (sk.startsWith('BUILD#QSET#')) room.qsets.push(r);
     else if (sk === SK.run) room.run = r;
     else if (sk === SK.seen) room.seen = r;
     else if (sk.startsWith('BUILD#BLD#')) room.builders.push(r);
@@ -653,6 +710,7 @@ function roomFromRows(rows) {
   const byTime = (a, b) => String(a.CreatedAt || '').localeCompare(String(b.CreatedAt || '')) || bySk(a, b);
   room.points.sort(byTime);
   room.preqs.sort(byTime);
+  room.qsets.sort(bySk);
   room.builders.sort(bySk);
   room.tasks.sort(bySk);
   room.comments.sort(bySk);
@@ -1068,7 +1126,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.25.1';
+const LATEST_PLUGIN = '1.26.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1421,7 +1479,10 @@ const POINT_KINDS = Object.freeze(['talk', 'finding', 'idea']);
 const POINT_STATUSES = Object.freeze(['new', 'shown', 'voting', 'queued', 'sent', 'later', 'removed']);
 /** A point counts against the room's limit while it is waiting for the host or on the Stage. */
 const OPEN_POINT_STATUSES = Object.freeze(['new', 'shown', 'queued']);
-const REQUEST_KINDS = Object.freeze(['research', 'ideas']);
+// 'questions' (question-sets plan step 7): the host asks their own Claude for a question set.
+const REQUEST_KINDS = Object.freeze(['research', 'ideas', 'questions']);
+/** What a crew builder may ask its own Claude for: not a question set, which is the host's. */
+const BUILDER_REQUEST_KINDS = Object.freeze(['research', 'ideas']);
 const REQUEST_STATUSES = Object.freeze(['waiting', 'working', 'done', 'failed']);
 const POINT_LIMITS = Object.freeze({
   text: 280, detail: 1200, about: 200, subject: 200, sourceTitle: 120, sources: 3, perPost: 8, open: 40, batch: 60, activeRequests: 10,
@@ -1499,10 +1560,11 @@ function normalizePointsPost(body) {
 }
 
 /** A Research or Ideas request: {kind, subject}. */
-function normalizePointRequest(body) {
+function normalizePointRequest(body, { builder = false } = {}) {
   const b = body || {};
   const kind = String(b.kind || '').trim().toLowerCase();
-  if (!REQUEST_KINDS.includes(kind)) return { error: `kind must be ${REQUEST_KINDS.join(' or ')}` };
+  const kinds = builder ? BUILDER_REQUEST_KINDS : REQUEST_KINDS;
+  if (!kinds.includes(kind)) return { error: `kind must be ${kinds.join(' or ')}` };
   const subject = cleanText(b.subject, POINT_LIMITS.subject + 1);
   if (!subject) return { error: 'Say what to look into' };
   if (subject.length > POINT_LIMITS.subject) return { error: `The subject is ${POINT_LIMITS.subject} characters at most` };
@@ -1794,6 +1856,8 @@ function hostView({ gameId, meta, sessionState, room, players, now, audience = '
     opening: openingView(room.state, room),
     // The kind of build (plan 2026-10-22): which question sets come first, for the host and for Claude.
     buildKind: buildKindOf(room.state),
+    // Question sets Claude wrote for the room (plan step 7): the host's, to use now or save.
+    ...(isAgent ? {} : { claudeSets: (room.qsets || []).map(claudeSetView) }),
     // The host's ready questions for Claude (plan step 4): all of them for Claude, a summary for the host.
     ready: isAgent ? readyView(room.state) : (() => { const r = readyView(room.state); return r ? { kind: r.kind, count: r.sets.reduce((n, x) => n + x.questions.length, 0), names: r.sets.map((x) => x.name), at: r.at } : null; })(),
     briefDraft: isAgent ? null : draftView(room.state),
@@ -2344,7 +2408,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
-  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,

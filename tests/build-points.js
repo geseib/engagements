@@ -1287,6 +1287,72 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     HA = HOST;
   });
 
+  console.log('\nAsk Claude for questions (question-sets plan step 7)');
+  const SET = {
+    name: 'Game questions', kind: 'game', file: 'build-room/questions/game-questions.json',
+    questions: [
+      { kind: 'ideas', section: 'Start', prompt: 'What does the player do first?' },
+      { kind: 'choose', section: 'While building', prompt: 'Which look?', options: ['Pixel', 'Paper'] },
+      { kind: 'rate', section: 'Before wrapping up', prompt: 'How fun is it so far?', detail: 'One is dull, five is great.' },
+      { kind: 'yesno', prompt: 'Ship it?' },
+      { kind: 'choose', prompt: 'One option', options: ['Only'] },
+    ],
+  };
+  await check('the host asks: a questions request reaches Claude with how to answer it; a builder cannot ask for one', async () => {
+    seed();
+    const r = await host('POST', 'points/requests', { kind: 'questions', subject: 'Questions for a game' });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    const inbox = (await claude('GET', 'inbox')).body.inbox;
+    assert.strictEqual(inbox[0].kind, 'questions');
+    assert.ok(/Write a question set for the room/.test(inbox[0].text) && /share_question_set/.test(inbox[0].text) && /Questions for a game/.test(inbox[0].text), inbox[0].text);
+    assert.ok(S.normalizePointRequest({ kind: 'questions', subject: 'x' }, { builder: true }).error, 'a builder asked for a question set');
+  });
+  await check('Claude sends its set: kept as a room can ask it, the dropped said why, the request done, the host sees it; nobody else', async () => {
+    seed();
+    const req = (await host('POST', 'points/requests', { kind: 'questions', subject: 'Questions for a game' })).body.request.id;
+    await claude('GET', 'inbox');
+    const r = await claude('POST', 'question-sets', { requestId: req, ...SET });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.set.questions.map((q) => [q.kind, q.category, q.prompt]), [
+      ['suggest', 'Start', 'What does the player do first?'],
+      ['choice', 'While building', 'Which look?'],
+      ['rating', 'Before wrapping up', 'How fun is it so far?'],
+    ]);
+    assert.strictEqual(r.body.dropped.length, 2);
+    assert.ok(/not Ideas, Choose or Rate/.test(r.body.dropped[0]) && /2 to 6 options/.test(r.body.dropped[1]), r.body.dropped.join(' | '));
+    const h = (await host('GET', 'state')).body;
+    assert.deepStrictEqual(h.claudeSets.map((x) => [x.name, x.kind, x.questions.length, x.file, x.savedAt]), [['Game questions', 'game', 3, 'build-room/questions/game-questions.json', null]]);
+    assert.strictEqual(h.points.requests.find((x) => x.id === req).status, 'done');
+    assert.strictEqual((await claude('GET', 'state')).body.claudeSets, undefined, 'Claude has its own file');
+    assert.ok(!JSON.stringify((await phone('Priya')('GET', 'state')).body).includes('How fun is it'), 'a phone saw the set');
+    assert.strictEqual((await host('POST', 'question-sets', SET)).status, 403, 'the host does not post a Claude set');
+  });
+  await check('Claude sends nothing askable, or a bad file name: refused or kept without the name', async () => {
+    seed();
+    assert.strictEqual((await claude('POST', 'question-sets', { name: 'X', questions: [{ kind: 'yesno', prompt: 'Ship?' }] })).status, 400);
+    assert.strictEqual((await claude('POST', 'question-sets', { name: '', questions: SET.questions })).status, 400);
+    const r = await claude('POST', 'question-sets', { ...SET, file: '../../etc/passwd' });
+    assert.strictEqual(r.body.set.file, '');
+  });
+  await check('the host marks it saved (in the bell) or removes it', async () => {
+    seed();
+    const id = (await claude('POST', 'question-sets', SET)).body.set.setId;
+    assert.ok((await host('POST', `question-sets/${id}`, { action: 'saved' })).body.set.savedAt);
+    assert.ok((await host('GET', 'state')).body.claudeSets[0].savedAt);
+    assert.strictEqual((await host('POST', `question-sets/${id}`, { action: 'eat' })).status, 400);
+    assert.strictEqual((await host('POST', `question-sets/${id}`, { action: 'remove' })).status, 200);
+    assert.deepStrictEqual((await host('GET', 'state')).body.claudeSets, []);
+    assert.strictEqual((await host('POST', `question-sets/${id}`, { action: 'saved' })).status, 404);
+  });
+  await check('in a team room the set is ciphertext at rest and plain through the API', async () => {
+    seed({ orgId: ORG });
+    HA = TEAM_HOST;
+    assert.strictEqual((await claude('POST', 'question-sets', SET)).status, 201);
+    for (const t of ['Game questions', 'What does the player do first?', 'game-questions.json']) assert.ok(!raw().includes(t), `${t} is plaintext at rest`);
+    assert.strictEqual((await host('GET', 'state')).body.claudeSets[0].questions[0].prompt, 'What does the player do first?');
+    HA = HOST;
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);

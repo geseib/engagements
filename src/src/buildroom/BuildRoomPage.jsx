@@ -31,7 +31,7 @@ import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
 import {
-  isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady, rankSetsForKind, KIND_NAMES,
+  isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady, rankSetsForKind, KIND_NAMES, claudeSetItems, draftsFromClaudeSet,
 } from './readyQuestions';
 import { useReadyForClaude } from './readyForClaude';
 import { OpeningPanel, BriefPath } from './BuildOpening';
@@ -1806,7 +1806,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} buildKind={room.buildKind || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer
+          kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} buildKind={room.buildKind || ''}
+          claudeSets={room.claudeSets || []} requests={(room.points && room.points.requests) || []} gameId={gameId}
+          api={api} run={run} busy={busy} onClose={() => setDialog(null)}
+        />
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
@@ -3958,7 +3962,39 @@ export function askedIndex(asks) {
   return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
 }
 
-function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
+/**
+ * ASK CLAUDE FOR QUESTIONS (question-sets plan step 7): a host request of kind
+ * `questions`. Claude writes the set as a file in the project and sends it;
+ * it lands in this library as From Claude.
+ */
+function AskClaudeForQuestions({ api, run, busy, buildKind, writing }) {
+  const [open, setOpen] = useState(false);
+  const [what, setWhat] = useState('');
+  if (writing) return <p className="brm-hint" role="status">{W.claudeWritingSet}</p>;
+  if (!open) {
+    return (
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || !run} onClick={() => setOpen(true)}>
+        <Icon name="Sparkle" size={14} /> {W.askClaudeForQuestions}
+      </button>
+    );
+  }
+  const send = async () => {
+    const subject = what.trim() || W.askClaudeDefault(KIND_NAMES[buildKind] || '');
+    const out = await run(() => api.pointRequest('questions', subject));
+    if (out !== undefined) { setOpen(false); setWhat(''); }
+  };
+  return (
+    <div className="brm-row brm-gap brm-askclaude">
+      <input className="brm-input brm-input--sm" aria-label={W.askClaudeWhat} placeholder={W.askClaudeWhat} value={what} maxLength={200} onChange={(e) => setWhat(e.target.value)} />
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={send}>{W.askClaudeSend}</button>
+      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOpen(false)}>Cancel</button>
+    </div>
+  );
+}
+
+function ReadyLibrary({
+  api, asks, buildKind = '', selectedKey, onPick, claudeSets = [], requests = [], run = null, busy = false, gameId = '',
+}) {
   const [sets, setSets] = useState(null);
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
@@ -3980,6 +4016,13 @@ function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
       .catch(() => { if (live) setSets([]); });
     return () => { live = false; };
   }, [api, buildKind]);
+  // Claude's sets: listed first, the newest open unless the host picked another.
+  const claudeKey = (cs) => `claude:${cs.setId}`;
+  const newestClaude = claudeSets.length ? claudeKey(claudeSets[claudeSets.length - 1]) : '';
+  const [picked, setPicked] = useState(false);
+  useEffect(() => { if (newestClaude && !picked) setActive(newestClaude); }, [newestClaude, picked]);
+  const claudeActive = claudeSets.find((cs) => claudeKey(cs) === active) || null;
+  const writing = requests.some((r) => r.kind === 'questions' && ['waiting', 'working'].includes(r.status));
   const set = (sets || []).find((st) => setKey(st) === active) || null;
   useEffect(() => {
     if (!set || loaded[active]) return undefined;
@@ -3997,29 +4040,55 @@ function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
     return () => { live = false; };
   }, [active, set, loaded, api]);
 
+  const askClaude = <AskClaudeForQuestions api={api} run={run} busy={busy} buildKind={buildKind} writing={writing} />;
   if (sets === null) return <aside className="brm-lib" aria-label="Ready questions"><p className="brm-hint">Loading ready questions…</p></aside>;
-  if (!sets.length) {
+  if (!sets.length && !claudeSets.length) {
     return (
       <aside className="brm-lib" aria-label="Ready questions">
         <p className="brm-hint">{W.noReadyQuestions}</p>
+        {askClaude}
       </aside>
     );
   }
+  const saveClaudeSet = (cs) => run(async () => {
+    for (const body of draftsFromClaudeSet(cs, gameId)) await api.draftFromBuild(body);
+    return api.claudeSetAction(cs.setId, 'saved');
+  });
   const askedIn = askedIndex(asks);
-  const items = loaded[active] ? loaded[active].map((it) => ({ ...it, askedIn: askedIn(it.key, it.ask.prompt) })) : null;
+  const source = claudeActive ? claudeSetItems(claudeActive) : loaded[active];
+  const items = source ? source.map((it) => ({ ...it, askedIn: askedIn(it.key, it.ask.prompt) })) : null;
   const q = query.trim().toLowerCase();
   const shown = (items || []).filter((it) => (category === 'all' || it.category === category) && (!q || it.ask.prompt.toLowerCase().includes(q)));
   const cats = [...new Set((items || []).map((it) => it.category))];
   return (
     <aside className="brm-lib" aria-label="Ready questions">
       <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {sets.length > 1 && (() => {
+      {askClaude}
+      {claudeSets.length > 0 && (
+        <div className="brm-qfilters" role="group" aria-label="From Claude">
+          {claudeSets.map((cs) => (
+            <button key={claudeKey(cs)} type="button" className={`brm-qchip brm-qchip--claude${active === claudeKey(cs) ? ' is-on' : ''}`} aria-pressed={active === claudeKey(cs)} onClick={() => { setPicked(true); setActive(claudeKey(cs)); setCategory('all'); }}>
+              {W.fromClaudeChip(cs.name)}
+            </button>
+          ))}
+        </div>
+      )}
+      {claudeActive && (
+        <div className="brm-notice" data-testid="brm-claude-set">
+          {claudeActive.savedAt ? W.claudeSetSaved : W.fromClaudeUnsaved}
+          {claudeActive.file && <span className="brm-hint brm-block">{W.claudeSetFile(claudeActive.file)}</span>}
+          {!claudeActive.savedAt && run && (
+            <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => saveClaudeSet(claudeActive)}>{W.saveClaudeSet}</button>
+          )}
+        </div>
+      )}
+      {(sets.length > 1 || (sets.length && claudeSets.length)) && (() => {
         // THE KIND OF BUILD (question-sets plan step 3): its sets first, then the general
         // ones; sets for other kinds fold away once the room has said what it is making.
         const r = rankSetsForKind(sets, buildKind);
         const shownSets = buildKind ? [...r.first, ...r.general] : [...r.general, ...r.other];
         const chip = (st) => (
-          <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
+          <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setPicked(true); setActive(setKey(st)); setCategory('all'); }}>
             {st.name}
           </button>
         );
@@ -4066,7 +4135,9 @@ function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], buildKind = '', api, run, busy, onClose }) {
+export function AskComposer({
+  kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], buildKind = '', claudeSets = [], requests = [], gameId = '', api, run, busy, onClose,
+}) {
   const [kind, setKind] = useState(initialKind);
   // The window opens with the cursor in the question and the starter questions beside it.
   const questionRef = useRef(null);
@@ -4118,7 +4189,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} asks={asks} buildKind={buildKind} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <ReadyLibrary api={api} asks={asks} buildKind={buildKind} claudeSets={claudeSets} requests={requests} run={run} busy={busy} gameId={gameId} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">

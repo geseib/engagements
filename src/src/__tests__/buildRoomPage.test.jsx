@@ -54,7 +54,7 @@ const NOW = new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
-function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null, doing = null } = {}) {
+function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], logs = [], ideas = [], keys = [], activity = null, doing = null, extra = [] } = {}) {
   const rows = [
     // Building by default; the opening's tests pass st: { Phase: undefined } (owner, 2026-10-06).
     { SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building', ...st },
@@ -66,6 +66,7 @@ function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], l
     ...ideas.map((d, i) => ({ SK: `BUILD#IDEA#${String(i).padStart(13, '0')}#i${i}`, IdeaId: `${i}-i${i}`, Status: 'new', CreatedAt: ago(120), ...d })),
     ...keys.map((k) => ({ SK: `BUILD#KEY#${k.KeyId}`, ...k })),
     ...(activity || doing ? [{ SK: 'BUILD#ACTIVITY', Items: activity || [], ...(doing || {}) }] : []),
+    ...extra,
   ];
   return S.hostView({
     gameId: GAME,
@@ -2300,6 +2301,69 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
       kind: 'game',
       sets: [{ name: 'Game questions', questions: [{ kind: 'suggest', prompt: 'What does the player do in the first ten seconds?', category: 'Start' }] }],
     });
+  });
+
+  // ASK CLAUDE FOR QUESTIONS (question-sets plan step 7).
+  const QSET = {
+    SK: 'BUILD#QSET#0000000000001#q1', QSetId: '0000000000001-q1', Name: 'Game questions', Kind: 'game',
+    File: 'build-room/questions/game-questions.json', CreatedAt: ago(30),
+    Questions: [
+      { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
+      { kind: 'choice', prompt: 'Which look?', category: 'While building', options: ['Pixel', 'Paper'] },
+      { kind: 'rating', prompt: 'How fun is it so far?', category: 'Before wrapping up' },
+    ],
+  };
+  const openComposer = async () => {
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    return screen.getByRole('dialog', { name: 'Ask the room' });
+  };
+
+  test('Ask Claude for questions: a questions request, with the host\'s words or one for the room\'s kind', async () => {
+    await openRoom(hostState({ st: { Brief: { lines: { kind: 'A game' } } } }));
+    const dialog = await openComposer();
+    fireEvent.click(await within(dialog).findByRole('button', { name: W.askClaudeForQuestions }));
+    fireEvent.click(within(dialog).getByRole('button', { name: W.askClaudeSend }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/points/requests`));
+    expect(lastPost().body).toEqual({ kind: 'questions', subject: W.askClaudeDefault('a game') });
+  });
+
+  test('while Claude writes one, the library says so instead of offering the button', async () => {
+    await openRoom(hostState({ extra: [{ SK: 'BUILD#PREQ#0000000000001#r1', ReqId: '0000000000001-r1', Kind: 'questions', Subject: 'Game', Status: 'working', CreatedAt: ago(20) }] }));
+    const dialog = await openComposer();
+    expect(await within(dialog).findByText(W.claudeWritingSet)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: W.askClaudeForQuestions })).toBeNull();
+  });
+
+  test('Claude\'s set: first in the library, askable now, and Save sends two drafts to the bell, tagged for its kind', async () => {
+    await openRoom(hostState({ extra: [QSET] }));
+    const dialog = await openComposer();
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    expect(await within(lib).findByText('What does the player do first?')).toBeInTheDocument();
+    expect(within(lib).getByRole('button', { name: W.fromClaudeChip('Game questions') })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(lib).getByTestId('brm-claude-set')).toHaveTextContent(W.fromClaudeUnsaved);
+    expect(within(lib).getByTestId('brm-claude-set')).toHaveTextContent('build-room/questions/game-questions.json');
+    fireEvent.click(within(lib).getByRole('button', { name: /Which look\?/ }));
+    expect(within(dialog).getByLabelText(/Question/)).toHaveValue('Which look?');
+    fireEvent.click(within(lib).getByRole('button', { name: W.saveClaudeSet }));
+    await waitFor(() => expect(posts().some((p) => path(p) === `games/${GAME}/build/question-sets/0000000000001-q1`)).toBe(true));
+    const drafts = posts().filter((p) => /admin\/generation-drafts\/from-build$/.test(p.url));
+    expect(drafts.map((p) => [p.body.engagementType, p.body.title, p.body.items.length, p.body.tags])).toEqual([
+      ['call-and-answer', 'Game questions: ideas', 1, ['build-room', 'for-game']],
+      ['poll', 'Game questions: choose and rate', 2, ['build-room', 'for-game']],
+    ]);
+    expect(drafts[1].body.items).toEqual([
+      { title: 'Which look?', detail: '', category: 'While building', kind: 'choice', options: ['Pixel', 'Paper'] },
+      { title: 'How fun is it so far?', detail: '', category: 'Before wrapping up', kind: 'rating', scale: '1-5' },
+    ]);
+    expect(posts().find((p) => path(p) === `games/${GAME}/build/question-sets/0000000000001-q1`).body).toEqual({ action: 'saved' });
+  });
+
+  test('a saved Claude set says it is in the bell, with no Save', async () => {
+    await openRoom(hostState({ extra: [{ ...QSET, SavedAt: ago(5) }] }));
+    const dialog = await openComposer();
+    const box = await within(dialog).findByTestId('brm-claude-set');
+    expect(box).toHaveTextContent(W.claudeSetSaved);
+    expect(within(box).queryByRole('button', { name: W.saveClaudeSet })).toBeNull();
   });
 
   test('no ready set: the library says how to make one, and the form works as before', async () => {

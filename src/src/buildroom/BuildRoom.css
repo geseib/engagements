@@ -953,6 +953,10 @@
   border: 1px solid var(--brm-rule); background: transparent; color: var(--muted);
   font: inherit; font-size: var(--brm-t-label);
 }
+/* A set Claude wrote (question-sets plan step 7): dashed until it is saved. */
+.brm .brm-qchip--claude { border-style: dashed; }
+.brm .brm-askclaude { flex-wrap: wrap; }
+.brm .brm-askclaude .brm-input { flex: 1 1 200px; min-width: 0; }
 .brm .brm-qchip.is-on { border-color: var(--secondary); color: var(--text); background: var(--brm-tint-blue); }
 .brm .brm-qchip:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
 .brm .brm-qbulk {

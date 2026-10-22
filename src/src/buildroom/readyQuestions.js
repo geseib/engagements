@@ -119,3 +119,61 @@ export function groupReady(items) {
     .sort((a, b) => rank(a[0]) - rank(b[0]))
     .map(([category, list]) => ({ category, items: list }));
 }
+
+// ── Question sets Claude wrote (question-sets plan step 7) ─────────────────
+
+const CLAUDE_KIND = Object.freeze({ suggest: 'suggest', choice: 'choice', rating: 'rating' });
+
+/** A Claude set's questions as the library lists them, like a saved set's. */
+export function claudeSetItems(cs) {
+  return ((cs && cs.questions) || []).filter((q) => CLAUDE_KIND[q.kind]).map((q, i) => ({
+    key: `claude:${cs.setId}:${i}`,
+    category: q.category || 'While building',
+    setName: cs.name || 'From Claude',
+    ask: {
+      kind: q.kind,
+      prompt: q.prompt,
+      detail: q.detail || '',
+      claudeGets: 'do-now',
+      claudeNote: '',
+      ...(q.kind === 'choice' ? { options: (q.options || []).map((title) => ({ title })), maxPicks: 1 } : {}),
+    },
+  }));
+}
+
+/**
+ * A Claude set as drafts for the AI drafts review behind the bell. A set has
+ * one type, so Ideas questions become a Call and Answer draft and Choose and
+ * Rate a Poll draft; a set with both makes two, named so. Tagged build-room
+ * and for-<kind>, so once accepted it is in the library for that kind.
+ */
+export function draftsFromClaudeSet(cs, gameId = '') {
+  const qs = (cs && cs.questions) || [];
+  const ideas = qs.filter((q) => q.kind === 'suggest');
+  const polls = qs.filter((q) => q.kind === 'choice' || q.kind === 'rating');
+  const name = (cs && cs.name) || 'Questions from Claude';
+  const tags = ['build-room', ...(cs && cs.kind ? [`for-${cs.kind}`] : [])];
+  const both = ideas.length && polls.length;
+  const out = [];
+  const base = { tags, description: 'Written by Claude in a Build Room.', ...(gameId ? { gameId: String(gameId) } : {}) };
+  if (ideas.length) {
+    out.push({
+      ...base,
+      title: both ? `${name}: ideas` : name,
+      engagementType: 'call-and-answer',
+      items: ideas.map((q) => ({ title: q.prompt, detail: q.detail || '', category: q.category || 'While building' })),
+    });
+  }
+  if (polls.length) {
+    out.push({
+      ...base,
+      title: both ? `${name}: choose and rate` : name,
+      engagementType: 'poll',
+      items: polls.map((q) => ({
+        title: q.prompt, detail: q.detail || '', category: q.category || 'While building',
+        ...(q.kind === 'choice' ? { kind: 'choice', options: q.options || [] } : { kind: 'rating', scale: '1-5' }),
+      })),
+    });
+  }
+  return out;
+}

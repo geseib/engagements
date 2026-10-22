@@ -41,7 +41,7 @@ And: *"yes, add it to the plan and build 1–4 first."*
    seconds?"). Server change.
 6. **Starter sets per kind** (later). Drafts for training, game, document and dashboard from
    the existing set generator, five sections each, for the owner to edit.
-7. **Claude writes a set** (later; plugin 1.26.0). A host button, Ask Claude for questions,
+7. **Claude writes a set** (built 22 Oct; plugin 1.26.0). A host button, Ask Claude for questions,
    makes a request of a new kind `questions`. A plugin skill says what a good Build Room set
    is (the five sections, only Ideas / Choose 2-6 / Rate 1-5, readable from the back of the
    room, what Claude does with each answer) and uses the brief, the decisions and the code.
@@ -57,3 +57,19 @@ And: *"yes, add it to the plan and build 1–4 first."*
 - Kinds: today's six plus training and dashboard, to match the starter templates. A paper is
   a document.
 - The library reorders; it does not ask the host to confirm a set.
+
+## Step 7 as built (22 Oct)
+
+- Host: Ask Claude for questions in Ask the room's library (optional words; blank asks for
+  the room's kind) makes a `questions` request (`BUILD#PREQ#`, host only; builders cannot).
+- Claude: the build-room skill's Writing a question set; the file
+  `build-room/questions/<kind>-<name>.json`; the tool `share_question_set` (path checked under
+  build-room/questions/, at most 64 KB, valid JSON) posts it to `POST build/question-sets`.
+- Server: kept as `BUILD#QSET#` (sealed for teams: Name, Questions, File), what a room cannot
+  ask dropped and said why, the request marked done, a host-only timeline line. The host's
+  read carries `claudeSets`; Claude, phones and the wall do not.
+- Library: Claude's sets first, marked From Claude (dashed), askable at once. Save to my sets
+  makes one or two drafts through `POST /admin/generation-drafts/from-build` (Call and Answer
+  for Ideas, Poll for Choose and Rate; a set has one type), tagged `build-room` and
+  `for-<kind>`, ready at once, with a bell note; then the existing review. The room's copy is
+  marked saved.

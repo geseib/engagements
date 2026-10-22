@@ -400,6 +400,47 @@ const APPEND = {
     assert.deepStrictEqual(requiredGroupsForRoute('POST', 'me/notifications/invite%23joinvote/read'), ['pending', 'hosts', 'admins']);
   });
 
+  // A QUESTION SET CLAUDE WROTE IN A BUILD ROOM (docs/superpowers/plans/2026-10-22-build-room-question-sets.md step 7).
+  await test('from-build: Claude\'s set becomes a ready draft in my library, sealed, with a bell note; only I see it', async () => {
+    reset();
+    await seedOrgAndSet();
+    const r = parse(await route('POST', 'from-build', {
+      title: 'Game questions: choose and rate', engagementType: 'poll', tags: ['build-room', 'for-game'], gameId: '4821',
+      items: [
+        { title: 'Which look?', category: 'While building', kind: 'choice', options: ['Pixel', 'Paper'] },
+        { title: 'How fun is it so far?', category: 'Before wrapping up', kind: 'rating' },
+      ],
+    }));
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    const { draftId } = r.body.draft;
+    assert.deepStrictEqual([r.body.draft.status, r.body.draft.mode, r.body.draft.engagementType, r.body.draft.produced], ['ready', 'new', 'poll', 2]);
+    const items = rows().filter((x) => x.RecordType === 'GENDRAFT_ITEM');
+    assert.strictEqual(items.length, 2);
+    assert.ok(items.every((x) => isEnvelope(x.item)), 'Claude\'s questions sat in plaintext');
+    assert.ok(!JSON.stringify(rows()).includes('How fun is it'), 'readable at rest');
+    const opened = parse(await route('GET', draftId));
+    assert.strictEqual(opened.status, 200);
+    assert.deepStrictEqual(opened.body.items.map((x) => x.item), [
+      { title: 'Which look?', detail: '', category: 'While building', kind: 'choice', options: ['Pixel', 'Paper'] },
+      { title: 'How fun is it so far?', detail: '', category: 'Before wrapping up', kind: 'rating', scale: '1-5' },
+    ]);
+    const note = parse(await inbox('GET', 'list')).body.items.find((n) => n.id === `draft#${draftId}`);
+    assert.ok(note, 'no bell note');
+    assert.strictEqual(parse(await route('GET', draftId, null, member('sub-other'))).status, 404, 'another member read my draft');
+  });
+  await test('from-build refuses what a Build Room set cannot be', async () => {
+    reset();
+    await seedOrgAndSet();
+    const bad = async (b) => parse(await route('POST', 'from-build', { title: 'X', engagementType: 'poll', items: [{ title: 'Q', kind: 'choice', options: ['A', 'B'] }], ...b })).status;
+    assert.strictEqual(await bad({ engagementType: 'trivia' }), 400);
+    assert.strictEqual(await bad({ title: '  ' }), 400);
+    assert.strictEqual(await bad({ items: [] }), 400);
+    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'choice', options: ['A'] }] }), 400);
+    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'yesno' }] }), 400);
+    assert.strictEqual(await bad({ items: [{ title: '', kind: 'rating' }] }), 400);
+    assert.strictEqual(parse(await route('POST', 'from-build', { title: 'X', engagementType: 'call-and-answer', items: [{ title: 'Q' }] }, orgless)).status, 403);
+  });
+
   await test('the TTLs are the owner\'s', () => {
     assert.strictEqual(drafts.READY_DAYS, 30);
     assert.strictEqual(drafts.DISCARD_RESTORE_DAYS, 7);

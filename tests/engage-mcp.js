@@ -126,6 +126,10 @@ const server = http.createServer((req, res) => {
       return send(201, { posted, request: rec.body.requestId ? { id: rec.body.requestId, kind: 'research', subject: 'Rival meetup apps', status: rec.body.done ? 'done' : 'working' } : undefined, inbox: [] });
     }
     if (req.method === 'POST' && p === 'run/done') return send(200, { run: { current: rec.body.runItem }, inbox: [] });
+    if (req.method === 'POST' && p === 'question-sets') {
+      const kept = (rec.body.questions || []).filter((q) => q.kind !== 'yesno');
+      return send(201, { set: { setId: 'q1', name: rec.body.name, questions: kept }, dropped: kept.length < (rec.body.questions || []).length ? ['4: "yesno" is not Ideas, Choose or Rate'] : [], inbox: [] });
+    }
     if (req.method === 'POST' && p === 'log') {
       return send(200, {
         entry: { logId: 'l9', kind: rec.body.kind, text: rec.body.text, ...(/HOLD/.test(rec.body.text || '') ? { roomHold: 'held' } : {}) },
@@ -220,12 +224,12 @@ const hardStop = setTimeout(() => {
   });
 
   console.log('\n2. listings');
-  await check('tools/list has all twenty-seven tools (sixteen room, eleven crew) with object schemas', async () => {
+  await check('tools/list has all twenty-eight tools (seventeen room, eleven crew) with object schemas', async () => {
     const r = await mcp.request('tools/list', {});
     const names = r.result.tools.map(t => t.name).sort();
     assert.deepStrictEqual(names, ['announce_merge', 'ask_for_help', 'ask_room_for_ideas', 'ask_room_to_choose', 'ask_room_to_rate', 'check_directions', 'checkpoint',
       'claim_task', 'comment_share', 'commit', 'connect', 'crew_status', 'draft_brief', 'get_results', 'get_share', 'post_points', 'post_update', 'propose_task', 'review_share', 'room_status',
-      'share_image', 'share_pr', 'share_repo', 'share_work', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
+      'share_image', 'share_pr', 'share_question_set', 'share_repo', 'share_work', 'wait_for_direction', 'wait_for_room', 'wrap_up']);
     for (const t of r.result.tools) {
       assert.strictEqual(t.inputSchema.type, 'object', t.name);
       assert.ok(t.description && t.description.length > 40, t.name);
@@ -566,6 +570,31 @@ const hardStop = setTimeout(() => {
     }
     const none = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
     assert.ok(!/READY QUESTIONS/.test(none));
+  });
+  await check('1.26.0: share_question_set sends the file Claude wrote under build-room/questions/, and says what was dropped', async () => {
+    const dir = path.join(PROJECT, 'build-room', 'questions');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'game-questions.json'), JSON.stringify({ name: 'Game questions', kind: 'game', questions: [
+      { kind: 'ideas', section: 'Start', prompt: 'What does the player do first?' },
+      { kind: 'yesno', prompt: 'Ship it?' },
+    ] }));
+    const res = await mcp.request('tools/call', { name: 'share_question_set', arguments: { file: 'build-room/questions/game-questions.json', requestId: 'r9' } });
+    const r = { isError: res.result.isError, text: textOf(res) };
+    assert.ok(!r.isError, r.text);
+    assert.ok(/Sent "Game questions" to the host: 1 questions/.test(r.text) && /Dropped .*yesno/.test(r.text), r.text);
+    const sent = requests.filter((q) => q.url.endsWith('/build/question-sets')).pop();
+    assert.deepStrictEqual([sent.body.requestId, sent.body.name, sent.body.kind, sent.body.file, sent.body.questions.length], ['r9', 'Game questions', 'game', 'build-room/questions/game-questions.json', 2]);
+  });
+  await check('1.26.0: share_question_set refuses a path outside build-room/questions/, a missing file and bad JSON, before any call', async () => {
+    const before = requests.filter((q) => q.url.endsWith('/build/question-sets')).length;
+    for (const [file, re] of [['../secrets.json', /build-room\/questions/], ['build-room/questions/nope.json', /There is no file/], ['/etc/passwd', /build-room\/questions/]]) {
+      const res = await mcp.request('tools/call', { name: 'share_question_set', arguments: { file } });
+      assert.ok(res.result.isError && re.test(textOf(res)), `${file}: ${textOf(res)}`);
+    }
+    fs.writeFileSync(path.join(PROJECT, 'build-room', 'questions', 'broken.json'), '{ not json');
+    const res = await mcp.request('tools/call', { name: 'share_question_set', arguments: { file: 'build-room/questions/broken.json' } });
+    assert.ok(res.result.isError && /not valid JSON/.test(textOf(res)), textOf(res));
+    assert.strictEqual(requests.filter((q) => q.url.endsWith('/build/question-sets')).length, before);
   });
   await check('the kickoff prompt has Claude call room_status with kickoff', async () => {
     const r = await mcp.request('prompts/get', { name: 'kickoff', arguments: {} });
