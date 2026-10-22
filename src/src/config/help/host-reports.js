@@ -71,7 +71,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'Save report keeps it as a PDF: Keep for 90 days, or Keep for 1 year. A saved report outlives the session. Find it again under Reports on the welcome screen, with the link and passkey for anyone without an account.',
+          text: '**Save report** keeps it as a PDF: **Keep for 90 days**, or **Keep for 1 year**. A saved report outlives the session. Find it again under Reports on the welcome screen, with the link and passkey for anyone without an account.',
         },
       ],
     },

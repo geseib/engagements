@@ -57,7 +57,7 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            'Choose Create engagement on the welcome screen.',
+            'Choose **Create engagement** on the welcome screen.',
             'Give it an event title — this is what the room sees on the big screen.',
             'Pick the kind of session, and a question set of that kind.',
             'Narrow it by category if you want a subset of the questions.',

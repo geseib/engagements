@@ -148,10 +148,10 @@ const joining = {
         {
           t: 'steps',
           items: [
-            'You tap "Ask the host to hand it over".',
+            'You tap **Ask the host to hand it over**.',
             'The host sees "asking to take this name" beside that name on their Players tab.',
             'They say yes — usually after you have said something out loud in the room.',
-            'Your button becomes "Take over the name". Tap it and you are in, with the history that name has built up.',
+            'Your button becomes **Take over the name**. Tap it and you are in, with the history that name has built up.',
           ],
         },
         {

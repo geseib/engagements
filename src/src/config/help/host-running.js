@@ -125,7 +125,7 @@ const lateItems = {
           head: ['Button or label', 'What it means'],
           rows: [
             ['Show on the wall', 'Puts it up for the room. Offered only for the round the wall is showing; it then reads "Reviewed with the room".'],
-            ['Mark reviewed', 'You have read it yourself; it reads "Reviewed by the host".'],
+            ['**Mark reviewed**', 'You have read it yourself; it reads "Reviewed by the host".'],
             ['Not reviewed', 'Nobody has looked at it yet.'],
             ['Close comments', 'After the session ends, stops new comments before the 24 hours are up.'],
           ],
@@ -198,14 +198,14 @@ const playerManagement = {
           t: 'steps',
           items: [
             { title: 'They ask', text: 'On their screen they tap "Ask the host to hand it over". Their row on your Players tab now reads "asking to take this name".' },
-            { title: 'You decide', text: 'Usually out loud, in the room: "Sam, is that you on the iPad?" Press "Let them take it".' },
+            { title: 'You decide', text: 'Usually out loud, in the room: "Sam, is that you on the iPad?" Press **Let them take it**.' },
             { title: 'The row says "unlocked for one handover"', text: 'They tap "Take over the name" and they are in, with everything that name has scored.' },
           ],
         },
         { t: 'h', text: 'Unlocking without being asked' },
         {
           t: 'p',
-          text: 'If nobody has asked, the same button reads "Unlock name". Use it when the conversation happened in the room rather than on a screen — someone says "I have lost my page", and you open the name for them before they get as far as asking.',
+          text: 'If nobody has asked, the same button reads **Unlock name**. Use it when the conversation happened in the room rather than on a screen — someone says "I have lost my page", and you open the name for them before they get as far as asking.',
         },
         {
           t: 'note',

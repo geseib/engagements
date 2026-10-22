@@ -102,6 +102,13 @@
   margin-bottom: 4px;
 }
 
+/* A UI label, marked **Label** in the corpus (DocRenderer's ink()): the words
+   on a button or tab, exactly as the screen shows them, in bold. */
+.help-content-doc .help-ui {
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* Info Boxes */
 .help-info-box, .help-warning-box, .help-tip-box {
   padding: 16px;

@@ -56,6 +56,22 @@ const NOTE_TONES = {
 };
 
 /**
+ * UI LABELS ARE MARKED `**Label**` IN THE CORPUS (help refresh Phase 0): the
+ * words of a button, tab or heading exactly as the screen shows them. They
+ * render as <strong className="help-ui">, and __tests__/helpGuardrails.test.js
+ * fails when a marked label no longer exists anywhere in src/ — so a renamed
+ * button turns the guide red instead of leaving it quoting a label nobody can
+ * find. Unmarked text renders exactly as before.
+ */
+export function ink(text) {
+  if (typeof text !== 'string' || text.indexOf('**') < 0) return text;
+  const parts = text.split(/\*\*([^*]+?)\*\*/g);
+  return parts.map((part, i) => (i % 2 === 1
+    ? <strong className="help-ui" key={i}>{part}</strong>
+    : part));
+}
+
+/**
  * An item is either a bare string or `{ title, text }`. Both shapes appear all
  * over the corpus because both read correctly: a step with a name wants the
  * name in bold, a plain sentence does not want to invent one.
@@ -64,12 +80,12 @@ function Item({ item }) {
   if (item && typeof item === 'object') {
     return (
       <>
-        <strong>{item.title}</strong>
-        {item.text ? <p>{item.text}</p> : null}
+        <strong>{ink(item.title)}</strong>
+        {item.text ? <p>{ink(item.text)}</p> : null}
       </>
     );
   }
-  return <>{item}</>;
+  return <>{ink(item)}</>;
 }
 
 function PhaseFlow({ gameType }) {
@@ -171,7 +187,7 @@ export function renderBlock(block, key) {
   if (!block || typeof block !== 'object') return null;
   switch (block.t) {
     case 'p':
-      return <p key={key}>{block.text}</p>;
+      return <p key={key}>{ink(block.text)}</p>;
 
     case 'h':
       return <h3 key={key}>{block.text}</h3>;
@@ -198,7 +214,7 @@ export function renderBlock(block, key) {
             <Icon name={tone.icon} weight="duotone" size={16} color="var(--accent)" />
             {` ${block.title}`}
           </h4>
-          {block.text ? <p>{block.text}</p> : null}
+          {block.text ? <p>{ink(block.text)}</p> : null}
           {block.items ? (
             <ul>
               {block.items.map((item, i) => <li key={i}><Item item={item} /></li>)}
@@ -217,7 +233,7 @@ export function renderBlock(block, key) {
                 <Icon name={item.icon} weight="duotone" size={16} color="var(--accent)" />
               </span>
               <h4>{item.title}</h4>
-              <p>{item.text}</p>
+              <p>{ink(item.text)}</p>
             </div>
           ))}
         </div>
@@ -228,8 +244,8 @@ export function renderBlock(block, key) {
         <dl key={key} className="help-faq">
           {block.items.map((item, i) => (
             <React.Fragment key={i}>
-              <dt>{item.q}</dt>
-              <dd>{item.a}</dd>
+              <dt>{ink(item.q)}</dt>
+              <dd>{ink(item.a)}</dd>
             </React.Fragment>
           ))}
         </dl>
@@ -247,7 +263,7 @@ export function renderBlock(block, key) {
           {block.items.map((item, i) => (
             <React.Fragment key={i}>
               <dt><kbd>{item.keys}</kbd></dt>
-              <dd>{item.text}</dd>
+              <dd>{ink(item.text)}</dd>
             </React.Fragment>
           ))}
         </dl>
@@ -281,8 +297,8 @@ export function renderBlock(block, key) {
                 <tr key={i}>
                   {row.map((cell, j) => (
                     j === 0
-                      ? <th key={j} scope="row">{cell}</th>
-                      : <td key={j}>{cell}</td>
+                      ? <th key={j} scope="row">{ink(cell)}</th>
+                      : <td key={j}>{ink(cell)}</td>
                   ))}
                 </tr>
               ))}

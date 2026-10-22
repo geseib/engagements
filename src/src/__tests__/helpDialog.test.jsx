@@ -112,6 +112,13 @@ describe('opening at a section', () => {
       .toHaveClass('help-doc-section--active');
   });
 
+  test('a **Label** in the corpus renders as a bold UI label, without the asterisks', () => {
+    render(<HelpSystem guide="host-reporting" section="session-report" onClose={() => {}} />);
+    const label = screen.getByText('Save report', { selector: 'strong.help-ui' });
+    expect(label).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('**');
+  });
+
   test('every section of a rendered guide carries its id', () => {
     render(<HelpSystem section="player-playing" onClose={() => {}} />);
     ['answering', 'held-back', 'voting', 'reading-long-answer'].forEach((id) => {
