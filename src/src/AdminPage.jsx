@@ -10,6 +10,7 @@ import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
 import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
+import { helpFor } from './config/help/screens';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
 import ClaudeModelsPanel from './components/ClaudeModelsPanel';
@@ -1995,7 +1996,7 @@ function AdminPage() {
                       <span className="padm-card-n">Open the library</span>
                     </button>
                     <div className="padm-card-aside">
-                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                      <HelpButton {...helpFor('admin-prompts')} variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                     </div>
                   </li>
 
@@ -2021,7 +2022,7 @@ function AdminPage() {
                       <span className="padm-card-n">Open the library</span>
                     </button>
                     <div className="padm-card-aside">
-                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                      <HelpButton {...helpFor('admin-prompts')} variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                     </div>
                   </li>
                 </ul>
@@ -2427,7 +2428,7 @@ function AdminPage() {
               <div className="admin-section debug-section">
                 <div className="section-title-with-help">
                   <h2><Icon name="Broadcast" weight="bold" size={16} color="var(--success)" /> Real-time Communication</h2>
-                  <HelpButton section="websocket-settings" variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
+                  <HelpButton {...helpFor('admin-settings-realtime')} variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
                 </div>
                 <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
                 
