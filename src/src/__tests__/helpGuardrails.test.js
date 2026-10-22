@@ -45,7 +45,6 @@ const BANNED_ALLOWLIST = {
   'host-late-items': { 'the wall': 2 },
   'host-two-screens': { projector: 6, 'big screen': 1, 'the wall': 7 },
   'host-reporting': { 'the AI summary': 1, 'the wall': 2 },
-  'host-build-room': { projector: 1, PRESENT: 1 },
 };
 
 /* PRESENT is the dock's old name for the room's window (decision 1). It is a
@@ -141,7 +140,6 @@ const LONG_SECTIONS = {
   'host-two-screens#laptop-console': 552,
   'host-two-screens#phone-remote': 264,
   'host-reporting#what-we-heard': 344,
-  'host-build-room#during-after': 1437,
   'admin-ai-prompts#versions': 322,
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
@@ -149,7 +147,6 @@ const LONG_UNITS = {
   'player-playing#answering': 133,
   'host-game-setup#settings-before-you-start': 184,
   'host-reporting#what-we-heard': 144,
-  'host-build-room#during-after': 301,
 };
 
 const sections = guides.flatMap((g) => g.sections.map((s) => [`${g.id}#${s.id}`, s]));

@@ -153,6 +153,10 @@ export const HELP_ALIASES = {
 export const HELP_SECTION_MOVES = {
   'host-running-engagements#laptop-console': 'host-two-screens#laptop-console',
   'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
+  // Phase 2 (W7): the one Build Room guide became six. host-build-room keeps
+  // its id (the setup guide); its connecting and during-and-after sections left.
+  'host-build-room#connecting-claude': 'build-room-claude#connecting-claude',
+  'host-build-room#during-after': 'build-room-running#the-host-screen',
 };
 
 /** The section of a guide with that id, or null. */
