@@ -165,6 +165,8 @@ it is and is not held up by it.
 
 ## 3. Decisions for the owner
 
+**Decided 22 Oct 2026: all six yes** (owner: "go, all six yes"). Tracking: issue #44 (the refresh), issue #43 (the product defects).
+
 1. **The room display**: call the second-screen window "the room's window" and the
    one-screen view "the stage", everywhere, and retire wall / projector / big screen /
    PRESENT / Presentation? (Recommended.)
