@@ -53,9 +53,12 @@ export const HELP_FOR_SCREEN = {
   'host-remote': { guide: 'host-two-screens', section: 'phone-remote' },
 
   /* ---- host: events ---- */
-  'event-builder': { guide: 'glossary', section: 'event' },
-  'event-agenda': { guide: 'glossary', section: 'event' },
-  'event-stage': { guide: 'glossary', section: 'event' },
+  // The builder's add and edit dialogs (EventBuilder, EventItemDialog), the
+  // agenda page around it (HostEventAgenda, and the console's Events place),
+  // and the event's own stage (EventStage).
+  'event-builder': { guide: 'host-event-agenda', section: 'adding-items' },
+  'event-agenda': { guide: 'host-event-agenda', section: 'the-agenda-page' },
+  'event-stage': { guide: 'host-event-day', section: 'the-board' },
 
   /* ---- admin console: your space and teams ---- */
   'admin-overview': { guide: 'admin-getting-started', section: 'overview' },
@@ -65,7 +68,7 @@ export const HELP_FOR_SCREEN = {
   'admin-set-versions': { guide: 'admin-question-sets', section: 'versions-not-overwrites' },
   'admin-public-library': { guide: 'glossary', section: 'owner-tags' },
   'admin-sessions': { guide: 'admin-game-management', section: 'sessions-list' },
-  'admin-events': { guide: 'glossary', section: 'event' },
+  'admin-events': { guide: 'admin-game-management', section: 'events-list' },
   'admin-prompt-versions': { guide: 'admin-ai-prompts', section: 'versions' },
   'admin-members': { guide: 'admin-members', section: 'who-is-here' },
   'admin-activity': { guide: 'admin-activity', section: 'reading-activity' },
@@ -111,7 +114,7 @@ export const HELP_FOR_SCREEN = {
   'player-results': { guide: 'player-feedback', section: 'results-feedback' },
   'player-end': { guide: 'player-feedback', section: 'after-the-end' },
   'player-survey': { guide: 'player-surveys', section: 'answering' },
-  'player-event': { guide: 'glossary', section: 'event' },
+  'player-event': { guide: 'player-events', section: 'the-agenda' },
   'player-build-room': { guide: 'player-build-room', section: 'joining' },
 };
 
@@ -121,11 +124,9 @@ export const HELP_FOR_SCREEN = {
  */
 export const PROVISIONAL_SCREENS = [
   'host-create-advanced', 'host-sessions', 'host-room-screen-chooser',
-  'event-builder', 'event-agenda', 'event-stage',
-  'admin-public-library', 'admin-events',
+  'admin-public-library',
   'staff-organisations', 'staff-observability', 'staff-plan-requests', 'staff-discount-codes',
   'staff-shared-library', 'staff-public-library', 'staff-moderation', 'staff-engage-settings',
-  'player-event',
 ];
 
 /**
