@@ -32,7 +32,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Known gaps
 
-- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project).
+- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project) ([#45](https://github.com/geseib/engagements/issues/45)).
 - Everything in the entry below, including the help gaps, still applies.
 
 ## 22 Oct 2026: Help rewritten with a ? on every screen, Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes
