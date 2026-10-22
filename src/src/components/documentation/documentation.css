@@ -1,61 +1,99 @@
-/* skin-allowance: colour=43 font=3 primary=0 */
-/* Documentation Content Styles */
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   ONE GUIDE, RENDERED — components/documentation/DocRenderer.jsx. Read by the
+   help modal (HelpSystem, always dusk: it declares data-theme="dark") and by
+   the public /help page (marketing/HelpPage.css re-inks a few of these for
+   the marketing shell).
+
+   ROLES ONLY (help refresh Phase 0): no literal colour, no font name, no
+   --primary/--secondary. It was 43 colour literals and three font stacks of a
+   light modal; on the dusk screens it now opens over, those greys and the
+   #3b82f6 blue were a second product. __tests__/helpSystemPalette.test.js
+   measures every ink on its ground in every skin.
+
+   THE NOTES' TINTS ARE CHANNEL FORMS at .08 (components/ui/Notice.css says
+   why .08: at .10 the words fall under AA over a danger tint on --surface-2);
+   the hue is carried by the 4px edge, the words stay --text.
+
+   Inline code was --danger on light grey. --danger never carries text (4.38:1
+   on --surface; engage-design §1), so it is --accent-text now.
+   ========================================================================== */
 .help-content-doc {
   max-width: 800px;
   margin: 0 auto;
   line-height: 1.6;
+  color: var(--text);
 }
 
 .help-doc-header {
   text-align: center;
   margin-bottom: 32px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--rule);
 }
 
 .help-doc-header h1 {
-  color: #1f2937;
+  color: var(--text);
   margin-bottom: 8px;
   font-size: 2rem;
 }
 
 .help-doc-header p {
-  color: #6b7280;
+  color: var(--muted);
   font-size: 1.1rem;
   margin: 0;
 }
 
 .help-doc-section {
   margin-bottom: 40px;
+  /* A section opened by a help button or a #section link scrolls to here,
+     with room above its heading. */
+  scroll-margin-top: 16px;
 }
 
 .help-doc-section h2 {
-  color: #1f2937;
+  color: var(--text);
   margin-bottom: 16px;
   font-size: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--rule);
   padding-bottom: 8px;
 }
 
+/* The heading takes focus when its section is opened (tabIndex -1). A ring on
+   a heading after a click is noise; the active marker below says where you are. */
+.help-doc-section h2:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.help-doc-section h2:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+/* The section a help button or a link opened: the heading's rule in the accent. */
+.help-doc-section--active h2 {
+  border-bottom: 2px solid var(--accent);
+}
+
 .help-doc-section h3 {
-  color: #374151;
+  color: var(--text);
   margin: 24px 0 12px 0;
   font-size: 1.25rem;
 }
 
 .help-doc-section h4 {
-  color: #4b5563;
+  color: var(--text);
   margin: 16px 0 8px 0;
   font-size: 1.1rem;
 }
 
 .help-doc-section p {
-  color: #4b5563;
+  color: var(--text);
   margin-bottom: 16px;
 }
 
 .help-doc-section ul, .help-doc-section ol {
-  color: #4b5563;
+  color: var(--text);
   margin-bottom: 16px;
   padding-left: 24px;
 }
@@ -67,45 +105,47 @@
 /* Info Boxes */
 .help-info-box, .help-warning-box, .help-tip-box {
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   margin: 20px 0;
+  color: var(--text);
 }
 
 .help-info-box {
-  background: #eff6ff;
-  border-left: 4px solid #3b82f6;
+  background: rgb(var(--info-rgb) / .08);
+  border-left: 4px solid var(--info);
 }
 
 .help-warning-box {
-  background: #fef3c7;
-  border-left: 4px solid #f59e0b;
+  background: rgb(var(--warn-rgb) / .08);
+  border-left: 4px solid var(--warn);
 }
 
 .help-tip-box {
-  background: #f0fdf4;
+  background: rgb(var(--success-rgb) / .08);
   border-left: 4px solid var(--success);
 }
 
 .help-info-box h4, .help-warning-box h4, .help-tip-box h4 {
   margin: 0 0 8px 0;
-  color: #1f2937;
+  color: var(--text);
 }
 
 .help-info-box p, .help-warning-box p, .help-tip-box p {
   margin: 0;
-  color: #374151;
+  color: var(--text);
 }
 
 .help-info-box ul, .help-warning-box ul, .help-tip-box ul {
   margin: 8px 0 0 0;
-  color: #374151;
+  color: var(--text);
 }
 
 /* Code Blocks */
 .help-code-block {
-  background: #1f2937;
-  color: #f9fafb;
-  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   padding: 16px;
   margin: 16px 0;
   overflow-x: auto;
@@ -113,7 +153,7 @@
 
 .help-code-block pre {
   margin: 0;
-  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.4;
 }
@@ -138,11 +178,11 @@
    and put the chip back inside every code BLOCK. :where() adds no specificity,
    so this stays at (0,0,1) — exactly what the bare selector it replaces was. */
 :where(.help-doc-header, .help-doc-section) code {
-  background: #f3f4f6;
-  color: var(--danger);
+  background: var(--surface-2);
+  color: var(--accent-text);
   padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -155,9 +195,9 @@
 }
 
 .help-variable-item {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -165,15 +205,15 @@
 }
 
 .help-variable-item code {
-  background: #374151;
-  color: #f9fafb;
+  background: var(--bg);
+  color: var(--text);
   font-weight: 600;
   display: inline-block;
   width: fit-content;
 }
 
 .help-variable-item span {
-  color: #6b7280;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -184,16 +224,16 @@
 
 .help-faq dt {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text);
   margin: 16px 0 4px 0;
   font-size: 1.05rem;
 }
 
 .help-faq dd {
-  color: #4b5563;
+  color: var(--text);
   margin: 0 0 8px 16px;
   padding-left: 8px;
-  border-left: 2px solid #e5e7eb;
+  border-left: 2px solid var(--rule);
 }
 
 /* Steps List */
@@ -215,8 +255,8 @@
   position: absolute;
   left: 0;
   top: 0;
-  background: #3b82f6;
-  color: white;
+  background: var(--action);
+  color: var(--on-action);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -238,9 +278,9 @@
 .help-feature-item {
   text-align: center;
   padding: 20px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--rule);
 }
 
 .help-feature-icon {
@@ -251,12 +291,12 @@
 
 .help-feature-item h4 {
   margin: 0 0 8px 0;
-  color: #1f2937;
+  color: var(--text);
 }
 
 .help-feature-item p {
   margin: 0;
-  color: #6b7280;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -265,19 +305,19 @@
   .help-content-doc {
     padding: 0 8px;
   }
-  
+
   .help-doc-header h1 {
     font-size: 1.75rem;
   }
-  
+
   .help-variables-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .help-feature-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .help-code-block {
     font-size: 12px;
   }
@@ -304,21 +344,22 @@
 
 .help-table th,
 .help-table td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rule);
   padding: 10px 12px;
   text-align: left;
   vertical-align: top;
+  color: var(--text);
 }
 
 .help-table thead th {
-  background: #f9fafb;
-  color: #1f2937;
+  background: var(--surface-2);
+  color: var(--text);
   font-weight: 600;
 }
 
 .help-table tbody th {
-  background: #fcfcfd;
-  color: #1f2937;
+  background: var(--surface-2);
+  color: var(--text);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -339,19 +380,19 @@
 
 .help-keys dd {
   margin: 0;
-  color: #374151;
+  color: var(--text);
 }
 
 .help-keys kbd {
   display: inline-block;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
-  color: #1f2937;
+  color: var(--text);
   white-space: nowrap;
 }
 

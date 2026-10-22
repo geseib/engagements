@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import DocRenderer, { scrollToHelpSection } from './documentation/DocRenderer';
 import Modal from './Modal';
 import './HelpSystem.css';
@@ -56,6 +57,16 @@ const FOCUSABLE = [
  * panel under it, and Tab would wander into the panel behind the dialog.
  * Focus moves in on open (the section heading, or the close button) and goes
  * back to the opener on close (Modal, and HelpButton for the menu case).
+ *
+ * IT IS PORTALLED TO <body>. HelpButton sits inside other surfaces — the
+ * Session panel, the player's `.plr` scope — and the modal used to render
+ * there, so their stylesheets reached into it: styles.css repaints every
+ * `.setup-panel button` it does not exempt (a navy panel button), which made
+ * Back, Home, every card and the footer inside help look like the panel's
+ * controls. Out of their DOM, only this sheet paints it. React still bubbles
+ * a portal's events through the tree it was rendered from, so every keydown
+ * that starts inside the dialog is stopped at the dialog: the panel's `\`
+ * toggle must not fire while somebody types a backslash into help's search.
  */
 const HelpSystem = ({ section, guide, onClose }) => {
   const initial = guide ? resolveHelpTarget(guide, section) : resolveHelpTarget(section);
@@ -127,6 +138,15 @@ const HelpSystem = ({ section, guide, onClose }) => {
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [onClose]);
+
+  // Keys typed inside help belong to help (see the portal note above).
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return undefined;
+    const stop = (event) => event.stopPropagation();
+    el.addEventListener('keydown', stop);
+    return () => el.removeEventListener('keydown', stop);
+  }, []);
 
   const results = useMemo(() => searchHelp(searchTerm), [searchTerm]);
 
@@ -336,7 +356,7 @@ const HelpSystem = ({ section, guide, onClose }) => {
     );
   };
 
-  return (
+  return createPortal(
     <Modal
       overlayClassName="help-system-modal"
       contentClassName="help-modal-content"
@@ -405,7 +425,8 @@ const HelpSystem = ({ section, guide, onClose }) => {
           </div>
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 };
 

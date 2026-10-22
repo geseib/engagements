@@ -45,6 +45,23 @@ describe('a real dialog', () => {
     expect(underneath).not.toHaveBeenCalled();
   });
 
+  test('it renders under <body>, out of the surface that opened it', () => {
+    // rejects: the Session panel's `.setup-panel button` repaint reaching
+    // every button inside help because the dialog sat in the panel's DOM.
+    const { container } = render(<div className="setup-panel"><HelpSystem onClose={() => {}} /></div>);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(screen.getByRole('dialog').closest('.setup-panel')).toBeNull();
+  });
+
+  test('a key typed in help does not reach the page: \\ in search leaves the panel alone', () => {
+    const underneath = jest.fn();
+    document.addEventListener('keydown', underneath);
+    render(<HelpSystem onClose={() => {}} />);
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: '\\' });
+    document.removeEventListener('keydown', underneath);
+    expect(underneath).not.toHaveBeenCalled();
+  });
+
   test('focus moves in on open: to the close button on a plain open', () => {
     render(<HelpSystem onClose={() => {}} />);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close help' }));
