@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import AIScenarioBuilder from './AIScenarioBuilder';
 import TriviaAIBuilder from './TriviaAIBuilder';
 import PollAIBuilder from './PollAIBuilder';
@@ -438,6 +440,8 @@ export default function HostQuestionSetsDialog({
             as your administrator left it.
           </p>
         </div>
+        {/* The setup guide's question-set section (Help Phase 3). */}
+        <HelpButton {...helpFor('host-question-sets')} variant="inline" size="small" tooltip="Help: question sets" className="help-button-quiet" />
         {/*
           THE SAME `×` IN THE SAME CORNER as the editor this dialog opens and as
           QuestionsPanel's question dialog inside that. It replaced a text

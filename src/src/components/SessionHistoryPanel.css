@@ -107,6 +107,10 @@
 
 .shist__close:hover { background: var(--surface); }
 
+/* The `?` (Help Phase 3) takes the push to the right, and the X sits beside it. */
+.shist__head .shist__help { margin-left: auto; }
+.shist__head .shist__help + .shist__close { margin-left: 0; }
+
 /* A refused start, in the server's words (the `notice` prop). Amber, not
    red: a start refused because the set is empty destroyed nothing. --text
    on --surface, a pairing this sheet already inherits the measurement of. */

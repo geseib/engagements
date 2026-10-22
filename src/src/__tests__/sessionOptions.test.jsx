@@ -138,7 +138,8 @@ describe('one copy of the options, never two', () => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name !== '__tests__' && entry.name !== 'node_modules') sources(full, out);
+        // The help quotes these labels in words; it draws nothing.
+        if (!['__tests__', 'node_modules', 'help'].includes(entry.name)) sources(full, out);
       } else if (/\.jsx?$/.test(entry.name)) {
         out.push(full);
       }

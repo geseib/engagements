@@ -195,7 +195,7 @@ describe('Setup in the loop', () => {
 describe('help', () => {
   test('"Running it from your phone" says who may sign in, in the same words', () => {
     // eslint-disable-next-line global-require
-    const help = require('../config/help/host').default || require('../config/help/host');
+    const help = require('../config/help').ROLE_BY_ID.host;
     const text = JSON.stringify(help);
     expect(text).toContain('any host or admin of that team');
     expect(text).toContain('Only your account can drive');

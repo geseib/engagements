@@ -2,6 +2,8 @@ import React from 'react';
 import CW from '../../config/consoleWords';
 import RoomWindowStatus from '../stage/RoomWindowStatus';
 import HostNotificationsBell from '../HostNotificationsBell';
+import HelpButton from '../HelpButton';
+import { helpFor } from '../../config/help/screens';
 
 /**
  * THE CONSOLE'S TOP LINE (host console spec §3.1): the session's name, the
@@ -9,7 +11,7 @@ import HostNotificationsBell from '../HostNotificationsBell';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null }) {
+export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null, help = '' }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -42,6 +44,20 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
       {/* A type's own top-line parts (the Build Room's Share demo, The room
           sees and the connection), after the window, in its order. */}
       {children}
+      {/* THE `?` (Help Phase 3): `help` is the screen id of the type's console
+          (config/help/screens.js), and the same button is where a bug is
+          reported from, as on the Session panel's header. Before the bell,
+          which stays last. */}
+      {help ? (
+        <HelpButton
+          {...helpFor(help)}
+          variant="inline"
+          size="small"
+          tooltip="Help and feedback"
+          className="help-button-quiet hc-help"
+          reports={{ context: 'host', gameId: code || undefined }}
+        />
+      ) : null}
       {/* THE BELL (owner, 21 Oct 2026), last on the line. The laptop's private
           screen; a click opens the console in a new tab so the session stays put. */}
       <HostNotificationsBell newTab />

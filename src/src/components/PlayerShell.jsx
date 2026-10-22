@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import BrandMark from './BrandMark';
 import { EventBarContext } from './event/eventBar';
 import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 // The shell is the `.plr` scope root, so it brings the scope's stylesheet with
 // it; PlayerPage imports it too, and webpack loads it once.
 import './PlayerSurface.css';
@@ -33,10 +34,13 @@ import './PlayerSurface.css';
  * survey is the only thing on the phone that has a LENGTH, so it is the only
  * thing that carries one, and it grows in the strip that is already there
  * rather than in a second bar (survey-phone.css, "progress, one line").
+ *
+ * `help` (optional) is the screen id the bar's `?` opens, from
+ * config/help/screens.js: `player-voting`, `player-survey` and so on.
  */
 export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, after = null, progress = null, children,
+  centre = false, dock = null, after = null, progress = null, help = null, children,
 }) => {
   const eventBar = useContext(EventBarContext);
   const metered = typeof progress === 'number' && Number.isFinite(progress);
@@ -86,9 +90,15 @@ export const PlayerShell = ({
             It renders inside `.plr` so the modal is in the dusk scope rather
             than beside it, for the same reason `after` is: a dialog rendered as
             a sibling of this shell resolves none of the --plr-* tokens.
+
+            THE GUIDES OPEN WHERE THE PLAYER IS (Help Phase 3): `help` is a
+            screen id from config/help/screens.js, passed per state by each
+            caller (lobby, answering, voting, results, survey, event, Build
+            Room). A caller that passes none gets the join section while
+            joining and the overview otherwise.
           */}
           <HelpButton
-            section="player"
+            {...helpFor(help || (phase === 'join' ? 'player-join' : 'player-page'))}
             variant="inline"
             size="small"
             tooltip="Help"

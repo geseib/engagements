@@ -41,7 +41,11 @@ import { render, act, fireEvent, screen } from '@testing-library/react';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import { sessionPanelKeyLive } from '../utils/hostOverlays';
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
-import { HOST_ROLE } from '../config/help/host';
+import { ROLE_BY_ID } from '../config/help';
+
+// The host guides live in several area files since the help refresh's Phase 0
+// split; the role, assembled by config/help/index.js, is the whole of them.
+const HOST_ROLE = ROLE_BY_ID.host;
 
 // `document.body`, not `window`: SessionSetupPanel's own close listener is on
 // `document`, and a real keypress bubbles target -> document -> window, so
@@ -159,7 +163,7 @@ describe('useSessionPanelKey + the real SessionSetupPanel', () => {
 describe('the key is written down where the host looks for it', () => {
   test('the host guide lists \\', () => {
     const items = JSON.stringify(HOST_ROLE);
-    expect(items).toContain('"keys":"\\\\","text":"Open and close the session panel."');
+    expect(items).toContain('"keys":"\\\\","text":"Open and close the Session panel."');
   });
 });
 

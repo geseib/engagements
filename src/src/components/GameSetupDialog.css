@@ -144,6 +144,24 @@
 
 .gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
 
+/* The `?` beside the X (Help Phase 3): the create section of the setup
+   guide. Positioned against the sticky head like the X, so it stays on
+   screen; the title's right padding makes room for both. */
+.gsd .gsd-head .help-menu-anchor,
+.gsd .gsd-head > .help-button {
+  position: absolute;
+  top: 13px;
+  right: 54px;
+}
+.gsd .gsd-head h2 { padding-right: 112px; }
+
+/* The Advanced fold's own `?`, at the head of the open fold. */
+.gsd .gsd-adv-help {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -4px;
+}
+
 .gsd-close:focus-visible {
   outline: 2px solid var(--gsd-primary);
   outline-offset: 2px;

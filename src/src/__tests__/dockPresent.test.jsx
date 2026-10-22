@@ -23,7 +23,7 @@ test('no present prop, no link', () => {
 
 test('PRESENT opens /present in a new window', () => {
   render(<Dock status="Ready" onSetup={() => {}} present={{ href: '/present?gameId=5479', presenting: 0 }} />);
-  const link = screen.getByRole('link', { name: 'Open the Presentation in a new window' });
+  const link = screen.getByRole('link', { name: "Open the room's window in a new window" });
   expect(link.getAttribute('href')).toBe('/present?gameId=5479');
   expect(link.getAttribute('target')).toBe('_blank');
   expect(link.getAttribute('rel')).toMatch(/noopener/);

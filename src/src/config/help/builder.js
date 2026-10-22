@@ -1,49 +1,86 @@
 /**
- * THE TWO BUILDER GUIDES — for whoever writes the questions, who may be an
+ * WRITING QUESTIONS BY HAND — for whoever writes the questions, who may be an
  * admin, may be a host with their own set, and is doing a different job from
- * either while they are doing it.
+ * either while they are doing it. Building with AI is `builder-ai` in ./ai.js.
+ *
+ * Every field below is the question form in components/QuestionsPanel.jsx
+ * (checked 22 Oct 2026): Category * (CategoryPicker), Title *, "Question
+ * detail" (trivia) / "Detail shown to the room", Option A–F, "Correct answer",
+ * "Difficulty", the poll's kind (SurveyQuestionFields, POLL_KINDS), "Round
+ * direction" and "Whose material is this?" (Call & Answer), "Instruction shown
+ * to the room", "School / source", "Picture" (QuestionImageField), "Reveal
+ * (shown only after the round)", "Tags", "Background for Workie". Saving a set
+ * and its versions belong to admin-question-sets (admin-console.js).
  *
  * The reveal section is the reason this role's guides needed writing rather
- * than folding into Admin. The withheld-detail field is the single most
- * misunderstood thing in a question set: it shipped populated but untagged, so
- * the AI was told to reveal something the editor never offered a way to fill
- * in, and rooms watched the AI promise a reveal that never arrived.
+ * than folding into Admin: the withheld-detail field is the most
+ * misunderstood thing in a question set.
  */
 
 const manual = {
   id: 'builder-manual',
   title: 'Writing questions',
   icon: 'NotePencil',
-  summary: 'The fields, what each one is for, and the one everybody leaves empty.',
+  summary: 'The fields of a question, what each one is for, and the one everybody leaves empty.',
   sections: [
+    /*
+      QuestionsPanel.jsx:1382 "Add a question", :1393 "Add questions…", the
+      question dialog with "Writing alongside these." (the other questions in
+      the category), Done, then the set's save ("Save as version N").
+    */
     {
+      id: 'adding-one',
+      title: 'Adding a question',
+      icon: 'Plus',
+      blocks: [
+        {
+          t: 'steps',
+          items: [
+            { title: 'Open the set', text: 'In Question sets, press Edit on your set; its Questions panel lists every question.' },
+            { title: 'Press Add a question', text: 'Choose the category first: the other questions in it appear under Writing alongside these, as the voice to match.' },
+            { title: 'Fill in the fields', text: 'The fields depend on the format; see below. **Draft this with AI** gives you a first go (Building with AI).' },
+            { title: 'Press Done, then save the set', text: 'Nothing is written until the set is saved, and one save makes one new version. Question sets, in the admin guides, explains versions.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'trivia-question',
       title: 'A trivia question',
       icon: 'Brain',
       blocks: [
         {
           t: 'list',
           items: [
-            { title: 'Title', text: 'The short version, for lists and for the round header.' },
-            { title: 'Question', text: 'The full text, as the room will read it.' },
-            { title: 'Options', text: 'A to D, and E and F when the question needs them: up to six. Make the wrong ones plausible or the round is not a round.' },
-            { title: 'Correct answer', text: 'Which option is right. Getting this wrong is the worst bug a set can have — it is wrong in public, with points attached.' },
-            { title: 'Answer details', text: 'The explanation, revealed with the answer. This is the reveal field — see below.' },
-            { title: 'Category and difficulty', text: 'Used for filtering and for pacing.' },
+            { title: 'Title', text: 'The short version, for lists and the round\'s header.' },
+            { title: 'Question detail', text: 'The full question, as the room will read it.' },
+            { title: 'Option A to Option F', text: 'Up to six options; fill in only the ones you need. Make the wrong ones plausible, or the round is not a round.' },
+            { title: 'Correct answer', text: 'Which option is right; it offers only the options you filled in. Getting this wrong is the worst mistake a set can have: it is wrong in public, with points attached.' },
+            { title: 'Difficulty', text: 'Easy, medium or hard.' },
+            { title: 'Reveal (shown only after the round)', text: 'The explanation, revealed with the answer. See below.' },
           ],
         },
       ],
     },
+    /*
+      Call & Answer / Wavelength: "Detail shown to the room", "Round direction"
+      (Inherit the set's direction) and "Whose material is this?" (Apply
+      rounds) when the format has directions, "Instruction shown to the room",
+      "School / source".
+    */
     {
-      title: 'An open-answer question',
+      id: 'open-answer-question',
+      title: 'An open-answer question (Call & Answer, Wavelength)',
       icon: 'ChatCircleText',
       blocks: [
         {
           t: 'list',
           items: [
-            { title: 'Title', text: 'The prompt itself, usually. Short enough to project.' },
-            { title: 'Detail', text: 'The background — why you are asking, what frame to answer in.' },
-            { title: 'Custom instructions', text: 'Guidance for the answer. "One sentence", "as your worst self", "assume it already failed".' },
-            { title: 'Category', text: 'For filtering.' },
+            { title: 'Title', text: 'Usually the question itself. Short enough to read from the back of the room.' },
+            { title: 'Detail shown to the room', text: 'The background: why you are asking, what frame to answer in.' },
+            { title: 'Instruction shown to the room', text: 'How to answer: "One sentence", "as your worst self", "assume it already failed".' },
+            { title: 'Round direction', text: 'Call & Answer only. Leave it to inherit the set\'s direction, or choose another for this question. An Apply round names the material in **Whose material is this?**.' },
+            { title: 'School / source', text: 'Where the idea comes from, if it matters.' },
           ],
         },
         {
@@ -54,14 +91,41 @@ const manual = {
         },
       ],
     },
+    /*
+      engagementType === 'poll': SurveyQuestionFields with POLL_KINDS
+      (choice, rating, yesno, text): "Multiple choice", "Rating", "Yes / No",
+      "Open answer"; rating scales 1–5, 1–10, 0–10, Stars with labels under
+      each end; yes/no "Yes reads" / "No reads".
+    */
     {
-      /*
-        THE FIELD THIS GUIDE EXISTS FOR. The owner's framing, which is broader
-        than the field's name and is why the `{reveal}` alias was added
-        alongside it: *"it could be any information that the host doesnt want
-        revealed (or the creator of the question set really) until after they
-        have responded with their thoughts."*
-      */
+      id: 'poll-question',
+      title: 'A poll question',
+      icon: 'ChartBar',
+      blocks: [
+        {
+          t: 'p',
+          text: 'A poll question is one of four kinds; choose the kind, then fill in what it needs:',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Multiple choice', text: 'The options, and whether people pick one or several.' },
+            { title: 'Rating', text: 'A scale (1 to 5, 1 to 10, 0 to 10, or stars) and the words under each end.' },
+            { title: 'Yes / No', text: 'What the two buttons say, for example Approve and Decline.' },
+            { title: 'Open answer', text: 'A line or a paragraph.' },
+          ],
+        },
+      ],
+    },
+    /*
+      THE FIELD THIS GUIDE EXISTS FOR. The owner's framing, which is broader
+      than the field's name and is why the `{reveal}` alias was added
+      alongside it: *"it could be any information that the host doesnt want
+      revealed (or the creator of the question set really) until after they
+      have responded with their thoughts."*
+    */
+    {
+      id: 'holding-back',
       title: 'Holding something back until they have answered',
       icon: 'EyeSlash',
       blocks: [
@@ -71,145 +135,91 @@ const manual = {
         },
         {
           t: 'p',
-          text: 'That is what the answer-details field is for. It is never shown to players while they are answering, so it is safe to put the spoiler there — and it is handed to the AI at results time, so the summary can compare what the room said against what was actually true, and then reveal it.',
+          text: 'That is what the **Reveal (shown only after the round)** field is for. It is never shown to players while they are answering, so it is safe to put the spoiler there. Workie is given it at results, so What we heard can compare what the room said with what was true, and then reveal it.',
         },
         { t: 'h', text: 'It is not only for trivia' },
         {
           t: 'p',
-          text: 'The name says "answer details" and the job is wider than that. Any kind of session can use it. An art round with no right answer still has a real title worth revealing at the end.',
+          text: 'Any format can use it. An art round with no right answer still has a real title worth revealing at the end.',
         },
         {
           t: 'note',
           tone: 'warn',
-          title: 'An empty reveal is the commonest set bug there is',
-          text: 'If the AI promises to reveal the real title and then does not, the field is empty. The AI is not withholding it — it never had it. Fill the field in, and the reveal happens.',
+          title: 'An empty reveal is the commonest set mistake there is',
+          text: 'If Workie promises to reveal the real title and then does not, the field is empty. Workie is not withholding it; it never had it. Fill the field in, and the reveal happens.',
         },
         {
           t: 'note',
           tone: 'info',
           title: 'Two names, one field',
-          text: 'Prompts can refer to it as {answerDetails} or as {reveal}. They are the same content — the second name exists because that is what people look for when they want this behaviour.',
+          text: 'Prompts can refer to it as {answerDetails} or as {reveal}. They are the same content.',
         },
       ],
     },
+    /*
+      QuestionsPanel.jsx:2291 "Background for Workie", 600 chars, "Facts and
+      context Workie may use. Never shown to players."; "Tags".
+    */
     {
+      id: 'notes-for-workie',
+      title: 'Notes for Workie, and tags',
+      icon: 'Note',
+      blocks: [
+        {
+          t: 'p',
+          text: '**Background for Workie** holds facts and context for this question, up to 600 characters: the numbers behind it, what happened, who said it. Players never see it. Workie draws on it when it writes What we heard, every time the question is played.',
+        },
+        {
+          t: 'p',
+          text: '**Tags** are your own words for finding questions later, separated by commas. A question drafted by AI carries a tag saying so; delete it if you rewrite the question as your own.',
+        },
+      ],
+    },
+    /*
+      QuestionImageField.jsx: a file name or web address ("mona-lisa.jpg, or
+      https://…"), Upload / Replace, Clear ("Nothing is deleted from storage").
+    */
+    {
+      id: 'pictures',
       title: 'Pictures',
       icon: 'Image',
       blocks: [
         {
           t: 'p',
-          text: 'A question can carry a picture, via the Picture field. On an art round the image is the question — the text asks what people see in it, and the withheld detail carries what it actually is.',
+          text: 'Type a web address or a file name into **Picture**, or press Upload to add an image file. Clear takes the picture off the question without deleting the file. On an art round the image is the question: the text asks what people see in it, and the reveal carries what it actually is.',
         },
       ],
     },
+    /*
+      CategoryPicker.jsx: pick an existing category or create one deliberately;
+      the 25th is refused (utils/addQuestions.js:23, three 8-bit host masks).
+    */
     {
+      id: 'categories',
       title: 'Categories',
       icon: 'ListChecks',
       blocks: [
         {
           t: 'p',
-          text: 'Categories let a host play a slice of a set. Aim for a handful of meaningful ones rather than one per question — a category that matches a single question is a filter nobody will use.',
+          text: 'Categories let a host play a slice of a set, switching them on and off during the session. Choose an existing one in the Category field, or add a new one there on purpose. Aim for a handful of meaningful ones rather than one per question: a category with a single question is a filter nobody uses.',
         },
         {
           t: 'note',
           tone: 'warn',
           title: 'There are 24 category slots per set',
-          text: 'That is a hard ceiling in the storage format, not a style guide. Sets that sprawl past it will not behave.',
+          text: 'That is a hard limit, not a style guide. The 25th category is refused.',
         },
       ],
     },
   ],
 };
 
-const ai = {
-  id: 'builder-ai',
-  title: 'Building with AI',
-  icon: 'MagicWand',
-  summary: 'Getting a usable set out of a generator, and what to check before anyone plays it.',
-  sections: [
-    {
-      title: 'Describing what you want',
-      icon: 'ChatCircleText',
-      blocks: [
-        {
-          t: 'p',
-          text: 'The generator is much better with constraints than with adjectives. "Fun questions about technology" produces exactly what you would expect. Say who the room is, what you want them arguing about, and how long you have.',
-        },
-        {
-          t: 'list',
-          items: [
-            'Who is in the room — a team, a conference, a family at Christmas.',
-            'What the session is actually for — warm-up, retrospective, teaching something.',
-            'The tone, in words you would use to a person.',
-            'How many questions, and roughly how long each should take.',
-          ],
-        },
-        {
-          t: 'note',
-          tone: 'tip',
-          title: 'Lock the fields you have already decided',
-          text: 'The assistant can fill the metadata from your description, and a locked field is left alone. Lock the name and the category list, then let it regenerate the rest as many times as you like.',
-        },
-      ],
-    },
-    {
-      title: 'It runs as a job, into a draft',
-      icon: 'Timer',
-      blocks: [
-        {
-          t: 'p',
-          text: 'A set is not generated while you wait. It runs on the server and writes into a draft, so you can close the dialog and get on with something else. The bell in the top line tells you when the draft is ready, on any device, and the draft waits thirty days for you to review it.',
-        },
-        {
-          t: 'p',
-          text: 'Before it starts, the builder shows where the set will be saved — your space, a team, or Engage for Engage staff — and lets you change it. Questions added to an existing set always go into that set\'s library. Public is not a choice here: publish a set once it is saved.',
-        },
-        {
-          t: 'note',
-          tone: 'info',
-          title: 'Nothing is saved until you accept',
-          text: 'Not the set, and not a new version of one. If a set of the same name already exists when you accept, you are asked for another name; nothing you already have is replaced.',
-        },
-      ],
-    },
-    {
-      title: 'Before you let anyone play it',
-      icon: 'MagnifyingGlass',
-      blocks: [
-        {
-          t: 'note',
-          tone: 'warn',
-          title: 'Check the answer keys',
-          text: 'A generated trivia question can be fluent and wrong. It will be wrong in front of a room, with points riding on it, and you will be the one arguing with somebody who knows the real answer.',
-        },
-        {
-          t: 'list',
-          items: [
-            'Exactly one option is right, and the other three are plausible.',
-            'The answer-details field is filled in, especially on any round meant to end in a reveal.',
-            'The categories are a usable handful, not twenty synonyms.',
-            'Nothing is subtly about the wrong country, decade or company.',
-          ],
-        },
-      ],
-    },
-    {
-      title: 'If it keeps coming out wrong the same way',
-      icon: 'Sparkle',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Repeated, consistent problems are the generation prompt rather than your description. Too long, too corporate, always four options when you asked for three — fix the prompt once in the Prompts section and every future set inherits the fix.',
-        },
-      ],
-    },
-  ],
-};
-
-export const BUILDER_ROLE = {
+/**
+ * The builder area. Assembled into roles by ./index.js (ROLE_AREAS); see
+ * docs/help-refresh/STRUCTURE.md for the map and the conventions.
+ * Writing questions by hand.
+ */
+export const AREA = {
   id: 'builder',
-  title: 'For builders',
-  icon: 'Buildings',
-  blurb: 'Writing the questions, by hand or with the AI.',
-  guides: [manual, ai],
+  guides: { builder: [manual] },
 };

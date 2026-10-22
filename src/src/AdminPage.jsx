@@ -10,6 +10,7 @@ import UserManagement from './components/UserManagement';
 import SessionsPanel from './components/SessionsPanel';
 import ReportsPanel from './components/ReportsPanel';
 import HelpButton from './components/HelpButton';
+import { helpFor } from './config/help/screens';
 import PlatformOrgsPanel from './components/PlatformOrgsPanel';
 import ObservabilityPanel from './components/ObservabilityPanel';
 import ClaudeModelsPanel from './components/ClaudeModelsPanel';
@@ -113,7 +114,7 @@ const ADMIN_SECTIONS = [
     label: 'Sessions',
     icon: 'GameController',
     title: 'Sessions',
-    subtitle: 'What hosts have run. Data here expires: 90 days from creation, 7 days after last play.',
+    subtitle: 'What hosts have run. Data here expires: 90 days from creation, or 7 days from the start once started.',
     contentTheme: 'dark',
   },
   {
@@ -196,6 +197,49 @@ const ADMIN_SECTION_IDS = [...new Set([
    GET /orgs answers, a bare /admin shows it too rather than flashing Question
    sets first. */
 const DEFAULT_ADMIN_SECTION = 'overview';
+
+/*
+  WHICH SECTION THE HEADER'S `?` OPENS (Help Phase 3; ids in
+  config/help/screens.js): the section that is showing, and in Engage mode
+  the staff version of it. A place inside a section (the set editor, a
+  draft's review, an event's agenda) is its own screen. An id with no entry
+  opens the console's overview of sections.
+*/
+const SECTION_HELP = {
+  overview: 'admin-overview',
+  questionsets: 'admin-question-sets',
+  games: 'admin-sessions',
+  events: 'admin-events',
+  library: 'admin-public-library',
+  prompts: 'admin-prompts',
+  members: 'admin-members',
+  activity: 'admin-activity',
+  billing: 'admin-plan',
+  privacy: 'admin-data-privacy',
+  reports: 'host-reports',
+  settings: 'admin-settings',
+};
+const STAFF_SECTION_HELP = {
+  overview: 'staff-overview',
+  orgs: 'staff-organisations',
+  observability: 'staff-observability',
+  planrequests: 'staff-plan-requests',
+  discountcodes: 'staff-discount-codes',
+  questionsets: 'staff-shared-library',
+  prompts: 'staff-prompts',
+  publiclibrary: 'staff-public-library',
+  moderation: 'staff-moderation',
+  users: 'staff-accounts',
+  archive: 'staff-archive',
+  engagesettings: 'staff-engage-settings',
+  settings: 'admin-settings',
+};
+export function adminHelpScreen({ tab = '', onPlatform = false, editingSet = false, draftOpen = false, eventOpen = false } = {}) {
+  if (draftOpen && tab === DRAFTS_SECTION) return 'ai-draft-review';
+  if (editingSet && tab === 'questionsets') return 'admin-set-editor';
+  if (eventOpen && tab === 'events') return 'event-agenda';
+  return (onPlatform ? STAFF_SECTION_HELP : SECTION_HELP)[tab] || 'admin-console';
+}
 
 /** True when the address bar names a section this console recognises. */
 function urlNamesKnownSection() {
@@ -1879,8 +1923,21 @@ function AdminPage() {
                 Reporting used to be a second icon here, then a tab in the
                 corner of every screen; it is this button's menu now (see
                 HelpButton's `reports`). The small contextual `?` buttons
-                further down pass no `reports` and open their guide directly. */}
-            <HelpButton section="admin" variant="header" size="medium" tooltip="Help and feedback" reports={{ context: 'admin' }} />
+                further down pass no `reports` and open their guide directly.
+                Its guides open at the section showing (`adminHelpScreen`). */}
+            <HelpButton
+              {...helpFor(adminHelpScreen({
+                tab: resolvedTab,
+                onPlatform,
+                editingSet: Boolean(editingSet),
+                draftOpen: Boolean(draftPlace),
+                eventOpen: Boolean(eventPlace),
+              }))}
+              variant="header"
+              size="medium"
+              tooltip="Help and feedback"
+              reports={{ context: 'admin' }}
+            />
           </>
         )}
       >
@@ -1995,7 +2052,7 @@ function AdminPage() {
                       <span className="padm-card-n">Open the library</span>
                     </button>
                     <div className="padm-card-aside">
-                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                      <HelpButton {...helpFor('admin-prompts')} variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                     </div>
                   </li>
 
@@ -2021,7 +2078,7 @@ function AdminPage() {
                       <span className="padm-card-n">Open the library</span>
                     </button>
                     <div className="padm-card-aside">
-                      <HelpButton section="ai-prompts" variant="inline" size="small" tooltip="Help: AI Prompts Management" />
+                      <HelpButton {...helpFor('admin-prompts')} variant="inline" size="small" tooltip="Help: AI Prompts Management" />
                     </div>
                   </li>
                 </ul>
@@ -2427,7 +2484,7 @@ function AdminPage() {
               <div className="admin-section debug-section">
                 <div className="section-title-with-help">
                   <h2><Icon name="Broadcast" weight="bold" size={16} color="var(--success)" /> Real-time Communication</h2>
-                  <HelpButton section="websocket-settings" variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
+                  <HelpButton {...helpFor('admin-settings-realtime')} variant="inline" size="small" tooltip="Help: WebSocket & Real-time Settings" />
                 </div>
                 <p className="section-description">Real-time WebSocket communication is now the default. Toggle off to use HTTP polling instead.</p>
                 

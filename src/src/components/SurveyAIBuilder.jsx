@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -383,6 +385,8 @@ function SurveyAIBuilder({
               <p className="sab-sub">The job runs on the server, so you can close this once it starts.</p>
             )}
           </div>
+          {/* The AI builders' guide (Help Phase 3), beside the X. */}
+          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
           <button
             type="button"
             className="close-button"

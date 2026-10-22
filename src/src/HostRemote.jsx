@@ -3,6 +3,8 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
 import HostNotificationsBell from './components/HostNotificationsBell';
+import HelpButton from './components/HelpButton';
+import { helpFor } from './config/help/screens';
 import { twoSurfacesHere, presentHref } from './config/surfaces';
 import RemoteSessionPanel from './components/RemoteSessionPanel';
 import RemoteCategoryList from './components/RemoteCategoryList';
@@ -1469,6 +1471,17 @@ function HostRemote() {
           />
           <span className="hr-live-word">{connected ? 'Live' : 'Offline'}</span>
         </span>
+        {/* HELP (Help Phase 3): the remote's own section of the two-screens
+            guide, and the same `?` reports a bug, as on the laptop. A phone:
+            44px whatever the pointer reports (HostRemote.css). */}
+        <HelpButton
+          {...helpFor('host-remote')}
+          variant="inline"
+          size="small"
+          tooltip="Help and feedback"
+          className="help-button-quiet hr-help"
+          reports={{ context: 'host', gameId: gameId || undefined }}
+        />
         {/* THE BELL (owner, 21 Oct 2026): the host's phone is private, so the
             inbox rides here too; a click opens the console in a new tab. */}
         <HostNotificationsBell newTab />

@@ -703,7 +703,7 @@ body {
 /* `.setup-ask` (Ask next / Ask now) is exempt too: the two must read as two
    DIFFERENT actions, and this repaint would draw them as one navy button —
    which is how the Queue / Ask next pair looked the same for its whole life. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn) {
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;

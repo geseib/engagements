@@ -32,22 +32,32 @@ describe('§1 the player has a way in', () => {
     expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument();
   });
 
-  test('it opens the player guides', () => {
-    render(<PlayerShell phase="ASK" ctx="Round 1" who="Ada" />);
+  /*
+    WHERE THE PLAYER IS, NOT THE PLAYER ROLE (Help Phase 3). It opened the
+    four player guides' index; it now opens the section for the screen the
+    player is on, which the caller names with `help` (a screen id).
+  */
+  const openGuides = () => {
     // The `?` is a menu of four since 2026-09-21 (HelpButton's `reports`): the
     // guides are its first row, and reporting a bug is the other three.
     fireEvent.click(screen.getByRole('button', { name: /help/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
-    expect(screen.getByRole('heading', { level: 1, name: /For players/i })).toBeInTheDocument();
+  };
+
+  test('it opens the section for the state the player is in', () => {
+    render(<PlayerShell phase="vote" ctx="Round 1" who="Ada" help="player-voting" />);
+    openGuides();
+    expect(document.getElementById('help-player-voting--voting')).toBeInTheDocument();
   });
 
-  test('the player guides it opens are the four written for them', () => {
-    render(<PlayerShell phase="ASK" ctx="Round 1" who="Ada" />);
-    fireEvent.click(screen.getByRole('button', { name: /help/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
-    ['Getting started', 'Joining a session', 'Playing', 'Scoring'].forEach((title) => {
-      expect(screen.getByRole('button', { name: new RegExp(title, 'i') })).toBeInTheDocument();
-    });
+  test('with no state of its own it opens the overview, and the join section while joining', () => {
+    const { unmount } = render(<PlayerShell phase="ASK" ctx="Round 1" who="Ada" />);
+    openGuides();
+    expect(document.getElementById('help-player-getting-started--session-looks-like')).toBeInTheDocument();
+    unmount();
+    render(<PlayerShell phase="join" ctx="Join a session" />);
+    openGuides();
+    expect(document.getElementById('help-player-joining--getting-in')).toBeInTheDocument();
   });
 
   test('the help control is inside the player surface scope, not beside it', () => {
@@ -104,11 +114,20 @@ describe('§2 the host has a way in', () => {
     }
   });
 
-  test('it opens the host role index', () => {
+  // It opened the host role index; since Help Phase 3, the tab that is showing.
+  test('it opens the section for the tab that is showing', () => {
     render(<SessionSetupPanel {...panelProps} />);
     fireEvent.click(screen.getByRole('button', { name: /Help and feedback/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
-    expect(screen.getByRole('heading', { level: 1, name: /For hosts/i })).toBeInTheDocument();
+    expect(document.getElementById('help-host-player-management--players-tab')).toBeInTheDocument();
+  });
+
+  test('on Settings it opens the Settings tab\'s section', () => {
+    render(<SessionSetupPanel {...panelProps} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: /Help and feedback/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
+    expect(document.getElementById('help-host-session-panel--settings-tab')).toBeInTheDocument();
   });
 
   /*

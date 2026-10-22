@@ -1159,6 +1159,7 @@ export default function BuildPlayer({
       phase={phase}
       volume={volume}
       ctx={(view && view.title) || 'Build Room'}
+      help="player-build-room"
       who={playerName}
       online={online}
       banner={banner}

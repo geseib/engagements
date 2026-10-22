@@ -132,7 +132,7 @@ const SECTION = {
     label: 'Sessions',
     icon: 'GameController',
     title: 'Sessions',
-    subtitle: 'What hosts have run. Data here expires: 90 days from creation.',
+    subtitle: 'What hosts have run. Data here expires: 90 days from creation, or 7 days from the start once started.',
     contentTheme: 'dark',
   },
   /*

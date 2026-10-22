@@ -25,7 +25,17 @@ function gameIdFromAddress() {
 }
 
 const HelpButton = ({
+  /**
+   * Without `guide`: what it always was — a role id, a guide id or an alias
+   * (`section="host"`, `section="ai-prompts"`), or `guide#section`.
+   * With `guide`: a section id inside that guide, and the modal opens there,
+   * scrolled to it. Screens should not hand-write these: spread
+   * `helpFor('<screen id>')` from config/help/screens.js, the one map of which
+   * screen opens which section.
+   */
   section,
+  /** A guide id or alias; `section` is then a section within it. */
+  guide,
   variant = 'floating',
   size = 'medium',
   tooltip = 'Help & Documentation',
@@ -105,6 +115,13 @@ const HelpButton = ({
 
   const openGuides = () => { setMenuOpen(false); setShowHelp(true); };
 
+  // Focus goes back to this button, not to wherever it was when the dialog
+  // opened: from the menu that was "Read the guides", which is gone by now.
+  const closeHelp = () => {
+    setShowHelp(false);
+    if (buttonRef.current && typeof buttonRef.current.focus === 'function') buttonRef.current.focus();
+  };
+
   const openReport = (type) => {
     setMenuOpen(false);
     // Read when the report is opened, not when the bar mounted: the panel this
@@ -158,8 +175,9 @@ const HelpButton = ({
 
       {showHelp && (
         <HelpSystem
+          guide={guide}
           section={section}
-          onClose={() => setShowHelp(false)}
+          onClose={closeHelp}
         />
       )}
 

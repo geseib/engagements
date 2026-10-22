@@ -1,5 +1,7 @@
 // skin-allowance: colour=1
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import HelpButton from './HelpButton';
+import { helpFor } from '../config/help/screens';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -1133,6 +1135,8 @@ function AIScenarioBuilder({
       <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
+          {/* The AI builders' guide (Help Phase 3), beside the X. */}
+          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
           <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
         </div>
 

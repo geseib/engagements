@@ -29,7 +29,11 @@ import AnswerSpotlight from '../components/AnswerSpotlight';
 import Stage from '../components/stage/Stage';
 import { nextStyle } from '../config/scoreboard';
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
-import { HOST_ROLE } from '../config/help/host';
+import { ROLE_BY_ID } from '../config/help';
+
+// The host guides live in several area files since the help refresh's Phase 0
+// split; the role, assembled by config/help/index.js, is the whole of them.
+const HOST_ROLE = ROLE_BY_ID.host;
 
 function Host({ canOpen = true, enabled = true, onAction = () => {}, start = false }) {
   const [board, setBoard] = useState({ open: start, style: 'departure' });
@@ -149,7 +153,7 @@ describe('the keys are written down where the host looks for them', () => {
   test('the host guide lists them too', () => {
     const items = JSON.stringify(HOST_ROLE);
     expect(items).toMatch(/"keys":"S","text":"Show or hide the scoreboard/);
-    expect(items).toMatch(/"keys":"V","text":"With the scoreboard up, change its look/);
+    expect(items).toMatch(/"keys":"V","text":"Change the scoreboard's look while it is up/);
   });
 });
 

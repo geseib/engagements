@@ -44,6 +44,8 @@ import { useKeepOnScreen } from './keepOnScreen';
 import HostAlert from './BuildHostAlert';
 import { W } from './words';
 import InfoTip from './InfoTip';
+import HelpButton from '../components/HelpButton';
+import { helpFor } from '../config/help/screens';
 import BuildLaterPoints from './BuildLaterPoints';
 import BuildPointRequest from './BuildPointRequest';
 import { ShownPointCard, TakeDownOffer } from './BuildPointStage';
@@ -293,6 +295,8 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
       <form className="brm-card brm-create" onSubmit={submit} aria-labelledby="brm-create-title">
         <div className="brm-dh">
           <h1 id="brm-create-title">New Build Room</h1>
+          {/* The Build Room guide's setting-up section (Help Phase 3). */}
+          <HelpButton {...helpFor('build-create')} variant="inline" size="small" tooltip="Help: New Build Room" className="help-button-quiet brm-dh-help" />
           <a className="brm-x" href="/" aria-label="Close"><Icon name="X" size={16} /></a>
         </div>
         <p className="brm-sub">A room of people and your own Claude Code build something together. Claude asks the room at real decision points; you shape every answer before it reaches Claude.</p>
@@ -2233,6 +2237,9 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
   );
 }
 
+/** The header `?`'s section per screen (config/help/screens.js). The Stage's is in its dock. */
+export const SCREEN_HELP = { host: 'build-host', build: 'build-build', history: 'build-history' };
+
 /**
  * THE HEADER, the same on all four screens: the title, the screens, the open
  * ask, Claude's status, the join code. On the Host screen it adds the live
@@ -2320,6 +2327,19 @@ function RoomHeader({
       )}
       <div className="brm-hbar-tools">
         {!tucked && <HeaderTools {...tools} />}
+        {/* HELP (Help Phase 3): the section for the screen that is showing,
+            beside SESSION as on the other engagements' panels. It names
+            nobody and shows nothing of the session, so it may sit in the
+            header the room sees on Build and History; it opens on this
+            laptop, never the room's window. */}
+        <HelpButton
+          {...helpFor(SCREEN_HELP[screen] || 'build-host')}
+          variant="inline"
+          size="small"
+          tooltip="Help and feedback"
+          className="help-button-quiet brm-help"
+          reports={{ context: 'host', gameId: room.gameId }}
+        />
         {/* SESSION (owner, 2026-10-09): the same word and key as the other
             engagements, last on the right where the three-dot menu was. */}
         <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
@@ -3515,10 +3535,12 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
 
 // ── Dialogs ─────────────────────────────────────────────────────────────────
 
-function DialogHead({ id, title, onClose }) {
+// `help`: a screen id (config/help/screens.js); its `?` sits beside the X.
+function DialogHead({ id, title, onClose, help = '' }) {
   return (
     <div className="brm-dh">
       <h2 className="brm-h" id={id}>{title}</h2>
+      {help ? <HelpButton {...helpFor(help)} variant="inline" size="small" tooltip={`Help: ${title}`} className="help-button-quiet brm-dh-help" /> : null}
       <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
     </div>
   );
@@ -3832,7 +3854,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-connect-title">
-      <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} />
+      <DialogHead id="brm-connect-title" title="Connect Claude Code" onClose={onClose} help="build-connect" />
       <div ref={top} className="brm-connect-body" data-connect={which}>{body}</div>
 
       <label className="brm-check brm-field">

@@ -554,6 +554,12 @@ body, .stage-ladder-table{
 /* PRESENT is a link shaped like the buttons beside it; PRESENTING says a
    Presentation is connected, in the pressed blue (one orange per screen). */
 a.dock-more{text-decoration:none}
+/* THE DOCK'S `?` (Dock.jsx `help`, Help Phase 3) is a .dock-more, square: the
+   HelpButton's own blue circle and drop shadow undone at three classes, so
+   it wins wherever HelpButton.css lands in the bundle. */
+.dock .help-button.dock-help{width:auto;height:auto;border-radius:10px;background:transparent;
+  color:var(--muted);border:var(--hair) solid var(--rule);box-shadow:none;padding:.3em .7em}
+.dock .help-button.dock-help:hover{transform:none;box-shadow:none;color:var(--text);border-color:var(--text)}
 .dock-present[data-presenting]{color:var(--text);border-color:var(--secondary);background:rgba(124,167,230,.16)}
 /* Room-facing copy, so it wraps rather than ellipsing — "Results are o…" is
    not a status. It is in the audit's CONTENT_SEL, which means A11 fails if it
