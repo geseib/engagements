@@ -134,7 +134,6 @@ const UNIT_CAP = 120;
 
 /** guide#section → today's words. SHRINK ONLY. */
 const LONG_SECTIONS = {
-  'player-playing#answering': 469,
   'host-quick-start#step-3-run-rounds': 273,
   'host-game-setup#settings-before-you-start': 435,
   'host-player-management#handing-name-over': 274,
@@ -146,7 +145,6 @@ const LONG_SECTIONS = {
 };
 /** guide#section → today's longest paragraph/item/note/row. SHRINK ONLY. */
 const LONG_UNITS = {
-  'player-playing#answering': 133,
   'host-game-setup#settings-before-you-start': 184,
   'host-reporting#what-we-heard': 144,
   'host-build-room#during-after': 301,

@@ -153,6 +153,9 @@ export const HELP_ALIASES = {
 export const HELP_SECTION_MOVES = {
   'host-running-engagements#laptop-console': 'host-two-screens#laptop-console',
   'host-running-engagements#phone-remote': 'host-two-screens#phone-remote',
+  // Phase 2 (W1): voting got its own player guide.
+  'player-playing#voting': 'player-voting#voting',
+  'player-playing#reading-long-answer': 'player-voting#reading-long-answer',
 };
 
 /** The section of a guide with that id, or null. */
