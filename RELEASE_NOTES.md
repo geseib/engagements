@@ -47,6 +47,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 ### Known gaps
 
 - **Help:** the Engage staff guides were written from the code; the QA account is not staff on dev, so they were not checked on screen. Privacy and Terms are unchanged: they say things that are not true (no data shared, 90-day retention, export and delete), and the proposed corrections wait for the owner in `docs/help-refresh/privacy-terms-proposals.md`. Product gaps the help work found are on [#43](https://github.com/geseib/engagements/issues/43) (Suspend sets a status nothing checks; Export and Delete are not wired; Ask the room is off on prod, and the help says so).
+- The public code-entry page (`/join`) has no **?** yet; the player's help starts once the code is in (the name page and everything after).
 - Reports do not yet record which prompt version wrote a read.
 - The check compares numbers by value: a "2" anywhere in the material lets "two weeks" pass. Commitments are checked only under a Next steps heading.
 - The prompt fixes reach a tier only when an admin applies the repo's version there.
