@@ -161,17 +161,16 @@ Today's occurrences are in `BANNED_ALLOWLIST` (guide → term → count):
 
 | Term | Total | Where |
 |---|---|---|
-| the wall | 14 | host-two-screens 7, host-quick-start 2, host-late-items 2, host-reporting 2, host-build-room 1 |
-| projector | 9 | host-two-screens 7, host-game-setup 1, host-build-room 1 |
-| big screen | 5 | host-two-screens 2, player-getting-started 1, host-quick-start 1, technical-requirements 1 |
+After Phase 1 (22 Oct 2026):
+
+| Term | Total | Where |
+|---|---|---|
+| the wall | 12 | host-two-screens 7, host-late-items 2, host-reporting 2, host-quick-start 1 |
+| projector | 8 | host-two-screens 6, host-game-setup 1, host-build-room 1 |
+| big screen | 2 | host-two-screens 1, host-quick-start 1 |
 | the AI summary | 3 | host-quick-start 2, host-reporting 1 |
-| display profile | 3 | technical-requirements 2, host-game-setup 1 |
-| New version | 2 | host-game-setup 1, admin-question-sets 1 |
-| Fork | 2 | host-game-setup 1, admin-question-sets 1 |
-| word cloud | 1 | player-scoring 1 |
-| SETUP control | 1 | host-running-engagements 1 |
-| PRESENT | 1 | host-build-room 1 |
-| Presentation, codes card, Field Notes | 0 | |
+| PRESENT | 1 | host-build-room 1 (the dock's label still reads PRESENT) |
+| display profile, New version, Fork, word cloud, SETUP control, Presentation, codes card, Field Notes | 0 | |
 
 **It is a ratchet both ways.** A new occurrence fails. When you remove one, the test fails
 until you lower that number (delete the entry at 0). Nobody raises a number. The glossary
