@@ -26,6 +26,21 @@
     event                        components/WelcomeEvents.jsx:88 ("Run an event"), config/consoleSections.js:148,
                                  components/EventBuilder.jsx:466 ("Agenda")
 
+  Added in Phase 2 (W11, 22 Oct 2026), for words wave 1's guides use across
+  several guides:
+    the console                  components/WelcomeScreen.jsx:143 ("Question sets & team" / "Admin console")
+    your laptop console          components/console/HostConsole.jsx (two screens; host-two-screens#laptop-console)
+    Your part now                config/roundWords.js:154 (yourPartLabel)
+    session code                 components/stage/PresentMoments.jsx lobby, RootPage.jsx ("Session code");
+                                 the panel mid-session: host-two-screens#join-code
+    the main screen              PlayerPage.jsx:3146 ("Type the four digits on the main screen.")
+    phone remote                 SessionSetupPanel "Your phone as a remote"; HostRemote.jsx
+    direction                    buildroom/words.js:49 ("Send to Claude"), :281 ("your last direction")
+    crew                         buildroom/BuildSessionPanel.jsx:574 ("Open to a crew")
+  Checked in W11: draft now says what the list really shows (DraftsStrip.jsx
+  "An AI draft is waiting for your review."; the "AI draft" chip on a set row
+  is a generated set not yet reviewed, QuestionSetsPanel.jsx:647).
+
   Writers: a term is defined HERE, once. Elsewhere, use it; do not re-define it.
 */
 const glossary = {
@@ -91,6 +106,22 @@ const glossary = {
       ],
     },
     {
+      id: 'laptop-console',
+      title: 'Your laptop console',
+      icon: 'Monitor',
+      blocks: [
+        { t: 'p', text: 'What your laptop shows on two screens, instead of the stage: the next step, the responses and Workie\'s read, none of which the room sees.' },
+      ],
+    },
+    {
+      id: 'your-part-now',
+      title: 'Your part now',
+      icon: 'Play',
+      blocks: [
+        { t: 'p', text: 'The box on your laptop console that says what to do next, in one sentence, with the main button. Space presses it.' },
+      ],
+    },
+    {
       id: 'room-screen-size',
       title: 'Room screen size',
       icon: 'CornersOut',
@@ -112,6 +143,38 @@ const glossary = {
       icon: 'DotsSixVertical',
       blocks: [
         { t: 'p', text: 'The row of buttons along the bottom of the stage: the main button that moves the room on, and SESSION for the Session panel.' },
+      ],
+    },
+    {
+      id: 'session-code',
+      title: 'Session code (the join code)',
+      icon: 'LinkSimple',
+      blocks: [
+        { t: 'p', text: 'The four digits people join with, under the QR code. Every session has its own. During a session the join code panel puts it back up for latecomers.' },
+      ],
+    },
+    {
+      id: 'main-screen',
+      title: 'The main screen',
+      icon: 'Monitor',
+      blocks: [
+        { t: 'p', text: 'What players\' phones call whatever the room is watching, whether that is the stage or the room\'s window.' },
+      ],
+    },
+    {
+      id: 'phone-remote',
+      title: 'Phone remote',
+      icon: 'DeviceMobile',
+      blocks: [
+        { t: 'p', text: 'Your own phone, signed in, running the session while you walk the room. Scan the QR under Your phone as a remote in the Session panel\'s Settings tab.' },
+      ],
+    },
+    {
+      id: 'the-console',
+      title: 'The console',
+      icon: 'Gear',
+      blocks: [
+        { t: 'p', text: 'Where your question sets, sessions, reports and team live. Open it from your start screen with Question sets & team (Admin console for Engage admins).' },
       ],
     },
     {
@@ -143,7 +206,7 @@ const glossary = {
       title: 'Draft (AI draft)',
       icon: 'NotePencil',
       blocks: [
-        { t: 'p', text: 'What Workie writes when you ask it for a set or for more questions. It waits, seen only by you, until you review it and accept it; nothing is saved before that. Drafts show at the top of Question sets, marked AI draft.' },
+        { t: 'p', text: 'What Workie writes when you ask it for a set or for more questions. It waits, seen only by you, until you review it and accept it; nothing is saved before that. A line at the top of Question sets says when an AI draft is waiting, and the bell tells you. (A set row tagged AI draft is a set Workie wrote that nobody has reviewed yet.)' },
       ],
     },
     {
@@ -168,6 +231,22 @@ const glossary = {
       icon: 'Terminal',
       blocks: [
         { t: 'p', text: 'The small add-on for Claude Code that connects it to a Build Room. Install it once per laptop from the Connect Claude Code window.' },
+      ],
+    },
+    {
+      id: 'direction',
+      title: 'Direction (Build Room)',
+      icon: 'PaperPlaneTilt',
+      blocks: [
+        { t: 'p', text: 'What you send Claude to build next, shaped from what the room said, with Send to Claude. Claude picks it up on its next turn.' },
+      ],
+    },
+    {
+      id: 'crew',
+      title: 'Crew (Build Room)',
+      icon: 'UsersThree',
+      blocks: [
+        { t: 'p', text: 'People in a Build Room who build parts with their own Claude Code alongside yours, once you choose Open to a crew. Everyone else follows on their phone.' },
       ],
     },
     {

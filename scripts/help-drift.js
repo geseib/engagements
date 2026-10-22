@@ -94,10 +94,10 @@ const COVERS = {
   // builders
   'builder-manual': [`${S}/components/QuestionsPanel.jsx`, `${S}/components/QuestionImageField.jsx`, `${S}/components/SurveyQuestionFields.jsx`, `${S}/components/CategoryPicker.jsx`],
   // technical
-  'technical-troubleshooting': [`${S}/components/JoinCodeEntry.jsx`, `${S}/auth`, `${S}/utils`],
-  'technical-requirements': [`${S}/config/displayProfile.js`, `${S}/config/roomScreen.js`],
+  'technical-troubleshooting': [`${S}/components/JoinCodeEntry.jsx`, `${S}/components/RootPage.jsx`, `${S}/components/joinResult.js`, `${L}/game/session-gate.js`, `${S}/auth`, `${S}/WebSocketClient.js`, `${S}/present/roomWindow.js`, `${S}/utils/fullscreen.js`, `${S}/config/hostRemote.js`, `${S}/components/AISummaryStatus.jsx`, `${S}/utils/aiSummaryRecovery.js`, `${S}/components/DraftsStrip.jsx`, `${S}/buildroom/words.js`, 'src/public/engage-mcp.mjs'],
+  'technical-requirements': [`${S}/config/displayProfile.js`, `${S}/config/roomScreen.js`, `${S}/present/roomWindow.js`, `${S}/buildroom/buildHostApi.js`, 'src/public/engage-mcp.mjs', 'src/public/index.html'],
   // the glossary: the screens its terms are checked against (its header comment)
-  glossary: [`${S}/utils/setOwnerTag.js`, `${S}/config/consoleWords.js`, `${S}/config/roomScreen.js`, `${S}/config/followUpWords.js`, `${S}/components/WelcomeScreen.jsx`, `${S}/components/stage/Dock.jsx`],
+  glossary: [`${S}/utils/setOwnerTag.js`, `${S}/config/consoleWords.js`, `${S}/config/roomScreen.js`, `${S}/config/followUpWords.js`, `${S}/components/WelcomeScreen.jsx`, `${S}/components/stage/Dock.jsx`, `${S}/config/roundWords.js`, `${S}/components/DraftsStrip.jsx`, `${S}/buildroom/BuildSessionPanel.jsx`],
 };
 
 const git = (...args) => {
