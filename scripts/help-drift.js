@@ -79,6 +79,12 @@ const COVERS = {
   'admin-data-privacy': [`${S}/components/PrivacyPanel.jsx`, `${L}/game/session-ttl.js`, `${L}/game/save-report.js`],
   'admin-game-management': [`${S}/AdminPage.jsx`],
   'admin-settings': [`${S}/AdminPage.jsx`],
+  // Engage staff (W10)
+  'admin-staff-console': [`${S}/config/consoleSections.js`, `${S}/components/ScopeTabs.jsx`, `${S}/components/OverviewPanel.jsx`, `${S}/config/overviewAlerts.js`, `${L}/admin/orgs/my-notifications.js`],
+  'admin-staff-organisations': [`${S}/components/PlatformOrgsPanel.jsx`, `${S}/components/OrgBillingDrawer.jsx`, `${S}/components/PlanRequestsPanel.jsx`, `${S}/components/DiscountCodesPanel.jsx`, `${L}/admin/orgs/platform-orgs.js`, `${L}/admin/orgs/plan-requests.js`, `${L}/admin/orgs/adjustments.js`],
+  'admin-staff-accounts': [`${S}/components/UserManagement.jsx`, `${L}/admin/manage-users.js`],
+  'admin-staff-content': [`${S}/components/PublicLibraryPanel.jsx`, `${S}/components/ScoreCard.jsx`, `${S}/components/ModerationPanel.jsx`, `${S}/utils/moderationRow.js`, `${L}/admin/moderation-decide.js`],
+  'admin-staff-platform': [`${S}/components/ObservabilityPanel.jsx`, `${S}/components/StaffStatsDrill.jsx`, `${S}/components/ClaudeModelsPanel.jsx`, `${S}/components/SiteSkinPanel.jsx`, `${S}/components/ArchivePanel.jsx`, `${L}/admin/shared/archive-prompt-link.js`],
   // AI
   'admin-ai-prompts': [`${S}/components/PromptLibraryPanel.jsx`, `${S}/components/AIPromptManager.jsx`, `${S}/components/PromptVersionsPanel.jsx`, `${S}/components/PromptRepoReview.jsx`, `${S}/config/templateVariables.js`],
   'admin-ai-builders': [`${S}/components/TriviaAIBuilder.jsx`, `${S}/components/PollAIBuilder.jsx`, `${S}/components/SurveyAIBuilder.jsx`, `${S}/components/AIScenarioBuilder.jsx`, `${S}/components/DestinationField.jsx`, `${S}/components/GenerationJobPanel.jsx`, `${S}/components/AddQuestionsDialog.jsx`],

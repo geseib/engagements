@@ -173,6 +173,8 @@ export const HELP_SECTION_MOVES = {
   'admin-ai-builders#drafts-bell-review': 'ai-drafts#drafts-bell-review',
   'admin-ai-builders#accepting-taking-back': 'ai-drafts#accepting-taking-back',
   'admin-ai-builders#reviewing-output': 'ai-drafts#reviewing-output',
+  // Phase 2 (W10): moving sets between environments is the staff Archive's.
+  'admin-question-sets#moving-between-environments': 'admin-staff-platform#moving-between-environments',
 };
 
 /** The section of a guide with that id, or null. */
