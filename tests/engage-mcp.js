@@ -66,6 +66,7 @@ let statePoints;
 let postedIds = 0;
 // The server's one line for an out-of-date plugin (copy pass 2026-10-10): set to make GET state carry it.
 let statePluginNote = '';
+let stateReady = null;
 let errorPluginNote = '';
 // Claude's project folder, so the plugin writes .engage/brief.md somewhere harmless.
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'engage-mcp-'));
@@ -98,6 +99,7 @@ const server = http.createServer((req, res) => {
         ...(stateYou ? { you: stateYou } : {}),
         ...(statePoints ? { points: statePoints } : {}),
         ...(statePluginNote ? { pluginNote: statePluginNote } : {}),
+        ...(stateReady ? { buildKind: 'game', ready: stateReady } : {}),
         ...(statePluginLatest ? { pluginLatest: statePluginLatest } : {}),
       });
     }
@@ -547,6 +549,23 @@ const hardStop = setTimeout(() => {
     assert.ok(folder && !folder.startsWith('/') && !folder.includes(require('os').homedir() + '/'), folder);
     const other = requests.filter((q) => !/\/build\/state/.test(q.url) && q.folder);
     assert.deepStrictEqual(other, [], 'only state reads carry it');
+  });
+  await check('1.25.1: READY QUESTIONS lists the host\'s sets for the kind, by section, fenced as room text', async () => {
+    stateReady = { kind: 'game', sets: [{ name: 'Game questions', questions: [
+      { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
+      { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper'] },
+      { kind: 'rating', prompt: 'How fun is it?', category: 'While building' },
+    ] }] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/READY QUESTIONS for a game, from the host's question sets/.test(t), t.slice(-800));
+      assert.ok(/Ideas: .*What does the player do first\?/.test(t) && /Choose: .*Which look\?.*\[.*Pixel.*\|.*Paper.*\]/.test(t) && /Rate: .*How fun is it\?/.test(t), t.slice(-800));
+      assert.ok(t.indexOf('Start') < t.indexOf('While building'), 'by section, in order');
+    } finally {
+      stateReady = null;
+    }
+    const none = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+    assert.ok(!/READY QUESTIONS/.test(none));
   });
   await check('the kickoff prompt has Claude call room_status with kickoff', async () => {
     const r = await mcp.request('prompts/get', { name: 'kickoff', arguments: {} });

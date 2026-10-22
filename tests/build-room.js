@@ -1835,6 +1835,50 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     }
     assert.strictEqual(S.folderOf({ headers: { 'X-Engage-Folder': 'tips' } }), 'tips', 'a folder outside home: its name');
   });
+  // QUESTION SETS BY KIND OF BUILD (docs/superpowers/plans/2026-10-22-build-room-question-sets.md, steps 2 and 4).
+  await check('kinds: step 1\'s answer, even an edited option, is read into one kind by its words; else none', async () => {
+    const got = ['A website or page', 'An app', 'A game', 'A tool that saves time', 'A document or guide', 'Figure something out',
+      'A training site for volunteers', 'A paper on parking', 'A dashboard of loans', 'Something else', ''].map(S.kindKeyOf);
+    assert.deepStrictEqual(got, ['website', 'app', 'game', 'tool', 'document', 'explore', 'training', 'document', 'dashboard', '', '']);
+  });
+  await check('buildKind rides the host\'s and Claude\'s reads once What are we making? is answered', async () => {
+    seed();
+    assert.strictEqual((await hostCall('GET', 'state')).body.buildKind, '');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    assert.strictEqual((await hostCall('GET', 'state')).body.buildKind, 'game');
+    assert.strictEqual((await agentWith('GET', 'state', {})).body.buildKind, 'game');
+  });
+  await check('ready questions: the host hands them over, capped and cleaned; Claude reads them all, the host a summary, a phone nothing', async () => {
+    seed();
+    const r = await hostCall('POST', 'ready', { kind: 'game', sets: [
+      { name: 'Game questions', questions: [
+        { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
+        { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper', ''] },
+        { kind: 'choice', prompt: 'One option only', options: ['Solo'] },
+        { kind: 'yesno', prompt: 'Not a Build Room kind' },
+        { kind: 'rating', prompt: '   ' },
+      ] },
+      { name: '', questions: [{ kind: 'suggest', prompt: 'No name, dropped' }] },
+    ] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.ready.count, 2);
+    const claude = (await agentWith('GET', 'state', {})).body.ready;
+    assert.deepStrictEqual(claude.sets, [{ name: 'Game questions', questions: [
+      { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
+      { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper'] },
+    ] }]);
+    assert.strictEqual(claude.kind, 'game');
+    const host = (await hostCall('GET', 'state')).body.ready;
+    assert.deepStrictEqual({ kind: host.kind, count: host.count, names: host.names }, { kind: 'game', count: 2, names: ['Game questions'] });
+    const phone = JSON.stringify((await playCall('GET', 'state', { playerName: 'Priya', clientId: 'c-priya' })).body);
+    assert.ok(!phone.includes('What does the player do first?'));
+    assert.strictEqual((await agentWith('POST', 'ready', {}, { kind: 'game', sets: [] })).status, 403, 'only the host hands them over');
+    assert.strictEqual((await hostCall('POST', 'ready', { kind: 'game', sets: 'x' })).status, 400);
+    const many = { kind: 'nope', sets: [{ name: 'Big', questions: Array.from({ length: 60 }, (_, i) => ({ kind: 'suggest', prompt: `Q${i}` })) }] };
+    const capped = (await hostCall('POST', 'ready', many)).body.ready;
+    assert.deepStrictEqual([capped.kind, capped.count], ['', S.READY_LIMITS.questions]);
+  });
   await check('Claude\'s own view and the phones never carry the plugin or its version', async () => {
     seed();
     await agentWith('GET', 'state', { 'x-engage-plugin': '1.14.0' });

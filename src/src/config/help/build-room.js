@@ -229,6 +229,7 @@ const running = {
           items: [
             { title: 'Three kinds', text: '**Ideas**: people suggest, then vote. **Choose**: two to six lettered options, each with an optional preview link. **Rate**: 1 needs work, 5 great. With Choose and Rate, people can add why.' },
             { title: 'Ready questions', text: 'On the left: the questions of every set you can use that is tagged build-room, with how many have been asked here. Pick one to fill in the form.' },
+            { title: 'Ready questions for each kind of build', text: 'Tag a set for-game, for-training, for-document, for-dashboard, for-website, for-app, for-tool or for-explore as well, and once the room has said what it is making (the opening\'s first step) that set comes first, then sets with no for- tag; sets for other kinds fold under **Other sets**. Before the room decides, every set shows. Claude gets the matching set\'s questions too and asks from them first, still through you.' },
             { title: 'Claude gets it as', text: '**Do now** (Claude stops and does it), **Keep in mind** (a standing rule; Claude keeps going), or **Ask Claude** (Claude answers and keeps building). **Note for Claude (private)** goes with the answer.' },
             { title: 'Save as a draft', text: 'Keeps it in Waiting for you instead of opening it.' },
           ],

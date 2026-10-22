@@ -114,6 +114,11 @@ reusing `components/console/*`). **Consider** (`POST …/build/consider`, `Build
 queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` marks what
 reached Claude and links each mark to its History entry.
 
+Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
+not in the material, claims the vote does not support, next steps written as decided and
+generic filler trigger one rewrite (`get-ai-summary.js`); what remains is stored as
+`ReadCheck` and shown to the host only (`GET …/ai-summary/host`).
+
 What every room screen shows, per moment and room screen size, is decided in one place:
 `src/src/config/roomContent.js`: the title and the lesson lead, the question goes in "Your turn", voting shows every answer and results put the bars behind the answers (mockup: `docs/design/room-content-v2/`). Call says more.
 

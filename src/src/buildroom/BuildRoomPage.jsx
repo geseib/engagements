@@ -30,7 +30,10 @@ import DeleteReasonField from '../components/DeleteReasonField';
 import webSocketClient from '../WebSocketClient';
 import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
-import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady } from './readyQuestions';
+import {
+  isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady, rankSetsForKind, KIND_NAMES,
+} from './readyQuestions';
+import { useReadyForClaude } from './readyForClaude';
 import { OpeningPanel, BriefPath } from './BuildOpening';
 import BuildReport from './BuildReport';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
@@ -353,6 +356,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // Screenshots are private: fetched with the host's sign-in (buildHostApi).
   const loadImage = useCallback((imageId) => hostImageUrl(gameId, imageId), [gameId]);
   const [room, setRoom] = useState(null);
+  // The room's ready questions for Claude, once it has said what it is making (question-sets plan step 4).
+  useReadyForClaude(room, api, { ended: Boolean(room && room.state === 'ENDED') });
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1805,7 +1810,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <EndDialog api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.compose && (
-        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <AskComposer kind={dialog.compose} prompt={dialog.prompt || ''} detail={dialog.detail || ''} asks={asks} buildKind={room.buildKind || ''} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
@@ -3975,7 +3980,7 @@ export function askedIndex(asks) {
   return (key, prompt) => byKey.get(key) || byWords.get(String(prompt || '').trim().toLowerCase()) || null;
 }
 
-function ReadyLibrary({ api, asks, selectedKey, onPick }) {
+function ReadyLibrary({ api, asks, buildKind = '', selectedKey, onPick }) {
   const [sets, setSets] = useState(null);
   const [active, setActive] = useState('');
   const [loaded, setLoaded] = useState({});
@@ -3989,11 +3994,14 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
         if (!live) return;
         const ready = (list || []).filter((st) => isBuildRoomSet(st) && ['call-and-answer', 'poll'].includes(st.engagementType));
         setSets(ready);
-        if (ready.length) setActive(setKey(ready[0]));
+        // The sets for the room's kind of build first, then the general ones (question-sets plan step 3).
+        const r = rankSetsForKind(ready, buildKind);
+        const lead = [...r.first, ...r.general, ...r.other][0];
+        if (lead) setActive(setKey(lead));
       })
       .catch(() => { if (live) setSets([]); });
     return () => { live = false; };
-  }, [api]);
+  }, [api, buildKind]);
   const set = (sets || []).find((st) => setKey(st) === active) || null;
   useEffect(() => {
     if (!set || loaded[active]) return undefined;
@@ -4027,15 +4035,29 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   return (
     <aside className="brm-lib" aria-label="Ready questions">
       <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
-      {sets.length > 1 && (
-        <div className="brm-qfilters" role="group" aria-label="Ready sets">
-          {sets.map((st) => (
-            <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
-              {st.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {sets.length > 1 && (() => {
+        // THE KIND OF BUILD (question-sets plan step 3): its sets first, then the general
+        // ones; sets for other kinds fold away once the room has said what it is making.
+        const r = rankSetsForKind(sets, buildKind);
+        const shownSets = buildKind ? [...r.first, ...r.general] : [...r.general, ...r.other];
+        const chip = (st) => (
+          <button key={setKey(st)} type="button" className={`brm-qchip${active === setKey(st) ? ' is-on' : ''}`} aria-pressed={active === setKey(st)} onClick={() => { setActive(setKey(st)); setCategory('all'); }}>
+            {st.name}
+          </button>
+        );
+        return (
+          <>
+            {buildKind && r.first.length > 0 && <p className="brm-hint">{W.readyForKind(KIND_NAMES[buildKind] || buildKind)}</p>}
+            {shownSets.length > 0 && <div className="brm-qfilters" role="group" aria-label="Ready sets">{shownSets.map(chip)}</div>}
+            {buildKind && r.other.length > 0 && (
+              <details className="brm-verfold" open={r.other.some((st) => setKey(st) === active)}>
+                <summary>{W.otherSets(r.other.length)}</summary>
+                <div className="brm-qfilters" role="group" aria-label="Other sets">{r.other.map(chip)}</div>
+              </details>
+            )}
+          </>
+        );
+      })()}
       {cats.length > 1 && (
         <div className="brm-qfilters" role="group" aria-label="Categories">
           {['all', ...cats].map((c) => (
@@ -4066,7 +4088,7 @@ function ReadyLibrary({ api, asks, selectedKey, onPick }) {
   );
 }
 
-export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], api, run, busy, onClose }) {
+export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], buildKind = '', api, run, busy, onClose }) {
   const [kind, setKind] = useState(initialKind);
   // The window opens with the cursor in the question and the starter questions beside it.
   const questionRef = useRef(null);
@@ -4118,7 +4140,7 @@ export function AskComposer({ kind: initialKind, prompt: initialPrompt = '', det
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
-        <ReadyLibrary api={api} asks={asks} selectedKey={from ? from.key : ''} onPick={pickReady} />
+        <ReadyLibrary api={api} asks={asks} buildKind={buildKind} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
           <div className="brm-row brm-gap">
             <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">

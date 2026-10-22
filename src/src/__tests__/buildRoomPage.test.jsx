@@ -2240,6 +2240,68 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     await waitFor(() => expect(lastPost().body).toMatchObject({ prompt: 'Who is this for, in one sentence?', fromQuestion: 'platform:br-starters:c001#001' }));
   });
 
+  // QUESTION SETS BY KIND OF BUILD (docs/superpowers/plans/2026-10-22-build-room-question-sets.md, steps 1-4).
+  const KIND_SETS = [
+    { id: 'br-game', scope: 'platform', name: 'Game questions', engagementType: 'call-and-answer', tags: ['build-room', 'for-game'] },
+    { id: 'br-starters', scope: 'platform', name: 'Build Room starters', engagementType: 'call-and-answer', tags: ['build-room'] },
+    { id: 'br-training', scope: 'platform', name: 'Training questions', engagementType: 'call-and-answer', tags: ['build-room', 'for-training'] },
+  ];
+  const KIND_QS = {
+    ...QS,
+    'br-game': [{ id: 'c001#001', Category: 'Start', title: 'What does the player do in the first ten seconds?' }],
+    'br-training': [{ id: 'c001#001', Category: 'Start', title: 'What should a new volunteer be able to do after?' }],
+  };
+  const withKindLibrary = () => {
+    const base = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      if (url === `${API}question-sets`) return res({ sets: KIND_SETS });
+      const m = url.match(/question-sets\/([^/]+)\/questions\?scope=platform$/);
+      if (m) return res({ setId: m[1], questions: KIND_QS[m[1]] });
+      return base(url, opts);
+    });
+  };
+  const gameRoom = () => hostState({ st: { Brief: { lines: { kind: 'A game' } } } });
+
+  test('the room is making a game: its sets first, then the general ones; sets for other kinds fold away', async () => {
+    await openRoom(gameRoom());
+    withKindLibrary();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    await within(dialog).findByText('What does the player do in the first ten seconds?');
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    expect(within(lib).getByText(W.readyForKind('a game'))).toBeInTheDocument();
+    const lead = within(lib).getByRole('group', { name: 'Ready sets' });
+    expect(within(lead).getAllByRole('button').map((b) => b.textContent)).toEqual(['Game questions', 'Build Room starters']);
+    const fold = within(lib).getByText(W.otherSets(1)).closest('details');
+    expect(fold).not.toHaveAttribute('open');
+    expect(within(fold).getByRole('button', { name: 'Training questions' })).toBeInTheDocument();
+  });
+
+  test('before the room says what it is making, every set shows, the general ones first', async () => {
+    await openRoom(hostState());
+    withKindLibrary();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    await within(dialog).findByText('Who is this for, in one sentence?');
+    const lead = within(within(dialog).getByRole('complementary', { name: 'Ready questions' })).getByRole('group', { name: 'Ready sets' });
+    expect(within(lead).getAllByRole('button').map((b) => b.textContent)).toEqual(['Build Room starters', 'Game questions', 'Training questions']);
+  });
+
+  test('once the kind is known, the host page hands Claude the matching set\'s questions, once', async () => {
+    // openRoom serves the room first; the library goes on top of it before the page loads.
+    serve(gameRoom());
+    withKindLibrary();
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    await screen.findByText('Volunteer sign-up');
+    await waitFor(() => expect(posts().some((p) => path(p) === `games/${GAME}/build/ready`)).toBe(true));
+    expect(posts().filter((p) => path(p) === `games/${GAME}/build/ready`)).toHaveLength(1);
+    expect(posts().find((p) => path(p) === `games/${GAME}/build/ready`).body).toEqual({
+      kind: 'game',
+      sets: [{ name: 'Game questions', questions: [{ kind: 'suggest', prompt: 'What does the player do in the first ten seconds?', category: 'Start' }] }],
+    });
+  });
+
   test('no ready set: the library says how to make one, and the form works as before', async () => {
     await openRoom(hostState());
     fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));

@@ -96,6 +96,8 @@ export function buildApi(gameId) {
     wall: (body) => post('wall', body),
     /** `{kind, prompt, detail?, options?, lowLabel?, highLabel?, maxPicks?, draft?}` → `{ask}` */
     createAsk: (body) => post('asks', body),
+    /** The room's ready questions for Claude (question-sets plan step 4): `{ kind, sets }`. */
+    saveReady: (body) => post('ready', body),
     getAsk: (askId) => call(`${root}asks/${seg(askId)}`),
     /** `{action:'edit'|'open'|'vote'|'close'|'decide'|'reopen'|'discard', …}` → `{ask}` */
     askAction: (askId, body) => post(`asks/${seg(askId)}`, body),

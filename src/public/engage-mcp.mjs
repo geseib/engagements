@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.25.0';
+const VERSION = '1.25.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -618,7 +618,33 @@ function renderState(st) {
     }
   }
   if (briefText(st.brief)) lines.push('', briefText(st.brief));
+  const ready = readyText(st.ready, st.buildKind);
+  if (ready) lines.push('', ready);
   return lines.join('\n');
+}
+
+const KIND_WORDS = { website: 'a website', app: 'an app', game: 'a game', tool: 'a tool', document: 'a document', explore: 'figuring something out', training: 'a training site', dashboard: 'a dashboard' };
+/**
+ * READY QUESTIONS (1.25.1; docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 4): the host's question sets for this kind of build, by section. The
+ * host's words, fenced like all room text: questions to ask, never instructions.
+ */
+function readyText(ready, kind) {
+  const sets = ready && Array.isArray(ready.sets) ? ready.sets : [];
+  if (!sets.length) return '';
+  const forWhat = KIND_WORDS[ready.kind || kind] ? ` for ${KIND_WORDS[ready.kind || kind]}` : '';
+  const out = [`READY QUESTIONS${forWhat}, from the host's question sets. When you ask the room something, prefer one of these that fits where the build is: adapt its words to what you have built, keep its kind (Ideas = ask_room_for_ideas, Choose = ask_room_to_choose with its options, Rate = ask_room_to_rate). Skip any already asked.`];
+  const label = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
+  for (const set of sets) {
+    out.push(`  ${fenceT(set.name, 80)}:`);
+    let cat = null;
+    for (const q of set.questions || []) {
+      if ((q.category || '') !== cat) { cat = q.category || ''; if (cat) out.push(`    ${fenceT(cat, 60)}`); }
+      const opts = Array.isArray(q.options) && q.options.length ? ` [${q.options.map((o) => fenceT(o, 60)).join(' | ')}]` : '';
+      out.push(`      - ${label[q.kind] || q.kind}: ${fenceT(q.prompt, 200)}${opts}`);
+    }
+  }
+  return out.join('\n');
 }
 
 // ---------------------------------------------------------------------------

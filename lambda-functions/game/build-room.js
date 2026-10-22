@@ -1068,6 +1068,23 @@ async function ideaAction(ctx, ideaId, body) {
 }
 
 /**
+ * READY QUESTIONS FOR CLAUDE (docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 4). The host's page reads the question sets (Claude cannot: they are
+ * the team's library) and, once the room's kind of build is known, hands the
+ * matching sets' askable questions over. Claude's room_status lists them.
+ * Body: { kind, sets: [{ name, questions: [{ kind, prompt, category, options? }] }] }.
+ * Not announced: nothing the room or the host's screens show changes.
+ */
+async function saveReady(ctx, body) {
+  const norm = S.normalizeReady(body);
+  if (norm.error) return fail(400, norm.error);
+  const value = { ...norm.value, at: new Date().toISOString() };
+  const sealed = ctx.orgId ? (await encryptItem(ctx.orgId, 'buildState', { Ready: value })).Ready : value;
+  await touchState(ctx, { set: { Ready: sealed }, bump: false });
+  return reply(200, { ready: { kind: value.kind, count: value.sets.reduce((n, x) => n + x.questions.length, 0), at: value.at } });
+}
+
+/**
  * CONSIDER (docs/design/build-room-consider, frames 2-5; owner, 19 Oct 2026).
  * One thing the room gave (an idea, a suggestion, an option, a why), at any
  * moment, without touching the ask it came from:
@@ -3122,6 +3139,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'log' && b) return hostOnly() || editLog(ctx, b, body);
   if (a === 'directions' && !b) return hostOnly() || postDirection(ctx, body);
   if (a === 'consider' && !b) return hostOnly() || considerItem(ctx, body);
+  if (a === 'ready' && !b) return hostOnly() || saveReady(ctx, body);
   if (a === 'ideas' && b === 'acknowledge-all' && !c) return hostOnly() || acknowledgeAll(ctx);
   if (a === 'ideas' && b === 'wall' && c === 'clear') return hostOnly() || clearWall(ctx);
   if (a === 'ideas' && !b) return hostOnly() || hostIdea(ctx, body);
