@@ -124,8 +124,13 @@ What every room screen shows, per moment and room screen size, is decided in one
 
 ## Documentation
 
-- **Users**: the help guides inside the app (the Help button, and `/help` on the site).
-  Their content is `src/src/config/help/`; `src/src/__tests__/helpContent.test.js` checks it.
+- **Users**: the help guides inside the app. Every private screen has a **?** that opens
+  the guide section for that screen; `/help` on the site has them all, with `#section`
+  links. The content is `src/src/config/help/`, one file per area; `screens.js` maps each
+  screen to its section. Never on a screen the room sees. Rules and the area map:
+  `docs/help-refresh/STRUCTURE.md`. Checks: `helpContent.test.js`, `helpGuardrails.test.js`
+  (retired words, labels, length) and `helpScreenWiring.test.jsx`; before a push to test,
+  `node scripts/help-drift.js` lists guides whose code changed since they were written.
 - **Reviewers**: `RELEASE_NOTES.md`, one entry per push to test: what changed, what was
   fixed, and what to look at. It is updated before every push to test, with the help
   and this README.
