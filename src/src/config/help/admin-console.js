@@ -7,10 +7,11 @@
  * ./admin-team.js; AI builders, drafts and prompts are in ./ai.js (W9); the
  * Engage-staff screens are W10's (./admin-staff.js).
  *
- * Staff content still in this file (W10 moves it later, ids kept):
- * `admin-getting-started#console-sections` (the Engage row of the table),
- * `admin-getting-started#first-thing` (the Accounts sentence), and
- * `admin-question-sets#moving-between-environments`.
+ * Staff content moved to ./admin-staff.js (W10): the Engage row of
+ * `admin-getting-started#console-sections` is a pointer now, the group table
+ * of `#first-thing` is `admin-staff-accounts#kinds-of-account`, and
+ * `admin-question-sets#moving-between-environments` moved whole (id kept,
+ * HELP_SECTION_MOVES).
  *
  * Checked against the code at 47c35c9c and on dev (engage.dev, QA host, Your
  * space and two teams, 22 Oct 2026). Every **Label** exists in src/src.
@@ -57,7 +58,7 @@ const gettingStarted = {
             ['Activity', 'Team owners and admins', 'What the team ran, by month.'],
             ['Plan & usage, Data & privacy', 'Your space, and team owners and admins', 'What this month costs; encryption, the change log, and leaving.'],
             ['Settings', 'Everyone, at the foot of the menu', 'Three switches, stored in this browser only.'],
-            ['Overview, Organisations, Observability, Plan requests, Discount codes, Shared library, Prompts, Public library, Moderation, Accounts, Archive, Engage settings', 'Engage staff, switched to Engage', 'Running the platform. A team\'s content is not reachable from there.'],
+            ['Organisations, Accounts, Moderation and the other Engage sections', 'Engage staff, switched to Engage', 'Running the platform. See Engage staff: the console.'],
           ],
         },
         {
@@ -143,8 +144,8 @@ const gettingStarted = {
     /*
       Rewritten for team owners and admins (TeamPanel.jsx "Approve hosting",
       approve-member.js; only for members who joined by invitation, on a team
-      whose plan is not Free: org-guards.js canApproveHosting). The Accounts
-      sentence and the group table are staff content, kept here until W10.
+      whose plan is not Free: org-guards.js canApproveHosting). The group
+      table moved to admin-staff-accounts#kinds-of-account (W10).
     */
     {
       id: 'first-thing',
@@ -159,17 +160,7 @@ const gettingStarted = {
           t: 'list',
           items: [
             { title: 'They joined your team by invitation', text: 'An owner or admin can let them host with **Approve hosting** in Members, once the team is on a paid plan. Engage can still refuse.' },
-            { title: 'Anyone else', text: 'Engage staff approve them, in Accounts.' },
-          ],
-        },
-        {
-          t: 'table',
-          head: ['Group', 'Can'],
-          rows: [
-            ['hosts', 'Create and run sessions, and manage their own question sets.'],
-            ['pending', 'Sign in and nothing else. Waiting for approval.'],
-            ['admins', 'Engage staff: the Engage sections of this console.'],
-            ['Disabled (not a group)', 'Nothing: they cannot sign in. The account is kept.'],
+            { title: 'Anyone else', text: 'Engage staff approve them.' },
           ],
         },
       ],
@@ -437,23 +428,6 @@ const questionSets = {
           tone: 'tip',
           title: 'Pair a picture with a reveal',
           text: 'A picture round is much better when each question also fills in the withheld detail (the real title, the artist, the year), so Workie can reveal it after everyone has answered. See the Builder guides.',
-        },
-      ],
-    },
-    {
-      id: 'moving-between-environments',
-      title: 'Moving sets between environments',
-      icon: 'Package',
-      blocks: [
-        {
-          t: 'p',
-          text: 'Engage staff only. The Archive section is shared: dev, test and prod all read and write the same store. That is how one of Engage\'s sets built on dev reaches prod: export it to the archive from one, import it on the other. A team\'s or a personal space\'s sets do not go through the archive.',
-        },
-        {
-          t: 'note',
-          tone: 'warn',
-          title: 'A set carries its prompt by name',
-          text: 'Prompt ids are per-environment, so the link between a set and its generation prompt is carried across by prompt NAME. Import the prompt before the set, or the set arrives with nothing linked.',
         },
       ],
     },

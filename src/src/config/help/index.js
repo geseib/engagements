@@ -168,6 +168,8 @@ export const HELP_SECTION_MOVES = {
   // its id (the setup guide); its connecting and during-and-after sections left.
   'host-build-room#connecting-claude': 'build-room-claude#connecting-claude',
   'host-build-room#during-after': 'build-room-running#the-host-screen',
+  // Phase 2 (W10): moving sets between environments is the staff Archive's.
+  'admin-question-sets#moving-between-environments': 'admin-staff-platform#moving-between-environments',
 };
 
 /** The section of a guide with that id, or null. */

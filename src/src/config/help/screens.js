@@ -74,17 +74,17 @@ export const HELP_FOR_SCREEN = {
   'admin-settings': { guide: 'admin-settings', section: 'browser-only' },
 
   /* ---- admin console: Engage staff ---- */
-  'staff-organisations': { guide: 'admin-getting-started', section: 'console-sections' },
-  'staff-observability': { guide: 'admin-getting-started', section: 'console-sections' },
-  'staff-plan-requests': { guide: 'admin-getting-started', section: 'console-sections' },
-  'staff-discount-codes': { guide: 'admin-getting-started', section: 'console-sections' },
-  'staff-shared-library': { guide: 'glossary', section: 'owner-tags' },
-  'staff-public-library': { guide: 'glossary', section: 'owner-tags' },
+  'staff-organisations': { guide: 'admin-staff-organisations', section: 'organisations' },
+  'staff-observability': { guide: 'admin-staff-platform', section: 'observability' },
+  'staff-plan-requests': { guide: 'admin-staff-organisations', section: 'plan-requests' },
+  'staff-discount-codes': { guide: 'admin-staff-organisations', section: 'discount-codes' },
+  'staff-shared-library': { guide: 'admin-staff-content', section: 'shared-library' },
+  'staff-public-library': { guide: 'admin-staff-content', section: 'staff-public-library' },
   'staff-prompts': { guide: 'admin-ai-prompts', section: 'managing-them' },
-  'staff-moderation': { guide: 'admin-getting-started', section: 'console-sections' },
-  'staff-accounts': { guide: 'admin-getting-started', section: 'first-thing' },
-  'staff-archive': { guide: 'admin-question-sets', section: 'moving-between-environments' },
-  'staff-engage-settings': { guide: 'admin-getting-started', section: 'console-sections' },
+  'staff-moderation': { guide: 'admin-staff-content', section: 'moderation' },
+  'staff-accounts': { guide: 'admin-staff-accounts', section: 'approving' },
+  'staff-archive': { guide: 'admin-staff-platform', section: 'archive' },
+  'staff-engage-settings': { guide: 'admin-staff-platform', section: 'engage-settings' },
 
   /* ---- AI ---- */
   'ai-builders': { guide: 'admin-ai-builders', section: 'what-builders-do' },
@@ -123,8 +123,6 @@ export const PROVISIONAL_SCREENS = [
   'host-create-advanced', 'host-sessions', 'host-room-screen-chooser', 'host-survey',
   'event-builder', 'event-agenda', 'event-stage',
   'admin-public-library', 'admin-events',
-  'staff-organisations', 'staff-observability', 'staff-plan-requests', 'staff-discount-codes',
-  'staff-shared-library', 'staff-public-library', 'staff-moderation', 'staff-engage-settings',
   'player-survey', 'player-event',
 ];
 
