@@ -56,6 +56,12 @@ const COVERS = {
   'host-plan': [`${S}/components/BillingPanel.jsx`, `${S}/components/UsageMeter.jsx`, `${L}/websocket/session-count.js`],
   // Build Room
   'host-build-room': [`${S}/buildroom`, `${S}/present/buildwall`, `src/public/engage-mcp.mjs`],
+  'build-room-running': [`${S}/buildroom`],
+  'build-room-sharing': [`${S}/buildroom/BuildWifiShare.jsx`, `src/public/engage-mcp.mjs`],
+  'build-room-two-screens': [`${S}/buildroom`, `${S}/present/buildwall`, `${S}/components/console`],
+  'build-room-wrap-up': [`${S}/buildroom`],
+  'build-room-claude': [`src/public/engage-mcp.mjs`],
+  'player-build-room': [`${S}/buildroom`],
   // admin console
   'admin-getting-started': [`${S}/AdminPage.jsx`, `${S}/components/AdminShell.jsx`, `${S}/config/consoleSections.js`],
   'admin-question-sets': [`${S}/components/QuestionSetsPanel.jsx`, `${S}/components/QuestionSetEditor.jsx`, `${S}/components/QuestionSetUploadPanel.jsx`, `${S}/components/ArchivePanel.jsx`],
