@@ -1603,6 +1603,17 @@
 }
 .brm .brm-info { width: 20px; height: 20px; margin-left: 6px; padding: 0; border-radius: 50%; border: 1px solid var(--brm-rule); background: none; color: var(--muted); font: 700 var(--brm-t-floor)/1 var(--font-ui); cursor: help; }
 .brm .brm-info:hover, .brm .brm-info:focus-visible { border-color: var(--primary); color: var(--text); }
+/* InfoTip's popover (help refresh Phase 0): the advice, visible, on a tap, a
+   click, Enter/Space or a mouse hover — a title alone never shows on touch.
+   Roles only. Under the "i", wrapping, never wider than the screen. */
+.brm .brm-info-wrap { position: relative; display: inline-block; }
+.brm .brm-info-pop {
+  position: absolute; z-index: 60; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(280px, 80vw); padding: 8px 10px;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--rule-strong); border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(var(--shade-rgb) / .4);
+  font: 600 13px/1.4 var(--font-ui); letter-spacing: 0; text-align: left; text-transform: none; white-space: normal;
+}
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
 .brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
 .brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }

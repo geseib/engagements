@@ -212,12 +212,14 @@ export default function Dock({
         door's `presenting`). Only where the two-surface switch is on. The
         Build Room's Stage passes it always, with the window's status as its
         `title` (owner, 19 Oct 2026: the room's window from the Stage too).
+        Its accessible label says "the room's window", the help's word for it
+        (owner's decision 1, 22 Oct 2026); it said "the Presentation".
       */}
       {present && present.href && (
         <RoomWindowLink
           className="dock-more dock-present"
           href={present.href}
-          aria-label={present.presenting > 0 ? 'Presenting. Open another Presentation window' : 'Open the Presentation in a new window'}
+          aria-label={present.presenting > 0 ? 'Presenting. Open another room\'s window' : 'Open the room\'s window in a new window'}
           title={present.title || 'Drag it to the second screen and press F'}
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
