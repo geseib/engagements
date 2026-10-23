@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (late night): searching Quick start and Your question sets, several tags and a date filter in the console, and three Build Room ideas features the last entries missed
 
-**Test:** merge of dev `DEVSHA`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `183fb769`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
