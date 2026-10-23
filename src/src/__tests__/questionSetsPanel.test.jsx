@@ -716,3 +716,60 @@ describe('a set whose content could not be decrypted', () => {
     expect(within(row).queryByRole('button', { name: /^copy$/i })).toBeNull();
   });
 });
+
+/* ----------------------------------------------------------------- updated */
+
+describe('the Updated filter — the owner\'s "or by date"', () => {
+  // The same windows and rule as the host's set chooser (config/setFinder.js
+  // inUpdatedWindow), so "this month" means one thing in both places.
+  const NOW = Date.parse('2026-10-23T12:00:00.000Z');
+  const DATED = [
+    { id: 'w', name: 'Fresh This Week', updatedAt: '2026-10-21T10:00:00.000Z', createdAt: '2026-01-01T10:00:00.000Z', engagementType: 'poll', active: true },
+    { id: 'm', name: 'Earlier This Month', createdAt: '2026-10-05T10:00:00.000Z', engagementType: 'poll', active: true },
+    { id: 'o', name: 'Long Ago', createdAt: '2026-04-01T10:00:00.000Z', engagementType: 'poll', active: true, tags: ['retro'] },
+    { id: 'u', name: 'Undated', engagementType: 'poll', active: true },
+  ];
+  const updatedSelect = () => screen.getByRole('combobox', { name: /when it was updated/i });
+  const names = () => rows().map((r) => DATED.find((set) => r.textContent.includes(set.name)).name);
+  let spy;
+  beforeEach(() => { spy = jest.spyOn(Date, 'now').mockReturnValue(NOW); });
+  afterEach(() => spy.mockRestore());
+
+  test('it offers the console\'s windows, and no "used by me", which needs sessions it never loads', () => {
+    render(<QuestionSetsPanel questionSets={DATED} />);
+    const labels = within(updatedSelect()).getAllByRole('option').map((o) => o.textContent);
+    expect(labels).toEqual(['Updated any time', 'Updated this week', 'Updated this month', 'Older than 3 months']);
+  });
+
+  test('each window shows the sets inside it, an undated set never counting as old', () => {
+    render(<QuestionSetsPanel questionSets={DATED} />);
+    fireEvent.change(updatedSelect(), { target: { value: 'week' } });
+    expect(names()).toEqual(['Fresh This Week']);
+    fireEvent.change(updatedSelect(), { target: { value: 'month' } });
+    expect(names().sort()).toEqual(['Earlier This Month', 'Fresh This Week']);
+    fireEvent.change(updatedSelect(), { target: { value: 'older' } });
+    expect(names()).toEqual(['Long Ago']);
+  });
+
+  test('it counts as a filter, takes a drop-exit, and Clear all lets it go', () => {
+    // rejects: an axis in the predicate and missing from computeDrops / the
+    // filter count / Clear all — a dead end the screen cannot name.
+    render(<QuestionSetsPanel questionSets={DATED} />);
+    fireEvent.change(updatedSelect(), { target: { value: 'week' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: /search name, description/i }), {
+      target: { value: 'long ago' },
+    });
+    expect(screen.getByText(/No sets match these 2 filters/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Updated this week — 1 set/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /clear all filters/i }));
+    expect(rows()).toHaveLength(DATED.length);
+    expect(updatedSelect()).toHaveValue('any');
+  });
+
+  test('matchesFilters honours the window and several tags, the predicate the counts share', () => {
+    expect(matchesFilters(DATED[2], { updated: 'older' })).toBe(true);
+    expect(matchesFilters(DATED[0], { updated: 'older' })).toBe(false);
+    expect(matchesFilters(DATED[2], { tag: 'sprint,retro' })).toBe(true);
+    expect(matchesFilters(DATED[0], { tag: 'sprint,retro' })).toBe(false);
+  });
+});

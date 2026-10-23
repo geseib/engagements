@@ -114,6 +114,29 @@ describe('the tags, which are the half a select cannot do', () => {
     expect(onPickTag).toHaveBeenCalledWith('');
   });
 
+  test('a second tag joins the first rather than replacing it', () => {
+    // Several at once since the set chooser (owner, 23 Oct 2026): a set with
+    // ANY of them stays. rejects: a pill that swaps one word for another, so
+    // two tags can never be looked at together.
+    const onPickTag = jest.fn();
+    open({ tag: 'empire', onPickTag });
+    fireEvent.click(screen.getByRole('button', { name: /^onboarding — / }));
+    expect(onPickTag).toHaveBeenCalledWith('empire,onboarding');
+  });
+
+  test('pressing one of several lets go of that one only, and each is named with the browse shut', () => {
+    const onPickTag = jest.fn();
+    mount({ tag: 'empire,onboarding', onPickTag });
+    // Shut, the summary still names both, each with its own way out.
+    fireEvent.click(screen.getByRole('button', { name: /clear the tag onboarding/i }));
+    expect(onPickTag).toHaveBeenLastCalledWith('empire');
+    fireEvent.click(toggle());
+    expect(screen.getByRole('button', { name: /^empire — / })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /^onboarding — / })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /^empire — / }));
+    expect(onPickTag).toHaveBeenLastCalledWith('onboarding');
+  });
+
   test('the find box narrows the tags themselves', () => {
     // "see/search ALL tags" — a library with two hundred words in it is not
     // browsable by scrolling, and the main search box searches SETS, not tags.
@@ -217,6 +240,20 @@ describe('wired into the list it describes', () => {
     // leaves, which is the two History sets.
     fireEvent.click(screen.getByRole('button', { name: /Tag: onboarding — 2 sets/ }));
     expect(names()).toEqual(['Rome at its Height', 'The Cold War Years']);
+  });
+
+  test('two tags show the sets carrying either, and one exit drops both', () => {
+    render(<QuestionSetsPanel questionSets={SETS} />);
+    fireEvent.click(toggle());
+    fireEvent.click(screen.getByRole('button', { name: /^onboarding — 1 set$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^1980s — 1 set$/ }));
+    expect(names()).toEqual(['The Cold War Years', 'Shipping Safely']);
+
+    // Onto a shelf neither is on: the exit names both tags it lets go of.
+    fireEvent.click(screen.getByRole('button', { name: /^Unfiled — 1 set$/ }));
+    expect(screen.getByText(/No sets match these 2 filters/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Tags: onboarding, 1980s — 1 set/ }));
+    expect(names()).toEqual(['Legacy Offsite Prompts']);
   });
 
   test('it is still there when nothing matches, because it is an exit too', () => {
