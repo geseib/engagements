@@ -1973,6 +1973,42 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     expect(within(dialogs[dialogs.length - 1]).getByLabelText(/Question/)).toHaveValue('How should we do this: \u201cTwo days before, by text\u201d?');
   });
 
+  test('E: Ask Claude for mockups of an idea: its latest words, 2 or 3, the idea named in the request', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask Claude for mockups of this' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask Claude for mockups' });
+    expect(within(dialog).getByLabelText('Mock up')).toHaveValue(IDEAS[0].Text);
+    fireEvent.click(within(dialog).getByRole('radio', { name: '2' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: W.sendToClaudeNow }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/points/requests`));
+    expect(lastPost().body).toEqual({ kind: 'mockups', subject: IDEAS[0].Text, count: 2, ideaId: '0-i0' });
+  });
+
+  test('E: an older plugin is told to update instead of sending', async () => {
+    await openRoom(hostState({ ideas: IDEAS, st: { AgentPlugin: '1.26.1', AgentSeenAt: ago(5) } }));
+    const q = queue();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask Claude for mockups of this' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask Claude for mockups' });
+    expect(within(dialog).getByRole('status').textContent).toMatch('Update the plugin to use this: it needs plugin 1.27.0');
+    expect(within(dialog).getByRole('button', { name: W.sendToClaudeNow })).toBeDisabled();
+  });
+
+  test('E: mockups you asked for come back marked so, with Ask for new mockups and what to change', async () => {
+    const mine = { AskId: '006', Kind: 'choice', Prompt: 'Which documentation?', Status: 'proposed', Source: 'agent', FromRequest: 'rq-1', AskForMockups: true,
+      Options: [{ label: 'A', title: 'FAQ under sign-up' }, { label: 'B', title: 'First-shift guide' }] };
+    await openRoom(hostState({ asks: [mine] }));
+    const card = screen.getByRole('region', { name: 'Proposed ask 6' });
+    expect(card.textContent).toMatch('Mockups you asked for');
+    fireEvent.click(within(card).getByRole('button', { name: 'Ask for new mockups' }));
+    fireEvent.change(within(card).getByLabelText('What should be different (optional)'), { target: { value: 'more playful' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Ask for new mockups' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'remock', change: 'more playful' }));
+    expect(path(lastPost())).toBe(`games/${GAME}/build/asks/006`);
+  });
+
   test('Save for later posts later', async () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();

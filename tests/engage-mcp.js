@@ -771,6 +771,28 @@ const hardStop = setTimeout(() => {
       assert.ok(/IDEAS REQUEST[\s\S]*Where next/.test(t) && /4 to 8/.test(t) && /kind "idea"/.test(t) && /requestId "rq-10"/.test(t) && /Agent tool/.test(t), t);
     } finally { stateInbox = []; }
   });
+  await check('E: a mockups request says how many, first to the host, no wait; ask_room_to_choose and post_update carry its requestId', async () => {
+    stateInbox = [{ id: 'm1', kind: 'mockups', requestId: 'rq-11', count: 2, subject: 'add documentation', notLike: 'FAQ; Guide', text: 'x', from: 'request', as: 'do-now', createdAt: 'x' }];
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'check_directions', arguments: {} }));
+      assert.ok(/MOCKUPS REQUEST: 2 ways to do[\s\S]*add documentation/.test(t) && /requestId "rq-11"/.test(t) && /Do NOT call wait_for_room/.test(t), t);
+      assert.ok(/Not like the last set[\s\S]*FAQ; Guide/.test(t) && !/Act on the direction now/.test(t), t);
+    } finally { stateInbox = []; }
+    stateInbox = [{ id: 'w1', kind: 'walkthrough', requestId: 'rq-12', subject: 'the demo as it stands', text: 'x', from: 'request', as: 'do-now', createdAt: 'x' }];
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'check_directions', arguments: {} }));
+      assert.ok(/WALKTHROUGH REQUEST/.test(t) && /milestone/.test(t) && /requestId "rq-12"/.test(t), t);
+    } finally { stateInbox = []; }
+    requests.length = 0;
+    await mcp.request('tools/call', { name: 'ask_room_to_choose', arguments: { question: 'Which docs?', options: [{ title: 'FAQ' }, { title: 'Guide' }], requestId: 'rq-11' } });
+    const ask = requests.find((q) => q.url.endsWith('/build/asks'));
+    assert.strictEqual(ask.body.requestId, 'rq-11');
+    requests.length = 0;
+    await mcp.request('tools/call', { name: 'post_update', arguments: { kind: 'milestone', text: 'That is the walkthrough', requestId: 'rq-12' } });
+    assert.strictEqual(requests.find((q) => q.url.endsWith('/build/log')).body.requestId, 'rq-12');
+    const bad = await mcp.request('tools/call', { name: 'post_update', arguments: { text: 'x', requestId: 'no spaces' } });
+    assert.strictEqual(bad.result.isError, true);
+  });
   await check('a run item: finish, commit, post_update with runItem, then wait; post_update sends run/done', async () => {
     stateInbox = [{ id: 'u1', text: 'Add a waitlist', from: 'host', as: 'do-now', runItem: 2, runId: 'run-abc' }];
     try {
