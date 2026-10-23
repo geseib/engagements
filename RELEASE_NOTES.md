@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (later): AI question sets arrive with a topic, and an idea's doors all open
 
-**Test:** merge of dev `DEVSHA` (notes in the same commit).
+**Test:** merge of dev `0fa2edee2` (and the commit naming it).
 
 ### New
 
