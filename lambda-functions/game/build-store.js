@@ -859,6 +859,22 @@ function chosenWords(ask, room, chosen) {
 const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0);
 
 /** The tally of one ask, with names. Views strip what an audience may not see. */
+/**
+ * THE HOST'S OWN VOTE (ideas flow C; docs/design/build-room-ideas I5; owner,
+ * 18 Oct: the host "may vote too (never required)"). Stored as a player's
+ * answer or vote is, under a name no player can have (cleanText strips
+ * control characters from every joined name), and flagged ByHost. It counts
+ * as one person; the room learns only that the count includes the host.
+ */
+const HOST_VOTER = '\u0001host';
+const voterName = (r) => (r && r.ByHost ? 'Host' : (r && r.PlayerName) || '');
+
+/** The host's own answer or vote on an ask, or null. */
+function hostVoteOf(ask, room) {
+  const rows = ask.Kind === 'suggest' ? forAsk(room.votes || [], ask.AskId) : forAsk(room.answers || [], ask.AskId);
+  return rows.find((r) => r.ByHost) || null;
+}
+
 function tally(ask, room) {
   const kind = ask.Kind;
   const askId = ask.AskId;
@@ -881,7 +897,7 @@ function tally(ask, room) {
     .map((a) => ({ label: kind === 'choice' ? (a.Choice || []).join(', ') : String(a.Rating || ''), text: a.Why, playerName: a.PlayerName || '', whyId: whyIdOf(a) }));
   if (kind === 'choice') {
     const options = (ask.Options || []).map((o) => {
-      const voters = answers.filter((a) => (a.Choice || []).includes(o.label)).map((a) => a.PlayerName || '');
+      const voters = answers.filter((a) => (a.Choice || []).includes(o.label)).map(voterName);
       return { label: o.label, title: o.title, count: voters.length, pct: pct(voters.length, answers.length), voters };
     });
     return { total: answers.length, options, whys };
@@ -903,7 +919,7 @@ function answeredNames(ask, room) {
     ? (ask.Status === 'live' ? forAsk(room.resps, ask.AskId).filter((r) => (r.Source || 'player') === 'player') : forAsk(room.votes, ask.AskId))
     : forAsk(room.answers, ask.AskId);
   const out = [];
-  for (const r of rows) if (r.PlayerName && !out.includes(r.PlayerName)) out.push(r.PlayerName);
+  for (const r of rows) if (r.PlayerName && !r.ByHost && !out.includes(r.PlayerName)) out.push(r.PlayerName);
   return out;
 }
 
@@ -973,6 +989,13 @@ function askView(ask, room, audience, me) {
   // parity PLAN §2.9b). Names only, never what anyone chose. While the room
   // suggests, the people who suggested; once it votes, the people who voted.
   if (audience === 'host') out.answeredBy = answeredNames(ask, room);
+  // The host's own vote (C, I5): every screen may say the count includes the
+  // host, never which way; the host's own screen gets what it chose.
+  const hv = ask.Kind === 'rating' || ask.Kind === 'choice' || ask.Kind === 'suggest' ? hostVoteOf(ask, room) : null;
+  if (hv) {
+    out.hostVoted = true;
+    if (audience === 'host') out.myVote = ask.Kind === 'suggest' ? { respIds: hv.RespIds || [] } : { choice: hv.Choice || [], rating: hv.Rating || null };
+  }
   if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
   if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
   if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
@@ -2125,7 +2148,7 @@ const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Everyone the room's rows name: players, builders, idea authors, voters, the wheel's spinners. */
 function namesIn(room, players) {
   const out = new Set((players || []).filter(Boolean));
-  const add = (n) => { if (n && typeof n === 'string' && n !== 'host') out.add(n); };
+  const add = (n) => { if (n && typeof n === 'string' && n !== 'host' && n !== HOST_VOTER) out.add(n); };
   for (const r of room.builders || []) add(r.PlayerName);
   for (const r of room.ideas || []) add(r.PlayerName);
   for (const r of (room.resps || []).concat(room.answers || [], room.votes || [], room.comments || [])) add(r.PlayerName || r.Name);
@@ -2500,7 +2523,7 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
-  roomFromRows, tally, askView, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
+  roomFromRows, tally, askView, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,

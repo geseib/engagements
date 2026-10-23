@@ -90,6 +90,14 @@ export const W = Object.freeze({
   threadSend: 'Send',
   threadFull: 'This conversation is as long as one gets. Talk in person, or put the idea to the room.',
   gotItThanks: 'Got it, thanks',
+  // YOUR VOTE (ideas flow C, I5): optional, one person's worth.
+  myVote: 'Your vote (optional)',
+  myVoteIn: 'Your vote is in',
+  myVoteCast: 'Cast my vote',
+  myVoteChange: 'Change my vote',
+  myVoteTakeBack: 'Take my vote back',
+  myVoteHint: 'Counts as one person. Skip it and the round runs the same. The room sees only that the count includes you.',
+  includesHost: 'includes the host',
   // The sender's phone (I2).
   hostReplied: 'The host replied',
   hostRepliedLabel: 'The host\'s reply',

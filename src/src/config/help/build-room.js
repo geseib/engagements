@@ -315,6 +315,7 @@ const running = {
           items: [
             'An Ideas vote is an approval vote: each person picks up to three, and may pick their own.',
             'To vote on ideas sent to you, tick them in Waiting for you or Later and put them to a vote (two to six; you set the picks per person). From one idea, **Put to a vote with other ideas** opens the vote and lets you add others from the queue there.',
+            'Your vote (optional) sits under an open Choose or Rate, and under an Ideas vote once the room votes. It counts as one person, and you can change it or take it back until the results show. The room\'s screens say only that the count includes the host, never which way; skip it and the round runs the same.',
             'A tie says so: **Spin the wheel**, **Vote again** between the tied options, or click one.',
             '**Spin the wheel** is offered wherever the room could vote, and closes an open ask first. Someone in the room is picked to spin it on their phone; you can spin too. **Someone else spins** passes the turn, and **Spin again** spins once more.',
             'Every screen sees the wheel land on the same option, which then leads. You can still pick another.',

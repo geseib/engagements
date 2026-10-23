@@ -616,7 +616,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   const context = { category: STAGE_KIND[current.kind] || 'Ask', round: n, noun: 'Ask' };
   if (current.status === 'results') {
     const total = (current.results && current.results.total) || current.answerCount || 0;
-    const meter = { heading: 'Answered', count: total, of: here };
+    const meter = { heading: 'Answered', count: total, of: here + (current.hostVoted ? 1 : 0) };
     const w = current.wheel;
     if (isPointsVote(current) && !w && !current.revotedAs) {
       // A VOTE MADE FROM POINTS (T6): the same three moves as the Host, Send as the main button.
@@ -682,9 +682,12 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
   // THE WHEEL INSTEAD OF A VOTE (owner, 2026-10-06): wherever the room could
   // vote between options, the host may let the wheel pick instead.
   const instead = { action: 'wheel', label: W.spin };
+  // THE HOST'S OWN VOTE (ideas flow C, I5) is one more person: counted, and said, never which way.
+  const withHost = here + (current.hostVoted ? 1 : 0);
+  const hostToo = current.hostVoted ? ` \u00b7 ${W.includesHost}` : '';
   if (current.status === 'voting') {
     const voted = current.voteCount || 0;
-    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: here }, status: `${voted} of ${here} voted`, primary: { action: 'close', label: W.showResults }, secondary: instead };
+    return { phase: 'VOTE', context, meter: { heading: 'Voted', count: voted, of: withHost }, status: `${voted} of ${withHost} voted${hostToo}`, primary: { action: 'close', label: W.showResults }, secondary: instead };
   }
   const answered = current.answerCount || 0;
   if (current.kind === 'suggest') {
@@ -694,7 +697,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
     };
   }
   return {
-    phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: here }, status: `${answered} of ${here} answered`,
+    phase: 'ASK', context, meter: { heading: 'Answered', count: answered, of: withHost }, status: `${answered} of ${withHost} answered${hostToo}`,
     primary: { action: 'close', label: W.showResults }, ...(current.kind === 'choice' ? { secondary: instead } : {}),
   };
 }
@@ -1342,14 +1345,14 @@ const countOf = (ask, label) => {
 export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
   const opened = ask.openedAt ? `Opened ${clockOf(ask.openedAt)}` : 'Opened';
   const total = (ask.results && ask.results.total) || 0;
-  const of = (n) => Math.max(Number(playerCount) || 0, n);
+  const of = (n) => Math.max((Number(playerCount) || 0) + (ask.hostVoted ? 1 : 0), n);
   let collect;
   if (ask.kind === 'suggest') {
     // Revy review (2026-10-10): the people who suggested, as the header pill counts them; then the ideas, then any votes.
     const people = suggestedBy(ask);
     const ideas = Number(ask.answerCount) || 0;
     collect = `${people} of ${of(people)} suggested \u00b7 ${ideas} ${ideas === 1 ? 'idea' : 'ideas'}${total ? ` \u00b7 ${total} voted` : ''}`;
-  } else collect = `${total} of ${of(total)} ${ask.kind === 'rating' ? 'rated' : 'voted'}`;
+  } else collect = `${total} of ${of(total)} ${ask.kind === 'rating' ? 'rated' : 'voted'}${ask.hostVoted ? ` \u00b7 ${W.includesHost}` : ''}`;
   const wheel = ask.wheel && ask.wheel.landed;
   const leader = winnerOf({ ...ask, wheel: null }); // a unique vote leader only
   let settle = '';

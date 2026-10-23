@@ -933,6 +933,10 @@
 @media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
 .brm .brm-onwall { margin: 0; }
 
+/* YOUR VOTE (OPTIONAL) (ideas flow C, I5). */
+.brm .brm-myvote { display: grid; gap: 8px; margin: 10px 0; padding: 10px 12px; border: 1px dashed var(--brm-rule); border-radius: 10px; }
+.brm .brm-myvote-opts { display: grid; gap: 4px; }
+
 /* REPLY TO JOE (ideas flow B, I2): private, the host and the sender only. */
 .brm .brm-thread-door { margin-top: 6px; }
 .brm .brm-thread-new { font-size: var(--brm-st-meta, 0.8rem); font-weight: 700; color: var(--text); }

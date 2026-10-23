@@ -541,6 +541,47 @@ async function reaskAction(ctx, room, ask, b) {
   return reply(200, { ask: S.askView(findAsk(after, newId), after, 'host') });
 }
 
+/**
+ * THE HOST'S OWN VOTE (ideas flow C; docs/design/build-room-ideas I5): optional,
+ * one person's worth, on the open ask the room is answering: a pick or a
+ * rating while it is live, an Ideas vote while the room votes. `clear` takes
+ * it back. The same rules as a phone (S.HOST_VOTER, ByHost in build-store).
+ */
+async function hostVote(ctx, room, ask, b) {
+  if ((room.state || {}).CurrentAskId !== ask.AskId) return fail(409, 'That question is no longer open');
+  const now = new Date().toISOString();
+  const suggest = ask.Kind === 'suggest';
+  if (suggest && ask.Status !== 'voting') return fail(409, 'Your vote goes in once the room is voting');
+  if (!suggest && ask.Status !== 'live') return fail(409, 'Answers are closed for this question');
+  const sk = suggest ? S.SK.vote(ask.AskId, S.HOST_VOTER) : S.SK.ans(ask.AskId, S.HOST_VOTER);
+  const row = { SK: sk, AskId: ask.AskId, PlayerName: S.HOST_VOTER, ByHost: true, CreatedAt: now };
+  if (b.clear) {
+    await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: sk } }));
+  } else if (suggest) {
+    const valid = new Set(room.resps.filter((r) => r.AskId === ask.AskId && !r.Hidden).map((r) => r.RespId));
+    const ids = [...new Set((Array.isArray(b.respIds) ? b.respIds : []).map(String))];
+    if (!ids.length) return fail(400, 'Pick an idea');
+    if (ids.some((id) => !valid.has(id))) return fail(400, 'That suggestion is not on the ballot');
+    const max = ask.MaxPicks || S.DEFAULT_MAX_PICKS;
+    if (ids.length > max) return fail(400, `Pick up to ${max}`);
+    await put(ctx, { ...row, RespIds: ids });
+  } else if (ask.Kind === 'choice') {
+    const labels = (ask.Options || []).map((o) => o.label);
+    const picks = [...new Set((Array.isArray(b.choice) ? b.choice : [b.choice]).map((x) => String(x || '').toUpperCase()))].filter((x) => labels.includes(x));
+    if (!picks.length) return fail(400, 'Pick an option');
+    if (picks.length > (ask.MaxPicks || 1)) return fail(400, `Pick up to ${ask.MaxPicks || 1}`);
+    await put(ctx, { ...row, Choice: picks });
+  } else {
+    const r = Number(b.rating);
+    if (!Number.isInteger(r) || r < 1 || r > 5) return fail(400, 'Rate from 1 to 5');
+    await put(ctx, { ...row, Rating: r });
+  }
+  const after = await loadRoom(ctx);
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { ask: S.askView(findAsk(after, ask.AskId), after, 'host') });
+}
+
 async function askAction(ctx, role, askId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
@@ -550,8 +591,9 @@ async function askAction(ctx, role, askId, body) {
   if (action === 'reask') return reaskAction(ctx, room, ask, b);
   if (action === 'forward') return role === 'host' ? forwardAction(ctx, room, ask, b) : fail(403, 'Only the host moves points forward');
   if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
+  if (action === 'my-vote') return role === 'host' ? hostVote(ctx, room, ask, b) : fail(403, 'Only the host has a vote here');
   const now = new Date().toISOString();
-  const answered = room.answers.some((a) => a.AskId === askId) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
+  const answered = room.answers.some((a) => a.AskId === askId && !a.ByHost) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
   // OPEN NEXT (step 4, C3b): line a waiting ask up behind the open one. It
   // opens when the current ask closes; with nothing open, it opens now.

@@ -806,6 +806,45 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const p = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Later?', options: ['X', 'Y'], draft: true });
     assert.strictEqual((await hostCall('POST', `asks/${p.body.ask.askId}`, { action: 'wheel' })).status, 409);
   });
+  await check('C: the host\'s own vote is optional, counts as one, the room learns only that it is in', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Should we do this?', options: ['Yes', 'No'] });
+    const id = c.body.ask.askId;
+    await playCall('POST', 'respond', { ...priya, askId: id, choice: ['A'] });
+    const v = await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['B'] });
+    assert.strictEqual(v.status, 200);
+    assert.deepStrictEqual(v.body.ask.myVote, { choice: ['B'], rating: null });
+    assert.strictEqual(v.body.ask.hostVoted, true);
+    assert.strictEqual(v.body.ask.answerCount, 2, 'counts as one person');
+    assert.deepStrictEqual(v.body.ask.answeredBy, ['Priya'], 'the People list is people');
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A', 'B'] })).status, 400);
+    assert.strictEqual((await agentCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] })).status, 403);
+    // A phone's view: included, never which way.
+    const p = await playCall('GET', 'state', marcus);
+    assert.strictEqual(p.body.current.hostVoted, true);
+    assert.strictEqual(p.body.current.myVote, undefined);
+    assert.ok(!JSON.stringify(p.body).includes('\\u0001'), 'the host\'s voter key reaches a phone');
+    // Changed, then taken back.
+    await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] });
+    const back = await hostCall('POST', `asks/${id}`, { action: 'my-vote', clear: true });
+    assert.strictEqual(back.body.ask.hostVoted, undefined);
+    assert.strictEqual(back.body.ask.answerCount, 1);
+    await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['B'] });
+    const closed = await hostCall('POST', `asks/${id}`, { action: 'close' });
+    assert.deepStrictEqual(closed.body.ask.results.options.map((o) => [o.label, o.count, o.voters]), [['A', 1, ['Priya']], ['B', 1, ['Host']]]);
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] })).status, 409, 'closed');
+    // A rating, and an Ideas vote once the room votes.
+    const r = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How close?' });
+    assert.strictEqual((await hostCall('POST', `asks/${r.body.ask.askId}`, { action: 'my-vote', rating: 4 })).body.ask.myVote.rating, 4);
+    const i = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Ideas?' });
+    await playCall('POST', 'respond', { ...priya, askId: i.body.ask.askId, text: 'A map' });
+    assert.strictEqual((await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'my-vote', respIds: ['x'] })).status, 409, 'not voting yet');
+    const voting = await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'vote' });
+    const respId = voting.body.ask.responses[0].respId;
+    const iv = await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'my-vote', respIds: [respId] });
+    assert.deepStrictEqual(iv.body.ask.myVote, { respIds: [respId] });
+    assert.strictEqual(iv.body.ask.voteCount, 1);
+  });
   await check('no tie, the wheel holds every option; a rating has no wheel', async () => {
     seed();
     const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['One', 'Two', 'Three'] });

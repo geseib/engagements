@@ -401,8 +401,27 @@ describe('each ask status', () => {
     }));
     expect(screen.getByText('The room is voting')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show results' })).toHaveAttribute('data-next-primary');
-    const row = screen.getByText('Not seeing open shifts').closest('li');
+    const row = screen.getByText('Not seeing open shifts', { selector: '.brm-sug-text' }).closest('li');
     expect(within(row).getByText('2')).toBeInTheDocument();
+  });
+
+  test('C: your vote (optional) on an Ideas vote: up to the picks, cast, then the count says it includes you', async () => {
+    const votes = [{ AskId: '004', PlayerName: 'Sam', RespIds: ['r2'] }];
+    await openRoom(hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'voting' }], resps: IDEAS_RESPS, votes }));
+    const box = screen.getByRole('region', { name: 'Your vote (optional)' });
+    expect(box.textContent).toMatch('Counts as one person');
+    fireEvent.click(within(box).getByRole('checkbox', { name: 'Not seeing open shifts' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cast my vote' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'my-vote', respIds: [IDEAS_RESPS.find((r) => r.Text === 'Not seeing open shifts').RespId] }));
+  });
+
+  test('C: once cast it says so, offers Take my vote back, and Settle is untouched', async () => {
+    const votes = [{ AskId: '004', PlayerName: 'Sam', RespIds: ['r2'] }, { SK: 'BUILD#VOTE#004#\u0001host', AskId: '004', PlayerName: '\u0001host', ByHost: true, RespIds: ['r1'] }];
+    await openRoom(hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'voting' }], resps: IDEAS_RESPS, votes }));
+    const box = screen.getByRole('region', { name: 'Your vote (optional)' });
+    expect(within(box).getByRole('status').textContent).toBe('Your vote is in');
+    fireEvent.click(within(box).getByRole('button', { name: 'Take my vote back' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'my-vote', clear: true }));
   });
 
   test('results: bars, reasons with names, and a direction prefilled from the winner', async () => {
