@@ -50,6 +50,8 @@ const {
 const tenant = require('./tenant');
 const { encryptItem, decryptItem } = require('./tenant-crypto');
 const notifications = require('./notifications');
+const { resolveSetTopic, normalizeSetTopic, normalizeSetTags } = require('./set-topics');
+const { proposeDraftTopic } = require('./draft-topic');
 
 const STATUS = Object.freeze({
   GENERATING: 'generating',
@@ -133,6 +135,7 @@ function trimRequest(payload) {
 async function createDraft(db, table, {
   draftId, lib, kind, engagementType, mode, appendMode = '', target = null,
   requested, request, title, creator, jobId, tokensPerItem = 0, now = new Date(),
+  targetTopic = '',
 }) {
   const at = now.toISOString();
   const sealed = await seal(lib, 'draft', {
@@ -152,6 +155,10 @@ async function createDraft(db, table, {
     mode,
     ...(appendMode ? { appendMode } : {}),
     ...(target ? { targetSetId: target.setId, targetVersion: target.version ?? null } : {}),
+    // THE TOPIC THE TARGET SET ALREADY HAS, when this run adds to one. An
+    // addition never re-files a set; the review offers this run's suggestion
+    // only where this is empty (shared/draft-topic.js).
+    ...(targetTopic ? { targetTopic } : {}),
     status: STATUS.GENERATING,
     requested,
     produced: 0,
@@ -365,6 +372,16 @@ function headerToWire(draft, { now = new Date() } = {}) {
     cancelRequested: draft.cancelRequested === true,
     topic: draft.request && draft.request.setMetadata && typeof draft.request.setMetadata.topic === 'string'
       ? draft.request.setMetadata.topic : '',
+    // WHAT THE RUN PROPOSES (shared/draft-topic.js): always a shelf id once a
+    // run has finished with anything in it, '' before. The review pre-fills it.
+    suggestedTopic: normalizeSetTopic(draft.suggestedTopic) || '',
+    suggestedTags: Array.isArray(draft.suggestedTags) ? draft.suggestedTags : [],
+    suggestedTopicSource: draft.suggestedTopicSource || '',
+    // The builder's own tags for the set, so the review shows what an accept
+    // that names none would save.
+    requestTags: draft.request && draft.request.setMetadata && Array.isArray(draft.request.setMetadata.tags)
+      ? normalizeSetTags(draft.request.setMetadata.tags) : [],
+    targetTopic: resolveSetTopic(draft.targetTopic),
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,
     readyAt: draft.readyAt || null,
@@ -526,6 +543,7 @@ async function prepareDraftRun({
       target: { setId: clean(appendTo.setId), version: found.item.activeVersion ?? null },
       requested: count, request: { ...payload, appendOnly: true, setMetadata: undefined },
       title: typeof name === 'string' ? name : '', creator, jobId, tokensPerItem,
+      targetTopic: resolveSetTopic(found.item.topic),
     });
     return { draftId, payload: { ...payload, appendOnly: true }, requested: count, lib };
   }
@@ -584,6 +602,12 @@ async function openDraftRun({ db, table, caller, now = () => new Date() }) {
     draft,
     seedTitles,
     regenerating,
+    /**
+     * Should this run ask the model for the set's topic? Not on a regenerate
+     * (the draft already has its suggestion, and one topic per set is decided
+     * once) and not when adding to a set that already has one.
+     */
+    asksTopic: !regenerating && !(draft.mode === 'append' && resolveSetTopic(draft.targetTopic)),
     addUsage(u) {
       if (!u || typeof u !== 'object') return;
       usage.inputTokens += Number(u.input_tokens ?? u.inputTokens) || 0;
@@ -617,7 +641,9 @@ async function openDraftRun({ db, table, caller, now = () => new Date() }) {
      * and `failed` when it holds nothing; the creator is notified either way.
      * A category regenerate that produced nothing keeps the old category.
      */
-    async finish({ produced, warnings = [], error = null, promptSource = null, stoppedByRequest = false }) {
+    async finish({
+      produced, warnings = [], error = null, promptSource = null, stoppedByRequest = false, modelTopic = null,
+    }) {
       await this.progress(produced);
       if (replacing.length && written > 0) {
         await deleteItems(db, table, draft, replacing.map((it) => it.seq));
@@ -666,6 +692,15 @@ async function openDraftRun({ db, table, caller, now = () => new Date() }) {
           ExpressionAttributeValues: { ':ps': promptSource },
         }));
       }
+      if (total > 0) {
+        await recordSuggestedTopic(db, table, lib, draft, {
+          modelTopic,
+          items: [
+            ...existing.filter((it) => !(written > 0 && replacingSeqs.has(it.seq))).map((it) => it.item),
+            ...produced,
+          ],
+        });
+      }
       await setItemsTtl(db, table, draft, ttl);
       await notifyCreator(db, draft, {
         status,
@@ -677,6 +712,37 @@ async function openDraftRun({ db, table, caller, now = () => new Date() }) {
       return { status, total };
     },
   };
+}
+
+/**
+ * THE TOPIC THIS DRAFT PROPOSES, written on the header (shared/draft-topic.js).
+ *
+ * The model's pick when this run's first pass made one; otherwise a pick the
+ * model made on an earlier run of the same draft is kept (a regenerate does not
+ * ask again); otherwise keywords over everything the draft now holds. Never
+ * throws: a draft with no suggestion is still a draft to review, and the
+ * person can choose a topic by hand exactly as before.
+ */
+async function recordSuggestedTopic(db, table, lib, draft, { modelTopic, items }) {
+  try {
+    if (!modelTopic && draft.suggestedTopicSource === 'model' && normalizeSetTopic(draft.suggestedTopic)) return;
+    const meta = (draft.request && draft.request.setMetadata) || {};
+    const proposal = proposeDraftTopic({
+      model: modelTopic,
+      title: clean(draft.title) || clean(meta.title),
+      description: clean(meta.description),
+      items,
+    });
+    await db.send(new UpdateCommand({
+      TableName: table,
+      Key: headerKey(lib, draft.draftId),
+      UpdateExpression: 'SET #st = :st, #stg = :stg, #sts = :sts',
+      ExpressionAttributeNames: { '#st': 'suggestedTopic', '#stg': 'suggestedTags', '#sts': 'suggestedTopicSource' },
+      ExpressionAttributeValues: { ':st': proposal.topic, ':stg': proposal.tags, ':sts': proposal.source },
+    }));
+  } catch (error) {
+    console.warn(`⚠️ Draft ${draft.draftId}: no topic suggestion recorded: ${error.message}`);
+  }
 }
 
 /**
@@ -827,7 +893,15 @@ async function createReadyDraft(db, table, {
     ExpressionAttributeNames: { '#status': 'status', '#produced': 'produced', '#nextSeq': 'nextSeq', '#readyAt': 'readyAt', '#updatedAt': 'updatedAt' },
     ExpressionAttributeValues: { ':ready': STATUS.READY, ':generating': STATUS.GENERATING, ':n': items.length, ':seq': nextSeq, ':at': at },
   }));
-  const ready = { ...draft, status: STATUS.READY, produced: items.length, nextSeq, readyAt: at, updatedAt: at };
+  // A set Claude wrote arrives with a topic suggested too, by keywords: no run
+  // asked a model for one.
+  await recordSuggestedTopic(db, table, lib, draft, { modelTopic: null, items });
+  const fresh = await getDraft(db, table, lib, draftId, { now });
+  const ready = {
+    ...draft,
+    ...(fresh ? { suggestedTopic: fresh.suggestedTopic, suggestedTags: fresh.suggestedTags, suggestedTopicSource: fresh.suggestedTopicSource } : {}),
+    status: STATUS.READY, produced: items.length, nextSeq, readyAt: at, updatedAt: at,
+  };
   await notifyCreator(db, ready, { status: STATUS.READY, produced: items.length, requested: items.length, ttl: Number(draft.ttl), now });
   return { draft: headerToWire(ready, { now }) };
 }

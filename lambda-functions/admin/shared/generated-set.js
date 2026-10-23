@@ -516,7 +516,7 @@ const CSV_BY_TYPE = {
  * @returns {Promise<{statusCode: number, body: object}>} the importer's answer, parsed
  */
 async function importDraftAsSet({
-  event, draft, items, activate = true, title = '', topic = '',
+  event, draft, items, activate = true, title = '', topic = '', tags = null,
 }) {
   const toCsv = CSV_BY_TYPE[draft.engagementType] || CSV_BY_TYPE['call-and-answer'];
   const request = draft.request && typeof draft.request === 'object' ? draft.request : {};
@@ -525,7 +525,14 @@ async function importDraftAsSet({
   if (!setTitle) return { statusCode: 400, body: { error: 'Give the set a name before accepting it.' } };
   const roundKind = normalizeRoundKind(request.roundKind);
   const roundKindBrief = String(request.roundKindBrief ?? '').trim();
-  const shelf = String(topic || metadata.topic || '').trim();
+  // THE PERSON'S CHOICE, ELSE THE BUILDER'S, ELSE WHAT THE RUN PROPOSED
+  // (shared/draft-topic.js) — so "Switch it on now" works without a pick.
+  const shelf = String(topic || metadata.topic || draft.suggestedTopic || '').trim();
+  // Tags the same way: what the review sent (even an empty list — the person
+  // removed them), else the builder's, else the run's proposal.
+  const setTags = Array.isArray(tags)
+    ? normalizeSetTags(tags)
+    : (metadata.tags.length ? metadata.tags : normalizeSetTags(draft.suggestedTags));
   const body = {
     fileName: `${setTitle.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.csv`,
     fileContent: toCsv(items),
@@ -537,7 +544,7 @@ async function importDraftAsSet({
     ...(roundKind && ['call-and-answer', 'wavelength', 'poll'].includes(draft.engagementType) ? { roundKind } : {}),
     ...(roundKind && roundKindBrief ? { roundKindBrief } : {}),
     ...(shelf ? { topic: shelf } : {}),
-    ...(metadata.tags.length ? { tags: metadata.tags } : {}),
+    ...(setTags.length ? { tags: setTags } : {}),
     isAIGenerated: true,
     reviewedDraft: true,
     ...(activate ? {} : { startInactive: true }),

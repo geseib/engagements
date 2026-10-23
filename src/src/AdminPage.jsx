@@ -1262,6 +1262,29 @@ function AdminPage() {
     window.WEBSOCKET_MODE = webSocketMode;
   }, [debugMode, promptDebugMode, webSocketMode]);
 
+  /*
+    FILE AN UNFILED SET UNDER A TOPIC, from the set list's in-row picker
+    (QuestionSetsPanel `onFileTopic`) — the step before switching it on, which
+    the server refuses for a set with no topic (toggle-question-set.js). The
+    editor's own route, which refuses a topic off the shelf. Answers
+    { ok, error } and never throws; the panel says what went wrong in the row.
+  */
+  const handleFileTopic = async (set, topic) => {
+    try {
+      const response = await authFetch(`${API_BASE}admin/edit-question-set/${encodeURIComponent(set.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, ...(set.scope ? { scope: set.scope } : {}) }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) return { ok: false, error: result.error || `The topic was not saved (HTTP ${response.status}).` };
+      setQuestionSets((prev) => prev.map((s) => (s.id === set.id ? { ...s, topic } : s)));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: `The topic was not saved: ${error.message}` };
+    }
+  };
+
   const handleToggleActive = async (setId, currentActive) => {
     try {
       const newActive = !currentActive;
@@ -2136,6 +2159,7 @@ function AdminPage() {
               onEdit={handleEditQuestionSet}
               onDelete={(set) => setDeletingSet(set)}
               onToggleActive={(set) => handleToggleActive(set.id, set.active)}
+              onFileTopic={handleFileTopic}
               onToggleQuickstart={(set, next) => handleToggleQuickstart(set.id, next)}
               onCreate={handleCreatePath}
               /* Only inside an organisation: there is nowhere to copy TO in

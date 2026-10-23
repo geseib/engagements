@@ -100,3 +100,25 @@ export async function undoAccept(draftId, libraryKey) {
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
+
+/**
+ * FILE A SET UNDER A TOPIC — after an addition to a set that had none
+ * (DraftReview offers the run's suggestion there), and from the set list when
+ * an unfiled set is switched on (QuestionSetsPanel). Through the set editor's
+ * own route, which refuses a topic off the shelf. Never throws.
+ *
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+export async function fileSetTopic(setId, topic, scope, libraryKey) {
+  try {
+    const res = await authFetch(`${apiBase()}admin/edit-question-set/${encodeURIComponent(setId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(libraryKey ? libraryHeaders(libraryKey) : {}) },
+      body: JSON.stringify({ topic, ...(scope ? { scope } : {}) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, error: data.error || `the server answered ${res.status}` };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
