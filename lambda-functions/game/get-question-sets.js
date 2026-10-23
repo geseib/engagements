@@ -3,7 +3,7 @@ const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb'
 const {
   resolvePartitionFromMeta, toVersion, knownVersions, setMetadataKey, readableSetRefs,
 } = require('./set-version');
-const { ORG } = require('./tenant');
+const { ORG, callerUserId } = require('./tenant');
 const { decryptItem, isEnvelope } = require('./tenant-crypto');
 
 const client = new DynamoDBClient({});
@@ -22,6 +22,7 @@ exports.handler = async (event) => {
     // read in one Query, so three round trips is the floor; awaiting them in
     // sequence would just be three times the latency for no fewer reads.
     const scopeRefs = readableSetRefs(event, '');
+    const caller = callerUserId(event);
     const perScope = await Promise.all(scopeRefs.map(async (ref) => {
       // Every page: the shared libraries grow with every organisation, and a
       // Query stops at 1 MB. tests/library-reads-paged.js.
@@ -164,6 +165,12 @@ exports.handler = async (event) => {
         // an unfiled set is offered here exactly as it always was.
         topic: item.topic || '',
         tags: Array.isArray(item.tags) ? item.tags : [],
+        // THE SET CHOOSER (issue #41, 23 Oct 2026) reads these three: Yours vs
+        // the team's (the same both-non-empty rule as the console's
+        // isSetOwner), and the dates its Updated filter and sorts use.
+        mine: Boolean(caller && typeof item.createdBy === 'string' && item.createdBy.trim() === caller),
+        createdAt: item.createdAt || null,
+        updatedAt: item.updatedAt || item.UpdatedAt || item.createdAt || null,
         hasImages: item.hasImages === true,
         // The version a game created from this set right now would pin to.
         // null on an unmigrated set, which reads its legacy partition.

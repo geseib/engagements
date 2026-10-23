@@ -27,6 +27,7 @@ jest.mock('../auth/authFetch', () => ({
   authFetch: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ prompts: PROMPTS }) })),
 }));
 import { GAME_TYPE_LIST, GAME_TYPES, PICKER_GAME_TYPES, UNPLAYABLE_GAME_TYPES } from '../config/gameTypes';
+import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
 
 const SETS = [
   { id: 'pricing', name: 'Strategic Pricing Plays', totalQuestions: 47, engagementType: 'call-and-answer', hasImages: false },
@@ -59,7 +60,6 @@ function setup(overrides = {}) {
 }
 
 const pill = (label) => screen.getByRole('button', { name: label });
-const setSelect = () => screen.getByLabelText(/question set/i);
 
 /*
   THE PICKER'S VALUE IS `scope:id`, NOT `id`. A <select> can only carry a
@@ -96,14 +96,14 @@ describe('the format picker', () => {
   // which is what makes the set dropdown's type filter meaningful.
   test('choosing a format marks it, and clears the question set', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
-    expect(setSelect().value).toBe('platform:pricing');
+    pickSet('platform:pricing');
+    expect(chosenSet()).toBe('platform:pricing');
 
     fireEvent.click(pill('Trivia'));
 
     expect(pill('Trivia')).toHaveAttribute('aria-pressed', 'true');
     expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'false');
-    expect(setSelect().value).toBe('');
+    expect(chosenSet()).toBe('');
     // and the page is told, so it can drop the old set's categories/instruction
     expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('', 'platform');
   });
@@ -132,26 +132,25 @@ describe('the question set', () => {
   // the question count and the image marker.
   test('lists only sets of the chosen format, with their counts', () => {
     setup();
-    const options = within(setSelect()).getAllByRole('option').map((o) => o.textContent);
-    expect(options).toEqual(['Select a question set...', 'Strategic Pricing Plays (47 questions)']);
+    expect(listedSets()).toEqual(['Strategic Pricing Plays']);
+    expect(chooser().textContent).toMatch('47');
 
     fireEvent.click(pill('Poll'));
-    const pollOptions = within(setSelect()).getAllByRole('option').map((o) => o.textContent);
-    expect(pollOptions).toEqual(['Select a question set...', 'Room Mood (6 questions)']);
+    expect(listedSets()).toEqual(['Room Mood']);
   });
 
   // rejects: dropping the callback, which is the only thing that loads the
   // categories the create payload then carries.
   test('tells the page which set was chosen, so it can load the categories', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(props.onQuestionSetChange).toHaveBeenCalledWith('pricing', 'platform');
   });
 
   test('shows the category grid only once a set is chosen', () => {
     setup();
     expect(screen.queryByText('Leadership')).toBeNull();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(screen.getByText('Leadership')).toBeInTheDocument();
   });
 
@@ -159,7 +158,7 @@ describe('the question set', () => {
   // "these three, not those five".
   test('a category toggle goes back to the page that owns the selection', () => {
     const { props } = setup();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     fireEvent.click(screen.getByText('Leadership').closest('button'));
     expect(props.onToggleCategory).toHaveBeenCalledWith('Leadership');
   });
@@ -239,7 +238,7 @@ describe('the trivia timer', () => {
 describe('creating', () => {
   const ready = (overrides = {}) => {
     const r = setup({ eventTitle: 'Q3 Offsite', ...overrides });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     return r;
   };
 
@@ -250,7 +249,7 @@ describe('creating', () => {
     const create = screen.getByRole('button', { name: /create engagement/i });
     expect(create).toBeDisabled();               // no title, no set
 
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(create).toBeDisabled();               // set, still no title
 
     setup({ eventTitle: '   ' });                 // whitespace is not a title
@@ -376,7 +375,7 @@ describe('edit mode', () => {
     expect(screen.getByLabelText(/event details/i).value).toBe('Pricing day.');
     expect(screen.getByLabelText(/instructions for workie/i).value).toBe('Mid-market SaaS.');
     expect(screen.getByLabelText(/workie's voice/i).value).toBe('coach');
-    expect(setSelect().value).toBe('platform:pricing');
+    expect(chosenSet()).toBe('platform:pricing');
     expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'true');
     // anonymousUntilReveal: false must arrive as an UNCHECKED box — seeding
     // the default instead would flip the session anonymous on the first save.
@@ -407,7 +406,8 @@ describe('edit mode', () => {
     setupEdit();
     expect(pill('Call & Answer')).toBeDisabled();
     expect(pill('Trivia')).toBeDisabled();
-    expect(setSelect()).toBeDisabled();
+    // The chooser folds to the pinned set with no Change: the set is fixed once created.
+    expect(within(chooser()).queryByRole('button', { name: 'Change' })).toBeNull();
     expect(screen.getByText('Leadership').closest('button')).not.toBeDisabled();
     expect(screen.getByRole('checkbox', { name: /shuffle the question order/i })).toBeDisabled();
     expect(screen.getAllByText(/fixed once a session is created/i).length).toBeGreaterThan(0);
@@ -489,7 +489,7 @@ describe('edit mode', () => {
   // the pinned set (retired, or fetched for another format).
   test('a set the page\'s list does not carry still displays by id', () => {
     setupEdit({ questionSetId: 'retired-set' });
-    expect(setSelect().value).toBe('platform:retired-set');
+    expect(chosenSet()).toBe('platform:retired-set');
   });
 
   /*
@@ -587,11 +587,11 @@ describe('the Advanced section', () => {
   // rejects: a fold that hides the choices that define the session.
   test('title, format, set and categories stay in the main view', () => {
     setup();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     for (const el of [
       screen.getByLabelText(/event title/i),
       pill('Call & Answer'),
-      setSelect(),
+      chooser(),
       screen.getByText('Leadership').closest('button'),
     ]) {
       expect(advanced().contains(el)).toBe(false);
@@ -643,7 +643,7 @@ describe('the Advanced section', () => {
 
   test('the old plan sentence is gone — one statement of the plan, not two', () => {
     setup();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(screen.queryByTestId('gsd-workie-plan')).toBeNull();
   });
 
@@ -656,7 +656,7 @@ describe('the Advanced section', () => {
   test('the approach picker offers the summary prompts for the chosen format', async () => {
     setup();
     fireEvent.click(pill('Trivia'));
-    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    pickSet('platform:space');
     const picker = await screen.findByLabelText(/summary approach/i);
     await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
     expect(within(picker).queryByRole('option', { name: /LP Behavioural/ })).toBeNull();
@@ -667,7 +667,7 @@ describe('the Advanced section', () => {
   test('a chosen approach reaches the payload, and none is the empty string', async () => {
     const { props } = setup({ eventTitle: 'Quiz night' });
     fireEvent.click(pill('Trivia'));
-    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    pickSet('platform:space');
     const picker = await screen.findByLabelText(/summary approach/i);
     await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
@@ -685,7 +685,7 @@ describe('the Advanced section', () => {
     await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
     fireEvent.change(picker, { target: { value: 'trivia-vj' } });
     fireEvent.click(pill('Poll'));
-    fireEvent.change(setSelect(), { target: { value: 'platform:mood' } });
+    pickSet('platform:mood');
     fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
     expect(props.onCreate.mock.calls[0][0].promptId).toBe('');
   });
@@ -696,7 +696,7 @@ describe('the Advanced section', () => {
         { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
       ],
     });
-    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
+    pickSet('platform:lp');
     const picker = await screen.findByLabelText(/summary approach/i);
     await waitFor(() => expect(within(picker).getByRole('option', { name: /LP Behavioural/ })).toBeInTheDocument());
     // The default option says where the default comes from.
@@ -711,7 +711,7 @@ describe('the Advanced section', () => {
         { id: 'lp', name: 'Leadership Principles', totalQuestions: 10, engagementType: 'call-and-answer', hasImages: false, promptId: 'lp-behavioral' },
       ],
     });
-    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
+    pickSet('platform:lp');
     expect(advLine().textContent).toMatch(/follows this set’s own summary approach/i);
     expect(advLine().textContent).not.toMatch(/standard/i);
   });
@@ -816,13 +816,13 @@ describe('the foot says who can get in', () => {
 describe('the category helper counts questions', () => {
   test('none picked: all of them are in, with the total', () => {
     setup({ activeCategoryIds: new Set() });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(screen.getByText('None picked, so all 2 are in · 47 questions')).toBeInTheDocument();
   });
 
   test('some picked: how many of how many, and their questions', () => {
     setup({ activeCategoryIds: new Set(['Leadership']) });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(screen.getByText('1 of 2 categories · 20 questions')).toBeInTheDocument();
   });
 });
@@ -860,7 +860,7 @@ describe('the question set reference survives the picker', () => {
   // rejects: raising the id alone, which pins the session to Engage's library.
   test('an org set is raised with its scope', () => {
     const { props } = ready();
-    fireEvent.change(setSelect(), { target: { value: 'org:teamretro' } });
+    pickSet('org:teamretro');
     create();
     expect(props.onCreate).toHaveBeenCalledWith(
       expect.objectContaining({ setId: 'teamretro', setScope: 'org' }),
@@ -870,7 +870,7 @@ describe('the question set reference survives the picker', () => {
   // rejects: hardcoding 'org' — a platform set must still say platform.
   test('a platform set is raised as platform', () => {
     const { props } = ready();
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     create();
     expect(props.onCreate).toHaveBeenCalledWith(
       expect.objectContaining({ setId: 'pricing', setScope: 'platform' }),
@@ -885,15 +885,16 @@ describe('the question set reference survives the picker', () => {
   // rejects: a picker that cannot express "ours, not Engage's".
   test('both libraries\' copies of one slug are offered separately', () => {
     setup({ questionSets: SCOPED });
-    expect(screen.getByRole('option', { name: /Team Retro \(Engage\)/ }).value).toBe('platform:teamretro');
-    expect(screen.getByRole('option', { name: /Team Retro \(ours\)/ }).value).toBe('org:teamretro');
+    listedSets();
+    expect(screen.getByRole('radio', { name: /Team Retro \(Engage\)/ })).toHaveAttribute('data-set-key', 'platform:teamretro');
+    expect(screen.getByRole('radio', { name: /Team Retro \(ours\)/ })).toHaveAttribute('data-set-key', 'org:teamretro');
   });
 
   // rejects: the page being told an id with no scope, which sends
   // fetchCategories and fetchQuestionSetInstruction back to the same ambiguity.
   test('the page is told the scope too, so it loads the right categories', () => {
     const { props } = setup({ questionSets: SCOPED });
-    fireEvent.change(setSelect(), { target: { value: 'org:teamretro' } });
+    pickSet('org:teamretro');
     expect(props.onQuestionSetChange).toHaveBeenCalledWith('teamretro', 'org');
   });
 });
@@ -922,8 +923,8 @@ describe('a question set whose content could not be decrypted', () => {
     decryptFailed: true,
   };
   const withUnreadable = () => setup({ questionSets: [...SETS, UNREADABLE] });
-  const options = () => Array.from(setSelect().querySelectorAll('option'));
-  const unreadableOption = () => options().find((o) => o.textContent.includes('q3retro'));
+  const options = () => { listedSets(); return Array.from(chooser().querySelectorAll('[data-set-key]')); };
+  const unreadableOption = () => options().find((o) => o.getAttribute('aria-label').includes('q3retro'));
 
   // rejects: `{set.name} ({set.totalQuestions} questions)` rendered straight
   // through, which for a nulled name is the line " (42 questions)" — an option
@@ -945,7 +946,8 @@ describe('a question set whose content could not be decrypted', () => {
   // the picker rather than a fact about the set.
   test('the option says why it is unavailable rather than just being dead', () => {
     withUnreadable();
-    expect(unreadableOption().textContent).toMatch(/unreadable/i);
+    expect(unreadableOption().getAttribute('aria-label')).toMatch(/unreadable/i);
+    expect(unreadableOption().closest('tr')).toHaveAttribute('title');
   });
 
   // rejects: filtering `decryptFailed` rows out of the picker. The handler
@@ -953,7 +955,7 @@ describe('a question set whose content could not be decrypted', () => {
   // set they can see in the console, cannot find here, and cannot explain.
   test('the readable sets are all still offered beside it', () => {
     withUnreadable();
-    expect(options().some((o) => o.textContent.includes('Strategic Pricing Plays'))).toBe(true);
+    expect(options().some((o) => o.getAttribute('aria-label').includes('Strategic Pricing Plays'))).toBe(true);
   });
 });
 
@@ -1032,7 +1034,7 @@ describe("Workie's briefing", () => {
 
   test('a typed briefing reaches the create payload', () => {
     const { props } = setup({ eventTitle: 'Q3 review' });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     writeIt('Open issues are up 15%.');
     create();
     expect(props.onCreate.mock.calls[0][0].briefing).toEqual(expect.objectContaining({
@@ -1042,7 +1044,7 @@ describe("Workie's briefing", () => {
 
   test('no briefing is null in the payload, never a stale value', () => {
     const { props } = setup({ eventTitle: 'Q3 review' });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     create();
     expect(props.onCreate.mock.calls[0][0].briefing).toBeNull();
   });
@@ -1051,7 +1053,7 @@ describe("Workie's briefing", () => {
     const { props } = setup({ eventTitle: 'Quiz' });
     writeIt('Kept while the dialog is open.');
     fireEvent.click(pill('Trivia'));
-    fireEvent.change(setSelect(), { target: { value: 'platform:space' } });
+    pickSet('platform:space');
     create();
     expect('briefing' in props.onCreate.mock.calls[0][0]).toBe(false);
     fireEvent.click(pill('Call & Answer'));
@@ -1068,7 +1070,7 @@ describe("Workie's briefing", () => {
 
   test('Create waits while Workie is writing the briefing, and frees up when it is done', async () => {
     setup({ eventTitle: 'Q3 review' });
-    fireEvent.change(setSelect(), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     const createButton = screen.getByRole('button', { name: /create engagement/i });
     expect(createButton).toBeEnabled();
     const input = document.querySelector('input[type="file"]');

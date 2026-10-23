@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New engagement, before a set is picked</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#0F1A2E}
+.sc{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#F4EDE4}
+.sc *{box-sizing:border-box}
+.lbl{font-size:13px;color:#9BA8BE;font-weight:600}
+.inp{height:44px;padding:0 14px;border:1px solid #5B6F93;border-radius:10px;background:#0F1A2E;color:#F4EDE4;font:inherit;font-size:15px;width:100%}
+.fmt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 14px;border:1px solid #33476B;border-radius:10px;background:transparent;color:#F4EDE4;font:inherit;font-size:15px;font-weight:600;text-align:left}
+.fmt span{font-size:12px;font-weight:400;color:#9BA8BE}
+.fmt.on{border-color:#F6A94C;background:#25375A}
+.recent{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid #33476B;border-radius:8px;background:#1B2942;color:#F4EDE4;font:inherit;font-size:13px}
+.recent span{color:#9BA8BE}
+.fold{display:flex;align-items:center;gap:10px;height:44px;padding:0 14px;border:1px solid #22324F;border-radius:10px;color:#9BA8BE;font-size:15px}
+.dim{color:#9BA8BE;font-size:13px}
+.btn{height:40px;padding:0 18px;border-radius:8px;font:inherit;font-size:15px;font-weight:600;border:1px solid #33476B;background:transparent;color:#F4EDE4}
+.btn.pri{background:#F6A94C;border-color:#F6A94C;color:#1B2942}
+.btn.pri[disabled]{background:#4A4536;border-color:#4A4536;color:#C9C1B0}
+a{color:#9DC0F0}a:hover{color:#C4D8F6}
+</style>
+</helmet>
+<div class="sc" style="width: 1040px; height: 860px; padding: 28px; background: #0B1424; display: flex; align-items: flex-start; justify-content: center">
+<section aria-label="New engagement" style="width: 860px; background: #1B2942; border: 1px solid #33476B; border-radius: 14px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #33476B">
+<h1 style="margin: 0; font-size: 24px">New engagement</h1>
+<span class="dim">in <b style="color: #F4EDE4">TeamG</b> · <a href="#">Switch team</a></span>
+<button aria-label="Close" style="margin-left: auto; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #33476B; background: transparent; color: #F4EDE4; font-size: 18px">×</button>
+</div>
+<div style="padding: 20px 22px; display: flex; flex-direction: column; gap: 18px">
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span class="lbl">Event title</span>
+<input class="inp" value="Leadership offsite: Q1 priorities">
+</label>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span class="lbl">Format</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<button class="fmt">Call &amp; Answer<span>Ideas, then a vote</span></button>
+<button class="fmt on" aria-pressed="true">Poll<span>Quick questions, live results</span></button>
+<button class="fmt">Trivia<span>Right answers, scores</span></button>
+<button class="fmt">Survey<span>Answers at their own pace</span></button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span class="lbl">Question set</span>
+<a href="#" style="margin-left: auto; font-size: 13px">Your question sets</a>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; border: 2px solid #7CA7E6; border-radius: 10px; background: #0F1A2E">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9BA8BE" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<input aria-label="Choose a question set" placeholder="Choose a question set: type to search 47 poll sets" style="flex: 1; border: 0; background: transparent; color: #F4EDE4; font: inherit; font-size: 15px; outline: none">
+<span style="color: #9BA8BE">▾</span>
+</label>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="dim">Used by you lately:</span>
+<button class="recent">Team health check <span>· TeamG</span></button>
+<button class="recent">Quarterly planning priorities <span>· Yours</span></button>
+<button class="recent">Offsite warm-up <span>· Yours</span></button>
+</div>
+</div>
+<div class="fold">Categories <span style="font-size: 13px">· once a set is picked</span></div>
+<div class="fold">Advanced <span style="margin-left: auto">▸</span></div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid #33476B">
+<button class="btn">Cancel</button>
+<span class="dim" style="margin-left: auto">Choose a question set first</span>
+<button class="btn pri" disabled>Create engagement</button>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
