@@ -3704,6 +3704,13 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     eventDetails, gameAiContext, questionSetAiContext, customInstruction, briefing, angleLayer, hostLayer,
     (Array.isArray(lateAnswers) ? lateAnswers : []).map((a) => (a && a.answer) || ''),
   ]);
+  // The prompt's OWN words — the template before its variables are filled, the
+  // output contract, the honesty rule — so an owner the read copied from the
+  // prompt's example ("whoever runs the weekly release", review #46) is told
+  // apart from one an answer named. Never material, never logged.
+  const readInstructions = [
+    templateBody, buildOutputContract(promptData, { openingMove }), templateVars.contextInstructions, HONESTY_RULE,
+  ].filter((s) => typeof s === 'string' && s.trim()).join('\n\n');
   const readVote = {
     points: rankedAnswers.map((a) => Number(a.score) || 0),
     rankCount: rankedAnswers.length,
@@ -3981,7 +3988,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     */
     let readCheck = null;
     try {
-      const vet = (text) => checkRead({ read: text, material: readMaterial, vote: readVote, voice: readVoice });
+      const vet = (text) => checkRead({
+        read: text, material: readMaterial, vote: readVote, voice: readVoice, instructions: readInstructions,
+      });
       const first = vet(aiResponse);
       const firstIssues = first.issues;
       readCheck = { checked: true, rewritten: false, first: firstIssues.length, issues: firstIssues };

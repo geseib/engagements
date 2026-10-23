@@ -12,7 +12,9 @@
  * the exact words, or not shown its previous reply; a worse rewrite kept over
  * a better first reply; a failed rewrite losing the read; a second model call
  * on a clean read; ReadCheck on the public read; ReadCheck left out of the
- * sealed fields; the read's words or the room's answers in the logs.
+ * sealed fields; the read's words or the room's answers in the logs; the
+ * prompt's own text not reaching the check as `instructions`, so an owner
+ * copied from its example passes (review #46).
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -175,7 +177,9 @@ async function read(gameId, routeKey, authorizer) {
 
 (async () => {
   put({ PK: 'AIPROMPTS', SK: 'AIPROMPT#lessons-learned', promptId: 'lessons-learned', s3Key: 'none',
-        instructions: 'Read the round back. Answers: {responsesText}', outputFormat: 'Keep it short.' });
+        // The example owner is the prompt's own words (review #46): section 6.
+        instructions: 'Read the round back. An owner is the role an answer implies, for example whoever runs the van departure. Answers: {responsesText}',
+        outputFormat: 'Keep it short.' });
 
   console.log('\n1. a bad first reply, a good rewrite');
   seedRound('9301');
@@ -259,7 +263,24 @@ async function read(gameId, routeKey, authorizer) {
   await check('ReadCheck is sealed with the read (ENCRYPTED_FIELDS.aiSummary)', () =>
     assert.ok(ENCRYPTED_FIELDS.aiSummary.includes('ReadCheck')));
 
-  console.log('\n6. the logs');
+  console.log('\n6. the prompt\'s own example owner (review #46)');
+  // "departure" is in the answers, so only the prompt's text tells this owner
+  // apart from one an answer named: the worker must pass it as `instructions`.
+  const LEAK = '\n\nFour answers hold the line at Friday van departure. The objection named most often came from the route lead.'
+    + '\n\n## Discussion Questions\n1. What does an acknowledged receiver look like?'
+    + '\n\n## Next Steps\n1. **Suggested** Whoever runs the van departure: hold one Friday and see who acknowledges.';
+  seedRound('9306');
+  const f = await run('9306', [LEAK, GOOD]);
+  await check('an owner copied from the prompt is flagged, and the note names it', () => {
+    assert.strictEqual(f.calls, 2);
+    assert.ok(f.prompts[1].includes('- "Whoever runs the van departure" is an owner the answers never named: use a person or a role an answer names.'),
+      f.prompts[1].slice(-500));
+    assert.deepStrictEqual(f.row.ReadCheck, { checked: true, rewritten: true, first: 1, issues: [] });
+  });
+  await check('the first prompt carries the owner-and-practice sentence', () =>
+    assert.ok(f.prompts[0].includes('Never say what the organisation currently or usually does unless an answer says it; never name an owner the answers did not name.')));
+
+  console.log('\n7. the logs');
   const checkLines = lines.filter((l) => l.includes('READ CHECK') || l.includes('read-check'));
   await check('the check logs its kinds and counts', () => {
     assert.ok(checkLines.some((l) => /3 issue\(s\)/.test(l) && /"number":1/.test(l)), checkLines.join('\n'));
