@@ -449,7 +449,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). Type in the search box above them to narrow every format to the sets whose name, description or tags match; **Clear the search** brings them all back. One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
+          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). Narrow them with the search box, whose sets (each counted), and tags (any of those pressed; press again to let one go). **Clear the search and filters** brings everything back. One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
         },
         {
           t: 'p',

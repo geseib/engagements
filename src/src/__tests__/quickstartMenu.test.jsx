@@ -10,7 +10,7 @@
  * is zero and every such assertion passes unconditionally.
  */
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import QuickstartMenu from '../components/QuickstartMenu';
 
 jest.mock('../auth/authFetch', () => ({
@@ -404,5 +404,82 @@ describe('searching Quick start', () => {
     renderMenu();
     expect(await screen.findByText('No Quickstart Sets Available')).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+/* OWNER AND TAG FILTERS (owner, 23 Oct 2026: "add owner and tag filters to
+   Quick start too"). The same rules as the set chooser: whose set it is by
+   setOwnerTag, several tags meaning a set with ANY of them. */
+describe('filtering Quick start by owner and tag', () => {
+  const set = (id, name, engagementType, extra = {}) => ({
+    id, name, engagementType, description: '', totalQuestions: 10, categoryCount: 2, quickstart: true, active: true, ...extra,
+  });
+  const LIBRARY = [
+    set('m1', 'My retro', 'call-and-answer', { scope: 'org', mine: true, tags: ['retro'] }),
+    set('t1', 'Team planning', 'call-and-answer', { scope: 'org', mine: false, tags: ['planning'] }),
+    set('e1', 'Engage icebreaker', 'call-and-answer', { scope: 'platform', tags: ['icebreaker', 'retro'] }),
+    set('e2', 'Engage space trivia', 'trivia', { scope: 'platform', tags: ['space'] }),
+  ];
+  beforeEach(() => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: LIBRARY }) };
+      return { ok: true, json: async () => ({ gameId: '4821' }) };
+    });
+  });
+  const owners = () => screen.findByRole('radiogroup', { name: 'Whose sets' });
+
+  // rejects: an owner filter whose counts disagree with what pressing it shows,
+  // or one offering owners no quick start set has.
+  test('owners present, each counted; picking one narrows every format', async () => {
+    renderMenu();
+    const group = await owners();
+    expect(within(group).getAllByRole('radio').map((b) => b.textContent)).toEqual(['All4', 'Yours1', 'Team1', 'Engage2']);
+    fireEvent.click(within(group).getByRole('radio', { name: /Engage/ }));
+    expect(screen.getByRole('button', { name: /Engage icebreaker/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /My retro/ })).toBeNull();
+  });
+
+  // rejects: tags that AND together (two tags would usually find nothing), or
+  // a tag pill that cannot be let go.
+  test('tags: several at once, a set with any of them; pressing again lets one go', async () => {
+    renderMenu();
+    const tags = within(await screen.findByRole('group', { name: 'Tags' }));
+    expect(tags.getByRole('button', { name: /^retro/ }).textContent).toBe('retro2');
+    fireEvent.click(tags.getByRole('button', { name: /^planning/ }));
+    fireEvent.click(tags.getByRole('button', { name: /^space/ }));
+    expect(screen.getByRole('button', { name: /Team planning/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /My retro/ })).toBeNull();
+    fireEvent.click(tags.getByRole('button', { name: /^space/ }));
+    expect(tags.getByRole('button', { name: /^space/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: /Engage space trivia/ })).toBeNull();
+  });
+
+  // rejects: a no-match line that blames only the search when a filter did it,
+  // or a Clear that leaves the filters on.
+  test('nothing matching names the filters, and one press clears them all', async () => {
+    renderMenu();
+    // Tags are counted within the owner, so the tag goes first: Yours then shows 0.
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Tags' })).getByRole('button', { name: /^space/ }));
+    const yours = within(await owners()).getByRole('radio', { name: /Yours/ });
+    expect(yours.textContent).toBe('Yours0');
+    fireEvent.click(yours);
+    expect(screen.getByRole('status')).toHaveTextContent('No quick start set matches in Yours, tagged space.');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the search and filters' }));
+    expect(screen.getByRole('button', { name: /My retro/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(within(screen.getByRole('radiogroup', { name: 'Whose sets' })).getByRole('radio', { name: /All/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  // rejects: an owner row over a library with one owner, which filters nothing.
+  test('one owner only: no owner row', async () => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: LIBRARY.filter((s) => s.scope === 'platform') }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    renderMenu();
+    await screen.findByRole('group', { name: 'Tags' });
+    expect(screen.queryByRole('radiogroup', { name: 'Whose sets' })).toBeNull();
   });
 });
