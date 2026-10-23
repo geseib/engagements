@@ -85,7 +85,8 @@ const ASSEMBLY_LAYERS = Object.freeze([
       + 'knowledge the model is certain of — never an invented number, name or quotation, nothing invented '
       + 'about the organisation or event — and a missing piece is worked around, never mentioned. It ends '
       + 'with what a ranking measures: which answers people preferred, not that the room agreed to a plan '
-      + 'or chose an owner.',
+      + 'or chose an owner — and never says what the organisation currently does, or names an owner, '
+      + 'unless an answer does.',
   }),
   Object.freeze({
     source: 'briefingLayer',

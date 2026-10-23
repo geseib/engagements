@@ -58,3 +58,27 @@ Two prompts already carry the fix in their own words; four still have the bare r
   fails. Anything in the persona's own voice text is exempt.
 - **The fact sheet (smaller than planned).** The vote facts already reach Workie. One line is
   added: what a ranking measures (preference among these answers, not agreement to a plan).
+
+## Review #46: what still got through
+
+Review [#46](https://github.com/geseib/engagements/issues/46) ran test `cb30e35d`, which had the
+check, with the same four answers. Four things got past it. The owner asked for the show
+stoppers and high-impact gaps to be fixed before prod.
+
+| Got through | Why | Now |
+|---|---|---|
+| "the next **two Friday runs**", "a **two-week** pilot" | numbers were compared by value, and "two branches" holds a two | **numbers carry their unit or noun.** "two-week" ≈ "two weeks"; "two branches" licenses branches only. Bare numbers, the vote's counts and points, ranks, and counts of the room's own things ("three answers") are allowed as before. A count never licenses a duration, clock, percentage or money. |
+| "**Whoever runs the weekly release**: book paid cover…" | no answer has a release; the words are the prompt's own example | **`owner`**: a Next steps owner must be a printed name, or a role whose head noun is in the material. An owner phrase that is in the prompt's own text (`instructions`) and not in the material is flagged whatever its head noun. The example owners are gone from the repo prompts ("the role an answer names"). |
+| "…which signals that **the current habit is** to build visible tooling first" | an inferred practice the answers never state | **`practice`**: "currently", "already has", "as usual", "the existing practice", "signals that … is to" are flagged unless an answer says the same thing. Questions ("Who currently owns…?") and steps that set out to find out ("confirm whether it currently…") pass. |
+| "Route lead: count…", "Growth sponsors: list…" | the v1 prompts ask for owner-then-action; v2 (in the repo) asks for **Suggested** but is not live on test | **`commitment`**: an "Owner: verb …" step not starting **Suggested**, not hedged with could/might/may, and not under a "Suggested next steps" heading, is asked to become a suggestion. A v1 prompt now yields suggestions too. |
+
+The honesty rule gains one sentence: "Never say what the organisation currently or usually does
+unless an answer says it; never name an owner the answers did not name."
+
+Measured on the four real Bedrock reads in `docs/design/ca-followup-asks/prototype/` (a
+different session, so names and topics are unrelated to the fixture): no `practice` flags; the
+new `number` flags are durations and counts those answers did not give ("in the next two
+weeks", "the next five agent PRs"); and
+the `owner` flags left are owners those answers did not name ("whoever owns the security review
+checklist" when no answer mentions a checklist). One weak spot is known: "one problem to solve
+or two separate policies" reads "two separate policies" as a count no answer gave.
