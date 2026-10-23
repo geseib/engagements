@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
@@ -7,6 +7,8 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
+import { makeSearchMatcher } from '../config/listControls';
+import { SET_SEARCH_FIELDS } from '../config/setFinder';
 import { SCREEN_WORDS } from '../config/roomScreen';
 import { TWO_SURFACE_TYPES, presentHref } from '../config/surfaces';
 import { openPendingRoomWindow, willPlace } from '../present/roomWindow';
@@ -67,6 +69,22 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   });
 
   const SETS_PER_PAGE = 4;
+
+  /*
+    A SEARCH (owner, 23 Oct 2026: "add search to Quick start"; issue #41). The
+    same fields as the set chooser and the console list (config/setFinder.js):
+    name, description, custom instruction and tags. Each format's carousel
+    shows only its matches and starts again at its first page.
+  */
+  const [query, setQuery] = useState('');
+  const shownSets = useMemo(() => {
+    const matches = makeSearchMatcher(SET_SEARCH_FIELDS);
+    return Object.fromEntries(Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matches(set, query))]));
+  }, [quickstartSets, query]);
+  const search = (value) => {
+    setQuery(value);
+    setCurrentPage((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, 0])));
+  };
 
   useEffect(() => {
     fetchQuickstartSets();
@@ -224,7 +242,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const nextPage = (type) => {
-    const maxPage = Math.max(0, Math.ceil(quickstartSets[type].length / SETS_PER_PAGE) - 1);
+    const maxPage = Math.max(0, Math.ceil(shownSets[type].length / SETS_PER_PAGE) - 1);
     setCurrentPage(prev => ({
       ...prev,
       [type]: prev[type] >= maxPage ? 0 : prev[type] + 1 // Circular navigation
@@ -232,7 +250,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const prevPage = (type) => {
-    const maxPage = Math.max(0, Math.ceil(quickstartSets[type].length / SETS_PER_PAGE) - 1);
+    const maxPage = Math.max(0, Math.ceil(shownSets[type].length / SETS_PER_PAGE) - 1);
     setCurrentPage(prev => ({
       ...prev,
       [type]: prev[type] <= 0 ? maxPage : prev[type] - 1 // Circular navigation
@@ -240,7 +258,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const getVisibleSets = (type) => {
-    const sets = quickstartSets[type];
+    const sets = shownSets[type];
     const startIdx = currentPage[type] * SETS_PER_PAGE;
     return sets.slice(startIdx, startIdx + SETS_PER_PAGE);
   };
@@ -322,8 +340,27 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
               <p>To enable quickstart, go to Admin <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /> Question Sets and check the "Quickstart" box for your desired question sets.</p>
             </div>
           ) : (
-            Object.entries(quickstartSets).map(([type, sets]) => {
+            <>
+            <label className="quickstart-search">
+              <Icon name="MagnifyingGlass" size={16} color="currentColor" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => search(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); search(''); } }}
+                placeholder={`Search ${totalQuickstartSets} quick start sets`}
+                aria-label={`Search ${totalQuickstartSets} quick start sets`}
+              />
+            </label>
+            {query.trim() && Object.values(shownSets).every((list) => list.length === 0) && (
+              <div className="quickstart-nomatch" role="status">
+                <p>No quick start set matches “{query.trim()}”.</p>
+                <button type="button" className="quickstart-clear" onClick={() => search('')}>Clear the search</button>
+              </div>
+            )}
+            {Object.entries(shownSets).map(([type, sets]) => {
               if (sets.length === 0) return null;
+              const all = (quickstartSets[type] || []).length;
               
               const visibleSets = getVisibleSets(type);
               const totalPages = Math.ceil(sets.length / SETS_PER_PAGE);
@@ -340,7 +377,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
                         color={gameTypeMeta(type).accent}
                       />{' '}
                       {gameTypeMeta(type).label}
-                      <span className="set-count">({sets.length} available)</span>
+                      <span className="set-count">({sets.length === all ? `${all} available` : `${sets.length} of ${all}`})</span>
                     </h3>
                   </div>
 
@@ -432,7 +469,8 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
                   )}
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
 
