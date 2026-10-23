@@ -106,11 +106,16 @@ Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.
 
 **Question sets in a Build Room** (plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md`):
 Ask the room's ready questions list every Call & Answer or Poll set tagged `build-room`,
-ordered by a `for-<kind>` tag once the room has said what it is making. **Ask Claude for
+ordered by a `for-<kind>` tag once the room has said what it is making; Engage's starter sets
+for a training site, game, document and dashboard are installed per tier with
+`scripts/install-build-room-kind-sets.sh <table> --apply`. The opening's steps also follow the kind
+(`build-store.js` `OPENING_BY_KIND`). **Ask Claude for
 questions** (plugin 1.26.0) has Claude write a set into the project
 (`build-room/questions/<kind>-<name>.json`), commit it and send it (`POST build/question-sets`,
 kept as `BUILD#QSET#` rows, sealed for teams); **Save to my sets** turns it into AI drafts
 through `POST /admin/generation-drafts/from-build`, which the host accepts from the bell.
+An unsaved set puts a quiet entry in the host's bell that turns into a reminder two days
+before the session ends (#45; `notifications.js`, copied identically into `game/`).
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
 Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the

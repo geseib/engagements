@@ -318,15 +318,82 @@ function phaseOf(state, room) {
 }
 
 /** The opening as the host, Claude and the phones see it. */
+/**
+ * THE OPENING BY KIND OF BUILD (docs/superpowers/plans/2026-10-22-build-room-question-sets.md
+ * step 5; owner 22 Oct: "an early choice might change which question set we
+ * want or need"). Once What are we making? is answered, a game, a training
+ * site, a document or a dashboard asks its own words for the steps after it,
+ * with its own probes. Other kinds keep the general words.
+ */
+const OPENING_BY_KIND = Object.freeze({
+  training: {
+    forWhom: { question: 'Who is learning? Name a person and the moment they need it.', probes: ['What do they already know?', 'Where and when will they take it?'] },
+    problem: { question: 'What goes wrong today because they do not know this?', probes: ['How do they learn it today?', 'What does that cost?'] },
+    good: { question: 'Launch day: what can a new person do after an hour with it?', probes: ['What would they tell the next new person?'] },
+    proof: { question: 'How will we know someone has learned it?', probes: ['Which mistake would stop happening?'] },
+    firstBuild: { question: 'What is the one lesson we could show today?' },
+  },
+  game: {
+    forWhom: { question: 'Who is playing, and where are they when they play?', probes: ['What should a player feel in the first minute?', 'Why would they play a second time?'] },
+    problem: { question: 'What does the player do, and what stands in their way?', probes: ['How do they win, and how do they lose?'] },
+    good: { question: 'Launch day: what do players say after their first round?', probes: ['What would make them share it?'] },
+    proof: { question: 'How will we know it is fun?', probes: ['What would we see when someone plays it?'] },
+    firstBuild: { question: 'What does the player do in the first ten seconds?' },
+  },
+  document: {
+    forWhom: { question: 'Who reads it? Name the reader and what they do after reading.', probes: ['What do they believe before they read it?', 'How much time will they give it?'] },
+    problem: { question: 'What does the reader not know, or not agree with, today?', probes: ['What would they ask first?'] },
+    good: { question: 'What is the one sentence we want them to remember?', probes: ['What would they tell a colleague after reading it?'] },
+    proof: { question: 'What decision or action should it lead to?', probes: ['How would we know they acted on it?'] },
+    firstBuild: { question: 'What is the smallest version we could share today: an outline, a page, a section?' },
+  },
+  dashboard: {
+    forWhom: { question: 'Who looks at it, and how often?', probes: ['What do they check today, somewhere else?'] },
+    problem: { question: 'What decision is hard to make today without it?', probes: ['What do they do instead today?'] },
+    good: { question: 'Launch day: which three numbers are on the screen?', probes: ['What does a bad week look like on it?'] },
+    proof: { question: 'How will we know it is used?', probes: ['Which decision would change because of it?'] },
+    firstBuild: { question: 'What is the one chart we could show today, with the data we have?' },
+  },
+});
+const MAX_PROBES = 4;
+/**
+ * Probes from the host's own sets (plan step 5): an Ideas question in a
+ * category "Opening: <step>" (its label, "Opening: For", or its key,
+ * "Opening: forWhom") probes that step. They ride the ready questions the host
+ * page hands over (POST build/ready), so they follow the room's kind.
+ */
+function setProbesFor(state, step) {
+  const r = readyView(state);
+  const out = [];
+  for (const set of (r && r.sets) || []) {
+    for (const q of set.questions || []) {
+      const m = /^opening\s*[:\-\u2013]\s*(.+)$/i.exec(String(q.category || '').trim());
+      if (!m || q.kind !== 'suggest') continue;
+      const name = m[1].trim().toLowerCase();
+      if (name === step.key.toLowerCase() || name === step.label.toLowerCase()) out.push(q.prompt);
+    }
+  }
+  return out;
+}
+/** The opening's steps for this room: the kind's own words and probes, then the host's sets' probes. */
+function openingStepsFor(state) {
+  const kind = OPENING_BY_KIND[buildKindOf(state)] || {};
+  return OPENING_STEPS.map((st) => {
+    const own = kind[st.key] || {};
+    const probes = [...(own.probes || st.probes || []), ...setProbesFor(state, st)]
+      .filter((p, i, all) => p && all.indexOf(p) === i).slice(0, MAX_PROBES);
+    return { ...st, ...(own.question ? { question: own.question } : {}), probes };
+  });
+}
+
 function openingView(state, room) {
   const brief = briefView(state);
   const phase = phaseOf(state, room);
   const open = (room.asks || []).filter((a) => a.OpeningStep && OPEN_STATUSES.concat(['results']).includes(a.Status));
   const asking = new Set(open.map((a) => a.OpeningStep));
   const valueOf = (k) => (k === 'forWhom' ? brief.forWhom : k === 'never' ? brief.keep.map((i) => i.text).join('; ') : brief.lines[k] || '');
-  const steps = OPENING_STEPS.map((st) => ({
+  const steps = openingStepsFor(state).map((st) => ({
     ...st,
-    probes: st.probes || [],
     value: valueOf(st.key),
     status: asking.has(st.key) ? 'asking' : brief.steps[st.key] || 'next',
   }));
@@ -1126,7 +1193,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.26.0';
+const LATEST_PLUGIN = '1.26.1';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -2408,7 +2475,7 @@ module.exports = {
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
-  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
+  LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
   POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,

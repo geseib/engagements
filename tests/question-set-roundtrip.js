@@ -802,8 +802,13 @@ const WAVELENGTH_CSV = [
   }
 
   // ==== the shipped Build Room starter sets import as they are ============
-  say('\n  -- sets/build-room-starters.csv and sets/build-room-pulse.csv --');
-  for (const [file, type, count] of [['build-room-starters.csv', 'call-and-answer', 17], ['build-room-pulse.csv', 'poll', 3]]) {
+  say('\n  -- sets/build-room-*.csv: the starters, the pulse, and one pair per kind of build --');
+  // Per kind (docs/superpowers/plans/2026-10-22-build-room-question-sets.md step 6): installed
+  // with --tags build-room,for-<kind>; the library puts them first for that kind.
+  const KIND_SETS = ['training', 'game', 'document', 'dashboard'].flatMap((k) => [
+    [`build-room-${k}.csv`, 'call-and-answer', 14], [`build-room-${k}-pulse.csv`, 'poll', 3],
+  ]);
+  for (const [file, type, count] of [['build-room-starters.csv', 'call-and-answer', 17], ['build-room-pulse.csv', 'poll', 3], ...KIND_SETS]) {
     resetDb();
     const csv = require('fs').readFileSync(require('path').join(__dirname, '..', 'sets', file), 'utf8');
     const t = await roundTrip(`Shipped ${file}`, type, csv);
@@ -813,8 +818,16 @@ const WAVELENGTH_CSV = [
     });
     check(`${file}: it survives the round trip`, () => assertSameQuestions(t.before, t.after));
     if (type === 'poll') {
-      check(`${file}: every pulse question is a 1 to 5 rating on the fixed scale`, () =>
-        assert.ok(t.before.every((r) => r.kind === 'rating' && r.scale === '1-5'), JSON.stringify(t.before)));
+      // A Build Room asks a 1 to 5 rating on the fixed scale, or a choice of 2 to 6 with one pick (readyQuestions.js).
+      check(`${file}: every pulse question is a 1 to 5 rating on the fixed scale, or a single-pick choice of 2 to 6`, () =>
+        assert.ok(t.before.every((r) => (r.kind === 'rating' && r.scale === '1-5')
+          || (r.kind === 'choice' && Array.isArray(r.options) && r.options.length >= 2 && r.options.length <= 6 && !r.allowMultiple)), JSON.stringify(t.before)));
+    } else {
+      check(`${file}: the five sections, in session order`, () => {
+        const order = ['Who it is for', 'Start', 'Think differently', 'While building', 'Before wrapping up'];
+        const cats = [...new Set(t.before.map((r) => r.Category))];
+        assert.deepStrictEqual(cats.filter((c) => order.includes(c)), cats, JSON.stringify(cats));
+      });
     }
   }
 

@@ -88,6 +88,11 @@ describe('where a notification goes', () => {
   test('an invitation goes to the Overview, where invitations are answered', () => {
     expect(destinationOf({ type: 'invites' }).url).toBe('/admin?section=overview');
   });
+  test('Claude\'s unsaved question set (#45) opens its Build Room, from any library', () => {
+    expect(destinationOf({ type: 'build', gameId: '4821', setId: 'x', orgId: 'org_1' }))
+      .toEqual({ libraryKey: '', url: '/build?gameId=4821' });
+    expect(destinationOf({ type: 'build', gameId: '../admin' }).url).toBe('/admin');
+  });
   test('days left, in words', () => {
     expect(daysLeftLabel(1)).toBe('1 day left');
     expect(daysLeftLabel(0)).toBe('expires today');

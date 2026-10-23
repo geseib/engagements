@@ -9,6 +9,34 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026: The opening follows the kind of build, starter sets per kind, and a reminder before Claude's unsaved question set goes
+
+**Test:** merge of dev `a66a7b49`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45); plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (steps 5 and 6, another session); notes `docs/design/build-room-host-redesign/starter-sets-by-kind.md`.
+
+### New
+
+- **The opening follows what you are making** (another session, plugin **1.26.1**). Once the room answers *What are we making?*, a game, a training site, a document or a dashboard asks the next steps in its own words ("Who is playing, and where are they when they play?" instead of who it is for), and each done step offers follow-up questions that fit. Your own sets can add follow-ups: an Ideas question in a category named "Opening: <step>" is offered after that step, and Claude sees them too.
+- **Starter sets for each kind of build** (another session): for a training site, a game, a document and a dashboard, two sets each in Engage's library: *Build Room: <Kind> questions* (14 Ideas questions across the five sections) and *Build Room: <Kind> pulse* (two 1 to 5 ratings and one choice), tagged `build-room` and `for-<kind>`, so a room making that kind sees them first.
+- **The bell reminds you about Claude's unsaved question set** (#45). A set Claude writes in a Build Room lives only as long as the session, seven days from its start, unless you press **Save to my sets**. When the set arrives, the host's bell gets an entry for it, already read (you are looking at it in the room). Two days before the session ends it turns unread: *Claude's question set is not saved: …*, with **Reminder · 2 days left**. Pressing it opens the Build Room. Saving or removing the set clears the entry; it ends with the session.
+
+### Fixed
+
+- Claude's question set could vanish with its session without the host being told.
+
+### What to look at
+
+1. **Update the plugin** from Connect Claude Code (1.26.1). Start a Build Room and answer *What are we making?* with a game: the next steps ask in a game's words, and a done step offers follow-ups for a game.
+2. In Ask the room's ready questions, *Build Room: Game questions* and *Build Room: Game pulse* come first (once the starter sets are installed on test; see Known gaps).
+3. In the same Build Room, use **Ask Claude for questions** and let the set arrive. Open the bell (start screen or console): the entry is there, read, with "7 days left".
+4. Press **Save to my sets**: the entry goes, and the draft's own entry appears. Ask for a second set and **Remove** it: its entry goes too.
+5. The reminder itself shows two days before the session ends; to see it sooner, ask an engineer to set a test session's end date near (there is no switch in the app).
+
+### Known gaps
+
+- **The starter sets are installed by hand per tier** (`scripts/install-build-room-kind-sets.sh engagetest --apply`); until that runs on test, step 2 shows only the sets already there.
+- The reminder shows when you next open a page with the bell (the start screen, the console, the two-screen console, the phone remote); there is no email, by design.
+- A set that arrived before this change has no entry until `scripts/backfill-claude-set-reminders.js` is run on the tier (dry run by default; `--apply` writes; a team room's set needs the tier's tenant key). Only dev and test can have such sets.
+
 ## 22 Oct 2026 (later): Ask Claude for questions in a Build Room
 
 **Test:** merge of dev `15fd6c0d`. Plan: `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (step 7). Everything in the entry below is already on test; this push adds only what is here.
@@ -32,7 +60,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Known gaps
 
-- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project) ([#45](https://github.com/geseib/engagements/issues/45)).
+- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project). The bell now reminds the host first (see 23 Oct, [#45](https://github.com/geseib/engagements/issues/45)).
 - Everything in the entry below, including the help gaps, still applies.
 
 ## 22 Oct 2026: Help rewritten with a ? on every screen, Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes

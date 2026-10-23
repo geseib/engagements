@@ -2543,8 +2543,11 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     await openRoom(opening({ Brief: { forWhom: 'Two friends, one laptop', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } }));
     const pathList = screen.getByRole('region', { name: 'The opening: the build brief' });
     expect(within(pathList).getByRole('button', { name: /Making.*A game/ })).toBeInTheDocument();
-    fireEvent.click(within(within(pathList).getByRole('group', { name: 'Probe For' })).getByRole('button', { name: 'Who is it not for?' }));
-    await waitFor(() => expect(lastPost().body).toMatchObject({ kind: 'suggest', prompt: 'Who is it not for?', openingStep: 'forWhom', probe: true }));
+    // A game probes with its own questions (question-sets plan step 5), not the general ones.
+    const probes = within(pathList).getByRole('group', { name: 'Probe For' });
+    expect(within(probes).getAllByRole('button').map((b) => b.textContent)).toEqual(['What should a player feel in the first minute?', 'Why would they play a second time?']);
+    fireEvent.click(within(probes).getByRole('button', { name: 'Why would they play a second time?' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ kind: 'suggest', prompt: 'Why would they play a second time?', openingStep: 'forWhom', probe: true }));
     expect(screen.getByRole('region', { name: /^Opening · step 3 of 9/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start building' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Start building' }));

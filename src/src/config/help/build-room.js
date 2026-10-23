@@ -219,6 +219,21 @@ const running = {
       ],
     },
     {
+      id: 'opening-by-kind',
+      title: 'The opening follows what you are making',
+      icon: 'ListNumbers',
+      blocks: [
+        { t: 'p', text: 'Once the room says what it is making, a game, a training site, a document or a dashboard asks the next steps in its own words. A game asks "Who is playing, and where are they when they play?" instead of who it is for.' },
+        {
+          t: 'list',
+          items: [
+            'A done step offers follow-up questions to ask the room next. They follow what you are making too.',
+            'Your own sets can add follow-ups: an Ideas question in a category named "Opening: For" (or any step\'s name) is offered after that step. Claude sees them as well.',
+          ],
+        },
+      ],
+    },
+    {
       id: 'asking-the-room',
       title: 'Asking the room',
       icon: 'Question',
@@ -247,6 +262,7 @@ const running = {
           items: [
             { title: 'Where it lands', text: 'Claude keeps it in the project under build-room/questions and sends it. It appears first in the ready questions, marked **From Claude**, and you can ask from it straight away.' },
             { title: 'Keeping it', text: '**Save to my sets** puts it in your bell as a draft: a Call and Answer set for its Ideas questions, a Poll set for its Choose and Rate ones, tagged for its kind. Keep, change or leave each question, then accept it to have it in every session.' },
+            { title: 'If you do not save it', text: 'It goes when the session does, seven days after it started; the file stays in the project. Two days before, your bell reminds you, and the reminder opens the room. Saving or removing the set clears it.' },
           ],
         },
       ],
