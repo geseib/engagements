@@ -1,5 +1,7 @@
 import React from 'react';
-import { SET_SEARCH_FIELDS, SET_SORTS } from '../config/setFinder';
+import {
+  SET_SEARCH_FIELDS, SET_SORTS, TAGS_AXIS, CONSOLE_UPDATED_WINDOWS, inUpdatedWindow, splitTags,
+} from '../config/setFinder';
 import Icon from './Icon';
 import PlanLimitNotice from './PlanLimitNotice';
 import ListControls from './ListControls';
@@ -29,7 +31,6 @@ import { shareStateOf } from '../utils/shareState';
 import {
   resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
 } from '../config/setTopics';
-import { setCarriesTag } from '../config/setShelfIndex';
 import { classifySetTopic } from '../config/topicKeywords';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
@@ -99,11 +100,12 @@ const LIST_CONFIG = {
     // is a real option here rather than a row that cannot be reached.
     topic: { get: (set) => resolveSetTopic(set.topic) },
     /*
-      ONE OF THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed
-      into the search box — which is what the browse's tag pills used to do.
+      THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed into the
+      search box — which is what the browse's tag pills used to do.
 
-      The pill carries a COUNT, and a count has to be the number of rows the
-      click produces. The search box cannot give it that: it OR-matches a
+      The pill carries a COUNT: the sets carrying that tag (once another tag is
+      in force, a click ADDS that tag's sets, so the list grows by that count
+      less the overlap). The search box cannot give it even that: it OR-matches a
       substring across the name, the description, the custom instruction and
       the tags, so `empire` also returned "The British Empire" (which carries
       no such tag) and `ancient` also returned every `ancient-egypt` set.
@@ -116,13 +118,28 @@ const LIST_CONFIG = {
 
       The row itself is handed to `eq`, not a field of it, because carrying a
       tag is a question about the set rather than a value to compare.
+
+      SEVERAL AT ONCE since the set chooser (owner, 23 Oct 2026: "filter ...
+      by tag"): the value is a comma-joined list (setFinder's joinTags /
+      splitTags) and a set carrying ANY of them stays, so ticking a second
+      tag widens what is shown. It is the chooser's own axis, TAGS_AXIS, so
+      the two cannot disagree about what a tag finds. The key stays `tag`: a
+      single tag is the same string it always was.
     */
-    tag: { all: '', get: (set) => set, eq: (set, wanted) => setCarriesTag(set, wanted) },
+    tag: TAGS_AXIS,
     type: { get: (set) => normalizeGameType(set.engagementType) },
     status: { get: (set) => (set.active ? 'active' : 'inactive') },
     // WHOSE IT IS — the same four values as the chip on every row, from the
     // same function, so the filter can never disagree with what a row says.
     owner: { get: (set) => setOwnerTag(set) },
+    /*
+      WHEN IT LAST CHANGED — the owner's "or by date". The same windows and
+      the same rule as the chooser (setFinder's inUpdatedWindow), minus "Used
+      by me lately": that reads the host's own sessions, which this screen
+      never loads. The clock is read when the row is tested rather than when
+      the module loads, so a console left open overnight still means today.
+    */
+    updated: { all: 'any', get: (set) => set, eq: (set, wanted) => inUpdatedWindow(set, wanted, Date.now()) },
   },
   sorts: SORTS,
   defaultSort: 'newest',
@@ -203,7 +220,7 @@ export default function QuestionSetsPanel({
     contract, on the same predicate the list itself uses.
   */
   const {
-    state: { search, topic, tag, type, status, owner, sort },
+    state: { search, topic, tag, type, status, owner, updated, sort },
     set,
     shown,
     drops,
@@ -216,11 +233,16 @@ export default function QuestionSetsPanel({
       // setTopicLabel answers "Unfiled" for the empty id, so the exit out of
       // that filter names itself the same way the option does.
       topic: (value) => `Topic: ${setTopicLabel(value)}`,
-      // A tag is already the word a person clicked, so it names itself.
-      tag: (value) => `Tag: ${value}`,
+      // A tag is already the word a person clicked, so it names itself; with
+      // several, the exit drops them all, so it names them all.
+      tag: (value) => {
+        const tags = splitTags(value);
+        return `${tags.length > 1 ? 'Tags' : 'Tag'}: ${tags.join(', ')}`;
+      },
       type: (value) => `Type: ${gameTypeLabel(value)}`,
       owner: (value) => `Owner: ${(OWNER_OPTIONS.find((o) => o.value === value) || {}).label || value}`,
       status: (value) => `Status: ${value === 'active' ? 'Active' : 'Inactive'}`,
+      updated: (value) => (CONSOLE_UPDATED_WINDOWS.find((w) => w.value === value) || {}).label || value,
     },
   });
 
@@ -457,6 +479,17 @@ export default function QuestionSetsPanel({
                   { value: 'all', label: 'All owners' },
                   ...OWNER_OPTIONS,
                 ],
+              },
+              {
+                // "Any time" reads as a filter label on this bar, where every
+                // other select opens with its own "All …".
+                key: 'updated',
+                value: updated,
+                onChange: (value) => set({ updated: value }),
+                ariaLabel: 'Filter by when it was updated',
+                options: CONSOLE_UPDATED_WINDOWS.map((w) => (
+                  w.value === 'any' ? { value: 'any', label: 'Updated any time' } : w
+                )),
               },
               {
                 key: 'sort',

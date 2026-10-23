@@ -2,6 +2,7 @@ import React, { useId, useMemo, useState } from 'react';
 import Icon from './Icon';
 import { ALL } from '../config/listControls';
 import { topicIndex, tagIndex, filterTagIndex } from '../config/setShelfIndex';
+import { joinTags, splitTags } from '../config/setFinder';
 
 /**
  * THE INDEX AT THE FRONT OF THE LIBRARY — what is actually on the shelves, and
@@ -43,13 +44,20 @@ export default function SetShelfBrowse({
   sets = [],
   /** The topic axis's current value, so the shelf in force reads as pressed. */
   topic = ALL,
-  /** The tag axis's current value, for the same reason on the tag side. '' is
-   *  that axis's All — see QuestionSetsPanel's LIST_CONFIG. */
+  /** The tag axis's current value, for the same reason on the tag side: the
+   *  tags in force, comma-joined (config/setFinder.js joinTags). '' is that
+   *  axis's All — see QuestionSetsPanel's LIST_CONFIG. */
   tag = '',
   /** Called with a shelf id, or ALL to let go of the one in force. */
   onPickTopic,
   /**
-   * Called with a tag, or '' to let go of it.
+   * Called with the tag axis's NEXT value: the tags in force with the clicked
+   * one toggled in or out, comma-joined, '' once none are left.
+   *
+   * A TOGGLE, NOT A REPLACE, since the set chooser took several tags (owner,
+   * 23 Oct 2026). A set carrying ANY of them stays, so a second pill widens
+   * the list rather than swapping one word for another — and a pill pressed
+   * by mistake comes out again without losing the others.
    *
    * A TAG IS ITS OWN AXIS, not a phrase dropped into the search box. The box
    * OR-matches a substring across a set's name, description, custom
@@ -65,6 +73,10 @@ export default function SetShelfBrowse({
   onPickTag,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const chosen = splitTags(tag);
+  const toggleTag = (word) => onPickTag && onPickTag(joinTags(
+    chosen.includes(word) ? chosen.filter((t) => t !== word) : [...chosen, word]
+  ));
   const [find, setFind] = useState('');
   const headId = useId();
 
@@ -110,23 +122,29 @@ export default function SetShelfBrowse({
       <span className="qsets-browse-sum">
         {plural(topics.length, 'topic')} · {plural(tags.length, 'tag')}
         {/*
-          THE TAG IN FORCE, OUTSIDE THE DISCLOSURE. A filter nothing on the
+          THE TAGS IN FORCE, OUTSIDE THE DISCLOSURE. A filter nothing on the
           screen names is the defect the drop-exits exist to prevent, and
           collapsing the browse would hide this one — so the state and the way
-          out of it both live on the always-visible row. `.qsets-browse-clear`
-          is the same link affordance the "Show all N" exit uses below.
+          out of it both live on the always-visible row, one button per tag so
+          each lets go of only itself. `.qsets-browse-clear` is the same link
+          affordance the "Show all N" exit uses below.
         */}
-        {tag ? (
+        {chosen.length ? (
           <>
             {' · tagged '}
-            <button
-              type="button"
-              className="qsets-browse-clear"
-              aria-label={`Clear the tag ${tag}`}
-              onClick={() => onPickTag && onPickTag('')}
-            >
-              {tag}
-            </button>
+            {chosen.map((word, i) => (
+              <React.Fragment key={word}>
+                {i > 0 ? ' or ' : ''}
+                <button
+                  type="button"
+                  className="qsets-browse-clear"
+                  aria-label={`Clear the tag ${word}`}
+                  onClick={() => toggleTag(word)}
+                >
+                  {word}
+                </button>
+              </React.Fragment>
+            ))}
           </>
         ) : null}
       </span>
@@ -135,7 +153,7 @@ export default function SetShelfBrowse({
         <div className="qsets-browse-body">
           <p className="qsets-browse-lede">
             Every count is out of all {plural(sets.length, 'set')} here, whatever the filters
-            above are set to.
+            above are set to. Press several tags to see the sets carrying any of them.
           </p>
 
           <h4 className="qsets-browse-h" id={`${headId}-topics`}>Topics</h4>
@@ -191,8 +209,8 @@ export default function SetShelfBrowse({
                   entry.tag,
                   entry.tag,
                   entry.count,
-                  tag === entry.tag,
-                  () => onPickTag && onPickTag(tag === entry.tag ? '' : entry.tag)
+                  chosen.includes(entry.tag),
+                  () => toggleTag(entry.tag)
                 ))}
             </div>
           )}
