@@ -1879,6 +1879,53 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const capped = (await hostCall('POST', 'ready', many)).body.ready;
     assert.deepStrictEqual([capped.kind, capped.count], ['', S.READY_LIMITS.questions]);
   });
+  // THE OPENING BY KIND (question-sets plan step 5).
+  await check('opening by kind: a game asks its own words and probes after What are we making?; other kinds keep the general ones', async () => {
+    seed();
+    const steps = async () => (await hostCall('GET', 'state')).body.opening.steps;
+    const general = await steps();
+    assert.strictEqual(general.find((x) => x.key === 'forWhom').question, 'Who is it for? Name a person and the moment they need it.', JSON.stringify(general[1]));
+    assert.deepStrictEqual(general.find((x) => x.key === 'forWhom').probes, ['Who else is it for?', 'Who is it not for?']);
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    const game = await steps();
+    assert.strictEqual(game.find((x) => x.key === 'forWhom').question, 'Who is playing, and where are they when they play?', JSON.stringify(game[1]));
+    assert.deepStrictEqual(game.find((x) => x.key === 'forWhom').probes, ['What should a player feel in the first minute?', 'Why would they play a second time?']);
+    assert.strictEqual(game.find((x) => x.key === 'firstBuild').question, 'What does the player do in the first ten seconds?');
+    assert.strictEqual(game.find((x) => x.key === 'never').question, 'What must it never do?', 'a step with no game words keeps the general ones');
+    assert.strictEqual((await agentWith('GET', 'state', {})).body.opening.steps.find((x) => x.key === 'forWhom').question, 'Who is playing, and where are they when they play?', 'Claude reads the same');
+    // Claude's call rewrote the state row: change the kind on the row as it is now.
+    const now = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    now.Brief = { lines: { kind: 'A website or page' } };
+    assert.strictEqual((await steps()).find((x) => x.key === 'forWhom').question, 'Who is it for? Name a person and the moment they need it.');
+  });
+  await check('opening probes from the host\'s sets: an Ideas question in "Opening: <step>" probes that step, by label or key, after the kind\'s own', async () => {
+    seed();
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    await hostCall('POST', 'ready', { kind: 'game', sets: [{ name: 'Ours', questions: [
+      { kind: 'suggest', prompt: 'What is the twist?', category: 'Opening: For' },
+      { kind: 'suggest', prompt: 'What is the smallest level?', category: 'opening - firstBuild' },
+      { kind: 'rating', prompt: 'Not a probe: a rating', category: 'Opening: For' },
+      { kind: 'suggest', prompt: 'Not a probe: another section', category: 'Start' },
+    ] }] });
+    const steps = (await hostCall('GET', 'state')).body.opening.steps;
+    assert.deepStrictEqual(steps.find((x) => x.key === 'forWhom').probes, ['What should a player feel in the first minute?', 'Why would they play a second time?', 'What is the twist?']);
+    assert.deepStrictEqual(steps.find((x) => x.key === 'firstBuild').probes, ['What is the smallest level?']);
+  });
+  await check('the host answering a step by hand sends Claude the kind\'s own question with the answer', async () => {
+    seed();
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    st.Phase = 'opening';
+    const r = await hostCall('POST', 'opening/answer', { step: 'forWhom', text: 'Kids on a bus' });
+    assert.ok(r.status < 300, JSON.stringify(r.body));
+    const dir = (await agentWith('GET', 'inbox', {})).body.inbox.map((x) => x.text).join(' | ');
+    assert.ok(/Who is playing, and where are they when they play: Kids on a bus/.test(dir), dir);
+  });
   await check('Claude\'s own view and the phones never carry the plugin or its version', async () => {
     seed();
     await agentWith('GET', 'state', { 'x-engage-plugin': '1.14.0' });

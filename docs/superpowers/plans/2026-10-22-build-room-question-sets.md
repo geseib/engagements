@@ -36,9 +36,9 @@ And: *"yes, add it to the plan and build 1–4 first."*
    most 3 sets and 40 questions). Claude's `room_status` lists them by section: READY
    QUESTIONS for a game. Claude prefers them when it asks the room, adapting the words to
    what it has built. Its asks still go to the host first.
-5. **Kind-specific opening questions** (later). A set's Opening category adds or replaces
-   probes after a step once its kind is chosen ("What does the player do in the first ten
-   seconds?"). Server change.
+5. **Kind-specific opening questions** (built 23 Oct: `OPENING_BY_KIND` and `openingStepsFor` in build-store.js; probes from a set's "Opening: <step>" Ideas questions via the ready questions; Claude's room_status lists each step's words and probes, plugin 1.26.1). The kind's own words and probes
+   replace the general ones for steps 2-7 ("What does the player do in the first ten
+   seconds?"); a set's "Opening: <step>" Ideas questions add probes after the kind's own.
 6. **Starter sets per kind** (built 23 Oct: `sets/build-room-<kind>.csv` and `-pulse.csv` for training, game, document, dashboard; `scripts/install-build-room-kind-sets.sh`; notes in `docs/design/build-room-host-redesign/starter-sets-by-kind.md`). Written by hand
    in the first starter set's style rather than by the set generator, five sections each, for
    the owner to edit.

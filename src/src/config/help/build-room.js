@@ -219,6 +219,21 @@ const running = {
       ],
     },
     {
+      id: 'opening-by-kind',
+      title: 'The opening follows what you are making',
+      icon: 'ListNumbers',
+      blocks: [
+        { t: 'p', text: 'Once the room says what it is making, a game, a training site, a document or a dashboard asks the next steps in its own words. A game asks "Who is playing, and where are they when they play?" instead of who it is for.' },
+        {
+          t: 'list',
+          items: [
+            'A done step offers follow-up questions to ask the room next. They follow what you are making too.',
+            'Your own sets can add follow-ups: an Ideas question in a category named "Opening: For" (or any step\'s name) is offered after that step. Claude sees them as well.',
+          ],
+        },
+      ],
+    },
+    {
       id: 'asking-the-room',
       title: 'Asking the room',
       icon: 'Question',

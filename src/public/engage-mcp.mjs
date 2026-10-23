@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.26.0';
+const VERSION = '1.26.1';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -613,6 +613,16 @@ function renderState(st) {
     const steps = st.opening.steps || [];
     lines.push('', 'PHASE: OPENING. The room is framing the build with the host. Do not write product code yet: prepare (the project folder and git), read the brief as it fills, and propose a probing question when an answer is thin (ask_room_for_ideas with forStep). The host presses Start building; you then get the whole brief as a direction.',
       'Steps: ' + steps.map((x) => `${x.key} (${x.status})`).join(', '));
+    // 1.26.1 (question-sets plan step 5): each step's words for this kind of build, and its probes
+    // (the kind's own, then the host's sets'). Propose a probe from here when an answer is thin.
+    const probing = steps.filter((x) => x.key !== 'kind' && x.status !== 'skipped' && x.question);
+    if (probing.length) {
+      lines.push('Questions and probes for this build (forStep = the key):');
+      for (const x of probing) {
+        const probes = Array.isArray(x.probes) && x.probes.length ? ` Probes: ${x.probes.map((p) => fenceT(p, 120)).join(' | ')}` : '';
+        lines.push(`  ${x.key}: ${fenceT(x.question, 160)}${probes}`);
+      }
+    }
     if (st.opening.readyForDraft && !st.opening.drafted) {
       lines.push('The room has said who it is for, the problem and what good looks like: draft the one-page brief now with draft_brief (a headline and a short summary, in the room\'s words).');
     }

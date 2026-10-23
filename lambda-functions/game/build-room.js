@@ -1258,7 +1258,8 @@ async function openingAction(ctx, action, body) {
     await logEntry(ctx, { kind: 'milestone', text: 'Back to the opening: the room is framing the build further.', by: 'system' });
   } else {
     if (!S.OPENING_KEYS.includes(step)) return fail(400, `step must be one of ${S.OPENING_KEYS.join(', ')}`);
-    const def = S.OPENING_STEPS.find((x) => x.key === step);
+    // The kind's own words for this step, once What are we making? is answered (question-sets plan step 5).
+    const def = S.openingStepsFor(room.state).find((x) => x.key === step);
     if (action === 'answer') {
       const text = S.cleanText(b.text, S.LIMITS.listItem);
       if (!text) return fail(400, 'Write the answer');
