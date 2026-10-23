@@ -876,13 +876,29 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(r.status, 200);
     assert.strictEqual(r.body.idea.status, 'acknowledged');
     const h = await hostCall('GET', 'state');
-    assert.strictEqual(h.body.log.length, logsBefore, 'an acknowledged comment is not a record');
+    // IDEAS FLOW A (owner, 23 Oct: closed ideas were lost): one host-only line says whose idea and its fate.
+    assert.strictEqual(h.body.log.length, logsBefore + 1);
+    const line = h.body.log.find((l) => l.kind === 'note' && l.text.includes('new buttons'));
+    assert.strictEqual(line.text, 'Priya\'s idea \u201cI like the look of the new buttons\u201d: acknowledged.');
+    assert.ok(!JSON.stringify((await agentCall('GET', 'state')).body.log).includes('new buttons'), 'Claude sees the fate line');
+    assert.ok(!JSON.stringify((await playCall('GET', 'state', priya)).body.log).includes('new buttons'), 'a phone sees the fate line');
     const inbox = await agentCall('GET', 'inbox');
     assert.strictEqual(inbox.status, 200);
     assert.ok(Array.isArray(inbox.body.inbox));
     assert.ok(!JSON.stringify(inbox.body).includes('new buttons'), 'Claude was told about it');
     const p = await playCall('GET', 'state', priya);
     assert.deepStrictEqual(p.body.myIdeas.map((i) => [i.text, i.status, i.walled]), [['I like the look of the new buttons', 'acknowledged', false]]);
+  });
+  await check('Every fate of an idea is a host-only line: dismissed, saved for later, on the wall, back in the queue', async () => {
+    seed();
+    await sendIdea(marcus, 'Add a dark mode');
+    const idea = await ideaOf('Add a dark mode');
+    for (const action of ['dismiss', 'restore', 'later', 'wall']) {
+      assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action })).status, 200, action);
+    }
+    const fates = (await hostCall('GET', 'state')).body.log.filter((l) => l.kind === 'note' && l.text.includes('dark mode')).map((l) => l.text.split(': ').pop());
+    for (const f of ['dismissed.', 'back in the queue.', 'saved for later.', 'shown on the wall.']) assert.ok(fates.includes(f), `${f} in ${fates}`);
+    assert.ok(!JSON.stringify((await agentCall('GET', 'state')).body.log).includes('dark mode'));
   });
   await check('Show on the wall acknowledges it and puts it, without a name, on the host\'s wall for a short while', async () => {
     seed();
