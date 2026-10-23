@@ -103,8 +103,9 @@ const LIST_CONFIG = {
       THE AUTHOR'S OWN WORDS, and an axis rather than a phrase pushed into the
       search box — which is what the browse's tag pills used to do.
 
-      The pill carries a COUNT, and a count has to be the number of rows the
-      click produces. The search box cannot give it that: it OR-matches a
+      The pill carries a COUNT: the sets carrying that tag (once another tag is
+      in force, a click ADDS that tag's sets, so the list grows by that count
+      less the overlap). The search box cannot give it even that: it OR-matches a
       substring across the name, the description, the custom instruction and
       the tags, so `empire` also returned "The British Empire" (which carries
       no such tag) and `ancient` also returned every `ancient-egypt` set.

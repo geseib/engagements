@@ -9,6 +9,40 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (late night): searching Quick start and Your question sets, several tags and a date filter in the console, and three Build Room ideas features the last entries missed
+
+**Test:** merge of dev `DEVSHA`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Quick start has a search box** (owner, 23 Oct: "add search to Quick start"). It finds a word in a set's name, description or tags; each format's carousel shows only its matches ("2 of 6"), starts again at its first page, and a format with none drops out. Nothing matching says so, with **Clear the search**; Esc clears the box before it closes the sheet.
+- **Your question sets has a search box** over both lists. Each list says how many of its sets match ("1 of 3"); nothing matching says what was searched, with **Clear the search**; Esc empties the box without closing the dialog. A set you are renaming or editing never disappears under a search.
+- **The console's Question Sets list takes several tags at once and filters by date.** In *Browse topics and tags*, clicking more tags shows the sets carrying any of them; clicking a tag again lets it go. A new **Updated** filter: this week, this month, or older than 3 months. Both join the "nothing matches" ways out and *Clear all*. The same rules as the set chooser in New engagement.
+- **Build Room, from the ideas flow** (on test since this afternoon, missing from the notes):
+  - **Reply to Joe:** an idea's card has *Reply to <name>*, a private conversation only the host and that person see (never the room, the big screen or Claude). Their phone says *The host replied*; they answer from Ideas; the card says *<name> answered*. *Got it, thanks* in one press.
+  - **Your vote (optional):** under an open Choose, Rate or Ideas vote, the host can vote as one person, change it or take it back. The room's screens say only "includes the host".
+  - **What happened to your idea:** the sender's phone says how it went, in counts and never names: "The room voted yes, 9 to 4. The host sent it to Claude." Once decided, Now shows it for 15 minutes, until *Got it*.
+
+### Fixed
+
+- Quick start's "nothing matches" line is read out by a screen reader without the button beside it.
+- `scripts/apply-repo-prompts.js` (another session): applies the repo's prompt versions on a tier in one go, for the prompt updates the previous entry asks an admin to apply.
+
+### What to look at
+
+1. **Quick start** (start screen › Quick start): type a word from one set's name; only its format's carousel keeps it, with "1 of N". Type nonsense: the sheet says nothing matches; **Clear the search** brings everything back. Press Esc with text in the box: it clears; Esc again closes the sheet.
+2. **Your question sets** (start screen › Question sets): search a word that is in one of your sets and one other set; both lists narrow with "N of M". Start a rename, then search something it does not match: the set being renamed stays. Esc clears the search and the dialog stays open.
+3. **Console › Question Sets › Browse topics and tags:** click two tags; the list shows sets with either, each tag named with its own ×. Set **Updated** to *This week*; then filter to nothing and use a way out from the "nothing matches" list.
+4. **Build Room, Reply to Joe:** as a player, send an idea; as host, *Reply to <name>* on its card; the phone shows *The host replied*; answer; the host card says *<name> answered*.
+5. **Build Room, Your vote:** open a Choose ask, vote as host under *Your vote (optional)*; the Stage's count says "includes the host".
+6. **Build Room, what happened to your idea:** put a player's idea to the room as a yes/no (Consider › Queue for the room), close it, decide; that player's phone says the result and what the host did.
+
+### Known gaps
+
+- Quick start and Your question sets search only; their owner, tag and date filters are the set chooser's and the console's.
+- The console has no "used by me lately" (it loads no sessions).
+- A set's owner label in the console still has two tones, as before.
+
 ## 23 Oct 2026 (night): finding a question set when you create a session, the room sees what Claude was told, live typing on the room's window, Claude's mockups where you are looking, and the wheel fix
 
 **Test:** merge of dev `2d68fe70`. Everything below this entry is already on test; this push adds only what is here.

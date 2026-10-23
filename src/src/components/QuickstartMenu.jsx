@@ -371,14 +371,11 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
               />
             </label>
             {/* The live region stays mounted: one that appears already holding
-                its sentence is often never read out. */}
-            <div role="status">
-              {noMatch && (
-                <div className="quickstart-nomatch">
-                  <p>No quick start set matches “{query.trim()}”.</p>
-                  <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>
-                </div>
-              )}
+                its sentence is often never read out. Only the sentence is in
+                it; the button beside it is not read out as part of the news. */}
+            <div className={noMatch ? 'quickstart-nomatch' : undefined}>
+              <p role="status" className="quickstart-status">{noMatch ? `No quick start set matches “${query.trim()}”.` : ''}</p>
+              {noMatch && <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>}
             </div>
             {Object.entries(shownSets).map(([type, sets]) => {
               if (sets.length === 0) return null;
