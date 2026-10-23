@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (night): finding a question set when you create a session, the room sees what Claude was told, live typing on the room's window, Claude's mockups where you are looking, and the wheel fix
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `2d68fe70`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
