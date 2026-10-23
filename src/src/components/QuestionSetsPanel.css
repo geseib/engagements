@@ -259,6 +259,17 @@
 }
 .qsets-tbl tbody tr:hover td { background: var(--qsets-row-hover); }
 
+/* THE IN-ROW TOPIC PICKER (QuestionSetsPanel.jsx `onFileTopic`). Switching on
+   an unfiled set asks for its topic here, under the row being switched on —
+   a choice this small stays inline (container rule) rather than opening a
+   dialog over the list it is about. It wraps, unlike a data row: three
+   controls and a sentence do not fit one 36px line at laptop width. */
+.qsets-tbl tr.qsets-filing td { background: var(--qsets-tint-warn); height: auto; padding: 8px 10px; }
+.qsets-filing-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.qsets-filing-label { font-size: var(--qsets-t-label); color: var(--text); }
+.qsets-filing-note { font-size: var(--qsets-t-label); color: var(--muted); }
+.qsets-filing-err { margin: 6px 0 0; font-size: var(--qsets-t-label); color: var(--danger-text); }
+
 /* 10% did not hold the console's own pair. "Edit" and "Delete" at
    `.qsets-btn--sm`'s 9px padding need more than a tenth of the table, so the
    row overflowed at every width and the alignment fault above turned that

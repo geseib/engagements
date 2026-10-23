@@ -58,6 +58,7 @@ const {
   callerUserId, findSetForCaller, requireSetManager, setScopeOf, setOrgOf,
 } = require('./shared/question-set-access');
 const drafts = require('./shared/generation-drafts');
+const { withTopicFields, topicPromptBlock, readModelTopic } = require('./shared/draft-topic');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
@@ -335,6 +336,8 @@ async function runWorker(event, context) {
   */
   let promptSource = null;
   let generationError = null;
+  // The set's topic, as the model proposed it on the first pass, or null.
+  let modelTopic = null;
 
   // WHO ASKED, read from the JOB ROW and not from this dispatch payload. This
   // invocation is an `InvocationType: 'Event'` one and carries no authorizer
@@ -423,7 +426,11 @@ async function runWorker(event, context) {
     }
 
     const perCall = itemsPerCall(engagementType);
-    const tool = buildItemsTool(engagementType, roundKind);
+    // A drafted run also asks for the set's TOPIC in this same call
+    // (shared/draft-topic.js) — first pass only, as generation-handler.js does.
+    const asksTopic = Boolean(draftRun && draftRun.asksTopic);
+    const tool = asksTopic ? withTopicFields(buildItemsTool(engagementType, roundKind)) : buildItemsTool(engagementType, roundKind);
+    let isFirstPass = true;
 
     await updateJobProgress(dynamodb, tableName, jobId, {
       completed: 0,
@@ -464,11 +471,13 @@ async function runWorker(event, context) {
         roundKindBrief,
         batchGuidance,
       });
+      const askingTopicNow = asksTopic && isFirstPass;
+      const withTopic = (p) => (askingTopicNow ? `${p}\n${topicPromptBlock()}` : p);
 
       let result;
       try {
         result = await invokeStructured(bedrockClient, InvokeModelCommand, {
-          prompt: chunkPrompt,
+          prompt: withTopic(chunkPrompt),
           tool,
           maxTokens: maxTokensFor(engagementType, chunkSize),
         });
@@ -479,12 +488,12 @@ async function runWorker(event, context) {
           warnings.push(`A pass of ${chunkSize} exceeded the output budget; continuing in smaller passes.`);
           const halved = Math.max(1, Math.floor(chunkSize / 2));
           result = await invokeStructured(bedrockClient, InvokeModelCommand, {
-            prompt: buildPrompt({
+            prompt: withTopic(buildPrompt({
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: [...seedTitles, ...produced.map((s) => s.title)],
               roundKind, roundKindBrief, batchGuidance,
-            }),
+            })),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),
           });
@@ -494,6 +503,8 @@ async function runWorker(event, context) {
       }
 
       if (draftRun) draftRun.addUsage(result && result.__usage);
+      if (askingTopicNow) modelTopic = readModelTopic(result);
+      isFirstPass = false;
       const batch = Array.isArray(result?.items) ? result.items : [];
       if (batch.length === 0) {
         warnings.push('A generation pass returned no items; stopping early.');
@@ -549,7 +560,7 @@ async function runWorker(event, context) {
   if (draftRun) {
     try {
       await draftRun.finish({
-        produced, warnings, error: generationError, promptSource, stoppedByRequest,
+        produced, warnings, error: generationError, promptSource, stoppedByRequest, modelTopic,
       });
     } catch (error) {
       console.error(`❌ Job ${jobId} could not finish its draft:`, error);

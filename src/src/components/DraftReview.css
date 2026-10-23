@@ -157,6 +157,37 @@
   align-items: end;
 }
 .drv-newset .drv-check { grid-column: 1 / -1; }
+/* THE SUGGESTED TOPIC AND TAGS (admin/shared/draft-topic.js): the label says
+   "(suggested)" while the run's pick is the one chosen, and the hint under it
+   says it can be changed. Tags are chips with a remove button and one input. */
+.drv-suggested { color: var(--muted); font-weight: 400; }
+.drv-newset .drv-hint { grid-column: 1 / -1; }
+.drv-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.drv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 4px 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--drv-t-label);
+}
+.drv-chipx {
+  min-width: 24px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.drv-chipx:hover { color: var(--text); background: var(--row-hover); }
+.drv-chipx:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drv-tags .drv-tagin { flex: 1 1 120px; width: auto; min-width: 120px; }
 .drv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 .drv-btn {
