@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (evening): review #46 and #47 fixes, before prod
 
-**Test:** merge of dev `DEVSHA` (and the commit naming it). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
+**Test:** merge of dev `788546cf0` (and the commit naming it). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
 
 ### Fixed
 
