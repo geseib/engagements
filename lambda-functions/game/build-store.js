@@ -1008,6 +1008,9 @@ function askView(ask, room, audience, me) {
   if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
   if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
   if (isHost && ask.FromQuestion) out.fromQuestion = ask.FromQuestion;
+  // Mockups the host asked Claude for (ideas flow E): the request, and the idea it was about.
+  if (isHost && ask.FromRequest) out.fromRequest = ask.FromRequest;
+  if (isHost && ask.AboutIdea) out.aboutIdea = ask.AboutIdea;
   // Queued for the room from one thing the room gave (Consider): its item key.
   if (isHost && ask.FromItem) out.fromItem = ask.FromItem;
   // An opening step (and whether it is a probe): phones see the step too, for "step 3 of 9".
@@ -1301,7 +1304,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.26.1';
+const LATEST_PLUGIN = '1.27.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1655,7 +1658,13 @@ const POINT_STATUSES = Object.freeze(['new', 'shown', 'voting', 'queued', 'sent'
 /** A point counts against the room's limit while it is waiting for the host or on the Stage. */
 const OPEN_POINT_STATUSES = Object.freeze(['new', 'shown', 'queued']);
 // 'questions' (question-sets plan step 7): the host asks their own Claude for a question set.
-const REQUEST_KINDS = Object.freeze(['research', 'ideas', 'questions']);
+// 'mockups' and 'walkthrough' (ideas flow E; docs/design/build-room-ideas I7): the host asks
+// its Claude to draw 2-3 ways to do an idea or a feature, or to walk the room through the demo.
+const REQUEST_KINDS = Object.freeze(['research', 'ideas', 'questions', 'mockups', 'walkthrough']);
+/** How many mockups one request may ask for (I7: "2–3 pictures come back to you first"). */
+const MOCKUP_COUNTS = Object.freeze([2, 3]);
+/** The plugin that knows mockups and walkthrough requests (requestId on ask_room_to_choose and post_update). */
+const MOCKUPS_PLUGIN = '1.27.0';
 /** What a crew builder may ask its own Claude for: not a question set, which is the host's. */
 const BUILDER_REQUEST_KINDS = Object.freeze(['research', 'ideas']);
 const REQUEST_STATUSES = Object.freeze(['waiting', 'working', 'done', 'failed']);
@@ -1740,10 +1749,15 @@ function normalizePointRequest(body, { builder = false } = {}) {
   const kind = String(b.kind || '').trim().toLowerCase();
   const kinds = builder ? BUILDER_REQUEST_KINDS : REQUEST_KINDS;
   if (!kinds.includes(kind)) return { error: `kind must be ${kinds.join(' or ')}` };
-  const subject = cleanText(b.subject, POINT_LIMITS.subject + 1);
-  if (!subject) return { error: 'Say what to look into' };
+  const subject = cleanText(b.subject, POINT_LIMITS.subject + 1) || (kind === 'walkthrough' ? 'the demo as it stands' : '');
+  if (!subject) return { error: kind === 'mockups' ? 'Say what to mock up' : 'Say what to look into' };
   if (subject.length > POINT_LIMITS.subject) return { error: `The subject is ${POINT_LIMITS.subject} characters at most` };
-  return { value: { kind, subject } };
+  if (kind !== 'mockups') return { value: { kind, subject } };
+  const want = b.count === undefined || b.count === null || b.count === '' ? 3 : Number(b.count);
+  if (!MOCKUP_COUNTS.includes(want)) return { error: 'Ask for 2 or 3 mockups' };
+  const ideaId = b.ideaId === undefined || b.ideaId === null ? '' : String(b.ideaId).trim();
+  if (ideaId && !/^[A-Za-z0-9_-]{1,60}$/.test(ideaId)) return { error: 'That idea is not one of this room\'s' };
+  return { value: { kind, subject, want, ...(ideaId ? { ideaId } : {}) } };
 }
 
 const idOf = (sk, prefix) => String(sk).slice(prefix.length).replace('#', '-');
@@ -1786,6 +1800,9 @@ function requestView(r) {
     for: r.ForBuilder || 'host',
     status: r.Status || 'waiting',
     count: Number(r.Count) || 0,
+    ...(r.Want ? { want: Number(r.Want) } : {}),
+    ...(r.IdeaId ? { ideaId: r.IdeaId } : {}),
+    ...(r.AskId ? { askId: r.AskId } : {}),
     createdAt: r.CreatedAt || null,
     updatedAt: r.UpdatedAt || r.CreatedAt || null,
   };
@@ -2590,7 +2607,7 @@ module.exports = {
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
-  POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
+  MOCKUP_COUNTS, MOCKUPS_PLUGIN, POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,

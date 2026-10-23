@@ -1392,6 +1392,69 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     HA = HOST;
   });
 
+  console.log('\nE: Ask Claude for mockups, or a walkthrough (ideas flow E)');
+  await check('E: a mockups request reaches Claude with the count; its Choose ask comes back to the host first, waiting on pictures', async () => {
+    seed();
+    await phone('Priya')('POST', 'idea', { text: 'add documentation' });
+    const idea = (await host('GET', 'state')).body.ideas[0];
+    assert.strictEqual((await host('POST', 'points/requests', { kind: 'mockups', subject: 'docs', count: 5 })).status, 400);
+    assert.strictEqual((await host('POST', 'points/requests', { kind: 'mockups', subject: 'docs', ideaId: 'nope' })).status, 404);
+    const r = await host('POST', 'points/requests', { kind: 'mockups', subject: 'add documentation', count: 2, ideaId: idea.ideaId });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.deepStrictEqual([r.body.request.want, r.body.request.ideaId], [2, idea.ideaId]);
+    const [item] = (await claude('GET', 'inbox')).body.inbox;
+    assert.deepStrictEqual([item.kind, item.count, item.subject], ['mockups', 2, 'add documentation']);
+    assert.ok(/Draw 2 quick mockups/.test(item.text) && item.text.includes(`requestId "${r.body.request.id}"`), item.text);
+    assert.ok(S.normalizePointRequest({ kind: 'mockups', subject: 'x' }, { builder: true }).error, 'a builder asked for mockups');
+    // Claude's ask, with the request: proposed even when the room lets Claude's asks straight through.
+    assert.strictEqual((await claude('POST', 'asks', { kind: 'rating', prompt: 'x', requestId: r.body.request.id })).status, 400);
+    assert.strictEqual((await claude('POST', 'asks', { kind: 'choice', prompt: 'x', options: ['a', 'b'], requestId: 'nope' })).status, 404);
+    const a = await claude('POST', 'asks', { kind: 'choice', prompt: 'Which documentation?', options: ['FAQ under sign-up', 'First-shift guide'], requestId: r.body.request.id });
+    assert.strictEqual(a.status, 201, JSON.stringify(a.body));
+    const h = (await host('GET', 'state')).body;
+    const ask = h.asks.find((x) => x.askId === a.body.ask.askId);
+    assert.deepStrictEqual([ask.status, ask.fromRequest, ask.aboutIdea, ask.mockups.total, ask.mockups.have], ['proposed', r.body.request.id, idea.ideaId, 2, 0]);
+    assert.deepStrictEqual([h.points.requests.find((x) => x.id === r.body.request.id).status, h.points.requests.find((x) => x.id === r.body.request.id).askId], ['done', ask.askId]);
+    assert.ok(!(await phone('Priya')('GET', 'state')).body.current, 'the room sees the mockups before the host');
+    assert.ok(h.log.some((l) => /Claude is drawing 2 mockups of \u201cadd documentation\u201d/.test(l.text)));
+  });
+  await check('E: Ask for new mockups sets the set aside and asks again, not like the last one; only on Claude\'s unseen set', async () => {
+    seed();
+    const r = await host('POST', 'points/requests', { kind: 'mockups', subject: 'a leaderboard' });
+    await claude('GET', 'inbox');
+    const a = (await claude('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['Arcade', 'Table', 'Podium'], requestId: r.body.request.id })).body.ask;
+    const again = await host('POST', `asks/${a.askId}`, { action: 'remock', change: 'more playful' });
+    assert.strictEqual(again.status, 200, JSON.stringify(again.body));
+    assert.deepStrictEqual([again.body.request.kind, again.body.request.subject, again.body.request.want], ['mockups', 'a leaderboard (more playful)', 3]);
+    assert.strictEqual((await host('GET', 'state')).body.asks.find((x) => x.askId === a.askId).status, 'discarded');
+    const [item] = (await claude('GET', 'inbox')).body.inbox;
+    assert.ok(/not like the last set: Arcade; Table; Podium/.test(item.text), item.text);
+    const plain = (await host('POST', 'asks', { kind: 'choice', prompt: 'Mine', options: ['a', 'b'], draft: true })).body.ask;
+    assert.strictEqual((await host('POST', `asks/${plain.askId}`, { action: 'remock' })).status, 409);
+    assert.strictEqual((await claude('POST', `asks/${a.askId}`, { action: 'remock' })).status, 403);
+  });
+  await check('E: a walkthrough request goes to Claude and is done when Claude\'s post names it', async () => {
+    seed();
+    const r = await host('POST', 'points/requests', { kind: 'walkthrough' });
+    assert.strictEqual(r.status, 201, JSON.stringify(r.body));
+    assert.strictEqual(r.body.request.subject, 'the demo as it stands');
+    const [item] = (await claude('GET', 'inbox')).body.inbox;
+    assert.ok(/Walk the room through the demo/.test(item.text), item.text);
+    await claude('POST', 'log', { kind: 'milestone', text: 'That is the walkthrough', requestId: r.body.request.id });
+    assert.strictEqual((await host('GET', 'state')).body.points.requests.find((x) => x.id === r.body.request.id).status, 'done');
+  });
+  await check('E: in a team room the request\'s words are sealed, the last set\'s titles too', async () => {
+    seed({ orgId: ORG, createdBy: 'user-1' });
+    HA = TEAM_HOST;
+    const r = await host('POST', 'points/requests', { kind: 'mockups', subject: 'SECRET-SUBJECT-77' });
+    await claude('GET', 'inbox');
+    const a = (await claude('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['SECRET-TITLE-77', 'Other'], requestId: r.body.request.id })).body.ask;
+    await host('POST', `asks/${a.askId}`, { action: 'remock' });
+    const raw = JSON.stringify(rowsOf('BUILD#PREQ#'));
+    assert.ok(!raw.includes('SECRET-SUBJECT-77') && !raw.includes('SECRET-TITLE-77'), 'plaintext at rest');
+    HA = HOST;
+  });
+
   console.log(`\n${pass} passed, ${failed} failed`);
   suiteFinished();
   process.exit(failed ? 1 : 0);
