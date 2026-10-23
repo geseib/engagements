@@ -9,6 +9,33 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (evening): review #46 and #47 fixes, before prod
+
+**Test:** merge of dev `DEVSHA` (and the commit naming it). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
+
+### Fixed
+
+- **Workie's check caught too little** (review #46, on a build that had the check). It now also catches:
+  - **a number with the wrong unit**: "two branches" in the answers no longer lets "two Friday runs" or "a two-week pilot" through; "4pm Friday" still passes;
+  - **an owner nobody named**: "Whoever runs the weekly release" when no answer mentions a release, and any owner copied from the prompt's own examples; "route lead", "driver", "growth sponsors" pass;
+  - **claims about what the organisation already does**: "the current habit is to…" when the answers only proposed it;
+  - **next steps handed out as tasks**: "Route lead: count…" is rewritten to start **Suggested**, even under the old prompts.
+  Every prompt now also says never to describe current practice, or name an owner, the answers did not give. The repo's prompts lose their example owners, and the survey and poll defaults ask for **Suggested** steps too.
+- **Going back to a round showed no lesson** (review #47). The end screen's "Something to add?" lists each round with its title ("Lesson 2 · Form Follows Function"; "Round 3" when it has none), and an opened round shows its lesson and "Your turn" above its responses. A comment started in one round stays with that round when you switch.
+
+### What to look at
+
+1. **Apply the prompt updates on test first** (they have never been applied there; review #46 ran on v1): Admin › Prompts shows "*N* prompts have a newer version in the repo". **Review** *Workie - The Transfer Reader* and **Save as version 2**; do the same for the others marked.
+2. **Run review #46's round 1** with the same four answers (Lessons from Different Schools, Threshold): next steps start **Suggested**, with no "two Friday runs", "two-week", "weekly release" owner or "current habit". If a read still has one, the console and the phone show the host note.
+3. **Repeat with the prompt left on v1** (or before applying it, on another set): next steps still come out as suggestions after the check's rewrite.
+4. **As a player, at the end:** open "Something to add?": each round shows its title; open one: its lesson and "Your turn" show above the responses; start a comment, switch rounds, come back: the comment is still there and posts to its own round.
+
+### Known gaps
+
+- The check can still flag a real count stated in other words (for example "two separate policies" when the answers never counted them); the rewrite usually just rewords it.
+- Drafts in "Something to add?" live in the page's memory; a reload loses them.
+- The prompt updates reach prod only when an admin applies them there after the prod deploy.
+
 ## 23 Oct 2026 (later): AI question sets arrive with a topic, and an idea's doors all open
 
 **Test:** merge of dev `0fa2edee2` (and the commit naming it).
