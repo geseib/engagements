@@ -428,6 +428,9 @@ const gameSetup = {
       Answer, Trivia, Wavelength, Poll (no Survey, no Build Room); title
       "Quick <kind>: <set>"; all categories, shuffled; QuickScreens "Where the
       room watches" only when a Call & Answer set is listed; PlanLimitNotice.
+      Search (23 Oct 2026): "Search N quick start sets: name, description or
+      tag" over SET_SEARCH_FIELDS; "N of M" per format; no match → "Clear the
+      search"; Esc clears, then closes.
       The chip: HostQuestionSetsDialog.jsx:673-693, title "Click to offer this
       set on the quickstart menu"; inactive sets stay off the menu (:683).
       Checked on dev 22 Oct 2026.
@@ -439,7 +442,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
+          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). Type in the search box above them to narrow every format to the sets whose name, description or tags match; **Clear the search** brings them all back. One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
         },
         {
           t: 'p',

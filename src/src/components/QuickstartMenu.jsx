@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
@@ -18,6 +18,10 @@ import {
 } from '../utils/unreadableSet';
 
 const API_BASE = window.API_BASE;
+
+// One matcher for the sheet's life: the fields are the set chooser's
+// (config/setFinder.js), so a word that finds a set there finds it here.
+const matchesSearch = makeSearchMatcher(SET_SEARCH_FIELDS);
 
 /**
  * WHERE THE ROOM WATCHES, IN QUICK START (owner, 18 Oct 2026). Quick start
@@ -74,17 +78,27 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
     A SEARCH (owner, 23 Oct 2026: "add search to Quick start"; issue #41). The
     same fields as the set chooser and the console list (config/setFinder.js):
     name, description, custom instruction and tags. Each format's carousel
-    shows only its matches and starts again at its first page.
+    shows only its matches and starts again at its first page — page 3 of a
+    twelve-set list is past the end of a two-match one. A format with no match
+    drops out rather than drawing an empty carousel.
   */
   const [query, setQuery] = useState('');
-  const shownSets = useMemo(() => {
-    const matches = makeSearchMatcher(SET_SEARCH_FIELDS);
-    return Object.fromEntries(Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matches(set, query))]));
-  }, [quickstartSets, query]);
+  const searchRef = useRef(null);
+  const shownSets = useMemo(() => Object.fromEntries(
+    Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matchesSearch(set, query))])
+  ), [quickstartSets, query]);
   const search = (value) => {
     setQuery(value);
     setCurrentPage((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, 0])));
   };
+  // Clear goes back to the box: the button that was pressed unmounts with the
+  // no-match line, and focus left on nothing drops a keyboard user to the top
+  // of the page, outside the sheet.
+  const clearSearch = () => {
+    search('');
+    searchRef.current?.focus();
+  };
+  const noMatch = query.trim() !== '' && Object.values(shownSets).every((list) => list.length === 0);
 
   useEffect(() => {
     fetchQuickstartSets();
@@ -342,22 +356,30 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
           ) : (
             <>
             <label className="quickstart-search">
-              <Icon name="MagnifyingGlass" size={16} color="currentColor" />
+              <Icon name="MagnifyingGlass" size={16} color="currentColor" aria-hidden="true" />
+              {/* Esc with words in the box clears them and stops there, as in
+                  the set chooser; Esc in an empty box falls through to the
+                  sheet's own handler and closes Quick start. */}
               <input
+                ref={searchRef}
                 type="search"
                 value={query}
                 onChange={(e) => search(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); search(''); } }}
-                placeholder={`Search ${totalQuickstartSets} quick start sets`}
-                aria-label={`Search ${totalQuickstartSets} quick start sets`}
+                placeholder={`Search ${totalQuickstartSets} quick start sets: name, description or tag`}
+                aria-label={`Search ${totalQuickstartSets} quick start sets: name, description or tag`}
               />
             </label>
-            {query.trim() && Object.values(shownSets).every((list) => list.length === 0) && (
-              <div className="quickstart-nomatch" role="status">
-                <p>No quick start set matches “{query.trim()}”.</p>
-                <button type="button" className="quickstart-clear" onClick={() => search('')}>Clear the search</button>
-              </div>
-            )}
+            {/* The live region stays mounted: one that appears already holding
+                its sentence is often never read out. */}
+            <div role="status">
+              {noMatch && (
+                <div className="quickstart-nomatch">
+                  <p>No quick start set matches “{query.trim()}”.</p>
+                  <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>
+                </div>
+              )}
+            </div>
             {Object.entries(shownSets).map(([type, sets]) => {
               if (sets.length === 0) return null;
               const all = (quickstartSets[type] || []).length;
