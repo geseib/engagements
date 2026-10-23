@@ -5454,6 +5454,21 @@ body {
 .quickstart-close:hover { color: var(--text); border-color: var(--muted); }
 
 .quickstart-content { padding: 22px 28px 28px; }
+/* Quick start's search (issue #41): roles only, the overlay is dusk. */
+.quickstart-search {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 0 18px; padding: 0 14px;
+  border: 1px solid rgb(var(--slate-rgb) / 0.38); border-radius: 10px; background: var(--surface-2); color: var(--muted);
+}
+.quickstart-search:focus-within { outline: 3px solid var(--action); outline-offset: 2px; }
+/* The box carries the ring (the sheet's focus ring, above); the borderless
+   input inside it would otherwise draw a second one. */
+.quickstart-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; }
+.quickstart-overlay .quickstart-search input:focus-visible { outline: none; }
+.quickstart-search input::placeholder { color: var(--muted); }
+.quickstart-nomatch { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 18px; color: var(--text); }
+.quickstart-nomatch p, .quickstart-status { margin: 0; }
+.quickstart-clear { min-height: 36px; padding: 0 12px; border: 1px solid rgb(var(--slate-rgb) / 0.38); border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.quickstart-clear:hover { border-color: var(--muted); }
 /* Where the room watches, above the sets (QuickstartMenu QuickScreens). */
 .quickstart-screens { margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; font-size: 14px; }
 
