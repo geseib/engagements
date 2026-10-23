@@ -374,6 +374,9 @@ const gameSetup = {
       made by an administrator…", Copy and edit (:828). Footer Close.
       Saving questions makes a new version; sessions keep theirs
       (QuestionSetEditor.jsx:1000). Checked on dev 22 Oct 2026.
+      Search (23 Oct 2026): one box over both lists, headings "Your sets" and
+      "Everyone else's sets" with "N of M"; no match names the words and offers
+      Clear the search; Esc clears before it closes.
     */
     {
       id: 'choosing-question-set',
@@ -383,6 +386,10 @@ const gameSetup = {
         {
           t: 'p',
           text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list; this dialog is where you change them.',
+        },
+        {
+          t: 'p',
+          text: 'The search box above the lists narrows both to sets with your words in the name, description or tags, and each list says how many of its sets match; Esc or **Clear the search** empties it.',
         },
         {
           t: 'list',
