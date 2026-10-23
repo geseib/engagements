@@ -404,7 +404,13 @@ async function createAsk(ctx, role, body) {
   if (norm.error) return fail(400, norm.error);
   const room = await loadRoom(ctx);
   const settings = S.settingsOf(room.state);
-  const status = role === 'agent'
+  // MOCKUPS THE HOST ASKED FOR (ideas flow E, I7): they come back to the host
+  // first, always, and the vote waits for the pictures (AskForMockups).
+  const reqId = role === 'agent' ? String((body && body.requestId) || '') : '';
+  const req = reqId ? (room.preqs || []).find((r) => r.ReqId === reqId && r.Kind === 'mockups' && !r.ForBuilder) : null;
+  if (reqId && !req) return fail(404, 'No such mockups request');
+  if (req && norm.value.kind !== 'choice') return fail(400, 'Mockups go in a Choose ask, one option per mockup');
+  const status = req ? 'proposed' : role === 'agent'
     ? (settings.reviewAgentAsks ? 'proposed' : 'live')
     : (body && body.draft ? 'proposed' : 'live');
   const st = await touchState(ctx, { set: phasePin(room), add: { AskSeq: 1 } });
@@ -426,11 +432,15 @@ async function createAsk(ctx, role, body) {
     ...(v.claudeNote ? { ClaudeNote: v.claudeNote } : {}),
     ...(v.fromQuestion ? { FromQuestion: v.fromQuestion } : {}),
     ...(v.openingStep ? { OpeningStep: v.openingStep, ...(v.probe ? { Probe: true } : {}) } : {}),
+    ...(req ? { FromRequest: req.ReqId, AskForMockups: true, ...(req.IdeaId ? { AboutIdea: req.IdeaId } : {}) } : {}),
     CreatedAt: now,
     ...(status === 'live' ? { OpenedAt: now } : {}),
   };
   await put(ctx, ask);
-  if (status === 'live') await makeCurrent(ctx, room, askId, role);
+  if (req) {
+    await put(ctx, { ...req, Status: 'done', Count: v.options.length, AskId: askId, UpdatedAt: now });
+    await logEntry(ctx, { kind: 'ask', text: `Claude is drawing ${v.options.length} mockups of \u201c${S.cleanText(req.Subject, 120)}\u201d for you to look at first`, by: 'system', askId, hostOnly: true });
+  } else if (status === 'live') await makeCurrent(ctx, room, askId, role);
   else await logEntry(ctx, { kind: 'ask', text: `Claude proposed a question: ${v.prompt}`, by: 'system', askId, hostOnly: true });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
@@ -582,6 +592,32 @@ async function hostVote(ctx, room, ask, b) {
   return reply(200, { ask: S.askView(findAsk(after, ask.AskId), after, 'host') });
 }
 
+/**
+ * ASK FOR NEW MOCKUPS (ideas flow E, I7): the set Claude drew is set aside
+ * (discarded, kept on the timeline) and the same request goes again, with
+ * what to change if the host says. Only on mockups the host asked for, while
+ * the room has not seen them.
+ */
+async function remockAction(ctx, room, ask, b) {
+  if (!ask.FromRequest || ask.Status !== 'proposed') return fail(409, 'New mockups are for a set Claude drew for you that the room has not seen');
+  const old = (room.preqs || []).find((r) => r.ReqId === ask.FromRequest);
+  if (!old) return fail(404, 'The request behind these mockups is gone');
+  const change = S.cleanText(b.change, 120);
+  const now = new Date(nextMs(room.preqs)).toISOString();
+  const was = (ask.Options || []).map((o) => o.title).join('; ');
+  const subject = S.cleanText(`${old.Subject}${change ? ` (${change})` : ''}`, S.POINT_LIMITS.subject);
+  const sk = S.SK.preq(now);
+  const row = await put(ctx, {
+    SK: sk, ReqId: S.requestIdOf(sk), Kind: 'mockups', Subject: subject, Want: old.Want || 3,
+    ...(old.IdeaId ? { IdeaId: old.IdeaId } : {}), ...(was ? { NotLike: S.cleanText(was, 400) } : {}), Status: 'waiting', Count: 0, CreatedAt: now,
+  });
+  await put(ctx, { ...ask, Status: 'discarded', DiscardedAt: now });
+  await logEntry(ctx, { kind: 'ask', text: `You asked Claude for new mockups of \u201c${S.cleanText(old.Subject, 120)}\u201d`, by: 'system', askId: ask.AskId, hostOnly: true });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(200, { request: S.requestView(row) });
+}
+
 async function askAction(ctx, role, askId, body) {
   const b = body || {};
   const room = await loadRoom(ctx);
@@ -592,6 +628,7 @@ async function askAction(ctx, role, askId, body) {
   if (action === 'forward') return role === 'host' ? forwardAction(ctx, room, ask, b) : fail(403, 'Only the host moves points forward');
   if (WHEEL_ACTIONS.includes(action)) return wheelAction(ctx, role, room, ask, action, b);
   if (action === 'my-vote') return role === 'host' ? hostVote(ctx, room, ask, b) : fail(403, 'Only the host has a vote here');
+  if (action === 'remock') return role === 'host' ? remockAction(ctx, room, ask, b) : fail(403, 'Only the host asks for new mockups');
   const now = new Date().toISOString();
   const answered = room.answers.some((a) => a.AskId === askId && !a.ByHost) || room.resps.some((r) => r.AskId === askId && (r.Source || 'player') !== 'host');
 
@@ -952,6 +989,11 @@ async function postLog(ctx, role, body) {
     // Claude's post waits for the host when the room says so (§2c).
     hold: role === 'agent' && await holdsPosts(ctx),
   });
+  // A WALKTHROUGH the host asked for (ideas flow E) is done when Claude's post names it.
+  if (role === 'agent' && b.requestId) {
+    const req = (await loadRoom(ctx)).preqs.find((r) => r.ReqId === String(b.requestId) && r.Kind === 'walkthrough' && !r.ForBuilder);
+    if (req && !['done', 'failed'].includes(req.Status)) await put(ctx, { ...req, Status: 'done', UpdatedAt: new Date().toISOString() });
+  }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -1733,10 +1775,12 @@ async function takeInbox(ctx, role) {
       }));
       const verb = r.Kind === 'research' ? 'Research this for the room, with sources'
         : r.Kind === 'questions' ? QUESTIONS_VERB
-          : 'Give the room ideas for where to go next';
+          : r.Kind === 'mockups' ? MOCKUPS_VERB(r.Want || 3, r.ReqId)
+            : r.Kind === 'walkthrough' ? WALKTHROUGH_VERB(r.ReqId)
+              : 'Give the room ideas for where to go next';
       out.push({
-        id: r.ReqId, kind: r.Kind, requestId: r.ReqId, subject: r.Subject || '',
-        text: `${verb}: ${r.Subject || ''}`, from: 'request', as: 'do-now', askId: null, shareId: null, createdAt: r.CreatedAt,
+        id: r.ReqId, kind: r.Kind, requestId: r.ReqId, subject: r.Subject || '', ...(r.Want ? { count: r.Want } : {}), ...(r.NotLike ? { notLike: r.NotLike } : {}),
+        text: `${verb}: ${r.Subject || ''}${r.NotLike ? ` (not like the last set: ${r.NotLike})` : ''}`, from: 'request', as: 'do-now', askId: null, shareId: null, createdAt: r.CreatedAt,
       });
     } catch (e) {
       if (e && e.name !== 'ConditionalCheckFailedException') throw e;
@@ -2661,12 +2705,15 @@ async function createPointRequest(ctx, forBuilder, body) {
   if (S.activeRequests(room, forBuilder, Date.parse(now)).length >= S.POINT_LIMITS.activeRequests) {
     return fail(409, 'Claude already has plenty to look into; wait for some to finish');
   }
+  if (norm.value.ideaId && !findIdea(room, norm.value.ideaId)) return fail(404, 'No such idea');
   const sk = S.SK.preq(now);
   const row = await put(ctx, {
     SK: sk,
     ReqId: S.requestIdOf(sk),
     Kind: norm.value.kind,
     Subject: norm.value.subject,
+    ...(norm.value.want ? { Want: norm.value.want } : {}),
+    ...(norm.value.ideaId ? { IdeaId: norm.value.ideaId } : {}),
     ...(forBuilder ? { ForBuilder: forBuilder } : {}),
     Status: 'waiting',
     Count: 0,
@@ -2681,6 +2728,14 @@ async function createPointRequest(ctx, forBuilder, body) {
  * build-room skill says what a good set is; Claude writes it as a file in the
  * repo, commits it, and sends it with share_question_set.
  */
+/**
+ * ASK CLAUDE (ideas flow E; docs/design/build-room-ideas I7). What an older
+ * plugin reads as a plain direction; plugin 1.27.0 words these requests
+ * itself (engage-mcp.mjs claudeRequestText) and passes the requestId back.
+ */
+const MOCKUPS_VERB = (n, id) => `Draw ${n} quick mockups for the host, ${n} different ways to do this. Make each a small labelled variant, create ONE Choose ask with ask_room_to_choose (requestId "${id}", one option per variant), then share_image each mockup onto its option. It goes to the host first; do not wait_for_room. About`;
+const WALKTHROUGH_VERB = (id) => `Walk the room through the demo, one screen at a time: for each of 3 to 6 steps, post_update kind "showing" with the screen's link and one plain sentence, and share_image a screenshot of it as progress. Then post_update a milestone with requestId "${id}" to say the walkthrough is done. About`;
+
 const QUESTIONS_VERB = 'Write a question set for the room (the build-room skill, Writing a question set: save it as build-room/questions/<kind>-<name>.json, commit it, then call share_question_set with this requestId and the file). About';
 
 /**

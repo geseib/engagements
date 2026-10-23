@@ -379,6 +379,22 @@ const running = {
       ],
     },
     {
+      id: 'ask-claude',
+      title: 'Ask Claude for mockups or a walkthrough',
+      icon: 'Image',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            '**Mockups…** in Points, or Ask Claude for mockups of this under an idea\'s Ask the room: Claude draws two or three different ways to do it. Each is a quick screen, not the finished thing.',
+            'They come back to you first, in Waiting for you, marked Mockups you asked for; each picture appears as Claude makes it. The room sees nothing until you open them as a vote. **Ask for new mockups** sets them aside and asks again, with what should be different if you say.',
+            '**Walkthrough** asks Claude to step the room through the demo, one screen at a time, three to six steps.',
+            'Both need plugin 1.27.0 or later; with an older one the window says to update it first.',
+          ],
+        },
+      ],
+    },
+    {
       id: 'marks-and-history',
       title: 'Sent to Claude marks and History',
       icon: 'CheckCircle',

@@ -42,7 +42,8 @@ function RequestChips({ requests, connected, ended, busy, run, api }) {
   // A request that finished with nothing says so, until the host dismisses it.
   const [gone, setGone] = useState(() => new Set());
   const active = requests.filter((r) => ['waiting', 'working'].includes(r.status));
-  const empty = requests.filter((r) => r.status === 'done' && r.count === 0 && !gone.has(r.id));
+  // A walkthrough has no count; only a Research or Ideas request can come back empty.
+  const empty = requests.filter((r) => ['research', 'ideas'].includes(r.kind) && r.status === 'done' && r.count === 0 && !gone.has(r.id));
   if (!active.length && !empty.length) return null;
   return (
     <ul className="brm-pchips" aria-label={W.requestsLabel}>
@@ -57,7 +58,9 @@ function RequestChips({ requests, connected, ended, busy, run, api }) {
         const away = r.status === 'waiting' && r.for === 'host' && !connected;
         const text = away
           ? W.requestWaits(r.kind, r.subject)
-          : (r.kind === 'ideas' ? W.findingIdeas(r.subject, who) : W.researching(r.subject, who));
+          : r.kind === 'mockups' ? W.drawingMockups(r.subject, who)
+            : r.kind === 'walkthrough' ? W.walkingThrough(who)
+              : (r.kind === 'ideas' ? W.findingIdeas(r.subject, who) : W.researching(r.subject, who));
         return (
           <li key={r.id} className={`brm-pchip${away ? ' is-away' : ''}`} data-status={r.status}>
             <span className="brm-pchip-t" role="status">{text}</span>
@@ -152,6 +155,9 @@ export default function BuildPoints({
         <div className="brm-row brm-gap brm-ptop">
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.researchTip} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
           <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.ideasTip} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
+          {/* ASK CLAUDE (ideas flow E, I7): pictures to the host first, or a walk through the demo. */}
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.mockupsTip} onClick={() => onRequest('mockups')}><Icon name="Image" size={14} /> {W.mockupsAsk}</button>
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.walkthroughTip} onClick={() => onRequest('walkthrough')}><Icon name="PlayCircle" size={14} /> {W.walkthroughAsk}</button>
           {full && <span className="brm-hint" role="status">{W.pointsFull(POINTS_OPEN_MAX)}</span>}
         </div>
       )}

@@ -76,6 +76,7 @@ const claude = {
             ['wrap-up', 'Writes the wrap-up and tidies the project (see Wrapping up a Build Room).'],
             ['restore', 'Lists the hidden snapshots and brings one back, after asking you.'],
             ['(when you ask for questions)', 'Writes a question set for this kind of build into the project under build-room/questions, commits it, and sends it to your ready questions (see Ask Claude for questions).'],
+            ['(when you ask for mockups or a walkthrough)', 'Draws quick screens and sends them to you first, or steps the room through the demo (see Ask Claude for mockups or a walkthrough).'],
             ['share-repo, review', 'Crew: shares the repository with builders; reviews the next early look.'],
             ['join, early-look', 'For a builder\'s own Claude Code: joins the crew; shares an early look.'],
           ],

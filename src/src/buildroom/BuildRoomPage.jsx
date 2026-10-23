@@ -1041,7 +1041,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const pointTickedNow = pointTicked.filter((id) => pointsList.some((p) => p.id === id && POINT_OPEN.includes(p.status))).length;
   const whatsNextShown = !onCrew && !current && !(room.opening && room.opening.phase === 'opening') && nowFlags(room).whatsNext;
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
-  const sendPointRequest = (kind, subject) => run(() => api.pointRequest(kind, subject));
+  const sendPointRequest = (kind, subject, extra) => run(() => api.pointRequest(kind, subject, extra));
   // Put N to a vote opens the window (T5); its Open voting makes the ask.
   const putPointsToVote = (ids) => { setPointVote(ids); return undefined; };
   const openPointsVote = async (body) => {
@@ -1197,7 +1197,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
         onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
         pointTicked={pointTicked} setPointTicked={setPointTicked} askOpen={Boolean(current)} openPoints={pointsTab}
-        onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+        onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
         withLater={false}
       />
     );
@@ -1207,7 +1207,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         laterTicked={laterTicked} setLaterTicked={setLaterTicked} onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
         onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
         pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
-        onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+        onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
       />
     );
     const waitingTop = (
@@ -1716,7 +1716,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
               onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
               pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
-              onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+              onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
             />
           )}
         </section>
@@ -1818,7 +1818,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
-          kind={dialog.points} initial={defaultSubject(room)} connected={Boolean(room.agent && room.agent.connected)} busy={busy}
+          kind={dialog.points} initial={dialog.subject !== undefined ? dialog.subject : ['mockups', 'walkthrough'].includes(dialog.points) ? '' : defaultSubject(room)}
+          ideaId={dialog.ideaId || ''} plugin={(room.plugin && room.plugin.running) || ''}
+          connected={Boolean(room.agent && room.agent.connected)} busy={busy}
           onSend={sendPointRequest} onClose={() => setDialog(null)}
         />
       )}
@@ -2512,6 +2514,10 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   });
   const discard = () => run(() => api.askAction(ask.askId, { action: 'discard' }));
   const lineUp = (action) => run(() => api.askAction(ask.askId, { action }));
+  // ASK FOR NEW MOCKUPS (ideas flow E, I7): only on a set the host asked Claude to draw.
+  const [remocking, setRemocking] = useState(false);
+  const [change, setChange] = useState('');
+  const remock = () => run(() => api.askAction(ask.askId, { action: 'remock', change: change.trim() }));
   // THE VOTE THAT WAITS FOR MOCKUPS (C3b): hidden until the pictures are in,
   // then Ready; it opens only when the host opens it, or lined up next.
   const mockups = ask.mockups || null;
@@ -2548,7 +2554,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   return (
     <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`} data-alert-ask={ask.askId} tabIndex={-1}>
       <div className="brm-row brm-gap">
-        <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
+        <span className="brm-chip brm-chip--amber">{ask.fromRequest ? W.mockupsForYou : ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
         {mockups && (mockups.ready
           ? <span className="brm-chip brm-chip--live" data-testid="brm-mockups-ready">Mockups ready</span>
           : <span className="brm-chip" data-testid="brm-mockups-wait">Claude is making mockups · {mockups.have} of {mockups.total}</span>)}
@@ -2661,7 +2667,17 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
           {blocking && (ask.next
             ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title={W.tipWaitsHere} onClick={() => lineUp('notNext')}>Not next</button>
             : <button type="button" className="brm-btn" disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</button>)}
+          {ask.fromRequest && !remocking && (
+            <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setRemocking(true)}>{W.newMockups}</button>
+          )}
           <button type="button" className={`brm-btn${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</button>
+        </div>
+      )}
+      {remocking && !ended && (
+        <div className="brm-row brm-gap brm-remock">
+          <input className="brm-input brm-input--sm" aria-label={W.newMockupsChange} placeholder={W.newMockupsChange} value={change} maxLength={120} onChange={(e) => setChange(e.target.value)} />
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={remock}>{W.newMockups}</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setRemocking(false)}>Cancel</button>
         </div>
       )}
       {answering && !ended && (
@@ -3381,6 +3397,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
           onVote={() => toVote(tickedLive.includes(x.idea.ideaId) ? tickedLive : [...tickedLive, x.idea.ideaId])}
           voteCount={tickedLive.includes(x.idea.ideaId) ? tickedLive.length : tickedLive.length + 1}
           onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(latestWords(idea)))}
+          onMockups={(idea) => onRequest('mockups', { subject: latestWords(idea), ideaId: idea.ideaId })}
           run={run} api={api}
         />
       )))}
@@ -3424,7 +3441,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
 }
 
 /** One idea in the queue (C1): tick it, or send it where it belongs. */
-function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {}, run, api }) {
+function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {}, onMockups = null, run, api }) {
   return (
     <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
       <div className="brm-row brm-gap">
@@ -3454,6 +3471,8 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
                 )}
                 {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
+                {/* ASK CLAUDE (ideas flow E, I7): 2 or 3 ways to do it, back to the host first. */}
+                {onMockups && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.mockupsTip} onClick={() => { close(); onMockups(idea); }}>{W.mockupsOfThis}</button>}
               </>
             )}
           </SessionMenu>
