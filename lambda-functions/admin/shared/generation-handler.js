@@ -32,6 +32,7 @@ const {
 } = require('./generation-jobs');
 const { createSetForJob } = require('./generated-set');
 const drafts = require('./generation-drafts');
+const { withTopicFields, topicPromptBlock, readModelTopic } = require('./draft-topic');
 const {
   findSetForCaller, requireSetManager, setScopeOf, setOrgOf,
 } = require('./question-set-access');
@@ -111,6 +112,9 @@ function makeGenerationHandler(config) {
     const warnings = [];
     let meta = null;
     let generationError = null;
+    // The set's topic, as the model proposed it on the first pass, or null
+    // (shared/draft-topic.js); the draft falls back to keywords without it.
+    let modelTopic = null;
 
     // WHO ASKED, read from the JOB ROW and not from the dispatch payload.
     //
@@ -153,7 +157,10 @@ function makeGenerationHandler(config) {
     try {
       const { total, config: reqConfig } = parseRequest(payload);
       const perCall = itemsPerCall(tokenKind);
-      const tool = buildTool(reqConfig);
+      // A drafted run also asks for the set's TOPIC, in this same call: two
+      // optional fields on the tool and a short block on the first prompt.
+      const asksTopic = Boolean(draftRun && draftRun.asksTopic);
+      const tool = asksTopic ? withTopicFields(buildTool(reqConfig)) : buildTool(reqConfig);
 
       await updateJobProgress(dynamodb, tableName, jobId, {
         completed: 0,
@@ -183,12 +190,16 @@ function makeGenerationHandler(config) {
           break;
         }
 
-        const promptFor = (count) => buildPrompt({
-          config: reqConfig,
-          count,
-          alreadyUsedTitles: [...seedTitles, ...produced.map(titleOf).filter(Boolean)],
-          isFirstPass,
-        });
+        const askingTopicNow = asksTopic && isFirstPass;
+        const promptFor = (count) => {
+          const prompt = buildPrompt({
+            config: reqConfig,
+            count,
+            alreadyUsedTitles: [...seedTitles, ...produced.map(titleOf).filter(Boolean)],
+            isFirstPass,
+          });
+          return askingTopicNow && typeof prompt === 'string' ? `${prompt}\n${topicPromptBlock()}` : prompt;
+        };
 
         let result;
         try {
@@ -214,6 +225,7 @@ function makeGenerationHandler(config) {
         }
 
         if (draftRun) draftRun.addUsage(result && result.__usage);
+        if (askingTopicNow) modelTopic = readModelTopic(result);
 
         // Set-level output (e.g. an improved survey title) is asked for on the
         // FIRST pass only — re-deriving it per chunk invites the model to
@@ -288,7 +300,7 @@ function makeGenerationHandler(config) {
     if (draftRun) {
       try {
         await draftRun.finish({
-          produced, warnings, error: generationError, stoppedByRequest,
+          produced, warnings, error: generationError, stoppedByRequest, modelTopic,
         });
       } catch (error) {
         console.error(`❌ Job ${jobId} could not finish its draft:`, error);

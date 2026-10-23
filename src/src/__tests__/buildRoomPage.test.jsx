@@ -1889,11 +1889,45 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, askForMockups: true }));
   });
 
-  test('a single idea\'s menu needs another ticked before it can go to a vote; Save for later posts later', async () => {
+  test('nothing greyed out: one idea opens the vote, others are added from the queue, two needed', async () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
-    expect(within(q).getByRole('button', { name: 'Put to a vote' })).toBeDisabled();
+    const vote = within(q).getByRole('button', { name: 'Put to a vote with other ideas' });
+    expect(vote).toBeEnabled();
+    fireEvent.click(vote);
+    const dialog = screen.getByRole('dialog', { name: 'Put to a vote' });
+    expect(within(dialog).getByRole('status').textContent).toBe('Add at least one more idea to vote between.');
+    expect(within(dialog).getByRole('button', { name: 'Open voting' })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: new RegExp(IDEAS[1].Text) }));
+    expect(screen.getByRole('dialog', { name: 'Put 2 ideas to a vote' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open voting' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, open: true }));
+  });
+
+  test('the only idea in the queue: the vote says to use Consider instead', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 1) }));
+    const q = queue();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    fireEvent.click(within(q).getByRole('button', { name: 'Put to a vote with other ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Put to a vote' });
+    expect(within(dialog).getByRole('status').textContent).toMatch('Consider');
+  });
+
+  test('no Ideas ask open: the idea offers to ask the room about it, prefilled', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 1) }));
+    const q = queue();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    expect(within(q).queryByRole('button', { name: 'Add to the open Ideas ask' })).toBeNull();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room for ideas about this' }));
+    const dialogs = await screen.findAllByRole('dialog');
+    const field = within(dialogs[dialogs.length - 1]).getByLabelText(/Question/);
+    expect(field).toHaveValue(`How should we do this: \u201c${IDEAS[0].Text}\u201d?`);
+  });
+
+  test('Save for later posts later', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
+    const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Save for later' })[0]);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'later' }));
   });

@@ -224,7 +224,7 @@ const questionSets = {
         },
         {
           t: 'p',
-          text: 'A set with no topic is **Unfiled**: nobody filtering by topic will find it. Give it one in the editor.',
+          text: 'A set with no topic is **Unfiled**: nobody filtering by topic will find it, and it cannot be switched on. Give it one in the editor, or click **Inactive** on its row and choose one there (see Switching a set on, off and onto Quickstart).',
         },
       ],
     },
@@ -272,6 +272,12 @@ const questionSets = {
       both requireSetManager); Not playable, Empty, Unreadable, "Review · N"
       (a draft waiting), "AI draft" (generated, off, unreviewed), AI, and the
       owner tag. The Quickstart menu is the host's (host-setup guide).
+      Inactive on an UNFILED set (no topic) opens an in-row picker
+      (QuestionSetsPanel onFileTopic, AdminPage handleFileTopic): "Switching
+      on needs a topic. File “<name>” under" <select>, pre-selected from the
+      name and description (config/topicKeywords.js) with "(suggested from its
+      name)", then "Save topic and switch on" (edit-question-set, then the
+      toggle) or Cancel. A refused save is said in the row.
     */
     {
       id: 'quickstart',
@@ -286,6 +292,7 @@ const questionSets = {
           t: 'list',
           items: [
             { title: 'Active / Inactive', text: 'Only active sets are offered to hosts. Switching one off loses nothing.' },
+            { title: 'A set with no topic', text: 'A set must have a topic to be switched on. Click **Inactive** on an unfiled set and the row asks for one, with a topic already suggested from its name and description. Change it if you like, then press **Save topic and switch on**, or **Cancel**.' },
             { title: 'Quickstart', text: 'Puts the set on the Quick start menu of the host\'s start screen, for everyone in this space. Keep that menu short enough to fit on one screen.' },
           ],
         },

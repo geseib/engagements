@@ -3380,6 +3380,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
           canSuggest={canSuggest}
           onVote={() => toVote(tickedLive.includes(x.idea.ideaId) ? tickedLive : [...tickedLive, x.idea.ideaId])}
           voteCount={tickedLive.includes(x.idea.ideaId) ? tickedLive.length : tickedLive.length + 1}
+          onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(idea.text))}
         />
       )))}
 
@@ -3411,6 +3412,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
       {voteOf && (
         <VoteFromIdeasDialog
           ideas={voteOf} connected={connected} openAsk={openAsk} busy={busy} run={run} api={api}
+          more={items.filter((x) => x.type === 'idea' && !voteOf.some((v) => v.ideaId === x.idea.ideaId)).map((x) => x.idea)}
           onClose={() => setVoteOf(null)}
           onDone={() => { setVoteOf(null); setTicked([]); }}
         />
@@ -3420,7 +3422,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
 }
 
 /** One idea in the queue (C1): tick it, or send it where it belongs. */
-function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount }) {
+function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {} }) {
   return (
     <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
       <div className="brm-row brm-gap">
@@ -3438,10 +3440,16 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <SessionMenu label="Ask the room" groupLabel="Ask the room">
             {(close) => (
               <>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount < 2 || voteCount > 6} title={voteCount < 2 ? W.tipTickAnother : undefined} onClick={() => { close(); onVote(); }}>
-                  {voteCount < 2 ? W.putToAVote : `Put ${voteCount} ideas to a vote`}
+                {/* NOTHING GREYED OUT (owner, 18 Oct): a vote opens from one idea and adds others in its dialog;
+                    with no Ideas ask open, the card offers to open one about it instead. */}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount > 6} onClick={() => { close(); onVote(); }}>
+                  {voteCount < 2 ? W.putToAVoteMore : `Put ${voteCount} ideas to a vote`}
                 </button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || !canSuggest} title={canSuggest ? undefined : 'Open an Ideas ask first'} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</button>
+                {canSuggest ? (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</button>
+                ) : (
+                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => { close(); onAskIdeas(idea); }}>{W.askIdeasAbout}</button>
+                )}
                 {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
               </>
@@ -3473,10 +3481,15 @@ function voteEntries(room, items) {
     : { laterId: x.id, text: x.text, source: 'host' })).filter(Boolean);
 }
 
-export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, openAsk, busy, run, api, onClose, onDone }) {
+export function VoteFromIdeasDialog({ ideas: chosen, more = [], picks: startPicks = 1, connected, openAsk, busy, run, api, onClose, onDone }) {
   const [prompt, setPrompt] = useState('Which should Claude build next?');
+  // NO TICKING FIRST (owner, 18 Oct: the vote was "greyed out"): the dialog
+  // opens from one idea and the others in the queue are added here.
+  const [added, setAdded] = useState([]);
+  const ideas = [...chosen, ...more.filter((i) => added.includes(i.ideaId))].slice(0, 6);
   // The picks offered are 1, then 2 with three options, 3 with four or more.
-  const [maxPicks, setMaxPicks] = useState(() => Math.max(1, Math.min(startPicks, ideas.length > 3 ? 3 : ideas.length > 2 ? 2 : 1)));
+  const [wantPicks, setMaxPicks] = useState(() => Math.max(1, Math.min(startPicks, chosen.length > 3 ? 3 : chosen.length > 2 ? 2 : 1)));
+  const maxPicks = Math.min(wantPicks, ideas.length > 3 ? 3 : ideas.length > 2 ? 2 : 1);
   const [mockups, setMockups] = useState(false);
   const n = ideas.length;
   const letter = (i) => String.fromCharCode(65 + i);
@@ -3488,7 +3501,7 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
   const picks = [1, ...(n > 2 ? [2] : []), ...(n > 3 ? [3] : [])];
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-vote-title">
-      <DialogHead id="brm-vote-title" title={ideas.some((i) => i.laterId) ? W.putToVote(n) : `Put ${n} ideas to a vote`} onClose={onClose} />
+      <DialogHead id="brm-vote-title" title={n < 2 ? W.putToAVote : ideas.some((i) => i.laterId) ? W.putToVote(n) : `Put ${n} ideas to a vote`} onClose={onClose} />
       <label className="brm-field"><span className="brm-lbl">Question for the room</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
       <div className="brm-field">
         <span className="brm-lbl">How people vote</span>
@@ -3509,6 +3522,18 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
           </li>
         ))}
       </ul>
+      {more.length > 0 && (
+        <fieldset className="brm-field brm-voteadd">
+          <legend className="brm-lbl">{W.voteAddFromQueue}</legend>
+          {more.map((i) => (
+            <label key={i.ideaId} className="brm-check">
+              <input type="checkbox" checked={added.includes(i.ideaId)} disabled={!added.includes(i.ideaId) && ideas.length >= 6} onChange={() => setAdded((l) => (l.includes(i.ideaId) ? l.filter((x) => x !== i.ideaId) : [...l, i.ideaId]))} />
+              <span>{i.text} <span className="brm-who">{i.source === 'host' ? 'You' : (i.playerName || 'From the room')}</span></span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {n < 2 && <p className="brm-hint" role="status">{more.length ? W.voteNeedsTwo : W.voteNeedsTwoNoMore}</p>}
       <p className="brm-hint">{W.noNames}</p>
       <label className="brm-check brm-field">
         <input type="checkbox" checked={mockups} disabled={!connected && !mockups} onChange={(e) => setMockups(e.target.checked)} />
@@ -3520,11 +3545,11 @@ export function VoteFromIdeasDialog({ ideas, picks: startPicks = 1, connected, o
       {!connected && <p className="brm-hint">{W.offlineNoMockups}</p>}
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
-        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ open: false })}>{W.saveDraft}</button>}
+        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: false })}>{W.saveDraft}</button>}
         {mockups ? (
-          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim()} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
+          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
         ) : (
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !prompt.trim()} onClick={() => send({ open: true })}>
+          <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: true })}>
             {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : W.openVoting}
           </button>
         )}

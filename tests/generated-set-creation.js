@@ -436,13 +436,18 @@ const scenarioBody = (overrides = {}) => ({
   await test('an accept that switches the set on needs a shelf, and with one it is live', async () => {
     // rejects: activating an unfiled set (upload-questions.js refuses to make
     // one servable), and an accept that ignores "switch it on".
+    //
+    // Since 23 Oct 2026 a run with no shelf of its own still ARRIVES with one:
+    // the draft carries a suggested topic (shared/draft-topic.js), and an
+    // accept that names none files the set there — so "switch it on" works
+    // without a pick, and the set is never live unfiled.
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'live'));
-    const refused = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: { activate: true } });
-    assert.strictEqual(refused.accepted.statusCode, 400, 'an unfiled set was switched on');
-    assert.strictEqual(setRows().length, 0);
-    const draft = [...ddb.values()].find((r) => r.SK === `DRAFT#${refused.draftId}`);
-    assert.strictEqual(draft.status, 'ready', 'a refused accept did not hand the draft back for review');
+    const suggested = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: { activate: true } });
+    assert.strictEqual(suggested.accepted.statusCode, 200, 'an accept with a suggested topic was refused');
+    const filed = setRows()[0];
+    assert.ok(filed && filed.topic, 'the set was switched on unfiled');
+    assert.strictEqual(filed.active, true);
     reset();
     bedrockHandler = () => toolResponse(scenarioItems(2, 'live'));
     await runJob(scenarios, scenarioBody({ count: 2, setMetadata: { ...SCENARIO_META, topic: 'business-work' } }),
@@ -451,6 +456,72 @@ const scenarioBody = (overrides = {}) => ({
     assert.ok(set, 'no set');
     assert.strictEqual(set.active, true, 'an accepted, filed set was left off');
     for (const row of questionRows(set.SK.replace('SET#', ''))) assert.strictEqual(row.Active, true);
+  });
+
+  /*
+    THE TOPIC A RUN PROPOSES (shared/draft-topic.js). Owner, 23 Oct 2026:
+    "when ai generates question sets. it should auto tag (based on a list of
+    categories) right now the user gets an error activating sets because they
+    dont have a tag". The model is asked in the run's own call; keywords answer
+    when it does not; the accept uses the person's choice, else the builder's,
+    else the suggestion.
+  */
+  const withTopic = (items, input) => ({
+    body: new TextEncoder().encode(JSON.stringify({
+      stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', name: 'emit_items', input: { items, ...input } }],
+    })),
+  });
+  const draftRow = (draftId) => [...ddb.values()].find((r) => r.SK === `DRAFT#${draftId}`);
+
+  await test('the model is asked for the topic in the same call, and its pick files the set on accept', async () => {
+    // rejects: a second model call for the topic; a suggestion that is never
+    // used; "switch it on" refused for want of a pick the run already made.
+    reset();
+    bedrockHandler = () => withTopic(scenarioItems(2, 'model'), { setTopic: 'politics-society', setTags: ['Heads of State', 'diplomacy'] });
+    const out = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: { activate: true } });
+    assert.strictEqual(bedrockCalls.length, 1, 'the topic cost a second call');
+    assert.match(bedrockCalls[0].prompt, /SET TOPIC/, 'the first pass did not ask for the topic');
+    assert.deepStrictEqual(bedrockCalls[0].body.tools[0].input_schema.properties.setTopic.enum.length, 15);
+    assert.ok(!bedrockCalls[0].body.tools[0].input_schema.required.includes('setTopic'), 'the topic became required');
+    const d = draftRow(out.draftId);
+    assert.strictEqual(d.suggestedTopic, 'politics-society');
+    assert.strictEqual(d.suggestedTopicSource, 'model');
+    assert.deepStrictEqual(d.suggestedTags, ['heads-of-state', 'diplomacy']);
+    assert.strictEqual(out.accepted.statusCode, 200, JSON.stringify(out.accepted.body));
+    const set = setRows()[0];
+    assert.strictEqual(set.topic, 'politics-society');
+    assert.deepStrictEqual(set.tags, ['heads-of-state', 'diplomacy']);
+    assert.strictEqual(set.active, true);
+  });
+
+  await test('a model that omits or garbles the topic is answered by keywords', async () => {
+    // rejects: a draft left unfiled because the model skipped an optional
+    // field; a sixteenth shelf taken from the model's spelling.
+    for (const input of [{}, { setTopic: 'leadership-studies' }, { setTopic: ['history'] }]) {
+      reset();
+      bedrockHandler = () => withTopic(scenarioItems(2, 'kw'), input);
+      const out = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent, { accept: { activate: true } });
+      const d = draftRow(out.draftId);
+      // "World Leaders" + items tagged Leadership / remote work.
+      assert.strictEqual(d.suggestedTopic, 'business-work', JSON.stringify(input));
+      assert.strictEqual(d.suggestedTopicSource, 'keywords');
+      assert.ok(d.suggestedTags.includes('leadership'), d.suggestedTags.join(','));
+      assert.strictEqual(out.accepted.statusCode, 200);
+      assert.strictEqual(setRows()[0].topic, 'business-work');
+      assert.strictEqual(setRows()[0].active, true);
+    }
+  });
+
+  await test('the person\'s topic and tags at accept win over the suggestion', async () => {
+    reset();
+    bedrockHandler = () => withTopic(scenarioItems(2, 'mine'), { setTopic: 'history', setTags: ['empires'] });
+    const out = await runJob(scenarios, scenarioBody({ count: 2 }), ctx(), adminEvent,
+      { accept: { activate: true, topic: 'business-work', tags: [] } });
+    assert.strictEqual(out.accepted.statusCode, 200);
+    const set = setRows()[0];
+    assert.strictEqual(set.topic, 'business-work', 'the suggestion overrode the person');
+    assert.ok(!set.tags || set.tags.length === 0, 'tags the person removed came back');
   });
 
   await test('the set is owned by the caller, not by the Lambda role', async () => {

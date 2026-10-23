@@ -74,6 +74,13 @@ export const W = Object.freeze({
   laterEmpty: 'Nothing saved for later.',
   putToVote: (n) => `Put ${n} to a vote`,
   putToAVote: 'Put to a vote',
+  // Nothing greyed out on an idea (owner, 18 Oct).
+  putToAVoteMore: 'Put to a vote with other ideas',
+  voteAddFromQueue: 'Add ideas from the queue',
+  voteNeedsTwo: 'Add at least one more idea to vote between.',
+  voteNeedsTwoNoMore: 'There is only this idea in the queue. Ask the room yes or no with Consider instead.',
+  askIdeasAbout: 'Ask the room for ideas about this',
+  askIdeasPrompt: (text) => `How should we do this: \u201c${text}\u201d?`,
   ctrlEnterVote: 'Ctrl Enter puts them to a vote',
   finishAsk: 'Finish the open question first',
   nothingFound: (kind, subject) => (kind === 'ideas'

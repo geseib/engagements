@@ -9,6 +9,31 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (later): AI question sets arrive with a topic, and an idea's doors all open
+
+**Test:** merge of dev `0fa2edee2` (and the commit naming it).
+
+### New
+
+- **AI-generated sets arrive with a topic** (owner: "right now the user gets an error activating sets because they dont have a tag"). Every AI run picks one topic from the shelf's fifteen, plus up to five tags, in the call it already makes; code checks the pick against the list, and a keyword match on the title, description and questions stands in when the model leaves it out. The draft review shows it pre-filled as *(suggested)* and changeable, so **Switch it on now** works without choosing. Adding to a set that has no topic offers one for that set too.
+- **Switching on a set with no topic asks for one in its row**, with a suggestion pre-selected, and **Save topic and switch on** does both, instead of the server's error.
+- **An idea in Waiting for you has every door open** (another session, Build Room ideas flow A): *Put to a vote with other ideas* is always offered and adds ideas from the queue (two needed); with no Ideas ask open, *Ask the room for ideas about this* opens the composer with the idea in it; *Show on the wall now* fills the Stage; each idea's fate (acknowledged, shown, dismissed, later, restored) goes on the host's timeline.
+
+### Fixed
+
+- Accepting an AI draft with *Switch it on now* and no topic chosen no longer stops at "Choose a shelf".
+
+### What to look at
+
+1. **Generate a question set with AI** and open the draft: the Shelf is pre-filled *(suggested)* with tags; accept with **Switch it on now** and no change: the set is live and filed.
+2. **Question sets:** switch on an older set with no topic: a picker opens in its row with a suggestion; **Save topic and switch on**.
+3. **Build Room, Waiting for you:** on an idea, **Put to a vote with other ideas** with one other idea from the queue; on another, **Show on the wall now**: the Stage shows it full screen; the host's Timeline names each idea's fate.
+
+### Known gaps
+
+- A draft's suggested tags are stored unencrypted, as set tags already are for team sets.
+- The keyword fallback picks General Knowledge when nothing matches; the review is where to change it.
+
 ## 23 Oct 2026: The opening follows the kind of build, starter sets per kind, and a reminder before Claude's unsaved question set goes
 
 **Test:** merge of dev `a66a7b49`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45); plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (steps 5 and 6, another session); notes `docs/design/build-room-host-redesign/starter-sets-by-kind.md`.

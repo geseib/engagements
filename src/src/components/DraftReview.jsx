@@ -6,10 +6,13 @@ import {
   DRAFT_STATUS, getDraft, updateDraftItems, cancelDraft, discardDraft, restoreDraft,
   acceptNewSetDraft, libraryHeaders, groupByCategory, itemDefect, draftNoun, tokenEstimate,
 } from '../utils/draftsApi';
-import { acceptIntoSet, undoAccept } from '../utils/draftAccept';
+import { acceptIntoSet, undoAccept, fileSetTopic } from '../utils/draftAccept';
 import { libraryLabel, ENGAGE_KEY } from '../utils/libraries';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
-import { SET_TOPICS, SET_TOPIC_IDS } from '../config/setTopics';
+import {
+  SET_TOPICS, SET_TOPIC_IDS, normalizeSetTopic, normalizeSetTags, setTopicLabel,
+} from '../config/setTopics';
+import { normalizeTag } from '../utils/tags';
 import './DraftReview.css';
 
 /**
@@ -77,10 +80,15 @@ export default function DraftReview({
   const [guidance, setGuidance] = useState('');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
+  // The set's own tags, pre-filled with the builder's or the run's suggestion.
+  const [tags, setTags] = useState([]);
+  const [tagDraft, setTagDraft] = useState('');
   const [activate, setActivate] = useState(true);
   const [result, setResult] = useState(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const nameTouched = useRef(false);
+  const topicTouched = useRef(false);
+  const tagsTouched = useRef(false);
 
   const where = libraryLabel(libraryKey || (draft && draft.orgId) || (draft ? ENGAGE_KEY : ''), libraries);
 
@@ -96,8 +104,19 @@ export default function DraftReview({
     setDraft(res.data.draft);
     setItems(res.data.items || []);
     if (!nameTouched.current) setName(res.data.draft.title || '');
-    if (res.data.draft.topic) setTopic(res.data.draft.topic);
-    return res.data.draft;
+    /*
+      THE TOPIC ARRIVES SUGGESTED (owner, 23 Oct 2026: "it should auto tag …
+      right now the user gets an error activating sets because they dont have
+      a tag"). The builder's own pick first, else what the run proposed
+      (admin/shared/draft-topic.js) — so Switch it on now works without a pick.
+      A poll while the person is choosing never overwrites their choice.
+    */
+    const d = res.data.draft;
+    if (!topicTouched.current) setTopic(normalizeSetTopic(d.topic) || normalizeSetTopic(d.suggestedTopic) || '');
+    if (!tagsTouched.current) {
+      setTags(normalizeSetTags(Array.isArray(d.requestTags) && d.requestTags.length ? d.requestTags : (d.suggestedTags || [])));
+    }
+    return d;
   }, [draftId, libraryKey]);
 
   useEffect(() => { load(); }, [load]);
@@ -120,6 +139,21 @@ export default function DraftReview({
   const canRegenerate = draft && engagementType !== 'survey' && GENERATORS[draft.kind];
   // A new set switched on needs a shelf first (toggle-question-set.js refuses an unfiled live set).
   const needsShelf = Boolean(draft) && !isAppend && activate && !topic;
+  const suggestedTopic = draft ? normalizeSetTopic(draft.suggestedTopic) : null;
+  const showsSuggestion = Boolean(suggestedTopic) && topic === suggestedTopic && !normalizeSetTopic(draft && draft.topic);
+  // ADDING TO A SET THAT HAS NO TOPIC: the run's suggestion is offered, and
+  // filed on the set once the questions are saved. A set that has one keeps it.
+  const offersTargetTopic = Boolean(isAppend && draft && !normalizeSetTopic(draft.targetTopic) && suggestedTopic);
+
+  const chooseTopic = (value) => { topicTouched.current = true; setTopic(value); };
+  const addTag = (raw) => {
+    const tag = normalizeTag(raw);
+    setTagDraft('');
+    if (!tag || tags.includes(tag)) return;
+    tagsTouched.current = true;
+    setTags(normalizeSetTags([...tags, tag]));
+  };
+  const removeTag = (tag) => { tagsTouched.current = true; setTags(tags.filter((t) => t !== tag)); };
 
   // ── keep / leave / edit (free: no model call) ─────────────────────────
   const setDecision = async (seqs, decision) => {
@@ -190,12 +224,23 @@ export default function DraftReview({
         load();
         return;
       }
+      // The questions are in. File the set too, when it had no topic and one
+      // is chosen — through the editor's own route, which refuses a bad one.
+      if (offersTargetTopic && topic) {
+        const filed = await fileSetTopic(draft.targetSetId, topic, draft.scope, libraryKey);
+        if (!filed.ok) {
+          setMessage({ tone: 'error', text: `The questions were added, but the topic was not saved: ${filed.error}` });
+        }
+      }
       setResult({ mode: 'append', ...out });
     } else {
       const res = await acceptNewSetDraft(draftId, {
         activate,
         title: name.trim(),
         ...(topic ? { topic } : {}),
+        // Sent when there are tags, or when the person removed the suggested
+        // ones — an empty list then means "none", not "use the suggestion".
+        ...(tags.length || tagsTouched.current ? { tags } : {}),
       }, libraryKey);
       setBusy('');
       if (!res.ok) {
@@ -509,17 +554,52 @@ export default function DraftReview({
       {reviewable && (
         <footer className="drv-foot">
           {blockAccept && <p className="drv-msg drv-msg--pending" role="status">{blockAccept}</p>}
+          {offersTargetTopic && items.length > 0 && (
+            <div className="drv-newset" data-testid="draft-target-topic">
+              <label className="drv-label" htmlFor="drv-target-shelf">
+                Shelf for “{draft.title}”{topic === suggestedTopic && <span className="drv-suggested"> (suggested)</span>}
+              </label>
+              <select id="drv-target-shelf" className="drv-input" value={topic} onChange={(e) => chooseTopic(e.target.value)}>
+                <option value="">Leave it unfiled</option>
+                {SET_TOPIC_IDS.map((id) => <option key={id} value={id}>{SET_TOPICS[id].label}</option>)}
+              </select>
+              <p className="drv-dim drv-hint">
+                This set has no shelf yet, so it cannot be switched on.
+                {topic ? ` Accepting also files it under ${setTopicLabel(topic)}.` : ' Accepting leaves it unfiled.'}
+              </p>
+            </div>
+          )}
           {!isAppend && items.length > 0 && (
             <div className="drv-newset">
               <label className="drv-label" htmlFor="drv-name">Set name</label>
               <input id="drv-name" className="drv-input" value={name}
                 onChange={(e) => { nameTouched.current = true; setName(e.target.value); }} />
-              <label className="drv-label" htmlFor="drv-shelf">Shelf</label>
-              <select id="drv-shelf" className="drv-input" value={topic} onChange={(e) => setTopic(e.target.value)}
+              <label className="drv-label" htmlFor="drv-shelf">
+                Shelf{showsSuggestion && <span className="drv-suggested" data-testid="draft-topic-suggested"> (suggested)</span>}
+              </label>
+              <select id="drv-shelf" className="drv-input" value={topic} onChange={(e) => chooseTopic(e.target.value)}
                 aria-invalid={needsShelf || undefined} aria-describedby={needsShelf ? 'drv-shelf-need' : undefined}>
                 <option value="">Choose a shelf…</option>
                 {SET_TOPIC_IDS.map((id) => <option key={id} value={id}>{SET_TOPICS[id].label}</option>)}
               </select>
+              {showsSuggestion && (
+                <p className="drv-dim drv-hint">
+                  Suggested from the questions. Change it if the set belongs on another shelf.
+                </p>
+              )}
+              <span className="drv-label" id="drv-tags-label">Tags</span>
+              <div className="drv-tags" role="group" aria-labelledby="drv-tags-label" data-testid="draft-tags">
+                {tags.map((tag) => (
+                  <span key={tag} className="drv-chip">
+                    {tag}
+                    <button type="button" className="drv-chipx" aria-label={`Remove tag ${tag}`} onClick={() => removeTag(tag)}>×</button>
+                  </span>
+                ))}
+                <input className="drv-input drv-tagin" aria-label="Add a tag" value={tagDraft} placeholder="Add a tag"
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); } }}
+                  onBlur={() => addTag(tagDraft)} />
+              </div>
               {/* ACCEPTING SWITCHES IT ON (owner, 21 Oct 2026), so this starts
                   ticked and is never greyed out. A live set needs a shelf
                   (toggle-question-set.js), so with it ticked Accept waits for

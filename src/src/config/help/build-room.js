@@ -314,7 +314,7 @@ const running = {
           t: 'list',
           items: [
             'An Ideas vote is an approval vote: each person picks up to three, and may pick their own.',
-            'To vote on ideas sent to you, tick them in Waiting for you or Later and put them to a vote (two to six; you set the picks per person).',
+            'To vote on ideas sent to you, tick them in Waiting for you or Later and put them to a vote (two to six; you set the picks per person). From one idea, **Put to a vote with other ideas** opens the vote and lets you add others from the queue there.',
             'A tie says so: **Spin the wheel**, **Vote again** between the tied options, or click one.',
             '**Spin the wheel** is offered wherever the room could vote, and closes an open ask first. Someone in the room is picked to spin it on their phone; you can spin too. **Someone else spins** passes the turn, and **Spin again** spins once more.',
             'Every screen sees the wheel land on the same option, which then leads. You can still pick another.',
@@ -357,6 +357,21 @@ const running = {
           items: [
             { title: 'Queue for the room', text: 'Keeps the room\'s words. As a **Yes or no** question or a **Feedback** question it waits in Waiting for you as a new ask, and opens when you open it. **Add to a vote** marks it Queued for the room until you put it to a vote with others. While an Ideas ask is open, **Add to the open Ideas ask** joins it.' },
             { title: 'Send to Claude', text: 'Starts from the room\'s words; change them if you like and say why. **Send to Claude now**, or **Later** to keep it on your Later list.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'one-idea',
+      title: 'An idea in Waiting for you',
+      icon: 'ChatCircleText',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            'Under **Ask the room**: **Put to a vote with other ideas**, **Add to the open Ideas ask** while one is open, or else **Ask the room for ideas about this**, which opens a new Ideas ask with the idea in its question for you to edit.',
+            'The menu\'s last choice fills the Stage with the idea, without a name, for a short while.',
+            '**Save for later**, **Acknowledge** and **Dismiss** take it off the list. Each fate, and **Restore**, adds a line to your Timeline saying whose idea it was and what became of it. Only you see those lines; Claude and the room do not.',
           ],
         },
       ],

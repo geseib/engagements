@@ -8,7 +8,8 @@
  *   GET  {id}                    one draft and its items, opened
  *   POST {id}/items              { updates: [{ seq, decision?, item? }] }  keep/leave/edit
  *   POST {id}/cancel             stop a run between passes
- *   POST {id}/accept             new set:  { activate, title?, topic? }  → the set is made
+ *   POST {id}/accept             new set:  { activate, title?, topic?, tags? }  → the set is made
+ *                                (no topic: the builder's, else the run's suggestion)
  *                                add to a set: { phase: 'claim' | 'complete' | 'release', ... }
  *   POST {id}/discard            leave it (restorable for 7 days)
  *   POST {id}/restore            back to review
@@ -189,6 +190,7 @@ async function acceptNewSet(event, draft, b) {
     activate,
     title: typeof b.title === 'string' ? b.title : '',
     topic: typeof b.topic === 'string' ? b.topic : '',
+    tags: Array.isArray(b.tags) ? b.tags : null,
   });
   if (imported.statusCode !== 200) {
     await drafts.releaseAccept(db(), table(), { ...draft, status: drafts.STATUS.ACCEPTING });

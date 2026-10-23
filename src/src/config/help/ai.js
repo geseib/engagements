@@ -344,8 +344,16 @@ const drafts = {
     },
     /*
       DraftReview.jsx: new set footer "Set name", "Shelf" (Choose a shelf…),
+      pre-filled since 23 Oct 2026 with the run's suggested topic
+      (admin/shared/draft-topic.js: asked of the model in the run's own call,
+      keywords when it gives none) and marked "(suggested)", hint "Suggested
+      from the questions. Change it if the set belongs on another shelf.";
+      "Tags" chips (Remove tag x, "Add a tag"), pre-filled with suggested tags;
       "Switch it on now" (ticked; needs a shelf: "Choose a shelf to switch it
-      on, or untick Switch it on now to save it off."), "Accept N of M — save
+      on, or untick Switch it on now to save it off." — only when no shelf is
+      chosen, so not with a suggestion). Adding to a set with no topic: "Shelf
+      for “<set>” (suggested)", "Leave it unfiled"; filed after the version is
+      saved (edit-question-set). "Accept N of M — save
       the set in <library>"; append "Accept N of M — saves version N"; done:
       "Version N saved", "Undo — back to version N", "Open the set", "Done";
       undo message "Back on version N. The version this draft made is kept in
@@ -362,8 +370,8 @@ const drafts = {
         {
           t: 'list',
           items: [
-            { title: 'A new set', text: 'Check **Set name**, choose a **Shelf** (the set\'s topic, which people browse and filter by), and leave **Switch it on now** ticked to make it live at once (it needs a shelf) or untick it to save it switched off. Then press Accept. A name already used in that library is refused; change it and accept again.' },
-            { title: 'Questions for a set you have', text: 'Accept saves one new version of the set with the questions you kept. The version before is kept, and **Undo** puts it back while the new one is still the live one. Sessions already running keep the version they started on.' },
+            { title: 'A new set', text: 'Check **Set name** and the **Shelf** (the set\'s topic, which people browse and filter by). Workie suggests a shelf and a few **Tags** from the questions, marked **(suggested)**; choose another shelf or remove and add tags if they are not right. Leave **Switch it on now** ticked to make it live at once (it needs a shelf) or untick it to save it switched off. Then press Accept. A name already used in that library is refused; change it and accept again.' },
+            { title: 'Questions for a set you have', text: 'Accept saves one new version of the set with the questions you kept. If the set has no shelf yet, the review suggests one (**Shelf for** the set); accepting files it there too, or choose **Leave it unfiled**. A set that already has a shelf keeps it. The version before is kept, and **Undo** puts it back while the new one is still the live one. Sessions already running keep the version they started on.' },
             { title: 'Later', text: 'Every version is in the set\'s Versions, so you can go back to one there too (see Question sets).' },
           ],
         },

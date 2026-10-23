@@ -29,6 +29,7 @@ import {
   resolveSetTopic, setTopicLabel, SET_TOPIC_IDS, SET_TOPICS, UNFILED, UNFILED_LABEL,
 } from '../config/setTopics';
 import { setCarriesTag } from '../config/setShelfIndex';
+import { classifySetTopic } from '../config/topicKeywords';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
 
@@ -171,6 +172,19 @@ export default function QuestionSetsPanel({
    */
   rowActions,
   onToggleActive,
+  /**
+   * FILE AN UNFILED SET UNDER A TOPIC — `(set, topicId) => Promise<{ok, error?}>`.
+   *
+   * Switching on a set with no topic is refused by the server ("Give this set
+   * a topic…", toggle-question-set.js) — the error the owner hit on 23 Oct
+   * 2026. Given this, the Inactive chip of an unfiled set asks for the topic
+   * IN THE ROW instead (a choice this small stays inline: the container rule),
+   * pre-selected with what its name and description point to
+   * (config/topicKeywords.js), saves it with this, and then switches the set
+   * on through `onToggleActive`. The server's refusal stays as the guard.
+   * Absent, the chip behaves as it always did.
+   */
+  onFileTopic,
   onToggleQuickstart,
   /** The three ranked creation paths from mockup 02. */
   onCreate,
@@ -218,6 +232,32 @@ export default function QuestionSetsPanel({
   });
 
   const nothingExists = questionSets.length === 0;
+
+  /* THE IN-ROW TOPIC PICKER: { setId, topic, suggested, busy, error } or null. */
+  const [filing, setFiling] = React.useState(null);
+  const pressActive = (set) => {
+    if (!onToggleActive) return;
+    if (!set.active && onFileTopic && resolveSetTopic(set.topic) === UNFILED) {
+      const suggested = classifySetTopic({ title: set.name || '', description: set.description || '' });
+      setFiling({ setId: set.id, topic: suggested, suggested, busy: false, error: '' });
+      return;
+    }
+    onToggleActive(set);
+  };
+  const fileAndSwitchOn = async (set) => {
+    if (!filing || filing.busy) return;
+    const topic = filing.topic;
+    setFiling({ ...filing, busy: true, error: '' });
+    let out;
+    try { out = await onFileTopic(set, topic); } catch (e) { out = { ok: false, error: e.message }; }
+    if (!out || !out.ok) {
+      setFiling((f) => f && { ...f, busy: false, error: (out && out.error) || 'The topic was not saved.' });
+      return;
+    }
+    setFiling(null);
+    await onToggleActive({ ...set, topic });
+  };
+  const columnCount = 5 + (rowActions ? 0 : 1) + (showVisibility ? 1 : 0);
 
   /*
     DOES THIS ROW CARRY A SHARE BUTTON? Written once, because two things read
@@ -541,8 +581,10 @@ export default function QuestionSetsPanel({
                   // description — same glyph, opposite meaning.
                   const blurb = isUnreadableSet(set) ? UNREADABLE_SUB : truncate(set.description, 110);
                   const subLine = [publisher, blurb].filter(Boolean).join(' · ') || '—';
+                  const filingHere = filing && filing.setId === set.id ? filing : null;
                   return (
-                    <tr key={set.id}>
+                    <React.Fragment key={set.id}>
+                    <tr>
                       <td>
                         {/*
                           A SET NOBODY NAMED AND A SET NOBODY CAN READ LOOK
@@ -569,7 +611,8 @@ export default function QuestionSetsPanel({
                             <button
                               type="button"
                               className={`qsets-chip ${set.active ? 'qsets-chip--on' : 'qsets-chip--off'}`}
-                              onClick={() => onToggleActive && onToggleActive(set)}
+                              onClick={() => pressActive(set)}
+                              aria-expanded={filingHere ? true : undefined}
                               title={`Click to ${set.active ? 'deactivate' : 'activate'} this question set`}
                             >
                               {set.active ? 'Active' : 'Inactive'}
@@ -813,6 +856,51 @@ export default function QuestionSetsPanel({
                         </div>
                       </td>
                     </tr>
+                    {filingHere && (
+                      <tr className="qsets-filing" data-testid="set-topic-picker">
+                        <td colSpan={columnCount}>
+                          <div className="qsets-filing-in" role="group" aria-label={`Topic for ${set.name || set.id}`}>
+                            <label className="qsets-filing-label" htmlFor={`qsets-filing-${set.id}`}>
+                              Switching on needs a topic. File “{set.name || set.id}” under
+                            </label>
+                            <select
+                              id={`qsets-filing-${set.id}`}
+                              className="qsets-input qsets-select"
+                              value={filingHere.topic}
+                              disabled={filingHere.busy}
+                              onChange={(e) => setFiling({ ...filingHere, topic: e.target.value, error: '' })}
+                            >
+                              {SET_TOPIC_IDS.map((id) => (
+                                <option key={id} value={id}>{SET_TOPICS[id].label}</option>
+                              ))}
+                            </select>
+                            {filingHere.topic === filingHere.suggested && (
+                              <span className="qsets-filing-note">(suggested from its name)</span>
+                            )}
+                            <button
+                              type="button"
+                              className="qsets-btn qsets-btn--primary"
+                              disabled={filingHere.busy}
+                              onClick={() => fileAndSwitchOn(set)}
+                            >
+                              {filingHere.busy ? 'Saving…' : 'Save topic and switch on'}
+                            </button>
+                            <button
+                              type="button"
+                              className="qsets-btn"
+                              disabled={filingHere.busy}
+                              onClick={() => setFiling(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {filingHere.error && (
+                            <p className="qsets-filing-err" role="alert">{filingHere.error}</p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

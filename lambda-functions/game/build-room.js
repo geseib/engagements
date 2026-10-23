@@ -1063,6 +1063,14 @@ async function ideaAction(ctx, ideaId, body) {
     // A sent idea goes in the room's own words: as written (H1).
     await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true, why: S.cleanText((body || {}).why, S.LIMITS.reason) } : {}) });
   }
+  // WHAT BECAME OF IT (owner, 18 Oct: closing an idea "seems to be gone forever
+  // ... we need that in timeline and record who's idea and what was decided").
+  // The host's own timeline only, as a note: never the room, never Claude.
+  const FATE = { acknowledge: 'acknowledged', wall: 'shown on the wall', dismiss: 'dismissed', later: 'saved for later', restore: 'back in the queue' };
+  if (FATE[action]) {
+    const whose = idea.Source === 'host' ? 'Your idea' : `${idea.PlayerName || 'Someone'}'s idea`;
+    await logEntry(ctx, { kind: 'note', by: 'system', text: `${whose} \u201c${S.cleanText(idea.Text, 200)}\u201d: ${FATE[action]}.`, ideaId: idea.IdeaId });
+  }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });

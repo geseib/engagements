@@ -181,6 +181,14 @@ describe.each(DUSK_CASES)('%s / %s', (skin, theme) => {
       expect(on(T.muted, [T.bg, tint('--qsets-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
     });
 
+    test('the in-row topic picker, which sits on the same amber tint', () => {
+      // .qsets-filing: its label (--text), its note (--muted) and a refused
+      // save (--danger-text), all on the work field under --qsets-tint-warn.
+      for (const fg of [T.text, T.muted, T.dangerText]) {
+        expect(on(fg, [T.bg, tint('--qsets-tint-warn', o)])).toBeGreaterThanOrEqual(AA);
+      }
+    });
+
     test('the clean-file tier and the deactivate-instead block', () => {
       // The green tier sits on the work field; the deactivate block sits on the
       // dialog's --surface. Two different composites of the same tint.
