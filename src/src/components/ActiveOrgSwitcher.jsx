@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import OrgSwitcher from './OrgSwitcher';
-import { authFetch, setActiveOrgId, getActiveOrgId } from '../auth/authFetch';
+import useActiveOrgs from '../hooks/useActiveOrgs';
 
 /**
  * THE ORG SWITCHER, ON THE SCREEN A HOST ACTUALLY WORKS FROM.
@@ -47,52 +47,8 @@ import { authFetch, setActiveOrgId, getActiveOrgId } from '../auth/authFetch';
  * and every existing mount omits it.
  */
 export default function ActiveOrgSwitcher({ onSwitch } = {}) {
-  const [orgs, setOrgs] = useState(null);
-  const [activeOrgId, setActive] = useState(() => getActiveOrgId());
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await authFetch(`${window.API_BASE || ''}orgs`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        const list = Array.isArray(data.orgs) ? data.orgs : [];
-        setOrgs(list);
-
-        /* Reconcile, exactly as the console does. A remembered id this account
-           is no longer a member of must not be sent — the authorizer resolves
-           an org you do not belong to to NO org, so the screen would act
-           unscoped while naming a team. */
-        const remembered = getActiveOrgId();
-        const valid = list.some((o) => o.orgId === remembered);
-        const next = valid
-          ? remembered
-          : (list.find((o) => o.type === 'personal') || list[0])?.orgId || '';
-        if (next !== remembered) setActiveOrgId(next);
-        setActive(next);
-      } catch (err) {
-        /* Silent by design — see the header. */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
+  const { orgs, activeOrgId, choose } = useActiveOrgs({ onSwitch });
   if (!orgs || !orgs.length) return null;
-
-  const choose = (orgId) => {
-    if (!orgId || orgId === activeOrgId) return;
-    setActiveOrgId(orgId);
-    if (onSwitch) onSwitch(orgId);
-    /* A reload, for the same reason the console reloads: the question sets,
-       the session list and the quickstarts on this screen have all been
-       fetched for the previous organisation, and no single place owns them.
-       Leaving one team's sets on screen under another team's name is the worst
-       possible failure for a tenancy feature. */
-    window.location.reload();
-  };
-
   return (
     <OrgSwitcher
       organisations={orgs}

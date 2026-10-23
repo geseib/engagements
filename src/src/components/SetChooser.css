@@ -1,0 +1,257 @@
+/* ==========================================================================
+   SET CHOOSER — components/SetChooser.jsx (issue #41; docs/design/set-chooser).
+
+   Lives inside the New engagement dialog (.gsd, dusk) and an agenda item's
+   dialog (.evb); its --schs-* locals read the shared roles, never another
+   stylesheet's tokens (skill §0.5). The table idiom is the
+   console's Question Sets list (QuestionSetsPanel.css): fixed layout, 36px+
+   rows, a two-tone owner chip.
+
+   MEASURED CONTRAST: setChooserPalette.test.js composites every pairing on
+   the dusk roles in every skin.
+
+   Ladder: the laptop ladder, 12/13/15/19; inputs at 15px.
+   ========================================================================== */
+
+.schs {
+  /* Roles only (styles/roles.css), so every skin and theme paints it; the
+     caller sets the theme: GameSetupDialog passes theme="dark" because its
+     card is dusk under a paper <html>; the agenda dialog inherits its own. */
+  --schs-card: var(--surface);
+  --schs-field: var(--surface-2);
+  --schs-text: var(--text);
+  --schs-muted: var(--muted);
+  --schs-rule: rgb(var(--slate-rgb) / 0.38);
+  --schs-rule-soft: rgb(var(--slate-rgb) / 0.2);
+  --schs-primary: var(--accent-text);
+  --schs-link: var(--info);
+  --schs-sel: rgb(var(--accent-rgb) / 0.14);
+  --schs-grp: rgb(var(--shade-rgb) / 0.35);
+  --schs-t-floor: 12px;
+  --schs-t-label: 13px;
+  --schs-t-body: 15px;
+  --schs-t-head: 19px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--schs-text);
+  font-size: var(--schs-t-body);
+  min-width: 0;
+}
+
+.schs .schs-dim { color: var(--schs-muted); font-size: var(--schs-t-label); }
+.schs .schs-push { margin-left: auto; }
+.schs .schs-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.schs .schs-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 10px;
+  background: var(--schs-field);
+  color: var(--schs-muted);
+}
+.schs .schs-search:focus-within { border-color: var(--schs-link); }
+.schs .schs-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-body);
+  outline: none;
+}
+.schs .schs-search input::placeholder { color: var(--schs-muted); }
+.schs .schs-keys { font-size: var(--schs-t-floor); color: var(--schs-muted); white-space: nowrap; }
+
+.schs .schs-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.schs .schs-recentbtn,
+.schs .schs-btn,
+.schs .schs-fbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-label);
+  cursor: pointer;
+}
+.schs .schs-recentbtn span,
+.schs .schs-fbtn span { color: var(--schs-muted); }
+.schs .schs-fbtn.is-set { border-color: var(--schs-primary); }
+.schs .schs-fbtn.is-set span { color: var(--schs-primary); font-weight: 700; }
+.schs .schs-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--schs-link);
+  font: inherit;
+  font-size: var(--schs-t-label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* S1b: the picked set, one line. */
+.schs .schs-picked {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 52px;
+  padding: 6px 8px 6px 14px;
+  border: 1px solid var(--schs-primary);
+  border-radius: 10px;
+  background: var(--schs-sel);
+  color: var(--schs-primary);
+}
+.schs .schs-picked-name { color: var(--schs-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.schs .schs-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.schs .schs-head b { color: var(--schs-text); }
+.schs .schs-team { position: relative; }
+.schs .schs-teammenu { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: 8px; }
+
+.schs .schs-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.schs .schs-seg { display: flex; flex-wrap: wrap; border: 1px solid var(--schs-rule); border-radius: 8px; overflow: hidden; }
+.schs .schs-seg button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--schs-rule);
+  background: transparent;
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-label);
+  cursor: pointer;
+}
+.schs .schs-seg button:last-child { border-right: 0; }
+.schs .schs-seg button.is-on { background: var(--schs-sel); color: var(--schs-primary); font-weight: 700; }
+.schs .schs-seg b { margin-left: 6px; font-weight: 400; color: var(--schs-muted); }
+.schs .schs-sel { display: inline-flex; align-items: center; gap: 6px; font-size: var(--schs-t-label); color: var(--schs-muted); }
+.schs .schs-sel select {
+  min-height: 34px;
+  max-width: 190px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 8px;
+  background: var(--schs-field);
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-label);
+}
+
+.schs .schs-tagwrap { position: relative; }
+.schs .schs-pop {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 10px;
+  background: var(--schs-card);
+  box-shadow: 0 18px 40px rgb(var(--shade-rgb) / 0.45);
+}
+.schs .schs-pop label { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 6px; border-radius: 6px; font-size: var(--schs-t-body); }
+.schs .schs-pop label.is-on { background: var(--schs-sel); }
+.schs .schs-pop label b { margin-left: auto; font-weight: 400; color: var(--schs-muted); font-size: var(--schs-t-label); }
+.schs .schs-find {
+  min-height: 36px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 8px;
+  background: var(--schs-field);
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-body);
+}
+
+.schs .schs-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.schs .schs-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--schs-sel); font-size: var(--schs-t-label); }
+.schs .schs-chip button { width: 24px; height: 24px; border: 0; border-radius: 50%; background: var(--schs-rule); color: var(--schs-text); cursor: pointer; }
+
+.schs .schs-list { max-height: 360px; overflow: auto; border: 1px solid var(--schs-rule); border-radius: 10px; }
+.schs .schs-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--schs-t-body); }
+.schs .schs-tbl .schs-c-name { width: auto; }
+.schs .schs-tbl .schs-c-qs { width: 52px; }
+.schs .schs-tbl .schs-c-own { width: 112px; }
+.schs .schs-tbl .schs-c-when { width: 128px; }
+.schs .schs-tbl th {
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--schs-rule);
+  text-align: left;
+  font-size: var(--schs-t-floor);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--schs-muted);
+}
+.schs .schs-tbl td {
+  height: 40px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--schs-rule-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.schs .schs-tbl tbody tr { cursor: pointer; }
+.schs .schs-tbl td input { margin: 0 10px 0 0; vertical-align: -2px; }
+.schs .schs-tbl tr.is-sel td { background: var(--schs-sel); }
+.schs .schs-tbl tr.is-cursor td { box-shadow: inset 0 -2px 0 var(--schs-link); }
+.schs .schs-tbl tr.is-off td { color: var(--schs-muted); cursor: not-allowed; }
+.schs .schs-tbl tr.schs-grp td {
+  height: 28px;
+  background: var(--schs-grp);
+  font-size: var(--schs-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--schs-muted);
+  cursor: default;
+}
+.schs .schs-note { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--schs-rule); font-size: var(--schs-t-floor); font-weight: 700; color: var(--schs-text); }
+
+/* The owner chip: two tones only, as on the console (utils/setOwnerTag.js). */
+.schs .schs-own { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--schs-sel); color: var(--schs-primary); font-size: var(--schs-t-floor); font-weight: 700; }
+.schs .schs-own--off { color: var(--schs-muted); background: transparent; border: 1px solid var(--schs-rule); }
+
+.schs .schs-empty { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border: 1px dashed var(--schs-rule); border-radius: 10px; }
+.schs .schs-empty h3 { margin: 0; font-size: var(--schs-t-head); }
+.schs .schs-empty p { margin: 0; color: var(--schs-muted); }
+.schs .schs-exits { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.schs .schs-exit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--schs-text);
+  font: inherit;
+  font-size: var(--schs-t-body);
+  text-align: left;
+  cursor: pointer;
+}
+.schs .schs-exit b { margin-left: auto; font-weight: 400; color: var(--schs-muted); font-size: var(--schs-t-label); }
+
+@media (max-width: 560px) {
+  .schs .schs-tbl .schs-c-when { width: 0; }
+  .schs .schs-tbl th:nth-child(4), .schs .schs-tbl td:nth-child(4) { display: none; }
+  .schs .schs-sel select { max-width: 140px; }
+}

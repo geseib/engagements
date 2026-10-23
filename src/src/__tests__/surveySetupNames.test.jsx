@@ -14,6 +14,7 @@ import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
 import { NAMES_MODES, namesMode } from '../config/surveyNames';
+import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
 
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
@@ -49,7 +50,7 @@ function setup(overrides = {}) {
 
 const chooseSurvey = (setKey = 'platform:q3-feedback') => {
   fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
-  fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: setKey } });
+  pickSet(setKey);
 };
 const names = () => screen.getByRole('radiogroup', { name: 'Names' });
 const radio = (label) => within(names()).getByRole('radio', { name: new RegExp(`^${label}`) });
@@ -63,7 +64,7 @@ describe('Survey is a format the host can start', () => {
   test('the survey sets are the ones offered under it', () => {
     setup();
     fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
-    const options = within(screen.getByLabelText(/question set/i)).getAllByRole('option').map((o) => o.textContent);
+    const options = listedSets();
     expect(options.some((t) => t.startsWith('Q3 All-Hands feedback'))).toBe(true);
     expect(options.some((t) => t.startsWith('Strategic Pricing Plays'))).toBe(false);
   });
@@ -99,7 +100,7 @@ describe('the Names card', () => {
     setup();
     chooseSurvey();
     fireEvent.click(radio('Named'));
-    fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: 'platform:retro' } });
+    pickSet('platform:retro');
     expect(radio('Named')).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -152,7 +153,7 @@ describe('what a survey does not show', () => {
 
   test('no Names card on any other format', () => {
     setup();
-    fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: 'platform:pricing' } });
+    pickSet('platform:pricing');
     expect(screen.queryByRole('radiogroup', { name: 'Names' })).toBeNull();
   });
 });

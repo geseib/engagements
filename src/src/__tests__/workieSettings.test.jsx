@@ -37,6 +37,7 @@ import QuestionSetEditor from '../components/QuestionSetEditor';
 import GameSetupDialog from '../components/GameSetupDialog';
 import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import { authFetch } from '../auth/authFetch';
+import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -453,7 +454,6 @@ function renderDialog(overrides = {}) {
   );
 }
 
-const setSelect = () => screen.getByLabelText(/question set/i);
 // The Advanced line now states the plan (session-setup-redesign 01); the old
 // green plan sentence it replaced made the same promise these tests guard.
 const plan = () => screen.getByTestId('gsd-adv-summary');
@@ -465,7 +465,7 @@ describe('the setup dialog only promises what will happen', () => {
   test('a set whose prompt resolves is promised, and says so', async () => {
     mockPromptApi();
     renderDialog();
-    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
+    pickSet('platform:lp');
     await waitFor(() => expect(plan().textContent).toMatch(/this set’s own summary approach/i));
     expect(plan().textContent).not.toMatch(/standard/i);
   });
@@ -475,7 +475,7 @@ describe('the setup dialog only promises what will happen', () => {
   test('a set whose prompt is not in the fetched list gets the standard sentence', async () => {
     mockPromptApi();
     renderDialog();
-    fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
+    pickSet('platform:ghosted');
     await waitFor(() => expect(plan().textContent).toMatch(/standard Call & Answer summary/));
     expect(plan().textContent).not.toMatch(/set’s own/i);
   });
@@ -487,7 +487,7 @@ describe('the setup dialog only promises what will happen', () => {
   test('a list that would not load is not evidence against the set', async () => {
     mockPromptApi({ status: 500 });
     renderDialog();
-    fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
+    pickSet('platform:ghosted');
     await waitFor(() => expect(plan()).toBeTruthy());
     expect(plan().textContent).toMatch(/this set’s own summary approach/i);
   });
@@ -499,7 +499,7 @@ describe('the setup dialog only promises what will happen', () => {
   test('a thrown request is caught, and read as unknown rather than empty', async () => {
     mockPromptApi({ throws: true });
     renderDialog();
-    fireEvent.change(setSelect(), { target: { value: 'platform:ghosted' } });
+    pickSet('platform:ghosted');
     await waitFor(() => expect(plan().textContent).toMatch(/this set’s own summary approach/i));
     // and the dialog is still a dialog: an unhandled rejection in the effect
     // would have taken it down with it.
@@ -512,8 +512,8 @@ describe('the setup dialog only promises what will happen', () => {
     const { promptCalls } = mockPromptApi();
     renderDialog();
     await waitFor(() => expect(promptCalls()).toHaveLength(1));
-    fireEvent.change(setSelect(), { target: { value: 'platform:lp' } });
-    fireEvent.change(setSelect(), { target: { value: 'platform:plain' } });
+    pickSet('platform:lp');
+    pickSet('platform:plain');
     expect(promptCalls()).toHaveLength(1);
   });
 });
