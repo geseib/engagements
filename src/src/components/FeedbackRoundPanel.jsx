@@ -84,10 +84,26 @@ export default function FeedbackRoundPanel({
    * must promise the opposite — and say it before anyone types.
    */
   namesShown = true,
+  /**
+   * A DRAFT KEPT FOR THIS ROUND (issue #47): `{ anchor, text }` the container
+   * saved the last time this round's panel was open, restored on mount so
+   * going back to another round and returning never loses what was typed.
+   * Read once, at mount — the container keys the panel by round, so a
+   * different round is a different mount and never sees this one's draft.
+   */
+  savedDraft = null,
+  /**
+   * Called with `{ anchor, text }` whenever the composer holds unsent text,
+   * and with null once it is empty (sent, cancelled, cleared). Optional; the
+   * host-triggered caller does not pass it.
+   */
+  onDraftSave,
 }) {
+  const restored = savedDraft && savedDraft.anchor && typeof savedDraft.text === 'string'
+    ? savedDraft : null;
   /** The section being commented on, or null when the composer is closed. */
-  const [anchor, setAnchor] = useState(null);
-  const [text, setText] = useState('');
+  const [anchor, setAnchor] = useState(restored ? restored.anchor : null);
+  const [text, setText] = useState(restored ? restored.text : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const boxRef = useRef(null);
@@ -105,6 +121,16 @@ export default function FeedbackRoundPanel({
   useEffect(() => {
     onDraftChange?.(Boolean(text.trim()));
   }, [text, onDraftChange]);
+
+  // The draft itself, for a container keeping one per round. Through a ref so
+  // a caller passing a fresh function each render does not re-fire this.
+  const onDraftSaveRef = useRef(onDraftSave);
+  onDraftSaveRef.current = onDraftSave;
+  useEffect(() => {
+    const save = onDraftSaveRef.current;
+    if (!save) return;
+    save(anchor && text.trim() ? { anchor, text } : null);
+  }, [anchor, text]);
 
   const open = useCallback((next) => {
     setAnchor(next);

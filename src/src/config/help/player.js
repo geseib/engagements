@@ -679,6 +679,10 @@ const feedback = {
           t: 'p',
           text: '**Close** takes you back. If the host moves on while you are writing, your text is not lost: post it and it is kept with that round, then tap **Go to the question**.',
         },
+        {
+          t: 'p',
+          text: 'Close a round with a comment still unsent and your phone keeps it with that round, never another. It is back in the box when you open that round again, for example from the end screen.',
+        },
       ],
     },
     {
@@ -739,7 +743,10 @@ const feedback = {
         add?" with a button per round while comments are open (24 hours after
         the end, or until the host closes them); the panel says "Comments stay
         open for 24 hours, or until your host closes them. Yours is marked as
-        added later." Checked on dev (session 2901).
+        added later." Checked on dev (session 2901). Issue #47: each button is
+        "<noun> N · <title>" (config/pastRounds.js pastRoundLabel), an opened
+        round shows the lesson and "Your turn" (get-results' `question`), and
+        an unsent comment is kept per round ("Unsent comment" on its button).
       */
       id: 'after-the-end',
       title: 'After the session ends',
@@ -751,7 +758,15 @@ const feedback = {
         },
         {
           t: 'p',
-          text: 'Under **Something to add?** there is a button for each round. Open one to read the question, its responses and Workie\'s read, and comment on any of it. Your comment is marked as added later.',
+          text: 'Under **Something to add?** there is a button for each round, with its number and title, for example "Lesson 2 · Form Follows Function". A long title is shortened; a round with no title shows its number alone.',
+        },
+        {
+          t: 'p',
+          text: 'Going back to a round shows its lesson again: the title, the lesson text and what you were asked to do, then its responses and Workie\'s read. Comment on any of it. Your comment is marked as added later.',
+        },
+        {
+          t: 'p',
+          text: 'You can move between rounds. A comment you started and did not post stays with its own round, and that round\'s button says **Unsent comment**.',
         },
         {
           t: 'p',

@@ -257,6 +257,16 @@ export default function RoundReport({
           />
         )}
         {round.school && <p className="past-round__school">{round.school}</p>}
+        {/* WHAT THE ROOM WAS ASKED TO DO (issue #47): the question's own
+            instruction, or the question pulled from the front of the lesson,
+            as the room screen's "Your turn" showed it. Supplied only by the
+            player's read-back of an earlier round; PastRound passes none. */}
+        {round.task && (
+          <p className="past-round__task">
+            <span className="past-round__task-label">Your turn</span>
+            {round.task}
+          </p>
+        )}
         {options.length > 0 && (
           <ul className="past-round__options">
             {options.map((option, i) => (

@@ -13,6 +13,13 @@
  * flagged; a decided-sounding next step passed, or a **Suggested** one
  * flagged; a name stored in a token; one filler word on a clean read reported;
  * "one question" read as a number; a revision note that is not the exact text.
+ *
+ * Review #46 (test cb30e35d, the same four answers): "two Friday runs" or
+ * "two-week" passed because "two branches" holds a two; "Whoever runs the
+ * weekly release" (the prompt's own example) passed as an owner; "the current
+ * habit is to…" passed as a fact; "Route lead: count…" passed as a step. Also
+ * rejects: "two branches", "4pm Friday", a named role or the fixture's plain
+ * sentences flagged.
  */
 const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
@@ -91,7 +98,8 @@ check('"4:30pm" is flagged, "4pm"/"4 pm" are not', () => {
   assert.deepStrictEqual(num('Stop at 4:30pm.'), ['4:30pm']);
 });
 check('a number only in a fixed instruction (contextInstructions) is not material', () =>
-  assert.deepStrictEqual(num('Across 99 contexts.'), ['99']));
+  // The token carries the noun the number counts (review #46: numbers are unit-aware).
+  assert.deepStrictEqual(num('Across 99 contexts.'), ['99 contexts']));
 
 console.log('\n3. claims about the room');
 const claims = (read, vote = SPLIT, voice = VOICE) => tokens(checkRead({ read, material: MATERIAL, vote, voice }), 'claim');
@@ -169,6 +177,131 @@ check('the note is the exact text, one line per issue', () => {
 });
 check('a clean read has no issues', () =>
   assert.deepStrictEqual(checkRead({ read: '## What we heard\nThree of four answers keep returns coordinator-owned at Friday departure; the top one took 12 points.\n\n## Next steps\n1. **Suggested:** try one Friday and see who acknowledges.', material: MATERIAL, vote: SPLIT, voice: VOICE }).issues, []));
+
+// ---- review #46 (test cb30e35d, the same four answers) -----------------------
+console.log('\n7. #46: numbers carry their unit or noun');
+const ROUTE = 'Route lead: count how many pickup slots slip over the next two Friday runs when a return is held at the van.';
+const GROWTH = "Growth sponsors: list the branches that would lose coverage under a two-week pilot held to Friday's return route.";
+check('"two Friday runs" is flagged: the material\'s two counts branches, not runs', () =>
+  assert.deepStrictEqual(num(ROUTE), ['two Friday runs']));
+check('"two-week" is flagged: no answer holds two weeks', () =>
+  assert.deepStrictEqual(num(GROWTH), ['two-week']));
+check('"two branches", "2 branches" and "nine-branch coverage" are the material\'s', () =>
+  assert.deepStrictEqual(num('A missed departure strands two branches (2 branches), and nine-branch coverage waits.'), []));
+check('"4pm Friday" and "4 pm" are the material\'s clock', () =>
+  assert.deepStrictEqual(num('Stop loading at 4pm Friday, or 4 pm.'), []));
+check('"two weeks" ≈ "two-week" when the material holds two weeks', () => {
+  const mat = collectMaterial({ responsesText: 'Theo - "Run it for two weeks first" (8 vote points)' });
+  assert.deepStrictEqual(tokens(checkRead({ read: 'A two-week pilot, then 2 weeks of review.', material: mat, vote: SPLIT }), 'number'), []);
+});
+check('a count licenses a headcount, not a duration ("4 people" yes, "4 weeks" no)', () =>
+  assert.deepStrictEqual(num('4 people answered; try it for 4 weeks.'), ['4 weeks']));
+check('counts of the room\'s own things stay allowed ("three answers", "4 answers", "12 points")', () =>
+  assert.deepStrictEqual(num('Named by three answers; all 4 answers, 12 points at the top, 8 points second.'), []));
+check('a bare number keeps the by-value rule ("two of the four")', () =>
+  assert.deepStrictEqual(num('Two of the four answers keep returns with the coordinator.'), []));
+
+console.log('\n8. #46: owners the answers never named');
+const INSTRUCTIONS = 'Rule 11. The owner is a person named in the material, or the role an answer implies, '
+  + 'for example whoever runs the weekly release, whoever owns that wiki page.';
+const owners = (read, instructions = INSTRUCTIONS) => checkRead({ read, material: MATERIAL, vote: SPLIT, voice: VOICE, instructions })
+  .issues.filter((i) => i.kind === 'owner');
+const RELEASE = 'Whoever runs the weekly release: book paid cover for that rehearsal before any dashboard work is scheduled.';
+check('"Whoever runs the weekly release" is flagged as an owner the answers never named', () => {
+  const o = owners(STEPS(`**Suggested** ${RELEASE}`));
+  assert.deepStrictEqual(o.map((i) => i.token), ['Whoever runs the weekly release']);
+});
+check('…and flagged as leaked from the prompt even when its head noun is in the material', () => {
+  const mat = collectMaterial({ responsesText: `${responsesText}\n\nA release slips when the van is late. (0 vote points)` });
+  const o = checkRead({ read: STEPS(`**Suggested** ${RELEASE}`), material: mat, vote: SPLIT, instructions: INSTRUCTIONS })
+    .issues.filter((i) => i.kind === 'owner');
+  assert.strictEqual(o.length, 1);
+  assert.match(o[0].why, /prompt/);
+  // Without the prompt text the head noun grounds it.
+  assert.strictEqual(checkRead({ read: STEPS(`**Suggested** ${RELEASE}`), material: mat, vote: SPLIT })
+    .issues.filter((i) => i.kind === 'owner').length, 0);
+});
+check('"Route lead", "Growth sponsors", "The driver", "Coordinator" and a printed name are owners the answers name', () =>
+  assert.deepStrictEqual(owners(STEPS(
+    `**Suggested** ${ROUTE.replace('two Friday runs', 'next Friday run')}`,
+    '**Suggested** Growth sponsors: list the branches that would lose coverage.',
+    '**Suggested:** The driver: note each booked stop that waits.',
+    '**Suggested** Coordinator: keep the unacknowledged returns.',
+    '**Suggested** Omar: write down the 4pm cut-off.',
+  )), []));
+check('an invented role is flagged ("Release manager:"), the host is always an owner', () =>
+  assert.deepStrictEqual(owners(STEPS('**Suggested** Release manager: book cover.', '**Suggested** Host: ask the room once more.')).map((i) => i.token),
+    ['Release manager']));
+check('a colon heading that is not a person ("Timing:", "First step:") is not an owner', () =>
+  assert.deepStrictEqual(owners(STEPS('**Suggested** Timing: hold it to Friday.', '**Suggested** First step: ask the route lead.')), []));
+check('an owner token never carries a participant\'s name', () => {
+  const o = checkRead({ read: STEPS('**Suggested** Priya and Theo: draft it.'), material: MATERIAL, vote: { ...SPLIT, names: [...NAMES, 'Priya'] } })
+    .issues.filter((i) => i.kind === 'owner');
+  assert.strictEqual(o.length, 1);
+  for (const n of [...NAMES, 'Priya']) assert.ok(!o[0].token.includes(n), o[0].token);
+  assert.strictEqual(o[0].quote, 'Priya and Theo');
+});
+
+console.log('\n9. #46: what the organisation already does');
+const practice = (read) => checkRead({ read, material: MATERIAL, vote: SPLIT, voice: VOICE }).issues.filter((i) => i.kind === 'practice');
+const HABIT = 'Two answers put the rehearsal before the dashboard, which signals that the current habit is to build visible tooling first.';
+check('the habit sentence is flagged as practice', () => {
+  const p = practice(`## What we heard\n${HABIT}`);
+  assert.deepStrictEqual(p.map((i) => i.token), ['signals that the current habit is to']);
+  assert.strictEqual(p[0].quote, 'signals that the current habit is to build visible tooling first');
+});
+check('"currently", "as usual", "already has" and "the existing practice" are flagged', () =>
+  assert.deepStrictEqual(practice('The depot currently loads at four. As usual, the van leaves early. The network already has a rota. The existing practice is to wait.').map((i) => i.token),
+    ['currently', 'As usual', 'already has', 'The existing practice is']));
+check('…unless an answer says the same thing', () => {
+  const mat = collectMaterial({ responsesText: 'Theo - "We currently load the van before every return is acknowledged" (8 vote points)' });
+  assert.deepStrictEqual(checkRead({ read: 'The depot currently loads the van before returns are acknowledged.', material: mat, vote: SPLIT })
+    .issues.filter((i) => i.kind === 'practice'), []);
+});
+check('"the second answer already has a fix" is about an answer, not the organisation', () =>
+  assert.deepStrictEqual(practice('The second answer already has a fix for the van.'), []));
+
+console.log('\n10. #46: steps handed out as tasks');
+check('a bare "Owner: verb …" step is flagged as a commitment; "**Suggested** Owner: verb …" passes', () => {
+  const c = commits(STEPS('Route lead: count the pickup slots that slip.', '**Suggested** Route lead: count the pickup slots that slip.', 'Growth sponsors: list the branches.'));
+  assert.deepStrictEqual(c.map((i) => i.token), ['Route lead: count', 'Growth sponsors: list']);
+});
+check('a step with could/might/may passes ("Route lead: could count…")', () =>
+  assert.deepStrictEqual(commits(STEPS('Route lead: could count the slots that slip.', 'The driver: you might note each stop.')), []));
+check('the #46 next steps, as written, are all flagged', () => {
+  const r = checkRead({ read: STEPS(ROUTE, GROWTH, RELEASE), material: MATERIAL, vote: SPLIT, voice: VOICE, instructions: INSTRUCTIONS });
+  assert.deepStrictEqual(issueKinds(r.issues), { number: 2, owner: 1, commitment: 3 });
+});
+
+console.log('\n11. no false positives on the fixture\'s plain sentences');
+check('plain sentences built from the four answers pass', () => {
+  const read = [
+    '## What we heard',
+    'Three of four answers keep an unacknowledged return coordinator-owned at Friday van departure; the top one took 12 points.',
+    'Omar would stop van loading at 4pm Friday. The route lead objects that a missed departure strands two branches.',
+    'The driver objects that waiting can strand the next branch\'s booked stop, and growth sponsors will object to delaying nine-branch coverage.',
+    '',
+    '## Next steps',
+    '1. **Suggested** Route lead: list which pickup slots a Friday hold would move.',
+    '2. **Suggested** Coordinator: keep each unacknowledged return until a receiver acknowledges it.',
+    '3. **Suggested** Growth sponsors: say which of the nine branches can wait.',
+  ].join('\n');
+  assert.deepStrictEqual(checkRead({ read, material: MATERIAL, vote: SPLIT, voice: VOICE, instructions: INSTRUCTIONS }).issues, []);
+});
+
+console.log('\n12. the revision note for the new kinds');
+check('owner and practice lines are the exact text', () => {
+  assert.strictEqual(revisionNote([
+    { kind: 'owner', token: 'Whoever runs the weekly release' },
+    { kind: 'practice', token: 'signals that the current habit is to', quote: 'signals that the current habit is to build visible tooling first' },
+    { kind: 'commitment', token: 'Route lead: count', quote: 'Route lead: count' },
+  ]), [
+    'Revise your reply. Change only these, keep everything else, keep the headings:',
+    '- "Whoever runs the weekly release" is an owner the answers never named: use a person or a role an answer names.',
+    '- "signals that the current habit is to build visible tooling first" says what the organisation already does; the answers only propose it: say it as their proposal.',
+    '- "Route lead: count…" is written as decided: the room has not agreed; make it a suggestion starting **Suggested**.',
+  ].join('\n'));
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 suiteFinished();

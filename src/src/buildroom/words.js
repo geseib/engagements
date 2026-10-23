@@ -498,6 +498,13 @@ export const W = Object.freeze({
   // "we cant assume they have claude cli running"). Every case is one paste.
   startOpens: 'It makes the folder, opens Claude Code, connects and kicks off. That is the last step.',
   alreadyOpenKick: 'Claude Code already open in that folder? Type this there instead:',
+  // Step 3 says when Claude Code has called in with the key just minted (owner, 23 Oct).
+  connectWaiting: 'Waiting for Claude Code to call in…',
+  connectSlow: 'Nothing yet? Look at the terminal: the first time in a folder, Claude Code may ask you to trust it or to allow Engage. Answer yes, and this turns green.',
+  connectedTitle: 'Connected',
+  connectedAt: (time, folder) => `Claude Code connected at ${time}${folder ? `, in ${folder}` : ''}.`,
+  connectedKicked: 'It has started work. You can close this window.',
+  connectedKicking: 'It is reading the room and starts in a moment. You can close this window.',
   workedHere: (at) => (at ? `Claude worked here, last at ${at}` : 'Claude worked here before'),
   inFolderNotNow: (folder) => (folder ? `In ${folder}. Claude Code is not connected now.` : 'Claude Code is not connected now.'),
   connectedNow: 'Connected now',
