@@ -2553,6 +2553,9 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
       `Before ask ${askNumber(ask.askId)} opens to the room: make a quick mockup of ${missing.length === 1 ? `option ${list}` : `options ${list}`}, `
       + `stamp each with its letter, screenshot it, and attach it to its option with share_image (askId "${ask.askId}", label ${list}). `
       + 'Then tell me they are in.',
+      'do-now', null,
+      // An instruction about an ask the room has not seen: never the room's Sent to Claude card.
+      { hideFromRoom: true },
     ));
     if (out !== undefined) setAskedMockups(true);
   };
@@ -3125,7 +3128,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
             className="brm-btn"
             disabled={busy || quiet}
             title={quiet ? 'Connect Claude Code first' : W.tipPreview}
-            onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text)); if (ok !== undefined) setSent(true); }}
+            onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true })); if (ok !== undefined) setSent(true); }}
           >
             Preview the work
           </button>
