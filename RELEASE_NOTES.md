@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026: A reminder before Claude's unsaved question set goes
 
-**Test:** merge of dev `DEVCOMMIT`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45).
+**Test:** merge of dev `896d8e81`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45).
 
 ### New
 
