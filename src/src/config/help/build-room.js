@@ -371,6 +371,7 @@ const running = {
           items: [
             'Under **Ask the room**: **Put to a vote with other ideas**, **Add to the open Ideas ask** while one is open, or else **Ask the room for ideas about this**, which opens a new Ideas ask with the idea in its question for you to edit.',
             'The menu\'s last choice fills the Stage with the idea, without a name, for a short while.',
+            'Reply to the person who sent it (Reply to Joe): only you and they see it, not the room and not Claude. **Got it, thanks** is one press. Their phone says The host replied, and they can answer; the card then says Joe answered. Ask the room for ideas about this uses their latest answer. An answer to an idea you acknowledged puts it back on your list.',
             '**Save for later**, **Acknowledge** and **Dismiss** take it off the list. Each fate, and **Restore**, adds a line to your Timeline saying whose idea it was and what became of it. Only you see those lines; Claude and the room do not.',
           ],
         },

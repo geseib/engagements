@@ -101,6 +101,11 @@ export function sendIdea({ apiBase, gameId, playerName, clientId }, text) {
   return post(apiBase, gameId, 'idea', { playerName, clientId }, { text });
 }
 
+/** POST idea-reply — this phone's answer to the host's private reply on its own idea (ideas flow B). */
+export function sendIdeaReply({ apiBase, gameId, playerName, clientId }, ideaId, text) {
+  return post(apiBase, gameId, 'idea-reply', { playerName, clientId }, { ideaId, text });
+}
+
 /**
  * Feedback on what Claude is showing (owner, 2026-10-04): "Looks good", or
  * "Needs a change" with what to change. Once per preview per phone.

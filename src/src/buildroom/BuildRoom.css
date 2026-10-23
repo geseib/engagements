@@ -933,6 +933,15 @@
 @media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
 .brm .brm-onwall { margin: 0; }
 
+/* REPLY TO JOE (ideas flow B, I2): private, the host and the sender only. */
+.brm .brm-thread-door { margin-top: 6px; }
+.brm .brm-thread-new { font-size: var(--brm-st-meta, 0.8rem); font-weight: 700; color: var(--primary); }
+.brm .brm-thread { display: grid; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--brm-rule); border-radius: 10px; background: var(--brm-tint-blue); }
+.brm .brm-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-thread-msg { overflow-wrap: anywhere; }
+.brm .brm-thread-msg--host { padding-left: 14px; }
+.brm .brm-thread-input { width: 100%; resize: vertical; }
+
 /* "Choose this instead" at results; the one going to Claude says so. */
 .brm .brm-pick { justify-self: start; align-self: start; margin-top: 4px; }
 .brm span.brm-pick.is-on {

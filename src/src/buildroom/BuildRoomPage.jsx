@@ -3380,7 +3380,8 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
           canSuggest={canSuggest}
           onVote={() => toVote(tickedLive.includes(x.idea.ideaId) ? tickedLive : [...tickedLive, x.idea.ideaId])}
           voteCount={tickedLive.includes(x.idea.ideaId) ? tickedLive.length : tickedLive.length + 1}
-          onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(idea.text))}
+          onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(latestWords(idea)))}
+          run={run} api={api}
         />
       )))}
 
@@ -3404,6 +3405,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
               {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
               )}
+              <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />
             </div>
           ))}
         </details>
@@ -3422,7 +3424,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
 }
 
 /** One idea in the queue (C1): tick it, or send it where it belongs. */
-function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {} }) {
+function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {}, run, api }) {
   return (
     <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
       <div className="brm-row brm-gap">
@@ -3462,7 +3464,79 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
         </div>
       )}
+      {run && api && <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />}
     </div>
+  );
+}
+
+/** The sender's newest words on an idea: their last private answer, else the idea (ideas flow B, I2-I3). */
+export function latestWords(idea) {
+  const answers = ((idea && idea.thread) || []).filter((m) => m.by === 'player');
+  return answers.length ? answers[answers.length - 1].text : (idea && idea.text) || '';
+}
+
+/**
+ * REPLY TO JOE (ideas flow B; docs/design/build-room-ideas I2; owner, 18 Oct:
+ * "private with Joe able to answer"). Only the host and the person who sent
+ * the idea see this: not the room, not the Stage, not Claude. Joe answers from
+ * his phone once the host has written. An idea the host typed, or one made
+ * from a vote's option, has no one to reply to, so no button.
+ */
+function IdeaThread({ idea, busy, ended, run, api }) {
+  const thread = idea.thread || [];
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  if (idea.source === 'host' || !idea.playerName) return null;
+  const name = idea.playerName;
+  const answered = thread.length > 0 && thread[thread.length - 1].by === 'player';
+  const full = thread.length >= THREAD_MAX;
+  const send = async (text) => {
+    const words = text.trim();
+    if (!words) return;
+    const out = await run(() => api.ideaAction(idea.ideaId, 'reply', { text: words }));
+    if (out !== undefined) setDraft('');
+  };
+  if (!open) {
+    if (ended && !thread.length) return null;
+    return (
+      <div className="brm-row brm-gap brm-thread-door">
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen(true)}>
+          {thread.length ? W.threadOpen(name, thread.length) : W.replyTo(name)}
+        </button>
+        {answered && <span className="brm-thread-new" data-testid="brm-thread-new">{W.threadAnswered(name)}</span>}
+      </div>
+    );
+  }
+  return (
+    <section className="brm-thread" aria-label={W.threadLabel(name)}>
+      <div className="brm-row brm-gap">
+        <b className="brm-lbl">{W.threadOnly(name)}</b>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setOpen(false)}>{W.threadHide}</button>
+      </div>
+      <ol className="brm-thread-list">
+        <li className="brm-thread-msg brm-thread-msg--player"><span className="brm-who">{name} · {clockTime(idea.createdAt)}</span> {idea.text}</li>
+        {thread.map((m, i) => (
+          <li key={`${m.at}-${i}`} className={`brm-thread-msg brm-thread-msg--${m.by}`}>
+            <span className="brm-who">{m.by === 'host' ? 'You' : name} · {clockTime(m.at)}</span> {m.text}
+          </li>
+        ))}
+      </ol>
+      {!ended && !full && (
+        <>
+          <textarea
+            className="brm-input brm-thread-input" rows={2} maxLength={280} value={draft}
+            aria-label={W.replyTo(name)} placeholder={`${W.replyTo(name)}\u2026`}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(draft); } }}
+          />
+          <div className="brm-row brm-gap">
+            {!thread.length && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => send(W.gotItThanks)}>{W.gotItThanks}</button>}
+            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy || !draft.trim()} onClick={() => send(draft)}>{W.threadSend}</button>
+          </div>
+        </>
+      )}
+      {full && <p className="brm-hint">{W.threadFull}</p>}
+    </section>
   );
 }
 
@@ -3586,6 +3660,8 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
 }
 
 /** "Connected now" (W2): the plugin checked in within this long. It reports every 4-15 s while connected. */
+// The server keeps at most this many messages on one idea's private thread (build-store IDEA_THREAD_MAX).
+const THREAD_MAX = 20;
 export const CONNECTED_NOW_MS = 30 * 1000;
 
 /**

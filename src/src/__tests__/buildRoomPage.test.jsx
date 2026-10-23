@@ -1925,6 +1925,35 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     expect(field).toHaveValue(`How should we do this: \u201c${IDEAS[0].Text}\u201d?`);
   });
 
+  test('B: Reply to Dee opens a private thread; Got it, thanks and a typed reply post reply', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    // The host's own idea has no one to reply to.
+    expect(within(q).queryByRole('button', { name: 'Reply to Host' })).toBeNull();
+    fireEvent.click(within(q).getByRole('button', { name: 'Reply to Dee' }));
+    const t = within(q).getByRole('region', { name: 'Private with Dee' });
+    expect(t.textContent).toMatch('Only you and Dee see this');
+    fireEvent.click(within(t).getByRole('button', { name: 'Got it, thanks' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'reply', text: 'Got it, thanks' }));
+    expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/0-i0`);
+    fireEvent.change(within(t).getByLabelText('Reply to Dee'), { target: { value: 'What kind of reminder?' } });
+    fireEvent.click(within(t).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'reply', text: 'What kind of reminder?' }));
+  });
+
+  test('B: an answer shows on the card; Ask the room for ideas quotes the latest answer', async () => {
+    const thread = [{ by: 'host', text: 'Which day?', at: ago(60) }, { by: 'player', text: 'Two days before, by text', at: ago(30) }];
+    await openRoom(hostState({ ideas: [{ ...IDEAS[0], Thread: thread }] }));
+    const q = queue();
+    expect(within(q).getByTestId('brm-thread-new').textContent).toBe('Dee answered');
+    fireEvent.click(within(q).getByRole('button', { name: 'Your conversation with Dee \u00b7 2' }));
+    expect(within(q).getByRole('region', { name: 'Private with Dee' }).textContent).toMatch('Two days before, by text');
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room for ideas about this' }));
+    const dialogs = await screen.findAllByRole('dialog');
+    expect(within(dialogs[dialogs.length - 1]).getByLabelText(/Question/)).toHaveValue('How should we do this: \u201cTwo days before, by text\u201d?');
+  });
+
   test('Save for later posts later', async () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();

@@ -1102,7 +1102,33 @@ function ideaView(r) {
     // Queued for the room (Consider): waiting to be put to a vote, or made from one thing the room gave.
     ...(r.FromItem ? { fromItem: r.FromItem } : {}),
     ...(r.QueuedAt ? { queuedAt: r.QueuedAt } : {}),
+    // A PRIVATE REPLY (ideas flow B, owner 18 Oct: "private with Joe able to
+    // answer"): the host and the sender only. This view goes to the host and,
+    // as myIdeas, to the sender's own phone; Claude's view carries no ideas.
+    ...(Array.isArray(r.Thread) && r.Thread.length ? { thread: threadView(r.Thread) } : {}),
   };
+}
+
+/** The most messages one idea's private thread keeps, both sides together. */
+const IDEA_THREAD_MAX = 20;
+
+function threadView(thread) {
+  return (Array.isArray(thread) ? thread : []).filter((m) => m && (m.by === 'host' || m.by === 'player') && m.text)
+    .map((m) => ({ by: m.by, text: String(m.text), at: m.at || null }));
+}
+
+/**
+ * Who may write next on an idea's private thread: the host on any idea a
+ * person sent (not their own, not one made from a vote's option); the sender
+ * only once the host has written. Returns an error string, or ''.
+ */
+function threadRefusal(idea, by) {
+  if (!idea) return 'No such idea';
+  if (idea.Source === 'host' || !idea.PlayerName) return 'There is no one to reply to on this idea';
+  const thread = threadView(idea.Thread);
+  if (thread.length >= IDEA_THREAD_MAX) return 'That is as long as one conversation about an idea gets';
+  if (by === 'player' && !thread.some((m) => m.by === 'host')) return 'The host has not replied to this idea';
+  return '';
 }
 
 /** How many of a viewed ask's options carry a picture. */
@@ -2474,7 +2500,7 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
-  roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
+  roomFromRows, tally, askView, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,

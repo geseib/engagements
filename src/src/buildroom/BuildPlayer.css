@@ -644,6 +644,11 @@
 
 .bpl .bpl-myideas li > .bpl-text { flex: 1 1 12ch; min-width: 0; }
 
+/* REPLY TO JOE (ideas flow B, I2): the host's private words on this phone's own idea. */
+.bpl .bpl-thread { flex: 1 1 100%; display: grid; gap: 6px; margin: 4px 0 0; padding: 8px 10px; border-left: 3px solid var(--bpl-rule); }
+.bpl .bpl-thread-msg { margin: 0; font-size: var(--plr-t-body); overflow-wrap: anywhere; }
+.bpl .bpl-thread-who { font-weight: 700; }
+
 .bpl .bpl-status {
   margin-left: auto;
   font-size: var(--plr-t-meta);

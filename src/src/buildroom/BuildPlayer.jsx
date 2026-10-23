@@ -4,7 +4,7 @@ import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendIdeaReply, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
 import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, historyFromView } from './buildScreens';
@@ -942,6 +942,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
                   <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea, current)}</span>
+                  {idea.thread && idea.thread.length > 0 && <IdeaThread api={api} idea={idea} onResult={onResult} />}
                 </li>
               ))}
             </ul>
@@ -950,6 +951,52 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
       )}
     </section>
   );
+}
+
+/**
+ * THE HOST REPLIED (ideas flow B; docs/design/build-room-ideas I2): the host's
+ * private words on this phone's own idea, and the answer box. Only the host
+ * sees what is sent here; the room and Claude never do.
+ */
+function IdeaThread({ api, idea, onResult }) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const thread = idea.thread || [];
+  const full = thread.length >= 20;
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await sendIdeaReply(api, idea.ideaId, text);
+    setBusy(false);
+    if (r.ok) setDraft('');
+    else setError(r.error);
+    onResult(r);
+  };
+  const id = `bpl-reply-${idea.ideaId}`;
+  return (
+    <div className="bpl-thread" aria-label={W.hostRepliedLabel}>
+      {thread.map((m, i) => (
+        <p key={`${m.at}-${i}`} className="bpl-thread-msg"><span className="bpl-thread-who">{m.by === 'host' ? 'Host' : 'You'}:</span> {m.text}</p>
+      ))}
+      {!full && (
+        <>
+          <label className="bpl-label" htmlFor={id}>{W.answerTheHost}</label>
+          <textarea id={id} className="plr-inp bpl-area bpl-area--short" maxLength={TEXT_MAX} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <p className="plr-help">{W.onlyTheHost}</p>
+          <button type="button" className="bpl-send" disabled={!draft.trim() || busy} onClick={send}>{busy ? 'Sending\u2026' : W.sendToHost}</button>
+          <ErrorLine error={error} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** This phone's ideas whose newest private message is the host's: an answer is owed. */
+export function hostRepliedTo(myIdeas) {
+  return (myIdeas || []).filter((i) => (i.thread || []).length && i.thread[i.thread.length - 1].by === 'host');
 }
 
 /* -------------------------------------------------------------- history -- */
@@ -1261,6 +1308,12 @@ export default function BuildPlayer({
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
           {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
           <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>{W.haveALook}</button>
+        </section>
+      )}
+      {hostRepliedTo(myIdeas).length > 0 && (
+        <section className="bpl-ideas bpl-pvnote" aria-label={W.hostReplied}>
+          <p className="plr-help"><b>{W.hostReplied}</b> {W.yourIdeaWas(hostRepliedTo(myIdeas)[0].text)}</p>
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('ideas')}>{W.readAndAnswer}</button>
         </section>
       )}
       <section className="bpl-ideas">

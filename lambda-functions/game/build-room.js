@@ -1023,6 +1023,7 @@ async function ideaAction(ctx, ideaId, body) {
   const room = await loadRoom(ctx);
   const idea = findIdea(room, ideaId);
   if (!idea) return fail(404, 'No such idea');
+  if (action === 'reply') return ideaReply(ctx, idea, 'host', (body || {}).text);
   const now = new Date().toISOString();
   let status = idea.Status || 'new';
   if (action === 'direct') {
@@ -1047,7 +1048,7 @@ async function ideaAction(ctx, ideaId, body) {
   // own fold until the host brings it back.
   else if (action === 'later') status = 'later';
   else if (action === 'restore') status = 'new';
-  else return fail(400, 'action must be direct, suggest, acknowledge, wall, later, dismiss or restore');
+  else return fail(400, 'action must be direct, suggest, reply, acknowledge, wall, later, dismiss or restore');
   const next = { ...idea, Status: status, UpdatedAt: now, ...(action === 'wall' ? { WalledAt: now } : {}) };
   // How it was used, so the sender's phone can say (step 7, C11): sent to
   // Claude, or added to the room's open Ideas ask.
@@ -1074,6 +1075,34 @@ async function ideaAction(ctx, ideaId, body) {
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });
+}
+
+/**
+ * A PRIVATE REPLY ON AN IDEA (ideas flow B; docs/design/build-room-ideas I2;
+ * owner, 18 Oct: "private with Joe able to answer"). The host writes to the
+ * person who sent an idea; that person answers from their phone once the host
+ * has written. Only the two of them see it: the thread is on the idea row
+ * (sealed for organisations), the host's view and the sender's own myIdeas
+ * carry it, Claude's view has no ideas, and the timeline lines are host-only
+ * notes. An answer to an acknowledged idea puts it back on the host's list.
+ */
+async function ideaReply(ctx, idea, by, raw) {
+  const text = S.cleanText(raw, S.LIMITS.idea);
+  if (!text) return fail(400, 'Write your reply');
+  const refusal = S.threadRefusal(idea, by);
+  if (refusal) return fail(409, refusal);
+  const now = new Date().toISOString();
+  const next = { ...idea, Thread: [...S.threadView(idea.Thread), { by, text, at: now }], UpdatedAt: now };
+  if (by === 'player' && next.Status === 'acknowledged') next.Status = 'new';
+  await put(ctx, next);
+  const name = idea.PlayerName;
+  await logEntry(ctx, {
+    kind: 'note', by: 'system', ideaId: idea.IdeaId,
+    text: by === 'host' ? `You replied to ${name} privately: \u201c${text}\u201d` : `${name} answered privately: \u201c${text}\u201d`,
+  });
+  const rev = (await touchState(ctx)).Rev;
+  await announce(ctx, rev);
+  return reply(by === 'host' ? 200 : 201, { idea: S.ideaView(next) });
 }
 
 /**
@@ -3351,11 +3380,18 @@ async function routePlay(ctx, method, parts, body, query) {
   if (method !== 'POST') return fail(404, 'Not found');
   // A phone's doors, and no others (a phone never releases a post, §2c). remote-key:
   // this person's own way in to the remote share (owner 2026-10-16).
-  if (!['idea', 'respond', 'spin', 'vote', 'remote-key'].includes(a)) return fail(404, 'Not found');
+  if (!['idea', 'idea-reply', 'respond', 'spin', 'vote', 'remote-key'].includes(a)) return fail(404, 'Not found');
   if ((await sessionState(ctx)) === 'ENDED') return fail(409, 'This session has ended');
   if (a === 'remote-key' && !parts[1]) return playRemoteKey(ctx, me, input);
   const now = new Date().toISOString();
   const room = await loadRoom(ctx);
+
+  if (a === 'idea-reply') {
+    // Only this phone's own idea, and only once the host has written (ideas flow B).
+    const idea = room.ideas.find((i) => i.IdeaId === String(input.ideaId || '') && i.PlayerName === me.playerName && i.Source !== 'host');
+    if (!idea) return fail(404, 'No such idea');
+    return ideaReply(ctx, idea, 'player', input.text);
+  }
 
   if (a === 'idea') {
     let text = S.cleanText(input.text, S.LIMITS.idea);

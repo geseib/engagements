@@ -789,6 +789,36 @@ describe('a phone hears what happened to its comment (owner, 2026-10-05)', () =>
   });
 });
 
+describe('the host replied, privately (ideas flow B, I2)', () => {
+  const THREAD = [{ ideaId: 'j1', text: 'add documentation', status: 'new', playerName: ME, thread: [{ by: 'host', text: 'What kind of documentation?', at: '2026-10-23T10:43:00.000Z' }] }];
+
+  test('Now says the host replied; Ideas shows the words and sends the answer as idea-reply', async () => {
+    serve(baseView({ myIdeas: THREAD }));
+    await mount();
+    const note = await screen.findByRole('region', { name: 'The host replied' });
+    expect(note.textContent).toMatch('Your idea: \u201cadd documentation\u201d');
+    fireEvent.click(within(note).getByRole('button', { name: 'Read and answer' }));
+    expect(screen.getByText('What kind of documentation?')).toBeInTheDocument();
+    expect(screen.getByText('Only the host sees this.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Answer the host'), { target: { value: 'A how-to on the sign-up page' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to the host' })); });
+    await waitFor(() => expect(posts('idea-reply')).toHaveLength(1));
+    expect(posts('idea-reply')[0].body).toMatchObject({ ideaId: 'j1', text: 'A how-to on the sign-up page' });
+  });
+
+  test('once answered, Now no longer asks; an idea with no reply has no answer box', async () => {
+    serve(baseView({ myIdeas: [
+      { ...THREAD[0], thread: [...THREAD[0].thread, { by: 'player', text: 'A how-to', at: '2026-10-23T10:44:00.000Z' }] },
+      { ideaId: 'j2', text: 'bigger buttons', status: 'new', playerName: ME },
+    ] }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    expect(screen.queryByRole('region', { name: 'The host replied' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getAllByLabelText('Answer the host')).toHaveLength(1);
+  });
+});
+
 describe('Now · Ideas · History, on a phone or a laptop (step 7, C11)', () => {
   const at = (m) => `2026-10-06T10:${String(m).padStart(2, '0')}:00.000Z`;
   const STORY = {
