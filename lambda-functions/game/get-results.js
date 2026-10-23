@@ -462,12 +462,45 @@ async function readRoundQuestion(gameId, paddedQuestionId) {
   }
 }
 
-/** The title a phone can head an earlier round with; '' when it cannot be read. */
-async function roundQuestionTitle(gameId, paddedQuestionId) {
+/** A field as a phone may show it: a string, or '' (an envelope that did not open is never text). */
+const publicText = (...values) => {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  return '';
+};
+
+/**
+ * WHAT A PHONE SAW OF AN EARLIER ROUND'S QUESTION (issue #47). A participant
+ * going back to a finished round from the end screen read only "Lesson 2" and
+ * its responses: the lesson they had answered was gone. This is the question's
+ * PUBLIC face, the fields get-question.js projects to a player during ASK and
+ * nothing more: title, lesson (detail), category, the question's own
+ * instruction, its artwork and school.
+ *
+ * A WHITELIST, never a spread of the row: Background is Workie's alone
+ * ("never shown to players"), AnswerDetails is the spoiler get-question also
+ * leaves out, and ClaudeNote is not a player's. Decrypted from the SET's org by
+ * readRoundQuestion, as the live read is. Null when the question cannot be read.
+ */
+async function roundQuestionPublic(gameId, paddedQuestionId) {
   const q = await readRoundQuestion(gameId, paddedQuestionId);
-  if (!q) return '';
-  const title = q.Title || q.title || q.Prompt || q.prompt || '';
-  return typeof title === 'string' ? title : '';
+  if (!q) return null;
+  return {
+    title: publicText(q.Title, q.title, q.Prompt, q.prompt),
+    detail: publicText(q.Detail, q.questionDetail, q.detail),
+    category: publicText(q.Category, q.category),
+    customInstructions: publicText(q.CustomInstructions),
+    image: publicText(q.Image, q.image),
+    school: publicText(q.School, q.school),
+  };
+}
+
+/** The read-back's question fields: `questionTitle` (issue #35's heading) and
+ *  `question` (#47's lesson). '' and null when the question cannot be read. */
+async function roundQuestionFields(gameId, paddedQuestionId) {
+  const question = await roundQuestionPublic(gameId, paddedQuestionId);
+  return { questionTitle: question ? question.title : '', question };
 }
 
 exports.handler = async (event) => {
@@ -673,7 +706,8 @@ const handle = async (event) => {
                 timestamp: row.CompletedAt || null,
                 stored: true,
                 // Issue #35: the phone headed an earlier round "Round 1" only.
-                questionTitle: await roundQuestionTitle(gameId, paddedPast),
+                // Issue #47: and showed none of its lesson.
+                ...(await roundQuestionFields(gameId, paddedPast)),
               }),
               headers: { 'Access-Control-Allow-Origin': '*' }
             };
@@ -702,7 +736,7 @@ const handle = async (event) => {
                 statusCode: 200,
                 body: JSON.stringify({
                   gameId, questionId: paddedPast, answers: [], totalVotes: 0, stored: true, noAnswers: true,
-                  questionTitle: await roundQuestionTitle(gameId, paddedPast),
+                  ...(await roundQuestionFields(gameId, paddedPast)),
                 }),
                 headers: { 'Access-Control-Allow-Origin': '*' }
               };

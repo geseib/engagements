@@ -11831,6 +11831,25 @@ body {
   padding-left: 20px;
 }
 
+/* "Your turn" on an earlier round read back on a phone (issue #47). Tokens
+   only: --text on the shell's dusk, --muted for the label (6.6:1 on
+   --surface), the accent as a rule, never as text. */
+.past-round__task {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.past-round__task-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 .past-round__answer-detail {
   margin: 10px 0 0;
   padding: 8px 12px;
