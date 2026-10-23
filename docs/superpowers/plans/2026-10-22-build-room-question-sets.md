@@ -39,8 +39,9 @@ And: *"yes, add it to the plan and build 1–4 first."*
 5. **Kind-specific opening questions** (later). A set's Opening category adds or replaces
    probes after a step once its kind is chosen ("What does the player do in the first ten
    seconds?"). Server change.
-6. **Starter sets per kind** (later). Drafts for training, game, document and dashboard from
-   the existing set generator, five sections each, for the owner to edit.
+6. **Starter sets per kind** (built 23 Oct: `sets/build-room-<kind>.csv` and `-pulse.csv` for training, game, document, dashboard; `scripts/install-build-room-kind-sets.sh`; notes in `docs/design/build-room-host-redesign/starter-sets-by-kind.md`). Written by hand
+   in the first starter set's style rather than by the set generator, five sections each, for
+   the owner to edit.
 7. **Claude writes a set** (built 22 Oct; plugin 1.26.0). A host button, Ask Claude for questions,
    makes a request of a new kind `questions`. A plugin skill says what a good Build Room set
    is (the five sections, only Ideas / Choose 2-6 / Rate 1-5, readable from the back of the
