@@ -397,7 +397,10 @@ const around = (raw, needle) => {
     + 'you would like is missing, work with what you have and do not mention that it is missing.\n'
     // The one-line fact sheet (workie-grounding STEP0, 21 Oct 2026): what a ranking measures.
     + 'A ranking shows which answers people preferred among these, not that the room agreed to a plan or '
-    + 'chose an owner. Say what the vote shows, as the counts and points above show it.'));
+    + 'chose an owner. Say what the vote shows, as the counts and points above show it. '
+    // Review #46: no inferred practice, no owner the answers never named.
+    + 'Never say what the organisation currently or usually does unless an answer says it; '
+    + 'never name an owner the answers did not name.'));
   await check('backgroundLine labels a Background, and is empty for nothing', () => {
     assert.strictEqual(backgroundLine(`  ${BG}  `), LABEL + BG);
     for (const v of [undefined, null, '', '   ', 42, {}]) assert.strictEqual(backgroundLine(v), '');
