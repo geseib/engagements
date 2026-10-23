@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (Organisations): every team's Billing… button shows
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `9b3ee00b`. Everything below this entry is already on test; this push adds only what is here.
 
 ### Fixed
 
@@ -26,6 +26,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - On narrow windows the list scrolls sideways rather than squeezing the buttons (as before, it was already 620px wide at least; now 700px).
 
 ---
+
 ## 23 Oct 2026 (Quick start filters): whose sets and tags beside the search
 
 **Test:** merge of dev `363a9b81`. Everything below this entry is already on test; this push adds only what is here.
