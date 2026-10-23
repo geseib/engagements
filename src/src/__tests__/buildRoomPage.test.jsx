@@ -696,6 +696,40 @@ describe('Connect Claude Code', () => {
   const LATEST = { running: S.LATEST_PLUGIN, latest: S.LATEST_PLUGIN, outdated: false };
   const quiet = { lastSeenAt: ago(600), folder: '~/build-room/volunteer-sign-up' };
 
+  test('step 3 waits for Claude, offers the in-Claude command there, and turns green once the new key calls in (owner, 23 Oct)', async () => {
+    const props = (room) => ({
+      room: { settings: {}, title: 'Volunteer sign-up', plugin: LATEST, ...room }, gameId: GAME, busy: false, onClose: () => {}, run: (fn) => fn(),
+      api: { mintKey: jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' })), revokeKey: jest.fn(), saveSettings: jest.fn() },
+    });
+    const first = props({ agent: {} });
+    const { rerender } = render(<ConnectPanel {...first} />);
+    expect(screen.queryByTestId('brm-connect')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Mint a key and copy the command' }));
+    const waiting = await screen.findByTestId('brm-connect-waiting');
+    expect(waiting).toHaveTextContent(W.connectWaiting);
+    // The "already in Claude Code" line belongs with pasting (step 3), not with minting (step 2).
+    const [, mint, paste] = document.querySelectorAll('.brm-steps--connect > li');
+    expect(mint.querySelector('[data-testid="brm-connect"]')).toBeNull();
+    expect(paste.querySelector('[data-testid="brm-connect"]').textContent).toBe(`/engage:kickoff eng_${GAME}_${'n'.repeat(43)}`);
+    expect(mint).toHaveClass('is-done');
+    expect(paste).toHaveClass('is-wait');
+    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('brm-btn--primary');
+
+    // An older key used long ago does not count.
+    rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { key: { keyId: 'k1', lastUsedAt: ago(900) } } }} />);
+    expect(paste).toHaveClass('is-wait');
+
+    const at = new Date().toISOString();
+    rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { lastSeenAt: at, kickedOffAt: at, folder: '~/build-room/volunteer-sign-up', key: { keyId: 'k2', createdAt: at, lastUsedAt: at } } }} />);
+    const steps = document.querySelectorAll('.brm-steps--connect > li');
+    expect(steps[2]).toHaveClass('is-done');
+    expect(steps[2].querySelector('.brm-step-title').textContent).toBe(W.connectedTitle);
+    expect(screen.getByTestId('brm-connected')).toHaveTextContent(/Claude Code connected at .*, in ~\/build-room\/volunteer-sign-up\. It has started work\./);
+    expect(steps[0]).toHaveClass('is-done');
+    expect(screen.queryByTestId('brm-connect-waiting')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('brm-btn--primary');
+  });
+
   test('a crew room adds a fourth step: share the repo', () => {
     panel({ agent: {}, crew: { enabled: true } });
     const titles = [...document.querySelectorAll('.brm-step-title')].map((n) => n.textContent);

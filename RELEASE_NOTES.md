@@ -9,6 +9,33 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (evening): Connect Claude Code says when you are connected
+
+**Test:** merge of dev `DEVCOMMIT`.
+
+### New
+
+- **Step 3 of Connect Claude Code confirms the connection** (owner, 23 Oct: "this screen doesnt turn step 3 green and indicate hey, you are done and connected"). After you mint a key, step 3 says *Waiting for Claude Code to call in…*; once Claude Code calls in with that key, the step turns green, reads **Connected**, gives the time and folder, says whether Claude has started, and **Done** becomes the main button. An older key calling in does not count.
+- **The "already in Claude Code" line moved to step 3.** Step 2 is now only the folder, the key and the start command; step 3 holds both ways to start: paste the start command into a terminal, or type the kickoff line into a Claude Code already open in that folder.
+- **Nothing after 45 seconds?** Step 3 says where to look: the first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.
+
+### Fixed
+
+- Step 3 never showed as done, even while the phones already said Claude Code was connected.
+- The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
+
+### What to look at
+
+1. On a Build Room with no Claude yet, open **Connect Claude Code**, **Mint a key and copy the command**. Step 2 turns green; step 3 shows the kickoff line for an open Claude Code and *Waiting for Claude Code to call in…*.
+2. Paste the start command into a terminal. When Claude Code connects, step 3 turns green with **Connected at …, in ~/build-room/…**, and **Done** is highlighted.
+3. Leave it 45 seconds without pasting: the hint about the terminal's trust and allow questions appears.
+
+### Known gaps
+
+- If you close the window before Claude calls in, reopening it shows the "Connected now" view instead, which says the same thing in its own words.
+
+---
+
 ## 23 Oct 2026 (later): AI question sets arrive with a topic, and an idea's doors all open
 
 **Test:** merge of dev `0fa2edee2` (and the commit naming it).
@@ -58,7 +85,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Known gaps
 
-- **The starter sets are installed by hand per tier** (`scripts/install-build-room-kind-sets.sh engagetest --apply`); until that runs on test, step 2 shows only the sets already there.
+- **The starter sets are installed by hand per tier** (`scripts/install-build-room-kind-sets.sh <table> --apply`): done on dev and test on 23 Oct; prod will need it when this ships there.
 - The reminder shows when you next open a page with the bell (the start screen, the console, the two-screen console, the phone remote); there is no email, by design.
 - A set that arrived before this change has no entry until `scripts/backfill-claude-set-reminders.js` is run on the tier (dry run by default; `--apply` writes; a team room's set needs the tier's tenant key). Only dev and test can have such sets.
 

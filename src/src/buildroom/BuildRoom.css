@@ -254,6 +254,10 @@
 .brm .brm-connback.is-now { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
 .brm .brm-connback-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-text); margin-top: 6px; flex: none; }
 .brm .brm-connback.is-now .brm-connback-dot { background: var(--brm-success-text); }
+.brm .brm-connwait { display: flex; align-items: center; gap: 8px; }
+.brm .brm-connwait .brm-connback-dot { margin-top: 0; animation: brm-connwait 1.6s ease-in-out infinite; }
+@keyframes brm-connwait { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .brm .brm-connwait .brm-connback-dot { animation: none; } }
 .brm .brm-connback > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .brm .brm-connback span:not(.brm-connback-dot) { color: var(--muted); font-size: var(--brm-t-label); overflow-wrap: anywhere; }
 .brm .brm-otherlaptop { margin: 0; }
