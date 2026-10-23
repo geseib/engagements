@@ -25,7 +25,7 @@
  *
  * Words come from words.js. Pure: no React, no fetch.
  */
-import { stageModel, decisionChoices } from './buildScreens';
+import { stageModel, decisionChoices, wheelPossible } from './buildScreens';
 import { W } from './words';
 
 const ICON = Object.freeze({
@@ -126,7 +126,8 @@ function inlineDecide(model, current, { pickId = null, answering = false } = {})
   if (p && p.action === 'noop') return m;
   const isEdit = (c) => Boolean(c && c.action === 'edit');
   const wheel = current.wheel && !current.revotedAs ? current.wheel : null;
-  const canWheel = !current.revotedAs && current.kind !== 'rating' && decisionChoices(current).length > 0;
+  // Two options at least, as the server requires: one idea offered a Spin that could only fail.
+  const canWheel = wheelPossible(current);
   const spinMove = wheel ? { action: 'spin', label: W.spinAgain } : canWheel ? { action: 'wheel', label: W.spin } : null;
   const picked = pickId && current.kind !== 'rating' ? pickId : null;
   if (p && p.action === 'to-claude') {

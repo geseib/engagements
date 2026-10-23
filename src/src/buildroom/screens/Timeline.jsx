@@ -42,12 +42,14 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
         ) : (
           <>
             <span className="brm-by">{byLabel(entry)}</span>
-            <span className="brm-tl-text">{entry.text}</span>
+            <span className="brm-tl-text">{entry.hidden && !entry.text ? W.historyNotShown : entry.text}</span>
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
             {host && entry.held && <span className="brm-tl-flag">{W.laterHeld}</span>}
             {host && entry.roomHold && <span className="brm-tl-flag brm-tl-flag--held">{entry.roomHold === 'kept' ? W.postKept : W.postNotShown}</span>}
+            {/* Don't show the room: the host's copy keeps the words and says so; the room's has none. */}
+            {entry.hidden && entry.text && <span className="brm-notshown">{W.notShownMark}</span>}
             {host && entry.forAgent && <span className="brm-tl-flag">{entry.as && entry.as !== 'do-now' ? `${claudeKindLabel(entry.as)} · ` : ''}{entry.deliveredAt ? 'Claude has it' : stopped ? `Waiting for Claude · run ${continueCommand()}` : 'Waiting for Claude'}</span>}
           </>
         )}

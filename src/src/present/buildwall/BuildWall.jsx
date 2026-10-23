@@ -13,6 +13,12 @@
  * controls: nothing on the wall can be pressed, and it names nobody unless the
  * host turned List names on (the server decides; wallView is an allowlist).
  *
+ * LIVE TYPING (owner, 23 Oct 2026): the host's draft to Claude, from the
+ * laptop that opened this window, arrives on a BroadcastChannel in this
+ * browser (buildroom/typingMirror.js), never through the server, so the rule
+ * of useBuildWall (frames are refetch signals only) is untouched. The Stage
+ * draws it in the Sent to Claude card's place; a new send clears it.
+ *
  * NEVER SCROLLS (host standards §5). The Stage has the shared fitter. Build
  * fits its newest screenshot into what is left of the screen. History shows
  * the newest entries that fit and "and N earlier" (fit lever 3), measured
@@ -24,6 +30,7 @@ import BuildStageScreen from '../../buildroom/screens/BuildStageScreen';
 import BuildBuildScreen from '../../buildroom/screens/BuildBuildScreen';
 import BuildHistoryScreen from '../../buildroom/screens/BuildHistoryScreen';
 import { W } from '../../buildroom/words';
+import { listenForTyping, openTypingChannel } from '../../buildroom/typingMirror';
 import { PROFILES, profileClass } from '../../config/displayProfile';
 import useBuildWall from './useBuildWall';
 import { wallRoom, wallState } from './wallRoom';
@@ -116,6 +123,15 @@ function useHistoryFit(on, key) {
   return fit;
 }
 
+/** What the host is typing to Claude on the laptop that opened this window, or ''. Cleared by a new send. */
+export function useHostTyping(gameId, sentAt) {
+  const [text, setText] = useState('');
+  useEffect(() => listenForTyping(openTypingChannel(gameId), setText), [gameId]);
+  // The real card replaces the draft the moment the send lands.
+  useEffect(() => { setText(''); }, [sentAt]);
+  return text;
+}
+
 /** A plain line in the middle of the room's screen: connecting, a changed link, a gone session. */
 function WallQuiet({ line, profile = 'room' }) {
   useRootProfile(profile, line);
@@ -135,6 +151,7 @@ export default function BuildWall({ gameId, k }) {
   const ended = Boolean(room && room.state === 'ENDED');
   const storyKey = room ? `${(room.log || []).length}:${(room.asks || []).length}:${(room.images || []).length}:${ws.profile}` : '';
   const fit = useHistoryFit(status === 'ok' && screen === 'history', storyKey);
+  const typing = useHostTyping(gameId, room && room.sent ? room.sent.at : null);
   useRootProfile(ws.profile, screen);
 
   if (status === 'link-changed') return <WallQuiet line={W.wallLinkChanged} />;
@@ -144,7 +161,7 @@ export default function BuildWall({ gameId, k }) {
   const codesUp = ws.codes !== 'none' && !ended;
   let body;
   if (screen === 'stage') {
-    body = <BuildStageScreen room={room} now={now} show={{ codesUp }} profile={ws.profile} />;
+    body = <BuildStageScreen room={room} now={now} show={{ codesUp }} profile={ws.profile} typing={typing} />;
   } else {
     body = (
       <div className="bwall-frame">

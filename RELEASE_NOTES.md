@@ -9,6 +9,44 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (night): finding a question set when you create a session, the room sees what Claude was told, live typing on the room's window, Claude's mockups where you are looking, and the wheel fix
+
+**Test:** merge of dev `2d68fe70`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Finding a question set when you create a session** (another session, [#41](https://github.com/geseib/engagements/issues/41)). Create engagement's question set is no longer a long drop-down: one line with a search box and the sets you used lately, opening in place to search and filter by **Whose sets** (All, Yours, your team by name, Engage, Public, each counted), **Topic**, **Tag** (any of several), **Updated** (used by me lately, this week, this month, older) and **Sort**, with the keyboard and a *nothing matches* line that counts every way out. Hosts in several teams can switch team from it. The event agenda's item dialog uses the same chooser. Help: *Finding a question set*.
+- **Sent to Claude leads the Stage** (owner, 23 Oct: "nobody can see what Claude was actually told"). From the moment you send until the next ask opens, the Stage, the room's window and the phones' Now lead with a **Sent to Claude** card: the words Claude got, and the room's pick they came from (*The room chose B · Calm photo*). Claude's status sits under it instead of replacing it. Every kind of send counts: a decided ask (reworded or not), Consider's Send to Claude, Add something, an idea sent from Waiting for you, Send now from the Later list, and What's next's Combine. Your Why is never on the card.
+- **Don't show the room**, unticked, beside every Send to Claude (the decide panel, Change before sending, the one-press Send at Settle, Consider, Add something, and once over Waiting for you and over the Later list). Ticked, Claude gets every word as before; the Stage, the room's window and phones say only *The host sent Claude a direction*, and the room's History reads *Sent to Claude, not shown*. Your Host screen, console, Timeline and History keep the words, marked *not shown to the room*.
+- **Show my typing to the room** (two screens only, off by default, remembered per session in this browser). While it is on, the room's window opened from this laptop shows *The host is writing to Claude…* with your words and a caret as you type a direction, never the Why. It goes when you send (the card takes over), on an empty box, or after 10 seconds without typing. The words never go through the server, so a room's window on another device does not see them.
+- **Claude's mockups are ready**, where you are looking (owner, dev game 2550: "Claude made three mockups for a vote, but I couldn't readily put them up"). When every picture of one of Claude's Choose questions is in, a card shows the question and the A/B/C pictures (click one to look closer) above whatever you are running on the Host screen, and under the main button in **Your part now** on the console, never in its place. **Put to the room now** opens it, asking *Close ask 2 and open this?* first if an ask is open; **Next, after this ask** lines it up to open when the open ask closes (the existing Open next), and is the main button during the opening, so the mockups follow the step the room is on. Lined up, the card reads *Opens after ask N*, with **Not next**. More than one ready: the oldest, with *+N more in Waiting for you*. On the Stage the dock shows **Mockups ready** beside HOST; the room's window never does.
+- **Waiting for you lists ready mockups first** among Claude's questions, so a set of pictures no longer sits under Claude's Ideas question.
+
+### Fixed
+
+- **Spin the wheel with only one idea** (dev game 2550): an Ideas vote with a single idea offered **Spin the wheel**, which the server refuses (a wheel needs two options), so pressing it ended in an error. The wheel is now offered only with two options or more, on the Host screen, the console and the Stage.
+- After a send, the room's window kept the last question up with "Claude is building", and a direction sent without an ask never showed at all.
+- Mockups Claude made during the opening, with an ask open, could only be reached through their card in Waiting for you, and nothing pointed at them.
+
+### What to look at
+
+1. **Create engagement**, Call & Answer: the question set is one line with a search box and your recent sets; open it, filter by **Whose sets** › Engage and a **Topic**, search a word, pick one, then **Change**. In an event's agenda, **Add item** › a session uses the same chooser.
+2. On two screens, with a phone joined: run a Choose ask to results and press **Send B to Claude**. The room's window and the phone's Now show **Sent to Claude** with the words and *The room chose B · …*; when Claude says what it is doing, its status shows under the card, and the card stays until you open the next ask.
+3. In Add something, type a direction, tick **Don't show the room** and **Send to Claude**. The room's window and the phone say *The host sent Claude a direction*; the phone's History says *Sent to Claude, not shown*; your Host screen and Timeline show the words with *not shown to the room*; Claude gets the words.
+4. Tick **Show my typing to the room** beside Add something and type: the room's window opened from this laptop shows *The host is writing to Claude…* and the words as you type. Type in the Why: nothing new shows. Send: the card replaces it. Turn the toggle off and reload: it stays off for this session.
+5. On one screen, the typing toggle is not offered.
+6. In the opening, with a step's question open, have Claude propose a Choose question with mockups (or answer its Ideas question first so it sits above): once the pictures are in, **Claude's mockups are ready** shows above the open step on the Host screen (on two screens, under Your part now), with **Next, after this ask** as the main button. Press it: the card reads *Opens after ask N*; close the step's question and the mockups open to the room. In Waiting for you the mockups are listed above Claude's other questions.
+7. Again with an ask open, press **Put to the room now**: it asks *Close ask N and open this?*; **Keep it open** changes nothing. On the Stage (press 2) the dock shows **Mockups ready**; pressing it goes to the Host screen.
+
+### Known gaps
+
+- Live typing shows on the Stage screen of the room's window only (not Build or History), and only while no ask is open. The words are shown as you type them: the room's window cannot hide a name you type.
+- A send with no box of its own (points sent together, run-list items) always shows its words on the card; the instructions Preview the work, the brief request and the mockups request never do. While a run list is going, the Stage keeps the list, not the card.
+- History still shows the room your Why for a decision or a Consider send (as before); Don't show the room hides that too.
+- With nothing open between the opening's steps, the mockups card offers only **Put to the room now**: Open next has nothing to wait behind, so it would open at once.
+
+---
+
 ## 23 Oct 2026 (late evening): review #46 and #47 fixes, before prod
 
 **Test:** merge of dev `788546cf0` (and the commit naming it). This push also carries the entry below it (Connect Claude Code confirms the connection; the side boxes scroll on). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).

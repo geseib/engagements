@@ -460,6 +460,21 @@ const PHONE_HIDDEN_LOG_KINDS = Object.freeze(['direction']);
 /** Shown on a phone without their detail (the host's note, an idea's author). */
 const DETAIL_PRIVATE_LOG_KINDS = Object.freeze(['decision', 'idea']);
 
+/**
+ * DON'T SHOW THE ROOM (owner, 23 Oct 2026): a send the host ticked reaches
+ * Claude word for word, but the room's reads (phones, the wall, the room's
+ * History) carry it as `hidden: true` with no words. `hideFromRoom` is a body
+ * field of every host send; absent is false. → `{value}` or `{error}`.
+ */
+function roomHiddenOf(body) {
+  const v = (body || {}).hideFromRoom;
+  if (v === undefined || v === null) return { value: false };
+  if (typeof v !== 'boolean') return { error: 'hideFromRoom must be true or false' };
+  return { value: v };
+}
+/** A logView entry as the room may read it: a hidden send keeps its place and stamps, never its words. */
+const roomSafeEntry = (l) => (l && l.hidden ? { ...l, text: '', detail: '', why: '', roomWords: '' } : l);
+
 const LIMITS = Object.freeze({
   prompt: 300,
   detail: 2000,
@@ -1046,6 +1061,11 @@ function askView(ask, room, audience, me) {
       decidedAt: ask.DecidedAt || null,
       deliveredAt: ask.Decision.deliveredAt || null,
     };
+    // Don't show the room: the room still sees its own pick, never the words the host sent.
+    if (ask.Decision.roomHidden) {
+      out.decision.hidden = true;
+      if (!isHost) Object.assign(out.decision, { direction: '', ...(out.decision.why ? { why: '' } : {}), ...(out.decision.roomWords ? { roomWords: '' } : {}) });
+    }
   }
   // Claude reads the decision with the host's why under it (wait_for_room prints the direction as it is).
   if (audience === 'agent' && out.decision && ask.Decision.why) out.decision.direction = `${out.decision.direction}\n\nWhy: ${ask.Decision.why}`;
@@ -1082,6 +1102,8 @@ function logView(r) {
     considered: Boolean(r.Considered),
     // A held entry the host later sent: the entry that carried it.
     sentAs: r.SentAs || null,
+    // Don't show the room: the host's copy keeps the words; the room's reads blank them (roomSafeEntry).
+    ...(r.RoomHidden ? { hidden: true } : {}),
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -2090,7 +2112,8 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
     currentAskId: current ? current.AskId : null,
     current: current ? publicAsk(askView(current, room, 'public', me), forRoom) : null,
     decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
-      askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.direction || '', decidedAt: a.DecidedAt || null,
+      askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.roomHidden ? '' : a.Decision.direction || '', decidedAt: a.DecidedAt || null,
+      ...(a.Decision.roomHidden ? { hidden: true } : {}),
     })),
     // A phone sees the timeline the room made, not the host's working:
     // directions are Claude's copy of a decision the phone already sees (and
@@ -2103,6 +2126,7 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
         // A phone sees when a step ran, not where Claude took it from.
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
+      .map(roomSafeEntry)
       .map((l) => ({ ...l, link: forRoom(l.link) })),
     myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map((i) => {
       const v = ideaView(i);
@@ -2111,6 +2135,9 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
     }) : [],
     // The host's words in History (a why, what Claude got) never carry a name to a phone (Consider, frame 6).
     history: roomHistory(room, visibleAsks, nameTest(room, players, settingsOf(room.state).listNames)),
+    // SENT TO CLAUDE ON THE PHONE (owner, 23 Oct 2026): what the room's Claude was
+    // told last, by the wall's rules (no name, nothing the host kept from the room).
+    sent: sentView(room, nameTest(room, players, settingsOf(room.state).listNames), { forRoom: true }),
     images: room.images.map(imageView),
     outcome: publicOutcome(outcomeView(room.state && room.state.Outcome), forRoom),
     doing: doingPublicView(room.activity, now),
@@ -2163,7 +2190,7 @@ function roomHistory(room, visibleAsks, hide = () => false) {
       ideaId: l.ideaId, from: l.from ? { ...l.from, ...(l.from.items ? { items: roomItems(l.from.items) } : {}) } : null, asWritten: l.asWritten,
       forAgent: l.forAgent, held: l.held, deliveredAt: l.deliveredAt, createdAt: l.createdAt,
       why: safe(l.why), roomWords: l.considered ? safe(l.roomWords) : '', liked: l.liked, considered: l.considered, sentAs: l.sentAs,
-    })),
+    })).map((l, i) => (entries[i].RoomHidden ? roomSafeEntry({ ...l, hidden: true }) : l)),
   };
 }
 
@@ -2332,6 +2359,7 @@ function wallView({ gameId, meta, sessionState, room: whole, players, now, crew 
     // "Claude proposed a question: …" names an ask the room has not seen (roomRowsForRoom drops it too).
     .filter((l) => !l.AskId || seenAsks.has(l.AskId))
     .map(logView)
+    .map(roomSafeEntry)
     .filter((l) => !names(l.text))
     .map(({ forAgent, deliveredAt, as, held, step, from, name, link, ...rest }) => ({
       ...(DETAIL_PRIVATE_LOG_KINDS.includes(rest.kind) ? { ...rest, detail: '' } : rest),
@@ -2372,7 +2400,7 @@ function wallView({ gameId, meta, sessionState, room: whole, players, now, crew 
     agent: { connected: agent.connected, listening: agent.listening, name: agent.name },
     // I9-I10 (owner, 18 Oct 2026): what went to Claude last, and what Claude's
     // tools did (file and program names only, as the plugin writes them).
-    sent: sentView(room, names),
+    sent: sentView(room, names, { forRoom: true }),
     activity: activityView(room.activity).filter((a) => !names(a.text)),
     shownPoint: shown ? { ...shown, from: shown.from === 'claude' ? 'claude' : nameOf(shown.from) } : null,
     run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
@@ -2414,7 +2442,7 @@ function pendingDirections(room) {
  * words the reader may not see (the wall: a name the room meter hides); the
  * entry still counts, so the Stage still says Sent to Claude. Null when none.
  */
-function sentView(room, hide = () => false) {
+function sentView(room, hide = () => false, { forRoom = false } = {}) {
   let best = null;
   for (const l of (room && room.logs) || []) {
     if (!l.ForAgent || l.ForBuilder || l.HostOnly || l.Cancelled || l.Kind === 'note') continue;
@@ -2425,13 +2453,35 @@ function sentView(room, hide = () => false) {
   if (!best) return null;
   const as = claudeGetsOf(best.ForAgentAs);
   const text = String(best.Text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  // DON'T SHOW THE ROOM (owner, 23 Oct 2026): the room's reads say only that
+  // something went; the host's read keeps the words, marked.
+  const hidden = Boolean(best.RoomHidden);
+  const pick = hidden && forRoom ? null : sentPickOf(room, best);
   return {
     verb: best.Kind === 'decision' ? 'decided' : as === 'ask' ? 'asked' : 'told',
-    text: hide(text) ? '' : text,
+    text: (hidden && forRoom) || hide(text) ? '' : text,
     askId: best.AskId || null,
     at: best.CreatedAt || null,
     pickedAt: best.DeliveredAt || null,
+    ...(hidden ? { hidden: true } : {}),
+    ...(pick ? { pick } : {}),
   };
+}
+
+/**
+ * The pick a sent decision came from, as the Sent to Claude card says it ("The
+ * room chose B · Calm photo"): how it was decided and the chosen options'
+ * labels and titles. Null for any other send, a rating, or a pick that names no option.
+ */
+function sentPickOf(room, entry) {
+  if (!entry || entry.Kind !== 'decision' || !entry.AskId) return null;
+  const ask = ((room && room.asks) || []).find((a) => a.AskId === entry.AskId);
+  const d = ask && ask.Decision;
+  if (!d) return null;
+  const items = (d.chosen || []).map((c) => (ask.Options || []).find((o) => o.label === c))
+    .filter(Boolean).map((o) => ({ label: o.label, title: o.title || '' }));
+  if (!items.length) return null;
+  return { method: d.method || (d.spoken ? 'spoken' : 'vote'), items };
 }
 
 /** Entries for one builder's Claude (crew mode): feedback, the base moving. */
@@ -2601,7 +2651,7 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
-  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView, roomHiddenOf, roomSafeEntry,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,

@@ -56,6 +56,11 @@
 .hc-bullet { color: var(--muted); }
 .hc-action { color: var(--accent-text); }
 .hc-acts { flex: none; }
+/* A second card under Your part now (`extra`): the row wraps and the card takes a line of its own. */
+.hc-now--extra { flex-wrap: wrap; }
+.hc-now--extra .hc-now-text { flex: 1 1 0; }
+.hc-now-extra { flex: 1 1 100%; min-width: 0; }
+.hc-now-extra:empty { display: none; }
 /* The way out, on the top line (owner, 18 Oct 2026). */
 .hc-leave { font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); background: transparent; border: 0; padding: 4px 6px; cursor: pointer; }
 .hc-leave:hover { color: var(--text); }

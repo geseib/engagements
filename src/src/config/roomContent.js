@@ -103,6 +103,10 @@
  *  BUILD_SHOWING   LEAD what the host put up (the codes,    same
  *                  the crew board, the brief); Claude
  *                  essential
+ *  BUILD_SENT      LEAD what Claude was told (or only that  same
+ *                  the host sent something); the room's
+ *                  pick it came from support; Claude
+ *                  essential under it (owner, 23 Oct 2026)
  *
  *  Claude's status (every BUILD_ moment, every profile, one screen and the
  *  room's window, Stage, Build and History): the headline ("Claude is
@@ -125,7 +129,7 @@ export const CA_MOMENTS = Object.freeze([
 ]);
 export const BUILD_MOMENTS = Object.freeze([
   'BUILD_ASK', 'BUILD_RESULTS', 'BUILD_WHEEL', 'BUILD_IDLE', 'BUILD_POINT',
-  'BUILD_RUN', 'BUILD_HISTORY', 'BUILD_BUILD', 'BUILD_SHOWING',
+  'BUILD_RUN', 'BUILD_HISTORY', 'BUILD_BUILD', 'BUILD_SHOWING', 'BUILD_SENT',
 ]);
 
 export const VERBOSE_PROFILES = Object.freeze(['call']);
@@ -458,6 +462,13 @@ function build(p, moment, verbose, d) {
       p.part('shown', ROLE.LEAD, 'primary');
       claudePart(ROLE.SUPPORT);
       return 'shown';
+    case 'BUILD_SENT': {
+      const sent = d.sent && typeof d.sent === 'object' ? d.sent : {};
+      p.part('sent', ROLE.LEAD, 'primary', str(sent.text));
+      p.part('pick', str(sent.pick) ? ROLE.SUPPORT : ROLE.DROPPED, 'body', str(sent.pick), { keep: true });
+      claudePart(ROLE.SUPPORT);
+      return 'sent';
+    }
     case 'BUILD_BUILD':
     default:
       p.part('picture', ROLE.LEAD, 'primary');

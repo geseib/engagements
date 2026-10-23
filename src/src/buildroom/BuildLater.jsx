@@ -8,9 +8,10 @@
  * The ticks are the page's state (BuildRoomPage), so What's next can lead with
  * "Put N from Later to a vote" while two to six are ticked.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import Icon from '../components/Icon';
 import { W } from './words';
+import { HideFromRoom } from './BuildSendOptions';
 import { laterItems, VOTE_IDEAS_MAX } from './buildScreens';
 
 const clockOf = (iso) => {
@@ -19,6 +20,8 @@ const clockOf = (iso) => {
 };
 
 export default function BuildLater({ room, ticked, setTicked, busy, ended, run, api, onVote, onAskRoom }) {
+  // Don't show the room, for this list's Send now: one box over the list, unticked by default.
+  const [hide, setHide] = useState(false);
   const items = laterItems(room);
   if (!items.length) return null;
   const live = new Set(items.map((x) => x.key));
@@ -29,11 +32,13 @@ export default function BuildLater({ room, ticked, setTicked, busy, ended, run, 
   const remove = (x) => run(() => (x.type === 'idea'
     ? api.ideaAction(x.id, 'dismiss')
     : api.editBrief({ later: later.filter((i) => i.id !== x.id).map(({ id, text }) => ({ id, text })) })));
-  const send = (x) => run(() => (x.type === 'idea' ? api.ideaAction(x.id, 'direct') : api.sendLater(x.id)));
+  const extra = hide ? { hideFromRoom: true } : {};
+  const send = (x) => run(() => (x.type === 'idea' ? api.ideaAction(x.id, 'direct', extra) : api.sendLater(x.id, extra)));
 
   return (
     <section className="brm-later" aria-label={W.later} data-capability="later">
       <h3 className="brm-h5">{W.later} · {items.length} <span className="brm-hint">{W.laterNote}</span></h3>
+      {!ended && <HideFromRoom checked={hide} onChange={setHide} disabled={busy} />}
       {!ended && on.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked in Later">
           <b>{on.length} ticked</b>

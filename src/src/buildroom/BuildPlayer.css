@@ -1135,3 +1135,6 @@
 .bpl .bpl-story-was { color: var(--muted); }
 .bpl .bpl-story-got { margin: 2px 0 0; font-weight: 700; overflow-wrap: anywhere; }
 .bpl .bpl-story-why { margin: 4px 0 0; padding-left: 8px; border-left: 3px solid var(--muted); overflow-wrap: anywhere; }
+
+/* SENT TO CLAUDE (owner, 23 Oct 2026): the Latest decision box's amber, leading Now. */
+.bpl .bpl-sentcard .bpl-sentpick { margin: 6px 0 0; }

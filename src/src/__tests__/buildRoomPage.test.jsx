@@ -311,6 +311,8 @@ describe('each ask status', () => {
     fireEvent.click(within(note).getByRole('button', { name: 'Ask Claude for mockups' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     expect(lastPost().body.text).toMatch(/^Before ask 3 opens to the room: make a quick mockup of option B, /);
+    // An instruction about an ask the room has not seen never reaches its Sent to Claude card.
+    expect(lastPost().body.hideFromRoom).toBe(true);
     expect(lastPost().body.text).toContain('share_image (askId "003", label B)');
     await waitFor(() => expect(screen.getByTestId('brm-previews-missing').textContent).toMatch(/Asked Claude for mockups/));
     expect(within(screen.getByTestId('brm-previews-missing')).queryByRole('button')).toBeNull();
@@ -2741,6 +2743,7 @@ describe('Claude drafts the brief; the host edits it and uses it (owner, 2026-10
     fireEvent.click(screen.getByRole('button', { name: 'Ask Claude to draft the brief' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     expect(lastPost().body.text).toMatch(/^Draft the one-page build brief now with draft_brief/);
+    expect(lastPost().body.hideFromRoom).toBe(true);
   });
 
   test('the draft: edit the headline, untick a line, use it', async () => {

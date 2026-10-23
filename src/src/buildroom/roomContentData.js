@@ -15,9 +15,11 @@ import { claudeState, runCurrentItem } from './buildScreens';
 
 /** Which room-content moment the Stage is showing. */
 export function buildMomentOf({
-  current = null, wheel = false, point = null, run = null, showing = false,
+  current = null, wheel = false, point = null, run = null, showing = false, sent = null,
 } = {}) {
   if (showing) return 'BUILD_SHOWING';
+  // THE SENT TO CLAUDE CARD (owner, 23 Oct 2026) leads until the next ask opens (buildScreens sentCard).
+  if (sent && !current) return 'BUILD_SENT';
   if (current && wheel) return 'BUILD_WHEEL';
   // A decided ask is on the Stage only while it is Sent to Claude (buildScreens sentStageAsk): its result.
   if (current) return ['results', 'decided'].includes(current.status) ? 'BUILD_RESULTS' : 'BUILD_ASK';
@@ -26,20 +28,23 @@ export function buildMomentOf({
   return 'BUILD_IDLE';
 }
 
-/** Claude's status, as the room may read it. */
-export function claudeWords(room, now) {
+/**
+ * Claude's status, as the room may read it. `quote: false` while the Sent to
+ * Claude card is up: the card says the words, so the line under it does not.
+ */
+export function claudeWords(room, now, { quote = true } = {}) {
   const st = claudeState(room, now);
   return {
     key: st.key,
     headline: st.headline,
-    // Sent to Claude (I9): beside an open ask the one line is what was sent, word for word.
-    line: st.key === 'sent' && st.sent && st.sent.text && st.sent.verb !== 'decided' ? `\u201c${st.sent.text}\u201d` : (st.line || ''),
+    // Sent to Claude (I9): beside an open ask the one line is what was sent, word for word; never a hidden send's.
+    line: quote && st.key === 'sent' && st.sent && st.sent.text && !st.sent.hidden && st.sent.verb !== 'decided' ? `\u201c${st.sent.text}\u201d` : (st.line || ''),
     dur: st.doing && !st.doing.stale ? st.doing.dur : '',
     helperLine: st.helperLine || '',
   };
 }
 
-export function buildRoomData(room, current, now) {
+export function buildRoomData(room, current, now, card = null) {
   const whys = current && current.results && Array.isArray(current.results.whys) ? current.results.whys : [];
   const step = room && room.run ? runCurrentItem(room.run) : null;
   return {
@@ -47,12 +52,13 @@ export function buildRoomData(room, current, now) {
     detail: current ? current.detail : '',
     options: current ? (current.options || []) : [],
     whys: whys.map((w) => ({ label: w.label, text: w.text })),
-    claude: claudeWords(room, now),
+    claude: claudeWords(room, now, { quote: !card }),
     step: step ? { k: step.k, text: step.text } : null,
+    sent: card ? { text: card.text, pick: card.pick } : null,
   };
 }
 
-/** The room content for one Build Room screen. */
-export function buildRoomContent(moment, profile, room, current, now) {
-  return roomContentFor(moment, profile, buildRoomData(room, current, now));
+/** The room content for one Build Room screen. `card`: the Sent to Claude card (buildScreens sentCard), when it leads. */
+export function buildRoomContent(moment, profile, room, current, now, card = null) {
+  return roomContentFor(moment, profile, buildRoomData(room, current, now, card));
 }

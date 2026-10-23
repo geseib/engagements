@@ -81,6 +81,7 @@ function StoryKid({ kid, onOpen, focus = null }) {
       {openable
         ? <button type="button" className="brm-story-open brm-story-kidt" aria-label={`Open Ask ${askNumber(kid.askId)}`} onClick={() => onOpen(kid.askId)}>{kid.text}</button>
         : <span className="brm-story-kidt">{kid.text}</span>}
+      {kid.notShown === 'mark' && <span className="brm-notshown">{W.notShownMark}</span>}
       <span className="brm-story-tm">{clockTime(kid.at)}</span>
       {safeHref(kid.link) && <a className="brm-story-kidlink" href={safeHref(kid.link)} target="_blank" rel="noopener noreferrer">{kid.link}</a>}
       {kid.type !== 'decided' && kid.chain && kid.chain.length > 0 && <span className="brm-story-kidmark" aria-label={chainLabel(kid.type)}>{kid.chain.join(' → ')}</span>}
@@ -114,6 +115,8 @@ export function StoryItem({ item, onOpen = null, focus = null }) {
           ? <button type="button" className="brm-story-h brm-story-open" aria-label={`Open Ask ${askNumber(item.askId)}`} onClick={() => onOpen(item.askId)}>{item.heading}</button>
           : <span className="brm-story-h">{item.heading}{isStep && item.dur && <span className="brm-muted">{` · ${item.dur}`}</span>}</span>}
         {!isStep && (item.sent ? <SentBody sent={item.sent} text={item.text} /> : <p className="brm-story-t">{item.text}</p>)}
+        {/* Don't show the room: the host's History keeps the words, with this mark (the room's has none). */}
+        {item.notShown === 'mark' && <p className="brm-notshown">{W.notShownMark}</p>}
         {isStep && item.kids.length > 0 && (
           <ul className="brm-story-kids">
             {item.kids.map((k) => <StoryKid key={k.id} kid={k} onOpen={onOpen} focus={focus} />)}
@@ -229,6 +232,7 @@ export default function BuildHistoryScreen({
                 const words = (
                   <>
                     {a.decision.direction || a.prompt}
+                    {a.decision.hidden && a.decision.direction && <span className="brm-notshown">{` · ${W.notShownMark}`}</span>}
                     {a.decision.method && <span className="brm-muted brm-small">{` · ${METHOD_WORDS[a.decision.method] || a.decision.method}`}</span>}
                   </>
                 );

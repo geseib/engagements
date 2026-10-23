@@ -22,6 +22,7 @@ import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { MARK_WORDS } from './sentMarks';
+import { SendExtras, useMirror } from './BuildSendOptions';
 
 export const ConsiderContext = createContext(null);
 
@@ -79,7 +80,7 @@ const ROUNDS = Object.freeze([
 ]);
 
 /** What a fresh panel starts with: the room's words, Send to Claude. */
-export const freshDraft = (item) => ({ door: 'claude', text: item.words || '', why: '', round: 'yesno', question: '' });
+export const freshDraft = (item) => ({ door: 'claude', text: item.words || '', why: '', round: 'yesno', question: '', hide: false });
 
 /**
  * The panel. `draft`/`setDraft` live with the page, so Esc loses nothing.
@@ -89,6 +90,7 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
   const d = draft || freshDraft(item);
   const set = (patch) => setDraft({ ...d, ...patch });
   const [error, setError] = useState('');
+  const mirror = useMirror();
   const changed = d.text.trim() !== String(item.words || '').trim();
   const rounds = item.type === 'idea' && canIdeas ? [...ROUNDS, { key: 'ideas', label: W.considerToIdeas, note: W.considerIdeasNote }] : ROUNDS;
   const round = rounds.find((r) => r.key === d.round) || rounds[0];
@@ -98,11 +100,13 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
     setError('');
     const out = await run(call);
     if (out === undefined) { setError(W.notSent); return; }
+    mirror.done();
     onDone();
     onClose();
   };
   const send = (later) => go(() => api.consider({
     item: item.key, go: later ? 'later' : 'send', text: d.text.trim(), ...(d.why.trim() ? { why: d.why.trim() } : {}),
+    ...(d.hide ? { hideFromRoom: true } : {}),
   }));
   const queue = () => go(() => (round.key === 'ideas'
     ? api.ideaAction(item.ideaId, 'suggest')
@@ -132,13 +136,14 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
         <>
           <label className="brm-field">
             <span className="brm-lbl">{W.considerWords}</span>
-            <textarea className="brm-input brm-ta brm-ta--sm" value={d.text} maxLength={2000} onChange={(e) => set({ text: e.target.value })} />
+            <textarea className="brm-input brm-ta brm-ta--sm" value={d.text} maxLength={2000} onChange={(e) => { set({ text: e.target.value }); mirror.draft(e.target.value); }} />
           </label>
           <label className="brm-field">
             <span className="brm-lbl">{W.considerWhy}</span>
             <input className="brm-input" value={d.why} maxLength={WHY_MAX} onChange={(e) => set({ why: e.target.value })} />
           </label>
           {changed && <p className="brm-hint" data-testid="brm-consider-changed">{W.considerChanged}</p>}
+          <SendExtras hide={Boolean(d.hide)} setHide={(v) => set({ hide: v })} disabled={busy} />
         </>
       ) : (
         <>

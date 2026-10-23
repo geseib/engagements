@@ -278,3 +278,19 @@ describe('decideInline: which second button applies when the decide panel is ope
     expect(pick(controlsFor(r, { decideInline: true }))).toEqual(pick(controlsFor(r)));
   });
 });
+
+// The owner's "Spin the wheel … not connected to server" (23 Oct, dev game
+// 2550): an Ideas vote with ONE idea offered a Spin the server refuses (it
+// needs two options). The wheel is offered only when it can work.
+describe('the wheel needs two options', () => {
+  // eslint-disable-next-line global-require
+  const { wheelPossible, WHEEL_MIN } = require('../buildroom/buildScreens');
+  const ideas = (n) => ({ askId: '002', kind: 'suggest', status: 'voting', results: { ranked: Array.from({ length: n }, (_, i) => ({ respId: `r${i}`, text: `Idea ${i}`, votes: 0 })) } });
+  test('one idea: no wheel; two: a wheel', () => {
+    expect(WHEEL_MIN).toBe(2);
+    expect(wheelPossible(ideas(1))).toBe(false);
+    expect(wheelPossible(ideas(2))).toBe(true);
+    expect(wheelPossible({ kind: 'choice', options: [{ label: 'A', title: 'Only' }] })).toBe(false);
+    expect(wheelPossible({ kind: 'rating', results: {} })).toBe(false);
+  });
+});

@@ -202,7 +202,7 @@ describe('the Consider panel', () => {
   });
 
   test('a fresh draft is the room\'s words on the Send door', () => {
-    expect(freshDraft({ words: 'x' })).toEqual({ door: 'claude', text: 'x', why: '', round: 'yesno', question: '' });
+    expect(freshDraft({ words: 'x' })).toEqual({ door: 'claude', text: 'x', why: '', round: 'yesno', question: '', hide: false });
   });
 });
 

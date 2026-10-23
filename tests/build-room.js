@@ -645,7 +645,9 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     sent = (await hostCall('GET', 'state')).body.sent;
     assert.deepStrictEqual([sent.verb, sent.pickedAt], ['asked', null]);
     assert.strictEqual((await agentCall('GET', 'state')).body.sent, undefined, 'Claude has its inbox');
-    assert.strictEqual((await playCall('GET', 'state', priya)).body.sent, undefined, 'a phone never gets a direction');
+    // Owner, 23 Oct 2026: phones see what Claude was told too (the Sent to Claude card), as the room may read it.
+    const phone = (await playCall('GET', 'state', priya)).body.sent;
+    assert.deepStrictEqual([phone.verb, phone.text, phone.hidden], ['asked', 'Which font reads best from the back?', undefined]);
   });
 
   console.log('\nfeedback on a preview (owner, 2026-10-04)');

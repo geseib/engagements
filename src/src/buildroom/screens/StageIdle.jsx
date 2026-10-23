@@ -58,7 +58,7 @@ export function WrappedStage({ outcome, agent, images = [] }) {
  * Fixing / Checking / Saved from the plugin's hook, the last test run's counts,
  * and the last few lines its tools wrote (file and program names only).
  */
-function WorkRow({ work }) {
+export function WorkRow({ work }) {
   const tw = testsWords(work.tests);
   return (
     <div className="brm-work" data-testid="brm-work">

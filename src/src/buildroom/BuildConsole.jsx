@@ -27,6 +27,7 @@ import HostConsole from '../components/console/HostConsole';
 import { Section } from '../components/console/ConsoleRail';
 import Icon from '../components/Icon';
 import { BCW, RAIL_SLOTS, railOpenFor } from './buildConsole';
+import { W } from './words';
 import './BuildConsole.css';
 
 
@@ -149,6 +150,13 @@ export function ClaudeLine({ state }) {
       <b>{state.headline}</b>
       {state.line ? <span className="hc-muted">{state.line}</span> : null}
       {state.helperLine ? <span className="hc-muted">{state.helperLine}</span> : null}
+      {/* What went, word for word: this is the host's own screen. A send kept from the room says so. */}
+      {state.key === 'sent' && state.sent && state.sent.text ? (
+        <span className="bc-sent" data-testid="bc-sent">
+          {`\u201c${state.sent.text}\u201d`}
+          {state.sent.hidden ? <span className="hc-muted brm-notshown">{` \u00b7 ${W.notShownMark}`}</span> : null}
+        </span>
+      ) : null}
     </div>
   );
 }
