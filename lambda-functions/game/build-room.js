@@ -28,6 +28,7 @@ const {
 const { recordAudit } = require('./audit-log');
 const { encryptItem, decryptItem, encryptValue, decryptValue } = require('./tenant-crypto');
 const { ttlFrom, ROUND_RECORD_DAYS } = require('./session-ttl');
+const inbox = require('./notifications');
 const { toAll, toHosts } = require('./survey-broadcast');
 const S = require('./build-store');
 const C = require('./build-crew');
@@ -2625,9 +2626,41 @@ async function postClaudeSet(ctx, body) {
   });
   if (req && !['done', 'failed'].includes(req.Status)) await put(ctx, { ...req, Status: 'done', Count: v.questions.length, UpdatedAt: now });
   await logEntry(ctx, { kind: 'progress', text: `Claude wrote a question set: ${v.name} (${v.questions.length} questions)`, by: 'system', hostOnly: true });
+  await remindUnsavedSet(ctx, { QSetId: row.QSetId, Title: v.name });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { set: S.claudeSetView(row), dropped: v.dropped });
+}
+
+/**
+ * #45: Claude's set lives only as long as the session unless the host saves
+ * it, so the host's bell holds one entry per unsaved set: written quiet when
+ * the set arrives (the host is looking at it in the room), turned into a
+ * reminder two days before the session's end (notifications.js), removed
+ * when the set is saved or removed. Never fails the caller.
+ */
+const claudeSetKey = (ctx, setId) => `claudeset#${ctx.gameId}-${setId}`;
+
+async function remindUnsavedSet(ctx, row) {
+  const sub = String((ctx.meta && ctx.meta.CreatedBy) || '');
+  if (!sub) return;
+  const room = String((ctx.meta && ctx.meta.Title) || '').trim();
+  await inbox.notify(db, {
+    sub,
+    key: claudeSetKey(ctx, row.QSetId),
+    kind: inbox.KINDS.CLAUDE_SET_UNSAVED,
+    orgId: ctx.orgId,
+    title: `Claude's question set is not saved: ${row.Title}`,
+    body: `${room ? `From the Build Room "${room}". ` : ''}Open the room and press Save to my sets before the session ends, or the set goes with it.`,
+    link: { type: 'build', gameId: ctx.gameId, setId: row.QSetId, orgId: ctx.orgId || '' },
+    expiresAt: ctx.ttl,
+    quiet: true,
+  });
+}
+
+async function forgetUnsavedSet(ctx, setId) {
+  const sub = String((ctx.meta && ctx.meta.CreatedBy) || '');
+  if (sub) await inbox.resolve(db, sub, claudeSetKey(ctx, setId));
 }
 
 /** The host: `saved` once it went to their bell as a draft; `remove` drops it from the room. */
@@ -2638,10 +2671,12 @@ async function claudeSetAction(ctx, setId, body) {
   const action = String((body || {}).action || '');
   if (action === 'saved') {
     const saved = await put(ctx, { ...row, SavedAt: new Date().toISOString() });
+    await forgetUnsavedSet(ctx, setId);
     return done(ctx, 200, { set: S.claudeSetView(saved) });
   }
   if (action === 'remove') {
     await db.send(new DeleteCommand({ TableName: TABLE(), Key: { PK: ctx.pk, SK: row.SK } }));
+    await forgetUnsavedSet(ctx, setId);
     return done(ctx, 200, { removed: true });
   }
   return fail(400, 'action must be saved or remove');

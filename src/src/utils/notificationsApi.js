@@ -36,6 +36,7 @@ export async function markAllNotificationsRead() {
  *   draft     the question sets, with that draft's review open
  *   section   a console section (members, billing, moderation …)
  *   invites   the Overview, where invitations are answered
+ *   build     a Build Room, where Claude's unsaved question set waits (#45)
  *
  * `libraryKey` is the library to stand in first (an org id, or Engage); '' when
  * any library will do. The console switches to it before going there, since
@@ -51,6 +52,10 @@ export function destinationOf(link) {
     return { libraryKey, url: `/admin?section=${encodeURIComponent(link.section)}` };
   }
   if (link.type === 'invites') return { libraryKey: '', url: '/admin?section=overview' };
+  // The room checks the host against the session's own team, so any library will do.
+  if (link.type === 'build' && /^\d{4}$/.test(String(link.gameId || ''))) {
+    return { libraryKey: '', url: `/build?gameId=${encodeURIComponent(link.gameId)}` };
+  }
   return { libraryKey, url: '/admin' };
 }
 

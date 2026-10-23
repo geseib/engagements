@@ -9,8 +9,9 @@
  *
  * ── TWO KINDS OF ENTRY ──────────────────────────────────────────────────────
  *
- *   STORED   A row here, written by whatever produced it — today the AI
- *            generation worker (a draft is ready, partly ready, or failed).
+ *   STORED   A row here, written by whatever produced it — the AI
+ *            generation worker (a draft is ready, partly ready, or failed),
+ *            and a Build Room when Claude sends it a question set (#45).
  *            It has read/unread, a deep link and a ttl, and it is removed when
  *            the thing it points at is decided.
  *   LIVE     Computed on read from state that already exists elsewhere —
@@ -34,6 +35,10 @@
  * TTL: the thing's own expiry when it has one (a draft's), otherwise
  * DEFAULT_TTL_DAYS. Readers filter `ttl <= now` because DynamoDB deletes late.
  *
+ * TWO COPIES: this file, and lambda-functions/game/notifications.js for the
+ * Build Room's writes. They are identical (tests/build-claude-set-reminder.js
+ * holds them equal); change both.
+ *
  * WRITES NEVER FAIL THEIR CALLER. A notification is a courtesy about work that
  * already happened; a worker that generated twenty questions must not report a
  * failure because the inbox write did not land. Errors are logged and dropped.
@@ -48,13 +53,30 @@ const DAY_SECONDS = 24 * 60 * 60;
 const DEFAULT_TTL_DAYS = 30;
 /** How close to its expiry a draft's notification turns into a reminder. */
 const REMIND_DAYS_BEFORE = 5;
+/**
+ * Claude's question set in a Build Room (#45) lives as long as the session —
+ * 7 days from its start, since a Build Room starts as it is created — and is
+ * gone with it unless the host saves it to their sets. Its entry is written
+ * QUIET (read) when the set arrives, because the host is in the room looking
+ * at it; it turns into an unread reminder this close to the session's end.
+ * Five days would remind two days into a seven-day life, so it is shorter.
+ */
+const CLAUDE_SET_REMIND_DAYS_BEFORE = 2;
 const LIST_MAX = 100;
 
 const KINDS = Object.freeze({
   DRAFT_READY: 'draft.ready',
   DRAFT_PARTIAL: 'draft.partial',
   DRAFT_FAILED: 'draft.failed',
+  CLAUDE_SET_UNSAVED: 'claudeset.unsaved',
 });
+
+/** Days before `expiresAt` an entry of this kind turns into a reminder; 0 = never. */
+function remindDaysFor(kind) {
+  if (kind === KINDS.DRAFT_READY || kind === KINDS.DRAFT_PARTIAL) return REMIND_DAYS_BEFORE;
+  if (kind === KINDS.CLAUDE_SET_UNSAVED) return CLAUDE_SET_REMIND_DAYS_BEFORE;
+  return 0;
+}
 
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 const nowSeconds = (now = new Date()) => Math.floor(now.getTime() / 1000);
@@ -92,10 +114,13 @@ function cleanLink(link) {
  * @param {string} [n.body]     a second line — sealed for an org
  * @param {object} [n.link]     ids only: `{ type:'draft', draftId, setId, orgId }`
  * @param {number} [n.expiresAt] epoch seconds the thing itself runs out
+ * @param {boolean} [n.quiet]   written read: listed, but not counted until its
+ *                              reminder (Claude's sets, which the host is
+ *                              looking at when they arrive)
  * @returns {Promise<boolean>}  whether it landed
  */
 async function notify(db, {
-  sub, key, kind, orgId = '', scope = '', title, body = '', link = null, expiresAt = null,
+  sub, key, kind, orgId = '', scope = '', title, body = '', link = null, expiresAt = null, quiet = false,
 } = {}, { now = new Date() } = {}) {
   try {
     const at = now.toISOString();
@@ -112,7 +137,7 @@ async function notify(db, {
       orgId: org,
       scope: clean(scope) || (org ? tenant.ORG : tenant.PLATFORM),
       link: cleanLink(link),
-      read: false,
+      read: quiet === true,
       createdAt: at,
       updatedAt: at,
       ...(exp ? { expiresAt: exp } : {}),
@@ -147,7 +172,8 @@ async function resolve(db, sub, key) {
  *
  * THE REMINDER IS LAZY. A ready draft's notification carries the draft's own
  * expiry; when it is read within REMIND_DAYS_BEFORE of that and has not been
- * reminded yet, it turns unread again and says so. There is no scheduler to
+ * reminded yet, it turns unread again and says so. Claude's unsaved question
+ * set does the same against its session's end (remindDaysFor). There is no scheduler to
  * pay for and no email to send (owner, 2026-10-21): the person sees the
  * reminder the next time they open the console, which is the only time they
  * could act on it anyway.
@@ -171,9 +197,9 @@ async function listFor(db, sub, { now = new Date() } = {}) {
         opened = { ...row, title: 'A notification from a team you no longer reach', body: '' };
       }
     }
-    const expiring = row.kind === KINDS.DRAFT_READY || row.kind === KINDS.DRAFT_PARTIAL;
-    const due = expiring && Number(row.expiresAt)
-      && Number(row.expiresAt) - t <= REMIND_DAYS_BEFORE * DAY_SECONDS;
+    const days = remindDaysFor(row.kind);
+    const due = days > 0 && Number(row.expiresAt)
+      && Number(row.expiresAt) - t <= days * DAY_SECONDS;
     if (due && !row.remindedAt) {
       try {
         await db.send(new UpdateCommand({
@@ -238,6 +264,8 @@ module.exports = {
   KINDS,
   DEFAULT_TTL_DAYS,
   REMIND_DAYS_BEFORE,
+  CLAUDE_SET_REMIND_DAYS_BEFORE,
+  remindDaysFor,
   notify,
   resolve,
   listFor,

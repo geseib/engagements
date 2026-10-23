@@ -9,6 +9,29 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026: A reminder before Claude's unsaved question set goes
+
+**Test:** merge of dev `896d8e81`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45).
+
+### New
+
+- **The bell reminds you about Claude's unsaved question set** (#45). A set Claude writes in a Build Room lives only as long as the session, seven days from its start, unless you press **Save to my sets**. When the set arrives, the host's bell gets an entry for it, already read (you are looking at it in the room). Two days before the session ends it turns unread: *Claude's question set is not saved: …*, with **Reminder · 2 days left**. Pressing it opens the Build Room. Saving or removing the set clears the entry; it ends with the session.
+
+### Fixed
+
+- Claude's question set could vanish with its session without the host being told.
+
+### What to look at
+
+1. In a Build Room on plugin 1.26.0, use **Ask Claude for questions** and let the set arrive. Open the bell (start screen or console): the entry is there, read, with "7 days left".
+2. Press **Save to my sets**: the entry goes, and the draft's own entry appears. Ask for a second set and **Remove** it: its entry goes too.
+3. The reminder itself shows two days before the session ends; to see it sooner, ask an engineer to set a test session's end date near (there is no switch in the app).
+
+### Known gaps
+
+- The reminder shows when you next open a page with the bell (the start screen, the console, the two-screen console, the phone remote); there is no email, by design.
+- A set that arrived before this change has no entry.
+
 ## 22 Oct 2026 (later): Ask Claude for questions in a Build Room
 
 **Test:** merge of dev `15fd6c0d`. Plan: `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (step 7). Everything in the entry below is already on test; this push adds only what is here.
@@ -32,7 +55,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Known gaps
 
-- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project) ([#45](https://github.com/geseib/engagements/issues/45)).
+- Claude's set lives with the session until it is saved; a set not saved is gone when the session expires (its file stays in the project). The bell now reminds the host first (see 23 Oct, [#45](https://github.com/geseib/engagements/issues/45)).
 - Everything in the entry below, including the help gaps, still applies.
 
 ## 22 Oct 2026: Help rewritten with a ? on every screen, Workie grounded in what the room said, prompt versions, AI drafts and the bell, and the review #38 fixes

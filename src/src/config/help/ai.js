@@ -267,6 +267,7 @@ const drafts = {
           head: ['Entry', 'Who gets it', 'Goes to'],
           rows: [
             ['Questions ready to review (or some of them, or a run that failed)', 'Whoever started the run', 'That draft\'s review'],
+            ['Claude\'s question set is not saved (from a Build Room)', 'The Build Room\'s host', 'That Build Room'],
             ['An invitation to join a team', 'The person invited', 'Overview'],
             ['Sets sent back by the content check', 'Everyone in that team or space', 'Question sets'],
             ['People waiting to be approved to host; invitations running out', 'Team owners and admins', 'Members'],
@@ -276,7 +277,7 @@ const drafts = {
         },
         {
           t: 'p',
-          text: 'A draft\'s entry is read once you open it; **Mark all read** clears those at once. The others stay in the count until the thing is dealt with. On a session\'s two-screen console or phone remote, an entry opens the console in a new tab so the session stays put.',
+          text: 'A draft\'s entry is read once you open it; **Mark all read** clears those at once. A Build Room entry for Claude\'s question set arrives already read and turns into a reminder two days before the session ends; it goes when you save or remove the set. The others stay in the count until the thing is dealt with. On a session\'s two-screen console or phone remote, an entry opens the console in a new tab so the session stays put.',
         },
       ],
     },
