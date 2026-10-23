@@ -9,6 +9,36 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (staff help): the Engage staff guides checked on the real screens
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Applying the repo's prompts to a tier in one go** (another session): `scripts/apply-repo-prompts.js --tier <tier>` does what Admin › Prompts' *Review* → *Save as version N* does, for every prompt with a newer version in the repo. Dry run by default, `--apply` to save; prompts edited on the tier are skipped unless asked; prod needs `--confirm-prod`. It is an engineer's tool: nothing changes in the app.
+
+### Fixed
+
+- **The Engage staff guides now match the staff screens.** They were written from the code while the QA account could not see Engage's sections; it now can (dev), and every staff section was read against its guide. Corrected or added:
+  - the *You are acting as Engage* banner, and the Overview's **Right now** tiles;
+  - Organisations: what the Plan column means (Team is the Organisation plan), what **Staff activity…** covers (organisations, accounts, discount codes and Engage settings, kept a year), and that billing is a simulation (no card is charged);
+  - Plan requests come from personal spaces too, read "Free → Organisation plan", and a decided row's note starts with the decision;
+  - Discount codes: only a live code has **Retire**; Accounts: a row's moves appear when you point at it;
+  - Observability: the month stepper, the five month tiles, the by-type table, and that it lists teams and personal spaces with numbers that month;
+  - Engage settings: the apply button is greyed out for the look already in use;
+  - Prompts: a retired prompt stays in the list, marked Archived; each results prompt has **Improve**.
+
+### What to look at
+
+1. Signed in as Engage staff on test, open **Help** › *For admins* › *Engage staff: organisations* and the other staff guides, beside Admin › Organisations, Plan requests, Discount codes, Observability and Prompts: each guide describes what the screen shows.
+
+### Known gaps
+
+- Every staff queue on dev was empty, so these are still checked only against the code: the Overview's queue boxes, accounts waiting for approval, **Decide…**, Moderation's rows, **Leave it serving**, and the bell's staff entries.
+- Product bugs the check found are listed on [#43](https://github.com/geseib/engagements/issues/43) (among them: a team's **Billing…** button is clipped out of the Organisations row, [#40](https://github.com/geseib/engagements/issues/40)); the guides describe what the screens do today.
+
+---
+
 ## 23 Oct 2026 (night): finding a question set when you create a session, the room sees what Claude was told, live typing on the room's window, Claude's mockups where you are looking, and the wheel fix
 
 **Test:** merge of dev `2d68fe70`. Everything below this entry is already on test; this push adds only what is here.
