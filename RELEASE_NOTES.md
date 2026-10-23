@@ -13,6 +13,10 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 **Test:** merge of dev `788546cf0` (and the commit naming it). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
 
+### New
+
+- Nothing new in this push: it fixes what reviews #46 and #47 found.
+
 ### Fixed
 
 - **Workie's check caught too little** (review #46, on a build that had the check). It now also catches:
