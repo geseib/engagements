@@ -6,6 +6,7 @@ import { gameTypeMeta } from './config/gameTypes';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 import { feedbackRoundFrom } from './config/sessionHistory';
+import { pastRoundLabel, pastRoundQuestion } from './config/pastRounds';
 import {
   participationUrl, participationFrom, nextParticipation, fetchOwnAnswer,
 } from './utils/playerParticipation';
@@ -384,6 +385,18 @@ function PlayerPage({ event = null } = {}) {
      from the end screen, which the room cannot move on from. */
   const [endedComments, setEndedComments] = useState(null);
   const [myFeedbackAfterEnd, setMyFeedbackAfterEnd] = useState(false);
+  /* EARLIER ROUNDS BY NAME, AND THE WORDS WRITTEN ON THEM (issue #47).
+     `roundTitles` maps a round's number to its question's title: recorded as
+     each round is played here, and read back from get-results at the end for
+     any round this phone did not see (joined late, rejoined on another
+     device). The end screen lists "Lesson 2 · Form Follows Function", not
+     "Lesson 2". `myFeedbackDrafts` maps a padded round number to the unsent
+     comment ({ anchor, text }) its panel held when the player left it, so
+     going back to the list and opening another round never loses one, and it
+     can only ever be posted on the round it was written in. */
+  const [roundTitles, setRoundTitles] = useState({});
+  const roundTitlesRef = useRef({});
+  const [myFeedbackDrafts, setMyFeedbackDrafts] = useState({});
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -1605,6 +1618,28 @@ function PlayerPage({ event = null } = {}) {
     return result;
   };
 
+  /** Remember a round's title for the end screen's list (issue #47). */
+  const recordRoundTitle = (n, title) => {
+    const t = typeof title === 'string' ? title.trim() : '';
+    if (!(n > 0) || !t || roundTitlesRef.current[n] === t) return;
+    roundTitlesRef.current = { ...roundTitlesRef.current, [n]: t };
+    setRoundTitles(roundTitlesRef.current);
+  };
+
+  /** Keep (or clear) the unsent comment of the round whose panel is open. */
+  const saveMyFeedbackDraft = (padded) => (draft) => {
+    setMyFeedbackDrafts((current) => {
+      if (!draft) {
+        if (!current[padded]) return current;
+        const { [padded]: _gone, ...rest } = current;
+        return rest;
+      }
+      const was = current[padded];
+      if (was && was.text === draft.text && was.anchor === draft.anchor) return current;
+      return { ...current, [padded]: draft };
+    });
+  };
+
   /**
    * WORKIE'S READ, FOR THE PLAYER'S OWN PANEL.
    *
@@ -1674,14 +1709,29 @@ function PlayerPage({ event = null } = {}) {
       if (!res.ok) { setMyFeedbackAnswersStatus('error'); return; }
       const data = await res.json();
       const ranked = rankedResultsFrom(data);
-      // An earlier round picked on the end screen is known only as "Round N";
-      // its stored read carries the question's title for the heading (#35).
+      // An earlier round picked on the end screen is known only by number and
+      // title; its stored read carries the question's title for the heading
+      // (#35) and its public fields — the lesson and "Your turn" (#47).
       const questionTitle = typeof data.questionTitle === 'string' ? data.questionTitle.trim() : '';
-      setMyFeedbackSnapshot((current) => (current ? {
-        ...current,
-        answers: ranked,
-        ...(current.roundLabel && questionTitle ? { title: questionTitle } : {}),
-      } : current));
+      const pastQuestion = data.question && typeof data.question === 'object' ? data.question : null;
+      setMyFeedbackSnapshot((current) => {
+        if (!current) return current;
+        if (!current.roundLabel) return { ...current, answers: ranked };
+        if (pastQuestion) {
+          const past = pastRoundQuestion(pastQuestion, questionTitle || current.title);
+          return {
+            ...current,
+            answers: ranked,
+            title: past.title,
+            detail: past.detail,
+            task: past.task,
+            image: past.image,
+            school: past.school,
+          };
+        }
+        return { ...current, answers: ranked, ...(questionTitle ? { title: questionTitle } : {}) };
+      });
+      if (questionTitle) recordRoundTitle(parseInt(padded, 10), questionTitle);
       setMyFeedbackAnswersStatus(feedbackAnswersStatusFrom(data));
     } catch {
       setMyFeedbackAnswersStatus('error');
@@ -1695,13 +1745,15 @@ function PlayerPage({ event = null } = {}) {
    * fills the responses in once they arrive.
    */
   const openMyFeedback = (pick = null) => {
-    // `pick` ({ padded, title }) is a round chosen on the end screen, known by
-    // number only; the results screen's button passes its click event, not one.
+    // `pick` ({ padded, title, knownTitle }) is a round chosen on the end
+    // screen: `title` its number ("Lesson 2"), `knownTitle` its question's
+    // title when the list already had it. The results screen's button passes
+    // its click event, not one.
     const chosen = pick && typeof pick.padded === 'string' ? pick : null;
     const match = String(gameState || '').match(/^RESULTS#(\d+)$/);
     const padded = chosen ? chosen.padded : (match && match[1]);
     if (!padded) return;
-    const q = chosen ? { title: chosen.title } : (currentQuestion || {});
+    const q = chosen ? { title: chosen.knownTitle || chosen.title } : (currentQuestion || {});
     setMyFeedbackAfterEnd(Boolean(chosen));
     setMyFeedbackNumber(padded);
     setMyFeedbackSnapshot({
@@ -1727,10 +1779,11 @@ function PlayerPage({ event = null } = {}) {
 
   /** Closing returns the player to the results screen — or, once the round
    *  has moved on, to whatever the room is doing now. Nothing is posted for
-   *  them — an unsent draft is simply dropped, the same as closing any other
-   *  composer without pressing Post. This is also "Go to the question" (fix
-   *  round 1, item 6): the same action, the label just says where it goes
-   *  when there was something to leave behind. */
+   *  them. An unsent draft is no longer dropped (issue #47): it stays in
+   *  `myFeedbackDrafts` under its own round and is back in the composer the
+   *  next time that round is opened, never in another round's. This is also
+   *  "Go to the question" (fix round 1, item 6): the same action, the label
+   *  just says where it goes when there was something to leave behind. */
   const closeMyFeedback = () => {
     setMyFeedbackOpen(false);
     setMyFeedbackAfterEnd(false);
@@ -1782,6 +1835,37 @@ function PlayerPage({ event = null } = {}) {
     })();
     return () => { cancelled = true; };
   }, [gameState, gameId]);
+
+  /* Each round's title, as it is played here (issue #47). */
+  useEffect(() => {
+    const n = roundNumberOf(currentQuestion, gameState);
+    if (n !== null && currentQuestion) recordRoundTitle(Number(n), currentQuestion.title || currentQuestion.question);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestion, gameState]);
+
+  /* At the end, the titles of rounds this phone never saw, from the same
+     read-back an opened round uses, so the list names every round. Only the
+     missing ones: a phone that played the whole session asks for nothing. */
+  useEffect(() => {
+    if (!endedComments || !endedComments.open || !(endedComments.lastRound > 0) || !gameId) return undefined;
+    let cancelled = false;
+    const missing = Array.from({ length: endedComments.lastRound }, (_, i) => i + 1)
+      .filter((n) => !roundTitlesRef.current[n]);
+    missing.forEach(async (n) => {
+      try {
+        const res = await fetch(`${API_BASE}games/get-results`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId, questionNumber: String(n).padStart(3, '0') }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) recordRoundTitle(n, data && data.questionTitle);
+      } catch { /* the list keeps "Lesson N" for this one */ }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endedComments, gameId]);
 
   /* At the end, read the final score and standing from /players. They were
      only ever filled on RESULTS, so a player who reloaded or rejoined after
@@ -3548,11 +3632,16 @@ function PlayerPage({ event = null } = {}) {
           </p>
         )}
         <FeedbackRoundPanel
+          // One mount per round: a draft is restored into, and saved from,
+          // the round it was written in and no other (issue #47).
+          key={myFeedbackNumber}
           round={myFeedbackRoundData}
           questionNumber={myFeedbackNumber}
           comments={myFeedbackComments}
           onSubmit={submitMyFeedbackComment}
           onDraftChange={setMyFeedbackHasDraft}
+          savedDraft={myFeedbackDrafts[myFeedbackNumber] || null}
+          onDraftSave={saveMyFeedbackDraft(myFeedbackNumber)}
           answersEmptyText={myFeedbackAnswersEmptyText}
           onRetryAnswers={myFeedbackRetryAnswers}
         />
@@ -3596,19 +3685,38 @@ function PlayerPage({ event = null } = {}) {
             <p className="plr-help">
               You can still comment on a round for 24 hours, or until your host closes comments.
             </p>
-            <div className="plr-ended-rounds">
-              {Array.from({ length: endedComments.lastRound }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="plr-btn plr-btn--ghost plr-ended-round"
-                  onClick={() => openMyFeedback({ padded: String(n).padStart(3, '0'), title: `${roundNoun} ${n}` })}
-                >
-                  <Icon name="ChatCircleText" size={18} />
-                  {` ${roundNoun} ${n}`}
-                </button>
-              ))}
-            </div>
+            {/* EACH ROUND BY NUMBER AND TITLE (issue #47): "Lesson 2 · Form
+                Follows Function", shortened on the button with the whole line
+                in title=; the number alone when no title is known. A round
+                holding an unsent comment says so. */}
+            <ul className="plr-ended-rounds">
+              {Array.from({ length: endedComments.lastRound }, (_, i) => i + 1).map((n) => {
+                const padded = String(n).padStart(3, '0');
+                const label = pastRoundLabel(roundNoun, n, roundTitles[n]);
+                const unsent = Boolean(myFeedbackDrafts[padded]);
+                return (
+                  <li key={n}>
+                    <button
+                      type="button"
+                      className="plr-btn plr-btn--ghost plr-ended-round"
+                      title={label.full}
+                      aria-label={unsent ? `${label.full}, unsent comment` : label.full}
+                      onClick={() => openMyFeedback({ padded, title: label.number, knownTitle: label.title })}
+                    >
+                      <Icon name="ChatCircleText" size={18} />
+                      <span className="plr-ended-round__n">{label.number}</span>
+                      {label.short && (
+                        <>
+                          <span className="plr-ended-round__sep" aria-hidden="true">·</span>
+                          <span className="plr-ended-round__title">{label.short}</span>
+                        </>
+                      )}
+                      {unsent && <span className="plr-ended-round__draft">Unsent comment</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         ) : null}
 

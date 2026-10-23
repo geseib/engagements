@@ -9,15 +9,12 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
-## 23 Oct 2026 (evening): Connect Claude Code says when you are connected, the side boxes scroll on, the room sees what Claude was told, and Claude's mockups show where you are looking
+## 23 Oct 2026 (night): the room sees what Claude was told, live typing on the room's window, Claude's mockups where you are looking, and the wheel fix
 
-**Test:** merge of dev `DEVCOMMIT`.
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
-- **Step 3 of Connect Claude Code confirms the connection** (owner, 23 Oct: "this screen doesnt turn step 3 green and indicate hey, you are done and connected"). After you mint a key, step 3 says *Waiting for Claude Code to call in…*; once Claude Code calls in with that key, the step turns green, reads **Connected**, gives the time and folder, says whether Claude has started, and **Done** becomes the main button. An older key calling in does not count.
-- **The "already in Claude Code" line moved to step 3.** Step 2 is now only the folder, the key and the start command; step 3 holds both ways to start: paste the start command into a terminal, or type the kickoff line into a Claude Code already open in that folder.
-- **Nothing after 45 seconds?** Step 3 says where to look: the first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.
 - **Sent to Claude leads the Stage** (owner, 23 Oct: "nobody can see what Claude was actually told"). From the moment you send until the next ask opens, the Stage, the room's window and the phones' Now lead with a **Sent to Claude** card: the words Claude got, and the room's pick they came from (*The room chose B · Calm photo*). Claude's status sits under it instead of replacing it. Every kind of send counts: a decided ask (reworded or not), Consider's Send to Claude, Add something, an idea sent from Waiting for you, Send now from the Later list, and What's next's Combine. Your Why is never on the card.
 - **Don't show the room**, unticked, beside every Send to Claude (the decide panel, Change before sending, the one-press Send at Settle, Consider, Add something, and once over Waiting for you and over the Later list). Ticked, Claude gets every word as before; the Stage, the room's window and phones say only *The host sent Claude a direction*, and the room's History reads *Sent to Claude, not shown*. Your Host screen, console, Timeline and History keep the words, marked *not shown to the room*.
 - **Show my typing to the room** (two screens only, off by default, remembered per session in this browser). While it is on, the room's window opened from this laptop shows *The host is writing to Claude…* with your words and a caret as you type a direction, never the Why. It goes when you send (the card takes over), on an empty box, or after 10 seconds without typing. The words never go through the server, so a room's window on another device does not see them.
@@ -26,32 +23,85 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Fixed
 
-- Step 3 never showed as done, even while the phones already said Claude Code was connected.
 - **Spin the wheel with only one idea** (dev game 2550): an Ideas vote with a single idea offered **Spin the wheel**, which the server refuses (a wheel needs two options), so pressing it ended in an error. The wheel is now offered only with two options or more, on the Host screen, the console and the Stage.
-- **Scrolling the right-hand boxes** (Waiting for you, Decided, Timeline, History…) on the Build Room console and Host screen: the wheel over an open box scrolled only that box and stopped at its end, so moving the column needed the pointer on the gap between boxes. Now a box scrolls to its end and the wheel carries on to the column.
-- The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
 - After a send, the room's window kept the last question up with "Claude is building", and a direction sent without an ask never showed at all.
 - Mockups Claude made during the opening, with an ask open, could only be reached through their card in Waiting for you, and nothing pointed at them.
+
+### What to look at
+
+1. On two screens, with a phone joined: run a Choose ask to results and press **Send B to Claude**. The room's window and the phone's Now show **Sent to Claude** with the words and *The room chose B · …*; when Claude says what it is doing, its status shows under the card, and the card stays until you open the next ask.
+2. In Add something, type a direction, tick **Don't show the room** and **Send to Claude**. The room's window and the phone say *The host sent Claude a direction*; the phone's History says *Sent to Claude, not shown*; your Host screen and Timeline show the words with *not shown to the room*; Claude gets the words.
+3. Tick **Show my typing to the room** beside Add something and type: the room's window opened from this laptop shows *The host is writing to Claude…* and the words as you type. Type in the Why: nothing new shows. Send: the card replaces it. Turn the toggle off and reload: it stays off for this session.
+4. On one screen, the typing toggle is not offered.
+5. In the opening, with a step's question open, have Claude propose a Choose question with mockups (or answer its Ideas question first so it sits above): once the pictures are in, **Claude's mockups are ready** shows above the open step on the Host screen (on two screens, under Your part now), with **Next, after this ask** as the main button. Press it: the card reads *Opens after ask N*; close the step's question and the mockups open to the room. In Waiting for you the mockups are listed above Claude's other questions.
+6. Again with an ask open, press **Put to the room now**: it asks *Close ask N and open this?*; **Keep it open** changes nothing. On the Stage (press 2) the dock shows **Mockups ready**; pressing it goes to the Host screen.
+
+### Known gaps
+
+- Live typing shows on the Stage screen of the room's window only (not Build or History), and only while no ask is open. The words are shown as you type them: the room's window cannot hide a name you type.
+- A send with no box of its own (points sent together, run-list items) always shows its words on the card; the instructions Preview the work, the brief request and the mockups request never do. While a run list is going, the Stage keeps the list, not the card.
+- History still shows the room your Why for a decision or a Consider send (as before); Don't show the room hides that too.
+- With nothing open between the opening's steps, the mockups card offers only **Put to the room now**: Open next has nothing to wait behind, so it would open at once.
+
+---
+
+## 23 Oct 2026 (late evening): review #46 and #47 fixes, before prod
+
+**Test:** merge of dev `788546cf0` (and the commit naming it). This push also carries the entry below it (Connect Claude Code confirms the connection; the side boxes scroll on). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
+
+### New
+
+- **Ask Claude for mockups or a walkthrough** (another session, Build Room ideas flow E, plugin **1.27.0**): from Points' *Mockups…* or an idea's *Ask the room* menu, Claude draws two or three distinct quick screens as one Choose ask that comes back to the host first (*Mockups you asked for*; *Ask for new mockups* sets them aside and asks for different ones), or steps the room through the demo. An older plugin says to update.
+
+### Fixed
+
+- **Workie's check caught too little** (review #46, on a build that had the check). It now also catches:
+  - **a number with the wrong unit**: "two branches" in the answers no longer lets "two Friday runs" or "a two-week pilot" through; "4pm Friday" still passes;
+  - **an owner nobody named**: "Whoever runs the weekly release" when no answer mentions a release, and any owner copied from the prompt's own examples; "route lead", "driver", "growth sponsors" pass;
+  - **claims about what the organisation already does**: "the current habit is to…" when the answers only proposed it;
+  - **next steps handed out as tasks**: "Route lead: count…" is rewritten to start **Suggested**, even under the old prompts.
+  Every prompt now also says never to describe current practice, or name an owner, the answers did not give. The repo's prompts lose their example owners, and the survey and poll defaults ask for **Suggested** steps too.
+- **Going back to a round showed no lesson** (review #47). The end screen's "Something to add?" lists each round with its title ("Lesson 2 · Form Follows Function"; "Round 3" when it has none), and an opened round shows its lesson and "Your turn" above its responses. A comment started in one round stays with that round when you switch.
+
+### What to look at
+
+1. **Apply the prompt updates on test first** (they have never been applied there; review #46 ran on v1): Admin › Prompts shows "*N* prompts have a newer version in the repo". **Review** *Workie - The Transfer Reader* and **Save as version 2**; do the same for the others marked.
+2. **Run review #46's round 1** with the same four answers (Lessons from Different Schools, Threshold): next steps start **Suggested**, with no "two Friday runs", "two-week", "weekly release" owner or "current habit". If a read still has one, the console and the phone show the host note.
+3. **Repeat with the prompt left on v1** (or before applying it, on another set): next steps still come out as suggestions after the check's rewrite.
+4. **Build Room** (update the plugin to 1.27.0 first): from an idea's *Ask the room* menu, ask Claude for mockups; the Choose ask comes back to you marked *Mockups you asked for* before the room sees it.
+5. **As a player, at the end:** open "Something to add?": each round shows its title; open one: its lesson and "Your turn" show above the responses; start a comment, switch rounds, come back: the comment is still there and posts to its own round.
+
+### Known gaps
+
+- The check can still flag a real count stated in other words (for example "two separate policies" when the answers never counted them); the rewrite usually just rewords it.
+- Drafts in "Something to add?" live in the page's memory; a reload loses them.
+- The prompt updates reach prod only when an admin applies them there after the prod deploy.
+
+## 23 Oct 2026 (evening): Connect Claude Code says when you are connected, and the side boxes scroll on
+
+**Test:** merge of dev `323a6588`.
+
+### New
+
+- **Step 3 of Connect Claude Code confirms the connection** (owner, 23 Oct: "this screen doesnt turn step 3 green and indicate hey, you are done and connected"). After you mint a key, step 3 says *Waiting for Claude Code to call in…*; once Claude Code calls in with that key, the step turns green, reads **Connected**, gives the time and folder, says whether Claude has started, and **Done** becomes the main button. An older key calling in does not count.
+- **The "already in Claude Code" line moved to step 3.** Step 2 is now only the folder, the key and the start command; step 3 holds both ways to start: paste the start command into a terminal, or type the kickoff line into a Claude Code already open in that folder.
+- **Nothing after 45 seconds?** Step 3 says where to look: the first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.
+
+### Fixed
+
+- Step 3 never showed as done, even while the phones already said Claude Code was connected.
+- **Scrolling the right-hand boxes** (Waiting for you, Decided, Timeline, History…) on the Build Room console and Host screen: the wheel over an open box scrolled only that box and stopped at its end, so moving the column needed the pointer on the gap between boxes. Now a box scrolls to its end and the wheel carries on to the column.
+- The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
 
 ### What to look at
 
 1. On a Build Room with no Claude yet, open **Connect Claude Code**, **Mint a key and copy the command**. Step 2 turns green; step 3 shows the kickoff line for an open Claude Code and *Waiting for Claude Code to call in…*.
 2. Paste the start command into a terminal. When Claude Code connects, step 3 turns green with **Connected at …, in ~/build-room/…**, and **Done** is highlighted.
 3. Leave it 45 seconds without pasting: the hint about the terminal's trust and allow questions appears.
-4. On two screens, with a phone joined: run a Choose ask to results and press **Send B to Claude**. The room's window and the phone's Now show **Sent to Claude** with the words and *The room chose B · …*; when Claude says what it is doing, its status shows under the card, and the card stays until you open the next ask.
-5. In Add something, type a direction, tick **Don't show the room** and **Send to Claude**. The room's window and the phone say *The host sent Claude a direction*; the phone's History says *Sent to Claude, not shown*; your Host screen and Timeline show the words with *not shown to the room*; Claude gets the words.
-6. Tick **Show my typing to the room** beside Add something and type: the room's window opened from this laptop shows *The host is writing to Claude…* and the words as you type. Type in the Why: nothing new shows. Send: the card replaces it. Turn the toggle off and reload: it stays off for this session.
-7. On one screen, the typing toggle is not offered.
-8. In the opening, with a step's question open, have Claude propose a Choose question with mockups (or answer its Ideas question first so it sits above): once the pictures are in, **Claude's mockups are ready** shows above the open step on the Host screen (on two screens, under Your part now), with **Next, after this ask** as the main button. Press it: the card reads *Opens after ask N*; close the step's question and the mockups open to the room. In Waiting for you the mockups are listed above Claude's other questions.
-9. Again with an ask open, press **Put to the room now**: it asks *Close ask N and open this?*; **Keep it open** changes nothing. On the Stage (press 2) the dock shows **Mockups ready**; pressing it goes to the Host screen.
 
 ### Known gaps
 
 - If you close the window before Claude calls in, reopening it shows the "Connected now" view instead, which says the same thing in its own words.
-- Live typing shows on the Stage screen of the room's window only (not Build or History), and only while no ask is open. The words are shown as you type them: the room's window cannot hide a name you type.
-- A send with no box of its own (Preview the work, points sent together) always shows its words on the card. While a run list is going, the Stage keeps the list, not the card.
-- History still shows the room your Why for a decision or a Consider send (as before); Don't show the room hides that too.
-- With nothing open between the opening's steps, the mockups card offers only **Put to the room now**: Open next has nothing to wait behind, so it would open at once.
 
 ---
 

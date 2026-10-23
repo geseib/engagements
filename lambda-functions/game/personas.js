@@ -735,10 +735,17 @@ const withholdBackground = (text, background) => {
  */
 const RANKING_FACT = 'A ranking shows which answers people preferred among these, not that the room agreed to '
   + 'a plan or chose an owner. Say what the vote shows, as the counts and points above show it.';
+const OWNER_PRACTICE_FACT = 'Never say what the organisation currently or usually does unless an answer says it; '
+  + 'never name an owner the answers did not name.';
 const HONESTY_RULE = 'Facts come from the material above, from what the room said, or from general knowledge '
   + 'you are certain of. Never invent numbers, names, quotations, or anything about this organisation or event. '
   + 'When something you would like is missing, work with what you have and do not mention that it is missing.\n'
-  + RANKING_FACT;
+  + RANKING_FACT
+  // Review #46 (test cb30e35d): "the current habit is to build visible
+  // tooling first" and "Whoever runs the weekly release" — an inferred
+  // practice and an owner copied from the prompt's own example. The read
+  // check (read-check.js 'practice', 'owner') backs this sentence.
+  + ' ' + OWNER_PRACTICE_FACT;
 
 /**
  * Resolve which voice to use.
@@ -909,6 +916,7 @@ module.exports = {
   withholdBackground,
   HONESTY_RULE,
   RANKING_FACT,
+  OWNER_PRACTICE_FACT,
   DEFAULT_OUTPUT_SECTIONS,
   normalizeOutputSections,
   resolveOutputSections,

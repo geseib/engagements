@@ -566,8 +566,28 @@
 .plr-feedback-btn { margin-top: 26px; }
 /* The end screen's way back to a round's comments (issue #34): wraps, never scrolls sideways. */
 .plr-ended-comments { margin-top: 22px; text-align: left; }
-.plr-ended-rounds { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.plr-btn.plr-ended-round { width: auto; flex: 0 0 auto; }
+/* Issue #47: one round per row, its number then its title, the title cut
+   with an ellipsis when the row runs out (the whole line is in title=). */
+.plr-ended-rounds {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 10px 0 0; padding: 0; list-style: none;
+}
+.plr-btn.plr-ended-round {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-width: 0; margin-top: 0; text-align: left;
+}
+.plr-ended-round__n { flex: 0 0 auto; white-space: nowrap; }
+.plr-ended-round__sep { flex: 0 0 auto; color: var(--plr-muted); }
+.plr-ended-round__title {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600;
+}
+.plr-ended-round__draft {
+  flex: 0 0 auto; margin-left: auto; padding: 2px 8px;
+  border: 1px solid var(--plr-rule-strong); border-radius: 999px;
+  font-size: var(--plr-t-meta); font-weight: 700; white-space: nowrap;
+}
 
 /* THE TOP EXIT ON THE PLAYER'S OWN FEEDBACK PANEL — a phone-sized escape hatch
    for a report that can run to the length of the whole round: the question,

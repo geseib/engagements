@@ -235,7 +235,9 @@ const summaryRow = (gameId, n = '000') => table.get(`GAME#${gameId}`, `QUESTION#
 
 const REPLY = '\n\n- **Two of two found it useful**: the rating came back as printed.\n\n'
   + '## What It Means\n\n- **Prep matters**: *Send the slides a day ahead*.\n\n'
-  + '## Next Steps\n\n1. Session lead: send the next deck a day early.';
+  // A suggestion (read-check.js, review #46): a bare "Session lead: send…" is
+  // a task handed out, and would be sent back for one rewrite.
+  + '## Next Steps\n\n1. **Suggested** Session lead: send the next deck a day early.';
 
 const beat = (gameId, b) => stageBeat({
   requestContext: { http: { method: 'POST' }, ...hostCtx(ACME) },
