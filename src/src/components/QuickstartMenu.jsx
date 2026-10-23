@@ -7,8 +7,10 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
-import { makeSearchMatcher } from '../config/listControls';
-import { SET_SEARCH_FIELDS } from '../config/setFinder';
+import { makeListPredicate, ALL } from '../config/listControls';
+import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags } from '../config/setFinder';
+import { tagIndex } from '../config/setShelfIndex';
+import { OWNER_OPTIONS, setOwnerTag } from '../utils/setOwnerTag';
 import { SCREEN_WORDS } from '../config/roomScreen';
 import { TWO_SURFACE_TYPES, presentHref } from '../config/surfaces';
 import { openPendingRoomWindow, willPlace } from '../present/roomWindow';
@@ -21,7 +23,19 @@ const API_BASE = window.API_BASE;
 
 // One matcher for the sheet's life: the fields are the set chooser's
 // (config/setFinder.js), so a word that finds a set there finds it here.
-const matchesSearch = makeSearchMatcher(SET_SEARCH_FIELDS);
+/*
+  QUICK START'S FILTERS (owner, 23 Oct 2026: "add owner and tag filters to
+  Quick start too"): the search, whose set it is and its tags, on the same
+  rules as the set chooser and the console (config/setFinder.js): several tags
+  at once means a set with ANY of them.
+*/
+const QS_CONFIG = {
+  searchFields: SET_SEARCH_FIELDS,
+  axes: { owner: { get: (set) => setOwnerTag(set) }, tags: TAGS_AXIS },
+};
+const matches = makeListPredicate(QS_CONFIG);
+/** The tags shown before "More tags": the most used. */
+const TAGS_SHOWN = 10;
 
 /**
  * WHERE THE ROOM WATCHES, IN QUICK START (owner, 18 Oct 2026). Quick start
@@ -83,13 +97,32 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
     drops out rather than drawing an empty carousel.
   */
   const [query, setQuery] = useState('');
+  const [owner, setOwner] = useState(ALL);
+  const [tags, setTags] = useState('');
+  const [allTags, setAllTags] = useState(false);
   const searchRef = useRef(null);
+  const state = { search: query, owner, tags };
   const shownSets = useMemo(() => Object.fromEntries(
-    Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matchesSearch(set, query))])
-  ), [quickstartSets, query]);
-  const search = (value) => {
-    setQuery(value);
-    setCurrentPage((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, 0])));
+    Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matches(set, { search: query, owner, tags }))])
+  ), [quickstartSets, query, owner, tags]);
+  const everySet = Object.values(quickstartSets).flat();
+  const countWith = (patch) => everySet.filter((set) => matches(set, { ...state, ...patch })).length;
+  const ownersPresent = OWNER_OPTIONS.filter((o) => everySet.some((set) => setOwnerTag(set) === o.value));
+  const tagsChosen = splitTags(tags);
+  // Counted within the search and the owner, so a tag's number is what it adds.
+  const tagList = tagIndex(everySet.filter((set) => matches(set, { ...state, tags: '' })));
+  for (const t of tagsChosen) if (!tagList.some((x) => x.tag === t)) tagList.unshift({ tag: t, count: 0 });
+  const firstPage = () => setCurrentPage((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, 0])));
+  const search = (value) => { setQuery(value); firstPage(); };
+  const pickOwner = (value) => { setOwner(value); firstPage(); };
+  const toggleTag = (tag) => {
+    setTags(joinTags(tagsChosen.includes(tag) ? tagsChosen.filter((t) => t !== tag) : [...tagsChosen, tag]));
+    firstPage();
+  };
+  const filtersOn = owner !== ALL || tagsChosen.length > 0;
+  const clearAll = () => {
+    setQuery(''); setOwner(ALL); setTags(''); firstPage();
+    searchRef.current?.focus();
   };
   // Clear goes back to the box: the button that was pressed unmounts with the
   // no-match line, and focus left on nothing drops a keyboard user to the top
@@ -98,7 +131,12 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
     search('');
     searchRef.current?.focus();
   };
-  const noMatch = query.trim() !== '' && Object.values(shownSets).every((list) => list.length === 0);
+  const noMatch = (query.trim() !== '' || filtersOn) && Object.values(shownSets).every((list) => list.length === 0);
+  const noMatchWords = [
+    query.trim() ? `“${query.trim()}”` : '',
+    owner !== ALL ? `in ${OWNER_OPTIONS.find((o) => o.value === owner).label}` : '',
+    tagsChosen.length ? `tagged ${tagsChosen.join(' or ')}` : '',
+  ].filter(Boolean).join(', ');
 
   useEffect(() => {
     fetchQuickstartSets();
@@ -370,12 +408,41 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
                 aria-label={`Search ${totalQuickstartSets} quick start sets: name, description or tag`}
               />
             </label>
+            {(ownersPresent.length > 1 || tagList.length > 0) && (
+              <div className="quickstart-filters">
+                {ownersPresent.length > 1 && (
+                  <div className="quickstart-owner" role="radiogroup" aria-label="Whose sets">
+                    {[{ value: ALL, label: 'All' }, ...ownersPresent].map((o) => (
+                      <button key={o.value} type="button" role="radio" aria-checked={owner === o.value} className={owner === o.value ? 'is-on' : ''} onClick={() => pickOwner(o.value)}>
+                        {o.label}<b>{countWith({ owner: o.value })}</b>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {tagList.length > 0 && (
+                  <div className="quickstart-tags" role="group" aria-label="Tags">
+                    {(allTags ? tagList : tagList.slice(0, TAGS_SHOWN)).map(({ tag, count }) => (
+                      <button key={tag} type="button" aria-pressed={tagsChosen.includes(tag)} className={tagsChosen.includes(tag) ? 'is-on' : ''} onClick={() => toggleTag(tag)}>
+                        {tag}<b>{count}</b>
+                      </button>
+                    ))}
+                    {tagList.length > TAGS_SHOWN && (
+                      <button type="button" className="quickstart-moretags" onClick={() => setAllTags((v) => !v)}>
+                        {allTags ? 'Fewer tags' : `More tags (${tagList.length - TAGS_SHOWN})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {/* The live region stays mounted: one that appears already holding
                 its sentence is often never read out. Only the sentence is in
                 it; the button beside it is not read out as part of the news. */}
             <div className={noMatch ? 'quickstart-nomatch' : undefined}>
-              <p role="status" className="quickstart-status">{noMatch ? `No quick start set matches “${query.trim()}”.` : ''}</p>
-              {noMatch && <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>}
+              <p role="status" className="quickstart-status">{noMatch ? `No quick start set matches ${noMatchWords}.` : ''}</p>
+              {noMatch && (filtersOn
+                ? <button type="button" className="quickstart-clear" onClick={clearAll}>Clear the search and filters</button>
+                : <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>)}
             </div>
             {Object.entries(shownSets).map(([type, sets]) => {
               if (sets.length === 0) return null;

@@ -9,6 +9,31 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (Quick start filters): whose sets and tags beside the search
+
+**Test:** merge of dev `363a9b81`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Quick start filters by owner and tag** (owner, 23 Oct: "add owner and tag filters to Quick start too"). Under the search box: **Whose sets** (All and every owner the quick start sets have: Yours, Team, Engage, Public, each counted; hidden when they all have one owner), and the tags in use as buttons with counts. Press several tags to see sets carrying any of them; press one again to let it go. The ten most used show first, then *More tags*. Every format narrows together and goes back to its first page. The same rules as the set chooser and the console list.
+- When nothing matches, the sheet says what it looked for ("No quick start set matches in Yours, tagged space.") and **Clear the search and filters** brings everything back.
+
+### Fixed
+
+- Nothing beyond the above.
+
+### What to look at
+
+1. Start screen › **Quick start**: under the search box, the owner row shows each owner with a count; press **Engage**: every format keeps only Engage's sets.
+2. Press two tags: sets carrying either show; press one again: it lets go.
+3. Press a tag, then an owner showing 0: the sheet names both filters; **Clear the search and filters** brings everything back and the owner row returns to All.
+4. Type in the search box with a tag pressed: the tag counts follow the search.
+
+### Known gaps
+
+- Quick start has no date filter (the set chooser and the console have one).
+- Tag counts follow the search and the owner, so an owner can show 0 once a tag is pressed; that is the count of what pressing it would show.
+
 ## 23 Oct 2026 (staff help): the Engage staff guides checked on the real screens
 
 **Test:** merge of dev `32c473c1`. Everything below this entry is already on test; this push adds only what is here.

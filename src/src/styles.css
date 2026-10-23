@@ -5467,6 +5467,17 @@ body {
 .quickstart-search input::placeholder { color: var(--muted); }
 .quickstart-nomatch { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 18px; color: var(--text); }
 .quickstart-nomatch p, .quickstart-status { margin: 0; }
+/* Quick start's owner and tag filters: the same look as the set chooser's. */
+.quickstart-filters { display: flex; flex-direction: column; gap: 10px; margin: -6px 0 18px; }
+.quickstart-owner { display: flex; flex-wrap: wrap; align-self: flex-start; border: 1px solid rgb(var(--slate-rgb) / 0.38); border-radius: 8px; overflow: hidden; }
+.quickstart-owner button { min-height: 34px; padding: 0 12px; border: 0; border-right: 1px solid rgb(var(--slate-rgb) / 0.38); background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.quickstart-owner button:last-child { border-right: 0; }
+.quickstart-owner button.is-on { background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); font-weight: 700; }
+.quickstart-owner b, .quickstart-tags b { margin-left: 6px; font-weight: 400; color: var(--muted); }
+.quickstart-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.quickstart-tags button { min-height: 32px; padding: 0 10px; border: 1px solid rgb(var(--slate-rgb) / 0.38); border-radius: 999px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.quickstart-tags button.is-on { border-color: var(--accent-text); background: rgb(var(--accent-rgb) / 0.14); color: var(--accent-text); font-weight: 700; }
+.quickstart-tags .quickstart-moretags { border-style: dashed; color: var(--muted); }
 .quickstart-clear { min-height: 36px; padding: 0 12px; border: 1px solid rgb(var(--slate-rgb) / 0.38); border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .quickstart-clear:hover { border-color: var(--muted); }
 /* Where the room watches, above the sets (QuickstartMenu QuickScreens). */
