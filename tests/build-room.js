@@ -876,13 +876,29 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual(r.status, 200);
     assert.strictEqual(r.body.idea.status, 'acknowledged');
     const h = await hostCall('GET', 'state');
-    assert.strictEqual(h.body.log.length, logsBefore, 'an acknowledged comment is not a record');
+    // IDEAS FLOW A (owner, 23 Oct: closed ideas were lost): one host-only line says whose idea and its fate.
+    assert.strictEqual(h.body.log.length, logsBefore + 1);
+    const line = h.body.log.find((l) => l.kind === 'note' && l.text.includes('new buttons'));
+    assert.strictEqual(line.text, 'Priya\'s idea \u201cI like the look of the new buttons\u201d: acknowledged.');
+    assert.ok(!JSON.stringify((await agentCall('GET', 'state')).body.log).includes('new buttons'), 'Claude sees the fate line');
+    assert.ok(!JSON.stringify((await playCall('GET', 'state', priya)).body.log).includes('new buttons'), 'a phone sees the fate line');
     const inbox = await agentCall('GET', 'inbox');
     assert.strictEqual(inbox.status, 200);
     assert.ok(Array.isArray(inbox.body.inbox));
     assert.ok(!JSON.stringify(inbox.body).includes('new buttons'), 'Claude was told about it');
     const p = await playCall('GET', 'state', priya);
     assert.deepStrictEqual(p.body.myIdeas.map((i) => [i.text, i.status, i.walled]), [['I like the look of the new buttons', 'acknowledged', false]]);
+  });
+  await check('Every fate of an idea is a host-only line: dismissed, saved for later, on the wall, back in the queue', async () => {
+    seed();
+    await sendIdea(marcus, 'Add a dark mode');
+    const idea = await ideaOf('Add a dark mode');
+    for (const action of ['dismiss', 'restore', 'later', 'wall']) {
+      assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action })).status, 200, action);
+    }
+    const fates = (await hostCall('GET', 'state')).body.log.filter((l) => l.kind === 'note' && l.text.includes('dark mode')).map((l) => l.text.split(': ').pop());
+    for (const f of ['dismissed.', 'back in the queue.', 'saved for later.', 'shown on the wall.']) assert.ok(fates.includes(f), `${f} in ${fates}`);
+    assert.ok(!JSON.stringify((await agentCall('GET', 'state')).body.log).includes('dark mode'));
   });
   await check('Show on the wall acknowledges it and puts it, without a name, on the host\'s wall for a short while', async () => {
     seed();
@@ -1878,6 +1894,53 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const many = { kind: 'nope', sets: [{ name: 'Big', questions: Array.from({ length: 60 }, (_, i) => ({ kind: 'suggest', prompt: `Q${i}` })) }] };
     const capped = (await hostCall('POST', 'ready', many)).body.ready;
     assert.deepStrictEqual([capped.kind, capped.count], ['', S.READY_LIMITS.questions]);
+  });
+  // THE OPENING BY KIND (question-sets plan step 5).
+  await check('opening by kind: a game asks its own words and probes after What are we making?; other kinds keep the general ones', async () => {
+    seed();
+    const steps = async () => (await hostCall('GET', 'state')).body.opening.steps;
+    const general = await steps();
+    assert.strictEqual(general.find((x) => x.key === 'forWhom').question, 'Who is it for? Name a person and the moment they need it.', JSON.stringify(general[1]));
+    assert.deepStrictEqual(general.find((x) => x.key === 'forWhom').probes, ['Who else is it for?', 'Who is it not for?']);
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    const game = await steps();
+    assert.strictEqual(game.find((x) => x.key === 'forWhom').question, 'Who is playing, and where are they when they play?', JSON.stringify(game[1]));
+    assert.deepStrictEqual(game.find((x) => x.key === 'forWhom').probes, ['What should a player feel in the first minute?', 'Why would they play a second time?']);
+    assert.strictEqual(game.find((x) => x.key === 'firstBuild').question, 'What does the player do in the first ten seconds?');
+    assert.strictEqual(game.find((x) => x.key === 'never').question, 'What must it never do?', 'a step with no game words keeps the general ones');
+    assert.strictEqual((await agentWith('GET', 'state', {})).body.opening.steps.find((x) => x.key === 'forWhom').question, 'Who is playing, and where are they when they play?', 'Claude reads the same');
+    // Claude's call rewrote the state row: change the kind on the row as it is now.
+    const now = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    now.Brief = { lines: { kind: 'A website or page' } };
+    assert.strictEqual((await steps()).find((x) => x.key === 'forWhom').question, 'Who is it for? Name a person and the moment they need it.');
+  });
+  await check('opening probes from the host\'s sets: an Ideas question in "Opening: <step>" probes that step, by label or key, after the kind\'s own', async () => {
+    seed();
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    await hostCall('POST', 'ready', { kind: 'game', sets: [{ name: 'Ours', questions: [
+      { kind: 'suggest', prompt: 'What is the twist?', category: 'Opening: For' },
+      { kind: 'suggest', prompt: 'What is the smallest level?', category: 'opening - firstBuild' },
+      { kind: 'rating', prompt: 'Not a probe: a rating', category: 'Opening: For' },
+      { kind: 'suggest', prompt: 'Not a probe: another section', category: 'Start' },
+    ] }] });
+    const steps = (await hostCall('GET', 'state')).body.opening.steps;
+    assert.deepStrictEqual(steps.find((x) => x.key === 'forWhom').probes, ['What should a player feel in the first minute?', 'Why would they play a second time?', 'What is the twist?']);
+    assert.deepStrictEqual(steps.find((x) => x.key === 'firstBuild').probes, ['What is the smallest level?']);
+  });
+  await check('the host answering a step by hand sends Claude the kind\'s own question with the answer', async () => {
+    seed();
+    await hostCall('GET', 'state');
+    const st = store.get(key(`GAME#${GAME}`, 'BUILD#STATE')) || [...store.values()].find((x) => x.PK === `GAME#${GAME}` && x.SK === 'BUILD#STATE');
+    st.Brief = { lines: { kind: 'A game' } };
+    st.Phase = 'opening';
+    const r = await hostCall('POST', 'opening/answer', { step: 'forWhom', text: 'Kids on a bus' });
+    assert.ok(r.status < 300, JSON.stringify(r.body));
+    const dir = (await agentWith('GET', 'inbox', {})).body.inbox.map((x) => x.text).join(' | ');
+    assert.ok(/Who is playing, and where are they when they play: Kids on a bus/.test(dir), dir);
   });
   await check('Claude\'s own view and the phones never carry the plugin or its version', async () => {
     seed();

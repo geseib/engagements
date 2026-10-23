@@ -1889,11 +1889,45 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, askForMockups: true }));
   });
 
-  test('a single idea\'s menu needs another ticked before it can go to a vote; Save for later posts later', async () => {
+  test('nothing greyed out: one idea opens the vote, others are added from the queue, two needed', async () => {
     await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
     const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
-    expect(within(q).getByRole('button', { name: 'Put to a vote' })).toBeDisabled();
+    const vote = within(q).getByRole('button', { name: 'Put to a vote with other ideas' });
+    expect(vote).toBeEnabled();
+    fireEvent.click(vote);
+    const dialog = screen.getByRole('dialog', { name: 'Put to a vote' });
+    expect(within(dialog).getByRole('status').textContent).toBe('Add at least one more idea to vote between.');
+    expect(within(dialog).getByRole('button', { name: 'Open voting' })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: new RegExp(IDEAS[1].Text) }));
+    expect(screen.getByRole('dialog', { name: 'Put 2 ideas to a vote' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open voting' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ ideaIds: ['0-i0', '1-i1'], prompt: 'Which should Claude build next?', maxPicks: 1, open: true }));
+  });
+
+  test('the only idea in the queue: the vote says to use Consider instead', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 1) }));
+    const q = queue();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    fireEvent.click(within(q).getByRole('button', { name: 'Put to a vote with other ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Put to a vote' });
+    expect(within(dialog).getByRole('status').textContent).toMatch('Consider');
+  });
+
+  test('no Ideas ask open: the idea offers to ask the room about it, prefilled', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 1) }));
+    const q = queue();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    expect(within(q).queryByRole('button', { name: 'Add to the open Ideas ask' })).toBeNull();
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room for ideas about this' }));
+    const dialogs = await screen.findAllByRole('dialog');
+    const field = within(dialogs[dialogs.length - 1]).getByLabelText(/Question/);
+    expect(field).toHaveValue(`How should we do this: \u201c${IDEAS[0].Text}\u201d?`);
+  });
+
+  test('Save for later posts later', async () => {
+    await openRoom(hostState({ ideas: IDEAS.slice(0, 2) }));
+    const q = queue();
     fireEvent.click(within(q).getAllByRole('button', { name: 'Save for later' })[0]);
     await waitFor(() => expect(lastPost().body).toEqual({ action: 'later' }));
   });
@@ -2543,8 +2577,11 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     await openRoom(opening({ Brief: { forWhom: 'Two friends, one laptop', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } }));
     const pathList = screen.getByRole('region', { name: 'The opening: the build brief' });
     expect(within(pathList).getByRole('button', { name: /Making.*A game/ })).toBeInTheDocument();
-    fireEvent.click(within(within(pathList).getByRole('group', { name: 'Probe For' })).getByRole('button', { name: 'Who is it not for?' }));
-    await waitFor(() => expect(lastPost().body).toMatchObject({ kind: 'suggest', prompt: 'Who is it not for?', openingStep: 'forWhom', probe: true }));
+    // A game probes with its own questions (question-sets plan step 5), not the general ones.
+    const probes = within(pathList).getByRole('group', { name: 'Probe For' });
+    expect(within(probes).getAllByRole('button').map((b) => b.textContent)).toEqual(['What should a player feel in the first minute?', 'Why would they play a second time?']);
+    fireEvent.click(within(probes).getByRole('button', { name: 'Why would they play a second time?' }));
+    await waitFor(() => expect(lastPost().body).toMatchObject({ kind: 'suggest', prompt: 'Why would they play a second time?', openingStep: 'forWhom', probe: true }));
     expect(screen.getByRole('region', { name: /^Opening · step 3 of 9/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start building' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Start building' }));

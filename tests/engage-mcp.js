@@ -618,6 +618,21 @@ const hardStop = setTimeout(() => {
       stateOpening = undefined;
     }
   });
+  await check('1.26.1: during the opening, room_status lists each step\'s words for this build and its probes, by key', async () => {
+    stateOpening = { phase: 'opening', current: 'forWhom', steps: [
+      { key: 'kind', status: 'done', question: 'What are we making?' },
+      { key: 'forWhom', status: 'next', question: 'Who is playing, and where are they when they play?', probes: ['What should a player feel in the first minute?', 'What is the twist?'] },
+      { key: 'never', status: 'skipped', question: 'What must it never do?' },
+    ] };
+    try {
+      const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
+      assert.ok(/Questions and probes for this build/.test(t), t.slice(-600));
+      assert.ok(/forWhom: .*Who is playing.* Probes: .*first minute.*\|.*twist/.test(t), t.slice(-600));
+      assert.ok(!/  kind: /.test(t) && !/  never: /.test(t), 'not the kind step, not a skipped one');
+    } finally {
+      stateOpening = undefined;
+    }
+  });
   await check('the opening: room_status says PHASE: OPENING with the steps, and the brief carries its lines', async () => {
     stateOpening = { phase: 'opening', current: 'problem', steps: [{ key: 'kind', status: 'done' }, { key: 'forWhom', status: 'done' }, { key: 'problem', status: 'asking' }] };
     stateBrief = { forWhom: 'Two friends', keep: [], later: [], lines: { kind: 'A game', problem: 'Setup takes too long' } };

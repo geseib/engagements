@@ -1063,6 +1063,14 @@ async function ideaAction(ctx, ideaId, body) {
     // A sent idea goes in the room's own words: as written (H1).
     await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true, why: S.cleanText((body || {}).why, S.LIMITS.reason) } : {}) });
   }
+  // WHAT BECAME OF IT (owner, 18 Oct: closing an idea "seems to be gone forever
+  // ... we need that in timeline and record who's idea and what was decided").
+  // The host's own timeline only, as a note: never the room, never Claude.
+  const FATE = { acknowledge: 'acknowledged', wall: 'shown on the wall', dismiss: 'dismissed', later: 'saved for later', restore: 'back in the queue' };
+  if (FATE[action]) {
+    const whose = idea.Source === 'host' ? 'Your idea' : `${idea.PlayerName || 'Someone'}'s idea`;
+    await logEntry(ctx, { kind: 'note', by: 'system', text: `${whose} \u201c${S.cleanText(idea.Text, 200)}\u201d: ${FATE[action]}.`, ideaId: idea.IdeaId });
+  }
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(200, { idea: S.ideaView(next) });
@@ -1258,7 +1266,8 @@ async function openingAction(ctx, action, body) {
     await logEntry(ctx, { kind: 'milestone', text: 'Back to the opening: the room is framing the build further.', by: 'system' });
   } else {
     if (!S.OPENING_KEYS.includes(step)) return fail(400, `step must be one of ${S.OPENING_KEYS.join(', ')}`);
-    const def = S.OPENING_STEPS.find((x) => x.key === step);
+    // The kind's own words for this step, once What are we making? is answered (question-sets plan step 5).
+    const def = S.openingStepsFor(room.state).find((x) => x.key === step);
     if (action === 'answer') {
       const text = S.cleanText(b.text, S.LIMITS.listItem);
       if (!text) return fail(400, 'Write the answer');
@@ -2641,11 +2650,12 @@ async function postClaudeSet(ctx, body) {
  */
 const claudeSetKey = (ctx, setId) => `claudeset#${ctx.gameId}-${setId}`;
 
-async function remindUnsavedSet(ctx, row) {
+/** The entry for one unsaved set, or null without a host. Also used by scripts/backfill-claude-set-reminders.js. */
+function unsavedSetNote(ctx, row) {
   const sub = String((ctx.meta && ctx.meta.CreatedBy) || '');
-  if (!sub) return;
+  if (!sub) return null;
   const room = String((ctx.meta && ctx.meta.Title) || '').trim();
-  await inbox.notify(db, {
+  return {
     sub,
     key: claudeSetKey(ctx, row.QSetId),
     kind: inbox.KINDS.CLAUDE_SET_UNSAVED,
@@ -2655,7 +2665,12 @@ async function remindUnsavedSet(ctx, row) {
     link: { type: 'build', gameId: ctx.gameId, setId: row.QSetId, orgId: ctx.orgId || '' },
     expiresAt: ctx.ttl,
     quiet: true,
-  });
+  };
+}
+
+async function remindUnsavedSet(ctx, row) {
+  const note = unsavedSetNote(ctx, row);
+  if (note) await inbox.notify(db, note);
 }
 
 async function forgetUnsavedSet(ctx, setId) {
@@ -3525,4 +3540,4 @@ exports.handler = async (event) => {
 };
 
 // For tests.
-exports._internals = { hostOrAgent, playerFrom };
+exports._internals = { hostOrAgent, playerFrom, unsavedSetNote };
