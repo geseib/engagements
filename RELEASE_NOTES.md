@@ -9,7 +9,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
-## 23 Oct 2026 (evening): Connect Claude Code says when you are connected
+## 23 Oct 2026 (evening): Connect Claude Code says when you are connected, and the side boxes scroll on
 
 **Test:** merge of dev `DEVCOMMIT`.
 
@@ -22,6 +22,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 ### Fixed
 
 - Step 3 never showed as done, even while the phones already said Claude Code was connected.
+- **Scrolling the right-hand boxes** (Waiting for you, Decided, Timeline, History…) on the Build Room console and Host screen: the wheel over an open box scrolled only that box and stopped at its end, so moving the column needed the pointer on the gap between boxes. Now a box scrolls to its end and the wheel carries on to the column.
 - The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
 
 ### What to look at

@@ -894,7 +894,11 @@
   .brm.brm-room--host .brm-stack { flex: 1; }
   .brm.brm-room--host .brm-stackitem { flex: none; }
   .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
-  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  /* A fold's body scrolls, and at its end the wheel carries on to the column
+     (scroll chaining, the browser's default): `contain` here meant the column
+     only moved with the pointer on the gap between folds (owner, 23 Oct).
+     The column itself still contains, so the page behind never moves. */
+  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; }
 }
 /* The asks table in the narrow right column: the kind column goes (the row's
    question says it), and the number, status and action get fixed widths. */
