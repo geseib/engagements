@@ -21,6 +21,7 @@ import {
 import { useNextFocus } from './useNextFocus';
 import { W } from './words';
 import ActionRow from './BuildActionRow';
+import { HideFromRoom } from './BuildSendOptions';
 import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
 
 const ORDER = ['ask', 'collect', 'settle', 'send'];
@@ -198,6 +199,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   const hot = quiet ? '' : ' brm-btn--primary';
   const [opened, setOpened] = useState(null); // a done step opened by a click
   const [said, setSaid] = useState(''); // a confirmation, in the row's hint slot
+  const [hide, setHide] = useState(false); // Don't show the room, for the one-press send
   useEffect(() => {
     if (!said) return undefined;
     const t = setTimeout(() => setSaid(''), 4000);
@@ -282,7 +284,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     if (!move || sending.current) return undefined;
     sending.current = true;
     try {
-      const out = await run(() => api.askAction(ask.askId, decideBody(ask, { direction: move.direction, chosen: move.chosen, as: kind })));
+      const out = await run(() => api.askAction(ask.askId, decideBody(ask, { direction: move.direction, chosen: move.chosen, as: kind, hide })));
       if (out !== undefined && onSent) onSent({ as: kind, send: true, direction: move.direction });
       return out;
     } finally { sending.current = false; }
@@ -347,6 +349,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
           </p>
         )}
         {then(['4 Change before sending'])}
+        {host && move && !held && <HideFromRoom checked={hide} onChange={setHide} disabled={busy} />}
         {row}
       </>
     );

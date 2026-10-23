@@ -9,7 +9,9 @@
  * FRAMES ARE REFETCH SIGNALS ONLY: `buildChanged` (and `gameEnded`) say "look
  * again"; their payload is never read. Debounced 400 ms, so a burst is one
  * read. Coming back online, the tab becoming visible and a reconnect refetch
- * too, and an 8 s poll heals a missed frame (as the host page does).
+ * too, and an 8 s poll heals a missed frame (as the host page does). The
+ * host's live typing never comes this way: it is local to this browser
+ * (BuildWall.jsx useHostTyping, buildroom/typingMirror.js).
  *
  * The socket is the /present viewer's (connect.js `viewer=present&viewerId=`):
  * never a player, never a host, one id per tab. The window reports itself

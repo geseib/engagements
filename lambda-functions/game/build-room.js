@@ -249,7 +249,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly, why, roomWords, liked, considered }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly, why, roomWords, liked, considered, roomHidden }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -292,6 +292,8 @@ async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, fo
     // THE RELEASE GATE (§2c): Claude's post waits on the host's queue; the host's alone, always.
     ...(hold ? { Released: false } : {}),
     ...(hostOnly ? { HostOnly: true } : {}),
+    // DON'T SHOW THE ROOM (owner, 23 Oct 2026): Claude gets it as ever; the room's reads carry no words.
+    ...(forAgent && roomHidden ? { RoomHidden: true } : {}),
     CreatedAt: now,
   };
   const saved = await put(ctx, row);
@@ -670,6 +672,8 @@ async function askAction(ctx, role, askId, body) {
     if (action === 'close') next.ClosedAt = now;
     if (action === 'discard') next.DiscardedAt = now;
     if (action === 'decide') {
+      const hiddenFromRoom = S.roomHiddenOf(b);
+      if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
       // A rating always carries its meaning: 5 is great, 1 needs work (owner, 2026-10-06).
       const typed = S.cleanText(b.direction, S.LIMITS.direction);
       const direction = S.withRatingMeaning(ask.Kind, typed || S.defaultDirection(ask, room));
@@ -699,6 +703,7 @@ async function askAction(ctx, role, askId, body) {
       const why = S.cleanText(b.why, S.LIMITS.reason);
       if (why) next.Decision.why = why;
       if (reworded === true) next.Decision.roomWords = S.chosenWords(ask, room, chosen);
+      if (sendToAgent && hiddenFromRoom.value) next.Decision.roomHidden = true;
       next.DecidedAt = now;
       if (!next.ClosedAt) next.ClosedAt = now;
       // One entry: the decision IS what Claude receives (inboxText adds the note).
@@ -714,7 +719,7 @@ async function askAction(ctx, role, askId, body) {
         const brief = S.briefWithStep(room.state, ask.OpeningStep, ask.Probe ? S.questionAnswer(ask.Prompt, answer) : answer, { probe: Boolean(ask.Probe), askId, at: now });
         await saveBrief(ctx, brief);
       }
-      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep), why: next.Decision.why || '' });
+      await logEntry(ctx, { kind: 'decision', text: direction, detail: note, by: 'host', askId, forAgent: sendToAgent, spoken, as, claudeNote: ask.ClaudeNote || '', noBrief: Boolean(ask.OpeningStep), why: next.Decision.why || '', roomHidden: Boolean(next.Decision.roomHidden) });
       await recordBuildDecision({ gameId: ctx.gameId, askId, metadata: ctx.meta }, { db });
     }
     await put(ctx, next);
@@ -975,6 +980,8 @@ async function postLog(ctx, role, body) {
     return fail(400, 'Write the update');
   }
   const link = S.safeUrl(b.link);
+  const hiddenFromRoom = S.roomHiddenOf(b);
+  if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
   const row = await logEntry(ctx, {
     kind,
     text,
@@ -985,6 +992,7 @@ async function postLog(ctx, role, body) {
     by: role === 'agent' ? 'agent' : 'host',
     // What the room said can go straight to Claude; a host note never does.
     forAgent: role === 'host' && Boolean(b.forAgent) && kind !== 'note',
+    roomHidden: role === 'host' && hiddenFromRoom.value,
     as: b.as,
     // Claude's post waits for the host when the room says so (§2c).
     hold: role === 'agent' && await holdsPosts(ctx),
@@ -1064,7 +1072,9 @@ async function postDirection(ctx, body) {
   const src = await directionSources(ctx, body || {}, text);
   if (src.error) return fail(400, src.error);
   const why = S.cleanText((body || {}).why, S.LIMITS.reason);
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, why, ...src.value });
+  const hiddenFromRoom = S.roomHiddenOf(body);
+  if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, why, roomHidden: hiddenFromRoom.value, ...src.value });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -1110,6 +1120,8 @@ async function ideaAction(ctx, ideaId, body) {
   if (action === 'reply') return ideaReply(ctx, idea, 'host', (body || {}).text);
   const now = new Date().toISOString();
   let status = idea.Status || 'new';
+  const hiddenFromRoom = S.roomHiddenOf(body);
+  if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
   if (action === 'direct') {
     status = 'promoted';
   } else if (action === 'suggest') {
@@ -1146,7 +1158,7 @@ async function ideaAction(ctx, ideaId, body) {
   }
   if (action === 'direct' || action === 'suggest') {
     // A sent idea goes in the room's own words: as written (H1).
-    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true, why: S.cleanText((body || {}).why, S.LIMITS.reason) } : {}) });
+    await logEntry(ctx, { kind: 'idea', text: idea.Text, detail: `from ${idea.PlayerName}`, by: 'room', forAgent: action === 'direct', as: (body || {}).as, ideaId: idea.IdeaId, ...(action === 'direct' ? { asWritten: true, why: S.cleanText((body || {}).why, S.LIMITS.reason), roomHidden: hiddenFromRoom.value } : {}) });
   }
   // WHAT BECAME OF IT (owner, 18 Oct: closing an idea "seems to be gone forever
   // ... we need that in timeline and record who's idea and what was decided").
@@ -1235,7 +1247,9 @@ async function considerItem(ctx, body) {
     const why = S.cleanText(b.why, S.LIMITS.reason);
     const asked = S.claudeGetsOf(b.as);
     const as = go === 'later' ? 'later' : asked === 'later' ? 'do-now' : asked;
-    const stamp = { forAgent: true, as, why, asWritten, considered: true, liked: item.liked, ...(asWritten ? {} : { roomWords: words }) };
+    const hiddenFromRoom = S.roomHiddenOf(b);
+    if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
+    const stamp = { forAgent: true, as, why, asWritten, considered: true, liked: item.liked, roomHidden: hiddenFromRoom.value, ...(asWritten ? {} : { roomWords: words }) };
     let row;
     if (item.type === 'idea' && asWritten) {
       row = await logEntry(ctx, { kind: 'idea', text, detail: item.idea.PlayerName ? `from ${item.idea.PlayerName}` : '', by: 'room', ideaId: item.ideaId, ...stamp });
@@ -1442,7 +1456,9 @@ async function settleDraft(ctx, action, body) {
  * SEND NOW (owner, 2026-10-06): a direction held on the Later list goes to Claude
  * as Do now, and leaves the list.
  */
-async function sendLater(ctx, itemId) {
+async function sendLater(ctx, itemId, body) {
+  const hiddenFromRoom = S.roomHiddenOf(body);
+  if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
   const room = await loadRoom(ctx);
   const brief = S.briefView(room.state);
   const item = brief.later.find((i) => i.id === itemId);
@@ -1454,6 +1470,8 @@ async function sendLater(ctx, itemId) {
     : held && held.IdeaId ? { askIds: [], ideaIds: [held.IdeaId], items: [] } : null;
   const row = await logEntry(ctx, {
     kind: 'direction', text: item.text, by: 'host', forAgent: true, as: 'do-now', askId: item.askId || undefined,
+    // Kept from the room when the host ticked it now, or when it was put on the list that way.
+    roomHidden: hiddenFromRoom.value || Boolean(held && held.RoomHidden),
     ...(held && from ? {
       sources: from,
       asWritten: typeof held.AsWritten === 'boolean' ? held.AsWritten && S.cleanText(held.Text, S.LIMITS.direction) === item.text : undefined,
@@ -3380,7 +3398,7 @@ async function routeHost(ctx, role, method, parts, body, event, query) {
   if (a === 'asks-from-ideas' && !b) return hostOnly() || askFromIdeas(ctx, body);
   if (a === 'brief' && !b) return hostOnly() || editBrief(ctx, body);
   if (a === 'brief' && b === 'vote' && !c) return hostOnly() || laterToVote(ctx, body);
-  if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c);
+  if (a === 'brief' && b === 'later' && c && d === 'send') return hostOnly() || sendLater(ctx, c, body);
   if (a === 'brief' && b === 'draft' && !c) return role === 'agent' ? draftBrief(ctx, body) : fail(403, 'Claude drafts the brief; the host uses or dismisses it');
   if (a === 'opening' && b === 'draft' && ['accept', 'dismiss'].includes(c)) return hostOnly() || settleDraft(ctx, c, body);
   if (a === 'opening' && b && !c) return hostOnly() || openingAction(ctx, b, body);

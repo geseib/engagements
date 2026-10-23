@@ -7,7 +7,9 @@ import RatingInput from '../components/survey/RatingInput';
 import { fetchBuildState, sendResponse, sendVote, sendIdea, sendIdeaReply, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
-import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, historyFromView } from './buildScreens';
+import {
+  RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, historyFromView, sentOf, sentCard,
+} from './buildScreens';
 import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
@@ -643,8 +645,29 @@ function Decided({ decision }) {
         {sentToClaude ? 'Sent to Claude' : 'Decided'}
       </p>
       {decision.direction ? <p className="plr-quote bpl-text">{decision.direction}</p> : null}
+      {decision.hidden && !decision.direction ? <p className="plr-help">{W.sentHiddenLine}</p> : null}
       {sentToClaude && decision.deliveredAt ? <p className="plr-help">Claude has picked it up.</p> : null}
     </div>
+  );
+}
+
+/**
+ * SENT TO CLAUDE ON THE PHONE (owner, 23 Oct 2026): what Claude was told, from
+ * the send until the next ask opens (buildScreens sentCard), above Claude's
+ * status. A send the host kept from the room says only that something went.
+ */
+export function phoneSentCard(view) {
+  const asks = [...((view && view.history && view.history.asks) || []), ...(view && view.current ? [view.current] : [])];
+  return sentCard(sentOf(view), asks);
+}
+function SentCard({ card }) {
+  if (!card) return null;
+  return (
+    <section className="bpl-latest bpl-sentcard" aria-label={card.head} data-testid="bpl-sentcard">
+      <h2 className="bpl-kind bpl-kind--amber">{card.head}</h2>
+      <p className="bpl-text bpl-latest-tx">{card.hidden ? card.text : `\u201c${card.text}\u201d`}</p>
+      {card.pick ? <p className="plr-help bpl-sentpick">{card.pick}</p> : null}
+    </section>
   );
 }
 
@@ -731,7 +754,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
       {latest ? (
         <div className="bpl-latest">
           <h3 className="bpl-kind bpl-kind--amber">Latest decision · Ask {askNo(latest.askId)}</h3>
-          <p className="bpl-text bpl-latest-tx">{latest.direction}</p>
+          <p className="bpl-text bpl-latest-tx">{latest.hidden && !latest.direction ? W.sentHiddenLine : latest.direction}</p>
         </div>
       ) : null}
       <BaseNotice crew={crew} log={view.log} />
@@ -744,7 +767,7 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
             <li key={e.logId || i} className={`bpl-entry bpl-entry--${e.kind}${i === 0 ? ' bpl-entry--newest' : ''}`}>
               <span className="bpl-kind">{FEED_KINDS[e.kind]}</span>
               <span className="bpl-ago">{clock(e.createdAt)}</span>
-              <span className="bpl-tx bpl-text">{e.text}</span>
+              <span className="bpl-tx bpl-text">{e.hidden && !e.text ? W.historyNotShown : e.text}</span>
               {DETAIL_KINDS.includes(e.kind) && e.detail ? <span className="bpl-dt bpl-text">{e.detail}</span> : null}
               {isHttpUrl(e.link) ? (
                 <a className="bpl-link bpl-lnk" href={e.link} target="_blank" rel="noopener noreferrer">{linkText(e.link)}</a>
@@ -1419,6 +1442,8 @@ export default function BuildPlayer({
   /* A point the host shows wins over a settled question: the host can only show
      one once the question is no longer open, but the last decided ask stays
      current on the phone, so without this the point never reached the room. */
+  // What Claude was told leads Now until the next ask opens (a point the host shows comes first).
+  const sentNow = view.shownPoint ? null : phoneSentCard(view);
   if (ask && (ask.status === 'results' || ask.status === 'decided') && !view.shownPoint) {
     const decided = ask.status === 'decided';
     return page({
@@ -1427,9 +1452,10 @@ export default function BuildPlayer({
         <>
           {intro}
           {openBuild}
+          {decided ? <SentCard card={sentNow} /> : null}
           <Eyebrow word={decided ? 'Decided' : 'Results'} askId={ask.askId} />
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
-          {decided ? <Decided decision={ask.decision} /> : null}
+          {decided && !sentNow ? <Decided decision={ask.decision} /> : null}
           {ask.wheel ? <PhoneWheel ask={ask} api={api} onResult={onResult} /> : null}
           <Results ask={ask} mine={mine} />
           <Whys whys={ask.results && ask.results.whys} />
@@ -1458,6 +1484,7 @@ export default function BuildPlayer({
         {!point && run ? <RunBlock run={run} lead /> : null}
         {!point && !run ? (
           <>
+            <SentCard card={sentNow} />
             <h1 className="plr-h1 plr-h1--primary">{doingNow && doingNow.text ? doingNow.headline : !view.agentConnected ? W.waitingForClaude : view.agentListening ? W.claudeReady : 'Claude is building'}</h1>
             {doingNow && doingNow.text && !doingNow.stale ? <p className="bpl-dur">{W.forDur(doingNow.dur)}</p> : null}
             {doingNow && doingNow.helperLine ? <p className="bpl-helper">{doingNow.helperLine}</p> : null}

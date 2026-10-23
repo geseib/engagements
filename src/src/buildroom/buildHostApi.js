@@ -113,10 +113,11 @@ export function buildApi(gameId) {
     /**
      * A direction; `as` is keep, later or ask (step 7c), else Do now. `from` names
      * what it was written from (`{ askIds, ideaIds }`, parity PLAN §2.8 H1), so
-     * History can mark those as sent to Claude.
+     * History can mark those as sent to Claude. `hideFromRoom`: Don't show the room.
      */
-    postDirection: (text, as, from = null) => post('directions', {
+    postDirection: (text, as, from = null, { hideFromRoom = false } = {}) => post('directions', {
       text,
+      ...(hideFromRoom ? { hideFromRoom: true } : {}),
       ...(as && as !== 'do-now' ? { as } : {}),
       ...(from && from.askIds && from.askIds.length ? { fromAskIds: from.askIds } : {}),
       ...(from && from.ideaIds && from.ideaIds.length ? { fromIdeaIds: from.ideaIds } : {}),
@@ -139,8 +140,8 @@ export function buildApi(gameId) {
     editBrief: (body) => post('brief', body),
     /** The brief's Later list, to a Pick one vote. */
     laterToVote: () => post('brief/vote', {}),
-    /** Send one held For Claude, later item now, as Do now. */
-    sendLater: (id) => post(`brief/later/${seg(id)}/send`, {}),
+    /** Send one held For Claude, later item now, as Do now. `{hideFromRoom?}`: Don't show the room. */
+    sendLater: (id, body = {}) => post(`brief/later/${seg(id)}/send`, body),
     /** The opening (owner, 2026-10-06): 'answer' {step, text}, 'skip' / 'reopen' {step}, or 'start'. */
     openingAction: (action, body = {}) => post(`opening/${seg(action)}`, body),
     /** Claude's draft of the brief: 'accept' {headline, summary, lines} (as edited) or 'dismiss'. */

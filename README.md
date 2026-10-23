@@ -91,6 +91,18 @@ committed: after editing a prompt file, run `node scripts/build-repo-prompts.js`
 both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; see
 `lambda-functions/admin/shared/prompt-versions.js`.
 
+To do that Review → Save for every prompt on a tier at once, after the deploy has landed:
+
+```bash
+aws sso login --profile <profile>
+AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com           # dry run
+AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
+```
+
+It runs the real list and update handlers locally with the tier's Lambda environment, skips
+prompts edited on the tier since they came from the repo (`--include-edited` to replace
+them), and checks each saved prompt now matches. Prod also needs `--confirm-prod`.
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.
@@ -125,7 +137,12 @@ screenshots reach the room only after the host releases them from the queue
 (`POST …/build/posts`; the `reviewAgentPosts` setting, on by default). On two screens the laptop is the console (`buildroom/BuildConsole.jsx`, `buildConsole.js`,
 reusing `components/console/*`). **Consider** (`POST …/build/consider`, `BuildConsider.jsx`)
 queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` marks what
-reached Claude and links each mark to its History entry.
+reached Claude and links each mark to its History entry. What went to Claude last
+(`sentView` in `build-store.js`) leads the Stage, the room's window and phones until the
+next ask opens (`screens/SentStage.jsx`); a send with `hideFromRoom: true` reaches Claude
+word for word, but every room read carries it with no words. The host's live typing
+reaches the room's window only over a same-browser `BroadcastChannel`
+(`buildroom/typingMirror.js`), never through the server or the socket.
 
 Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
 not in the material, claims the vote does not support, next steps written as decided and

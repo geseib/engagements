@@ -41,7 +41,7 @@ function StatusText({ status, onReviewLate }) {
   the button never jumps in from nothing. `emptyLabel` is that name; without
   it, nothing is drawn, as before. `ignoreKey` reaches the bar unchanged.
 */
-export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null, emptyLabel = '', ignoreKey = null, capability = undefined }) {
+export default function ConsoleFooter({ status, nextOnWall = '', part, controls, onAction, shortcutsEnabled, interceptAdvance, onBackKey, onReviewLate = null, emptyLabel = '', ignoreKey = null, capability = undefined, extra = null }) {
   /*
     NO DOCK ON TWO SCREENS. The Session panel and its scrim stop at
     `--dock-measured` (styles.css) so a bottom dock stays reachable; the
@@ -57,7 +57,7 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
   }, []);
   const statusText = (status && status.text) || '';
   return (
-    <section className="hc-now" aria-label={RW.yourPartLabel} data-capability={capability}>
+    <section className={`hc-now${extra ? ' hc-now--extra' : ''}`} aria-label={RW.yourPartLabel} data-capability={capability}>
       <div className="hc-now-text">
         <p className="hc-part-k">{RW.yourPartLabel}</p>
         {part ? (
@@ -84,6 +84,8 @@ export default function ConsoleFooter({ status, nextOnWall = '', part, controls,
         ) : null}
         {emptyLabel && !(controls && controls.primary) ? <span className="hc-nomove" data-empty-slot="">{emptyLabel}</span> : null}
       </div>
+      {/* A type's second card under the move, never in its place (the Build Room's Mockups ready). */}
+      {extra ? <div className="hc-now-extra">{extra}</div> : null}
     </section>
   );
 }

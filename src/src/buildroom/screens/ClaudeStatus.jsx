@@ -25,10 +25,23 @@ import { W } from '../words';
  * it up. It is the same element, not a second Sent to Claude: when Claude says
  * what it is doing, the state ends and the Stage moves on to the work row.
  */
-export default function ClaudeStatus({ rc, className = '', sent = '' }) {
+/*
+ * UNDER THE SENT TO CLAUDE CARD (`under`, owner 23 Oct 2026): the card already
+ * says "Sent to Claude", so while that state lasts this line says only whether
+ * Claude has picked it up; after, Claude's status as anywhere else.
+ */
+export default function ClaudeStatus({ rc, className = '', sent = '', under = false }) {
   const c = textOf(rc, 'claude');
   if (!c || !c.headline) return null;
   const step = textOf(rc, 'step');
+  if (under && c.key === 'sent') {
+    return (
+      <div className={`brm-roomclaude${className ? ` ${className}` : ''}`} data-claude-status="sent" data-rc-part="claude" data-rc={roleOf(rc, 'claude')} role="status" aria-label={W.claudeNow}>
+        <span className="brm-sdot brm-sdot--sent" aria-hidden="true" />
+        <span className="brm-roomclaude-m">{c.line || c.headline}</span>
+      </div>
+    );
+  }
   if (sent && c.key === 'sent') {
     return (
       <div
