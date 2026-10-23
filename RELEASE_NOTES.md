@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (evening): Connect Claude Code says when you are connected, and the side boxes scroll on
 
-**Test:** merge of dev `DEVCOMMIT`.
+**Test:** merge of dev `323a6588`.
 
 ### New
 
