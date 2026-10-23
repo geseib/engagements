@@ -2641,11 +2641,12 @@ async function postClaudeSet(ctx, body) {
  */
 const claudeSetKey = (ctx, setId) => `claudeset#${ctx.gameId}-${setId}`;
 
-async function remindUnsavedSet(ctx, row) {
+/** The entry for one unsaved set, or null without a host. Also used by scripts/backfill-claude-set-reminders.js. */
+function unsavedSetNote(ctx, row) {
   const sub = String((ctx.meta && ctx.meta.CreatedBy) || '');
-  if (!sub) return;
+  if (!sub) return null;
   const room = String((ctx.meta && ctx.meta.Title) || '').trim();
-  await inbox.notify(db, {
+  return {
     sub,
     key: claudeSetKey(ctx, row.QSetId),
     kind: inbox.KINDS.CLAUDE_SET_UNSAVED,
@@ -2655,7 +2656,12 @@ async function remindUnsavedSet(ctx, row) {
     link: { type: 'build', gameId: ctx.gameId, setId: row.QSetId, orgId: ctx.orgId || '' },
     expiresAt: ctx.ttl,
     quiet: true,
-  });
+  };
+}
+
+async function remindUnsavedSet(ctx, row) {
+  const note = unsavedSetNote(ctx, row);
+  if (note) await inbox.notify(db, note);
 }
 
 async function forgetUnsavedSet(ctx, setId) {
@@ -3525,4 +3531,4 @@ exports.handler = async (event) => {
 };
 
 // For tests.
-exports._internals = { hostOrAgent, playerFrom };
+exports._internals = { hostOrAgent, playerFrom, unsavedSetNote };
