@@ -30,7 +30,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 ### Known gaps
 
 - The reminder shows when you next open a page with the bell (the start screen, the console, the two-screen console, the phone remote); there is no email, by design.
-- A set that arrived before this change has no entry.
+- A set that arrived before this change has no entry until `scripts/backfill-claude-set-reminders.js` is run on the tier (dry run by default; `--apply` writes; a team room's set needs the tier's tenant key). Only dev and test can have such sets.
 
 ## 22 Oct 2026 (later): Ask Claude for questions in a Build Room
 
