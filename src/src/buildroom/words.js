@@ -21,6 +21,18 @@ export const W = Object.freeze({
   sentWaiting: (t) => (t ? `${t} \u00b7 waiting for Claude to pick it up` : 'Waiting for Claude to pick it up'),
   sentPicked: (t) => (t ? `Claude picked it up at ${t}` : 'Claude picked it up'),
   sentNotPicked: "Claude hasn't picked this up yet. Is Claude Code still running?",
+  // THE SENT TO CLAUDE CARD (owner, 23 Oct 2026): what Claude was told leads the Stage until the next ask opens.
+  sentPickLine: (method, items) => `${{ host: 'The host chose', wheel: 'The wheel chose', spoken: 'The room said' }[method] || 'The room chose'} ${items.map((i) => (i.title ? `${i.label} · ${i.title}` : i.label)).join(', ')}`,
+  sentHiddenLine: 'The host sent Claude a direction',
+  // DON'T SHOW THE ROOM, beside every Send to Claude: Claude still gets the words.
+  hideFromRoom: "Don't show the room",
+  hideFromRoomTip: 'Claude still gets every word. The room sees only that you sent something.',
+  notShownMark: 'not shown to the room',
+  historyNotShown: 'Sent to Claude, not shown',
+  // LIVE TYPING (two screens only): the room's window opened from this laptop shows the draft.
+  mirrorTyping: 'Show my typing to the room',
+  mirrorTypingTip: "Shows on the room's window opened from this laptop. Never the Why.",
+  hostWriting: 'The host is writing to Claude…',
   weToldClaude: 'We told Claude',
   weAskedClaude: 'We asked Claude',
   weDecided: 'We decided',

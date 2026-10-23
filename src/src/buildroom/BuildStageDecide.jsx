@@ -16,6 +16,7 @@ import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { ViewerContext } from './MockupViewer';
 import { W } from './words';
+import { SendExtras, useMirror } from './BuildSendOptions';
 import {
   HOST_KINDS, defaultKind, decideBody, settleWords, decisionChoices, directionFor, pickVerdict, roomChoice,
 } from './buildScreens';
@@ -47,6 +48,8 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   // The three kinds; a set that says Later is not one of them (Save for later is the button).
   const [as, setAs] = useState(() => { const k = (kept && kept.as) || defaultKind(ask); return k === 'later' ? 'do-now' : k; });
   const [why, setWhy] = useState(() => (kept && kept.why) || '');
+  const [hide, setHide] = useState(false);
+  const mirror = useMirror();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => reaskStart(ask));
@@ -73,10 +76,10 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
 
   const decide = async (kind) => {
     const out = await attempt(
-      () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind, why })),
+      () => api.askAction(ask.askId, decideBody(ask, { direction, chosen: pick ? [pick] : [], as: kind, why, hide })),
       W.notSent,
     );
-    if (out !== undefined) { onSent({ as: kind, send: true, direction: direction.trim() }); onClose(); }
+    if (out !== undefined) { mirror.done(); onSent({ as: kind, send: true, direction: direction.trim() }); onClose(); }
   };
   const discard = async () => {
     const out = await attempt(() => api.askAction(ask.askId, { action: 'discard' }), 'That did not discard. Nothing changed; try again.');
@@ -193,7 +196,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
             {W.yourPick(`${alternate.preferred.label ? `${alternate.preferred.label} · ` : ''}${alternate.preferred.text}`)}
           </div>
         )}
-        <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => setDirection(e.target.value)} placeholder="What should Claude do now?" />
+        <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" value={direction} maxLength={2000} onChange={(e) => { setDirection(e.target.value); mirror.draft(e.target.value); }} placeholder="What should Claude do now?" />
         <label className="brm-field brm-decide-why">
           <span className="brm-lbl">{W.considerWhy}</span>
           <input className="brm-input" value={why} maxLength={500} placeholder={W.decideWhyPlaceholder} onChange={(e) => setWhy(e.target.value)} />
@@ -208,6 +211,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
           </div>
           <span className="brm-hint">{sendLabel.hint}</span>
         </div>
+        <SendExtras hide={hide} setHide={setHide} disabled={busy} />
         {error && <p className="brm-alert" role="alert">{error}</p>}
       </div>
       <div className="brm-sd-foot">

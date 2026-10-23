@@ -336,11 +336,16 @@ const running = {
             '**Fold in from the room** adds a runner-up idea or a reason people gave. What the room said (optional) records a remark made out loud.',
             'Claude gets it as **Do now**, **Keep in mind** or **Ask Claude**.',
             '**Send to Claude**, or Ctrl Enter, sends it. **Save for later** puts it on your Later list; Claude hears nothing. **Record only** keeps the decision on record without telling Claude.',
+            '**Don\'t show the room** keeps the words from the room: Claude gets every word, the room\'s screens and History say only that you sent Claude a direction. Yours keep them, marked not shown to the room.',
           ],
         },
         {
           t: 'p',
-          text: 'Claude picks it up when it next checks in; until then Now says Sent to Claude, waiting for Claude to pick it up. If Claude Code has stopped, a notice offers the continue command to paste into it (see Connecting Claude Code).',
+          text: 'Once sent, **Sent to Claude** leads the Stage, the room\'s window and phones until the next ask opens, with the room\'s pick it came from and Claude\'s status under it. Never your Why.',
+        },
+        {
+          t: 'p',
+          text: 'Claude picks it up when it next checks in. If Claude Code has stopped, a notice offers the continue command (see Connecting Claude Code).',
         },
       ],
     },
@@ -637,6 +642,7 @@ const twoScreens = {
           items: [
             'The room sees: Stage, Build, History, like 2, 3, 4 and P, change only the room\'s window; your laptop stays where it is. **See it here** shows that screen on the laptop, and 1 comes back.',
             'The window needs no sign-in, has nothing to press, and shows no names unless **List names on the room meter** is on.',
+            '**Show my typing to the room**, beside the send boxes, puts your words on the room\'s window\'s Stage as you write a direction, under The host is writing to Claude. Never the Why. It is off until you turn it on, and this browser remembers it for the session. It shows on the room\'s window opened from this laptop only; on another device the room sees the words once you send.',
             'Link shared by mistake? In the Session panel, Settings, Screens, press **New link** twice: it cuts off every window opened with the old link.',
           ],
         },

@@ -84,6 +84,9 @@ import {
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
 import { sentMarks, itemKeys, storyHolds } from './sentMarks';
+import {
+  SendOptionsProvider, SendExtras, HideFromRoom, useMirror,
+} from './BuildSendOptions';
 import useStageMoves from './useStageMoves';
 import { buildControls } from './buildControls';
 import BuildConsole, {
@@ -1476,6 +1479,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     <ViewerContext.Provider value={openViewer}>
     <ImageViewer.Provider value={openImage}>
     <ConsiderContext.Provider value={considerValue}>
+    {/* Don't show the room and the typing mirror, beside every Send to Claude (BuildSendOptions). */}
+    <SendOptionsProvider gameId={gameId} twoScreens={twoRef.current}>
     <div className={`brm brm-room${present ? ' brm--present' : ''}${screen === 'host' && !consoleOn ? ' brm-room--host' : ''}${consoleOn ? ' brm-room--console' : ''}`} data-theme="dark">
       {screen === 'stage' ? (
         // ONE SCREEN: the room's Stage with the host's controls on it (parity PLAN §2.5).
@@ -1883,6 +1888,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         />
       )}
     </div>
+    </SendOptionsProvider>
     </ConsiderContext.Provider>
     </ImageViewer.Provider>
     </ViewerContext.Provider>
@@ -2810,6 +2816,9 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
   const [edited, setEdited] = useState(Boolean(draft));
   const [note, setNote] = useState('');
   const [why, setWhy] = useState(() => (draft && draft.why) || '');
+  // Don't show the room (owner, 23 Oct 2026): unticked unless the host ticks it.
+  const [hide, setHide] = useState(false);
+  const mirror = useMirror();
   // WHAT CLAUDE GETS (step 7c): as the ready question's set says, else Do now.
   // Later is a list, never a kind (owner, 2026-10-08): a set that says `later` starts at Do now.
   const [as, setAs] = useState(() => {
@@ -2880,8 +2889,9 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
       const said = direction.trim();
       const out = await run(async () => {
         if (beforeDecide) await beforeDecide();
-        return api.askAction(ask.askId, decideBody(ask, { direction: said, chosen, note, send, as: kind, spoken, why: spoken ? '' : why }));
+        return api.askAction(ask.askId, decideBody(ask, { direction: said, chosen, note, send, as: kind, spoken, why: spoken ? '' : why, hide }));
       });
+      if (out !== undefined) mirror.done();
       if (out !== undefined && onSent) onSent({ as: kind, send, direction: said });
       return out;
     } finally { inflight.current = false; }
@@ -2929,7 +2939,7 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
           </div>
         </div>
       )}
-      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { touch(); setEdited(true); setDirection(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
+      <textarea className="brm-input brm-ta brm-dirbox" aria-label="Direction for Claude" data-next-focus={next || undefined} value={direction} maxLength={2000} onKeyDown={onBoxKey} onChange={(e) => { touch(); setEdited(true); setDirection(e.target.value); mirror.draft(e.target.value); }} placeholder={spoken ? 'What did the room decide?' : 'What should Claude do now?'} />
       {!spoken && (
         <label className="brm-field brm-decide-why">
           <span className="brm-lbl">{W.considerWhy}</span>
@@ -2974,8 +2984,9 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
         </div>
         <span className="brm-hint">{(HOST_KINDS.find((k) => k.key === as) || HOST_KINDS[0]).hint}{ask.claudeNote ? ` With it, from the set: "${ask.claudeNote}"` : ''}</span>
       </div>
+      <SendExtras hide={hide} setHide={setHide} disabled={busy} />
       <ActionRow pinned={next} space={next} hint={next ? <span title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span> : ''}>
-        {onCancel && <button type="button" className="brm-btn brm-btn--ghost" onClick={onCancel}>Cancel</button>}
+        {onCancel && <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { mirror.done(); onCancel(); }}>Cancel</button>}
         <button type="button" className="brm-btn brm-btn--ghost" disabled={cannot} onClick={() => decide({ send: false })}>{W.recordOnly}</button>
         <button type="button" className="brm-btn" disabled={cannot} onClick={() => decide({ kind: 'later' })}>{W.saveLater}</button>
         {!sendRef && (
@@ -3185,11 +3196,13 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
   }, [focusKey]);
   const [logKind, setLogKind] = useState('verbal');
   const [alsoTell, setAlsoTell] = useState(false);
+  const [hide, setHide] = useState(false);
+  const mirror = useMirror();
   const words = text.trim();
   const tellAs = async (as) => {
     if (!words) return;
-    const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }));
-    if (ok !== undefined) { setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
+    const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }, { hideFromRoom: hide }));
+    if (ok !== undefined) { mirror.done(); setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };
   // QUEUE IT (step 4, C1): the host's own idea, waiting in the queue for later.
@@ -3206,8 +3219,9 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
   };
   const log = async () => {
     if (!words) return;
-    const ok = await run(() => api.postLog({ kind: logKind, text: words, forAgent: logKind !== 'note' && alsoTell }));
-    if (ok !== undefined) { setText(''); setAlsoTell(false); setSaid('Logged.'); }
+    const tells = logKind !== 'note' && alsoTell;
+    const ok = await run(() => api.postLog({ kind: logKind, text: words, forAgent: tells, ...(tells && hide ? { hideFromRoom: true } : {}) }));
+    if (ok !== undefined) { mirror.done(); setText(''); setAlsoTell(false); setSaid('Logged.'); }
   };
   return (
     <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h" data-capability="composer">
@@ -3221,9 +3235,10 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
           placeholder={W.logPlaceholder}
           value={text}
           maxLength={2000}
-          onChange={(e) => { setText(e.target.value); setSaid(''); }}
+          onChange={(e) => { setText(e.target.value); setSaid(''); mirror.draft(e.target.value); }}
         />
         <p className="brm-hint">{deliveryLine(agent)}</p>
+        <SendExtras hide={hide} setHide={setHide} disabled={busy} />
         <div className="brm-row brm-gap">
           {/* The one orange button is the step's or What's next's lead; Send is outline while one shows. */}
           <SendToClaude onSend={tellAs} busy={busy} disabled={!words} primary={!leadShows} submit />
@@ -3324,6 +3339,8 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
   const [filter, setFilter] = useState(startFilter);
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
+  // Don't show the room, for every Send to Claude in the queue: one box over the list, unticked by default.
+  const [hide, setHide] = useState(false);
   const items = queueItems(room);
   const shown = filterQueue(items, filter);
   const ideas = room.ideas || [];
@@ -3337,10 +3354,11 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
   const count = (key) => filterQueue(items, key).length;
 
   const toggle = (id) => setTicked((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
-  const act = (idea, action, extra) => run(() => api.ideaAction(idea.ideaId, action, extra));
+  const hidden = (action, extra) => (action === 'direct' && hide ? { ...(extra || {}), hideFromRoom: true } : extra);
+  const act = (idea, action, extra) => run(() => api.ideaAction(idea.ideaId, action, hidden(action, extra)));
   const bulk = async (action) => {
     const ids = tickedLive;
-    const ok = await run(async () => { for (const id of ids) await api.ideaAction(id, action); return true; });
+    const ok = await run(async () => { for (const id of ids) await api.ideaAction(id, action, hidden(action, {})); return true; });
     if (ok !== undefined) setTicked([]);
   };
   const toVote = (ids) => setVoteOf(ids.map((id) => ideas.find((i) => i.ideaId === id)).filter(Boolean));
@@ -3355,6 +3373,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
         ))}
         <span className="brm-hint brm-push">Claude first, then oldest</span>
       </div>
+      {!ended && items.some((x) => x.type === 'idea') && <HideFromRoom checked={hide} onChange={setHide} disabled={busy} />}
 
       {!ended && tickedLive.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked ideas">

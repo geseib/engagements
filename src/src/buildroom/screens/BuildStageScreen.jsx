@@ -19,6 +19,11 @@
  * always; what waits is a count on it (the list is the Host screen's Waiting
  * for you, and the Build / History header tab's).
  *
+ * SENT TO CLAUDE (owner, 23 Oct 2026): from a send until the next ask opens,
+ * the card (SentStage) leads in place of the quiet Stage; `typing` is the
+ * room's window's draft from the host's laptop (typingMirror.js), drawn in
+ * the card's place.
+ *
  * At results the host decides here: Send B to Claude sends the room's choice,
  * Change before sending opens the send window (StageDecide), and a click on an
  * option or a wheel slice opens that window with the pick made (owner,
@@ -57,7 +62,7 @@ import { wifiLink, demoOnStage } from '../BuildWifiShare';
 import StageJoinPanel from '../../components/stage/StageJoinPanel';
 import { dialogOpen } from '../useNextFocus';
 import {
-  stageModel, isPointsVote, sentStageAsk, sentOf,
+  stageModel, isPointsVote, sentStageAsk, sentOf, sentCard, mockupsReady,
 } from '../buildScreens';
 import { buildControls } from '../buildControls';
 import useStageMoves from '../useStageMoves';
@@ -70,6 +75,7 @@ import { AskStage } from './AskStage';
 import { IdleStage } from './StageIdle';
 import { QrZoom } from './QrZoom';
 import ClaudeStatus from './ClaudeStatus';
+import SentStage from './SentStage';
 import { buildMomentOf, buildRoomContent } from '../roomContentData';
 import { optionPageSizeFor } from '../../config/stagePaging';
 import { textOf } from '../../config/roomContent';
@@ -121,7 +127,7 @@ function HostHome({ alert, onHost }) {
 }
 
 export default function BuildStageScreen({
-  room, now, show = {}, controls = null, profile: wallProfile = null,
+  room, now, show = {}, controls = null, profile: wallProfile = null, typing = '',
 }) {
   const c = controls;
   const { crewOn = false, codesUp = false, pickId = null } = show;
@@ -214,7 +220,14 @@ export default function BuildStageScreen({
   // sends the room's decision, its result stays up with the "Sent to Claude"
   // band until Claude says what it is doing (the one I9 state); then the work
   // row (I10). Drawn only: the host's moves are the quiet moment's, as before.
-  const sentAsk = !current && !crewOn && !ended ? sentStageAsk(room, now) : null;
+  // THE SENT TO CLAUDE CARD (owner, 23 Oct 2026) takes the quiet Stage's place
+  // until the next ask opens; a point, the run list, the opening, mockups to
+  // compare and the wrap-up are the host's later moves and keep theirs.
+  const quiet = !current && !crewOn && !ended && !m.point && !m.run
+    && !(room.opening && room.opening.phase === 'opening') && !(room.outcome && room.outcome.summary) && !mockupsReady(room);
+  const card = quiet ? sentCard(sentOf(room), room.asks) : null;
+  const typed = quiet && typeof typing === 'string' && typing.trim() ? typing : '';
+  const sentAsk = !current && !crewOn && !ended && !card ? sentStageAsk(room, now) : null;
   const shownAsk = current || sentAsk;
   // WHAT THE ROOM SEES (config/roomContent.js): the same call on one screen and on the room's window.
   const momentNow = buildMomentOf({
@@ -223,8 +236,9 @@ export default function BuildStageScreen({
     point: m.point || null,
     run: m.run || null,
     showing: Boolean(crewOn || (!shownAsk && room.opening && room.opening.phase === 'opening')),
+    sent: card || typed ? (card || true) : null,
   });
-  const rc = buildRoomContent(momentNow, profile, room, crewOn ? null : shownAsk, now);
+  const rc = buildRoomContent(momentNow, profile, room, crewOn ? null : shownAsk, now, typed ? { text: typed, pick: '' } : card);
   const optSize = shownAsk ? optionPageSizeFor(profile, shownAsk.options, {
     height: window.innerHeight, results: !['live', 'voting'].includes(shownAsk.status),
   }) : 0;
@@ -281,6 +295,8 @@ export default function BuildStageScreen({
   } else if (room.opening && room.opening.phase === 'opening') {
     // THE OPENING (O3): between steps, the wall reads back the brief so far.
     content = <WallBrief room={room} />;
+  } else if (card || typed) {
+    content = <SentStage room={room} now={now} card={card} typing={typed} rc={rc} />;
   } else if (m.point) {
     content = <PointStage point={m.point} />;
   } else if (m.run) {
@@ -306,7 +322,7 @@ export default function BuildStageScreen({
       <Stage
         profile={profile}
         phase={m.phase || ''}
-        fitKey={[shownAsk ? `${shownAsk.askId}:${shownAsk.status}:${shownAsk.answerCount}:${shownAsk.voteCount}:${shownAsk.wheel ? shownAsk.wheel.spins.length : 0}:${optPage}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : '', claudeKey, sentWords].join('|')}
+        fitKey={[shownAsk ? `${shownAsk.askId}:${shownAsk.status}:${shownAsk.answerCount}:${shownAsk.voteCount}:${shownAsk.wheel ? shownAsk.wheel.spins.length : 0}:${optPage}` : 'idle', crewOn ? 'crew' : '', codesUp ? `codes:${both}` : '', claudeKey, sentWords, card ? `${card.at}:${card.text}` : '', typed].join('|')}
         rail={(
           <Rail
             phase={m.phase}
@@ -358,7 +374,7 @@ export default function BuildStageScreen({
             {content}
             {/* Claude's status, essential on every screen the room sees (owner, 17 Oct
                 2026); between asks the IdleStage above IS that status, so not twice. */}
-            {momentNow !== 'BUILD_IDLE' && <ClaudeStatus rc={rc} sent={sentWords} />}
+            {momentNow !== 'BUILD_IDLE' && momentNow !== 'BUILD_SENT' && <ClaudeStatus rc={rc} sent={sentWords} />}
           </div>
         </div>
       </Stage>
