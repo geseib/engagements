@@ -511,7 +511,7 @@
         },
         {
           "heading": "Next Steps",
-          "guidance": "One or two numbered lines: the owner, a colon, then the first action one person can finish inside a week. If nobody answered, one line only: put the question back to the room or move on."
+          "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: put the question back to the room or move on."
         }
       ],
       "category": "opinion",
@@ -541,7 +541,7 @@
         },
         {
           "heading": "Next Steps",
-          "guidance": "One or two numbered lines: the owner, a colon, then the first action one person can finish inside a week. If nobody answered, one line only: put the question back to the room or move on."
+          "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: put the question back to the room or move on."
         }
       ],
       "category": "preference",
@@ -571,7 +571,7 @@
         },
         {
           "heading": "Next Steps",
-          "guidance": "One or two numbered lines: the owner, a colon, then the first improvement one person can make inside a week. If nobody answered, one line only: put the question back to the room or move on."
+          "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first improvement one person can make inside a week. If nobody answered, one line only: put the question back to the room or move on."
         }
       ],
       "category": "feedback",
@@ -603,7 +603,7 @@
         },
         {
           "heading": "Next Steps",
-          "guidance": "Two or three numbered lines: the role that owns it (never a person's name), a colon, then the first action one person can finish inside a week. If nobody answered, one line only: run the survey again or leave it."
+          "guidance": "Two or three numbered lines: **Suggested**, then the role that owns it (never a person's name), a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: run the survey again or leave it."
         }
       ],
       "category": "general",

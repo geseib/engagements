@@ -999,7 +999,7 @@
           },
           {
             "heading": "Next Steps",
-            "guidance": "One or two numbered lines: the owner, a colon, then the first action one person can finish inside a week. If nobody answered, one line only: put the question back to the room or move on."
+            "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: put the question back to the room or move on."
           }
         ]
       },
@@ -1007,10 +1007,10 @@
         "description": "3bb0e2447a6dbb1a",
         "instructions": "0f9da2ae30850df2",
         "outputFormat": "0adc138b2484273e",
-        "outputSections": "f834557fad59a210"
+        "outputSections": "33e18b2df4b75f82"
       },
-      "hash": "394fdb8a4e02e6a6",
-      "commitDate": "2026-10-21T16:40:12+00:00"
+      "hash": "3c1f3b0763cedcbf",
+      "commitDate": "2026-10-23"
     },
     {
       "key": "lambda-functions/admin/default-ai-prompts.json#poll/preference",
@@ -1041,7 +1041,7 @@
           },
           {
             "heading": "Next Steps",
-            "guidance": "One or two numbered lines: the owner, a colon, then the first action one person can finish inside a week. If nobody answered, one line only: put the question back to the room or move on."
+            "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: put the question back to the room or move on."
           }
         ]
       },
@@ -1049,10 +1049,10 @@
         "description": "4c51e78a2d4293e8",
         "instructions": "09604b63e1c2a22c",
         "outputFormat": "0adc138b2484273e",
-        "outputSections": "bf2056225cf9bd75"
+        "outputSections": "202515c8c7c289e1"
       },
-      "hash": "fc0d90e144b71c48",
-      "commitDate": "2026-10-21T16:40:12+00:00"
+      "hash": "b9b6b2fc4253f2da",
+      "commitDate": "2026-10-23"
     },
     {
       "key": "lambda-functions/admin/default-ai-prompts.json#poll/feedback",
@@ -1083,7 +1083,7 @@
           },
           {
             "heading": "Next Steps",
-            "guidance": "One or two numbered lines: the owner, a colon, then the first improvement one person can make inside a week. If nobody answered, one line only: put the question back to the room or move on."
+            "guidance": "One or two numbered lines: **Suggested**, then the owner, a colon, then the first improvement one person can make inside a week. If nobody answered, one line only: put the question back to the room or move on."
           }
         ]
       },
@@ -1091,10 +1091,10 @@
         "description": "08b197d7e56176ca",
         "instructions": "02e305b55f16f1a3",
         "outputFormat": "0adc138b2484273e",
-        "outputSections": "cea517cc735474bc"
+        "outputSections": "0d9c6cb8b3f8fa10"
       },
-      "hash": "fa48c2c76980e04c",
-      "commitDate": "2026-10-21T16:40:12+00:00"
+      "hash": "608213b0261d091d",
+      "commitDate": "2026-10-23"
     },
     {
       "key": "lambda-functions/admin/default-ai-prompts.json#survey/general",
@@ -1126,7 +1126,7 @@
           },
           {
             "heading": "Next Steps",
-            "guidance": "Two or three numbered lines: the role that owns it (never a person's name), a colon, then the first action one person can finish inside a week. If nobody answered, one line only: run the survey again or leave it."
+            "guidance": "Two or three numbered lines: **Suggested**, then the role that owns it (never a person's name), a colon, then the first action one person can finish inside a week (a number, duration or limit only if an answer contains it). The room has not agreed to these. If nobody answered, one line only: run the survey again or leave it."
           }
         ]
       },
@@ -1134,10 +1134,10 @@
         "description": "cdff0dedc855d7c2",
         "instructions": "4d182d0ea8570c03",
         "outputFormat": "a486c9d37ee94320",
-        "outputSections": "c6781d13362dee97"
+        "outputSections": "e4835cb66ffb8005"
       },
-      "hash": "1aab70936487dd8a",
-      "commitDate": "2026-10-21T16:40:12+00:00"
+      "hash": "64e9be7e48b13536",
+      "commitDate": "2026-10-23"
     }
   ]
 }
