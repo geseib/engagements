@@ -15,7 +15,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### New
 
-- Nothing new in this push: it fixes what reviews #46 and #47 found.
+- **Ask Claude for mockups or a walkthrough** (another session, Build Room ideas flow E, plugin **1.27.0**): from Points' *Mockups…* or an idea's *Ask the room* menu, Claude draws two or three distinct quick screens as one Choose ask that comes back to the host first (*Mockups you asked for*; *Ask for new mockups* sets them aside and asks for different ones), or steps the room through the demo. An older plugin says to update.
 
 ### Fixed
 
@@ -32,7 +32,8 @@ Entries name the dev commit that was merged, so the review can be matched to the
 1. **Apply the prompt updates on test first** (they have never been applied there; review #46 ran on v1): Admin › Prompts shows "*N* prompts have a newer version in the repo". **Review** *Workie - The Transfer Reader* and **Save as version 2**; do the same for the others marked.
 2. **Run review #46's round 1** with the same four answers (Lessons from Different Schools, Threshold): next steps start **Suggested**, with no "two Friday runs", "two-week", "weekly release" owner or "current habit". If a read still has one, the console and the phone show the host note.
 3. **Repeat with the prompt left on v1** (or before applying it, on another set): next steps still come out as suggestions after the check's rewrite.
-4. **As a player, at the end:** open "Something to add?": each round shows its title; open one: its lesson and "Your turn" show above the responses; start a comment, switch rounds, come back: the comment is still there and posts to its own round.
+4. **Build Room** (update the plugin to 1.27.0 first): from an idea's *Ask the room* menu, ask Claude for mockups; the Choose ask comes back to you marked *Mockups you asked for* before the room sees it.
+5. **As a player, at the end:** open "Something to add?": each round shows its title; open one: its lesson and "Your turn" show above the responses; start a comment, switch rounds, come back: the comment is still there and posts to its own round.
 
 ### Known gaps
 
