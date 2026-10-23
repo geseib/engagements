@@ -307,3 +307,13 @@ describe('the theme travels with the markup', () => {
   // dialog the mockup draws is not built — see the component header for why a
   // button leading to a safeguard that does not exist is worse than no button.
 });
+
+// #40 / #43: a team row's three buttons (Billing…, Activity…, Suspend) need
+// about 235px; at 168px the first, Billing…, was clipped out of sight.
+describe('the actions column fits three buttons', () => {
+  test('wide enough, and the actions cell never clips', () => {
+    const width = Number((/\.porgs-col-acts\s*\{\s*width:\s*(\d+)px/.exec(MY_CSS) || [])[1]);
+    expect(width).toBeGreaterThanOrEqual(240);
+    expect(MY_CSS).toMatch(/\.porgs-tbl td\.porgs-col-acts\s*\{[^}]*overflow:\s*visible/);
+  });
+});

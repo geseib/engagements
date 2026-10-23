@@ -9,6 +9,24 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (Organisations): every team's Billing… button shows
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+### Fixed
+
+- **Billing… was cut off on team rows** in Admin › Organisations ([#40](https://github.com/geseib/engagements/issues/40)): a team row has three buttons (Billing…, Activity…, Suspend, or Reinstate when suspended), the column was 168px wide, and the first one, Billing…, was clipped out of sight, even at 1920px. The column now fits all three, and that cell never hides a button.
+
+### What to look at
+
+1. As Engage staff, open Admin › Organisations: every team row shows **Billing…**, **Activity…** and **Suspend** (or **Reinstate**); personal rows show Billing… and Activity…. **Billing…** opens the team's billing drawer.
+
+### Known gaps
+
+- On narrow windows the list scrolls sideways rather than squeezing the buttons (as before, it was already 620px wide at least; now 700px).
+
+---
+
 ## 23 Oct 2026 (staff help): the Engage staff guides checked on the real screens
 
 **Test:** merge of dev `32c473c1`. Everything below this entry is already on test; this push adds only what is here.

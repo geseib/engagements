@@ -119,7 +119,7 @@
 
 .porgs-tbl {
   width: 100%;
-  min-width: 620px;
+  min-width: 700px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -145,7 +145,12 @@
 .porgs-col-num { width: 92px; text-align: right; }
 .porgs-col-plan { width: 108px; }
 .porgs-col-status { width: 118px; }
-.porgs-col-acts { width: 168px; }
+/* THREE BUTTONS AT MOST: Billing…, Activity… and Suspend (or Reinstate, or
+   Approve). At 168px a team's row clipped its first button, Billing…, out of
+   sight (#40, #43): the cells hide overflow and the buttons sit to the right.
+   Wide enough for three, and this cell never clips a button. */
+.porgs-col-acts { width: 252px; }
+.porgs-tbl td.porgs-col-acts { overflow: visible; text-overflow: clip; }
 
 .porgs-name { color: var(--text); font-weight: 600; }
 .porgs-meta { color: var(--muted); font-size: var(--porgs-t-floor); }
