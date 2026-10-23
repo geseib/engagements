@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (Quick start filters): whose sets and tags beside the search
 
-**Test:** merge of dev `DEVSHA`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `363a9b81`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
