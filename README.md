@@ -91,6 +91,18 @@ committed: after editing a prompt file, run `node scripts/build-repo-prompts.js`
 both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; see
 `lambda-functions/admin/shared/prompt-versions.js`.
 
+To do that Review → Save for every prompt on a tier at once, after the deploy has landed:
+
+```bash
+aws sso login --profile <profile>
+AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com           # dry run
+AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
+```
+
+It runs the real list and update handlers locally with the tier's Lambda environment, skips
+prompts edited on the tier since they came from the repo (`--include-edited` to replace
+them), and checks each saved prompt now matches. Prod also needs `--confirm-prod`.
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.

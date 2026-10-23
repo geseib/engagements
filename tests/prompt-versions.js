@@ -478,6 +478,51 @@ const reset = () => { store.clear(); s3Store.clear(); s3Writes.clear(); };
     assert.strictEqual(s3Writes.get(reseeded.versionHistory[0].s3Key), 1);
   });
 
+  // ── 7 ─────────────────────────────────────────────────────────────────────
+  say('\n7. scripts/apply-repo-prompts.js — the library\'s Save, for every prompt at once');
+  reset();
+  const applyScript = require(path.join(REPO, 'scripts', 'apply-repo-prompts.js'));
+  const match = await import(require('url').pathToFileURL(path.join(REPO, 'src', 'src', 'utils', 'repoPromptMatch.js')).href);
+  await populateDefaults.handler({ body: JSON.stringify({ overwrite: false }) });
+  const transfer = repoPrompts.prompts.find((p) => p.key === 'demo-sets/lessons-from-different-schools.prompt.json');
+  const stale = await post(PLATFORM_ADMIN, {
+    name: `${transfer.name} (Imported 2026-08-15)`, description: 'older', instructions: BODY.instructions, outputFormat: BODY.outputFormat,
+  });
+  const editedDefault = [...store.values()].find((r) => r.name === 'Lessons Learned - Strategic Insights');
+  await put(PLATFORM_ADMIN, editedDefault.promptId, { instructions: `${BODY.instructions}\nEdited here.`, outputFormat: BODY.outputFormat });
+  const editedVersion = row(editedDefault.promptId).version;
+  const opts = {
+    listHandler: getPrompts.handler, updateHandler: updatePrompt.handler,
+    entries: repoPrompts.prompts, match, by: 'george@seibtribe.com',
+  };
+  const dry = await applyScript.run({ ...opts, apply: false });
+  await check('dry run: the stale import is planned, the edited default is skipped, nothing written', () => {
+    const planned = dry.rows.filter((r) => r.action === 'save').map((r) => r.prompt.promptId);
+    assert.deepStrictEqual(planned, [stale.promptId]);
+    const skipped = dry.rows.find((r) => r.prompt.promptId === editedDefault.promptId);
+    assert.match(skipped.note, /edited on this tier/);
+    assert.strictEqual(row(stale.promptId).version, 1);
+  });
+  const applied = await applyScript.run({ ...opts, apply: true });
+  await check('apply: one new version, From the repo, verified as matching', () => {
+    assert.deepStrictEqual(applied.saved.map((r) => [r.prompt.promptId, r.newVersion]), [[stale.promptId, 2]]);
+    assert.deepStrictEqual([applied.failed.length, applied.unverified.length], [0, 0]);
+    const h = row(stale.promptId).versionHistory[1];
+    assert.deepStrictEqual({ how: h.how, by: h.by, repoKey: h.repoKey }, { how: 'repo', by: 'george@seibtribe.com', repoKey: transfer.key });
+    assert.strictEqual(row(editedDefault.promptId).version, editedVersion);
+  });
+  await check('a second run has nothing to do', async () => {
+    const again = await applyScript.run({ ...opts, apply: true });
+    assert.deepStrictEqual(again.saved, []);
+  });
+  await check('--include-edited replaces the edit with the repo text, and the edit stays in the history', async () => {
+    const forced = await applyScript.run({ ...opts, apply: true, includeEdited: true, only: 'strategic insights' });
+    assert.deepStrictEqual(forced.saved.map((r) => r.prompt.promptId), [editedDefault.promptId]);
+    const r = row(editedDefault.promptId);
+    assert.strictEqual(r.version, editedVersion + 1);
+    assert.ok(bodyAt(r.versionHistory[editedVersion - 1].s3Key).instructions.endsWith('Edited here.'));
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);
