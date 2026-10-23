@@ -848,6 +848,7 @@ function AdminPage() {
       window.location.assign(url);
       return;
     }
+    if (link && link.type === 'build') { window.location.assign(url); return; }
     if (link && link.type === 'draft') { openDraft(link.draftId); return; }
     if (link && link.type === 'section' && link.section) { handleNavigate(link.section); return; }
     handleNavigate('overview');

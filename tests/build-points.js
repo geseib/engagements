@@ -146,10 +146,10 @@ const GAME = '4821';
 const ORG = 'org_TestOrg1';
 const put = (item) => store.set(key(item.PK, item.SK), item);
 
-function seed({ orgId = '' } = {}) {
+function seed({ orgId = '', createdBy = '' } = {}) {
   store.clear();
   sent = [];
-  put({ PK: `GAME#${GAME}`, SK: 'METADATA', GameType: 'build', Title: 'Food bank sign-up', Details: 'Build a volunteer sign-up site', ttl: 2000000000, ...(orgId ? { orgId } : {}) });
+  put({ PK: `GAME#${GAME}`, SK: 'METADATA', GameType: 'build', Title: 'Food bank sign-up', Details: 'Build a volunteer sign-up site', ttl: 2000000000, ...(orgId ? { orgId } : {}), ...(createdBy ? { CreatedBy: createdBy } : {}) });
   put({ PK: `GAME#${GAME}`, SK: 'STATE', State: 'STARTED' });
   for (const n of ['Priya', 'Sam', 'Marcus']) put({ PK: `GAME#${GAME}`, SK: `PLAYER#${n}`, PlayerName: n, ClientId: `c-${n}` });
   put({ PK: `GAME#${GAME}`, SK: 'CONNECTION#host-1', ConnectionId: 'host-1', ConnectionType: 'HOST' });
@@ -1350,6 +1350,45 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
     assert.strictEqual((await claude('POST', 'question-sets', SET)).status, 201);
     for (const t of ['Game questions', 'What does the player do first?', 'game-questions.json']) assert.ok(!raw().includes(t), `${t} is plaintext at rest`);
     assert.strictEqual((await host('GET', 'state')).body.claudeSets[0].questions[0].prompt, 'What does the player do first?');
+    HA = HOST;
+  });
+
+  // #45: an unsaved set would go with the session, so the host's bell holds a
+  // quiet entry that turns into a reminder near the end (notifications.js).
+  const notes = () => [...store.values()].filter((r) => r.PK === 'USER#user-1#NOTIFY');
+  await check('#45: Claude\'s set puts a quiet entry in the host\'s bell, ending with the session, opening the room', async () => {
+    seed({ createdBy: 'user-1' });
+    const id = (await claude('POST', 'question-sets', SET)).body.set.setId;
+    const [n] = notes();
+    assert.ok(n, 'no bell entry');
+    assert.strictEqual(n.SK, `NOTE#claudeset#${GAME}-${id}`);
+    assert.strictEqual(n.kind, 'claudeset.unsaved');
+    assert.strictEqual(n.read, true, 'quiet: the host is looking at it in the room');
+    assert.strictEqual(n.expiresAt, 2000000000, 'the session\'s own end');
+    assert.strictEqual(n.ttl, 2000000000);
+    assert.deepStrictEqual(n.link, { type: 'build', gameId: GAME, setId: id, orgId: '' });
+    assert.ok(/Game questions/.test(n.title) && /Food bank sign-up/.test(n.body) && /Save to my sets/.test(n.body), `${n.title} | ${n.body}`);
+  });
+  await check('#45: saving or removing the set takes its entry out of the bell; a room with no host id writes none', async () => {
+    seed({ createdBy: 'user-1' });
+    const a = (await claude('POST', 'question-sets', SET)).body.set.setId;
+    const b = (await claude('POST', 'question-sets', { ...SET, name: 'More questions' })).body.set.setId;
+    assert.strictEqual(notes().length, 2);
+    await host('POST', `question-sets/${a}`, { action: 'saved' });
+    assert.deepStrictEqual(notes().map((r) => r.SK), [`NOTE#claudeset#${GAME}-${b}`]);
+    await host('POST', `question-sets/${b}`, { action: 'remove' });
+    assert.deepStrictEqual(notes(), []);
+    seed();
+    assert.strictEqual((await claude('POST', 'question-sets', SET)).status, 201);
+    assert.deepStrictEqual(notes(), []);
+  });
+  await check('#45: in a team room the entry\'s words are sealed', async () => {
+    seed({ orgId: ORG, createdBy: 'user-1' });
+    HA = TEAM_HOST;
+    assert.strictEqual((await claude('POST', 'question-sets', SET)).status, 201);
+    const [n] = notes();
+    assert.strictEqual(n.orgId, ORG);
+    assert.ok(!JSON.stringify(n).includes('Game questions') && !JSON.stringify(n).includes('Food bank'), 'the entry is plaintext at rest');
     HA = HOST;
   });
 

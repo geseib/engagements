@@ -111,6 +111,8 @@ questions** (plugin 1.26.0) has Claude write a set into the project
 (`build-room/questions/<kind>-<name>.json`), commit it and send it (`POST build/question-sets`,
 kept as `BUILD#QSET#` rows, sealed for teams); **Save to my sets** turns it into AI drafts
 through `POST /admin/generation-drafts/from-build`, which the host accepts from the bell.
+An unsaved set puts a quiet entry in the host's bell that turns into a reminder two days
+before the session ends (#45; `notifications.js`, copied identically into `game/`).
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
 Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the
