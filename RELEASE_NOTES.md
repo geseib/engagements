@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (staff help): the Engage staff guides checked on the real screens
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `32c473c1`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
