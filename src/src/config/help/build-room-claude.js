@@ -52,7 +52,7 @@ const claude = {
           items: [
             { title: 'Install the plugin', text: 'Copy the command under **Check for the latest Engage plugin** and run it in a terminal, once per laptop. It needs Node 18 or later. If your Mac asks about node, click Allow, so the room can open the build on this Wi-Fi.' },
             { title: 'Mint a key and copy the start command', text: 'Name the project folder if you like (it goes under ~/build-room), then **Mint a key and copy the command**. The key is shown once.' },
-            { title: 'Paste it into a terminal', text: 'It makes the folder with git, opens Claude Code there, connects and kicks off. Claude reads the room, says what it plans, and starts. Claude Code already open in that folder? Type the line shown under the start command there instead.' },
+            { title: 'Paste it into a terminal', text: 'It makes the folder with git, opens Claude Code there, connects and kicks off. Claude Code already open in that folder? Type the line shown in this step there instead. The step waits for Claude to call in, then turns green and says **Connected**, with the time and folder; you can close the window. Nothing after a minute? The first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.' },
           ],
         },
         { t: 'p', text: 'Review Claude\'s questions, in the same window, decides whether Claude\'s questions wait for you. **More commands for later** lists the plugin\'s commands, each with a Copy button.' },

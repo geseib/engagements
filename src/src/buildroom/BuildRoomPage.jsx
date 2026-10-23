@@ -3819,7 +3819,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     setConfirmMint(false);
     const out = await run(() => api.mintKey('Claude Code'));
     if (!out || !out.key) return;
-    setMinted({ key: out.key, keyId: out.keyId });
+    setMinted({ key: out.key, keyId: out.keyId, at: Date.now() });
     const ok = await copyText(startCommand(folderName, out.key));
     setCopied(ok ? 'Copied. Paste it into a terminal.' : 'Copy it with the button below.');
   };
@@ -3830,6 +3830,12 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     setCopied('');
   };
   const step = (done, wait) => (done ? 'is-done' : wait ? 'is-wait' : '');
+  // STEP 3 IS DONE when Claude Code has called in with the key minted here:
+  // the room's live key is that key and it has been used. Without this the
+  // step stayed open after the phones already said Claude was connected.
+  const usedMinted = Boolean(minted && liveKey && liveKey.keyId === minted.keyId && liveKey.lastUsedAt);
+  const kickedOff = usedMinted && Boolean(agent.kickedOffAt) && Date.parse(agent.kickedOffAt) >= minted.at - 60 * 1000;
+  const waitingLong = Boolean(minted) && !usedMinted && now - minted.at > 45 * 1000;
   const mintLabel = liveKey ? 'Mint a new key and copy the command' : 'Mint a key and copy the command';
   const lastAt = agent.lastSeenAt ? clockTime(agent.lastSeenAt) : '';
   const showAllRow = (
@@ -3842,7 +3848,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
   // W1 and W5: the whole path, three steps (kickoff takes the key, so there is no fourth).
   const allSteps = (
     <ol className="brm-steps brm-steps--connect">
-      <li className={ver === 'old' ? 'is-old' : step(connected && which !== 'all', false)} data-step="install">
+      <li className={ver === 'old' ? 'is-old' : step(usedMinted || (connected && which !== 'all'), false)} data-step="install">
         <span className="brm-n">1</span>
         <div className="brm-step-body">
           <span className="brm-step-title">{ver === 'old' ? W.pluginUpdateTitle : W.pluginCheckTitle}</span>
@@ -3878,9 +3884,6 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
                 <CopyButton text={startLine} label="Copy again" />
                 <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
               </div>
-              <p className="brm-hint">{W.alreadyOpenKick}</p>
-              <pre className="brm-cmd" data-testid="brm-connect">{kickWithKey}</pre>
-              <div className="brm-row brm-gap"><CopyButton text={kickWithKey} label="Copy" /></div>
             </>
           ) : liveKey ? (
             <p className="brm-hint brm-block">
@@ -3905,11 +3908,33 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
         </div>
       </li>
 
-      <li className={step(false, Boolean(minted))}>
+      <li className={step(usedMinted, Boolean(minted) && !usedMinted)} data-step="started">
         <span className="brm-n">3</span>
         <div className="brm-step-body">
-          <span className="brm-step-title">Paste it into a terminal</span>
-          <span className="brm-hint">{W.startOpens}</span>
+          {usedMinted ? (
+            <>
+              <span className="brm-step-title">{W.connectedTitle}</span>
+              <p className="brm-hint" role="status" data-testid="brm-connected">
+                {W.connectedAt(clockTime(liveKey.lastUsedAt), reported)} {kickedOff ? W.connectedKicked : W.connectedKicking}
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="brm-step-title">Paste it into a terminal</span>
+              <span className="brm-hint">{W.startOpens}</span>
+              {minted && (
+                <>
+                  <p className="brm-hint">{W.alreadyOpenKick}</p>
+                  <pre className="brm-cmd" data-testid="brm-connect">{kickWithKey}</pre>
+                  <div className="brm-row brm-gap"><CopyButton text={kickWithKey} label="Copy" /></div>
+                  <p className="brm-hint brm-connwait" data-testid="brm-connect-waiting">
+                    <span className="brm-connback-dot" aria-hidden="true" /> {W.connectWaiting}
+                  </p>
+                  {waitingLong && <p className="brm-hint" data-testid="brm-connect-slow">{W.connectSlow}</p>}
+                </>
+              )}
+            </>
+          )}
         </div>
       </li>
 
@@ -4010,7 +4035,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
       )}
 
       <p className="brm-hint">Game {gameId}.</p>
-      <div className="brm-row"><button type="button" className="brm-btn brm-push" onClick={onClose}>Done</button></div>
+      <div className="brm-row"><button type="button" className={`brm-btn brm-push${usedMinted ? ' brm-btn--primary' : ''}`} onClick={onClose}>Done</button></div>
     </Modal>
   );
 }
