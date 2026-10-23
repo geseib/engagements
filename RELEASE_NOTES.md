@@ -13,6 +13,10 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 **Test:** merge of dev `9b3ee00b`. Everything below this entry is already on test; this push adds only what is here.
 
+### New
+
+- Nothing new: this push is one fix.
+
 ### Fixed
 
 - **Billing… was cut off on team rows** in Admin › Organisations ([#40](https://github.com/geseib/engagements/issues/40)): a team row has three buttons (Billing…, Activity…, Suspend, or Reinstate when suspended), the column was 168px wide, and the first one, Billing…, was clipped out of sight, even at 1920px. The column now fits all three, and that cell never hides a button.
