@@ -25,6 +25,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 ### Fixed
 
 - Step 3 never showed as done, even while the phones already said Claude Code was connected.
+- **Spin the wheel with only one idea** (dev game 2550): an Ideas vote with a single idea offered **Spin the wheel**, which the server refuses (a wheel needs two options), so pressing it ended in an error. The wheel is now offered only with two options or more, on the Host screen, the console and the Stage.
 - **Scrolling the right-hand boxes** (Waiting for you, Decided, Timeline, History…) on the Build Room console and Host screen: the wheel over an open box scrolled only that box and stopped at its end, so moving the column needed the pointer on the gap between boxes. Now a box scrolls to its end and the wheel carries on to the column.
 - The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
 - After a send, the room's window kept the last question up with "Claude is building", and a direction sent without an ask never showed at all.

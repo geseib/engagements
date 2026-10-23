@@ -80,6 +80,7 @@ import {
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
   rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts, roomStory, contributionsOf, doingLine,
+  wheelPossible,
 } from './buildScreens';
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
@@ -2720,6 +2721,8 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
   if (ask.revotedAs) {
     return <p className="brm-notice">Voted again as ask {Number(ask.revotedAs) || ask.revotedAs}.</p>;
   }
+  // Fewer than two options: no wheel to offer (the server refuses one).
+  if (!ask.wheel && !wheelPossible(ask)) return null;
   if (!ask.wheel) {
     return (
       <section className="brm-panel brm-wheelpanel" aria-label="The wheel">

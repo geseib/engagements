@@ -707,7 +707,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
         : { phase: 'RESULTS', context, meter, status, primary: { action: 'reopen', label: 'Reopen' } };
     }
     if (send) return { phase: 'RESULTS', context, meter, status, primary: send, secondary: change };
-    if (decisionChoices(current).length && !current.revotedAs) {
+    if (wheelPossible(current)) {
       return { phase: 'RESULTS', context, meter, status, primary: { action: 'wheel', label: W.spin }, secondary: change };
     }
     return { phase: 'RESULTS', context, meter, status, primary: change };
@@ -744,6 +744,12 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
 // the choices, and the text is swapped." These are the shared rules.
 
 /** The options a decision can pick between: Choose options, or Ideas suggestions. */
+/** The fewest options a wheel can hold: the server refuses fewer (build-store.js WHEEL_MIN). */
+export const WHEEL_MIN = 2;
+
+/** Whether the wheel can pick for this ask: two options or more, no rating, not a revote. */
+export const wheelPossible = (ask) => Boolean(ask) && ask.kind !== 'rating' && !ask.revotedAs && decisionChoices(ask).length >= WHEEL_MIN;
+
 export function decisionChoices(ask) {
   const r = (ask && ask.results) || {};
   if (ask && ask.kind === 'choice') {
