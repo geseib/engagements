@@ -1132,6 +1132,65 @@ function ideaView(r) {
   };
 }
 
+/**
+ * WHAT HAPPENED TO MY IDEA (ideas flow D; docs/design/build-room-ideas I6; owner,
+ * 18 Oct: "Joe's phone tells him what happened to his idea"). For the sender's
+ * own phone only (myIdeas): which round it went to, how far that round got,
+ * what the room said (counts, never names), and what the host did with it.
+ *   round  'yesno' | 'feedback' | 'vote' | 'ideas' | 'claude'
+ *   phase  'open' | 'counted' | 'decided'
+ *   yes, no (yesno) · answers (feedback) · won (vote, ideas: did the room pick it)
+ *   host   'claude' | 'later' | 'record' | null, and claudeHas once Claude took it
+ * Null for an idea still with the host, acknowledged, set aside or on the wall.
+ */
+function ideaOutcome(idea, room) {
+  if (!idea || idea.Status !== 'promoted') return null;
+  const hostOf = (d) => (!d ? null : d.heldForLater ? 'later' : d.sendToAgent === false ? 'record' : 'claude');
+  if (idea.PromotedVia === 'claude' && !idea.PromotedTo) {
+    const sent = (room.logs || []).filter((l) => l.IdeaId === idea.IdeaId && l.Kind === 'idea').pop();
+    const later = Boolean(sent && sent.ForAgentAs === 'later' && !sent.ForAgent);
+    return { round: 'claude', phase: 'decided', host: later ? 'later' : 'claude', claudeHas: Boolean(sent && sent.DeliveredAt), at: (sent && sent.CreatedAt) || idea.UpdatedAt || null };
+  }
+  let ask = null;
+  let round = '';
+  let mine = null; // the option label or response id that is this idea
+  if (idea.PromotedTo) {
+    ask = (room.asks || []).find((a) => a.AskId === idea.PromotedTo) || null;
+    if (!ask) return null;
+    const opts = ask.Options || [];
+    const yesno = ask.Kind === 'choice' && Boolean(ask.FromItem) && opts.length === 2 && opts[0].title === 'Yes' && opts[1].title === 'No';
+    round = yesno ? 'yesno' : ask.Kind === 'suggest' ? 'feedback' : 'vote';
+    const o = opts.find((x) => x.ideaId === idea.IdeaId);
+    mine = o ? o.label : null;
+  } else if (idea.PromotedVia === 'ideas') {
+    const resp = (room.resps || []).find((r) => r.IdeaId === idea.IdeaId);
+    ask = resp ? (room.asks || []).find((a) => a.AskId === resp.AskId) || null : null;
+    if (!ask) return { round: 'ideas', phase: 'open', at: idea.UpdatedAt || null };
+    round = 'ideas';
+    mine = resp.RespId;
+  } else return null;
+  if (['proposed', 'discarded'].includes(ask.Status)) return null;
+  const phase = ask.Status === 'decided' ? 'decided' : ask.Status === 'results' ? 'counted' : 'open';
+  const out = { round, phase, at: ask.DecidedAt || ask.ClosedAt || ask.OpenedAt || null };
+  if (round === 'ideas' && ask.Status === 'voting') out.voting = true;
+  if (phase !== 'open') {
+    const t = tally(ask, room);
+    if (round === 'yesno') {
+      out.yes = (t.options[0] && t.options[0].count) || 0;
+      out.no = (t.options[1] && t.options[1].count) || 0;
+    } else if (round === 'feedback') out.answers = t.responses;
+  }
+  if (phase === 'decided') {
+    const d = ask.Decision || {};
+    if (round === 'vote' || round === 'ideas') out.won = Boolean(mine && (d.chosen || []).includes(mine));
+    if (out.won !== false) {
+      out.host = hostOf(d);
+      if (out.host === 'claude') out.claudeHas = Boolean(d.deliveredAt);
+    }
+  }
+  return out;
+}
+
 /** The most messages one idea's private thread keeps, both sides together. */
 const IDEA_THREAD_MAX = 20;
 
@@ -2028,7 +2087,11 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
-    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
+    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map((i) => {
+      const v = ideaView(i);
+      const o = ideaOutcome(i, room);
+      return o ? { ...v, outcome: o } : v;
+    }) : [],
     // The host's words in History (a why, what Claude got) never carry a name to a phone (Consider, frame 6).
     history: roomHistory(room, visibleAsks, nameTest(room, players, settingsOf(room.state).listNames)),
     images: room.images.map(imageView),
@@ -2523,7 +2586,7 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
-  roomFromRows, tally, askView, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
+  roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
