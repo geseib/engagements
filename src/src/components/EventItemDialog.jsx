@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import SetChooser from './SetChooser';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import DeleteReasonField from './DeleteReasonField';
@@ -147,7 +148,6 @@ export default function EventItemDialog({
      agenda as it is at the moment of sending (final review M2). */
   const [after, setAfter] = useState(baseline.after);
   const [setKey, setSetKey] = useState(baseline.setKey);
-  const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -195,8 +195,6 @@ export default function EventItemDialog({
   const candidates = picking
     ? sets.filter((s) => s.active !== false && !s.decryptFailed && rules.canonicalSetType(s.engagementType) === type)
     : [];
-  const needle = search.trim().toLowerCase();
-  const shownSets = needle ? candidates.filter((s) => String(s.name || '').toLowerCase().includes(needle)) : candidates;
   const chosen = candidates.find((s) => keyOf(s) === setKey) || null;
 
   /* The set the options are about: the one chosen in the picker, or the one
@@ -470,54 +468,23 @@ export default function EventItemDialog({
           {picking && (
             <div className="evb-field evb-step">
               <span className="evb-label" id="evb-pick-label">Question set · {label} sets</span>
-              <label className="evb-search">
-                <Icon name="MagnifyingGlass" weight="bold" size={14} color="currentColor" />
-                <input
-                  className="evb-input"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={`Search ${label} sets`}
-                  aria-label={`Search ${label} sets`}
-                />
-              </label>
-              {candidates.length === 0 ? (
-                <p className="evb-hint">No {label} sets yet. Make one in Question sets, then add it here.</p>
-              ) : (
-                <div className="evb-pick">
-                  <table className="evb-pick-tbl" aria-labelledby="evb-pick-label">
-                    <thead>
-                      <tr>
-                        <th className="evb-col-r" aria-label="Pick" />
-                        <th>Set</th>
-                        <th className="evb-col-plays">Plays</th>
-                        <th className="evb-col-qs">Qs</th>
-                        <th className="evb-col-here" aria-label="On this agenda" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shownSets.map((s) => {
-                        const selected = keyOf(s) === setKey;
-                        const here = hereAt(s);
-                        return (
-                          <tr key={keyOf(s)} aria-selected={selected} data-testid="set-row">
-                            <td className="evb-col-r">
-                              <input type="radio" name="evb-set" checked={selected} onChange={() => choose(s)} aria-label={s.name} />
-                            </td>
-                            <td title={s.name}>{s.name}</td>
-                            <td>
-                              <span className="evb-ver">
-                                {s.activeVersion ? `v${s.activeVersion} · latest` : 'unversioned'}
-                              </span>
-                            </td>
-                            <td className="evb-col-qs">{s.questionCount || 0}</td>
-                            <td>{here && <span className="evb-chip evb-chip--warn">On this agenda · {here}</span>}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {/* THE SET CHOOSER (issue #41; docs/design/set-chooser S4): the same
+                  search, owner, tag and date controls as New engagement, with the
+                  version and "On this agenda" on each row. */}
+              <SetChooser
+                sets={candidates}
+                value={setKey}
+                keyOf={keyOf}
+                onChange={(key, s) => choose(s)}
+                formatLabel={label}
+                compact
+                stayOpen
+                rowNote={(s) => [
+                  s.activeVersion ? `v${s.activeVersion} · latest` : 'unversioned',
+                  hereAt(s) ? `On this agenda · ${hereAt(s)}` : '',
+                ].filter(Boolean).join(' · ')}
+                idPrefix="evb-set"
+              />
             </div>
           )}
 

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chooser narrowed by search and filters</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#0F1A2E}
+.sc{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#F4EDE4}
+.sc *{box-sizing:border-box}
+.lbl{font-size:13px;color:#9BA8BE;font-weight:600}
+.seg{display:flex;border:1px solid #33476B;border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:#F4EDE4;border:0;border-right:1px solid #33476B;font:inherit;font-size:13px;padding:0 12px;height:34px}
+.seg button:last-child{border-right:0}
+.seg button.on{background:#25375A;color:#F6A94C;font-weight:700}
+.seg b{font-weight:400;color:#9BA8BE;margin-left:6px}
+.fbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border:1px solid #33476B;border-radius:8px;background:#1B2942;color:#F4EDE4;font:inherit;font-size:13px}
+.fbtn span{color:#9BA8BE}
+.fbtn.set{border-color:#F6A94C}
+.fbtn.set span{color:#F6C88A;font-weight:700}
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px}
+.tbl th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#9BA8BE;text-align:left;font-weight:600;padding:0 10px;height:30px;border-bottom:1px solid #33476B}
+.tbl td{height:40px;padding:0 10px;border-bottom:1px solid #22324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl tr.kb td{background:#25375A;box-shadow:inset 3px 0 0 #7CA7E6}
+.own{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px}
+.o-team{background:rgba(124,167,230,.18);color:#B5CDF2}
+.tag{display:inline-block;font-size:12px;color:#C9D2E0;border:1px solid #33476B;border-radius:6px;padding:1px 6px;margin-right:4px}
+.tag.hit{border-color:#F6A94C;color:#F6C88A}
+mark{background:rgba(246,169,76,.28);color:#F4EDE4;border-radius:3px;padding:0 1px}
+.dim{color:#9BA8BE;font-size:13px}
+.radio{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #5B6F93;vertical-align:-3px;margin-right:10px}
+.achip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:999px;background:#25375A;font-size:13px}
+.achip button{width:22px;height:22px;border-radius:50%;border:0;background:#33476B;color:#F4EDE4;font-size:13px;line-height:1}
+.pop{position:absolute;width:280px;background:#1B2942;border:1px solid #5B6F93;border-radius:10px;box-shadow:0 18px 40px rgba(0,0,0,.45);padding:10px;display:flex;flex-direction:column;gap:4px;z-index:2}
+.pop label{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:6px;font-size:15px}
+.pop label b{margin-left:auto;font-weight:400;color:#9BA8BE;font-size:13px}
+.pop label.on{background:#25375A}
+.btn{height:40px;padding:0 18px;border-radius:8px;font:inherit;font-size:15px;font-weight:600;border:1px solid #33476B;background:transparent;color:#F4EDE4}
+.btn.pri{background:#F6A94C;border-color:#F6A94C;color:#1B2942}
+a{color:#9DC0F0}a:hover{color:#C4D8F6}
+</style>
+</helmet>
+<div class="sc" style="width: 1040px; height: 800px; padding: 28px; background: #0B1424; display: flex; align-items: flex-start; justify-content: center">
+<section aria-label="New engagement" style="width: 984px; background: #1B2942; border: 1px solid #33476B; border-radius: 14px; display: flex; flex-direction: column; position: relative">
+<div style="display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #33476B">
+<h1 style="margin: 0; font-size: 24px">New engagement</h1>
+<span class="dim">Format: <b style="color: #F4EDE4">Poll</b></span>
+<button aria-label="Close" style="margin-left: auto; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #33476B; background: transparent; color: #F4EDE4; font-size: 18px">×</button>
+</div>
+<div style="padding: 18px 22px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span class="lbl" style="font-size: 15px; color: #F4EDE4">Question set</span>
+<span class="dim" role="status">4 of 47 sets</span>
+<a href="#" style="margin-left: auto; font-size: 13px">+ New question set</a>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: 1px solid #7CA7E6; border-radius: 10px; background: #0F1A2E">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9BA8BE" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<input aria-label="Search sets" value="retro" style="flex: 1; border: 0; background: transparent; color: #F4EDE4; font: inherit; font-size: 15px; outline: none">
+<span class="dim" style="font-size: 12px">Esc clears</span>
+</label>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<div class="seg" role="radiogroup" aria-label="Whose sets">
+<button role="radio" aria-checked="false">All<b>7</b></button>
+<button role="radio" aria-checked="false">Yours<b>1</b></button>
+<button class="on" role="radio" aria-checked="true">TeamG<b>4</b></button>
+<button role="radio" aria-checked="false">Engage<b>1</b></button>
+<button role="radio" aria-checked="false">Public<b>1</b></button>
+</div>
+<button class="fbtn">Topic <span>Any</span> ▾</button>
+<button class="fbtn set" aria-expanded="true">Tag <span>retro</span> ▴</button>
+<button class="fbtn">Updated <span>Any time</span> ▾</button>
+<button class="fbtn" style="margin-left: auto">Sort <span>Best match</span> ▾</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<span class="achip">Search “retro” <button aria-label="Remove search">×</button></span>
+<span class="achip">TeamG <button aria-label="Remove TeamG">×</button></span>
+<span class="achip">Tag: retro <button aria-label="Remove tag retro">×</button></span>
+<a href="#" style="font-size: 13px">Clear all</a>
+</div>
+<div style="border: 1px solid #33476B; border-radius: 10px; overflow: hidden; height: 320px">
+<table class="tbl">
+<colgroup><col style="width: 36%"><col style="width: 7%"><col style="width: 11%"><col style="width: 15%"><col style="width: 19%"><col style="width: 12%"></colgroup>
+<thead><tr><th>Name</th><th>Qs</th><th>Owner</th><th>Topic</th><th>Tags</th><th>Updated</th></tr></thead>
+<tbody>
+<tr class="kb"><td><span class="radio"></span>Sprint <mark>retro</mark>: what went well</td><td>10</td><td><span class="own o-team">TeamG</span></td><td>Business &amp; Work</td><td><span class="tag hit">retro</span><span class="tag">sprint</span></td><td class="dim">3 days ago</td></tr>
+<tr><td><span class="radio"></span>Team health check</td><td>12</td><td><span class="own o-team">TeamG</span></td><td>Business &amp; Work</td><td><span class="tag">team-health</span><span class="tag hit">retro</span></td><td class="dim">used Tue</td></tr>
+<tr><td><span class="radio"></span>Project <mark>retro</mark>spective: launch</td><td>11</td><td><span class="own o-team">TeamG</span></td><td>Business &amp; Work</td><td><span class="tag hit">retro</span><span class="tag">launch</span></td><td class="dim">Sep 18</td></tr>
+<tr><td><span class="radio"></span>Remote team <mark>retro</mark> starter</td><td>8</td><td><span class="own o-team">TeamG</span></td><td>Everyday Life</td><td><span class="tag hit">retro</span><span class="tag">remote</span></td><td class="dim">Jul 2</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div style="display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid #33476B">
+<button class="btn">Cancel</button>
+<button class="btn pri" style="margin-left: auto" disabled>Create engagement</button>
+</div>
+<div class="pop" role="dialog" aria-label="Tag" style="left: 470px; top: 236px">
+<label style="height: 40px; border: 1px solid #5B6F93; border-radius: 8px; background: #0F1A2E"><input aria-label="Find a tag" placeholder="Find a tag" style="flex: 1; border: 0; background: transparent; color: #F4EDE4; font: inherit; font-size: 15px; outline: none"></label>
+<label class="on"><input type="checkbox" checked> retro<b>6</b></label>
+<label><input type="checkbox"> team-health<b>4</b></label>
+<label><input type="checkbox"> sprint<b>3</b></label>
+<label><input type="checkbox"> planning<b>3</b></label>
+<label><input type="checkbox"> remote<b>2</b></label>
+<label><input type="checkbox"> onboarding<b>2</b></label>
+<span class="dim" style="padding: 4px 8px">Counts are within TeamG. Pick several: a set matches any.</span>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":800}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

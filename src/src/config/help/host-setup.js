@@ -235,7 +235,7 @@ const gameSetup = {
           items: [
             { title: 'Event title', text: 'What the room sees the session called. Required.' },
             { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey, with a line under the buttons saying what each is. Build Room and Event are here too: pick one and the button becomes **Set up the Build Room** or **Continue to the event**, which takes your title to that screen.' },
-            { title: 'Question set', text: 'Only sets of the chosen format are listed, with their question counts. Changing the format clears the set. **Your question sets** opens your sets, to fix or make one without leaving; it says **Make a question set** when you have none of that format.' },
+            { title: 'Question set', text: 'A search box with the sets you used lately under it; click one, or type to search the sets of the chosen format (see Finding a question set). Once picked it is one line with **Change**. Changing the format clears the set. **Your question sets** opens your sets, to fix or make one without leaving; it says **Make a question set** when you have none of that format.' },
             { title: 'Categories', text: 'Appears once a set is picked, with each category\'s question count. None picked means all of them; the line underneath says how many questions are in.' },
           ],
         },
@@ -247,6 +247,32 @@ const gameSetup = {
           t: 'p',
           text: 'Close it with **Cancel**, the ×, or Esc. If you have filled anything in, it asks first: **Keep editing** or **Discard**.',
         },
+      ],
+    },
+    /*
+      SetChooser.jsx (issue #41): search over name, description and tags; Whose
+      sets: All / Yours / the team's name / Engage / Public, counted; Topic;
+      Tag (several: any of them); Updated (Used by me lately, this week, this
+      month, older than 3 months); Sort; chips with Clear all; "Used by you
+      lately"; nothing matching offers each way out with its count, other
+      formats, Make a new set; Switch team (more than one team) reloads.
+      The same chooser picks an agenda item's set.
+    */
+    {
+      id: 'finding-a-set',
+      title: 'Finding a question set',
+      icon: 'MagnifyingGlass',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Search', text: 'Finds a word in a set\'s name, description or tags. The arrow keys move through the list and Enter picks; Esc clears the search, then closes the list.' },
+            { title: 'Whose sets', text: 'All, Yours, your team (by its name), Engage and Public, each with how many match. You see one team at a time: the one you are working in. **Switch team** appears when you belong to more than one, and reloads the page in that team.' },
+            { title: 'Topic, Tag, Updated, Sort', text: 'Tag takes several at once: a set with any of them. Updated narrows to the sets you used lately, ones changed this week or this month, or older ones. Each filter in use shows above the list with an × to take it off; **Clear all** takes them all off.' },
+            { title: 'Nothing matches', text: 'Each way out says how many sets it would find, including the same search in another format. **Make a new set** opens your question sets.' },
+          ],
+        },
+        { t: 'p', text: 'The same chooser picks the set for an agenda item in an event.' },
       ],
     },
     /*

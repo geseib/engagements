@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agenda item: choose a set</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#0F1A2E}
+.sc{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#F4EDE4}
+.sc *{box-sizing:border-box}
+.seg{display:flex;border:1px solid #33476B;border-radius:8px;overflow:hidden}
+.seg button{background:transparent;color:#F4EDE4;border:0;border-right:1px solid #33476B;font:inherit;font-size:13px;padding:0 12px;height:34px}
+.seg button:last-child{border-right:0}
+.seg button.on{background:#25375A;color:#F6A94C;font-weight:700}
+.seg b{font-weight:400;color:#9BA8BE;margin-left:6px}
+.fbtn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border:1px solid #33476B;border-radius:8px;background:#1B2942;color:#F4EDE4;font:inherit;font-size:13px}
+.fbtn span{color:#9BA8BE}
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px}
+.tbl th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#9BA8BE;text-align:left;font-weight:600;padding:0 10px;height:30px;border-bottom:1px solid #33476B}
+.tbl td{height:40px;padding:0 10px;border-bottom:1px solid #22324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl tr.sel td{background:#25375A}
+.tbl tr.off td{color:#7F8CA3}
+.own{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px}
+.o-you{background:rgba(246,169,76,.16);color:#F6C88A}
+.o-team{background:rgba(124,167,230,.18);color:#B5CDF2}
+.o-eng{background:rgba(79,178,134,.18);color:#8FD8B5}
+.on-ag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:#33476B;color:#C9D2E0;margin-left:8px}
+.dim{color:#9BA8BE;font-size:13px}
+.radio{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #5B6F93;vertical-align:-3px;margin-right:10px}
+.radio.on{border-color:#F6A94C;background:radial-gradient(circle,#F6A94C 0 4px,transparent 5px)}
+.btn{height:40px;padding:0 18px;border-radius:8px;font:inherit;font-size:15px;font-weight:600;border:1px solid #33476B;background:transparent;color:#F4EDE4}
+.btn.pri{background:#F6A94C;border-color:#F6A94C;color:#1B2942}
+</style>
+</helmet>
+<div class="sc" style="width: 1040px; height: 680px; padding: 28px; background: #0B1424; display: flex; align-items: flex-start; justify-content: center">
+<section aria-label="Agenda item" style="width: 860px; background: #1B2942; border: 1px solid #33476B; border-radius: 14px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #33476B">
+<h1 style="margin: 0; font-size: 24px">Item 3 · Poll</h1>
+<span class="dim">Leadership offsite, Nov 4</span>
+<button aria-label="Close" style="margin-left: auto; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #33476B; background: transparent; color: #F4EDE4; font-size: 18px">×</button>
+</div>
+<div style="padding: 18px 22px; display: flex; flex-direction: column; gap: 12px">
+<label style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: 1px solid #5B6F93; border-radius: 10px; background: #0F1A2E">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9BA8BE" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<input aria-label="Search sets" placeholder="Search 47 poll sets" style="flex: 1; border: 0; background: transparent; color: #F4EDE4; font: inherit; font-size: 15px; outline: none">
+</label>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<div class="seg" role="radiogroup" aria-label="Whose sets">
+<button class="on" role="radio" aria-checked="true">All<b>47</b></button>
+<button role="radio" aria-checked="false">Yours<b>9</b></button>
+<button role="radio" aria-checked="false">TeamG<b>21</b></button>
+<button role="radio" aria-checked="false">Engage<b>12</b></button>
+<button role="radio" aria-checked="false">Public<b>5</b></button>
+</div>
+<button class="fbtn">Tag <span>Any</span> ▾</button>
+<button class="fbtn">Updated <span>Any time</span> ▾</button>
+</div>
+<div style="border: 1px solid #33476B; border-radius: 10px; overflow: hidden; height: 300px">
+<table class="tbl">
+<colgroup><col style="width: 54%"><col style="width: 9%"><col style="width: 15%"><col style="width: 22%"></colgroup>
+<thead><tr><th>Name</th><th>Qs</th><th>Owner</th><th>Updated</th></tr></thead>
+<tbody>
+<tr class="sel"><td><span class="radio on"></span><b>Quarterly planning priorities</b></td><td>8</td><td><span class="own o-you">Yours</span></td><td class="dim">used 2 wk ago</td></tr>
+<tr class="off"><td><span class="radio"></span>Offsite warm-up<span class="on-ag">On this agenda · item 1</span></td><td>6</td><td><span class="own o-you">Yours</span></td><td class="dim">used 1 mo ago</td></tr>
+<tr><td><span class="radio"></span>Team health check</td><td>12</td><td><span class="own o-team">TeamG</span></td><td class="dim">used Tue</td></tr>
+<tr><td><span class="radio"></span>Pulse: how is the week going?</td><td>5</td><td><span class="own o-eng">Engage</span></td><td class="dim">Sep 30</td></tr>
+<tr><td><span class="radio"></span>Customer journey pain points</td><td>14</td><td><span class="own o-team">TeamG</span></td><td class="dim">Oct 9</td></tr>
+<tr><td><span class="radio"></span>Sprint retro: what went well</td><td>10</td><td><span class="own o-team">TeamG</span></td><td class="dim">3 days ago</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div style="display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid #33476B">
+<button class="btn">Cancel</button>
+<button class="btn pri" style="margin-left: auto">Save item</button>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":680}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

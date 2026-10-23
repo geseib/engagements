@@ -17,6 +17,7 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
+import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
 
 const mockPrompts = [
   { promptId: 'lp-behavioral', name: 'LP Behavioural', gameType: 'call-and-answer', summaryPromptStatus: 'ok' },
@@ -70,7 +71,7 @@ test.each([
   dialog();
   await settle();
   fireEvent.click(screen.getByRole('button', { name: pill }));
-  fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: key } });
+  pickSet(key);
   await settle();
   expect(form()).toMatchSnapshot();
 });

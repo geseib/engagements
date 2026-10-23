@@ -13,6 +13,7 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
+import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
 
 jest.mock('../auth/authFetch', () => ({
   __esModule: true,
@@ -44,7 +45,7 @@ const setup = (overrides = {}) => {
 };
 const pickTrivia = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Trivia' }));
-  fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: 'platform:space' } });
+  pickSet('platform:space');
 };
 const create = () => screen.getByRole('button', { name: 'Create engagement' });
 
@@ -129,7 +130,7 @@ describe('a goal at create', () => {
     const props = setup();
     await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
-    fireEvent.change(screen.getByLabelText(/question set/i), { target: { value: 'platform:pulse' } });
+    pickSet('platform:pulse');
     expect(screen.queryByLabelText('Goal')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open the survey' }));
     expect(props.onCreate).toHaveBeenCalledTimes(1);

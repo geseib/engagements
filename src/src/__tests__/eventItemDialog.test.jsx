@@ -56,7 +56,7 @@ describe('adding an engagement', () => {
   it('offers only active sets of the chosen type, older spellings included', () => {
     render(<EventItemDialog {...base()} />);
     expect(screen.getByRole('heading', { name: 'Add Trivia' })).toBeInTheDocument();
-    const rows = screen.getAllByTestId('set-row').map((r) => r.textContent);
+    const rows = screen.getAllByTestId('set-chooser-row').map((r) => r.textContent);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatch(/Customer knowledge — Q4.*v3 · latest.*10/);
     expect(rows[1]).toMatch(/FY27 plan — check-in/);
@@ -66,7 +66,7 @@ describe('adding an engagement', () => {
 
   it('says when a set is already on the agenda, by the item\'s number', () => {
     render(<EventItemDialog {...base()} />);
-    expect(screen.getAllByTestId('set-row')[1]).toHaveTextContent('On this agenda · 2');
+    expect(screen.getAllByTestId('set-chooser-row')[1]).toHaveTextContent('On this agenda · 2');
   });
 
   it('picking a set fills an untouched title, and sends the version it shows', async () => {
@@ -222,7 +222,7 @@ describe('adding a break', () => {
     const p = base({ type: 'break' });
     render(<EventItemDialog {...p} />);
     expect(screen.getByRole('heading', { name: 'Add a break' })).toBeInTheDocument();
-    expect(screen.queryByTestId('set-row')).toBeNull();
+    expect(screen.queryByTestId('set-chooser-row')).toBeNull();
     expect(screen.getByLabelText('Title on the agenda')).toHaveValue('Break');
     fireEvent.change(screen.getByLabelText('Goes after'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add to agenda' }));
@@ -240,7 +240,7 @@ describe('editing and removing', () => {
     render(<EventItemDialog {...p} />);
     expect(screen.getByRole('heading', { name: 'Edit Trivia' })).toBeInTheDocument();
     expect(screen.getByText('Plays FY27 plan — check-in · v1.')).toBeInTheDocument();
-    expect(screen.queryByTestId('set-row')).toBeNull();
+    expect(screen.queryByTestId('set-chooser-row')).toBeNull();
     expect(screen.queryByLabelText('Goes after')).toBeNull();
     fireEvent.change(screen.getByLabelText('Planned length'), { target: { value: '20' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));

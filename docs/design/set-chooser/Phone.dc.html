@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set chooser on a phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#0F1A2E}
+.sc{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#F4EDE4}
+.sc *{box-sizing:border-box}
+.pill{flex:0 0 auto;height:36px;padding:0 12px;border:1px solid #33476B;border-radius:999px;background:transparent;color:#F4EDE4;font:inherit;font-size:13px}
+.pill.on{background:#25375A;border-color:#F6A94C;color:#F6A94C;font-weight:700}
+.row{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid #22324F}
+.row .t{font-size:15px;font-weight:600}
+.row .m{font-size:13px;color:#9BA8BE;margin-top:3px}
+.radio{flex:0 0 auto;width:18px;height:18px;border-radius:50%;border:2px solid #5B6F93;margin-top:2px}
+.radio.on{border-color:#F6A94C;background:radial-gradient(circle,#F6A94C 0 4px,transparent 5px)}
+.opt{display:flex;align-items:center;gap:12px;height:48px;padding:0 4px;font-size:15px;border-bottom:1px solid #22324F}
+.opt b{margin-left:auto;font-weight:400;color:#9BA8BE;font-size:13px}
+.lbl{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#9BA8BE;font-weight:700}
+</style>
+</helmet>
+<div class="sc" style="width: 390px; height: 844px; background: #1B2942; position: relative; overflow: hidden; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #33476B">
+<button aria-label="Back" style="width: 44px; height: 44px; border: 0; background: transparent; color: #F4EDE4; font-size: 20px">‹</button>
+<h1 style="margin: 0; font-size: 19px">Choose a poll set</h1>
+</div>
+<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+<label style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border: 1px solid #5B6F93; border-radius: 10px; background: #0F1A2E">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9BA8BE" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<input aria-label="Search sets" placeholder="Search 47 sets" style="flex: 1; min-width: 0; border: 0; background: transparent; color: #F4EDE4; font: inherit; font-size: 15px; outline: none">
+</label>
+<div style="display: flex; gap: 8px; overflow-x: auto">
+<button class="pill">All 47</button>
+<button class="pill on">TeamG 21</button>
+<button class="pill">Yours 9</button>
+<button class="pill">Engage 12</button>
+<button class="pill">Public 5</button>
+</div>
+<button style="align-self: flex-start; height: 36px; padding: 0 12px; border: 1px solid #F6A94C; border-radius: 8px; background: transparent; color: #F4EDE4; font: inherit; font-size: 13px">Filters · 1</button>
+</div>
+<div style="flex: 1; overflow: hidden">
+<div class="row"><span class="radio on"></span><div><div class="t">Team health check</div><div class="m">12 Qs · TeamG · used Tue</div></div></div>
+<div class="row"><span class="radio"></span><div><div class="t">Sprint retro: what went well</div><div class="m">10 Qs · TeamG · 3 days ago</div></div></div>
+<div class="row"><span class="radio"></span><div><div class="t">Customer journey pain points</div><div class="m">14 Qs · TeamG · Oct 9</div></div></div>
+</div>
+<div style="position: absolute; inset: 0; background: rgba(5,10,20,.55)"></div>
+<div role="dialog" aria-label="Filters" style="position: absolute; left: 0; right: 0; bottom: 0; background: #1B2942; border-top: 1px solid #5B6F93; border-radius: 16px 16px 0 0; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center">
+<h2 style="margin: 0; font-size: 19px">Filters</h2>
+<button style="margin-left: auto; height: 36px; padding: 0 10px; border: 0; background: transparent; color: #9DC0F0; font: inherit; font-size: 15px">Clear all</button>
+</div>
+<span class="lbl">Updated</span>
+<label class="opt"><input type="radio" name="up"> Any time<b>21</b></label>
+<label class="opt"><input type="radio" name="up" checked> Used by me lately<b>4</b></label>
+<label class="opt"><input type="radio" name="up"> This month<b>6</b></label>
+<label class="opt"><input type="radio" name="up"> Older than 3 months<b>9</b></label>
+<span class="lbl" style="margin-top: 6px">Topic and tag</span>
+<label class="opt">Topic<b>Any ›</b></label>
+<label class="opt">Tag<b>Any ›</b></label>
+<button style="height: 48px; margin-top: 8px; border: 0; border-radius: 10px; background: #F6A94C; color: #1B2942; font: inherit; font-size: 15px; font-weight: 700">Show 4 sets</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
