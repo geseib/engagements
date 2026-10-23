@@ -13,7 +13,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
-import BuildPlayer, { POLL_MS } from '../buildroom/BuildPlayer';
+import BuildPlayer, { POLL_MS, outcomeWords, ideaNews } from '../buildroom/BuildPlayer';
 
 const API = 'http://localhost:3000/api/';
 const GAME = '4821';
@@ -786,6 +786,68 @@ describe('a phone hears what happened to its comment (owner, 2026-10-05)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Send an idea to the host/ }));
     expect(screen.getByText('Seen by the host')).toBeInTheDocument();
     expect(screen.getByText('Shown on the wall')).toBeInTheDocument();
+  });
+});
+
+describe('what happened to my idea (ideas flow D, I6)', () => {
+  test('the words: counts, the host, Claude; a lost vote says another idea', () => {
+    expect(outcomeWords({ round: 'yesno', phase: 'open' })).toBe('The room is voting yes or no on it now.');
+    expect(outcomeWords({ round: 'yesno', phase: 'counted', yes: 9, no: 4 })).toBe('The room voted yes, 9 to 4. The host is deciding.');
+    expect(outcomeWords({ round: 'yesno', phase: 'decided', yes: 9, no: 4, host: 'claude', claudeHas: false })).toBe('The room voted yes, 9 to 4. The host sent it to Claude.');
+    expect(outcomeWords({ round: 'yesno', phase: 'decided', yes: 3, no: 5, host: 'record' })).toBe('The room voted no, 5 to 3. The host kept it on record.');
+    expect(outcomeWords({ round: 'feedback', phase: 'decided', answers: 7, host: 'claude', claudeHas: true })).toBe('The room gave 7 answers. The host sent it to Claude, and Claude has it.');
+    expect(outcomeWords({ round: 'vote', phase: 'decided', won: false })).toBe('The room picked another idea this time.');
+    expect(outcomeWords({ round: 'ideas', phase: 'decided', won: true, host: 'later' })).toBe('The room picked your idea. The host saved it for later.');
+    expect(outcomeWords({ round: 'claude', phase: 'decided', host: 'claude', claudeHas: true })).toBe('Sent to Claude, and Claude has it.');
+  });
+
+  test('Now tells the news once, until Got it; the Ideas tab keeps the line', async () => {
+    const at = new Date(Date.now() - 60000).toISOString();
+    serve(baseView({ myIdeas: [{ ideaId: 'k1', text: 'add documentation', status: 'promoted', promotedTo: '004', playerName: ME,
+      outcome: { round: 'yesno', phase: 'decided', yes: 9, no: 4, host: 'claude', claudeHas: false, at } }] }));
+    await mount();
+    const note = await screen.findByRole('region', { name: 'What happened to your idea' });
+    expect(note.textContent).toMatch('Your idea: \u201cadd documentation\u201d');
+    expect(note.textContent).toMatch('The room voted yes, 9 to 4. The host sent it to Claude.');
+    fireEvent.click(within(note).getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByRole('region', { name: 'What happened to your idea' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getByText('The room voted yes, 9 to 4. The host sent it to Claude.')).toBeInTheDocument();
+  });
+
+  test('old news stays off Now', () => {
+    const old = new Date(Date.now() - 60 * 60000).toISOString();
+    expect(ideaNews([{ ideaId: 'k', outcome: { phase: 'decided', at: old } }], Date.now())).toBeNull();
+  });
+});
+
+describe('the host replied, privately (ideas flow B, I2)', () => {
+  const THREAD = [{ ideaId: 'j1', text: 'add documentation', status: 'new', playerName: ME, thread: [{ by: 'host', text: 'What kind of documentation?', at: '2026-10-23T10:43:00.000Z' }] }];
+
+  test('Now says the host replied; Ideas shows the words and sends the answer as idea-reply', async () => {
+    serve(baseView({ myIdeas: THREAD }));
+    await mount();
+    const note = await screen.findByRole('region', { name: 'The host replied' });
+    expect(note.textContent).toMatch('Your idea: \u201cadd documentation\u201d');
+    fireEvent.click(within(note).getByRole('button', { name: 'Read and answer' }));
+    expect(screen.getByText('What kind of documentation?')).toBeInTheDocument();
+    expect(screen.getByText('Only the host sees this.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Answer the host'), { target: { value: 'A how-to on the sign-up page' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to the host' })); });
+    await waitFor(() => expect(posts('idea-reply')).toHaveLength(1));
+    expect(posts('idea-reply')[0].body).toMatchObject({ ideaId: 'j1', text: 'A how-to on the sign-up page' });
+  });
+
+  test('once answered, Now no longer asks; an idea with no reply has no answer box', async () => {
+    serve(baseView({ myIdeas: [
+      { ...THREAD[0], thread: [...THREAD[0].thread, { by: 'player', text: 'A how-to', at: '2026-10-23T10:44:00.000Z' }] },
+      { ideaId: 'j2', text: 'bigger buttons', status: 'new', playerName: ME },
+    ] }));
+    await mount();
+    await screen.findByRole('button', { name: /Send an idea to the host/ });
+    expect(screen.queryByRole('region', { name: 'The host replied' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Send an idea to the host/ }));
+    expect(screen.getAllByLabelText('Answer the host')).toHaveLength(1);
   });
 });
 

@@ -90,6 +90,14 @@ const playerBuildRoom = {
         },
         {
           t: 'p',
+          text: 'When the host puts your idea to the room, it then says how that went, in counts and never names: "The room voted yes, 9 to 4. The host sent it to Claude." Once the host decides, Now shows **What happened to your idea** for a few minutes; **Got it** puts it away.',
+        },
+        {
+          t: 'p',
+          text: 'The host may write back to you about an idea. Now then says **The host replied**; **Read and answer** opens your ideas with the host\'s words and a box to answer. Only the host sees what you send there, not the room and not Claude.',
+        },
+        {
+          t: 'p',
           text: 'When the host puts a talking point up for the room, Now shows **Talk it over** with a box for your idea about it.',
         },
       ],

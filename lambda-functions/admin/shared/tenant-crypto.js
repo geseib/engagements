@@ -554,7 +554,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   buildAsk: Object.freeze(['Prompt', 'Detail', 'Options', 'Decision', 'Wheel', 'ClaudeNote', 'FromLater']),
   buildResponse: Object.freeze(['Text', 'Why']),
   buildLog: Object.freeze(['Text', 'Detail', 'Link', 'ClaudeNote', 'Why', 'RoomWords']),
-  buildIdea: Object.freeze(['Text']),
+  buildIdea: Object.freeze(['Text', 'Thread']),
   buildImage: Object.freeze(['Caption']),
   buildBuilder: Object.freeze(['Note']),
   buildTask: Object.freeze(['Text', 'Detail']),
@@ -570,7 +570,7 @@ const ENCRYPTED_FIELDS = Object.freeze({
   // Talking points, research and ideas (docs/superpowers/specs/2026-10-09-build-room-talking-points-design.md):
   // a point's words and sources, a request's subject, and the run list's items.
   buildPoint: Object.freeze(['Text', 'Detail', 'Sources', 'About']),
-  buildPointReq: Object.freeze(['Subject']),
+  buildPointReq: Object.freeze(['Subject', 'NotLike']),
   buildQSet: Object.freeze(['Title', 'Questions', 'File']),
   buildRun: Object.freeze(['Items']),
 

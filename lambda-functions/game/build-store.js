@@ -859,6 +859,22 @@ function chosenWords(ask, room, chosen) {
 const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0);
 
 /** The tally of one ask, with names. Views strip what an audience may not see. */
+/**
+ * THE HOST'S OWN VOTE (ideas flow C; docs/design/build-room-ideas I5; owner,
+ * 18 Oct: the host "may vote too (never required)"). Stored as a player's
+ * answer or vote is, under a name no player can have (cleanText strips
+ * control characters from every joined name), and flagged ByHost. It counts
+ * as one person; the room learns only that the count includes the host.
+ */
+const HOST_VOTER = '\u0001host';
+const voterName = (r) => (r && r.ByHost ? 'Host' : (r && r.PlayerName) || '');
+
+/** The host's own answer or vote on an ask, or null. */
+function hostVoteOf(ask, room) {
+  const rows = ask.Kind === 'suggest' ? forAsk(room.votes || [], ask.AskId) : forAsk(room.answers || [], ask.AskId);
+  return rows.find((r) => r.ByHost) || null;
+}
+
 function tally(ask, room) {
   const kind = ask.Kind;
   const askId = ask.AskId;
@@ -881,7 +897,7 @@ function tally(ask, room) {
     .map((a) => ({ label: kind === 'choice' ? (a.Choice || []).join(', ') : String(a.Rating || ''), text: a.Why, playerName: a.PlayerName || '', whyId: whyIdOf(a) }));
   if (kind === 'choice') {
     const options = (ask.Options || []).map((o) => {
-      const voters = answers.filter((a) => (a.Choice || []).includes(o.label)).map((a) => a.PlayerName || '');
+      const voters = answers.filter((a) => (a.Choice || []).includes(o.label)).map(voterName);
       return { label: o.label, title: o.title, count: voters.length, pct: pct(voters.length, answers.length), voters };
     });
     return { total: answers.length, options, whys };
@@ -903,7 +919,7 @@ function answeredNames(ask, room) {
     ? (ask.Status === 'live' ? forAsk(room.resps, ask.AskId).filter((r) => (r.Source || 'player') === 'player') : forAsk(room.votes, ask.AskId))
     : forAsk(room.answers, ask.AskId);
   const out = [];
-  for (const r of rows) if (r.PlayerName && !out.includes(r.PlayerName)) out.push(r.PlayerName);
+  for (const r of rows) if (r.PlayerName && !r.ByHost && !out.includes(r.PlayerName)) out.push(r.PlayerName);
   return out;
 }
 
@@ -973,6 +989,13 @@ function askView(ask, room, audience, me) {
   // parity PLAN §2.9b). Names only, never what anyone chose. While the room
   // suggests, the people who suggested; once it votes, the people who voted.
   if (audience === 'host') out.answeredBy = answeredNames(ask, room);
+  // The host's own vote (C, I5): every screen may say the count includes the
+  // host, never which way; the host's own screen gets what it chose.
+  const hv = ask.Kind === 'rating' || ask.Kind === 'choice' || ask.Kind === 'suggest' ? hostVoteOf(ask, room) : null;
+  if (hv) {
+    out.hostVoted = true;
+    if (audience === 'host') out.myVote = ask.Kind === 'suggest' ? { respIds: hv.RespIds || [] } : { choice: hv.Choice || [], rating: hv.Rating || null };
+  }
   if (showResults && out.results && ask.Kind !== 'rating') out.results.tied = tiedIds(ask, room);
   if (ask.Wheel) out.wheel = wheelView(ask.Wheel, me);
   if (ask.RevotedAs) out.revotedAs = ask.RevotedAs;
@@ -985,6 +1008,9 @@ function askView(ask, room, audience, me) {
   if (isHost && ask.ClaudeGets) out.claudeGets = ask.ClaudeGets;
   if (isHost && ask.ClaudeNote) out.claudeNote = ask.ClaudeNote;
   if (isHost && ask.FromQuestion) out.fromQuestion = ask.FromQuestion;
+  // Mockups the host asked Claude for (ideas flow E): the request, and the idea it was about.
+  if (isHost && ask.FromRequest) out.fromRequest = ask.FromRequest;
+  if (isHost && ask.AboutIdea) out.aboutIdea = ask.AboutIdea;
   // Queued for the room from one thing the room gave (Consider): its item key.
   if (isHost && ask.FromItem) out.fromItem = ask.FromItem;
   // An opening step (and whether it is a probe): phones see the step too, for "step 3 of 9".
@@ -1102,7 +1128,92 @@ function ideaView(r) {
     // Queued for the room (Consider): waiting to be put to a vote, or made from one thing the room gave.
     ...(r.FromItem ? { fromItem: r.FromItem } : {}),
     ...(r.QueuedAt ? { queuedAt: r.QueuedAt } : {}),
+    // A PRIVATE REPLY (ideas flow B, owner 18 Oct: "private with Joe able to
+    // answer"): the host and the sender only. This view goes to the host and,
+    // as myIdeas, to the sender's own phone; Claude's view carries no ideas.
+    ...(Array.isArray(r.Thread) && r.Thread.length ? { thread: threadView(r.Thread) } : {}),
   };
+}
+
+/**
+ * WHAT HAPPENED TO MY IDEA (ideas flow D; docs/design/build-room-ideas I6; owner,
+ * 18 Oct: "Joe's phone tells him what happened to his idea"). For the sender's
+ * own phone only (myIdeas): which round it went to, how far that round got,
+ * what the room said (counts, never names), and what the host did with it.
+ *   round  'yesno' | 'feedback' | 'vote' | 'ideas' | 'claude'
+ *   phase  'open' | 'counted' | 'decided'
+ *   yes, no (yesno) · answers (feedback) · won (vote, ideas: did the room pick it)
+ *   host   'claude' | 'later' | 'record' | null, and claudeHas once Claude took it
+ * Null for an idea still with the host, acknowledged, set aside or on the wall.
+ */
+function ideaOutcome(idea, room) {
+  if (!idea || idea.Status !== 'promoted') return null;
+  const hostOf = (d) => (!d ? null : d.heldForLater ? 'later' : d.sendToAgent === false ? 'record' : 'claude');
+  if (idea.PromotedVia === 'claude' && !idea.PromotedTo) {
+    const sent = (room.logs || []).filter((l) => l.IdeaId === idea.IdeaId && l.Kind === 'idea').pop();
+    const later = Boolean(sent && sent.ForAgentAs === 'later' && !sent.ForAgent);
+    return { round: 'claude', phase: 'decided', host: later ? 'later' : 'claude', claudeHas: Boolean(sent && sent.DeliveredAt), at: (sent && sent.CreatedAt) || idea.UpdatedAt || null };
+  }
+  let ask = null;
+  let round = '';
+  let mine = null; // the option label or response id that is this idea
+  if (idea.PromotedTo) {
+    ask = (room.asks || []).find((a) => a.AskId === idea.PromotedTo) || null;
+    if (!ask) return null;
+    const opts = ask.Options || [];
+    const yesno = ask.Kind === 'choice' && Boolean(ask.FromItem) && opts.length === 2 && opts[0].title === 'Yes' && opts[1].title === 'No';
+    round = yesno ? 'yesno' : ask.Kind === 'suggest' ? 'feedback' : 'vote';
+    const o = opts.find((x) => x.ideaId === idea.IdeaId);
+    mine = o ? o.label : null;
+  } else if (idea.PromotedVia === 'ideas') {
+    const resp = (room.resps || []).find((r) => r.IdeaId === idea.IdeaId);
+    ask = resp ? (room.asks || []).find((a) => a.AskId === resp.AskId) || null : null;
+    if (!ask) return { round: 'ideas', phase: 'open', at: idea.UpdatedAt || null };
+    round = 'ideas';
+    mine = resp.RespId;
+  } else return null;
+  if (['proposed', 'discarded'].includes(ask.Status)) return null;
+  const phase = ask.Status === 'decided' ? 'decided' : ask.Status === 'results' ? 'counted' : 'open';
+  const out = { round, phase, at: ask.DecidedAt || ask.ClosedAt || ask.OpenedAt || null };
+  if (round === 'ideas' && ask.Status === 'voting') out.voting = true;
+  if (phase !== 'open') {
+    const t = tally(ask, room);
+    if (round === 'yesno') {
+      out.yes = (t.options[0] && t.options[0].count) || 0;
+      out.no = (t.options[1] && t.options[1].count) || 0;
+    } else if (round === 'feedback') out.answers = t.responses;
+  }
+  if (phase === 'decided') {
+    const d = ask.Decision || {};
+    if (round === 'vote' || round === 'ideas') out.won = Boolean(mine && (d.chosen || []).includes(mine));
+    if (out.won !== false) {
+      out.host = hostOf(d);
+      if (out.host === 'claude') out.claudeHas = Boolean(d.deliveredAt);
+    }
+  }
+  return out;
+}
+
+/** The most messages one idea's private thread keeps, both sides together. */
+const IDEA_THREAD_MAX = 20;
+
+function threadView(thread) {
+  return (Array.isArray(thread) ? thread : []).filter((m) => m && (m.by === 'host' || m.by === 'player') && m.text)
+    .map((m) => ({ by: m.by, text: String(m.text), at: m.at || null }));
+}
+
+/**
+ * Who may write next on an idea's private thread: the host on any idea a
+ * person sent (not their own, not one made from a vote's option); the sender
+ * only once the host has written. Returns an error string, or ''.
+ */
+function threadRefusal(idea, by) {
+  if (!idea) return 'No such idea';
+  if (idea.Source === 'host' || !idea.PlayerName) return 'There is no one to reply to on this idea';
+  const thread = threadView(idea.Thread);
+  if (thread.length >= IDEA_THREAD_MAX) return 'That is as long as one conversation about an idea gets';
+  if (by === 'player' && !thread.some((m) => m.by === 'host')) return 'The host has not replied to this idea';
+  return '';
 }
 
 /** How many of a viewed ask's options carry a picture. */
@@ -1193,7 +1304,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.26.1';
+const LATEST_PLUGIN = '1.27.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 
@@ -1547,7 +1658,13 @@ const POINT_STATUSES = Object.freeze(['new', 'shown', 'voting', 'queued', 'sent'
 /** A point counts against the room's limit while it is waiting for the host or on the Stage. */
 const OPEN_POINT_STATUSES = Object.freeze(['new', 'shown', 'queued']);
 // 'questions' (question-sets plan step 7): the host asks their own Claude for a question set.
-const REQUEST_KINDS = Object.freeze(['research', 'ideas', 'questions']);
+// 'mockups' and 'walkthrough' (ideas flow E; docs/design/build-room-ideas I7): the host asks
+// its Claude to draw 2-3 ways to do an idea or a feature, or to walk the room through the demo.
+const REQUEST_KINDS = Object.freeze(['research', 'ideas', 'questions', 'mockups', 'walkthrough']);
+/** How many mockups one request may ask for (I7: "2–3 pictures come back to you first"). */
+const MOCKUP_COUNTS = Object.freeze([2, 3]);
+/** The plugin that knows mockups and walkthrough requests (requestId on ask_room_to_choose and post_update). */
+const MOCKUPS_PLUGIN = '1.27.0';
 /** What a crew builder may ask its own Claude for: not a question set, which is the host's. */
 const BUILDER_REQUEST_KINDS = Object.freeze(['research', 'ideas']);
 const REQUEST_STATUSES = Object.freeze(['waiting', 'working', 'done', 'failed']);
@@ -1632,10 +1749,15 @@ function normalizePointRequest(body, { builder = false } = {}) {
   const kind = String(b.kind || '').trim().toLowerCase();
   const kinds = builder ? BUILDER_REQUEST_KINDS : REQUEST_KINDS;
   if (!kinds.includes(kind)) return { error: `kind must be ${kinds.join(' or ')}` };
-  const subject = cleanText(b.subject, POINT_LIMITS.subject + 1);
-  if (!subject) return { error: 'Say what to look into' };
+  const subject = cleanText(b.subject, POINT_LIMITS.subject + 1) || (kind === 'walkthrough' ? 'the demo as it stands' : '');
+  if (!subject) return { error: kind === 'mockups' ? 'Say what to mock up' : 'Say what to look into' };
   if (subject.length > POINT_LIMITS.subject) return { error: `The subject is ${POINT_LIMITS.subject} characters at most` };
-  return { value: { kind, subject } };
+  if (kind !== 'mockups') return { value: { kind, subject } };
+  const want = b.count === undefined || b.count === null || b.count === '' ? 3 : Number(b.count);
+  if (!MOCKUP_COUNTS.includes(want)) return { error: 'Ask for 2 or 3 mockups' };
+  const ideaId = b.ideaId === undefined || b.ideaId === null ? '' : String(b.ideaId).trim();
+  if (ideaId && !/^[A-Za-z0-9_-]{1,60}$/.test(ideaId)) return { error: 'That idea is not one of this room\'s' };
+  return { value: { kind, subject, want, ...(ideaId ? { ideaId } : {}) } };
 }
 
 const idOf = (sk, prefix) => String(sk).slice(prefix.length).replace('#', '-');
@@ -1678,6 +1800,9 @@ function requestView(r) {
     for: r.ForBuilder || 'host',
     status: r.Status || 'waiting',
     count: Number(r.Count) || 0,
+    ...(r.Want ? { want: Number(r.Want) } : {}),
+    ...(r.IdeaId ? { ideaId: r.IdeaId } : {}),
+    ...(r.AskId ? { askId: r.AskId } : {}),
     createdAt: r.CreatedAt || null,
     updatedAt: r.UpdatedAt || r.CreatedAt || null,
   };
@@ -1979,7 +2104,11 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
         ...(step ? { step: { startedAt: step.startedAt, endedAt: step.endedAt, durationMs: step.durationMs } } : {}),
       }))
       .map((l) => ({ ...l, link: forRoom(l.link) })),
-    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map(ideaView) : [],
+    myIdeas: me ? room.ideas.filter((i) => i.PlayerName === me.playerName && i.Source !== 'host').map((i) => {
+      const v = ideaView(i);
+      const o = ideaOutcome(i, room);
+      return o ? { ...v, outcome: o } : v;
+    }) : [],
     // The host's words in History (a why, what Claude got) never carry a name to a phone (Consider, frame 6).
     history: roomHistory(room, visibleAsks, nameTest(room, players, settingsOf(room.state).listNames)),
     images: room.images.map(imageView),
@@ -2099,7 +2228,7 @@ const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Everyone the room's rows name: players, builders, idea authors, voters, the wheel's spinners. */
 function namesIn(room, players) {
   const out = new Set((players || []).filter(Boolean));
-  const add = (n) => { if (n && typeof n === 'string' && n !== 'host') out.add(n); };
+  const add = (n) => { if (n && typeof n === 'string' && n !== 'host' && n !== HOST_VOTER) out.add(n); };
   for (const r of room.builders || []) add(r.PlayerName);
   for (const r of room.ideas || []) add(r.PlayerName);
   for (const r of (room.resps || []).concat(room.answers || [], room.votes || [], room.comments || [])) add(r.PlayerName || r.Name);
@@ -2474,11 +2603,11 @@ module.exports = {
   normalizeAsk, applyEdit, transition, normalizeOutcome,
   ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
-  roomFromRows, tally, askView, logView, ideaView, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
+  roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
   WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
-  POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
+  MOCKUP_COUNTS, MOCKUPS_PLUGIN, POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
   pointView, requestView, isOwnPoint, isOwnRequest, pointsHostView, pointsClaudeView, pointsBuilderView, pointDirectionText, pointLaterText, pointsDirection, oneLine,

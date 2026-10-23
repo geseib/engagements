@@ -293,6 +293,52 @@ async function closedChoice(prompt, options, picks, whys = []) {
     assert.strictEqual((await agentCall('POST', 'consider', { item: `idea:${idea.ideaId}`, go: 'send' })).status, 403);
   });
 
+  console.log('\nD: the sender\'s phone hears what happened (ideas flow D)');
+  H.seed({ players: [ZEB, QUI] });
+  const outcomeOf = async (who, ideaId) => ((await playCall('GET', 'state', who)).body.myIdeas.find((i) => i.ideaId === ideaId) || {}).outcome;
+  await check('yes/no: in the vote, the counts once closed, then what the host did and when Claude has it', async () => {
+    const idea = await sendIdea(zeb, 'a help page');
+    assert.strictEqual(await outcomeOf(zeb, idea.ideaId), undefined, 'with the host: nothing to say yet');
+    const ask = (await consider({ item: `idea:${idea.ideaId}`, go: 'queue', round: 'yesno' })).body.ask;
+    assert.strictEqual(await outcomeOf(zeb, idea.ideaId), undefined, 'a waiting ask is not news');
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'opennext' });
+    assert.deepStrictEqual(await outcomeOf(zeb, idea.ideaId), { round: 'yesno', phase: 'open', at: (await outcomeOf(zeb, idea.ideaId)).at });
+    await playCall('POST', 'respond', zeb, { askId: ask.askId, choice: ['A'] });
+    await playCall('POST', 'respond', qui, { askId: ask.askId, choice: ['B'] });
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'my-vote', choice: ['A'] });
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'close' });
+    const counted = await outcomeOf(zeb, idea.ideaId);
+    assert.deepStrictEqual([counted.phase, counted.yes, counted.no], ['counted', 2, 1]);
+    await hostCall('POST', `asks/${ask.askId}`, { action: 'decide', chosen: ['A'], direction: 'Add a help page' });
+    const sent = await outcomeOf(zeb, idea.ideaId);
+    assert.deepStrictEqual([sent.phase, sent.host, sent.claudeHas], ['decided', 'claude', false]);
+    await inbox();
+    assert.strictEqual((await outcomeOf(zeb, idea.ideaId)).claudeHas, true);
+    assert.ok(!(await playCall('GET', 'state', qui)).body.myIdeas.some((i) => i.ideaId === idea.ideaId), 'another phone hears about it');
+  });
+  await check('a vote between ideas: the winner hears what the host did, the other that the room picked another', async () => {
+    const a = await sendIdea(zeb, 'a parking map');
+    const b = await sendIdea(qui, 'a reminder text');
+    const v = await hostCall('POST', 'asks-from-ideas', { ideaIds: [a.ideaId, b.ideaId], open: true });
+    const id = v.body.ask.askId;
+    await playCall('POST', 'respond', zeb, { askId: id, choice: ['B'] });
+    await playCall('POST', 'respond', qui, { askId: id, choice: ['B'] });
+    await hostCall('POST', `asks/${id}`, { action: 'close' });
+    await hostCall('POST', `asks/${id}`, { action: 'decide', chosen: ['B'], direction: 'Text a reminder', as: 'later' });
+    const lost = await outcomeOf(zeb, a.ideaId);
+    assert.deepStrictEqual([lost.round, lost.phase, lost.won, lost.host], ['vote', 'decided', false, undefined]);
+    const won = await outcomeOf(qui, b.ideaId);
+    assert.deepStrictEqual([won.won, won.host], [true, 'later']);
+  });
+  await check('sent straight to Claude: says so, and says when Claude has it', async () => {
+    const idea = await sendIdea(zeb, 'bigger buttons');
+    await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'direct' });
+    const o = await outcomeOf(zeb, idea.ideaId);
+    assert.deepStrictEqual([o.round, o.phase, o.host, o.claudeHas], ['claude', 'decided', 'claude', false]);
+    await inbox();
+    assert.strictEqual((await outcomeOf(zeb, idea.ideaId)).claudeHas, true);
+  });
+
   console.log('\nNever a name on a phone or the wall');
   await check('no player name anywhere in a phone\'s history or the wall\'s, after all of the above', async () => {
     const h = JSON.stringify(await phoneHistory(qui));

@@ -4,7 +4,7 @@ import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
 import Icon from '../components/Icon';
 import RatingInput from '../components/survey/RatingInput';
-import { fetchBuildState, sendResponse, sendVote, sendIdea, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
+import { fetchBuildState, sendResponse, sendVote, sendIdea, sendIdeaReply, sendPreviewFeedback, sendSpin, mintRemoteKey } from './buildPlayApi';
 import BuildWheel from './BuildWheel';
 import { W } from './words';
 import { RATING_SCALE, roomStory, filterStory, STORY_FILTERS, doingLine, historyFromView } from './buildScreens';
@@ -91,6 +91,40 @@ const ideaStatusText = (idea, current = null) => {
   if (idea.status === 'promoted' && idea.promotedVia === 'ideas') return "In the room's ideas";
   return IDEA_STATUS[idea.status] || IDEA_STATUS.new;
 };
+
+/**
+ * WHAT HAPPENED TO MY IDEA (ideas flow D; docs/design/build-room-ideas I6):
+ * the server's outcome (build-store ideaOutcome) in plain words. Counts, never
+ * names. "The room voted yes, 9 to 4. The host sent it to Claude."
+ */
+export function outcomeWords(o) {
+  if (!o) return '';
+  const host = o.host === 'claude' ? (o.claudeHas ? W.outcomeHostClaudeHas : W.outcomeHostClaude)
+    : o.host === 'later' ? W.outcomeHostLater : o.host === 'record' ? W.outcomeHostRecord : '';
+  if (o.round === 'claude') return o.host === 'later' ? W.outcomeHostLater : o.claudeHas ? W.outcomeClaudeHas : W.outcomeClaude;
+  if (o.phase === 'open') {
+    if (o.round === 'ideas') return o.voting ? W.outcomeIdeasVoting : W.outcomeIdeasOpen;
+    return { yesno: W.outcomeYesNoOpen, feedback: W.outcomeFeedbackOpen, vote: W.outcomeVoteOpen }[o.round] || '';
+  }
+  let room;
+  if (o.round === 'yesno') room = W.outcomeYesNo(o.yes || 0, o.no || 0);
+  else if (o.round === 'feedback') room = W.outcomeAnswers(o.answers || 0);
+  else if (o.phase === 'decided') room = o.won ? W.outcomeWon : W.outcomeLost;
+  else room = W.outcomeVotesIn;
+  if (o.phase === 'counted') return `${room} ${W.outcomeDeciding}`;
+  return host ? `${room} ${host}` : room;
+}
+
+/** How long a decided idea's news stays on Now. */
+const OUTCOME_NEWS_MS = 15 * 60 * 1000;
+
+/** The newest of this phone's ideas the host settled lately, for Now (or null). */
+export function ideaNews(myIdeas, now, seen = []) {
+  const fresh = (myIdeas || []).filter((i) => i.outcome && i.outcome.phase === 'decided' && i.outcome.at
+    && now - Date.parse(i.outcome.at) < OUTCOME_NEWS_MS && !seen.includes(`${i.ideaId}:${i.outcome.at}`));
+  fresh.sort((a, b) => Date.parse(b.outcome.at) - Date.parse(a.outcome.at));
+  return fresh[0] || null;
+}
 
 export function isHttpUrl(value) {
   if (!value) return false;
@@ -942,6 +976,8 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
                   <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea, current)}</span>
+                  {idea.outcome && <p className="plr-help bpl-outcome">{outcomeWords(idea.outcome)}</p>}
+                  {idea.thread && idea.thread.length > 0 && <IdeaThread api={api} idea={idea} onResult={onResult} />}
                 </li>
               ))}
             </ul>
@@ -950,6 +986,52 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
       )}
     </section>
   );
+}
+
+/**
+ * THE HOST REPLIED (ideas flow B; docs/design/build-room-ideas I2): the host's
+ * private words on this phone's own idea, and the answer box. Only the host
+ * sees what is sent here; the room and Claude never do.
+ */
+function IdeaThread({ api, idea, onResult }) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const thread = idea.thread || [];
+  const full = thread.length >= 20;
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await sendIdeaReply(api, idea.ideaId, text);
+    setBusy(false);
+    if (r.ok) setDraft('');
+    else setError(r.error);
+    onResult(r);
+  };
+  const id = `bpl-reply-${idea.ideaId}`;
+  return (
+    <div className="bpl-thread" aria-label={W.hostRepliedLabel}>
+      {thread.map((m, i) => (
+        <p key={`${m.at}-${i}`} className="bpl-thread-msg"><span className="bpl-thread-who">{m.by === 'host' ? 'Host' : 'You'}:</span> {m.text}</p>
+      ))}
+      {!full && (
+        <>
+          <label className="bpl-label" htmlFor={id}>{W.answerTheHost}</label>
+          <textarea id={id} className="plr-inp bpl-area bpl-area--short" maxLength={TEXT_MAX} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <p className="plr-help">{W.onlyTheHost}</p>
+          <button type="button" className="bpl-send" disabled={!draft.trim() || busy} onClick={send}>{busy ? 'Sending\u2026' : W.sendToHost}</button>
+          <ErrorLine error={error} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** This phone's ideas whose newest private message is the host's: an answer is owed. */
+export function hostRepliedTo(myIdeas) {
+  return (myIdeas || []).filter((i) => (i.thread || []).length && i.thread[i.thread.length - 1].by === 'host');
 }
 
 /* -------------------------------------------------------------- history -- */
@@ -1081,6 +1163,8 @@ export default function BuildPlayer({
   const [refusal, setRefusal] = useState('removed');
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
+  // Ideas-flow D news this phone has already read (Got it), by idea and decision time.
+  const [seenNews, setSeenNews] = useState([]);
   const [tab, setTab] = useState('now');
   // The doing line counts minutes and goes stale as time passes.
   const [now, setNow] = useState(() => Date.now());
@@ -1215,6 +1299,7 @@ export default function BuildPlayer({
   const ask = view.current;
   const mine = view.mine || {};
   const myIdeas = view.myIdeas || [];
+  const news = ideaNews(myIdeas, now, seenNews);
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && myIdeas.some((i) => i.aboutLogId === preview.logId));
   const openAsk = Boolean(ask && ['live', 'voting'].includes(ask.status));
@@ -1261,6 +1346,19 @@ export default function BuildPlayer({
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
           {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
           <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>{W.haveALook}</button>
+        </section>
+      )}
+      {news && (
+        <section className="bpl-ideas bpl-pvnote" aria-label={W.outcomeNews}>
+          <p className="plr-help"><b>{W.outcomeNews}</b> {W.yourIdeaWas(news.text)}</p>
+          <p className="bpl-text">{outcomeWords(news.outcome)}</p>
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setSeenNews((l) => [...l, `${news.ideaId}:${news.outcome.at}`])}>{W.outcomeGotIt}</button>
+        </section>
+      )}
+      {hostRepliedTo(myIdeas).length > 0 && (
+        <section className="bpl-ideas bpl-pvnote" aria-label={W.hostReplied}>
+          <p className="plr-help"><b>{W.hostReplied}</b> {W.yourIdeaWas(hostRepliedTo(myIdeas)[0].text)}</p>
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('ideas')}>{W.readAndAnswer}</button>
         </section>
       )}
       <section className="bpl-ideas">

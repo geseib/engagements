@@ -52,7 +52,7 @@ const claude = {
           items: [
             { title: 'Install the plugin', text: 'Copy the command under **Check for the latest Engage plugin** and run it in a terminal, once per laptop. It needs Node 18 or later. If your Mac asks about node, click Allow, so the room can open the build on this Wi-Fi.' },
             { title: 'Mint a key and copy the start command', text: 'Name the project folder if you like (it goes under ~/build-room), then **Mint a key and copy the command**. The key is shown once.' },
-            { title: 'Paste it into a terminal', text: 'It makes the folder with git, opens Claude Code there, connects and kicks off. Claude reads the room, says what it plans, and starts. Claude Code already open in that folder? Type the line shown under the start command there instead.' },
+            { title: 'Paste it into a terminal', text: 'It makes the folder with git, opens Claude Code there, connects and kicks off. Claude Code already open in that folder? Type the line shown in this step there instead. The step waits for Claude to call in, then turns green and says **Connected**, with the time and folder; you can close the window. Nothing after a minute? The first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.' },
           ],
         },
         { t: 'p', text: 'Review Claude\'s questions, in the same window, decides whether Claude\'s questions wait for you. **More commands for later** lists the plugin\'s commands, each with a Copy button.' },
@@ -76,6 +76,7 @@ const claude = {
             ['wrap-up', 'Writes the wrap-up and tidies the project (see Wrapping up a Build Room).'],
             ['restore', 'Lists the hidden snapshots and brings one back, after asking you.'],
             ['(when you ask for questions)', 'Writes a question set for this kind of build into the project under build-room/questions, commits it, and sends it to your ready questions (see Ask Claude for questions).'],
+            ['(when you ask for mockups or a walkthrough)', 'Draws quick screens and sends them to you first, or steps the room through the demo (see Ask Claude for mockups or a walkthrough).'],
             ['share-repo, review', 'Crew: shares the repository with builders; reviews the next early look.'],
             ['join, early-look', 'For a builder\'s own Claude Code: joins the crew; shares an early look.'],
           ],

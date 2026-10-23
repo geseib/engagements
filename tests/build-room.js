@@ -806,6 +806,45 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const p = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Later?', options: ['X', 'Y'], draft: true });
     assert.strictEqual((await hostCall('POST', `asks/${p.body.ask.askId}`, { action: 'wheel' })).status, 409);
   });
+  await check('C: the host\'s own vote is optional, counts as one, the room learns only that it is in', async () => {
+    seed();
+    const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Should we do this?', options: ['Yes', 'No'] });
+    const id = c.body.ask.askId;
+    await playCall('POST', 'respond', { ...priya, askId: id, choice: ['A'] });
+    const v = await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['B'] });
+    assert.strictEqual(v.status, 200);
+    assert.deepStrictEqual(v.body.ask.myVote, { choice: ['B'], rating: null });
+    assert.strictEqual(v.body.ask.hostVoted, true);
+    assert.strictEqual(v.body.ask.answerCount, 2, 'counts as one person');
+    assert.deepStrictEqual(v.body.ask.answeredBy, ['Priya'], 'the People list is people');
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A', 'B'] })).status, 400);
+    assert.strictEqual((await agentCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] })).status, 403);
+    // A phone's view: included, never which way.
+    const p = await playCall('GET', 'state', marcus);
+    assert.strictEqual(p.body.current.hostVoted, true);
+    assert.strictEqual(p.body.current.myVote, undefined);
+    assert.ok(!JSON.stringify(p.body).includes('\\u0001'), 'the host\'s voter key reaches a phone');
+    // Changed, then taken back.
+    await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] });
+    const back = await hostCall('POST', `asks/${id}`, { action: 'my-vote', clear: true });
+    assert.strictEqual(back.body.ask.hostVoted, undefined);
+    assert.strictEqual(back.body.ask.answerCount, 1);
+    await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['B'] });
+    const closed = await hostCall('POST', `asks/${id}`, { action: 'close' });
+    assert.deepStrictEqual(closed.body.ask.results.options.map((o) => [o.label, o.count, o.voters]), [['A', 1, ['Priya']], ['B', 1, ['Host']]]);
+    assert.strictEqual((await hostCall('POST', `asks/${id}`, { action: 'my-vote', choice: ['A'] })).status, 409, 'closed');
+    // A rating, and an Ideas vote once the room votes.
+    const r = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How close?' });
+    assert.strictEqual((await hostCall('POST', `asks/${r.body.ask.askId}`, { action: 'my-vote', rating: 4 })).body.ask.myVote.rating, 4);
+    const i = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Ideas?' });
+    await playCall('POST', 'respond', { ...priya, askId: i.body.ask.askId, text: 'A map' });
+    assert.strictEqual((await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'my-vote', respIds: ['x'] })).status, 409, 'not voting yet');
+    const voting = await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'vote' });
+    const respId = voting.body.ask.responses[0].respId;
+    const iv = await hostCall('POST', `asks/${i.body.ask.askId}`, { action: 'my-vote', respIds: [respId] });
+    assert.deepStrictEqual(iv.body.ask.myVote, { respIds: [respId] });
+    assert.strictEqual(iv.body.ask.voteCount, 1);
+  });
   await check('no tie, the wheel holds every option; a rating has no wheel', async () => {
     seed();
     const c = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'Which?', options: ['One', 'Two', 'Three'] });
@@ -899,6 +938,46 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const fates = (await hostCall('GET', 'state')).body.log.filter((l) => l.kind === 'note' && l.text.includes('dark mode')).map((l) => l.text.split(': ').pop());
     for (const f of ['dismissed.', 'back in the queue.', 'saved for later.', 'shown on the wall.']) assert.ok(fates.includes(f), `${f} in ${fates}`);
     assert.ok(!JSON.stringify((await agentCall('GET', 'state')).body.log).includes('dark mode'));
+  });
+  await check('B: a private reply to the sender; they answer; only the host and that phone see it', async () => {
+    seed();
+    await sendIdea(priya, 'add documentation');
+    await sendIdea(marcus, 'bigger buttons');
+    const idea = await ideaOf('add documentation');
+    // The sender cannot start the thread; the host must write first.
+    assert.strictEqual((await playCall('POST', 'idea-reply', { ...priya, ideaId: idea.ideaId, text: 'hello?' })).status, 409);
+    assert.strictEqual((await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'reply', text: '  ' })).status, 400);
+    const r = await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'reply', text: 'What kind of documentation?' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body.idea.thread.map((m) => [m.by, m.text]), [['host', 'What kind of documentation?']]);
+    assert.strictEqual(r.body.idea.status, 'new', 'a reply leaves it on the list');
+    // Someone else's phone cannot answer it.
+    assert.strictEqual((await playCall('POST', 'idea-reply', { ...marcus, ideaId: idea.ideaId, text: 'me too' })).status, 404);
+    const p1 = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p1.body.myIdeas.find((i) => i.ideaId === idea.ideaId).thread.map((m) => m.by), ['host']);
+    const a = await playCall('POST', 'idea-reply', { ...priya, ideaId: idea.ideaId, text: 'A short how-to on the sign-up page' });
+    assert.strictEqual(a.status, 201);
+    const h = await hostCall('GET', 'state');
+    assert.deepStrictEqual(h.body.ideas.find((i) => i.ideaId === idea.ideaId).thread.map((m) => [m.by, m.text]),
+      [['host', 'What kind of documentation?'], ['player', 'A short how-to on the sign-up page']]);
+    const lines = h.body.log.filter((l) => l.kind === 'note' && l.text.includes('privately')).map((l) => l.text);
+    assert.deepStrictEqual(lines.sort(), ['Priya answered privately: \u201cA short how-to on the sign-up page\u201d', 'You replied to Priya privately: \u201cWhat kind of documentation?\u201d'].sort());
+    const secret = /kind of documentation|short how-to/;
+    assert.ok(!secret.test(JSON.stringify((await agentCall('GET', 'state')).body)), 'Claude sees the thread');
+    assert.ok(!secret.test(JSON.stringify((await agentCall('GET', 'inbox')).body)), 'Claude\'s inbox has the thread');
+    assert.ok(!secret.test(JSON.stringify((await playCall('GET', 'state', marcus)).body)), 'another phone sees the thread');
+  });
+  await check('B: an answer to an acknowledged idea puts it back on the host\'s list; the host cannot reply to its own idea', async () => {
+    seed();
+    await sendIdea(priya, 'love the colours');
+    const idea = await ideaOf('love the colours');
+    await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'reply', text: 'Got it, thanks' });
+    await hostCall('POST', `ideas/${idea.ideaId}`, { action: 'acknowledge' });
+    await playCall('POST', 'idea-reply', { ...priya, ideaId: idea.ideaId, text: 'Could the blue be darker?' });
+    assert.strictEqual((await ideaOf('love the colours')).status, 'new');
+    const mine = await hostCall('POST', 'ideas', { text: 'my own thought' });
+    assert.strictEqual(mine.status, 201);
+    assert.strictEqual((await hostCall('POST', `ideas/${mine.body.idea.ideaId}`, { action: 'reply', text: 'hi' })).status, 409);
   });
   await check('Show on the wall acknowledges it and puts it, without a name, on the host\'s wall for a short while', async () => {
     seed();

@@ -401,8 +401,27 @@ describe('each ask status', () => {
     }));
     expect(screen.getByText('The room is voting')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show results' })).toHaveAttribute('data-next-primary');
-    const row = screen.getByText('Not seeing open shifts').closest('li');
+    const row = screen.getByText('Not seeing open shifts', { selector: '.brm-sug-text' }).closest('li');
     expect(within(row).getByText('2')).toBeInTheDocument();
+  });
+
+  test('C: your vote (optional) on an Ideas vote: up to the picks, cast, then the count says it includes you', async () => {
+    const votes = [{ AskId: '004', PlayerName: 'Sam', RespIds: ['r2'] }];
+    await openRoom(hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'voting' }], resps: IDEAS_RESPS, votes }));
+    const box = screen.getByRole('region', { name: 'Your vote (optional)' });
+    expect(box.textContent).toMatch('Counts as one person');
+    fireEvent.click(within(box).getByRole('checkbox', { name: 'Not seeing open shifts' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cast my vote' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'my-vote', respIds: [IDEAS_RESPS.find((r) => r.Text === 'Not seeing open shifts').RespId] }));
+  });
+
+  test('C: once cast it says so, offers Take my vote back, and Settle is untouched', async () => {
+    const votes = [{ AskId: '004', PlayerName: 'Sam', RespIds: ['r2'] }, { SK: 'BUILD#VOTE#004#\u0001host', AskId: '004', PlayerName: '\u0001host', ByHost: true, RespIds: ['r1'] }];
+    await openRoom(hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'voting' }], resps: IDEAS_RESPS, votes }));
+    const box = screen.getByRole('region', { name: 'Your vote (optional)' });
+    expect(within(box).getByRole('status').textContent).toBe('Your vote is in');
+    fireEvent.click(within(box).getByRole('button', { name: 'Take my vote back' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'my-vote', clear: true }));
   });
 
   test('results: bars, reasons with names, and a direction prefilled from the winner', async () => {
@@ -676,6 +695,40 @@ describe('Connect Claude Code', () => {
   );
   const LATEST = { running: S.LATEST_PLUGIN, latest: S.LATEST_PLUGIN, outdated: false };
   const quiet = { lastSeenAt: ago(600), folder: '~/build-room/volunteer-sign-up' };
+
+  test('step 3 waits for Claude, offers the in-Claude command there, and turns green once the new key calls in (owner, 23 Oct)', async () => {
+    const props = (room) => ({
+      room: { settings: {}, title: 'Volunteer sign-up', plugin: LATEST, ...room }, gameId: GAME, busy: false, onClose: () => {}, run: (fn) => fn(),
+      api: { mintKey: jest.fn(() => Promise.resolve({ key: `eng_${GAME}_${'n'.repeat(43)}`, keyId: 'k2' })), revokeKey: jest.fn(), saveSettings: jest.fn() },
+    });
+    const first = props({ agent: {} });
+    const { rerender } = render(<ConnectPanel {...first} />);
+    expect(screen.queryByTestId('brm-connect')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Mint a key and copy the command' }));
+    const waiting = await screen.findByTestId('brm-connect-waiting');
+    expect(waiting).toHaveTextContent(W.connectWaiting);
+    // The "already in Claude Code" line belongs with pasting (step 3), not with minting (step 2).
+    const [, mint, paste] = document.querySelectorAll('.brm-steps--connect > li');
+    expect(mint.querySelector('[data-testid="brm-connect"]')).toBeNull();
+    expect(paste.querySelector('[data-testid="brm-connect"]').textContent).toBe(`/engage:kickoff eng_${GAME}_${'n'.repeat(43)}`);
+    expect(mint).toHaveClass('is-done');
+    expect(paste).toHaveClass('is-wait');
+    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('brm-btn--primary');
+
+    // An older key used long ago does not count.
+    rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { key: { keyId: 'k1', lastUsedAt: ago(900) } } }} />);
+    expect(paste).toHaveClass('is-wait');
+
+    const at = new Date().toISOString();
+    rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { lastSeenAt: at, kickedOffAt: at, folder: '~/build-room/volunteer-sign-up', key: { keyId: 'k2', createdAt: at, lastUsedAt: at } } }} />);
+    const steps = document.querySelectorAll('.brm-steps--connect > li');
+    expect(steps[2]).toHaveClass('is-done');
+    expect(steps[2].querySelector('.brm-step-title').textContent).toBe(W.connectedTitle);
+    expect(screen.getByTestId('brm-connected')).toHaveTextContent(/Claude Code connected at .*, in ~\/build-room\/volunteer-sign-up\. It has started work\./);
+    expect(steps[0]).toHaveClass('is-done');
+    expect(screen.queryByTestId('brm-connect-waiting')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('brm-btn--primary');
+  });
 
   test('a crew room adds a fourth step: share the repo', () => {
     panel({ agent: {}, crew: { enabled: true } });
@@ -1923,6 +1976,71 @@ describe('the queue (step 4: C1, C3, C3b)', () => {
     const dialogs = await screen.findAllByRole('dialog');
     const field = within(dialogs[dialogs.length - 1]).getByLabelText(/Question/);
     expect(field).toHaveValue(`How should we do this: \u201c${IDEAS[0].Text}\u201d?`);
+  });
+
+  test('B: Reply to Dee opens a private thread; Got it, thanks and a typed reply post reply', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    // The host's own idea has no one to reply to.
+    expect(within(q).queryByRole('button', { name: 'Reply to Host' })).toBeNull();
+    fireEvent.click(within(q).getByRole('button', { name: 'Reply to Dee' }));
+    const t = within(q).getByRole('region', { name: 'Private with Dee' });
+    expect(t.textContent).toMatch('Only you and Dee see this');
+    fireEvent.click(within(t).getByRole('button', { name: 'Got it, thanks' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'reply', text: 'Got it, thanks' }));
+    expect(path(lastPost())).toBe(`games/${GAME}/build/ideas/0-i0`);
+    fireEvent.change(within(t).getByLabelText('Reply to Dee'), { target: { value: 'What kind of reminder?' } });
+    fireEvent.click(within(t).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'reply', text: 'What kind of reminder?' }));
+  });
+
+  test('B: an answer shows on the card; Ask the room for ideas quotes the latest answer', async () => {
+    const thread = [{ by: 'host', text: 'Which day?', at: ago(60) }, { by: 'player', text: 'Two days before, by text', at: ago(30) }];
+    await openRoom(hostState({ ideas: [{ ...IDEAS[0], Thread: thread }] }));
+    const q = queue();
+    expect(within(q).getByTestId('brm-thread-new').textContent).toBe('Dee answered');
+    fireEvent.click(within(q).getByRole('button', { name: 'Your conversation with Dee \u00b7 2' }));
+    expect(within(q).getByRole('region', { name: 'Private with Dee' }).textContent).toMatch('Two days before, by text');
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room' }));
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask the room for ideas about this' }));
+    const dialogs = await screen.findAllByRole('dialog');
+    expect(within(dialogs[dialogs.length - 1]).getByLabelText(/Question/)).toHaveValue('How should we do this: \u201cTwo days before, by text\u201d?');
+  });
+
+  test('E: Ask Claude for mockups of an idea: its latest words, 2 or 3, the idea named in the request', async () => {
+    await openRoom(hostState({ ideas: IDEAS }));
+    const q = queue();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask Claude for mockups of this' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask Claude for mockups' });
+    expect(within(dialog).getByLabelText('Mock up')).toHaveValue(IDEAS[0].Text);
+    fireEvent.click(within(dialog).getByRole('radio', { name: '2' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: W.sendToClaudeNow }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/points/requests`));
+    expect(lastPost().body).toEqual({ kind: 'mockups', subject: IDEAS[0].Text, count: 2, ideaId: '0-i0' });
+  });
+
+  test('E: an older plugin is told to update instead of sending', async () => {
+    await openRoom(hostState({ ideas: IDEAS, st: { AgentPlugin: '1.26.1', AgentSeenAt: ago(5) } }));
+    const q = queue();
+    fireEvent.click(within(q).getAllByRole('button', { name: 'Ask the room' })[0]);
+    fireEvent.click(within(q).getByRole('button', { name: 'Ask Claude for mockups of this' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask Claude for mockups' });
+    expect(within(dialog).getByRole('status').textContent).toMatch('Update the plugin to use this: it needs plugin 1.27.0');
+    expect(within(dialog).getByRole('button', { name: W.sendToClaudeNow })).toBeDisabled();
+  });
+
+  test('E: mockups you asked for come back marked so, with Ask for new mockups and what to change', async () => {
+    const mine = { AskId: '006', Kind: 'choice', Prompt: 'Which documentation?', Status: 'proposed', Source: 'agent', FromRequest: 'rq-1', AskForMockups: true,
+      Options: [{ label: 'A', title: 'FAQ under sign-up' }, { label: 'B', title: 'First-shift guide' }] };
+    await openRoom(hostState({ asks: [mine] }));
+    const card = screen.getByRole('region', { name: 'Proposed ask 6' });
+    expect(card.textContent).toMatch('Mockups you asked for');
+    fireEvent.click(within(card).getByRole('button', { name: 'Ask for new mockups' }));
+    fireEvent.change(within(card).getByLabelText('What should be different (optional)'), { target: { value: 'more playful' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Ask for new mockups' }));
+    await waitFor(() => expect(lastPost().body).toEqual({ action: 'remock', change: 'more playful' }));
+    expect(path(lastPost())).toBe(`games/${GAME}/build/asks/006`);
   });
 
   test('Save for later posts later', async () => {

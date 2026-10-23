@@ -9,6 +9,66 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 23 Oct 2026 (late evening): review #46 and #47 fixes, before prod
+
+**Test:** merge of dev `788546cf0` (and the commit naming it). This push also carries the entry below it (Connect Claude Code confirms the connection; the side boxes scroll on). Reviews: [geseib/engagements#46](https://github.com/geseib/engagements/issues/46), [geseib/engagements#47](https://github.com/geseib/engagements/issues/47).
+
+### New
+
+- **Ask Claude for mockups or a walkthrough** (another session, Build Room ideas flow E, plugin **1.27.0**): from Points' *Mockups…* or an idea's *Ask the room* menu, Claude draws two or three distinct quick screens as one Choose ask that comes back to the host first (*Mockups you asked for*; *Ask for new mockups* sets them aside and asks for different ones), or steps the room through the demo. An older plugin says to update.
+
+### Fixed
+
+- **Workie's check caught too little** (review #46, on a build that had the check). It now also catches:
+  - **a number with the wrong unit**: "two branches" in the answers no longer lets "two Friday runs" or "a two-week pilot" through; "4pm Friday" still passes;
+  - **an owner nobody named**: "Whoever runs the weekly release" when no answer mentions a release, and any owner copied from the prompt's own examples; "route lead", "driver", "growth sponsors" pass;
+  - **claims about what the organisation already does**: "the current habit is to…" when the answers only proposed it;
+  - **next steps handed out as tasks**: "Route lead: count…" is rewritten to start **Suggested**, even under the old prompts.
+  Every prompt now also says never to describe current practice, or name an owner, the answers did not give. The repo's prompts lose their example owners, and the survey and poll defaults ask for **Suggested** steps too.
+- **Going back to a round showed no lesson** (review #47). The end screen's "Something to add?" lists each round with its title ("Lesson 2 · Form Follows Function"; "Round 3" when it has none), and an opened round shows its lesson and "Your turn" above its responses. A comment started in one round stays with that round when you switch.
+
+### What to look at
+
+1. **Apply the prompt updates on test first** (they have never been applied there; review #46 ran on v1): Admin › Prompts shows "*N* prompts have a newer version in the repo". **Review** *Workie - The Transfer Reader* and **Save as version 2**; do the same for the others marked.
+2. **Run review #46's round 1** with the same four answers (Lessons from Different Schools, Threshold): next steps start **Suggested**, with no "two Friday runs", "two-week", "weekly release" owner or "current habit". If a read still has one, the console and the phone show the host note.
+3. **Repeat with the prompt left on v1** (or before applying it, on another set): next steps still come out as suggestions after the check's rewrite.
+4. **Build Room** (update the plugin to 1.27.0 first): from an idea's *Ask the room* menu, ask Claude for mockups; the Choose ask comes back to you marked *Mockups you asked for* before the room sees it.
+5. **As a player, at the end:** open "Something to add?": each round shows its title; open one: its lesson and "Your turn" show above the responses; start a comment, switch rounds, come back: the comment is still there and posts to its own round.
+
+### Known gaps
+
+- The check can still flag a real count stated in other words (for example "two separate policies" when the answers never counted them); the rewrite usually just rewords it.
+- Drafts in "Something to add?" live in the page's memory; a reload loses them.
+- The prompt updates reach prod only when an admin applies them there after the prod deploy.
+
+## 23 Oct 2026 (evening): Connect Claude Code says when you are connected, and the side boxes scroll on
+
+**Test:** merge of dev `323a6588`.
+
+### New
+
+- **Step 3 of Connect Claude Code confirms the connection** (owner, 23 Oct: "this screen doesnt turn step 3 green and indicate hey, you are done and connected"). After you mint a key, step 3 says *Waiting for Claude Code to call in…*; once Claude Code calls in with that key, the step turns green, reads **Connected**, gives the time and folder, says whether Claude has started, and **Done** becomes the main button. An older key calling in does not count.
+- **The "already in Claude Code" line moved to step 3.** Step 2 is now only the folder, the key and the start command; step 3 holds both ways to start: paste the start command into a terminal, or type the kickoff line into a Claude Code already open in that folder.
+- **Nothing after 45 seconds?** Step 3 says where to look: the first time in a folder, Claude Code may be asking in the terminal to trust it or to allow Engage.
+
+### Fixed
+
+- Step 3 never showed as done, even while the phones already said Claude Code was connected.
+- **Scrolling the right-hand boxes** (Waiting for you, Decided, Timeline, History…) on the Build Room console and Host screen: the wheel over an open box scrolled only that box and stopped at its end, so moving the column needed the pointer on the gap between boxes. Now a box scrolls to its end and the wheel carries on to the column.
+- The 23 Oct entry's known gap about the starter sets: they are installed on dev and test.
+
+### What to look at
+
+1. On a Build Room with no Claude yet, open **Connect Claude Code**, **Mint a key and copy the command**. Step 2 turns green; step 3 shows the kickoff line for an open Claude Code and *Waiting for Claude Code to call in…*.
+2. Paste the start command into a terminal. When Claude Code connects, step 3 turns green with **Connected at …, in ~/build-room/…**, and **Done** is highlighted.
+3. Leave it 45 seconds without pasting: the hint about the terminal's trust and allow questions appears.
+
+### Known gaps
+
+- If you close the window before Claude calls in, reopening it shows the "Connected now" view instead, which says the same thing in its own words.
+
+---
+
 ## 23 Oct 2026 (later): AI question sets arrive with a topic, and an idea's doors all open
 
 **Test:** merge of dev `0fa2edee2` (and the commit naming it).
@@ -58,7 +118,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### Known gaps
 
-- **The starter sets are installed by hand per tier** (`scripts/install-build-room-kind-sets.sh engagetest --apply`); until that runs on test, step 2 shows only the sets already there.
+- **The starter sets are installed by hand per tier** (`scripts/install-build-room-kind-sets.sh <table> --apply`): done on dev and test on 23 Oct; prod will need it when this ships there.
 - The reminder shows when you next open a page with the bell (the start screen, the console, the two-screen console, the phone remote); there is no email, by design.
 - A set that arrived before this change has no entry until `scripts/backfill-claude-set-reminders.js` is run on the tier (dry run by default; `--apply` writes; a team room's set needs the tier's tenant key). Only dev and test can have such sets.
 

@@ -171,7 +171,7 @@ export function buildApi(gameId) {
     saveSettings: (body) => post('settings', body),
     // ── Talking points (docs/design/build-room-talking-points; build-room.js) ──
     /** `{kind:'research'|'ideas', subject}` → `{request}`: Claude (or a helper) starts when it next listens. */
-    pointRequest: (kind, subject) => post('points/requests', { kind, subject }),
+    pointRequest: (kind, subject, extra = {}) => post('points/requests', { kind, subject, ...extra }),
     /** Cancel a request that is stuck. → `{request}` */
     cancelPointRequest: (requestId) => post(`points/requests/${seg(requestId)}`, { action: 'cancel' }),
     /** A question set Claude wrote (question-sets plan step 7): `saved` or `remove`. */

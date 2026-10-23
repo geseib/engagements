@@ -25,6 +25,62 @@ import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
 
 const ORDER = ['ask', 'collect', 'settle', 'send'];
 
+/**
+ * YOUR VOTE (OPTIONAL) (ideas flow C; docs/design/build-room-ideas I5; owner,
+ * 18 Oct: the host "may vote too (never required)"). On every room vote while
+ * it is open: a pick, a rating, or an Ideas vote once the room votes. One
+ * person's worth; the room's screens say only that the count includes the host.
+ */
+export function MyVote({ ask, busy, run, api }) {
+  const mine = ask.myVote || null;
+  const suggest = ask.kind === 'suggest';
+  const open = suggest ? ask.status === 'voting' : ask.status === 'live' && ['choice', 'rating'].includes(ask.kind);
+  const had = mine ? (suggest ? mine.respIds || [] : mine.choice || []) : [];
+  const [picked, setPicked] = useState(had);
+  const key = had.join(',');
+  useEffect(() => { setPicked(key ? key.split(',') : []); }, [key]);
+  if (!open) return null;
+  const max = ask.maxPicks || (suggest ? 3 : 1);
+  const cast = (body) => run(() => api.askAction(ask.askId, { action: 'my-vote', ...body }));
+  const toggle = (id) => setPicked((l) => (l.includes(id) ? l.filter((x) => x !== id) : max === 1 ? [id] : l.length >= max ? l : [...l, id]));
+  const ballot = suggest
+    ? (ask.responses || []).filter((r) => !r.hidden).map((r) => ({ id: r.respId, label: r.text }))
+    : (ask.options || []).map((o) => ({ id: o.label, label: `${o.label} \u00b7 ${o.title}` }));
+  const changed = picked.join(',') !== key;
+  return (
+    <section className="brm-myvote" aria-label={W.myVote}>
+      <div className="brm-row brm-gap">
+        <b className="brm-lbl">{W.myVote}</b>
+        {mine && <span className="brm-hint brm-push" role="status">{W.myVoteIn}</span>}
+      </div>
+      {ask.kind === 'rating' ? (
+        <div className="brm-seg" role="group" aria-label={W.myVote}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} type="button" className={`brm-segbtn${mine && mine.rating === n ? ' is-on' : ''}`} aria-pressed={Boolean(mine && mine.rating === n)} disabled={busy} onClick={() => cast({ rating: n })}>{n}</button>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="brm-myvote-opts">
+            {ballot.map((b) => (
+              <label key={b.id} className="brm-check">
+                <input type={max === 1 ? 'radio' : 'checkbox'} name={`brm-myvote-${ask.askId}`} checked={picked.includes(b.id)} disabled={busy || (!picked.includes(b.id) && max > 1 && picked.length >= max)} onChange={() => toggle(b.id)} />
+                <span>{b.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="brm-row brm-gap">
+            <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !picked.length || !changed} onClick={() => cast(suggest ? { respIds: picked } : { choice: picked })}>{mine ? W.myVoteChange : W.myVoteCast}</button>
+            {mine && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</button>}
+          </div>
+        </>
+      )}
+      {ask.kind === 'rating' && mine && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</button>}
+      <p className="brm-hint">{W.myVoteHint}</p>
+    </section>
+  );
+}
+
 /** What the room is doing while it answers, and what it did once it has. */
 function collectTitle(ask, done) {
   if (ask.status === 'voting') return done ? 'The room voted' : 'The room is voting';
@@ -187,6 +243,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     collectBody = (
       <>
         {board}
+        {host && <MyVote ask={ask} busy={busy} run={run} api={api} />}
         {then(['3 Settle', '4 Send to Claude'])}
         {host && (
           <ActionRow space={!said} hint={said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>

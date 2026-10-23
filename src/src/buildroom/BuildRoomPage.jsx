@@ -1041,7 +1041,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const pointTickedNow = pointTicked.filter((id) => pointsList.some((p) => p.id === id && POINT_OPEN.includes(p.status))).length;
   const whatsNextShown = !onCrew && !current && !(room.opening && room.opening.phase === 'opening') && nowFlags(room).whatsNext;
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
-  const sendPointRequest = (kind, subject) => run(() => api.pointRequest(kind, subject));
+  const sendPointRequest = (kind, subject, extra) => run(() => api.pointRequest(kind, subject, extra));
   // Put N to a vote opens the window (T5); its Open voting makes the ask.
   const putPointsToVote = (ids) => { setPointVote(ids); return undefined; };
   const openPointsVote = async (body) => {
@@ -1197,7 +1197,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
         onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
         pointTicked={pointTicked} setPointTicked={setPointTicked} askOpen={Boolean(current)} openPoints={pointsTab}
-        onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+        onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
         withLater={false}
       />
     );
@@ -1207,7 +1207,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         laterTicked={laterTicked} setLaterTicked={setLaterTicked} onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
         onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
         pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
-        onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+        onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
       />
     );
     const waitingTop = (
@@ -1716,7 +1716,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               onVoteLater={(items) => setVoteIdeas(voteEntries(room, items))}
               onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
               pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
-              onRequest={(kind) => setDialog({ points: kind })} onVotePoints={putPointsToVote}
+              onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
             />
           )}
         </section>
@@ -1818,7 +1818,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
       {host && dialog && dialog.points && (
         <BuildPointRequest
-          kind={dialog.points} initial={defaultSubject(room)} connected={Boolean(room.agent && room.agent.connected)} busy={busy}
+          kind={dialog.points} initial={dialog.subject !== undefined ? dialog.subject : ['mockups', 'walkthrough'].includes(dialog.points) ? '' : defaultSubject(room)}
+          ideaId={dialog.ideaId || ''} plugin={(room.plugin && room.plugin.running) || ''}
+          connected={Boolean(room.agent && room.agent.connected)} busy={busy}
           onSend={sendPointRequest} onClose={() => setDialog(null)}
         />
       )}
@@ -2512,6 +2514,10 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   });
   const discard = () => run(() => api.askAction(ask.askId, { action: 'discard' }));
   const lineUp = (action) => run(() => api.askAction(ask.askId, { action }));
+  // ASK FOR NEW MOCKUPS (ideas flow E, I7): only on a set the host asked Claude to draw.
+  const [remocking, setRemocking] = useState(false);
+  const [change, setChange] = useState('');
+  const remock = () => run(() => api.askAction(ask.askId, { action: 'remock', change: change.trim() }));
   // THE VOTE THAT WAITS FOR MOCKUPS (C3b): hidden until the pictures are in,
   // then Ready; it opens only when the host opens it, or lined up next.
   const mockups = ask.mockups || null;
@@ -2548,7 +2554,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
   return (
     <section className="brm-panel brm-proposed" aria-label={`Proposed ask ${askNumber(ask.askId)}`} data-alert-ask={ask.askId} tabIndex={-1}>
       <div className="brm-row brm-gap">
-        <span className="brm-chip brm-chip--amber">{ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
+        <span className="brm-chip brm-chip--amber">{ask.fromRequest ? W.mockupsForYou : ask.source === 'agent' ? 'Proposed by Claude' : ask.fromIdeas ? `Your vote, from ${ask.fromIdeas.length} ideas` : 'Draft'} · not shown to the room</span>
         {mockups && (mockups.ready
           ? <span className="brm-chip brm-chip--live" data-testid="brm-mockups-ready">Mockups ready</span>
           : <span className="brm-chip" data-testid="brm-mockups-wait">Claude is making mockups · {mockups.have} of {mockups.total}</span>)}
@@ -2661,7 +2667,17 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
           {blocking && (ask.next
             ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title={W.tipWaitsHere} onClick={() => lineUp('notNext')}>Not next</button>
             : <button type="button" className="brm-btn" disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</button>)}
+          {ask.fromRequest && !remocking && (
+            <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setRemocking(true)}>{W.newMockups}</button>
+          )}
           <button type="button" className={`brm-btn${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</button>
+        </div>
+      )}
+      {remocking && !ended && (
+        <div className="brm-row brm-gap brm-remock">
+          <input className="brm-input brm-input--sm" aria-label={W.newMockupsChange} placeholder={W.newMockupsChange} value={change} maxLength={120} onChange={(e) => setChange(e.target.value)} />
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={remock}>{W.newMockups}</button>
+          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setRemocking(false)}>Cancel</button>
         </div>
       )}
       {answering && !ended && (
@@ -3380,7 +3396,9 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
           canSuggest={canSuggest}
           onVote={() => toVote(tickedLive.includes(x.idea.ideaId) ? tickedLive : [...tickedLive, x.idea.ideaId])}
           voteCount={tickedLive.includes(x.idea.ideaId) ? tickedLive.length : tickedLive.length + 1}
-          onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(idea.text))}
+          onAskIdeas={(idea) => onAskRoom(W.askIdeasPrompt(latestWords(idea)))}
+          onMockups={(idea) => onRequest('mockups', { subject: latestWords(idea), ideaId: idea.ideaId })}
+          run={run} api={api}
         />
       )))}
 
@@ -3404,6 +3422,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
               {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
               )}
+              <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />
             </div>
           ))}
         </details>
@@ -3422,7 +3441,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
 }
 
 /** One idea in the queue (C1): tick it, or send it where it belongs. */
-function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {} }) {
+function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {}, onMockups = null, run, api }) {
   return (
     <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
       <div className="brm-row brm-gap">
@@ -3452,6 +3471,8 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
                 )}
                 {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
                 <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
+                {/* ASK CLAUDE (ideas flow E, I7): 2 or 3 ways to do it, back to the host first. */}
+                {onMockups && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.mockupsTip} onClick={() => { close(); onMockups(idea); }}>{W.mockupsOfThis}</button>}
               </>
             )}
           </SessionMenu>
@@ -3462,7 +3483,79 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
         </div>
       )}
+      {run && api && <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />}
     </div>
+  );
+}
+
+/** The sender's newest words on an idea: their last private answer, else the idea (ideas flow B, I2-I3). */
+export function latestWords(idea) {
+  const answers = ((idea && idea.thread) || []).filter((m) => m.by === 'player');
+  return answers.length ? answers[answers.length - 1].text : (idea && idea.text) || '';
+}
+
+/**
+ * REPLY TO JOE (ideas flow B; docs/design/build-room-ideas I2; owner, 18 Oct:
+ * "private with Joe able to answer"). Only the host and the person who sent
+ * the idea see this: not the room, not the Stage, not Claude. Joe answers from
+ * his phone once the host has written. An idea the host typed, or one made
+ * from a vote's option, has no one to reply to, so no button.
+ */
+function IdeaThread({ idea, busy, ended, run, api }) {
+  const thread = idea.thread || [];
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  if (idea.source === 'host' || !idea.playerName) return null;
+  const name = idea.playerName;
+  const answered = thread.length > 0 && thread[thread.length - 1].by === 'player';
+  const full = thread.length >= THREAD_MAX;
+  const send = async (text) => {
+    const words = text.trim();
+    if (!words) return;
+    const out = await run(() => api.ideaAction(idea.ideaId, 'reply', { text: words }));
+    if (out !== undefined) setDraft('');
+  };
+  if (!open) {
+    if (ended && !thread.length) return null;
+    return (
+      <div className="brm-row brm-gap brm-thread-door">
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen(true)}>
+          {thread.length ? W.threadOpen(name, thread.length) : W.replyTo(name)}
+        </button>
+        {answered && <span className="brm-thread-new" data-testid="brm-thread-new">{W.threadAnswered(name)}</span>}
+      </div>
+    );
+  }
+  return (
+    <section className="brm-thread" aria-label={W.threadLabel(name)}>
+      <div className="brm-row brm-gap">
+        <b className="brm-lbl">{W.threadOnly(name)}</b>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setOpen(false)}>{W.threadHide}</button>
+      </div>
+      <ol className="brm-thread-list">
+        <li className="brm-thread-msg brm-thread-msg--player"><span className="brm-who">{name} · {clockTime(idea.createdAt)}</span> {idea.text}</li>
+        {thread.map((m, i) => (
+          <li key={`${m.at}-${i}`} className={`brm-thread-msg brm-thread-msg--${m.by}`}>
+            <span className="brm-who">{m.by === 'host' ? 'You' : name} · {clockTime(m.at)}</span> {m.text}
+          </li>
+        ))}
+      </ol>
+      {!ended && !full && (
+        <>
+          <textarea
+            className="brm-input brm-thread-input" rows={2} maxLength={280} value={draft}
+            aria-label={W.replyTo(name)} placeholder={`${W.replyTo(name)}\u2026`}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(draft); } }}
+          />
+          <div className="brm-row brm-gap">
+            {!thread.length && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => send(W.gotItThanks)}>{W.gotItThanks}</button>}
+            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy || !draft.trim()} onClick={() => send(draft)}>{W.threadSend}</button>
+          </div>
+        </>
+      )}
+      {full && <p className="brm-hint">{W.threadFull}</p>}
+    </section>
   );
 }
 
@@ -3586,6 +3679,8 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
 }
 
 /** "Connected now" (W2): the plugin checked in within this long. It reports every 4-15 s while connected. */
+// The server keeps at most this many messages on one idea's private thread (build-store IDEA_THREAD_MAX).
+const THREAD_MAX = 20;
 export const CONNECTED_NOW_MS = 30 * 1000;
 
 /**
@@ -3724,7 +3819,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     setConfirmMint(false);
     const out = await run(() => api.mintKey('Claude Code'));
     if (!out || !out.key) return;
-    setMinted({ key: out.key, keyId: out.keyId });
+    setMinted({ key: out.key, keyId: out.keyId, at: Date.now() });
     const ok = await copyText(startCommand(folderName, out.key));
     setCopied(ok ? 'Copied. Paste it into a terminal.' : 'Copy it with the button below.');
   };
@@ -3735,6 +3830,12 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     setCopied('');
   };
   const step = (done, wait) => (done ? 'is-done' : wait ? 'is-wait' : '');
+  // STEP 3 IS DONE when Claude Code has called in with the key minted here:
+  // the room's live key is that key and it has been used. Without this the
+  // step stayed open after the phones already said Claude was connected.
+  const usedMinted = Boolean(minted && liveKey && liveKey.keyId === minted.keyId && liveKey.lastUsedAt);
+  const kickedOff = usedMinted && Boolean(agent.kickedOffAt) && Date.parse(agent.kickedOffAt) >= minted.at - 60 * 1000;
+  const waitingLong = Boolean(minted) && !usedMinted && now - minted.at > 45 * 1000;
   const mintLabel = liveKey ? 'Mint a new key and copy the command' : 'Mint a key and copy the command';
   const lastAt = agent.lastSeenAt ? clockTime(agent.lastSeenAt) : '';
   const showAllRow = (
@@ -3747,7 +3848,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
   // W1 and W5: the whole path, three steps (kickoff takes the key, so there is no fourth).
   const allSteps = (
     <ol className="brm-steps brm-steps--connect">
-      <li className={ver === 'old' ? 'is-old' : step(connected && which !== 'all', false)} data-step="install">
+      <li className={ver === 'old' ? 'is-old' : step(usedMinted || (connected && which !== 'all'), false)} data-step="install">
         <span className="brm-n">1</span>
         <div className="brm-step-body">
           <span className="brm-step-title">{ver === 'old' ? W.pluginUpdateTitle : W.pluginCheckTitle}</span>
@@ -3783,9 +3884,6 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
                 <CopyButton text={startLine} label="Copy again" />
                 <span className="brm-hint" role="status">{copied} Key …{minted.key.slice(-4)}, minted just now.</span>
               </div>
-              <p className="brm-hint">{W.alreadyOpenKick}</p>
-              <pre className="brm-cmd" data-testid="brm-connect">{kickWithKey}</pre>
-              <div className="brm-row brm-gap"><CopyButton text={kickWithKey} label="Copy" /></div>
             </>
           ) : liveKey ? (
             <p className="brm-hint brm-block">
@@ -3810,11 +3908,33 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
         </div>
       </li>
 
-      <li className={step(false, Boolean(minted))}>
+      <li className={step(usedMinted, Boolean(minted) && !usedMinted)} data-step="started">
         <span className="brm-n">3</span>
         <div className="brm-step-body">
-          <span className="brm-step-title">Paste it into a terminal</span>
-          <span className="brm-hint">{W.startOpens}</span>
+          {usedMinted ? (
+            <>
+              <span className="brm-step-title">{W.connectedTitle}</span>
+              <p className="brm-hint" role="status" data-testid="brm-connected">
+                {W.connectedAt(clockTime(liveKey.lastUsedAt), reported)} {kickedOff ? W.connectedKicked : W.connectedKicking}
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="brm-step-title">Paste it into a terminal</span>
+              <span className="brm-hint">{W.startOpens}</span>
+              {minted && (
+                <>
+                  <p className="brm-hint">{W.alreadyOpenKick}</p>
+                  <pre className="brm-cmd" data-testid="brm-connect">{kickWithKey}</pre>
+                  <div className="brm-row brm-gap"><CopyButton text={kickWithKey} label="Copy" /></div>
+                  <p className="brm-hint brm-connwait" data-testid="brm-connect-waiting">
+                    <span className="brm-connback-dot" aria-hidden="true" /> {W.connectWaiting}
+                  </p>
+                  {waitingLong && <p className="brm-hint" data-testid="brm-connect-slow">{W.connectSlow}</p>}
+                </>
+              )}
+            </>
+          )}
         </div>
       </li>
 
@@ -3915,7 +4035,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
       )}
 
       <p className="brm-hint">Game {gameId}.</p>
-      <div className="brm-row"><button type="button" className="brm-btn brm-push" onClick={onClose}>Done</button></div>
+      <div className="brm-row"><button type="button" className={`brm-btn brm-push${usedMinted ? ' brm-btn--primary' : ''}`} onClick={onClose}>Done</button></div>
     </Modal>
   );
 }

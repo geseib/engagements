@@ -315,6 +315,7 @@ const running = {
           items: [
             'An Ideas vote is an approval vote: each person picks up to three, and may pick their own.',
             'To vote on ideas sent to you, tick them in Waiting for you or Later and put them to a vote (two to six; you set the picks per person). From one idea, **Put to a vote with other ideas** opens the vote and lets you add others from the queue there.',
+            'Your vote (optional) sits under an open Choose or Rate, and under an Ideas vote once the room votes. It counts as one person, and you can change it or take it back until the results show. The room\'s screens say only that the count includes the host, never which way; skip it and the round runs the same.',
             'A tie says so: **Spin the wheel**, **Vote again** between the tied options, or click one.',
             '**Spin the wheel** is offered wherever the room could vote, and closes an open ask first. Someone in the room is picked to spin it on their phone; you can spin too. **Someone else spins** passes the turn, and **Spin again** spins once more.',
             'Every screen sees the wheel land on the same option, which then leads. You can still pick another.',
@@ -371,7 +372,24 @@ const running = {
           items: [
             'Under **Ask the room**: **Put to a vote with other ideas**, **Add to the open Ideas ask** while one is open, or else **Ask the room for ideas about this**, which opens a new Ideas ask with the idea in its question for you to edit.',
             'The menu\'s last choice fills the Stage with the idea, without a name, for a short while.',
+            'Reply to the person who sent it (Reply to Joe): only you and they see it, not the room and not Claude. **Got it, thanks** is one press. Their phone says The host replied, and they can answer; the card then says Joe answered. Ask the room for ideas about this uses their latest answer. An answer to an idea you acknowledged puts it back on your list.',
             '**Save for later**, **Acknowledge** and **Dismiss** take it off the list. Each fate, and **Restore**, adds a line to your Timeline saying whose idea it was and what became of it. Only you see those lines; Claude and the room do not.',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'ask-claude',
+      title: 'Ask Claude for mockups or a walkthrough',
+      icon: 'Image',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            '**Mockups…** in Points, or Ask Claude for mockups of this under an idea\'s Ask the room: Claude draws two or three different ways to do it. Each is a quick screen, not the finished thing.',
+            'They come back to you first, in Waiting for you, marked Mockups you asked for; each picture appears as Claude makes it. The room sees nothing until you open them as a vote. **Ask for new mockups** sets them aside and asks again, with what should be different if you say.',
+            '**Walkthrough** asks Claude to step the room through the demo, one screen at a time, three to six steps.',
+            'Both need plugin 1.27.0 or later; with an older one the window says to update it first.',
           ],
         },
       ],

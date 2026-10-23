@@ -254,6 +254,10 @@
 .brm .brm-connback.is-now { background: var(--brm-tint-green); border-color: var(--brm-line-green); }
 .brm .brm-connback-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-text); margin-top: 6px; flex: none; }
 .brm .brm-connback.is-now .brm-connback-dot { background: var(--brm-success-text); }
+.brm .brm-connwait { display: flex; align-items: center; gap: 8px; }
+.brm .brm-connwait .brm-connback-dot { margin-top: 0; animation: brm-connwait 1.6s ease-in-out infinite; }
+@keyframes brm-connwait { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .brm .brm-connwait .brm-connback-dot { animation: none; } }
 .brm .brm-connback > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .brm .brm-connback span:not(.brm-connback-dot) { color: var(--muted); font-size: var(--brm-t-label); overflow-wrap: anywhere; }
 .brm .brm-otherlaptop { margin: 0; }
@@ -890,7 +894,11 @@
   .brm.brm-room--host .brm-stack { flex: 1; }
   .brm.brm-room--host .brm-stackitem { flex: none; }
   .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
-  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  /* A fold's body scrolls, and at its end the wheel carries on to the column
+     (scroll chaining, the browser's default): `contain` here meant the column
+     only moved with the pointer on the gap between folds (owner, 23 Oct).
+     The column itself still contains, so the page behind never moves. */
+  .brm.brm-room--host .brm-stackitem.is-open > .brm-stackbody { flex: 1; min-height: 0; overflow-y: auto; }
 }
 /* The asks table in the narrow right column: the kind column goes (the row's
    question says it), and the number, status and action get fixed widths. */
@@ -932,6 +940,19 @@
 .brm .brm-wallcomment-t { font-family: var(--font-display); font-weight: 800; font-size: var(--brm-st-q); line-height: 1.2; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .brm .brm-wallcomment { animation: none; } }
 .brm .brm-onwall { margin: 0; }
+
+/* YOUR VOTE (OPTIONAL) (ideas flow C, I5). */
+.brm .brm-myvote { display: grid; gap: 8px; margin: 10px 0; padding: 10px 12px; border: 1px dashed var(--brm-rule); border-radius: 10px; }
+.brm .brm-myvote-opts { display: grid; gap: 4px; }
+
+/* REPLY TO JOE (ideas flow B, I2): private, the host and the sender only. */
+.brm .brm-thread-door { margin-top: 6px; }
+.brm .brm-thread-new { font-size: var(--brm-st-meta, 0.8rem); font-weight: 700; color: var(--text); }
+.brm .brm-thread { display: grid; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--brm-rule); border-radius: 10px; background: var(--brm-tint-blue); }
+.brm .brm-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.brm .brm-thread-msg { overflow-wrap: anywhere; }
+.brm .brm-thread-msg--host { padding-left: 14px; }
+.brm .brm-thread-input { width: 100%; resize: vertical; }
 
 /* "Choose this instead" at results; the one going to Claude says so. */
 .brm .brm-pick { justify-self: start; align-self: start; margin-top: 4px; }

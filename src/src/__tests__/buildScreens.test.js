@@ -116,6 +116,16 @@ describe('the Stage screen, as the regular stage draws it', () => {
       .toMatchObject({ phase: 'RESULTS', meter: { count: 15, of: 18 }, primary: { action: 'reopen', label: 'Reopen' } });
   });
 
+  test('C: the host\'s own vote is one more, and the line says the count includes the host', () => {
+    expect(stageModel(room(), { askId: '003', kind: 'choice', status: 'live', answerCount: 6, hostVoted: true }))
+      .toMatchObject({ meter: { count: 6, of: 19 }, status: '6 of 19 answered \u00b7 includes the host' });
+    expect(stageModel(room(), { askId: '004', kind: 'suggest', status: 'voting', voteCount: 7, hostVoted: true }))
+      .toMatchObject({ meter: { of: 19 }, status: '7 of 19 voted \u00b7 includes the host' });
+    expect(stageModel(room(), { askId: '003', kind: 'rating', status: 'results', results: { total: 15 }, hostVoted: true }).meter.of).toBe(19);
+    expect(askPathSummaries({ askId: '003', kind: 'choice', status: 'live', results: { total: 4 }, hostVoted: true }, { playerCount: 12 }).collect)
+      .toBe('4 of 13 voted \u00b7 includes the host');
+  });
+
   test('between asks: no chip, who is here, and what Claude is doing, in room-safe words', () => {
     expect(stageModel(room(), null)).toMatchObject({ phase: null, meter: { heading: 'In the room', count: 18 }, status: 'Send an idea any time.', primary: null });
     expect(stageModel(room({ agent: {} }), null).status).toBe('Send an idea any time.');
