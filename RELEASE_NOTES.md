@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026: The opening follows the kind of build, starter sets per kind, and a reminder before Claude's unsaved question set goes
 
-**Test:** merge of dev `DEVCOMMIT`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45); plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (steps 5 and 6, another session); notes `docs/design/build-room-host-redesign/starter-sets-by-kind.md`.
+**Test:** merge of dev `a66a7b49`. Issue: [geseib/engagements#45](https://github.com/geseib/engagements/issues/45); plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md` (steps 5 and 6, another session); notes `docs/design/build-room-host-redesign/starter-sets-by-kind.md`.
 
 ### New
 
