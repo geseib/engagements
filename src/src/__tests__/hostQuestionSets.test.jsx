@@ -32,6 +32,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import GameSetupDialog from '../components/GameSetupDialog';
 import { authFetch } from '../auth/authFetch';
+import { listedSets } from '../testUtils/setChooser';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -976,8 +977,7 @@ describe('the entry point is the create-engagement screen', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
-      const picker = document.getElementById('gsd-set');
-      expect(within(picker).getByText(/Fresh Set/)).toBeTruthy();
+      expect(listedSets().some((name) => /Fresh Set/.test(name))).toBe(true);
     });
   });
 
@@ -1000,8 +1000,7 @@ describe('the entry point is the create-engagement screen', () => {
     await screen.findByRole('dialog', { name: /your question sets/i });
     await waitFor(() => expect(screen.getByText('Ivy Retro')).toBeTruthy());
 
-    const picker = document.getElementById('gsd-set');
-    expect(within(picker).queryByText(/Retired Set/)).toBeNull();
+    expect(listedSets().some((name) => /Retired Set/.test(name))).toBe(false);
   });
 });
 

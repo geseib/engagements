@@ -88,7 +88,7 @@ import { createGameBody, updateGameBody } from './config/createGame';
 import goalRules from '../../lambda-functions/websocket/session-goal';
 import { goalOnStage } from './config/goalStage';
 import { fetchComments, featureComment, postRoomNote } from './utils/commentsClient';
-import { DEFAULT_SCOPE } from './utils/setRef';
+import { DEFAULT_SCOPE, setRefKey } from './utils/setRef';
 import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
 import {
   hostControlsFor, notesReadyFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
@@ -145,6 +145,8 @@ import {
   mergeSessions, eventJoinPath, eventAgendaPath, BUILD_KIND,
 } from './config/engagementKinds';
 import { readEventsAccess } from './utils/eventsAccess';
+import useActiveOrgs from './hooks/useActiveOrgs';
+import { recentUses } from './config/setFinder';
 import EventDetailsDialog from './components/EventDetailsDialog';
 import {
   hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
@@ -1006,6 +1008,32 @@ function GameHostPage() {
   
   // New Game Dialog
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
+  /*
+    THE SET CHOOSER'S TWO NEIGHBOURS (issue #41): the sets this host used
+    lately, read quietly from the session list when the dialog opens (no
+    alert on a failed read, unlike fetchGamesList: the chooser simply has no
+    "Used by you lately" then), and the team the sets are for.
+  */
+  const [recentSetUses, setRecentSetUses] = useState(() => new Map());
+  const { orgs: myOrgs, active: activeOrg, choose: chooseOrg } = useActiveOrgs();
+  useEffect(() => {
+    if (!showNewGameDialog) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const res = await authFetch(`${API_BASE}games`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        if (live) setRecentSetUses(recentUses((data && data.games) || [], setRefKey));
+      } catch (e) { /* no recent row, nothing else */ }
+    })();
+    return () => { live = false; };
+  }, [showNewGameDialog]);
+  const chooserTeam = activeOrg && activeOrg.type !== 'personal' ? {
+    name: activeOrg.name,
+    others: (myOrgs || []).filter((o) => o.orgId !== activeOrg.orgId && o.type !== 'personal').map((o) => ({ orgId: o.orgId, name: o.name })),
+    onSwitch: chooseOrg,
+  } : null;
   // A create in flight — the ref guards re-entry, the state shows it on the button.
   const creatingSessionRef = useRef(false);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -6850,6 +6878,8 @@ Focus on actionable business strategy insights.`;
         eventTitle={eventTitle}
         onEventTitleChange={setEventTitle}
         questionSets={questionSets}
+        recentSetUses={recentSetUses}
+        team={chooserTeam}
         personas={personas}
         categories={categories}
         activeCategoryIds={activeCategoryIds}

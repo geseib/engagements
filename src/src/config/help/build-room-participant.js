@@ -35,7 +35,7 @@ const playerBuildRoom = {
           items: [
             { title: 'Now', text: 'What the room is doing: a question to answer, a vote, the results, or, between questions, the latest decision and what Claude has been doing.' },
             { title: 'Ideas', text: 'Your own ideas and what happened to each.' },
-            { title: 'History', text: 'What the room decided and what reached Claude. Your own ideas are marked as yours; no one else\'s name is shown.' },
+            { title: 'History', text: 'What the room decided and what reached Claude. Your own ideas are marked as yours; no one else\'s name is shown. Something the host kept from the room reads Sent to Claude, not shown.' },
           ],
         },
         { t: 'p', text: 'Before the host\'s Claude Code connects, Now says Waiting for Claude Code. You can still send ideas.' },
@@ -110,7 +110,8 @@ const playerBuildRoom = {
         {
           t: 'list',
           items: [
-            { title: 'Results and decisions', text: 'After a question you see what the room chose, then what the host sent to Claude.' },
+            { title: 'Results and decisions', text: 'After a question you see what the room chose.' },
+            { title: 'Sent to Claude', text: 'Once the host sends Claude something, **Sent to Claude** leads Now until the next question: what Claude was told, and the room\'s pick it came from. If the host kept the words for Claude alone, it says only that the host sent Claude a direction.' },
             { title: 'What Claude is doing', text: 'Between questions, Now shows Claude\'s updates and screenshots as the host shares them.' },
             { title: 'A list', text: 'When Claude works through a list, Now shows which item it is on.' },
             { title: 'A preview', text: 'When Claude shows the work, you can answer **Looks good** or **Needs a change** (and say what).' },

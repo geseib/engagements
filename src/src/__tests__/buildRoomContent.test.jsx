@@ -150,8 +150,10 @@ describe("Claude's status on every screen the room sees (owner, 17 Oct 2026)", (
     expect(prompt.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  // Nothing sent since the last ask opened: with something sent, the Sent to Claude card leads (owner, 23 Oct 2026).
+  const quiet = () => ({ ...wall(), sent: null });
   it.each(PROFILES)('%s: on the Stage between asks it IS the lead, drawn once', (profile) => {
-    const { container } = render(<BuildStageScreen room={wall()} now={now} profile={profile} />);
+    const { container } = render(<BuildStageScreen room={quiet()} now={now} profile={profile} />);
     expect(container.querySelector('.brm-stage--idle .brm-q').textContent).toBe('Claude is adding the parking map');
     expect(status(container)).toBeNull();
   });
@@ -164,7 +166,7 @@ describe("Claude's status on every screen the room sees (owner, 17 Oct 2026)", (
     });
     // The codes are a side panel (owner, 18 Oct 2026): between asks the idle
     // Stage stays beside them, and its lead IS Claude's status.
-    const { container } = render(<BuildStageScreen room={wall()} now={now} profile={profile} show={{ codesUp: true }} />);
+    const { container } = render(<BuildStageScreen room={quiet()} now={now} profile={profile} show={{ codesUp: true }} />);
     expect(container.querySelector('[data-testid="stage-join-panel"]')).not.toBeNull();
     expect(container.querySelector('.brm-stage--idle .brm-q').textContent).toBe('Claude is adding the parking map');
     const live = render(<BuildStageScreen room={wall({ ask: 'live' })} now={now} profile={profile} show={{ codesUp: true }} />);

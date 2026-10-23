@@ -93,7 +93,10 @@ import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
 import { BUILD_KIND, EVENT_KIND, kindLabel } from '../config/engagementKinds';
 import pricing from '../../../lambda-functions/game/pricing';
+import SetChooser from './SetChooser';
 import './GameSetupDialog.css';
+
+const EMPTY_USES = new Map();
 
 /*
   EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04). The owner: events
@@ -169,6 +172,12 @@ export default function GameSetupDialog({
      Absent reads as platform — see utils/setRef.js. */
   initialSetScope = '',
   questionSets = [],
+  /** The host's own recent uses of sets (config/setFinder.js recentUses):
+   *  the chooser's "Used by you lately". */
+  recentSetUses = EMPTY_USES,
+  /** The team the sets are for: { name, others: [{ orgId, name }], onSwitch }
+   *  (hooks/useActiveOrgs.js), or null where there is no team to name. */
+  team = null,
   personas = [],
   categories = [],
   activeCategoryIds = new Set(),
@@ -603,46 +612,38 @@ export default function GameSetupDialog({
         {!isOther && (
         <div className="gsd-row">
           <div className="form-group">
-            <label htmlFor="gsd-set">Question set</label>
-            <select
-              id="gsd-set"
+            {/* THE SET CHOOSER (issue #41; docs/design/set-chooser S0-S1b, owner
+                23 Oct 2026): the <select> could not be searched or filtered,
+                and "dozens of sets" was already the common case. The pair key,
+                the refusal of an unreadable set and the pinned set on an edit
+                all carry over (components/SetChooser.jsx). */}
+            <span className="gsd-label" id="gsd-set-label">Question set</span>
+            <SetChooser
+              sets={setsForType}
               value={newGameSetKey}
-              onChange={(e) => chooseSet(e.target.value)}
-              className="dialog-select"
+              onChange={(key) => chooseSet(key)}
+              keyOf={setRefKey}
+              recent={recentSetUses}
+              formatLabel={gameTypeMeta(engagementType).label}
+              teamName={(team && team.name) || ''}
+              otherTeams={(team && team.others) || []}
+              onSwitchTeam={team && team.onSwitch ? team.onSwitch : null}
+              isUnreadable={isUnreadableSet}
+              unreadableLabel={(set) => `${unreadableSetName(set)}: unreadable, cannot be used`}
+              unreadableReason={UNREADABLE_REASON}
               disabled={isEdit}
-            >
-              <option value="">Select a question set...</option>
-              {setsForType.map((set) => (
-                /* KEY AND VALUE ARE THE PAIR. Two libraries can hold the same
-                   slug, which under `key={set.id}` is a duplicate React key and
-                   two <option>s the browser cannot tell apart. */
-                /* AND A SET THE SERVER COULD NOT DECRYPT IS NOT A CHOICE.
-                   `{set.name} (n questions)` on a nulled name renders the line
-                   " (42 questions)" — an option with no subject. Worse, this
-                   control ACTS: picking it pins a session to content nobody can
-                   read, and that surfaces in front of a room. So it is named by
-                   the one field that was never encrypted, told apart from a set
-                   nobody titled, and refused. Still OFFERED, though — the
-                   handler keeps the row deliberately, and a set visible in the
-                   console but missing here is a question with no answer. */
-                <option
-                  key={setRefKey(set)}
-                  value={setRefKey(set)}
-                  disabled={isUnreadableSet(set)}
-                  title={isUnreadableSet(set) ? UNREADABLE_REASON : undefined}
-                >
-                  {isUnreadableSet(set)
-                    ? `${unreadableSetName(set)} — unreadable, cannot be used`
-                    : `${set.name} (${set.totalQuestions} questions)${imageMarkerSuffix(set.hasImages)}`}
-                </option>
-              ))}
-              {/* Editing a session whose set the page's list does not carry —
-                  a retired set, or a list fetched for another format — must
-                  still DISPLAY the pinned set rather than a blank control. */}
-              {isEdit && newGameSetId && !setsForType.some((s) => sameSetRef(s, newGameSetRef)) && (
-                <option value={newGameSetKey}>{newGameSetId}</option>
-              )}
-            </select>
+              pinnedLabel={newGameSetId}
+              onMakeSet={isEdit ? null : () => setShowSetsDialog(true)}
+              otherFormats={isEdit ? [] : PICKER_GAME_TYPES
+                .filter((type) => type.id !== engagementType)
+                .map((type) => ({
+                  label: type.label,
+                  sets: allSets.filter((set) => set.engagementType === type.id),
+                  onPick: () => chooseFormat(type.id),
+                }))}
+              idPrefix="gsd-set"
+              theme="dark"
+            />
             {/* THE ENTRY POINT. Always offered in create mode, not only when
                 the list is empty: "I need to fix the title on the set I made
                 last week" is as common as "I have none", and an affordance

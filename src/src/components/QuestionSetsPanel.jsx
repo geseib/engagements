@@ -1,4 +1,5 @@
 import React from 'react';
+import { SET_SEARCH_FIELDS, SET_SORTS } from '../config/setFinder';
 import Icon from './Icon';
 import PlanLimitNotice from './PlanLimitNotice';
 import ListControls from './ListControls';
@@ -68,17 +69,9 @@ import { formatWhen } from '../config/tableCells';
  *    different words and different exits now (host §7.9).
  */
 
-const SORTS = {
-  newest: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
-  oldest: (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
-  name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
-  questions: (a, b) => (b.totalQuestions || 0) - (a.totalQuestions || 0),
-  // Yours, then your team's, then Engage's library, then public — the two you
-  // can edit before the two you can only copy. Newest first within an owner, so
-  // choosing this does not also scramble the order people are used to.
-  owner: (a, b) => (setOwnerRank(a) - setOwnerRank(b))
-    || (new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
-};
+// THE SORTS AND THE SEARCH FIELDS ARE SHARED with the host's set chooser
+// (config/setFinder.js), so a word or "newest" means the same thing in both.
+const SORTS = SET_SORTS;
 
 /*
   THE LIST CONTROLS, DECLARED ONCE. This screen was the donor for
@@ -97,7 +90,7 @@ const LIST_CONFIG = {
   // The SET's own tags join the haystack (config/setTopics.js: not the list a
   // QUESTION carries, which lives on a different row and never meets this one).
   // A word somebody can write and never find again is not a tag.
-  searchFields: ['name', 'description', 'customInstruction', (set) => set.tags],
+  searchFields: SET_SEARCH_FIELDS,
   axes: {
     // THE SHELF, first because it is the axis a library is browsed by. Only
     // the ITEM side is resolved: the options come from the closed vocabulary,

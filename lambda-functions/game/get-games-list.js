@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
 const { countParticipants } = require('./player-rows');
-const { callerOrgId, gamesIndexPk, deleteRole } = require('./tenant');
+const { callerOrgId, gamesIndexPk, deleteRole, callerUserId } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
 const { SURVEY_CLOSED } = require('./survey-names');
 const { readOrgEvents, itemSessionIndex } = require('./engagement-catalog');
@@ -273,12 +273,17 @@ exports.handler = async (event) => {
     // partition and pass straight through (`decryptValue` unwraps envelopes and
     // nothing else), so the list mixes both forms happily.
     const indexRows = await decryptItems(orgId, 'session', indexItems);
+    const me = callerUserId(event);
 
     const games = indexRows.map(game => ({
       gameId: game.SK.replace('GAME#', ''),
       title: game.Title,
       gameType: game.GameType,
       questionSetId: game.QuestionSetId,
+      // The set chooser's "Used by you lately" (issue #41): which library the
+      // set was pinned from, and whether this caller made the session.
+      questionSetScope: game.QuestionSetScope || null,
+      byMe: Boolean(me && game.CreatedBy === me),
       createdAt: game.CreatedAt,
       started: game.Started || false,
       lastPlayedAt: game.LastPlayedAt,

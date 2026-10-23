@@ -355,9 +355,9 @@ console.log('\n   and session creation itself');
   const src = fs.readFileSync(path.join(REPO, 'src/src/GameHostPage.jsx'), 'utf8');
   const bare = src.split('\n').filter((l) => /\$\{API_BASE\}games`/.test(l));
   check('the bare /games sites are found (guards this check)', () =>
-    assert.strictEqual(bare.length, 2,
-      `found ${bare.length} — expected POST (create) and GET (list)`));
-  check('both send a token', () =>
+    assert.strictEqual(bare.length, 3,
+      `found ${bare.length} — expected POST (create), GET (list), and the set chooser's quiet GET for "Used by you lately" (issue #41)`));
+  check('every one sends a token', () =>
     assert.deepStrictEqual(bare.filter((l) => !/authFetch\(/.test(l)), [],
       'creating a session with no token leaves it with no owner and no org to bill'));
 }

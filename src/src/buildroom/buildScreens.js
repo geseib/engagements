@@ -65,7 +65,9 @@ export function queueItems(room) {
   const posts = heldPosts(room)
     .map((l) => ({ type: 'post', id: `post:${l.logId}`, from: 'claude', at: l.createdAt || '', entry: l }));
   const byAge = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
-  const claude = asks.filter((x) => x.from === 'claude').sort(byAge);
+  // Mockups ready lead Claude's asks (owner, 23 Oct 2026: three mockups sat under an Ideas ask), oldest first in each.
+  const ready = (x) => (mockupsDone(x.ask) && isMockupAsk(x.ask) ? 0 : 1);
+  const claude = asks.filter((x) => x.from === 'claude').sort((x, y) => ready(x) - ready(y) || byAge(x, y));
   const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas, ...posts].sort(byAge);
   return [...claude, ...rest];
 }
@@ -113,6 +115,35 @@ const isMockupAsk = (a) => a.kind === 'choice' && (a.options || []).length >= 2 
 const mockupsPending = (a) => Boolean(a.mockups && a.mockups.asked && !a.mockups.ready);
 /** Mockups are in: the server says so for an ask made WITH mockups (the host's own vote from ideas included); else Claude's ask with a picture on every option. */
 const mockupsDone = (a) => (a.mockups && a.mockups.asked ? Boolean(a.mockups.ready) : a.source === 'agent' && isMockupAsk(a));
+
+/**
+ * MOCKUPS READY, WHERE THE HOST IS LOOKING (owner, 23 Oct 2026, dev game 2550:
+ * Claude made three mockups for a vote and the only way to them was a card in
+ * Waiting for you). Every proposed Choose ask whose pictures are all in,
+ * oldest first (by when the last picture came, else when it was made).
+ */
+export function readyMockupAsks(room) {
+  const at = (a) => (a.mockups && a.mockups.readyAt) || a.createdAt || '';
+  return ((room && room.asks) || []).filter((a) => a.status === 'proposed' && mockupsDone(a) && isMockupAsk(a))
+    .sort((x, y) => (at(x) < at(y) ? -1 : at(x) > at(y) ? 1 : 0));
+}
+
+/**
+ * The Mockups ready card: the oldest ready ask not already lined up (else the
+ * lined-up one, which then reads "Opens after ask N"), how many more wait, the
+ * ask open now (Put to the room now closes it; Next lines this up behind it),
+ * and whether Next leads: during the opening, so the mockups follow the step
+ * the room is on. Null when none is ready.
+ * @returns {{ ask, more: number, queued: boolean, open: object|null, nextLeads: boolean }|null}
+ */
+export function mockupsCard(room) {
+  const list = readyMockupAsks(room);
+  if (!list.length) return null;
+  const ask = list.find((a) => !a.next) || list[0];
+  const open = ((room && room.asks) || []).find((a) => a.askId === room.currentAskId && ['live', 'voting'].includes(a.status)) || null;
+  const opening = Boolean(room.opening && room.opening.phase === 'opening');
+  return { ask, more: list.length - 1, queued: Boolean(ask.next), open, nextLeads: Boolean(open) && opening };
+}
 
 /** An item is unseen when its id was not opened and it was made after the last Mark all seen. */
 function unseenFilter(room, local) {
@@ -327,6 +358,38 @@ export function sentOf(room) {
     askId: typeof s.askId === 'string' && s.askId ? s.askId : null,
     at: s.at,
     pickedAt: Number.isFinite(timeOf(s.pickedAt)) ? s.pickedAt : null,
+    // Don't show the room: the host's read keeps the words, the room's has none; either way the room sees none.
+    hidden: s.hidden === true,
+    pick: s.pick && Array.isArray(s.pick.items) && s.pick.items.length ? {
+      method: typeof s.pick.method === 'string' ? s.pick.method : 'vote',
+      items: s.pick.items.filter((i) => i && typeof i.label === 'string').map((i) => ({ label: i.label, title: typeof i.title === 'string' ? i.title : '' })),
+    } : null,
+  };
+}
+
+/**
+ * THE SENT TO CLAUDE CARD (owner, 23 Oct 2026: "nobody can see what Claude was
+ * actually told"). What went to Claude last leads the Stage, the room's window
+ * and the phones' Now from the moment it is sent until the next ask opens, as
+ * the room may read it: the words and the pick it came from, or only that the
+ * host sent something (Don't show the room). Never the host's why. `asks` are
+ * the reader's (the host's, the wall's history, a phone's). Null when nothing
+ * was sent since the last ask opened.
+ * @returns {{ head: string, text: string, pick: string, hidden: boolean, at: string, sent: object }|null}
+ */
+export function sentCard(sent, asks) {
+  if (!sent) return null;
+  const sentMs = timeOf(sent.at);
+  const opened = (asks || []).some((a) => a && timeOf(a.openedAt) > sentMs);
+  if (opened) return null;
+  const hidden = sent.hidden || !sent.text;
+  return {
+    head: W.sentHeadline,
+    text: hidden ? W.sentHiddenLine : sent.text,
+    pick: !hidden && sent.pick && sent.pick.items.length ? W.sentPickLine(sent.pick.method, sent.pick.items) : '',
+    hidden,
+    at: sent.at,
+    sent,
   };
 }
 
@@ -444,7 +507,7 @@ export function stageSide(room) {
     .reduce((best, a) => (!best || String(a.decidedAt) >= String(best.decidedAt) ? a : best), null);
   const decision = latestDecisionLine(room);
   const decidedMs = decided ? timeOf(decided.decidedAt) : NaN;
-  if (sent && sent.verb !== 'decided' && sent.text && !(timeOf(sent.at) < decidedMs)) {
+  if (sent && sent.verb !== 'decided' && sent.text && !sent.hidden && !(timeOf(sent.at) < decidedMs)) {
     return { label: sent.verb === 'asked' ? W.weAskedClaude : W.weToldClaude, text: `\u201c${sent.text}\u201d`, at: sent.at };
   }
   return decision ? { label: W.weDecided, text: decision, at: decided ? decided.decidedAt || null : null } : null;
@@ -516,7 +579,8 @@ export function latestDecisionLine(room) {
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   const d = decided[decided.length - 1];
   if (!d) return '';
-  const dir = String(d.decision.direction || '');
+  // Don't show the room: the Stage never says the words, even on the host's one screen.
+  const dir = d.decision.hidden ? '' : String(d.decision.direction || '');
   // A vote made from Points ends "Moved forward: …" (the server's note for the host's list); the Stage says who chose what.
   if (d.fromPoints && d.fromPoints.length && /^Moved forward:/.test(dir)) {
     const titles = (d.options || []).filter((o) => (d.decision.chosen || []).includes(o.label)).map((o) => o.title).filter(Boolean);
@@ -674,7 +738,7 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
         : { phase: 'RESULTS', context, meter, status, primary: { action: 'reopen', label: 'Reopen' } };
     }
     if (send) return { phase: 'RESULTS', context, meter, status, primary: send, secondary: change };
-    if (decisionChoices(current).length && !current.revotedAs) {
+    if (wheelPossible(current)) {
       return { phase: 'RESULTS', context, meter, status, primary: { action: 'wheel', label: W.spin }, secondary: change };
     }
     return { phase: 'RESULTS', context, meter, status, primary: change };
@@ -711,6 +775,12 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
 // the choices, and the text is swapped." These are the shared rules.
 
 /** The options a decision can pick between: Choose options, or Ideas suggestions. */
+/** The fewest options a wheel can hold: the server refuses fewer (build-store.js WHEEL_MIN). */
+export const WHEEL_MIN = 2;
+
+/** Whether the wheel can pick for this ask: two options or more, no rating, not a revote. */
+export const wheelPossible = (ask) => Boolean(ask) && ask.kind !== 'rating' && !ask.revotedAs && decisionChoices(ask).length >= WHEEL_MIN;
+
 export function decisionChoices(ask) {
   const r = (ask && ask.results) || {};
   if (ask && ask.kind === 'choice') {
@@ -850,7 +920,9 @@ export const defaultKind = (ask) => (ask && ask.claudeGets) || (ask && ask.openi
  * screen's panel, the Stage's Send and its Change before sending window). `as` goes only
  * when it differs from the question's own kind: the server's default.
  */
-export function decideBody(ask, { direction, chosen, note = '', send = true, as, spoken = false, why = '' }) {
+export function decideBody(ask, {
+  direction, chosen, note = '', send = true, as, spoken = false, why = '', hide = false,
+}) {
   const said = String(why || '').trim();
   return {
     action: 'decide', direction: String(direction || '').trim(), chosen, note: String(note || '').trim(), sendToAgent: send, ...(spoken ? { spoken: true } : {}),
@@ -859,6 +931,8 @@ export function decideBody(ask, { direction, chosen, note = '', send = true, as,
     method: decisionMethod(ask, chosen, spoken),
     // Always said when sending, so the line the host read can never disagree with the server's default.
     ...(send ? { as: as || defaultKind(ask) } : {}),
+    // Don't show the room (owner, 23 Oct 2026): Claude gets the words; the room's screens do not.
+    ...(send && hide ? { hideFromRoom: true } : {}),
   };
 }
 
@@ -1024,6 +1098,13 @@ function decisionDetail(d) {
   return { roomWords: d.roomWords || '', got: d.direction || '', why: d.why || '', marks: d.roomWords ? [W.reworded] : [] };
 }
 
+/**
+ * DON'T SHOW THE ROOM in History: the host's copy keeps the words with a small
+ * mark (`notShown: 'mark'`); the room's copy has none, and says only that
+ * something went (`'blank'`, its text W.historyNotShown). Null: shown as ever.
+ */
+const notShownOf = (hidden, words) => (!hidden ? null : String(words || '').trim() ? 'mark' : 'blank');
+
 const deliveryOf = (e) => (e && e.held ? W.forClaudeLater : e && e.deliveredAt ? W.claudeHasIt : W.claudeWaiting);
 /** The ask an item key names (`resp:003:…`, `option:003:B`), or null. */
 const askOfKey = (k) => { const p = String(k || '').split(':'); return p.length === 3 ? p[1] : null; };
@@ -1078,15 +1159,17 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
   }
   const decided = asks
     ? asks.filter((a) => a.status === 'decided' && a.decision).map((a) => ({ askId: a.askId, direction: a.decision.direction, at: a.decision.decidedAt || a.decidedAt, ask: a }))
-    : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt }));
+    : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt, hidden: d.hidden === true }));
   for (const d of decided) {
     const outcome = d.ask ? outcomeOf(d.ask) : null;
-    const detail = d.ask ? decisionDetail(d.ask.decision) : null;
+    const notShown = notShownOf(d.ask ? d.ask.decision.hidden === true : d.hidden, d.direction);
+    const detail = d.ask && notShown !== 'blank' ? decisionDetail(d.ask.decision) : null;
     const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
     const chosen = d.ask ? (d.ask.decision.chosen || []) : [];
     const shown = chosen.length ? mockups.filter((im) => chosen.includes(im.label)).concat(mockups.filter((im) => !chosen.includes(im.label))) : mockups;
     items.push({
-      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: W.storyDecided(askNo(d.askId)), text: d.direction || '',
+      id: `decided:${d.askId}`, at: d.at, type: 'decided', heading: W.storyDecided(askNo(d.askId)), text: notShown === 'blank' ? W.historyNotShown : d.direction || '',
+      ...(notShown ? { notShown } : {}),
       // The entries that told Claude about it: a sent mark opens History here (Consider, frame 4).
       entryIds: (log || []).filter((e) => e.askId === d.askId && e.kind === 'decision').map((e) => e.logId),
       ...(detail ? { sent: detail } : {}),
@@ -1116,12 +1199,14 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
       const first = c.logId ? entryOf.get(c.logId) : null;
       // Held for later, then sent: the entry that carried it says how it went.
       const entry = first && first.sentAs && entryOf.get(first.sentAs) ? entryOf.get(first.sentAs) : first;
-      const detail = sentDetail(entry);
+      const notShown = notShownOf(Boolean(entry && entry.hidden), entry && entry.text);
+      const detail = notShown === 'blank' ? null : sentDetail(entry);
       items.push({
         id: `gave:${c.ideaId}`, at: (entry && entry.createdAt) || c.at, type: 'gave',
         heading: c.yours ? W.storyYourIdea : c.from === 'host' ? W.storyHostIdea : W.storyIdea,
         entryIds: [c.logId, ...(c.alsoIn || [])].filter(Boolean),
-        text: c.text, imageIds: [], chain: detail ? [deliveryOf(entry)] : gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
+        text: notShown === 'blank' ? W.historyNotShown : c.text, imageIds: [], chain: detail ? [deliveryOf(entry)] : gaveChain(c, entry), mark: c.mark, ...(c.yours ? { yours: true } : {}),
+        ...(notShown ? { notShown } : {}),
         ...(detail ? { sent: detail } : {}),
       });
     }
@@ -1131,11 +1216,13 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     for (const e of log || []) {
       if (e.kind !== 'direction' || !e.considered || (!e.forAgent && !e.held) || e.sentAs) continue;
       if (e.from && (e.from.ideaIds || []).length) continue;
-      const detail = sentDetail(e);
+      const notShown = notShownOf(e.hidden === true, e.text);
+      const detail = notShown === 'blank' ? null : sentDetail(e);
       const askId = askOfKey(((e.from && e.from.items) || [])[0]);
       items.push({
         id: `sent:${e.logId}`, entryIds: [e.logId], at: e.createdAt, type: 'gave',
-        heading: W.storyFromRoom(askId ? askNo(askId) : null), text: (detail && detail.roomWords) || e.text || '',
+        heading: W.storyFromRoom(askId ? askNo(askId) : null), text: notShown === 'blank' ? W.historyNotShown : (detail && detail.roomWords) || e.text || '',
+        ...(notShown ? { notShown } : {}),
         imageIds: [], chain: [deliveryOf(e)], mark: e.held ? 'later' : e.asWritten === false ? 'reworded' : 'sent',
         ...(detail ? { sent: detail } : {}),
       });

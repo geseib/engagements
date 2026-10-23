@@ -186,31 +186,30 @@ function sentRoom({ claudeSpoke = false, verb = 'decided', askId = '003' } = {})
   return room;
 }
 
-describe('frame 8: "Sent to Claude", the one status line as the band', () => {
-  it.each(PROFILES)('%s: the result stays up with the direction in the band, drawn once', (profile) => {
+// THE SENT TO CLAUDE CARD (owner, 23 Oct 2026) replaced frame 8's band: what
+// Claude was told leads the Stage, with the pick, until the next ask opens.
+describe('frame 8, as the Sent to Claude card', () => {
+  it.each(PROFILES)('%s: the card leads with the words and the room\'s pick; the status under it, drawn once', (profile) => {
     const room = sentRoom();
-    expect(sentStageAsk(room, now)).not.toBeNull();
+    room.sent.pick = { method: 'vote', items: [{ label: 'B', title: 'Calm photo' }] };
     const { container } = render(<BuildStageScreen room={room} now={now} profile={profile} />);
-    expect(container.querySelector('[data-room-moment]').getAttribute('data-room-moment')).toBe('BUILD_RESULTS');
-    expect(container.querySelector('.brm-pickbadge').textContent).toBe("The room's pick");
-    const band = container.querySelector('.brm-sentband');
-    expect(band).not.toBeNull();
-    expect(band.getAttribute('data-claude-status')).toBe('sent');
-    expect(band.querySelector('.brm-sentband-k').textContent).toBe('Sent to Claude');
-    expect(band.querySelector('.brm-sentband-t').textContent).toBe('Go with the calm photo header');
+    expect(container.querySelector('[data-room-moment]').getAttribute('data-room-moment')).toBe('BUILD_SENT');
+    const card = container.querySelector('[data-testid="brm-sentcard"]');
+    expect(card.querySelector('.brm-sentq').textContent).toBe('\u201cGo with the calm photo header\u201d');
+    expect(card.querySelector('.brm-sentpick').textContent).toBe('The room chose B \u00b7 Calm photo');
     expect(container.querySelectorAll('[data-claude-status]').length).toBe(1);
     expect(container.textContent.match(/Sent to Claude/g).length).toBe(1);
-    expect(band.closest('[data-drop]')).toBeNull();
+    expect(container.querySelector('.brm-choice')).toBeNull();
     expect(container.querySelectorAll('button, [role="button"]').length).toBe(0);
   });
 
-  it('when Claude says what it is doing, the Stage moves on to Claude\'s status', () => {
+  it('when Claude says what it is doing, the card stays and Claude\'s status sits under it', () => {
     const room = sentRoom({ claudeSpoke: true });
     expect(sentStageAsk(room, now)).toBeNull();
     const { container } = render(<BuildStageScreen room={room} now={now} profile="room" />);
-    expect(container.querySelector('.brm-sentband')).toBeNull();
-    expect(container.querySelector('.brm-choice')).toBeNull();
-    expect(container.querySelector('.brm-stage--idle .brm-q').textContent).toBe('Claude is building the calm photo header');
+    const card = container.querySelector('[data-testid="brm-sentcard"]');
+    expect(card.querySelector('.brm-sentq').textContent).toBe('\u201cGo with the calm photo header\u201d');
+    expect(card.querySelector('[data-claude-status]').textContent).toContain('Claude is building the calm photo header');
   });
 
   it('only the decided ask that was sent, and only while it is current', () => {
@@ -222,7 +221,7 @@ describe('frame 8: "Sent to Claude", the one status line as the band', () => {
     expect(buildMomentOf({ current: { status: 'decided' } })).toBe('BUILD_RESULTS');
   });
 
-  it('the room\'s window draws the same band from the wall read', () => {
+  it('the room\'s window draws the same card from the wall read', () => {
     const body = F.wallBody({ ask: 'results' });
     body.current = { ...body.current, status: 'decided', decision: { direction: 'Go with the calm photo header', chosen: ['B'], sentToAgent: true } };
     body.history.asks = (body.history.asks || []).map((a) => (a.askId === '003' ? body.current : a));
@@ -230,7 +229,6 @@ describe('frame 8: "Sent to Claude", the one status line as the band', () => {
     body.doing = null;
     const room = wallRoom(body);
     const { container } = render(<BuildStageScreen room={room} now={now} profile="room" />);
-    expect(container.querySelector('.brm-sentband-t').textContent).toBe('Go with the calm photo header');
-    expect(container.querySelector('[data-pick] .brm-ct').textContent).toBe('Choice B: Calm photo');
+    expect(container.querySelector('[data-testid="brm-sentcard"] .brm-sentq').textContent).toBe('\u201cGo with the calm photo header\u201d');
   });
 });
