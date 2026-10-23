@@ -75,7 +75,7 @@ import {
 import './BuildRoom.css';
 import {
   SCREENS, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, directionFor, defaultDirection,
-  decideBody, questionAnswer, claudeState, VOTE_IDEAS_MAX, mockupsReady, RATING_SCALE, ratingAnswer, ratingStep,
+  decideBody, questionAnswer, claudeState, VOTE_IDEAS_MAX, mockupsReady, mockupsCard, readyMockupAsks, RATING_SCALE, ratingAnswer, ratingStep,
   unheard, agentStopped, queueItems, hostAlert, QUEUE_FILTERS, filterQueue, laterItems, defaultKind,
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
@@ -85,6 +85,7 @@ import {
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
 import { sentMarks, itemKeys, storyHolds } from './sentMarks';
+import MockupsReady from './BuildMockupsReady';
 import {
   SendOptionsProvider, SendExtras, HideFromRoom, useMirror,
 } from './BuildSendOptions';
@@ -1288,6 +1289,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           ignoreKey: keepKey,
           emptyLabel: BCW.noMainMove,
           capability: bar.primary ? 'ask-moves' : undefined,
+          // Mockups ready, a second card under the move, never in its place (owner, 23 Oct 2026).
+          extra: <MockupsReady room={room} busy={busy} ended={ended} run={run} api={api} className="brm-mockready--console" />,
         }}
         slots={{
           waiting: {
@@ -1512,6 +1515,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             // PRESENT, as Call & Answer's, with the window's state in its title.
             present: wallHref ? { href: wallHref, presenting: windowOpen ? 1 : 0, title: presentStatusFrom(windowDetail).label } : null,
             alert: stageAlert,
+            // Claude's mockups are ready (owner, 23 Oct 2026): a cue on the dock; the card is on the Host screen.
+            mockups: !ended && mockupsCard(room) ? { count: readyMockupAsks(room).length } : null,
             onSession: () => (panel ? closePanel() : openPanel()),
             panelOpen: Boolean(panel),
             askingCount: askingNow.length,
@@ -1655,6 +1660,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                   onHide={() => setRunHidden(list.runId)}
                 />
               )}
+              {/* MOCKUPS READY (owner, 23 Oct 2026): above whatever leads, so they are never only in Waiting for you. */}
+              <MockupsReady room={room} busy={busy} ended={ended} run={run} api={api} />
               {current ? (
                 <div className="brm-now" data-capability="ask-path">
                   {/* THE ASK AS FOUR STEPS (owner, 2026-10-07). "Go with B"

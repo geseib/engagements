@@ -342,7 +342,17 @@ export default function BuildStageScreen({
             status={status}
             kbd={kbd}
             present={c.present || null}
-            home={<HostHome alert={c.alert} onHost={c.onHost} />}
+            home={(
+              <>
+                {/* Claude's mockups are ready (owner, 23 Oct 2026): a cue, fixed words; the card is on the Host screen. */}
+                {c.mockups && (
+                  <button type="button" className="dock-more brm-mockcue" onClick={c.onHost} title={W.mockupsCardHead} data-testid="brm-dock-mockups">
+                    <span className="dock-more-lbl">{W.dockMockups}</span>
+                  </button>
+                )}
+                <HostHome alert={c.alert} onHost={c.onHost} />
+              </>
+            )}
             onSetup={c.onSession}
             setupCount={c.askingCount || 0}
             setupCountLabel={W.askingSr}

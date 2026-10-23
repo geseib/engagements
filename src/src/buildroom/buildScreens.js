@@ -65,7 +65,9 @@ export function queueItems(room) {
   const posts = heldPosts(room)
     .map((l) => ({ type: 'post', id: `post:${l.logId}`, from: 'claude', at: l.createdAt || '', entry: l }));
   const byAge = (x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
-  const claude = asks.filter((x) => x.from === 'claude').sort(byAge);
+  // Mockups ready lead Claude's asks (owner, 23 Oct 2026: three mockups sat under an Ideas ask), oldest first in each.
+  const ready = (x) => (mockupsDone(x.ask) && isMockupAsk(x.ask) ? 0 : 1);
+  const claude = asks.filter((x) => x.from === 'claude').sort((x, y) => ready(x) - ready(y) || byAge(x, y));
   const rest = [...asks.filter((x) => x.from !== 'claude'), ...ideas, ...posts].sort(byAge);
   return [...claude, ...rest];
 }
@@ -113,6 +115,35 @@ const isMockupAsk = (a) => a.kind === 'choice' && (a.options || []).length >= 2 
 const mockupsPending = (a) => Boolean(a.mockups && a.mockups.asked && !a.mockups.ready);
 /** Mockups are in: the server says so for an ask made WITH mockups (the host's own vote from ideas included); else Claude's ask with a picture on every option. */
 const mockupsDone = (a) => (a.mockups && a.mockups.asked ? Boolean(a.mockups.ready) : a.source === 'agent' && isMockupAsk(a));
+
+/**
+ * MOCKUPS READY, WHERE THE HOST IS LOOKING (owner, 23 Oct 2026, dev game 2550:
+ * Claude made three mockups for a vote and the only way to them was a card in
+ * Waiting for you). Every proposed Choose ask whose pictures are all in,
+ * oldest first (by when the last picture came, else when it was made).
+ */
+export function readyMockupAsks(room) {
+  const at = (a) => (a.mockups && a.mockups.readyAt) || a.createdAt || '';
+  return ((room && room.asks) || []).filter((a) => a.status === 'proposed' && mockupsDone(a) && isMockupAsk(a))
+    .sort((x, y) => (at(x) < at(y) ? -1 : at(x) > at(y) ? 1 : 0));
+}
+
+/**
+ * The Mockups ready card: the oldest ready ask not already lined up (else the
+ * lined-up one, which then reads "Opens after ask N"), how many more wait, the
+ * ask open now (Put to the room now closes it; Next lines this up behind it),
+ * and whether Next leads: during the opening, so the mockups follow the step
+ * the room is on. Null when none is ready.
+ * @returns {{ ask, more: number, queued: boolean, open: object|null, nextLeads: boolean }|null}
+ */
+export function mockupsCard(room) {
+  const list = readyMockupAsks(room);
+  if (!list.length) return null;
+  const ask = list.find((a) => !a.next) || list[0];
+  const open = ((room && room.asks) || []).find((a) => a.askId === room.currentAskId && ['live', 'voting'].includes(a.status)) || null;
+  const opening = Boolean(room.opening && room.opening.phase === 'opening');
+  return { ask, more: list.length - 1, queued: Boolean(ask.next), open, nextLeads: Boolean(open) && opening };
+}
 
 /** An item is unseen when its id was not opened and it was made after the last Mark all seen. */
 function unseenFilter(room, local) {
