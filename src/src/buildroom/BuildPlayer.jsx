@@ -92,6 +92,40 @@ const ideaStatusText = (idea, current = null) => {
   return IDEA_STATUS[idea.status] || IDEA_STATUS.new;
 };
 
+/**
+ * WHAT HAPPENED TO MY IDEA (ideas flow D; docs/design/build-room-ideas I6):
+ * the server's outcome (build-store ideaOutcome) in plain words. Counts, never
+ * names. "The room voted yes, 9 to 4. The host sent it to Claude."
+ */
+export function outcomeWords(o) {
+  if (!o) return '';
+  const host = o.host === 'claude' ? (o.claudeHas ? W.outcomeHostClaudeHas : W.outcomeHostClaude)
+    : o.host === 'later' ? W.outcomeHostLater : o.host === 'record' ? W.outcomeHostRecord : '';
+  if (o.round === 'claude') return o.host === 'later' ? W.outcomeHostLater : o.claudeHas ? W.outcomeClaudeHas : W.outcomeClaude;
+  if (o.phase === 'open') {
+    if (o.round === 'ideas') return o.voting ? W.outcomeIdeasVoting : W.outcomeIdeasOpen;
+    return { yesno: W.outcomeYesNoOpen, feedback: W.outcomeFeedbackOpen, vote: W.outcomeVoteOpen }[o.round] || '';
+  }
+  let room;
+  if (o.round === 'yesno') room = W.outcomeYesNo(o.yes || 0, o.no || 0);
+  else if (o.round === 'feedback') room = W.outcomeAnswers(o.answers || 0);
+  else if (o.phase === 'decided') room = o.won ? W.outcomeWon : W.outcomeLost;
+  else room = W.outcomeVotesIn;
+  if (o.phase === 'counted') return `${room} ${W.outcomeDeciding}`;
+  return host ? `${room} ${host}` : room;
+}
+
+/** How long a decided idea's news stays on Now. */
+const OUTCOME_NEWS_MS = 15 * 60 * 1000;
+
+/** The newest of this phone's ideas the host settled lately, for Now (or null). */
+export function ideaNews(myIdeas, now, seen = []) {
+  const fresh = (myIdeas || []).filter((i) => i.outcome && i.outcome.phase === 'decided' && i.outcome.at
+    && now - Date.parse(i.outcome.at) < OUTCOME_NEWS_MS && !seen.includes(`${i.ideaId}:${i.outcome.at}`));
+  fresh.sort((a, b) => Date.parse(b.outcome.at) - Date.parse(a.outcome.at));
+  return fresh[0] || null;
+}
+
 export function isHttpUrl(value) {
   if (!value) return false;
   try {
@@ -942,6 +976,7 @@ function IdeaComposer({ api, ideas, open, setOpen, draft, setDraft, onResult, cu
                 <li key={idea.ideaId}>
                   <span className="bpl-text">{idea.text}</span>
                   <span className={`bpl-status bpl-status--${idea.walled ? 'walled' : idea.status || 'new'}`}>{ideaStatusText(idea, current)}</span>
+                  {idea.outcome && <p className="plr-help bpl-outcome">{outcomeWords(idea.outcome)}</p>}
                   {idea.thread && idea.thread.length > 0 && <IdeaThread api={api} idea={idea} onResult={onResult} />}
                 </li>
               ))}
@@ -1128,6 +1163,8 @@ export default function BuildPlayer({
   const [refusal, setRefusal] = useState('removed');
   const [ideaOpen, setIdeaOpen] = useState(false);
   const [ideaDraft, setIdeaDraft] = useState('');
+  // Ideas-flow D news this phone has already read (Got it), by idea and decision time.
+  const [seenNews, setSeenNews] = useState([]);
   const [tab, setTab] = useState('now');
   // The doing line counts minutes and goes stale as time passes.
   const [now, setNow] = useState(() => Date.now());
@@ -1262,6 +1299,7 @@ export default function BuildPlayer({
   const ask = view.current;
   const mine = view.mine || {};
   const myIdeas = view.myIdeas || [];
+  const news = ideaNews(myIdeas, now, seenNews);
   const preview = latestPreview(view.log);
   const previewSent = Boolean(preview && myIdeas.some((i) => i.aboutLogId === preview.logId));
   const openAsk = Boolean(ask && ['live', 'voting'].includes(ask.status));
@@ -1308,6 +1346,13 @@ export default function BuildPlayer({
           <p className="plr-help">Claude is showing something new: <span className="bpl-text">{preview.text}</span></p>
           {view.lan && view.lan.open && <p className="plr-help">Try it, then say what you think.</p>}
           <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('history')}>{W.haveALook}</button>
+        </section>
+      )}
+      {news && (
+        <section className="bpl-ideas bpl-pvnote" aria-label={W.outcomeNews}>
+          <p className="plr-help"><b>{W.outcomeNews}</b> {W.yourIdeaWas(news.text)}</p>
+          <p className="bpl-text">{outcomeWords(news.outcome)}</p>
+          <button type="button" className="bpl-send bpl-send--alt" onClick={() => setSeenNews((l) => [...l, `${news.ideaId}:${news.outcome.at}`])}>{W.outcomeGotIt}</button>
         </section>
       )}
       {hostRepliedTo(myIdeas).length > 0 && (
