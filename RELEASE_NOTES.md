@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `624d4c91`. Everything below this entry is already on test; this push adds only what is here.
 
 **Before reviewing:** the new starter sets are not installed by the deploy. Run `scripts/install-build-room-kind-sets.sh engagetest` (a dry run that lists what it would install and switch off), then the same with `--apply`, once per tier (`engagedev`, `engagetest`; `engageprod` when it goes there).
 
