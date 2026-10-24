@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
 
-**Test:** merge of dev `624d4c91`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
 
 **Before reviewing:** the new starter sets are not installed by the deploy. Run `scripts/install-build-room-kind-sets.sh engagetest` (a dry run that lists what it would install and switch off), then the same with `--apply`, once per tier (`engagedev`, `engagetest`; `engageprod` when it goes there).
 
@@ -20,6 +20,8 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - **Every Build Room question has a type** (owner, 24 Oct: "some questions are ideas (free form responses), some are multiple choice (with the choices), some are yes no. we need to store that info"): **Ideas** (everyone writes, then votes), **Choose** (two to six options), **Yes/No** and **Rate** (1 to 5). It is the Poll question's own kind (open answer, multiple choice, yes/no, rating), so one Poll set holds all four; a Call & Answer question is Ideas. A Yes/No is asked as the room's yes-or-no, a choice of its two answers, in the set's own words when it renamed them (Approve / Decline).
 - **Type chips in Ask the room's ready questions**: **All · Ideas · Choose · Yes/No · Rate**, each with its count. One press shows only that type, and it stays as you move between sets. Every question shows its type, and a Choose its options.
 - **One starter set per kind of build**: *Build Room: Training*, *Game*, *Document* and *Dashboard*, each a Poll set of 22 questions in the five sections: the 14 Ideas questions from before, three Choose, three Yes/No and the two 1-to-5 ratings. They replace the two sets per kind (*… questions* and *… pulse*), which the install script switches off.
+- **One general set for any build**: *Build Room: General*, a Poll set of 25 questions (the 17 Ideas questions of the old *Build Room starters*, the 3 ratings of *Build Room pulse*, and two new Choose and three new Yes/No). It replaces those two; every room sees it after the sets for its own kind.
+- **The old Build Room sets are deleted once replaced**: `scripts/delete-question-sets.js <table> <setId>…` (a dry run first, `--apply` to delete) removes switched-off Engage sets with the console's own delete. It refuses a set still switched on, one a live session uses, and any team's set.
 - **Claude's own question sets** take Yes/No and open questions too (plugin **1.28.0**), and **Save to my sets** makes one Poll draft holding all its types (a Call & Answer draft only when it is all Ideas).
 
 ### Fixed
@@ -39,9 +41,8 @@ Entries name the dev commit that was merged, so the review can be matched to the
 ### Known gaps
 
 - "Not sure" on a yes/no question is not offered in a Build Room: the room answers yes or no only.
-- The general starter sets (*Build Room starters*, *Build Room pulse*) stay as they were: a Call & Answer set and a Poll set, not merged.
 - The type filter covers the set you have open in the library (or Claude's set); it does not list every set's questions at once.
-- Until the install script runs on a tier, that tier still has the old two sets per kind, now without Create engagement listing them.
+- Until the install script runs on a tier, that tier still has the old sets, now without Create engagement listing them. Then delete them: `node scripts/delete-question-sets.js engagetest buildroomstarters buildroompulse buildroomtrainingquestions buildroomtrainingpulse buildroomgamequestions buildroomgamepulse buildroomdocumentquestions buildroomdocumentpulse buildroomdashboardquestions buildroomdashboardpulse` (dry run, then `--apply`).
 
 ---
 

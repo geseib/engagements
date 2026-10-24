@@ -23,7 +23,7 @@ are the source for the Choose, Yes/No and Rate questions.
 Same rules as the first starter set (`starter-set.md`): the five sections in session order
 (Who it is for, Start, Think differently, While building, Before wrapping up), plain words, what
 Claude gets for each answer (`ClaudeGets`) and how to use it (`ClaudeNote`, never shown to the
-room). The general **Build Room starters** and **pulse** stay, untagged, for any kind.
+room). The general set is **Build Room: General** (`sets/build-room-general.csv`, 24 Oct 2026): one Poll set of 25 questions, untagged by kind, replacing **Build Room starters** and **Build Room pulse**, which are retired and then deleted (`scripts/delete-question-sets.js`).
 
 **Drafts for the owner to edit.** Change the CSVs here, then reinstall; `tests/question-set-roundtrip.js`
 imports every one with the real importer and checks the sections, the counts, that each has what

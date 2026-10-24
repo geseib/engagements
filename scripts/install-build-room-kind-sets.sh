@@ -33,3 +33,12 @@ for KIND in training game document dashboard; do
   # shellcheck disable=SC2086
   node scripts/retire-question-sets.js "$TABLE" $OLD ${APPLY:+--apply}
 done
+
+# THE GENERAL SET (any kind of build; owner, 24 Oct: one mixed set, as for each kind). It
+# replaces "Build Room starters" (Call and Answer, 17 Ideas) and "Build Room pulse" (Poll,
+# 3 ratings). No for- tag: every room sees it, after the sets for its own kind.
+echo "=== General"
+node scripts/install-question-set.js "$TABLE" "sets/build-room-general.csv" --type poll --title "Build Room: General" \
+  --topic business-work --tags "build-room" --skip-existing ${APPLY:+--apply} \
+  --description "Questions for any build, from who it is for to what comes next: ideas, choices, yes or no, and a 1 to 5 pulse."
+node scripts/retire-question-sets.js "$TABLE" buildroomstarters buildroompulse ${APPLY:+--apply}

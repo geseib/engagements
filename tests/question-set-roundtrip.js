@@ -808,7 +808,9 @@ const WAVELENGTH_CSV = [
   // one Poll set per kind holds all four of the room's types (owner: "some questions are ideas
   // ..., some are multiple choice ..., some are yes no. we need to store that info").
   const KIND_SETS = ['training', 'game', 'document', 'dashboard'].map((k) => [`build-room-${k}.csv`, 'poll', 22]);
-  for (const [file, type, count] of [['build-room-starters.csv', 'call-and-answer', 17], ['build-room-pulse.csv', 'poll', 3], ...KIND_SETS]) {
+  // The general set (any kind of build) is one mixed Poll set too, since 24 Oct: the old
+  // starters (17 Ideas) and pulse (3 ratings), with two Choose and three Yes/No added.
+  for (const [file, type, count] of [['build-room-general.csv', 'poll', 25], ...KIND_SETS]) {
     resetDb();
     const csv = require('fs').readFileSync(require('path').join(__dirname, '..', 'sets', file), 'utf8');
     const t = await roundTrip(`Shipped ${file}`, type, csv);
