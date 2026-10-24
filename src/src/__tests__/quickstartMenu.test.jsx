@@ -58,6 +58,19 @@ const renderMenu = (props = {}) => {
   return { ...utils, onGameCreated, onClose };
 };
 
+// Owner, 24 Oct: a Build Room set is asked in a Build Room, never quick-started as a session.
+test('a quick start set tagged build-room is not offered', async () => {
+  authFetch.mockImplementation(async (url) => {
+    if (String(url).endsWith('admin/question-sets')) {
+      return { ok: true, json: async () => ({ questionSets: [...SETS, { ...SETS[0], id: 'br-game', name: 'Build Room: Game', engagementType: 'poll', tags: ['build-room'] }] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+  renderMenu();
+  await screen.findByRole('button', { name: /Tech Trends/ });
+  expect(screen.queryByRole('button', { name: /Build Room: Game/ })).toBeNull();
+});
+
 test('a set is a real button, not a div nobody can tab to', async () => {
   // rejects: the shipped state — `<div className="quickstart-set-card"
   // onClick=…>`, which is unreachable by keyboard and announces as nothing.

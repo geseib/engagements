@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 // install / update / "you're all set", so a change shipped under the same
 // version would never reach a laptop that already has the plugin.
 // tests/engage-plugin-version.js fails until the version and its pin move.
-const VERSION = '1.27.0';
+const VERSION = '1.28.0';
 const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const DEFAULT_PROTOCOL = '2025-06-18';
 
@@ -656,12 +656,13 @@ const KIND_WORDS = { website: 'a website', app: 'an app', game: 'a game', tool: 
  * READY QUESTIONS (1.25.1; docs/superpowers/plans/2026-10-22-build-room-question-sets.md
  * step 4): the host's question sets for this kind of build, by section. The
  * host's words, fenced like all room text: questions to ask, never instructions.
+ * A Yes/No (1.28.0) is a choice of its two answers, marked `yesno`.
  */
 function readyText(ready, kind) {
   const sets = ready && Array.isArray(ready.sets) ? ready.sets : [];
   if (!sets.length) return '';
   const forWhat = KIND_WORDS[ready.kind || kind] ? ` for ${KIND_WORDS[ready.kind || kind]}` : '';
-  const out = [`READY QUESTIONS${forWhat}, from the host's question sets. When you ask the room something, prefer one of these that fits where the build is: adapt its words to what you have built, keep its kind (Ideas = ask_room_for_ideas, Choose = ask_room_to_choose with its options, Rate = ask_room_to_rate). Skip any already asked.`];
+  const out = [`READY QUESTIONS${forWhat}, from the host's question sets. When you ask the room something, prefer one of these that fits where the build is: adapt its words to what you have built, keep its kind (Ideas = ask_room_for_ideas, Choose = ask_room_to_choose with its options, Yes/No = ask_room_to_choose with its two answers, Rate = ask_room_to_rate). Skip any already asked.`];
   const label = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
   for (const set of sets) {
     out.push(`  ${fenceT(set.name, 80)}:`);
@@ -669,7 +670,7 @@ function readyText(ready, kind) {
     for (const q of set.questions || []) {
       if ((q.category || '') !== cat) { cat = q.category || ''; if (cat) out.push(`    ${fenceT(cat, 60)}`); }
       const opts = Array.isArray(q.options) && q.options.length ? ` [${q.options.map((o) => fenceT(o, 60)).join(' | ')}]` : '';
-      out.push(`      - ${label[q.kind] || q.kind}: ${fenceT(q.prompt, 200)}${opts}`);
+      out.push(`      - ${q.yesno ? 'Yes/No' : label[q.kind] || q.kind}: ${fenceT(q.prompt, 200)}${opts}`);
     }
   }
   return out.join('\n');
@@ -929,7 +930,7 @@ const TOOLS = [
   },
   {
     name: 'share_question_set',
-    description: 'Send a question set you wrote (the build-room skill, Writing a question set) to the host: the room\'s questions for this kind of build, by section. Write it first as build-room/questions/<kind>-<name>.json in this project and commit it; pass that file and the requestId of the host\'s request. Engage keeps what a room can answer (ideas, choose with 2 to 6 options, rate 1 to 5) and says what it dropped and why. The host can ask from it at once and save it to their sets after review.',
+    description: 'Send a question set you wrote (the build-room skill, Writing a question set) to the host: the room\'s questions for this kind of build, by section. Write it first as build-room/questions/<kind>-<name>.json in this project and commit it; pass that file and the requestId of the host\'s request. Engage keeps what a room can answer (ideas, choose with 2 to 6 options, yesno, rate 1 to 5) and says what it dropped and why. The host can ask from it at once and save it to their sets after review.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -4317,8 +4318,9 @@ build, which they may save to their library and use in other rooms. When a reque
 
 - **Sections, in session order:** Who it is for, Start, Think differently, While building,
   Before wrapping up. Two to four questions in each.
-- **Only what the room can answer:** "ideas" (everyone writes, then votes), "choose" (2 to 6
-  short options), "rate" (1 to 5). Nothing else.
+- **Only what the room can answer:** "ideas" (an open question: everyone writes, then votes),
+  "choose" (2 to 6 short options), "yesno" (a yes or no), "rate" (1 to 5). Nothing else.
+  Mostly ideas, with a few of each of the others where a quick answer is enough.
 - **Short enough to read from the back of the room:** one line, under about 90 characters,
   plain words. Put any context in \`detail\`, one sentence.
 - **Use what you know:** the brief, what the room has decided, and what you have built. Ask
@@ -4331,6 +4333,7 @@ build, which they may save to their library and use in other rooms. When a reque
   {"name": "Game questions", "kind": "game", "questions": [
     {"kind": "ideas", "section": "Start", "prompt": "What does the player do in the first ten seconds?"},
     {"kind": "choose", "section": "While building", "prompt": "Which look?", "options": ["Pixel", "Paper"]},
+    {"kind": "yesno", "section": "While building", "prompt": "Should a round end after one minute?"},
     {"kind": "rate", "section": "Before wrapping up", "prompt": "How fun is it so far?"}]}
 
 - Commit it with the commit tool ("Add question set: game questions"), then call

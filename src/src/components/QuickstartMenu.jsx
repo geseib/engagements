@@ -8,7 +8,7 @@ import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
 import { makeListPredicate, ALL } from '../config/listControls';
-import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags } from '../config/setFinder';
+import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags, offeredForSessions } from '../config/setFinder';
 import { tagIndex } from '../config/setShelfIndex';
 import { OWNER_OPTIONS, setOwnerTag } from '../utils/setOwnerTag';
 import { SCREEN_WORDS } from '../config/roomScreen';
@@ -157,7 +157,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
       };
 
       (data.questionSets || []).forEach(set => {
-        if (set.quickstart && set.active) {
+        if (set.quickstart && set.active && offeredForSessions(set)) {
           const type = set.engagementType || 'call-and-answer';
           if (quickstartData[type]) {
             quickstartData[type].push(set);

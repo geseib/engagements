@@ -1295,6 +1295,8 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
       { kind: 'choose', section: 'While building', prompt: 'Which look?', options: ['Pixel', 'Paper'] },
       { kind: 'rate', section: 'Before wrapping up', prompt: 'How fun is it so far?', detail: 'One is dull, five is great.' },
       { kind: 'yesno', prompt: 'Ship it?' },
+      { kind: 'text', section: 'Start', prompt: 'What should a round feel like?' },
+      { kind: 'rank', prompt: 'Order these' },
       { kind: 'choose', prompt: 'One option', options: ['Only'] },
     ],
   };
@@ -1317,11 +1319,14 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
       ['suggest', 'Start', 'What does the player do first?'],
       ['choice', 'While building', 'Which look?'],
       ['rating', 'Before wrapping up', 'How fun is it so far?'],
+      // Owner, 24 Oct: a yes or no is kept as one, and an open question is Ideas.
+      ['yesno', 'While building', 'Ship it?'],
+      ['suggest', 'Start', 'What should a round feel like?'],
     ]);
     assert.strictEqual(r.body.dropped.length, 2);
-    assert.ok(/not Ideas, Choose or Rate/.test(r.body.dropped[0]) && /2 to 6 options/.test(r.body.dropped[1]), r.body.dropped.join(' | '));
+    assert.ok(/not Ideas, Choose, Yes\/No or Rate/.test(r.body.dropped[0]) && /2 to 6 options/.test(r.body.dropped[1]), r.body.dropped.join(' | '));
     const h = (await host('GET', 'state')).body;
-    assert.deepStrictEqual(h.claudeSets.map((x) => [x.name, x.kind, x.questions.length, x.file, x.savedAt]), [['Game questions', 'game', 3, 'build-room/questions/game-questions.json', null]]);
+    assert.deepStrictEqual(h.claudeSets.map((x) => [x.name, x.kind, x.questions.length, x.file, x.savedAt]), [['Game questions', 'game', 5, 'build-room/questions/game-questions.json', null]]);
     assert.strictEqual(h.points.requests.find((x) => x.id === req).status, 'done');
     assert.strictEqual((await claude('GET', 'state')).body.claudeSets, undefined, 'Claude has its own file');
     assert.ok(!JSON.stringify((await phone('Priya')('GET', 'state')).body).includes('How fun is it'), 'a phone saw the set');
@@ -1329,7 +1334,7 @@ const raw = () => JSON.stringify(rowsOf('BUILD#'));
   });
   await check('Claude sends nothing askable, or a bad file name: refused or kept without the name', async () => {
     seed();
-    assert.strictEqual((await claude('POST', 'question-sets', { name: 'X', questions: [{ kind: 'yesno', prompt: 'Ship?' }] })).status, 400);
+    assert.strictEqual((await claude('POST', 'question-sets', { name: 'X', questions: [{ kind: 'rank', prompt: 'Order?' }] })).status, 400);
     assert.strictEqual((await claude('POST', 'question-sets', { name: '', questions: SET.questions })).status, 400);
     const r = await claude('POST', 'question-sets', { ...SET, file: '../../etc/passwd' });
     assert.strictEqual(r.body.set.file, '');

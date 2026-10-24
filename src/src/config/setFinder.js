@@ -17,6 +17,17 @@
 import { resolveSetTopic } from './setTopics';
 import { setCarriesTag } from './setShelfIndex';
 import { setOwnerTag, setOwnerRank } from '../utils/setOwnerTag';
+import { isBuildRoomSet } from '../buildroom/readyQuestions';
+
+/**
+ * WHERE A SET MAY START A SESSION (owner, 24 Oct: "the question set filter on
+ * the new engagements puts the build question sets into the call and
+ * answer"). A Build Room set (tagged build-room) is asked inside a Build Room,
+ * any time, from Ask the room; it never starts a Call and Answer or a Poll.
+ * The create chooser, Quick start and the agenda item dialog list only sets
+ * this passes; the console's Question sets list shows every set.
+ */
+export const offeredForSessions = (set) => !isBuildRoomSet(set);
 
 /** What a word in the search box is matched against: the set's name, its
  *  description, its custom instruction and its own tags. */

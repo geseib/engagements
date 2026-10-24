@@ -27,7 +27,7 @@ import SurveyQuestionFields, {
   SurveyAddMenu, SurveyKindChip, SurveyPreviewLine, SurveyRequiredMark,
 } from './SurveyQuestionFields';
 import { SURVEY_CATEGORY, POLL_KINDS } from '../config/surveyKinds';
-import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS } from '../buildroom/readyQuestions';
+import { isBuildRoomSet, buildAskFromQuestion, ASKED_AS, ASKED_AS_HINT } from '../buildroom/readyQuestions';
 import { CLAUDE_KINDS } from '../buildroom/buildScreens';
 import {
   ADD_MODES, existingCategories, categoryCounts, rowsFromItems, holdToMode, describeAdded,
@@ -2324,7 +2324,7 @@ function BuildRoomFields({ draft, engagementType, onChange, idOf }) {
       <legend>In a Build Room</legend>
       <p className="qs-panel-note" id={idOf('askedAs')}>
         {out.ask
-          ? `Asked as ${ASKED_AS[out.ask.kind]}. ${out.ask.kind === 'suggest' ? 'Everyone answers, then votes.' : out.ask.kind === 'rating' ? 'The room rates 1 to 5: 1 needs work, 5 is great.' : 'The room picks from the options.'}`
+          ? `Asked as ${ASKED_AS[out.type]}. ${ASKED_AS_HINT[out.type]}`
           : `Not offered in a Build Room. ${out.reason}`}
       </p>
       {out.ask && (

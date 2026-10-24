@@ -5,17 +5,18 @@
 #   AWS_PROFILE=adminaccess scripts/install-build-room-kind-sets.sh engagedev           # dry run: says what it would do
 #   AWS_PROFILE=adminaccess scripts/install-build-room-kind-sets.sh engagedev --apply   # installs into Engage's library
 #
-# Each kind is two sets, because a set has one type: Ideas questions (Call and Answer)
-# and a pulse (Poll: 1 to 5 ratings and one choice). Both are tagged build-room and
-# for-<kind>, so a room that is making that kind of thing sees them first.
+# Each kind is ONE Poll set (owner, 24 Oct 2026) holding all four of the room's types:
+# Ideas (open answers), Choose, Yes/No and Rate. Tagged build-room and for-<kind>, so a
+# room that is making that kind of thing sees it first, and no classic picker lists it.
+#
+# It REPLACES the two sets per kind installed before 24 Oct ("Build Room: <Kind> questions",
+# Call and Answer, and "Build Room: <Kind> pulse", Poll): once the new set is on the table
+# they are switched off (scripts/retire-question-sets.js; still in the console, hidden from
+# hosts). Safe to re-run: an installed set is skipped, a switched-off one is left as it is.
 set -euo pipefail
 TABLE="${1:?usage: $0 <table: engagedev | engagetest | engageprod> [--apply]}"
 APPLY="${2:-}"
 cd "$(dirname "$0")/.."
-install() { # file type title description tags
-  node scripts/install-question-set.js "$TABLE" "sets/$1" --type "$2" --title "$3" --topic business-work \
-    --tags "$5" --description "$4" ${APPLY:+--apply}
-}
 for KIND in training game document dashboard; do
   case "$KIND" in
     training)  NAME="a training site";  TITLE="Training" ;;
@@ -23,8 +24,12 @@ for KIND in training game document dashboard; do
     document)  NAME="a document or paper"; TITLE="Document" ;;
     dashboard) NAME="a dashboard";      TITLE="Dashboard" ;;
   esac
-  install "build-room-$KIND.csv" call-and-answer "Build Room: $TITLE questions" \
-    "Short questions that help a room steer $NAME, from who it is for to what comes next." "build-room,for-$KIND"
-  install "build-room-$KIND-pulse.csv" poll "Build Room: $TITLE pulse" \
-    "A quick pulse while building $NAME: 1 needs work, 5 is great, and one choice." "build-room,for-$KIND"
+  echo "=== $TITLE"
+  node scripts/install-question-set.js "$TABLE" "sets/build-room-$KIND.csv" --type poll --title "Build Room: $TITLE" \
+    --topic business-work --tags "build-room,for-$KIND" --skip-existing ${APPLY:+--apply} \
+    --description "Questions that help a room steer $NAME, from who it is for to what comes next: ideas, choices, yes or no, and a 1 to 5 pulse."
+  # The ids install-question-set.js gave the old pair (their titles, lowercased, letters and digits only).
+  OLD="buildroom${KIND}questions buildroom${KIND}pulse"
+  # shellcheck disable=SC2086
+  node scripts/retire-question-sets.js "$TABLE" $OLD ${APPLY:+--apply}
 done

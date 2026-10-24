@@ -64,6 +64,14 @@ describe('adding an engagement', () => {
     expect(screen.queryByText('Switched off')).toBeNull();
   });
 
+  // Owner, 24 Oct: a Build Room set is asked in a Build Room, never an agenda item.
+  it('does not offer a set tagged build-room', () => {
+    render(<EventItemDialog {...base({ type: 'call-and-answer', sets: [...SETS, { id: 'brgame', scope: 'platform', orgId: null, name: 'Build Room: Game questions', engagementType: 'call-and-answer', activeVersion: 1, questionCount: 14, active: true, tags: ['build-room', 'for-game'] }] })} />);
+    const rows = screen.getAllByTestId('set-chooser-row').map((r) => r.textContent);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatch(/Friction finder/);
+  });
+
   it('says when a set is already on the agenda, by the item\'s number', () => {
     render(<EventItemDialog {...base()} />);
     expect(screen.getAllByTestId('set-chooser-row')[1]).toHaveTextContent('On this agenda · 2');
