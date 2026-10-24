@@ -2760,7 +2760,7 @@ const QUESTIONS_VERB = 'Write a question set for the room (the build-room skill,
  * POST question-sets (Claude): the set it wrote. Kept on the room for the host
  * to use at once or save to their sets (the AI drafts review behind the bell);
  * the request it answers, if any, is done. Body: { requestId?, name, kind?,
- * questions: [{ kind: 'ideas'|'choose'|'rate', prompt, category, detail?, options? }], file? }.
+ * questions: [{ kind: 'ideas'|'choose'|'yesno'|'rate', prompt, category, detail?, options? }], file? }.
  */
 async function postClaudeSet(ctx, body) {
   const norm = S.normalizeClaudeSet(body);

@@ -91,6 +91,13 @@ describe('the list', () => {
     expect(screen.getByText('5 sets')).toBeInTheDocument();
   });
 
+  // The console manages Build Room sets, so it lists them where the pickers do not (owner, 24 Oct).
+  test('a Build Room set is listed', () => {
+    render(<QuestionSetsPanel questionSets={[...SETS, { id: 'br-game', name: 'Build Room: Game', engagementType: 'poll', tags: ['build-room', 'for-game'], totalQuestions: 22, categoryCount: 5, active: true, quickstart: false, createdAt: '2026-10-24T10:00:00.000Z' }]} />);
+    expect(rows()).toHaveLength(6);
+    expect(rowFor('Build Room: Game')).toBeTruthy();
+  });
+
   test('a set with no engagementType is still listed', () => {
     // normalizeGameType's documented job is to always return something, and for
     // a SET (unlike a session) that is right: the host's picker filters on the

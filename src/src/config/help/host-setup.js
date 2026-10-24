@@ -273,6 +273,7 @@ const gameSetup = {
           ],
         },
         { t: 'p', text: 'The same chooser picks the set for an agenda item in an event.' },
+        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions, at any point in the room. They stay in your question sets, where you change them.' },
       ],
     },
     /*
@@ -385,7 +386,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list; this dialog is where you change them.',
+          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list, except Build Room sets, which a Build Room asks from inside the room; this dialog is where you change them all.',
         },
         {
           t: 'p',

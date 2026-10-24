@@ -9,6 +9,42 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+**Before reviewing:** the new starter sets are not installed by the deploy. Run `scripts/install-build-room-kind-sets.sh engagetest` (a dry run that lists what it would install and switch off), then the same with `--apply`, once per tier (`engagedev`, `engagetest`; `engageprod` when it goes there).
+
+### New
+
+- **Every Build Room question has a type** (owner, 24 Oct: "some questions are ideas (free form responses), some are multiple choice (with the choices), some are yes no. we need to store that info"): **Ideas** (everyone writes, then votes), **Choose** (two to six options), **Yes/No** and **Rate** (1 to 5). It is the Poll question's own kind (open answer, multiple choice, yes/no, rating), so one Poll set holds all four; a Call & Answer question is Ideas. A Yes/No is asked as the room's yes-or-no, a choice of its two answers, in the set's own words when it renamed them (Approve / Decline).
+- **Type chips in Ask the room's ready questions**: **All · Ideas · Choose · Yes/No · Rate**, each with its count. One press shows only that type, and it stays as you move between sets. Every question shows its type, and a Choose its options.
+- **One starter set per kind of build**: *Build Room: Training*, *Game*, *Document* and *Dashboard*, each a Poll set of 22 questions in the five sections: the 14 Ideas questions from before, three Choose, three Yes/No and the two 1-to-5 ratings. They replace the two sets per kind (*… questions* and *… pulse*), which the install script switches off.
+- **Claude's own question sets** take Yes/No and open questions too (plugin **1.28.0**), and **Save to my sets** makes one Poll draft holding all its types (a Call & Answer draft only when it is all Ideas).
+
+### Fixed
+
+- **Build Room sets showed up among Call & Answer and Poll sets** when creating an engagement (owner, 24 Oct). A set tagged build-room is no longer offered by Create engagement, Quick start or an agenda item; a Build Room asks it from its ready questions at any point in the room, as before. The console's Question sets still lists it, to edit.
+- A yes or no question and an open-answer question in a build-room Poll set used to say they "cannot be asked in a Build Room". They can now.
+
+### What to look at
+
+1. Run the install script on engagetest (dry run first, then `--apply`). In the console's Question sets, the four *Build Room: <Kind>* sets are there, active; the eight old *… questions* / *… pulse* sets are there, switched off.
+2. **Create engagement**: pick Call & Answer, then Poll, and search "Build Room": no Build Room set is listed. Open **Quick start** and add an agenda item to an event: none there either.
+3. Create a Build Room, and answer *What are we making?* with "a game". Open **Ask the room**: *Build Room: Game* leads the ready questions. Check the type chips' counts (All 22, Ideas 14, Choose 3, Yes/No 3, Rate 2), press **Yes/No**, then **Choose** (each shows its options), then **All**.
+4. Pick a Yes/No question (*Should there be a timer on the screen?*): the form opens as Choose with **Yes** and **No** filled in; ask it, and a phone answers Yes or No.
+5. In the console, edit *Build Room: Game*: each question's **In a Build Room** box says *Asked as Ideas / Choose / Yes/No / Rate*. Change a Rate question's scale to 1 to 10: it says a Build Room rates on 1 to 5.
+6. With plugin 1.28.0, press **Ask Claude for questions** in a Build Room: the set may include Yes/No questions; **Save to my sets** puts one draft in your bell.
+
+### Known gaps
+
+- "Not sure" on a yes/no question is not offered in a Build Room: the room answers yes or no only.
+- The general starter sets (*Build Room starters*, *Build Room pulse*) stay as they were: a Call & Answer set and a Poll set, not merged.
+- The type filter covers the set you have open in the library (or Claude's set); it does not list every set's questions at once.
+- Until the install script runs on a tier, that tier still has the old two sets per kind, now without Create engagement listing them.
+
+---
+
 ## 24 Oct 2026 (small fixes): row buttons in full, Suspend asks why, Reports in the console
 
 **Test:** merge of dev `5fc325d5`. Everything below this entry is already on test; this push adds only what is here.

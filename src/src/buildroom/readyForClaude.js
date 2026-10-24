@@ -26,7 +26,7 @@ export function setsForClaude(sets, kind) {
   return (r.first.length ? r.first : r.general).slice(0, READY_SETS);
 }
 
-/** One set's rows as the questions Claude reads: `{ kind, prompt, category, options? }`. */
+/** One set's rows as the questions Claude reads: `{ kind, prompt, category, options?, yesno? }`. */
 export function questionsForClaude(payload, set) {
   return editableRows(payload, set.engagementType)
     .map((row) => ({ row, out: buildAskFromQuestion(row, set) }))
@@ -36,6 +36,7 @@ export function questionsForClaude(payload, set) {
       prompt: out.ask.prompt,
       category: String(row.category || ''),
       ...(out.ask.kind === 'choice' ? { options: out.ask.options.map((o) => o.title) } : {}),
+      ...(out.type === 'yesno' ? { yesno: true } : {}),
     }));
 }
 
