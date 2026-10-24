@@ -9,6 +9,83 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
+
+**Test:** merge of dev `91cc6b10`. Everything below this entry is already on test; this push adds only what is here.
+
+**Data on test (done with this push, 24 Oct):** the new sets were installed with `scripts/install-build-room-kind-sets.sh engagetest --apply`, and the ten old Build Room sets deleted with `scripts/delete-question-sets.js` (dry run first both times). Prod needs the same two steps when this goes there.
+
+### New
+
+- **Every Build Room question has a type** (owner, 24 Oct: "some questions are ideas (free form responses), some are multiple choice (with the choices), some are yes no. we need to store that info"): **Ideas** (everyone writes, then votes), **Choose** (two to six options), **Yes/No** and **Rate** (1 to 5). It is the Poll question's own kind (open answer, multiple choice, yes/no, rating), so one Poll set holds all four; a Call & Answer question is Ideas. A Yes/No is asked as the room's yes-or-no, a choice of its two answers, in the set's own words when it renamed them (Approve / Decline).
+- **Type chips in Ask the room's ready questions**: **All · Ideas · Choose · Yes/No · Rate**, each with its count. One press shows only that type, and it stays as you move between sets. Every question shows its type, and a Choose its options.
+- **One starter set per kind of build**: *Build Room: Training*, *Game*, *Document* and *Dashboard*, each a Poll set of 22 questions in the five sections: the 14 Ideas questions from before, three Choose, three Yes/No and the two 1-to-5 ratings. They replace the two sets per kind (*… questions* and *… pulse*), which the install script switches off.
+- **One general set for any build**: *Build Room: General*, a Poll set of 25 questions (the 17 Ideas questions of the old *Build Room starters*, the 3 ratings of *Build Room pulse*, and two new Choose and three new Yes/No). It replaces those two; every room sees it after the sets for its own kind.
+- **The old Build Room sets are deleted once replaced**: `scripts/delete-question-sets.js <table> <setId>…` (a dry run first, `--apply` to delete) removes switched-off Engage sets with the console's own delete. It refuses a set still switched on, one a live session uses, and any team's set.
+- **Claude's own question sets** take Yes/No and open questions too (plugin **1.28.0**), and **Save to my sets** makes one Poll draft holding all its types (a Call & Answer draft only when it is all Ideas).
+
+- **The four per-type default prompts live in the repo too** (another session): *Call & Answer — Advisor Read*, *Trivia - Round Call*, *Poll - Round Read* and *Wavelength - Team Read* are kept in `prompts/tier-defaults`, so Admin › Prompts' repo check and `scripts/apply-repo-prompts.js` can carry them to the next tier (archived prompts are skipped). Nothing changes on screen.
+
+### Fixed
+
+- **Build Room sets showed up among Call & Answer and Poll sets** when creating an engagement (owner, 24 Oct). A set tagged build-room is no longer offered by Create engagement, Quick start or an agenda item; a Build Room asks it from its ready questions at any point in the room, as before. The console's Question sets still lists it, to edit.
+- A yes or no question and an open-answer question in a build-room Poll set used to say they "cannot be asked in a Build Room". They can now.
+
+### What to look at
+
+1. In the console's Question sets (Engage), filter by the tag `build-room`: exactly five sets, all active: *Build Room: General* (25 questions) and *Build Room: Training*, *Game*, *Document* and *Dashboard* (22 each). The old *… questions*, *… pulse*, *Build Room starters* and *Build Room pulse* are gone.
+2. **Create engagement**: pick Call & Answer, then Poll, and search "Build Room": no Build Room set is listed. Open **Quick start** and add an agenda item to an event: none there either.
+3. Create a Build Room, and answer *What are we making?* with "a game". Open **Ask the room**: *Build Room: Game* leads the ready questions. Check the type chips' counts (All 22, Ideas 14, Choose 3, Yes/No 3, Rate 2), press **Yes/No**, then **Choose** (each shows its options), then **All**.
+4. Pick a Yes/No question (*Should there be a timer on the screen?*): the form opens as Choose with **Yes** and **No** filled in; ask it, and a phone answers Yes or No.
+5. In the console, edit *Build Room: Game*: each question's **In a Build Room** box says *Asked as Ideas / Choose / Yes/No / Rate*. Change a Rate question's scale to 1 to 10: it says a Build Room rates on 1 to 5.
+6. With plugin 1.28.0, press **Ask Claude for questions** in a Build Room: the set may include Yes/No questions; **Save to my sets** puts one draft in your bell.
+
+### Known gaps
+
+- "Not sure" on a yes/no question is not offered in a Build Room: the room answers yes or no only.
+- The type filter covers the set you have open in the library (or Claude's set); it does not list every set's questions at once.
+- Until the install script runs on a tier, that tier still has the old sets, now without Create engagement listing them. Then delete them: `node scripts/delete-question-sets.js engagetest buildroomstarters buildroompulse buildroomtrainingquestions buildroomtrainingpulse buildroomgamequestions buildroomgamepulse buildroomdocumentquestions buildroomdocumentpulse buildroomdashboardquestions buildroomdashboardpulse` (dry run, then `--apply`).
+
+---
+
+## 24 Oct 2026 (small fixes): row buttons in full, Suspend asks why, Reports in the console
+
+**Test:** merge of dev `5fc325d5`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new: this push is fixes.
+
+### Fixed
+
+- **Billing… was cut off on team rows** in Admin › Organisations ([#40](https://github.com/geseib/engagements/issues/40)): a team row has three buttons (Billing…, Activity…, Suspend, or Reinstate when suspended), the column was 168px wide, and the first one, Billing…, was clipped out of sight, even at 1920px. The column now fits all three, and that cell never hides a button.
+- **Make Engage admin was cut off on Accounts** ([#43](https://github.com/geseib/engagements/issues/43)): when you point at an account, its moves (*Make Engage admin*, *Make host* or *Disable*, and the bin) appear in a column sized at a fifth of the table, too narrow for the longest pair, so *Make Engage admin* lost its left edge. The moves now have a column wide enough for them, and the person's name takes the rest.
+- **Suspend acted on one click, with no reason** ([#40](https://github.com/geseib/engagements/issues/40)). In Admin › Organisations, **Suspend…** opens a small dialog that says what it does today (the team is marked Suspended; nothing else changes yet, its members can still sign in and run sessions) and needs a written reason of a few words. The reason goes in the team's log and shows under its name on the list until **Reinstate**, which stays one click.
+- **The console's Reports section could not be opened.** The Reports section (the saved PDFs, the same list as the start screen's **Reports**) was built but missing from the menu. It now sits under Sessions (and Events) for everyone who has Sessions.
+- **Build Room, two screens: Join now toggles** ([#43](https://github.com/geseib/engagements/issues/43)). On the console, Join only ever showed the codes; it now shows and hides them, as on one screen and as J does, and says which a press will do. Esc takes them down too.
+- **"← All sessions" said where it went wrongly.** Its tooltip said "Back to your sessions"; it goes to the start screen, and now says so (the session keeps running; Continue brings you back).
+- **Wavelength showed "This round +0" on the phone.** Wavelength scores nobody, so the phone's results no longer show the score lines there, nor for a poll; Trivia and Call & Answer keep them.
+- **Quick start's empty menu gave stale directions** ("go to Admin → Question Sets and check the Quickstart box"). It now says to press a set's **Quickstart** tag in Your question sets (or the console's Question sets), with an **Open your question sets** button.
+
+### What to look at
+
+1. As Engage staff, open Admin › Organisations: every team row shows **Billing…**, **Activity…** and **Suspend…** (or **Reinstate**); personal rows show Billing… and Activity…. **Billing…** opens the team's billing drawer.
+2. Open Admin › Accounts and point at a host's row: **Make Engage admin**, **Disable** and the bin show in full; on an admin's row, **Make host**, **Disable** and the bin.
+3. Still in Organisations, press **Suspend…** on a test team: the dialog explains what Suspend does, and **Suspend** stays greyed out until you type a reason of a few words. Suspend it: the row reads Suspended with your reason under the name (point at it for the whole reason), and **Activity…** shows the entry with the reason. **Reinstate** acts on the click and the reason goes.
+4. In the console (as a host or a team member), the menu has **Reports** after Sessions; it lists the same saved reports as **Reports** on the start screen.
+5. Start a Build Room on two screens (or with the room's window up): press **Join** on the console's top line: the codes go up and Join reads as pressed; press it again: they come down. Put them up again and press **Esc**: they come down.
+6. On any console, point at **← All sessions**: the tooltip says it goes back to the start screen.
+7. Play a Wavelength subject on a phone to results: no "This round" or "Total" lines. A Trivia question still shows them.
+8. With no sets tagged Quickstart (a fresh personal space), open **Quick start**: the message names the Quickstart tag; **Open your question sets** opens them.
+
+### Known gaps
+
+- On narrow windows the list scrolls sideways rather than squeezing the buttons (as before, it was already 620px wide at least; now 700px).
+- Suspending still does not stop a team's members working; the dialog says so. Enforcing it is a separate decision.
+- A team suspended before this push shows no reason on its row (none was asked for then).
+
+---
+
 ## 23 Oct 2026 (Quick start filters): whose sets and tags beside the search
 
 **Test:** merge of dev `363a9b81`. Everything below this entry is already on test; this push adds only what is here.

@@ -17,13 +17,15 @@ const SET = (tags) => ({
 });
 const POLL = {
   id: 'br-pulse', name: 'Build Room pulse', engagementType: 'poll',
-  totalQuestions: 2, categoryCount: 1, activeVersion: 1, canManage: true, tags: ['build-room'],
+  totalQuestions: 4, categoryCount: 1, activeVersion: 1, canManage: true, tags: ['build-room'],
 };
 const QUESTIONS = {
   'br-starters': [{ id: 'c001#001', Category: 'While building', QuestionNumber: 1, title: 'What should we cut?', detail: 'One thing.', ClaudeGets: 'do-now', ClaudeNote: 'Remove the winning item.' }],
   'br-pulse': [
     { id: 'c001#001', Category: 'While building', QuestionNumber: 1, title: 'How clear is the main screen?', kind: 'rating', scale: '1-5' },
     { id: 'c001#002', Category: 'While building', QuestionNumber: 2, title: 'Ship it?', kind: 'yesno' },
+    { id: 'c001#003', Category: 'While building', QuestionNumber: 3, title: 'What should we build next?', kind: 'text' },
+    { id: 'c001#004', Category: 'While building', QuestionNumber: 4, title: 'How useful, out of ten?', kind: 'rating', scale: '1-10' },
   ],
 };
 
@@ -81,15 +83,24 @@ describe('the question form in a build-room set (C15)', () => {
     expect(within(dialog).queryByRole('group', { name: 'In a Build Room' })).toBeNull();
   });
 
-  test('Poll: a 1 to 5 rating is Rate; a yes or no says it is not offered, and why', async () => {
+  // Owner, 24 Oct: a Poll set holds all four types; what it cannot ask says why.
+  test('Poll: a 1 to 5 rating is Rate, a yes or no Yes/No, an open answer Ideas; a 1 to 10 scale says why it is not offered', async () => {
     mockApi('br-pulse');
     renderPanel(POLL);
     let dialog = await edit('How clear is the main screen?');
     expect(within(dialog).getByRole('group', { name: 'In a Build Room' }).textContent).toMatch('Asked as Rate. The room rates 1 to 5: 1 needs work, 5 is great.');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     dialog = await edit('Ship it?');
-    const section = within(dialog).getByRole('group', { name: 'In a Build Room' });
-    expect(section.textContent).toMatch('Not offered in a Build Room. A yes or no question cannot be asked in a Build Room.');
+    let section = within(dialog).getByRole('group', { name: 'In a Build Room' });
+    expect(section.textContent).toMatch('Asked as Yes/No. The room answers yes or no.');
+    expect(within(section).getByLabelText('Note for Claude')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    dialog = await edit('What should we build next?');
+    expect(within(dialog).getByRole('group', { name: 'In a Build Room' }).textContent).toMatch('Asked as Ideas. Everyone answers, then votes.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    dialog = await edit('How useful, out of ten?');
+    section = within(dialog).getByRole('group', { name: 'In a Build Room' });
+    expect(section.textContent).toMatch('Not offered in a Build Room. A Build Room rates on 1 to 5; this question uses 1 to 10.');
     expect(within(section).queryByLabelText('Note for Claude')).toBeNull();
   });
 });

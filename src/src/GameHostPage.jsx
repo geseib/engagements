@@ -6620,6 +6620,8 @@ Focus on actionable business strategy insights.`;
           });
         }}
         onClose={() => setShowQuickstartMenu(false)}
+        // The empty menu's way to the sets (#43): Your question sets opens over the start screen.
+        onQuestionSets={() => { setShowQuickstartMenu(false); setShowHostSets(true); }}
         roomScreen={roomScreenChoice}
         onRoomScreen={chooseRoomScreen}
       />

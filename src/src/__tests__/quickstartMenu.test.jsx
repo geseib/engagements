@@ -58,6 +58,19 @@ const renderMenu = (props = {}) => {
   return { ...utils, onGameCreated, onClose };
 };
 
+// Owner, 24 Oct: a Build Room set is asked in a Build Room, never quick-started as a session.
+test('a quick start set tagged build-room is not offered', async () => {
+  authFetch.mockImplementation(async (url) => {
+    if (String(url).endsWith('admin/question-sets')) {
+      return { ok: true, json: async () => ({ questionSets: [...SETS, { ...SETS[0], id: 'br-game', name: 'Build Room: Game', engagementType: 'poll', tags: ['build-room'] }] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+  renderMenu();
+  await screen.findByRole('button', { name: /Tech Trends/ });
+  expect(screen.queryByRole('button', { name: /Build Room: Game/ })).toBeNull();
+});
+
 test('a set is a real button, not a div nobody can tab to', async () => {
   // rejects: the shipped state — `<div className="quickstart-set-card"
   // onClick=…>`, which is unreachable by keyboard and announces as nothing.
@@ -402,8 +415,20 @@ describe('searching Quick start', () => {
   test('an empty library keeps its own message and shows no search', async () => {
     authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
     renderMenu();
-    expect(await screen.findByText('No Quickstart Sets Available')).toBeInTheDocument();
+    expect(await screen.findByText('No sets on the quick start menu yet')).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+
+  // rejects: the stale "Admin → Question Sets … check the 'Quickstart' box" (#43)
+  test('an empty library names today\'s control and opens Your question sets', async () => {
+    authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
+    const onQuestionSets = jest.fn();
+    renderMenu({ onQuestionSets });
+    const empty = (await screen.findByText('No sets on the quick start menu yet')).closest('.no-quickstart-sets');
+    expect(empty).toHaveTextContent(/Quickstart tag in Your question sets/);
+    expect(empty).not.toHaveTextContent(/Admin|check the/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Open your question sets' }));
+    expect(onQuestionSets).toHaveBeenCalledTimes(1);
   });
 });
 

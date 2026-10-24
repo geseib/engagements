@@ -8,7 +8,7 @@ import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
 import { makeListPredicate, ALL } from '../config/listControls';
-import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags } from '../config/setFinder';
+import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags, offeredForSessions } from '../config/setFinder';
 import { tagIndex } from '../config/setShelfIndex';
 import { OWNER_OPTIONS, setOwnerTag } from '../utils/setOwnerTag';
 import { SCREEN_WORDS } from '../config/roomScreen';
@@ -66,7 +66,7 @@ export function QuickScreens({ choice, onChoose, blocked = false }) {
   );
 }
 
-const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScreen = null }) => {
+const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScreen = null, onQuestionSets = null }) => {
   const [windowBlocked, setWindowBlocked] = useState(false);
   const [quickstartSets, setQuickstartSets] = useState({
     'call-and-answer': [],
@@ -157,7 +157,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
       };
 
       (data.questionSets || []).forEach(set => {
-        if (set.quickstart && set.active) {
+        if (set.quickstart && set.active && offeredForSessions(set)) {
           const type = set.engagementType || 'call-and-answer';
           if (quickstartData[type]) {
             quickstartData[type].push(set);
@@ -387,9 +387,15 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
             <QuickScreens choice={roomScreen} onChoose={onRoomScreen} blocked={windowBlocked} />
           ) : null}
           {totalQuickstartSets === 0 ? (
+            /* Today's controls (#43): a set goes on the menu by its Quickstart
+               tag, in Your question sets or the console's Question sets. This
+               used to send hosts to an "Admin → Question Sets" checkbox. */
             <div className="no-quickstart-sets">
-              <h3>No Quickstart Sets Available</h3>
-              <p>To enable quickstart, go to Admin <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /> Question Sets and check the "Quickstart" box for your desired question sets.</p>
+              <h3>No sets on the quick start menu yet</h3>
+              <p>To put one of your sets here, press its Quickstart tag in Your question sets; press it again to take it off. You can also do it from the console&apos;s Question sets.</p>
+              {onQuestionSets && (
+                <button type="button" className="quickstart-clear" onClick={onQuestionSets}>Open your question sets</button>
+              )}
             </div>
           ) : (
             <>

@@ -243,12 +243,21 @@ const running = {
           t: 'list',
           items: [
             { title: 'Three kinds', text: '**Ideas**: people suggest, then vote. **Choose**: two to six lettered options, each with an optional preview link. **Rate**: 1 needs work, 5 great. With Choose and Rate, people can add why.' },
-            { title: 'Ready questions', text: 'On the left: the questions of every set you can use that is tagged build-room, with how many have been asked here. Pick one to fill in the form.' },
+            { title: 'Ready questions', text: 'On the left: the questions of every set you can use that is tagged build-room, with how many have been asked here. They are there whenever you ask, from the opening to the wrap-up; you never pick a set when you create the room. Pick one to fill in the form.' },
             { title: 'Ready questions for each kind of build', text: 'Tag a set for-game, for-training, for-document, for-dashboard, for-website, for-app, for-tool or for-explore as well, and once the room has said what it is making (the opening\'s first step) that set comes first, then sets with no for- tag; sets for other kinds fold under **Other sets**. Before the room decides, every set shows. Claude gets the matching set\'s questions too and asks from them first, still through you.' },
             { title: 'Claude gets it as', text: '**Do now** (Claude stops and does it), **Keep in mind** (a standing rule; Claude keeps going), or **Ask Claude** (Claude answers and keeps building). **Note for Claude (private)** goes with the answer.' },
             { title: 'Save as a draft', text: 'Keeps it in Waiting for you instead of opening it.' },
           ],
         },
+      ],
+    },
+    {
+      id: 'ready-question-types',
+      title: 'Ready questions by type',
+      icon: 'SlidersHorizontal',
+      blocks: [
+        { t: 'p', text: 'Each ready question shows how the room is asked it: **Ideas**, **Choose** (its options under it), **Yes/No** or **Rate**. A Yes/No opens as a Choose of its two answers, in the set\'s own words when it renamed them.' },
+        { t: 'p', text: 'Above the list, **All** and one chip per type, each with how many questions are that type. Press one to see only that type; it stays as you move between sets. **All** brings them all back.' },
       ],
     },
     {
@@ -261,7 +270,7 @@ const running = {
           t: 'list',
           items: [
             { title: 'Where it lands', text: 'Claude keeps it in the project under build-room/questions and sends it. It appears first in the ready questions, marked **From Claude**, and you can ask from it straight away.' },
-            { title: 'Keeping it', text: '**Save to my sets** puts it in your bell as a draft: a Call and Answer set for its Ideas questions, a Poll set for its Choose and Rate ones, tagged for its kind. Keep, change or leave each question, then accept it to have it in every session.' },
+            { title: 'Keeping it', text: '**Save to my sets** puts it in your bell as a draft, tagged for its kind: one Poll set holding its Ideas (as open answers), Choose, Yes/No and Rate questions, or a Call and Answer set when it is all Ideas. Keep, change or leave each question, then accept it to have it in every Build Room.' },
             { title: 'If you do not save it', text: 'It goes when the session does, seven days after it started; the file stays in the project. Two days before, your bell reminds you, and the reminder opens the room. Saving or removing the set clears it.' },
           ],
         },
@@ -530,7 +539,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Join in the header, the code on the Stage\'s left rail, or J puts the join code in a panel beside what is on the Stage, on this screen and on the room\'s window, without covering it. While the demo is shared on the Wi-Fi, its code sits under the join code. J takes them down again, and so do Join on one screen and Esc on the Stage. On the Stage, click a code in the panel to enlarge it on your own screen; the enlarged join code copies its link.',
+          text: 'Join in the header, the code on the Stage\'s left rail, or J puts the join code in a panel beside what is on the Stage, on this screen and on the room\'s window, without covering it. While the demo is shared on the Wi-Fi, its code sits under the join code. J takes them down again, and so does Join; so does Esc, on the Stage and on the two-screen console. On the Stage, click a code in the panel to enlarge it on your own screen; the enlarged join code copies its link.',
         },
       ],
     },
@@ -661,7 +670,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'The top line', text: '← **All sessions** (the session keeps running), the title, Join (shows the join code to the room; J takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
+            { title: 'The top line', text: '← **All sessions** (the start screen; the session keeps running), the title, Join (shows the join code to the room; press it again, J or Esc takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
             { title: 'The strip', text: 'Where the ask is: Opening, then Ask, Collect, Settle, Send to Claude, then Wrap up. Between asks it stays, dimmed, and says what is happening instead (Between asks, or the run list with how many are done).' },
             { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now**, and What\'s next below has the moves. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
             { title: 'Mockups ready', text: 'When Claude\'s mockups are all in, a card under Your part now shows them, with **Put to the room now** and **Next, after this ask**. It never replaces the main button.' },

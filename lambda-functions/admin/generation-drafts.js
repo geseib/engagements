@@ -338,7 +338,8 @@ async function restore(event, id) {
  * review (docs/superpowers/plans/2026-10-22-build-room-question-sets.md step 7).
  * Body: { title, engagementType: 'call-and-answer'|'poll', items, tags?, description?, gameId? }.
  * Call and Answer items: { title, detail?, category }. Poll items: { title,
- * detail?, category, kind: 'choice', options (2-6) } or { ..., kind: 'rating', scale: '1-5' }.
+ * detail?, category, kind: 'choice', options (2-6) }, { ..., kind: 'rating', scale: '1-5' },
+ * or { ..., kind: 'yesno' } and { ..., kind: 'text' } (Yes/No and Ideas; owner, 24 Oct).
  */
 const FROM_BUILD_TYPES = ['call-and-answer', 'poll'];
 async function fromBuild(event) {
@@ -363,8 +364,10 @@ async function fromBuild(event) {
       items.push({ ...base, kind: 'choice', options });
     } else if (it.kind === 'rating') {
       items.push({ ...base, kind: 'rating', scale: '1-5' });
+    } else if (it.kind === 'yesno' || it.kind === 'text') {
+      items.push({ ...base, kind: it.kind });
     } else {
-      return json(400, { error: 'A poll question here is a choice or a rating.' });
+      return json(400, { error: 'A poll question here is a choice, a yes or no, an open answer or a rating.' });
     }
   }
   const tags = normalizeTags(Array.isArray(b.tags) ? b.tags : []);

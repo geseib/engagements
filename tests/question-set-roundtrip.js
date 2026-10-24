@@ -802,13 +802,15 @@ const WAVELENGTH_CSV = [
   }
 
   // ==== the shipped Build Room starter sets import as they are ============
-  say('\n  -- sets/build-room-*.csv: the starters, the pulse, and one pair per kind of build --');
+  say('\n  -- sets/build-room-*.csv: the starters, the pulse, and one set per kind of build --');
   // Per kind (docs/superpowers/plans/2026-10-22-build-room-question-sets.md step 6): installed
-  // with --tags build-room,for-<kind>; the library puts them first for that kind.
-  const KIND_SETS = ['training', 'game', 'document', 'dashboard'].flatMap((k) => [
-    [`build-room-${k}.csv`, 'call-and-answer', 14], [`build-room-${k}-pulse.csv`, 'poll', 3],
-  ]);
-  for (const [file, type, count] of [['build-room-starters.csv', 'call-and-answer', 17], ['build-room-pulse.csv', 'poll', 3], ...KIND_SETS]) {
+  // with --tags build-room,for-<kind>; the library puts them first for that kind. Since 24 Oct
+  // one Poll set per kind holds all four of the room's types (owner: "some questions are ideas
+  // ..., some are multiple choice ..., some are yes no. we need to store that info").
+  const KIND_SETS = ['training', 'game', 'document', 'dashboard'].map((k) => [`build-room-${k}.csv`, 'poll', 22]);
+  // The general set (any kind of build) is one mixed Poll set too, since 24 Oct: the old
+  // starters (17 Ideas) and pulse (3 ratings), with two Choose and three Yes/No added.
+  for (const [file, type, count] of [['build-room-general.csv', 'poll', 25], ...KIND_SETS]) {
     resetDb();
     const csv = require('fs').readFileSync(require('path').join(__dirname, '..', 'sets', file), 'utf8');
     const t = await roundTrip(`Shipped ${file}`, type, csv);
@@ -818,15 +820,25 @@ const WAVELENGTH_CSV = [
     });
     check(`${file}: it survives the round trip`, () => assertSameQuestions(t.before, t.after));
     if (type === 'poll') {
-      // A Build Room asks a 1 to 5 rating on the fixed scale, or a choice of 2 to 6 with one pick (readyQuestions.js).
-      check(`${file}: every pulse question is a 1 to 5 rating on the fixed scale, or a single-pick choice of 2 to 6`, () =>
+      // What a Build Room asks (readyQuestions.js): an open answer (Ideas), a single-pick choice of
+      // 2 to 6 (Choose), a yes or no (Yes/No), or a 1 to 5 rating on the fixed scale (Rate).
+      check(`${file}: every question is one the room can ask: open, a choice of 2 to 6, yes or no, or a 1 to 5 rating`, () =>
         assert.ok(t.before.every((r) => (r.kind === 'rating' && r.scale === '1-5')
-          || (r.kind === 'choice' && Array.isArray(r.options) && r.options.length >= 2 && r.options.length <= 6 && !r.allowMultiple)), JSON.stringify(t.before)));
-    } else {
+          || (r.kind === 'choice' && Array.isArray(r.options) && r.options.length >= 2 && r.options.length <= 6 && !r.allowMultiple)
+          || r.kind === 'yesno' || r.kind === 'text'), JSON.stringify(t.before)));
+    }
+    if (file !== 'build-room-pulse.csv') {
       check(`${file}: the five sections, in session order`, () => {
         const order = ['Who it is for', 'Start', 'Think differently', 'While building', 'Before wrapping up'];
         const cats = [...new Set(t.before.map((r) => r.Category))];
         assert.deepStrictEqual(cats.filter((c) => order.includes(c)), cats, JSON.stringify(cats));
+      });
+    }
+    if (KIND_SETS.some(([f]) => f === file)) {
+      check(`${file}: 14 Ideas, 3 Choose, 3 Yes/No and 2 Rate, the Ideas carrying their answer hint`, () => {
+        const n = (k) => t.before.filter((r) => r.kind === k).length;
+        assert.deepStrictEqual([n('text'), n('choice'), n('yesno'), n('rating')], [14, 3, 3, 2]);
+        assert.ok(t.before.filter((r) => r.kind === 'text').every((r) => r.placeholder), 'an Ideas question lost its hint');
       });
     }
   }

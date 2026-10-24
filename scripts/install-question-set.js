@@ -38,9 +38,13 @@ const flag = (name, fallback = null) => {
   return i === -1 ? fallback : (argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : true);
 };
 const apply = argv.includes('--apply');
+/* --skip-existing: a set with this id already on the table is "already
+   installed", exit 0, not a refusal, so a batch script can be re-run
+   (install-build-room-kind-sets.sh). The set is still never overwritten. */
+const skipExisting = argv.includes('--skip-existing');
 
 if (!tableName || !file) {
-  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--tags a,b] [--apply]');
+  console.error('usage: install-question-set.js <table> <file.csv> --type <gameType> --title "..." --topic <topic> [--description "..."] [--persona <id>] [--quickstart] [--tags a,b] [--skip-existing] [--apply]');
   process.exit(2);
 }
 
@@ -217,6 +221,10 @@ function reportImport(payload, writes) {
       return;
     }
     throw err;
+  }
+  if (existing.Item && skipExisting) {
+    console.log(`  "${setId}" is already installed (active=${existing.Item.active !== false}); skipped, nothing written.`);
+    return;
   }
   if (existing.Item) {
     console.error(`  A set with id "${setId}" already exists. upload-questions.js refuses to`);

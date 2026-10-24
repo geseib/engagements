@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import OrgBillingDrawer from './OrgBillingDrawer';
 import { AuditLogDialog } from './AuditLog';
+import Modal from './Modal';
 import './PlatformOrgsPanel.css';
 
 /**
@@ -27,7 +28,8 @@ import './PlatformOrgsPanel.css';
  * ── WHAT IT CAN DO ─────────────────────────────────────────────────────────
  *
  * Approve an organisation that is waiting, suspend one, and lift a suspension.
- * Each is one field on two rows and nothing else. A PERSONAL space cannot be
+ * Each is one field on two rows and nothing else. Suspend asks first, with a
+ * written reason (#40); Approve and Reinstate stay one click. A PERSONAL space cannot be
  * suspended at all — the server refuses it and this hides the control, for the
  * reason recorded in platform-orgs.js: suspending somebody's own home is an
  * account deletion with a friendlier name, and the lever for a person is their
@@ -36,6 +38,10 @@ import './PlatformOrgsPanel.css';
 const API = () => window.API_BASE || '';
 
 const STATUS_LABEL = { active: 'Active', pending: 'Pending', suspended: 'Suspended' };
+
+/* The server's floor and cap for a suspension's reason (platform-orgs.js). */
+export const SUSPEND_REASON_MIN = 10;
+export const SUSPEND_REASON_MAX = 600;
 
 /**
  * `2026-02-01T…` -> `since Feb 2026`. The mockup's "since Feb 2026".
@@ -65,6 +71,8 @@ export default function PlatformOrgsPanel() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState('');
+  /* The organisation whose Suspend was pressed: the dialog asks before it acts. */
+  const [suspending, setSuspending] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,7 +95,9 @@ export default function PlatformOrgsPanel() {
 
   useEffect(() => { load(); }, [load]);
 
-  const setStatus = async (org, status) => {
+  /* Resolves true when the change went through; a refusal shows on the page
+     (or, from the dialog, in it: `throwOnError`). */
+  const setStatus = async (org, status, { reason, throwOnError = false } = {}) => {
     setBusyId(org.orgId);
     setError('');
     setNotice('');
@@ -95,7 +105,7 @@ export default function PlatformOrgsPanel() {
       const res = await authFetch(`${API()}platform/orgs/${encodeURIComponent(org.orgId)}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(reason ? { status, reason } : { status }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`);
@@ -104,8 +114,11 @@ export default function PlatformOrgsPanel() {
          a table showing four. */
       setNotice(`${org.name} is now ${STATUS_LABEL[status].toLowerCase()}.`);
       await load();
+      return true;
     } catch (err) {
+      if (throwOnError) throw err;
       setError(err.message || 'That did not work.');
+      return false;
     } finally {
       setBusyId('');
     }
@@ -179,6 +192,12 @@ export default function PlatformOrgsPanel() {
                           <span className="porgs-meta">{sinceLabel(org.createdAt)}</span>
                         </>
                       )}
+                      {/* Why it is suspended, for staff (#40). Cut to one line; the title carries it whole. */}
+                      {status === 'suspended' && org.suspendedReason && (
+                        <span className="porgs-why" title={org.suspendedReason}>
+                          Suspended{org.suspendedAt ? ` ${whenLabel(org.suspendedAt)}` : ''}: {org.suspendedReason}
+                        </span>
+                      )}
                     </td>
                     <td className="porgs-col-plan">{org.plan === 'team' ? 'Team' : 'Free'}</td>
                     <td className="porgs-col-num">{org.members}</td>
@@ -237,9 +256,9 @@ export default function PlatformOrgsPanel() {
                             type="button"
                             className="porgs-btn porgs-btn--danger"
                             disabled={busy}
-                            onClick={() => setStatus(org, 'suspended')}
+                            onClick={() => setSuspending(org)}
                           >
-                            Suspend
+                            Suspend…
                           </button>
                         )}
                       </div>
@@ -252,6 +271,16 @@ export default function PlatformOrgsPanel() {
         </div>
       )}
 
+      {suspending && (
+        <SuspendOrgDialog
+          org={suspending}
+          onCancel={() => setSuspending(null)}
+          onSuspend={async (reason) => {
+            await setStatus(suspending, 'suspended', { reason, throwOnError: true });
+            setSuspending(null);
+          }}
+        />
+      )}
       {billing && <OrgBillingDrawer org={billing} onClose={() => setBilling(null)} />}
       {activity && (
         <AuditLogDialog
@@ -271,5 +300,103 @@ export default function PlatformOrgsPanel() {
         their own access log.
       </p>
     </div>
+  );
+}
+
+/** `2026-10-24T…` -> `24 Oct 2026`, in UTC for the reason sinceLabel gives. */
+function whenLabel(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * SUSPEND, ASKED FIRST (#40). It acted on one click with nothing saying why.
+ * The dialog says what Suspend does today, and no more: the organisation is
+ * marked Suspended, and nothing yet stops its members working. A written
+ * reason is required; it goes to the server, onto the row and into the audit
+ * log. X and Cancel share one close; Escape and the backdrop are held while a
+ * reason is typed or the change is in flight.
+ */
+export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const why = reason.replace(/\s+/g, ' ').trim();
+  const dirty = why.length > 0;
+  const ready = why.length >= SUSPEND_REASON_MIN && why.length <= SUSPEND_REASON_MAX;
+
+  const requestClose = () => {
+    if (busy) return;
+    if (dirty && !window.confirm('Close without suspending? The reason you typed will be lost.')) return;
+    onCancel();
+  };
+
+  const submit = async () => {
+    if (!ready) {
+      setError(why.length > SUSPEND_REASON_MAX
+        ? `Keep the reason to ${SUSPEND_REASON_MAX} characters.`
+        : 'Say why, in a few words.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await onSuspend(why);
+    } catch (e) {
+      setError(e.message || 'Not suspended.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      overlayClassName="porgs-scrim"
+      contentClassName="porgs-modal"
+      labelledBy="porgs-suspend-title"
+      onClose={requestClose}
+      closeOnBackdrop={() => !dirty && !busy}
+      closeOnEscape={() => !dirty && !busy}
+    >
+      <header className="porgs-modal-head">
+        <div className="porgs-grow">
+          <h2 id="porgs-suspend-title">Suspend {org.name}?</h2>
+          <p className="porgs-dim">
+            This marks the organisation Suspended on this list. Nothing else changes yet: its members
+            can still sign in and run sessions. Reinstate lifts it.
+          </p>
+        </div>
+        <button type="button" className="porgs-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
+      </header>
+      <div className="porgs-modal-body">
+        <label className="porgs-field">
+          <span className="porgs-lab">Reason <span className="porgs-dim">(required)</span></span>
+          <textarea
+            className="porgs-input"
+            rows={3}
+            value={reason}
+            maxLength={SUSPEND_REASON_MAX}
+            onChange={(e) => { setReason(e.target.value); setError(''); }}
+            disabled={busy}
+          />
+          <span className="porgs-help">
+            A few words at least. It shows on this row and goes in the organisation’s audit log, which its owners and admins can read.
+          </span>
+        </label>
+        {error && <p className="porgs-alert" role="alert">{error}</p>}
+      </div>
+      <footer className="porgs-modal-foot">
+        <button type="button" className="porgs-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+        <button
+          type="button"
+          className="porgs-btn porgs-btn--danger"
+          onClick={submit}
+          disabled={busy || !ready}
+          data-testid="porgs-suspend"
+        >
+          {busy ? 'Suspending…' : 'Suspend'}
+        </button>
+      </footer>
+    </Modal>
   );
 }

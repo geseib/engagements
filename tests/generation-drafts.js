@@ -436,7 +436,9 @@ const APPEND = {
     assert.strictEqual(await bad({ title: '  ' }), 400);
     assert.strictEqual(await bad({ items: [] }), 400);
     assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'choice', options: ['A'] }] }), 400);
-    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'yesno' }] }), 400);
+    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'rank' }] }), 400);
+    // Owner, 24 Oct: one Poll set holds all four of the room's types.
+    assert.strictEqual(await bad({ items: [{ title: 'Ship?', kind: 'yesno' }, { title: 'What next?', kind: 'text' }] }), 201);
     assert.strictEqual(await bad({ items: [{ title: '', kind: 'rating' }] }), 400);
     assert.strictEqual(parse(await route('POST', 'from-build', { title: 'X', engagementType: 'call-and-answer', items: [{ title: 'Q' }] }, orgless)).status, 403);
   });

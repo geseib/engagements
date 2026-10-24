@@ -4,27 +4,30 @@ Owner, 22 Oct 2026: *"different questions for a training site, vs a game, vs a p
 *"build step 6, the starter sets"* (`docs/superpowers/plans/2026-10-22-build-room-question-sets.md`).
 
 Four kinds first, to match the first starter templates: **training, game, document, dashboard**.
-Each kind is two sets, because a set has one type:
+Since 24 Oct 2026 each kind is **one Poll set** (owner: *"some questions are ideas (free form
+responses), some are multiple choice (with the choices), some are yes no. we need to store that
+info"*). A Poll question's kind is its Build Room type (`src/src/buildroom/readyQuestions.js`):
+open answer → Ideas, choice → Choose, yes/no → Yes/No, 1–5 rating → Rate.
 
 | File | Type | In a Build Room | Tags |
 |---|---|---|---|
-| `sets/build-room-training.csv` | Call and Answer, 14 | Ideas | `build-room`, `for-training` |
-| `sets/build-room-training-pulse.csv` | Poll, 3 | Rate (1 to 5) and one Choose | `build-room`, `for-training` |
-| `sets/build-room-game.csv` | Call and Answer, 14 | Ideas | `build-room`, `for-game` |
-| `sets/build-room-game-pulse.csv` | Poll, 3 | Rate (1 to 5) and one Choose | `build-room`, `for-game` |
-| `sets/build-room-document.csv` | Call and Answer, 14 | Ideas | `build-room`, `for-document` |
-| `sets/build-room-document-pulse.csv` | Poll, 3 | Rate (1 to 5) and one Choose | `build-room`, `for-document` |
-| `sets/build-room-dashboard.csv` | Call and Answer, 14 | Ideas | `build-room`, `for-dashboard` |
-| `sets/build-room-dashboard-pulse.csv` | Poll, 3 | Rate (1 to 5) and one Choose | `build-room`, `for-dashboard` |
+| `sets/build-room-training.csv` | Poll, 22 | 14 Ideas, 3 Choose, 3 Yes/No, 2 Rate | `build-room`, `for-training` |
+| `sets/build-room-game.csv` | Poll, 22 | 14 Ideas, 3 Choose, 3 Yes/No, 2 Rate | `build-room`, `for-game` |
+| `sets/build-room-document.csv` | Poll, 22 | 14 Ideas, 3 Choose, 3 Yes/No, 2 Rate | `build-room`, `for-document` |
+| `sets/build-room-dashboard.csv` | Poll, 22 | 14 Ideas, 3 Choose, 3 Yes/No, 2 Rate | `build-room`, `for-dashboard` |
+
+Until 24 Oct each kind was two sets (a Call and Answer set of Ideas and a three-question Poll
+"pulse"); the install script switches those off. The Ideas tables below are unchanged; the CSVs
+are the source for the Choose, Yes/No and Rate questions.
 
 Same rules as the first starter set (`starter-set.md`): the five sections in session order
 (Who it is for, Start, Think differently, While building, Before wrapping up), plain words, what
 Claude gets for each answer (`ClaudeGets`) and how to use it (`ClaudeNote`, never shown to the
-room). The general **Build Room starters** and **pulse** stay, untagged, for any kind.
+room). The general set is **Build Room: General** (`sets/build-room-general.csv`, 24 Oct 2026): one Poll set of 25 questions, untagged by kind, replacing **Build Room starters** and **Build Room pulse**, which are retired and then deleted (`scripts/delete-question-sets.js`).
 
 **Drafts for the owner to edit.** Change the CSVs here, then reinstall; `tests/question-set-roundtrip.js`
 imports every one with the real importer and checks the sections, the counts, that each has what
-Claude gets, and that every pulse question is one a Build Room can ask.
+Claude gets, and that every question is one a Build Room can ask.
 
 ## Installing
 
@@ -35,7 +38,12 @@ AWS_PROFILE=adminaccess scripts/install-build-room-kind-sets.sh engagedev
 AWS_PROFILE=adminaccess scripts/install-build-room-kind-sets.sh engagedev --apply
 ```
 
-Or upload each CSV in the console (Question sets, New set, Upload) and add the two tags.
+The dry run lists, per kind, the set it would install (`buildroom<kind>`) and the two old sets it
+would switch off (`buildroom<kind>questions`, `buildroom<kind>pulse`, via
+`scripts/retire-question-sets.js`). Re-running is safe: an installed set is skipped.
+
+Or upload each CSV in the console (Question sets, New set, Upload, as a Poll), add the two tags,
+and switch the old two off.
 
 ## The questions
 

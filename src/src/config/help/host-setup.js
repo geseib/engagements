@@ -273,6 +273,7 @@ const gameSetup = {
           ],
         },
         { t: 'p', text: 'The same chooser picks the set for an agenda item in an event.' },
+        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions, at any point in the room. They stay in your question sets, where you change them.' },
       ],
     },
     /*
@@ -385,7 +386,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list; this dialog is where you change them.',
+          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list, except Build Room sets, which a Build Room asks from inside the room; this dialog is where you change them all.',
         },
         {
           t: 'p',
@@ -457,7 +458,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets.',
+          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets. While the menu is empty, Quick start says so, and **Open your question sets** takes you there.',
         },
       ],
     },

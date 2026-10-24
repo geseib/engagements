@@ -357,6 +357,27 @@ describe('5. the keys and the way out', () => {
     expect(consoleEl()).not.toBeNull();
   });
 
+  test('Join toggles the codes, as on one screen; its words say what a press does; Escape takes them down', async () => {
+    await openRoom(MOMENTS['a · between asks']());
+    const top = consoleEl().querySelector('.hc-top');
+    const join = within(top).getByRole('button', { name: /^Join 4821/ });
+    expect(join).toHaveAttribute('aria-pressed', 'false');
+    expect(join).toHaveAttribute('title', 'Show the join code on the Stage');
+    fireEvent.click(join);
+    await waitFor(() => expect(posts('/build/wall')).toContainEqual(expect.objectContaining({ codes: 'join' })));
+    expect(join).toHaveAttribute('aria-pressed', 'true');
+    expect(join).toHaveAttribute('title', 'Hide the join code on the Stage');
+    fireEvent.click(join);
+    await waitFor(() => expect(posts('/build/wall')).toContainEqual(expect.objectContaining({ codes: 'none' })));
+    expect(join).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(join);
+    await waitFor(() => expect(join).toHaveAttribute('aria-pressed', 'true'));
+    const before = posts('/build/wall').filter((b) => b.codes === 'none').length;
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(join).toHaveAttribute('aria-pressed', 'false'));
+    expect(posts('/build/wall').filter((b) => b.codes === 'none').length).toBe(before + 1);
+  });
+
   test('the Session slot opens the Session panel; \\ does too', async () => {
     await openRoom(MOMENTS['a · between asks']());
     fireEvent.click(within(rail()).getByRole('button', { name: 'Settings' }));
