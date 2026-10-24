@@ -9,21 +9,23 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
-## 23 Oct 2026 (Organisations): every team's Billing… button shows
+## 23 Oct 2026 (Organisations and Accounts): every row's buttons show in full
 
-**Test:** merge of dev `9b3ee00b`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
-- Nothing new: this push is one fix.
+- Nothing new: this push is two fixes.
 
 ### Fixed
 
 - **Billing… was cut off on team rows** in Admin › Organisations ([#40](https://github.com/geseib/engagements/issues/40)): a team row has three buttons (Billing…, Activity…, Suspend, or Reinstate when suspended), the column was 168px wide, and the first one, Billing…, was clipped out of sight, even at 1920px. The column now fits all three, and that cell never hides a button.
+- **Make Engage admin was cut off on Accounts** ([#43](https://github.com/geseib/engagements/issues/43)): when you point at an account, its moves (*Make Engage admin*, *Make host* or *Disable*, and the bin) appear in a column sized at a fifth of the table, too narrow for the longest pair, so *Make Engage admin* lost its left edge. The moves now have a column wide enough for them, and the person's name takes the rest.
 
 ### What to look at
 
 1. As Engage staff, open Admin › Organisations: every team row shows **Billing…**, **Activity…** and **Suspend** (or **Reinstate**); personal rows show Billing… and Activity…. **Billing…** opens the team's billing drawer.
+2. Open Admin › Accounts and point at a host's row: **Make Engage admin**, **Disable** and the bin show in full; on an admin's row, **Make host**, **Disable** and the bin.
 
 ### Known gaps
 
