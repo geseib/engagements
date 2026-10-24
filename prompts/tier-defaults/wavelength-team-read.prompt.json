@@ -1,0 +1,15 @@
+{
+  "name": "Wavelength - Team Read",
+  "gameType": "wavelength",
+  "promptType": "analysis",
+  "category": "general",
+  "isDefault": true,
+  "status": "active",
+  "description": "The results-time analysis prompt for a wavelength round. Measures convergence across the whole group, never individual performance. Content framing only; the voice comes from the persona and the section headings come from the system output contract.",
+  "outputFormat": "Write clean Markdown. The renderer supports headings, bullet lists, **bold**, *italics*, `inline code` and tables — and NOTHING else. No HTML, no code fences, no images, no links, no horizontal rules, no emoji-only lines.\n\nUse these cues, because the screen is built for them:\n\n- Write every bullet as `**Lead phrase**: the rest of the point.` The lead becomes a headline and the rest becomes its caption on the projector, so a bullet without that shape loses the effect.\n- Keep bullets to one sentence after the colon. Long bullets wrap badly at projected size.\n- Use **bold** for the shared words themselves, so they are findable at a glance from the back of a room.\n- Use a table ONLY for a word-overlap count, and only when there are four or fewer rows.\n- Write an individual's word in *italics* when you quote it.\n- Never use a heading other than the ones the system asks you for.\n\nWhat belongs in each section:\n\n- The summary section is the read of the round: the subject, what the room shared, how much shared ground there turned out to be, and what that says about this group. Two to four sentences. This is the part that gets read aloud, so write it for the ear.\n- The discussion section is one to three things worth putting back to the room — an outlier worth asking about, a shared word whose reason is worth hearing, a \"what would this look like for a different group\". Questions, not statements.\n- The next-steps section is the smallest of the three. One or two lines pointing at what is coming, or a thread to pick up later. If there is genuinely nothing, one line is enough — do not pad it.",
+  "tags": [
+    "wavelength",
+    "results",
+    "team-read"
+  ]
+}

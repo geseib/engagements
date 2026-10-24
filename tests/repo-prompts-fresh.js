@@ -32,18 +32,28 @@ check('is current with its sources (run node scripts/build-repo-prompts.js if no
   assert.ok(builder.isFresh(committed), 'src/src/config/repoPrompts.json is stale');
 });
 
-check('carries every demo-sets/*.prompt.json and every built-in default', () => {
-  const demo = fs.readdirSync(path.join(REPO, 'demo-sets')).filter((f) => f.endsWith('.prompt.json'));
+check('carries every demo-sets/ and prompts/tier-defaults/ *.prompt.json and every built-in default', () => {
+  const files = (dir) => fs.readdirSync(path.join(REPO, dir)).filter((f) => f.endsWith('.prompt.json')).map((f) => `${dir}/${f}`);
+  const kept = [...files('demo-sets'), ...files('prompts/tier-defaults')];
   const defaults = require(path.join(REPO, versions.DEFAULTS_REPO_PATH));
   const nDefaults = Object.values(defaults).reduce((n, c) => n + Object.keys(c).length, 0);
-  assert.strictEqual(committed.prompts.length, demo.length + nDefaults);
-  for (const f of demo) assert.ok(committed.prompts.some((p) => p.key === `demo-sets/${f}`), f);
+  assert.strictEqual(committed.prompts.length, kept.length + nDefaults);
+  for (const k of kept) assert.ok(committed.prompts.some((p) => p.key === k), k);
+});
+
+check('one tier default per game type, each in the game-type defaults the summary reader resolves', () => {
+  const tier = committed.prompts.filter((p) => p.source === 'prompts/tier-defaults');
+  assert.deepStrictEqual(tier.map((p) => p.gameType).sort(), ['call-and-answer', 'poll', 'trivia', 'wavelength']);
+  for (const p of tier) assert.strictEqual(p.isDefault, true, p.key);
 });
 
 check('every entry has a name, a game type, its fields and the lambda\'s hashes of them', () => {
   for (const p of committed.prompts) {
     assert.ok(p.name && p.gameType && p.path && p.key, p.key);
-    assert.ok(p.fields.includes('instructions') || p.fields.includes('template'), `${p.key}: no text`);
+    // A tier default runs on the built-in instructions and carries only its
+    // format and sections; every other repo prompt carries its own text.
+    const text = p.source === 'prompts/tier-defaults' ? ['outputFormat'] : ['instructions', 'template'];
+    assert.ok(text.some((f) => p.fields.includes(f)), `${p.key}: no text`);
     assert.deepStrictEqual(p.fieldHashes, versions.fieldHashes(p.values, p.fields), `${p.key}: field hashes`);
     assert.strictEqual(p.hash, versions.contentHash(p.values, p.fields), `${p.key}: hash`);
   }

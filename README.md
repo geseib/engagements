@@ -83,8 +83,8 @@ npm run build
 `npm start` in `src/` runs a local dev server against the dev API.
 
 `npm run build` first runs `scripts/build-repo-prompts.js` (the `prebuild` script), which
-copies the repo's prompt files — `demo-sets/*.prompt.json` and
-`lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
+copies the repo's prompt files — `demo-sets/*.prompt.json`, `prompts/tier-defaults/*.prompt.json`
+(the per-game-type defaults first curated on a tier) and `lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
 The admin Prompts library compares each live prompt with that file ("Repo has a newer
 version") and its Review saves the repo's text as a new prompt version. The output is
 committed: after editing a prompt file, run `node scripts/build-repo-prompts.js` and commit
@@ -94,9 +94,9 @@ both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; se
 To do that Review → Save for every prompt on a tier at once, after the deploy has landed:
 
 ```bash
-aws sso login --profile <profile>
-AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com           # dry run
-AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
+aws sso login --profile adminaccess
+AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test --by you@example.com
+AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
 ```
 
 It runs the real list and update handlers locally with the tier's Lambda environment, skips
