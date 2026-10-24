@@ -2,9 +2,9 @@
 /**
  * Bring a tier's live Workie prompts up to the versions kept in the repo.
  *
- *   aws sso login --profile <profile>
- *   AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test             # DRY RUN
- *   AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --apply
+ *   aws sso login --profile adminaccess
+ *   AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test             # DRY RUN
+ *   AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test --apply
  *
  *   options:
  *     --only "<text>"    only prompts whose name contains this text (case ignored)
@@ -89,6 +89,7 @@ function planRows(prompts, entries, match, { only, includeEdited }) {
     if (!status) { note = 'live text could not be read'; }
     else if (status.state === match.REPO_STATE.NONE) { note = 'not in the repo'; }
     else if (status.state === match.REPO_STATE.MATCHES) { note = 'matches the repo'; }
+    else if (prompt.status === 'archived') { note = 'skipped: archived'; }
     else if (prompt.scope && !LISTABLE_SCOPES.includes(prompt.scope)) { note = `skipped: ${prompt.scope} prompt`; }
     else if (status.editedHere && !includeEdited) { note = 'skipped: edited on this tier since it was taken from the repo (--include-edited)'; }
     else { action = 'save'; note = `repo is newer: ${status.changed.join(', ')}`; }
@@ -209,6 +210,10 @@ async function main() {
   Object.entries(env).forEach(([k, v]) => { if (process.env[k] === undefined) process.env[k] = v; });
 
   const entries = JSON.parse(fs.readFileSync(path.join(REPO, 'src', 'src', 'config', 'repoPrompts.json'), 'utf8')).prompts;
+  // repoPromptMatch.js is an ES module in a folder with no "type"; Node
+  // detects that correctly and warns about it. The warning is noise here.
+  const emit = process.emitWarning;
+  process.emitWarning = (w, ...rest) => (String(rest[0] && rest[0].code || rest[1] || '').includes('MODULE_TYPELESS') ? undefined : emit.call(process, w, ...rest));
   const match = await import(pathToFileURL(path.join(REPO, 'src', 'src', 'utils', 'repoPromptMatch.js')).href);
   const quiet = !process.env.DEBUG;
   const realLog = console.log;

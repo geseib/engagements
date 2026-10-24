@@ -523,6 +523,12 @@ const reset = () => { store.clear(); s3Store.clear(); s3Writes.clear(); };
     assert.ok(bodyAt(r.versionHistory[editedVersion - 1].s3Key).instructions.endsWith('Edited here.'));
   });
 
+  await check('an archived prompt is never planned, even when the repo is newer', () => {
+    const rows = applyScript.planRows([{ ...row(stale.promptId), name: transfer.name, status: 'archived', fieldHashes: {} }],
+      repoPrompts.prompts, match, {});
+    assert.deepStrictEqual(rows.map((r) => [r.action, r.note]), [['none', 'skipped: archived']]);
+  });
+
   say(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail ? 1 : 0);

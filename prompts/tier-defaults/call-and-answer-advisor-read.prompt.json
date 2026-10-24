@@ -1,0 +1,33 @@
+{
+  "name": "Call & Answer — Advisor Read",
+  "gameType": "call-and-answer",
+  "promptType": "analysis",
+  "category": "lessons-learned",
+  "isDefault": true,
+  "status": "active",
+  "description": "The results-time analysis prompt for a call-and-answer round. Reads back what was written and what was voted, names a real disagreement and leaves it open (or says plainly there was none), rescues a low-voted answer worth keeping, and suggests next steps with owners. Content framing only; the voice comes from the persona.",
+  "outputFormat": "Write clean Markdown. The renderer supports bullet lists, numbered lists, **bold**, *italics*, `inline code` and tables — and nothing else here. No HTML, no code fences, no images, no links, no horizontal rules, no emoji. The place medals printed beside the ranked answers are formatting, not content: never repeat them.\n\nUse these cues, because the screen is built for them:\n\n- Write every bullet as `**Lead phrase**: the rest of the point.` The lead is set as a headline and the rest as its caption on the projector, so a bullet without that shape loses the effect.\n- Keep bullets to one sentence after the colon. Long bullets wrap badly at projected size.\n- Quote the room’s own words in *italics*, not in quotation marks — quotation marks read as scare quotes at projected size.\n- Use **bold** the first time you state what the vote put on top, so it is findable from the back of the room.\n- Use a table ONLY for a vote distribution, and only when there are four or fewer rows.\n- Never open with a title line, and never add a heading of your own.\n\nBudget the length before you start: roughly 75 words for each of the four sections, about 300 in all. If you are running long, cut adjectives before you cut evidence.",
+  "outputSections": [
+    {
+      "heading": "What the room said",
+      "guidance": "Two or three bullets. The first one or two report what the answers actually contain, quoting the room's own words in italics; do not name anyone here. The last bullet says whether the answers conflict. If two answers genuinely conflict (doing one rules out the other), it starts **Not settled**: quote a few words of each and state the choice between them without resolving it. If they do not, it starts **No split**: and names the one thing the answers share. Never invent a split."
+    },
+    {
+      "heading": "What the room voted",
+      "guidance": "Two or three bullets. First, what collected the most vote points, quoted, with the author named only if a real name is printed beside it and the points copied from the author line. Second, if it matters, whether the vote matched the writing. The last bullet starts **Worth keeping**: an answer with few or no vote points, quoted, never attributed, and one sentence on what ignoring it would cost. If no vote was taken, replace all of this with one line saying so."
+    },
+    {
+      "heading": "Discussion topics",
+      "guidance": "Two or three numbered questions the host can put to the room right now. Each one names the specific answer it comes from, in full. If the first section named a split, one question hands it back to the room unresolved. If it said there was none, do not invent one. A question that would fit any other session is a wasted one: delete it and write another."
+    },
+    {
+      "heading": "Suggested next steps",
+      "guidance": "Two or three numbered suggestions, each one sentence, starting **Suggested**, then the role an answer implies or the person whose answer it comes from (never the team, never we), a colon, then a first action one person could finish inside a week. Use a number, a duration or a limit only if an answer contains it. The room has not agreed to these. Each must trace to a specific answer from this round. If nobody answered, write one line only: put the question back to the room."
+    }
+  ],
+  "tags": [
+    "call-and-answer",
+    "results",
+    "advisor"
+  ]
+}

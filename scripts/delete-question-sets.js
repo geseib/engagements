@@ -20,8 +20,13 @@
  * Without --apply it only reads, and says per set what it would remove.
  */
 const path = require('path');
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { createRequire } = require('module');
+
+// The SDK is installed under lambda-functions/, not at the repo root, as the
+// neighbouring scripts (update-ai-prompt.js, apply-repo-prompts.js) resolve it.
+const lambdaRequire = createRequire(path.join(__dirname, '..', 'lambda-functions', 'package.json'));
+const { DynamoDBClient } = lambdaRequire('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, GetCommand, ScanCommand } = lambdaRequire('@aws-sdk/lib-dynamodb');
 
 const ADMIN = path.join(__dirname, '..', 'lambda-functions', 'admin', 'shared');
 const { deleteSetRows, setPartitions } = require(path.join(ADMIN, 'set-delete'));
