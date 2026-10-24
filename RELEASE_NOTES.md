@@ -13,7 +13,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 **Test:** merge of dev `7566047c`. Everything below this entry is already on test; this push adds only what is here.
 
-**Before reviewing:** the new starter sets are not installed by the deploy. Run `scripts/install-build-room-kind-sets.sh engagetest` (a dry run that lists what it would install and switch off), then the same with `--apply`, once per tier (`engagedev`, `engagetest`; `engageprod` when it goes there).
+**Data on test (done with this push, 24 Oct):** the new sets were installed with `scripts/install-build-room-kind-sets.sh engagetest --apply`, and the ten old Build Room sets deleted with `scripts/delete-question-sets.js` (dry run first both times). Prod needs the same two steps when this goes there.
 
 ### New
 
@@ -31,7 +31,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### What to look at
 
-1. Run the install script on engagetest (dry run first, then `--apply`). In the console's Question sets, the four *Build Room: <Kind>* sets are there, active; the eight old *… questions* / *… pulse* sets are there, switched off.
+1. In the console's Question sets (Engage), filter by the tag `build-room`: exactly five sets, all active: *Build Room: General* (25 questions) and *Build Room: Training*, *Game*, *Document* and *Dashboard* (22 each). The old *… questions*, *… pulse*, *Build Room starters* and *Build Room pulse* are gone.
 2. **Create engagement**: pick Call & Answer, then Poll, and search "Build Room": no Build Room set is listed. Open **Quick start** and add an agenda item to an event: none there either.
 3. Create a Build Room, and answer *What are we making?* with "a game". Open **Ask the room**: *Build Room: Game* leads the ready questions. Check the type chips' counts (All 22, Ideas 14, Choose 3, Yes/No 3, Rate 2), press **Yes/No**, then **Choose** (each shows its options), then **All**.
 4. Pick a Yes/No question (*Should there be a timer on the screen?*): the form opens as Choose with **Yes** and **No** filled in; ask it, and a phone answers Yes or No.
