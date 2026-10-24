@@ -644,6 +644,43 @@ describe('the Owner filter and sort — your team\'s prompts vs Engage\'s and sh
     expect(labels).toEqual(['All owners', 'Team', 'Engage', 'Public']);
   });
 
+  // rejects: the owner's 2026-10-24 report — Team offered on a library that
+  // holds no team prompt, a choice that can only empty the list.
+  test('the filter offers only the owners the library holds', () => {
+    render(<PromptLibraryPanel prompts={OWNED.slice(0, 2)} filters={base} onFilterChange={jest.fn()} />);
+    const select = screen.getByRole('combobox', { name: /owner/i });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['All owners', 'Engage', 'Public']);
+  });
+
+  // rejects: a one-choice filter and an owner sort that cannot change the order.
+  test('with one owner there is no owner filter and no owner sort', () => {
+    render(<PromptLibraryPanel prompts={[OWNED[1]]} filters={base} onFilterChange={jest.fn()} />);
+    expect(screen.queryByRole('combobox', { name: /owner/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /sort/i })).toBeNull();
+  });
+
+  // rejects: a stale owner choice hiding every row with no control to undo it.
+  test('a chosen owner with no prompts left stays offered, so it can be cleared', () => {
+    render(<PromptLibraryPanel prompts={[OWNED[1]]} filters={{ ...base, owner: 'team' }} onFilterChange={jest.fn()} />);
+    const select = screen.getByRole('combobox', { name: /owner/i });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['All owners', 'Team', 'Engage']);
+  });
+
+  // rejects: the owner's 2026-10-24 report — whose a prompt is, drawn as a chip
+  // inside State in one mount only, read as a column with no heading.
+  test('Owner is its own headed column, one cell per row, in every mount', () => {
+    const { container } = show(base);
+    const heads = [...container.querySelectorAll('.plib-tbl thead th')].map((th) => th.textContent);
+    expect(heads).toContain('Owner');
+    const col = heads.indexOf('Owner');
+    const cells = [...container.querySelectorAll('.plib-tbl tbody tr')]
+      .map((tr) => tr.querySelectorAll('td')[col].textContent);
+    expect(cells).toEqual(['Public', 'Engage', 'Your team']);
+    expect(container.querySelector('.plib-states').textContent).not.toMatch(/Engage|Public|Your team/);
+  });
+
   test('choosing an owner reports it to the page that owns the filters', () => {
     const onFilterChange = jest.fn();
     show(base, onFilterChange);

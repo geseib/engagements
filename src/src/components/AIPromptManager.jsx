@@ -1851,7 +1851,6 @@ function AIPromptManager({ readOnly = false }) {
             : (PROMPT_CATEGORIES[normalizeGameType(filters.gameType)] || [])
         }
         onView={readOnly ? setViewingPrompt : undefined}
-        showOwner={readOnly}
         onEdit={readOnly ? undefined : (target) => openEditor(target, 'edit')}
         onAdvise={readOnly ? undefined : (target) => openEditor(target, 'improve')}
         onDelete={readOnly ? undefined : handleDeletePrompt}

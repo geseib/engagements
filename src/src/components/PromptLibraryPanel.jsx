@@ -330,9 +330,6 @@ export default function PromptLibraryPanel({
    *  answer to `onEdit` (outside Engage mode no prompt can be changed; owner,
    *  2026-09-24). Same rule as every row action: no handler, no button. */
   onView,
-  /** Say which library each row is in (Engage, or your team). On for the
-   *  read-only mount, where a frozen team Workie sits beside Engage's. */
-  showOwner = false,
   onAdvise,
   onDelete,
   onCreate,
@@ -424,6 +421,20 @@ export default function PromptLibraryPanel({
     },
   });
 
+  /*
+    ONLY THE OWNERS THIS LIBRARY HOLDS. The owner, 2026-10-24: the filter
+    offered Team on a screen where no team prompt exists and none can be made.
+    An option that can only empty the list is a dead control. The chosen owner
+    stays offered even with no rows, so a stale choice can still be seen and
+    cleared. With one owner or none there is nothing to choose between, and
+    the filter and the owner sort are not drawn; the Owner column still says
+    whose each prompt is.
+  */
+  const ownerOptions = useMemo(() => PROMPT_OWNER_OPTIONS.filter(
+    (o) => o.value === owner || prompts.some((p) => promptOwnerTag(p) === o.value)
+  ), [prompts, owner]);
+  const ownerChoice = ownerOptions.length > 1 || owner !== 'all';
+
   const nothingExists = prompts.length === 0;
 
   return (
@@ -473,27 +484,31 @@ export default function PromptLibraryPanel({
             <option value="archived">Archived</option>
           </select>
 
-          <select
-            value={owner}
-            onChange={(e) => set({ owner: e.target.value })}
-            className="filter-select"
-            aria-label="Filter by owner"
-          >
-            <option value="all">All owners</option>
-            {PROMPT_OWNER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          {ownerChoice && (
+            <select
+              value={owner}
+              onChange={(e) => set({ owner: e.target.value })}
+              className="filter-select"
+              aria-label="Filter by owner"
+            >
+              <option value="all">All owners</option>
+              {ownerOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          )}
 
-          <select
-            value={sort}
-            onChange={(e) => set({ sort: e.target.value })}
-            className="filter-select"
-            aria-label="Sort order"
-          >
-            <option value="">Default order</option>
-            <option value="owner">Owner (team first)</option>
-          </select>
+          {(ownerChoice || sort) && (
+            <select
+              value={sort}
+              onChange={(e) => set({ sort: e.target.value })}
+              className="filter-select"
+              aria-label="Sort order"
+            >
+              <option value="">Default order</option>
+              <option value="owner">Owner (team first)</option>
+            </select>
+          )}
 
           <input
             type="search"
@@ -636,6 +651,7 @@ export default function PromptLibraryPanel({
               <th className="plib-col-name">Prompt</th>
               <th className="plib-col-type">Type</th>
               <th className="plib-col-cat">{categoryHeading}</th>
+              <th className="plib-col-owner">Owner</th>
               {repoStatusFor && <th className="plib-col-ver">Version</th>}
               <th className="plib-col-state">State</th>
               <th className="plib-col-acts" />
@@ -669,6 +685,13 @@ export default function PromptLibraryPanel({
                 <td className="plib-cat">
                   {prompt[categoryKey] ? catLabel(prompt[categoryKey]) : '—'}
                 </td>
+                {/* WHOSE IT IS, in its own headed column (owner, 2026-10-24: it
+                    used to be a chip inside State, in the read-only view only,
+                    so it read as an unlabelled column out of line with the
+                    rest). The same words the read-only view's Library fact uses. */}
+                <td className="plib-owner" title={promptLibraryTitle(prompt)}>
+                  {promptLibraryLabel(prompt)}
+                </td>
                 {repoStatusFor && (
                   <td className="plib-ver" data-testid={`plib-ver-${prompt.promptId}`}>
                     {Number(prompt.version) > 0 ? `v${Number(prompt.version)}` : '—'}
@@ -686,11 +709,6 @@ export default function PromptLibraryPanel({
                           : 'No prompt file in the repo is this prompt.'}
                       >
                         {REPO_STATE_LABEL[repoStatus.state]}
-                      </span>
-                    )}
-                    {showOwner && (
-                      <span className="plib-chip" title={promptLibraryTitle(prompt)}>
-                        {promptLibraryLabel(prompt)}
                       </span>
                     )}
                     <StatusChip

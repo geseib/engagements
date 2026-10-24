@@ -2134,10 +2134,11 @@
   border-collapse: collapse;
   font-size: var(--pc-t-body);
 }
-.plib-col-name  { width: 34%; }
+.plib-col-name  { width: 30%; }
 .plib-col-type  { width: 12%; }
-.plib-col-cat   { width: 14%; }
-.plib-col-state { width: 20%; }
+.plib-col-cat   { width: 13%; }
+.plib-col-owner { width: 9%; }
+.plib-col-state { width: 16%; }
 .plib-col-acts  { width: 20%; }
 
 .plib-tbl th {
@@ -2202,6 +2203,7 @@
   color: var(--pc-muted);
 }
 .plib-cat { font-size: var(--pc-t-label); color: var(--pc-muted); }
+.plib-owner { font-size: var(--pc-t-label); color: var(--pc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .plib-states { display: flex; flex-wrap: wrap; gap: 5px; }
 .plib-chip {
@@ -2322,10 +2324,11 @@ button.plib-chip:disabled { cursor: progress; }
   already holds at AA.
 */
 
-/* Six columns when the Version column is drawn — the name column donates. */
-.plib-tbl--versions .plib-col-name  { width: 28%; }
+/* Seven columns when the Version column is drawn — the name column donates. */
+.plib-tbl--versions .plib-col-name  { width: 21%; }
 .plib-tbl--versions .plib-col-type  { width: 11%; }
 .plib-tbl--versions .plib-col-cat   { width: 11%; }
+.plib-tbl--versions .plib-col-owner { width: 7%; }
 .plib-tbl--versions .plib-col-ver   { width: 7%; }
 .plib-tbl--versions .plib-col-state { width: 21%; }
 .plib-tbl--versions .plib-col-acts  { width: 22%; }
