@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 24 Oct 2026 (small fixes): row buttons in full, Suspend asks why, Reports in the console
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `5fc325d5`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
