@@ -24,6 +24,8 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - **The old Build Room sets are deleted once replaced**: `scripts/delete-question-sets.js <table> <setId>…` (a dry run first, `--apply` to delete) removes switched-off Engage sets with the console's own delete. It refuses a set still switched on, one a live session uses, and any team's set.
 - **Claude's own question sets** take Yes/No and open questions too (plugin **1.28.0**), and **Save to my sets** makes one Poll draft holding all its types (a Call & Answer draft only when it is all Ideas).
 
+- **The four per-type default prompts live in the repo too** (another session): *Call & Answer — Advisor Read*, *Trivia - Round Call*, *Poll - Round Read* and *Wavelength - Team Read* are kept in `prompts/tier-defaults`, so Admin › Prompts' repo check and `scripts/apply-repo-prompts.js` can carry them to the next tier (archived prompts are skipped). Nothing changes on screen.
+
 ### Fixed
 
 - **Build Room sets showed up among Call & Answer and Poll sets** when creating an engagement (owner, 24 Oct). A set tagged build-room is no longer offered by Create engagement, Quick start or an agenda item; a Build Room asks it from its ready questions at any point in the room, as before. The console's Question sets still lists it, to edit.
