@@ -160,7 +160,9 @@ const buildKindOf = (state) => kindKeyOf(briefView(state).lines.kind);
 /**
  * READY QUESTIONS FOR CLAUDE (plan step 4): the matching sets' askable
  * questions, handed over by the host's page once the kind is known. Plain
- * words only, capped; sealed in a team's room with the state row.
+ * words only, capped; sealed in a team's room with the state row. A Yes/No
+ * question arrives as the room asks it, a choice of its two answers, marked
+ * `yesno` so Claude reads it as one (owner, 24 Oct).
  */
 const READY_LIMITS = Object.freeze({ sets: 3, questions: 40, prompt: 300, name: 80, category: 60, option: 120, options: 6 });
 const READY_ASK_KINDS = Object.freeze(['suggest', 'choice', 'rating']);
@@ -183,7 +185,8 @@ function normalizeReady(body) {
         ? (Array.isArray(q.options) ? q.options : []).map((o) => cleanText(o, READY_LIMITS.option)).filter(Boolean).slice(0, READY_LIMITS.options)
         : [];
       if (q.kind === 'choice' && options.length < 2) continue;
-      questions.push({ kind: q.kind, prompt, category: cleanText(q.category, READY_LIMITS.category), ...(options.length ? { options } : {}) });
+      const yesno = q.kind === 'choice' && q.yesno === true && options.length === 2;
+      questions.push({ kind: q.kind, prompt, category: cleanText(q.category, READY_LIMITS.category), ...(options.length ? { options } : {}), ...(yesno ? { yesno } : {}) });
       left -= 1;
     }
     if (name && questions.length) sets.push({ name, questions });
@@ -194,12 +197,19 @@ function normalizeReady(body) {
  * A QUESTION SET CLAUDE WROTE (question-sets plan step 7; owner 22 Oct: "a
  * button request that gets back from claude code an artifact in the
  * repo/folder that we can use as a question set"). The plugin sends the file
- * Claude wrote. Kept as the room can ask it: Ideas, Choose with 2 to 6
- * options, Rate on 1 to 5; anything else is dropped and said why. At most 60
- * questions; the host saves it to their sets through the AI drafts review.
+ * Claude wrote. Kept as the room can ask it: Ideas (an open question), Choose
+ * with 2 to 6 options, Yes/No, Rate on 1 to 5; anything else is dropped and
+ * said why. A Yes/No is kept as `yesno` and asked as a choice of Yes and No
+ * (readyQuestions.js claudeSetItems). At most 60 questions; the host saves it
+ * to their sets through the AI drafts review.
  */
 const QSET_LIMITS = Object.freeze({ questions: 60, prompt: 300, detail: 600, name: 80, category: 60, option: 120, options: 6, file: 200 });
-const QSET_KIND_WORDS = Object.freeze({ ideas: 'suggest', suggest: 'suggest', choose: 'choice', choice: 'choice', rate: 'rating', rating: 'rating' });
+const QSET_KIND_WORDS = Object.freeze({
+  ideas: 'suggest', suggest: 'suggest', open: 'suggest', text: 'suggest',
+  choose: 'choice', choice: 'choice',
+  yesno: 'yesno', 'yes-no': 'yesno', 'yes/no': 'yesno',
+  rate: 'rating', rating: 'rating',
+});
 function normalizeClaudeSet(body) {
   const b = body || {};
   const name = cleanText(b.name, QSET_LIMITS.name);
@@ -214,7 +224,7 @@ function normalizeClaudeSet(body) {
     const k = QSET_KIND_WORDS[String(q.kind || '').toLowerCase()];
     const prompt = cleanText(q.prompt || q.question, QSET_LIMITS.prompt);
     if (!prompt) { dropped.push(`${n}: no question text`); return; }
-    if (!k) { dropped.push(`${n}: "${String(q.kind || '').slice(0, 20)}" is not Ideas, Choose or Rate`); return; }
+    if (!k) { dropped.push(`${n}: "${String(q.kind || '').slice(0, 20)}" is not Ideas, Choose, Yes/No or Rate`); return; }
     const options = k === 'choice'
       ? (Array.isArray(q.options) ? q.options : []).map((o) => cleanText(o, QSET_LIMITS.option)).filter(Boolean)
       : [];
@@ -1326,7 +1336,7 @@ function normalizeOutcome(body, by, now) {
 // Session > Claude and Claude in a line of its tool replies. Never the Stage,
 // never a device. tests/engage-plugin-version.js keeps this constant equal to
 // the plugin's own VERSION, so the two move together.
-const LATEST_PLUGIN = '1.27.0';
+const LATEST_PLUGIN = '1.28.0';
 const PLUGIN_OUTDATED_NOTE = 'The Engage plugin here is out of date; ask the host to run the update command from Connect.';
 const PLUGIN_HEADER = 'x-engage-plugin';
 

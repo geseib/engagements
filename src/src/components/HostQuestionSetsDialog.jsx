@@ -25,6 +25,8 @@ import { setOwnerLabel, setOwnerTitle, setOwnerIsOurs } from '../utils/setOwnerT
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import { buildEditPayload, editableSnapshot, summarizeEditResult } from '../utils/questionSetEditing';
+import { SET_SEARCH_FIELDS } from '../config/setFinder';
+import { makeSearchMatcher } from '../config/listControls';
 import './QuestionSetsPanel.css';
 
 /**
@@ -68,6 +70,15 @@ import './QuestionSetsPanel.css';
  * picker endpoint deliberately does not carry.
  */
 
+/*
+  THE SAME WORDS FIND THE SAME SETS HERE AS IN THE CHOOSER. The owner, 23 Oct
+  2026: "the current UX is not going to scale to find what people need as the
+  question sets grow ... search". The chooser and the console list already
+  match on SET_SEARCH_FIELDS through listControls; a third hand-written matcher
+  here would be the one that disagrees about what a word finds.
+*/
+const matchesSearch = makeSearchMatcher(SET_SEARCH_FIELDS);
+
 /** The picker shape, from the admin projection. Only ACTIVE sets can be played. */
 function toPickerSets(sets) {
   return sets
@@ -105,6 +116,8 @@ export default function HostQuestionSetsDialog({
   // editor is holding an unsaved working copy.
   const [editingQuestions, setEditingQuestions] = useState(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  /** What the search box holds. One box over both lists, not one each. */
+  const [search, setSearch] = useState('');
   /** The id of the set whose quickstart flag is currently in flight, or null. */
   const [quickstartBusy, setQuickstartBusy] = useState(null);
   /*
@@ -333,6 +346,37 @@ export default function HostQuestionSetsDialog({
   const house = sets.filter((set) => !set.canManage);
   const theirs = house.length;
 
+  /*
+    WHAT THE SEARCH SHOWS. Each list keeps its own total so its count can say
+    "N of M" — a list that only shrank would read as sets having gone.
+
+    A SET BEING WORKED ON IS NEVER HIDDEN. A host renaming "Retro" to
+    "Sprint review" would otherwise watch the row vanish mid-word, taking its
+    Save and Cancel with it; the same goes for the set whose editor or delete
+    dialog is open, so closing it lands back on the row it came from.
+  */
+  const needle = search.trim();
+  const inHand = new Set([editing?.id, editingQuestions?.id, deleting?.id].filter(Boolean));
+  const shownBy = (list) => list.filter((set) => inHand.has(set.id) || matchesSearch(set, needle));
+  const mineShown = shownBy(mine);
+  const houseShown = shownBy(house);
+  const countOf = (shown, total) => (needle ? `${shown} of ${total}` : String(total));
+  /*
+    THE NO-MATCH LINE NAMES THE SEARCH AND OFFERS THE WAY BACK. "You have no
+    sets" would be a lie about a host whose sets are one Esc away; the empty
+    state above is for a host who has made none, and only that.
+  */
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const nothingFound = Boolean(needle) && sets.length > 0 && mineShown.length === 0 && houseShown.length === 0;
+  const noMatch = (sentence, testId) => (
+    <div className="qsets-nomatch" data-testid={testId}>
+      <p>{sentence}</p>
+      <button type="button" className="qsets-btn qsets-btn--link" onClick={() => setSearch('')}>
+        Clear the search
+      </button>
+    </div>
+  );
+
   /**
    * Put one of the host's own sets on the quickstart shelf, or take it off.
    *
@@ -519,6 +563,44 @@ export default function HostQuestionSetsDialog({
 
         {loading && sets.length === 0 && <p className="qsets-loading">Loading your question sets…</p>}
 
+        {sets.length > 0 && (
+          /*
+            ONE BOX OVER BOTH LISTS. A host looking for "the retro one" does not
+            know, and should not need to know, whether it is theirs or the
+            library's. Esc empties the box and stops there: the Modal answers Esc
+            at the document, so stopping it here is what keeps a host who only
+            meant to clear the search from losing the dialog. An empty box lets
+            Esc through, and it closes the dialog as it does anywhere else.
+          */
+          <div className="qsets-filters">
+            <label className="qsets-search">
+              <Icon name="MagnifyingGlass" size={16} color="var(--muted)" />
+              <input
+                type="search"
+                className="qsets-input"
+                value={search}
+                placeholder="Search name, description, tags"
+                aria-label="Search your question sets and the library"
+                data-testid="hqs-search"
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && search) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSearch('');
+                  }
+                }}
+              />
+            </label>
+          </div>
+        )}
+
+        {nothingFound && noMatch(
+          `No set matches “${needle}”. Searched the name, description and tags of your `
+            + `${plural(mine.length, 'set', 'sets')} and ${plural(theirs, 'other', 'others')}.`,
+          'hqs-nomatch'
+        )}
+
         {!loading && !error && mine.length === 0 && (
           /*
             NOT the console's three-path empty state. Two of those three paths
@@ -535,7 +617,20 @@ export default function HostQuestionSetsDialog({
           </div>
         )}
 
-        {mine.length > 0 && (
+        {mine.length > 0 && !nothingFound && (
+          <h3 className="qsets-listhead">
+            Your sets <span className="qsets-count" data-testid="hqs-mine-count">{countOf(mineShown.length, mine.length)}</span>
+          </h3>
+        )}
+
+        {mine.length > 0 && mineShown.length === 0 && !nothingFound && noMatch(
+          mine.length === 1
+            ? `Your one set does not match “${needle}”.`
+            : `None of your ${mine.length} sets match “${needle}”.`,
+          'hqs-mine-nomatch'
+        )}
+
+        {mineShown.length > 0 && (
           <table className="qsets-tbl">
             <thead>
               <tr>
@@ -547,7 +642,7 @@ export default function HostQuestionSetsDialog({
               </tr>
             </thead>
             <tbody>
-              {mine.map((set) => (
+              {mineShown.map((set) => (
                 editing && editing.id === set.id ? (
                   <tr key={set.id}>
                     <td colSpan={5}>
@@ -769,7 +864,7 @@ export default function HostQuestionSetsDialog({
           </table>
         )}
 
-        {!loading && theirs > 0 && (
+        {!loading && theirs > 0 && !nothingFound && (
           /*
             THE HOUSE SHELF, AND THE ONE CONTROL THAT MAKES SENSE ON IT.
 
@@ -793,50 +888,61 @@ export default function HostQuestionSetsDialog({
             set rather than a replace.
           */
           <>
+            <h3 className="qsets-listhead">
+              Everyone else&apos;s sets <span className="qsets-count" data-testid="hqs-house-count">{countOf(houseShown.length, theirs)}</span>
+            </h3>
             <p className="qsets-dim">
               {theirs} set{theirs === 1 ? '' : 's'} below {theirs === 1 ? 'was' : 'were'} made by an
               administrator. You can play {theirs === 1 ? 'it' : 'them'} as {theirs === 1 ? 'it is' : 'they are'},
               or take your own copy to change — the original stays untouched.
             </p>
-            <table className="qsets-tbl">
-              <tbody>
-                {house.map((set) => (
-                  <tr key={set.id} data-testid={`house-${set.id}`}>
-                    <td className="qsets-col-set">
-                      <span className="qsets-nm">{set.name || set.id}</span>
-                    </td>
-                    <td className="qsets-col-type">
-                      {gameTypeLabel(set.engagementType)}{' '}
-                      {/* THE SHELF IS TWO LIBRARIES, NOT ONE. This section's
-                          heading says "made by an administrator", which is true
-                          of Engage's rows and NOT of a set another organisation
-                          published — and the copy rule differs for neither, so
-                          the row has to say which it is. Same module as the
-                          table above. */}
-                      <span
-                        className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
-                        title={setOwnerTitle(set)}
-                      >
-                        {setOwnerLabel(set)}
-                      </span>
-                    </td>
-                    <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
-                    <td className="qsets-col-acts">
-                      <div className="qsets-rowact">
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--sm"
-                          onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
-                          title={`Take your own copy of ${set.name || set.id} and edit it`}
+            {houseShown.length === 0 && noMatch(
+              theirs === 1
+                ? `The one other set does not match “${needle}”.`
+                : `None of the ${theirs} other sets match “${needle}”.`,
+              'hqs-house-nomatch'
+            )}
+            {houseShown.length > 0 && (
+              <table className="qsets-tbl">
+                <tbody>
+                  {houseShown.map((set) => (
+                    <tr key={set.id} data-testid={`house-${set.id}`}>
+                      <td className="qsets-col-set">
+                        <span className="qsets-nm">{set.name || set.id}</span>
+                      </td>
+                      <td className="qsets-col-type">
+                        {gameTypeLabel(set.engagementType)}{' '}
+                        {/* THE SHELF IS TWO LIBRARIES, NOT ONE. This section's
+                            heading says "made by an administrator", which is true
+                            of Engage's rows and NOT of a set another organisation
+                            published — and the copy rule differs for neither, so
+                            the row has to say which it is. Same module as the
+                            table above. */}
+                        <span
+                          className={`qsets-chip${setOwnerIsOurs(set) ? '' : ' qsets-chip--off'}`}
+                          title={setOwnerTitle(set)}
                         >
-                          Copy and edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {setOwnerLabel(set)}
+                        </span>
+                      </td>
+                      <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
+                      <td className="qsets-col-acts">
+                        <div className="qsets-rowact">
+                          <button
+                            type="button"
+                            className="qsets-btn qsets-btn--sm"
+                            onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
+                            title={`Take your own copy of ${set.name || set.id} and edit it`}
+                          >
+                            Copy and edit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </>
         )}
 

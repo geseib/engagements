@@ -273,6 +273,7 @@ const gameSetup = {
           ],
         },
         { t: 'p', text: 'The same chooser picks the set for an agenda item in an event.' },
+        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions, at any point in the room. They stay in your question sets, where you change them.' },
       ],
     },
     /*
@@ -374,6 +375,9 @@ const gameSetup = {
       made by an administrator…", Copy and edit (:828). Footer Close.
       Saving questions makes a new version; sessions keep theirs
       (QuestionSetEditor.jsx:1000). Checked on dev 22 Oct 2026.
+      Search (23 Oct 2026): one box over both lists, headings "Your sets" and
+      "Everyone else's sets" with "N of M"; no match names the words and offers
+      Clear the search; Esc clears before it closes.
     */
     {
       id: 'choosing-question-set',
@@ -382,7 +386,11 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list; this dialog is where you change them.',
+          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list, except Build Room sets, which a Build Room asks from inside the room; this dialog is where you change them all.',
+        },
+        {
+          t: 'p',
+          text: 'The search box above the lists narrows both to sets with your words in the name, description or tags, and each list says how many of its sets match; Esc or **Clear the search** empties it.',
         },
         {
           t: 'list',
@@ -428,6 +436,9 @@ const gameSetup = {
       Answer, Trivia, Wavelength, Poll (no Survey, no Build Room); title
       "Quick <kind>: <set>"; all categories, shuffled; QuickScreens "Where the
       room watches" only when a Call & Answer set is listed; PlanLimitNotice.
+      Search (23 Oct 2026): "Search N quick start sets: name, description or
+      tag" over SET_SEARCH_FIELDS; "N of M" per format; no match → "Clear the
+      search"; Esc clears, then closes.
       The chip: HostQuestionSetsDialog.jsx:673-693, title "Click to offer this
       set on the quickstart menu"; inactive sets stay off the menu (:683).
       Checked on dev 22 Oct 2026.
@@ -439,7 +450,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
+          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). Narrow them with the search box, whose sets (each counted), and tags (any of those pressed; press again to let one go). **Clear the search and filters** brings everything back. One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
         },
         {
           t: 'p',
@@ -447,7 +458,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets.',
+          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets. While the menu is empty, Quick start says so, and **Open your question sets** takes you there.',
         },
       ],
     },

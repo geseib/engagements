@@ -1377,3 +1377,106 @@ describe("a host's own set whose content could not be decrypted", () => {
     expect(within(row).getByRole('button', { name: /^rename$/i })).toBeInTheDocument();
   });
 });
+
+/* ---------------------------------------------------------------- search --- */
+
+/*
+  ONE SEARCH OVER BOTH LISTS. The owner, 23 Oct 2026: "the current UX is not
+  going to scale to find what people need as the question sets grow ...
+  search". The matching itself is config/setFinder's SET_SEARCH_FIELDS through
+  listControls, unit-tested there; what is pinned here is what the SHELF does
+  with it — each list narrowed and counted, a no-match that tells the truth and
+  offers the way back, Esc that clears before it closes, and a row being worked
+  on that the search cannot take away.
+*/
+describe('one search box narrows both lists', () => {
+  const type = (value) => fireEvent.change(screen.getByTestId('hqs-search'), { target: { value } });
+
+  test('each list keeps only its matches, and says "N of M"', async () => {
+    // rejects: a box that filters one list and leaves the other, and a count
+    // that keeps reporting the total while the rows beneath it shrink.
+    await openDialog();
+    expect(screen.getByTestId('hqs-mine-count')).toHaveTextContent(/^1$/);
+    expect(screen.getByTestId('hqs-house-count')).toHaveTextContent(/^2$/);
+
+    type('trivia');
+    expect(screen.getByText('80s Trivia')).toBeInTheDocument();
+    expect(screen.queryByText('Raj Quiz')).toBeNull();
+    expect(screen.queryByText('Ivy Retro')).toBeNull();
+    expect(screen.getByTestId('hqs-house-count')).toHaveTextContent('1 of 2');
+    expect(screen.getByTestId('hqs-mine-count')).toHaveTextContent('0 of 1');
+  });
+
+  test('a list with no match says what was searched, not that it is empty', async () => {
+    // rejects: the "You haven't made a question set yet" empty state appearing
+    // for a host whose set is one cleared search away.
+    await openDialog();
+    type('retro');
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
+    const none = screen.getByTestId('hqs-house-nomatch');
+    expect(none).toHaveTextContent('None of the 2 other sets match “retro”.');
+    expect(within(none).getByRole('button', { name: 'Clear the search' })).toBeInTheDocument();
+    expect(screen.queryByText(/you haven't made a question set yet/i)).toBeNull();
+  });
+
+  test('it reads the description and the tags, not only the name', async () => {
+    // rejects: a name-only matcher hand-written here instead of the shared fields.
+    await openDialog({}, {
+      sets: [...HOST_VIEW, {
+        id: 'sprint', name: 'Fortnightly', description: 'For the platform team', tags: ['velocity'],
+        engagementType: 'poll', totalQuestions: 5, active: true, canManage: true, mine: true,
+      }],
+    });
+    type('velocity');
+    expect(screen.getByText('Fortnightly')).toBeInTheDocument();
+    expect(screen.queryByText('Ivy Retro')).toBeNull();
+    type('platform team');
+    expect(screen.getByText('Fortnightly')).toBeInTheDocument();
+    expect(screen.getByTestId('hqs-mine-count')).toHaveTextContent('1 of 2');
+  });
+
+  test('nothing anywhere: one message naming the search, and Clear the search brings everything back', async () => {
+    await openDialog();
+    type('zebra');
+    const none = screen.getByTestId('hqs-nomatch');
+    expect(none).toHaveTextContent('No set matches “zebra”.');
+    expect(none).toHaveTextContent(/your 1 set and 2 others/);
+    // One way back, not one per list.
+    expect(screen.getAllByRole('button', { name: 'Clear the search' })).toHaveLength(1);
+
+    fireEvent.click(within(none).getByRole('button', { name: 'Clear the search' }));
+    expect(screen.getByTestId('hqs-search')).toHaveValue('');
+    for (const name of ['Ivy Retro', 'Raj Quiz', '80s Trivia']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+
+  test('Esc with text in the box clears it and leaves the dialog open', async () => {
+    // rejects: the Modal's document-level Esc closing the whole shelf when the
+    // host only meant to clear a search.
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    type('zebra');
+    fireEvent.keyDown(screen.getByTestId('hqs-search'), { key: 'Escape' });
+    expect(screen.getByTestId('hqs-search')).toHaveValue('');
+    expect(screen.getByText('Ivy Retro')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('Esc in an empty box goes through to the dialog, as it does anywhere else', async () => {
+    const onClose = jest.fn();
+    await openDialog({ onClose });
+    fireEvent.keyDown(screen.getByTestId('hqs-search'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('the set being renamed stays on screen whatever the search says', async () => {
+    // rejects: the row (and its Save and Cancel) vanishing mid-rename because
+    // the search no longer matches it.
+    await openDialog();
+    fireEvent.click(within(rowFor('Ivy Retro')).getByRole('button', { name: /^rename$/i }));
+    type('trivia');
+    expect(screen.getByLabelText('Name')).toHaveValue('Ivy Retro');
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+  });
+});

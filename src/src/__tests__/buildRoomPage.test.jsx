@@ -2350,7 +2350,73 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(within(lib).getByRole('button', { name: /Who is this for, in one sentence\?/ }).textContent).toMatch(/^IdeasWho is this for, in one sentence\?Keep in mind$/);
     fireEvent.click(within(lib).getByRole('button', { name: 'Build Room pulse' }));
     await within(lib).findByText('How clear is the main screen?');
-    expect(within(lib).queryByText('Ship it?')).toBeNull();
+    // A yes or no is asked as Yes/No since 24 Oct.
+    expect(within(lib).getByRole('button', { name: /Ship it\?/ }).textContent).toMatch(/^Yes\/NoShip it\?/);
+  });
+
+  // THE TYPE CHIPS (owner, 24 Oct: "we need to store that info, we need to populate it, and
+  // need to filter if the host clicks a type").
+  const MIXED = [{ id: 'br-game', scope: 'platform', name: 'Build Room: Game', engagementType: 'poll', tags: ['build-room', 'for-game'] }];
+  const MIXED_QS = { 'br-game': [
+    { id: 'c001#001', Category: 'Start', title: 'What does the player do first?', kind: 'text', ClaudeGets: 'keep' },
+    { id: 'c001#002', Category: 'Start', title: 'How long is one round?', kind: 'choice', options: ['Under a minute', 'About three minutes'] },
+    { id: 'c001#003', Category: 'Start', title: 'Should there be a timer?', kind: 'yesno', ClaudeGets: 'keep' },
+    { id: 'c002#001', Category: 'While building', title: 'Can a new player start without rules?', kind: 'yesno', yesLabel: 'Yes, at once', noLabel: 'Not yet' },
+    { id: 'c002#002', Category: 'While building', title: 'How fun is it so far?', kind: 'rating', scale: '1-5' },
+    { id: 'c002#003', Category: 'While building', title: 'Rank the levels', kind: 'rank', options: ['a', 'b', 'c'] },
+  ] };
+  const withMixed = () => {
+    const base = authFetch.getMockImplementation();
+    authFetch.mockImplementation(async (url, opts = {}) => {
+      if (url === `${API}question-sets`) return res({ sets: MIXED });
+      const m = url.match(/question-sets\/([^/]+)\/questions\?scope=platform$/);
+      if (m) return res({ setId: m[1], questions: MIXED_QS[m[1]] });
+      return base(url, opts);
+    });
+  };
+
+  test('type chips: All, Ideas, Choose, Yes/No, Rate with counts; one filters the list; Choose shows its options', async () => {
+    await openRoom(hostState());
+    withMixed();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    await within(lib).findByText('What does the player do first?');
+    const types = within(lib).getByRole('group', { name: 'Types' });
+    const chips = within(types).getAllByRole('button');
+    expect(chips.map((b) => b.textContent)).toEqual(['All 5', 'Ideas 1', 'Choose 1', 'Yes/No 2', 'Rate 1']);
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(within(lib).queryByText('Rank the levels')).toBeNull();
+    expect(within(lib).getByRole('button', { name: /How long is one round\?/ }).textContent).toMatch('Under a minute · About three minutes');
+    fireEvent.click(within(types).getByRole('button', { name: /^Yes\/No/ }));
+    expect(within(types).getByRole('button', { name: /^Yes\/No/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'false');
+    const listed = within(lib).getAllByRole('button', { name: /\?$|Keep in mind$|Do now$/ }).filter((b) => b.classList.contains('brm-lib-q'));
+    expect(listed.map((b) => b.querySelector('.brm-lib-t').textContent)).toEqual(['Should there be a timer?', 'Can a new player start without rules?']);
+    expect(listed.every((b) => b.querySelector('.brm-chip').textContent === 'Yes/No')).toBe(true);
+    // Picked, a Yes/No asks as a choice of its own two answers.
+    fireEvent.click(listed[1]);
+    expect(within(dialog).getByLabelText('Option A')).toHaveValue('Yes, at once');
+    expect(within(dialog).getByLabelText('Option B')).toHaveValue('Not yet');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks`));
+    expect(lastPost().body).toMatchObject({ kind: 'choice', prompt: 'Can a new player start without rules?', options: [{ title: 'Yes, at once', url: '' }, { title: 'Not yet', url: '' }], fromQuestion: 'platform:br-game:c002#001' });
+  });
+
+  test('type chips are buttons in the tab order, and All brings every type back', async () => {
+    await openRoom(hostState());
+    withMixed();
+    fireEvent.click(within(screen.getByRole('region', { name: 'Add something' })).getByRole('button', { name: 'Ideas' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+    const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
+    await within(lib).findByText('What does the player do first?');
+    const types = within(lib).getByRole('group', { name: 'Types' });
+    within(types).getAllByRole('button').forEach((b) => { expect(b.tagName).toBe('BUTTON'); expect(b).not.toHaveAttribute('tabindex', '-1'); });
+    fireEvent.click(within(types).getByRole('button', { name: /^Rate/ }));
+    expect(within(lib).queryByText('What does the player do first?')).toBeNull();
+    expect(within(lib).getByText('How fun is it so far?')).toBeInTheDocument();
+    fireEvent.click(within(types).getByRole('button', { name: /^All/ }));
+    expect(within(lib).getByText('What does the player do first?')).toBeInTheDocument();
   });
 
   test('picking one fills the form, editable, and sends its kind and note with it', async () => {
@@ -2488,7 +2554,7 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     expect(within(dialog).queryByRole('button', { name: W.askClaudeForQuestions })).toBeNull();
   });
 
-  test('Claude\'s set: first in the library, askable now, and Save sends two drafts to the bell, tagged for its kind', async () => {
+  test('Claude\'s set: first in the library, askable now, and Save sends one Poll draft to the bell, tagged for its kind', async () => {
     await openRoom(hostState({ extra: [QSET] }));
     const dialog = await openComposer();
     const lib = within(dialog).getByRole('complementary', { name: 'Ready questions' });
@@ -2501,11 +2567,12 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     fireEvent.click(within(lib).getByRole('button', { name: W.saveClaudeSet }));
     await waitFor(() => expect(posts().some((p) => path(p) === `games/${GAME}/build/question-sets/0000000000001-q1`)).toBe(true));
     const drafts = posts().filter((p) => /admin\/generation-drafts\/from-build$/.test(p.url));
+    // One Poll set holds all four types (owner, 24 Oct): the Ideas go in as open answers.
     expect(drafts.map((p) => [p.body.engagementType, p.body.title, p.body.items.length, p.body.tags])).toEqual([
-      ['call-and-answer', 'Game questions: ideas', 1, ['build-room', 'for-game']],
-      ['poll', 'Game questions: choose and rate', 2, ['build-room', 'for-game']],
+      ['poll', 'Game questions', 3, ['build-room', 'for-game']],
     ]);
-    expect(drafts[1].body.items).toEqual([
+    expect(drafts[0].body.items).toEqual([
+      { title: 'What does the player do first?', detail: '', category: 'Start', kind: 'text' },
       { title: 'Which look?', detail: '', category: 'While building', kind: 'choice', options: ['Pixel', 'Paper'] },
       { title: 'How fun is it so far?', detail: '', category: 'Before wrapping up', kind: 'rating', scale: '1-5' },
     ]);

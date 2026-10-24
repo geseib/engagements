@@ -1186,6 +1186,35 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     await hostCall('POST', 'directions', { text: 'Bigger buttons', as: 'whenever' });
     assert.strictEqual((await agentCall('GET', 'inbox')).body.inbox[0].as, 'do-now');
   });
+  // THE FOUR TYPES (owner, 24 Oct): each as the library sends it (readyQuestions.js
+  // buildAskFromQuestion; the mapping is held in src/src/__tests__/readyQuestions.test.js).
+  await check('a ready question of each type opens: Ideas, Choose, Yes/No as a choice of its two answers, Rate', async () => {
+    seed();
+    const from = (n) => `platform:buildroomgame:c004#00${n}`;
+    const bodies = [
+      { kind: 'suggest', prompt: 'What should a round feel like?', claudeGets: 'keep', fromQuestion: from(1) },
+      { kind: 'choice', prompt: 'How long is one round?', options: [{ title: 'Under a minute' }, { title: 'About three minutes' }, { title: 'Longer' }], claudeGets: 'keep', fromQuestion: from(2) },
+      { kind: 'choice', prompt: 'Should there be a timer on screen?', options: [{ title: 'Yes' }, { title: 'No' }], claudeGets: 'do-now', fromQuestion: from(3) },
+      { kind: 'choice', prompt: 'Ship it on Friday?', options: [{ title: 'Approve' }, { title: 'Decline' }], claudeGets: 'keep', fromQuestion: from(4) },
+      { kind: 'rating', prompt: 'How fun is it so far?', claudeGets: 'keep', fromQuestion: from(5) },
+    ];
+    const made = [];
+    let answer = null;
+    for (const body of bodies) {
+      const r = await hostCall('POST', 'asks', body);
+      assert.strictEqual(r.status, 201, `${body.prompt}: ${JSON.stringify(r.body)}`);
+      assert.strictEqual(r.body.ask.status, 'live', 'the host\'s ask goes to the room at once');
+      made.push(r.body.ask);
+      // The room answers the yes or no while it is the live one.
+      if (made.length === 3) answer = await playCall('POST', 'respond', { ...priya, askId: r.body.ask.askId, choice: ['B'] });
+    }
+    assert.deepStrictEqual(made.map((x) => [x.kind, x.fromQuestion]), [['suggest', from(1)], ['choice', from(2)], ['choice', from(3)], ['choice', from(4)], ['rating', from(5)]]);
+    assert.deepStrictEqual(made[2].options.map((o) => [o.label, o.title]), [['A', 'Yes'], ['B', 'No']]);
+    assert.deepStrictEqual(made[3].options.map((o) => [o.label, o.title]), [['A', 'Approve'], ['B', 'Decline']]);
+    assert.strictEqual(made[2].maxPicks, 1, 'a yes or no is one pick');
+    assert.strictEqual(answer.status, 200, JSON.stringify(answer.body));
+    assert.deepStrictEqual(answer.body.mine.answer.choice, ['B']);
+  });
   await check('a ready question carries what Claude gets and its note; the decision goes as that kind', async () => {
     seed();
     const c = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'Who is this for, in one sentence?', claudeGets: 'keep', claudeNote: 'Treat the winning answer as the audience.' });
@@ -1954,20 +1983,25 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
         { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper', ''] },
         { kind: 'choice', prompt: 'One option only', options: ['Solo'] },
         { kind: 'yesno', prompt: 'Not a Build Room kind' },
+        { kind: 'choice', prompt: 'Ship on Friday?', category: 'While building', options: ['Yes', 'No'], yesno: true },
+        { kind: 'choice', prompt: 'Not a yes or no: three answers', options: ['A', 'B', 'C'], yesno: true },
         { kind: 'rating', prompt: '   ' },
       ] },
       { name: '', questions: [{ kind: 'suggest', prompt: 'No name, dropped' }] },
     ] });
     assert.strictEqual(r.status, 200, JSON.stringify(r.body));
-    assert.strictEqual(r.body.ready.count, 2);
+    assert.strictEqual(r.body.ready.count, 4);
     const claude = (await agentWith('GET', 'state', {})).body.ready;
     assert.deepStrictEqual(claude.sets, [{ name: 'Game questions', questions: [
       { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
       { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper'] },
+      // A Yes/No keeps its mark (owner, 24 Oct); a choice of three does not.
+      { kind: 'choice', prompt: 'Ship on Friday?', category: 'While building', options: ['Yes', 'No'], yesno: true },
+      { kind: 'choice', prompt: 'Not a yes or no: three answers', category: '', options: ['A', 'B', 'C'] },
     ] }]);
     assert.strictEqual(claude.kind, 'game');
     const host = (await hostCall('GET', 'state')).body.ready;
-    assert.deepStrictEqual({ kind: host.kind, count: host.count, names: host.names }, { kind: 'game', count: 2, names: ['Game questions'] });
+    assert.deepStrictEqual({ kind: host.kind, count: host.count, names: host.names }, { kind: 'game', count: 4, names: ['Game questions'] });
     const phone = JSON.stringify((await playCall('GET', 'state', { playerName: 'Priya', clientId: 'c-priya' })).body);
     assert.ok(!phone.includes('What does the player do first?'));
     assert.strictEqual((await agentWith('POST', 'ready', {}, { kind: 'game', sets: [] })).status, 403, 'only the host hands them over');

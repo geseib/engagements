@@ -17,6 +17,17 @@
 import { resolveSetTopic } from './setTopics';
 import { setCarriesTag } from './setShelfIndex';
 import { setOwnerTag, setOwnerRank } from '../utils/setOwnerTag';
+import { isBuildRoomSet } from '../buildroom/readyQuestions';
+
+/**
+ * WHERE A SET MAY START A SESSION (owner, 24 Oct: "the question set filter on
+ * the new engagements puts the build question sets into the call and
+ * answer"). A Build Room set (tagged build-room) is asked inside a Build Room,
+ * any time, from Ask the room; it never starts a Call and Answer or a Poll.
+ * The create chooser, Quick start and the agenda item dialog list only sets
+ * this passes; the console's Question sets list shows every set.
+ */
+export const offeredForSessions = (set) => !isBuildRoomSet(set);
 
 /** What a word in the search box is matched against: the set's name, its
  *  description, its custom instruction and its own tags. */
@@ -61,6 +72,40 @@ const DAY = 24 * 60 * 60 * 1000;
 export const RECENT_USE_DAYS = 90;
 
 /**
+ * The windows the console's Question Sets list offers: every one but "used by
+ * me lately", because the console has no session data to read a host's uses
+ * from — a window it could only ever answer with nothing is not offered.
+ */
+export const CONSOLE_UPDATED_WINDOWS = Object.freeze(UPDATED_WINDOWS.filter((w) => w.value !== 'used'));
+
+/**
+ * Is this set inside a date window? The rule the chooser and the console both
+ * filter by, so "this month" cannot mean thirty days in one and a calendar
+ * month in the other. 'used' is not a date rule (it reads the host's sessions)
+ * and is the chooser's own; anything unknown, 'any' included, lets the set
+ * through. A set with no date at all is never "older": it is undated, not old.
+ */
+export function inUpdatedWindow(set, wanted, now = Date.now()) {
+  const within = (days) => setUpdatedAt(set) >= now - days * DAY;
+  if (wanted === 'week') return within(7);
+  if (wanted === 'month') return within(30);
+  if (wanted === 'older') return setUpdatedAt(set) > 0 && !within(90);
+  return true;
+}
+
+/**
+ * The several-tags axis for config/listControls.js, shared so the chooser and
+ * the console match a tag the same way — through `setCarriesTag`, the function
+ * the browse counts with, so a pill's count is the rows it produces.
+ * `all: ''` because a set tagged `all` is not a hypothetical.
+ */
+export const TAGS_AXIS = Object.freeze({
+  all: '',
+  get: (set) => set,
+  eq: (set, wanted) => splitTags(wanted).some((tag) => setCarriesTag(set, tag)),
+});
+
+/**
  * The chooser's config for config/listControls.js.
  *
  * `recent` maps a set's key to when this host last used it (ms); `keyOf` is
@@ -69,27 +114,18 @@ export const RECENT_USE_DAYS = 90;
  */
 export function chooserConfig({ recent = new Map(), keyOf = (s) => s.id, now = Date.now() } = {}) {
   const usedAt = (set) => recent.get(keyOf(set)) || 0;
-  const within = (set, days) => setUpdatedAt(set) >= now - days * DAY;
   return {
     searchFields: SET_SEARCH_FIELDS,
     axes: {
       owner: { get: (set) => setOwnerTag(set) },
       topic: { get: (set) => resolveSetTopic(set.topic) },
-      tags: {
-        all: '',
-        get: (set) => set,
-        eq: (set, wanted) => splitTags(wanted).some((tag) => setCarriesTag(set, tag)),
-      },
+      tags: TAGS_AXIS,
       updated: {
         all: 'any',
         get: (set) => set,
-        eq: (set, wanted) => {
-          if (wanted === 'used') return usedAt(set) >= now - RECENT_USE_DAYS * DAY;
-          if (wanted === 'week') return within(set, 7);
-          if (wanted === 'month') return within(set, 30);
-          if (wanted === 'older') return setUpdatedAt(set) > 0 && !within(set, 90);
-          return true;
-        },
+        eq: (set, wanted) => (wanted === 'used'
+          ? usedAt(set) >= now - RECENT_USE_DAYS * DAY
+          : inUpdatedWindow(set, wanted, now)),
       },
     },
     sorts: {

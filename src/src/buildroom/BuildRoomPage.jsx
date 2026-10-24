@@ -32,6 +32,7 @@ import { copyText } from '../utils/copyText';
 import { editableRows } from '../utils/questionRows';
 import {
   isBuildRoomSet, buildAskFromQuestion, ASKED_AS, groupReady, rankSetsForKind, KIND_NAMES, claudeSetItems, draftsFromClaudeSet,
+  typeOfItem, typeCounts,
 } from './readyQuestions';
 import { useReadyForClaude } from './readyForClaude';
 import { OpeningPanel, BriefPath } from './BuildOpening';
@@ -568,6 +569,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       if (!toggleCodesRef.current) return;
       e.preventDefault();
       toggleCodesRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+  // Escape takes the codes down on the two-screen console too (the Stage
+  // screen has its own); set each render below, null while there is nothing to take down.
+  const escCodesRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !escCodesRef.current || dialogOpen()) return;
+      escCodesRef.current();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -1139,6 +1151,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // it (BuildConsole.jsx). One screen, a phone, the Stage, Build and History
   // are exactly as before. Every panel below is the Host screen's own.
   const consoleOn = twoRef.current && screen === 'host' && !narrow;
+  escCodesRef.current = consoleOn && codesUp && !ended && !panel ? hideCodes : null;
   let consoleNode = null;
   if (consoleOn) {
     const pickNow = pick && current && pick.askId === current.askId ? pick.id : null;
@@ -1248,7 +1261,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     consoleNode = (
       <BuildConsole
         moment={moment}
-        top={{ title: room.title || 'Build Room', code: room.gameId, onJoin: showCodes, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' } }}
+        top={{ title: room.title || 'Build Room', code: room.gameId, onJoin: onJoinCode, joinHint: joinChipWords(ended, codesUp, demoLive), joinPressed: ended ? undefined : codesUp, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' } }}
         onLeave={() => window.location.assign('/')}
         topExtra={(
           <div className="bc-topx">
@@ -4199,6 +4212,8 @@ function ReadyLibrary({
   const [loaded, setLoaded] = useState({});
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  // THE TYPE (owner, 24 Oct): kept as the host moves between sets, unlike the category.
+  const [askType, setAskType] = useState('all');
   const setKey = (st) => `${st.scope || ''}:${st.id}`;
   useEffect(() => {
     let live = true;
@@ -4232,7 +4247,7 @@ function ReadyLibrary({
         const items = editableRows(payload, set.engagementType)
           .map((row) => ({ row, out: buildAskFromQuestion(row, set) }))
           .filter((x) => x.out.ask)
-          .map((x) => ({ key: `${active}:${x.row.sk}`, category: x.row.category, ask: x.out.ask, setName: set.name || 'Ready questions' }));
+          .map((x) => ({ key: `${active}:${x.row.sk}`, category: x.row.category, ask: x.out.ask, type: x.out.type, setName: set.name || 'Ready questions' }));
         setLoaded((l) => ({ ...l, [active]: items }));
       })
       .catch(() => { if (live) setLoaded((l) => ({ ...l, [active]: [] })); });
@@ -4257,8 +4272,9 @@ function ReadyLibrary({
   const source = claudeActive ? claudeSetItems(claudeActive) : loaded[active];
   const items = source ? source.map((it) => ({ ...it, askedIn: askedIn(it.key, it.ask.prompt) })) : null;
   const q = query.trim().toLowerCase();
-  const shown = (items || []).filter((it) => (category === 'all' || it.category === category) && (!q || it.ask.prompt.toLowerCase().includes(q)));
-  const cats = [...new Set((items || []).map((it) => it.category))];
+  const ofType = (items || []).filter((it) => askType === 'all' || typeOfItem(it) === askType);
+  const shown = ofType.filter((it) => (category === 'all' || it.category === category) && (!q || it.ask.prompt.toLowerCase().includes(q)));
+  const cats = [...new Set(ofType.map((it) => it.category))];
   return (
     <aside className="brm-lib" aria-label="Ready questions">
       <input className="brm-input brm-input--sm" type="search" aria-label="Search ready questions" placeholder="Search ready questions" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -4304,6 +4320,15 @@ function ReadyLibrary({
           </>
         );
       })()}
+      {items && items.length > 0 && (
+        <div className="brm-qfilters" role="group" aria-label="Types">
+          {typeCounts(items).map((t) => (
+            <button key={t.type} type="button" className={`brm-qchip${askType === t.type ? ' is-on' : ''}`} aria-pressed={askType === t.type} onClick={() => { setAskType(t.type); setCategory('all'); }}>
+              {t.label} <span className="brm-qchip-n">{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {cats.length > 1 && (
         <div className="brm-qfilters" role="group" aria-label="Categories">
           {['all', ...cats].map((c) => (
@@ -4320,8 +4345,11 @@ function ReadyLibrary({
             <h3 className="brm-h5">{g.category}</h3>
             {g.items.map((it) => (
               <button key={it.key} type="button" className={`brm-lib-q${selectedKey === it.key ? ' is-on' : ''}${it.askedIn ? ' is-asked' : ''}`} aria-pressed={selectedKey === it.key} onClick={() => onPick(it)}>
-                <span className="brm-chip">{ASKED_AS[it.ask.kind]}</span>
-                <span className="brm-lib-t">{it.ask.prompt}</span>
+                <span className="brm-chip">{ASKED_AS[typeOfItem(it)]}</span>
+                <span className="brm-lib-t">
+                  {it.ask.prompt}
+                  {typeOfItem(it) === 'choice' && <span className="brm-lib-opts">{it.ask.options.map((o) => o.title).join(' · ')}</span>}
+                </span>
                 {it.askedIn
                   ? <span className="brm-chip brm-chip--live">Asked · ask {askNumber(it.askedIn)}</span>
                   : <span className="brm-who">{claudeKindLabel(it.ask.claudeGets)}</span>}

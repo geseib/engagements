@@ -14,10 +14,23 @@
   (a pointer stays) and the group table of `admin-getting-started#first-thing`
   (now `admin-staff-accounts#kinds-of-account`).
 
-  Checked against the code at 6a5aa8f7. NOT checked on dev: the stored QA
-  account is in `hosts` only on dev (its refreshed id token, 22 Oct 2026), so
-  the Engage tab does not appear for it and every staff section was read from
-  the code alone. Every **Label** exists in src/src.
+  Checked against the code at 6a5aa8f7, and on dev on 23 Oct 2026 at
+  ae5d6de3 with the QA account in `admins`: every Engage section, the Billing
+  drawer and Grant dialog, Staff activity and Activity, New code, Plan requests
+  (Show: All), Unpublish, the score card with its Run the check again and Take
+  down dialogs, Archive's export, restore and delete dialogs, Accounts' delete
+  confirm and filters, the bell, and Prompts as staff. Opened and cancelled;
+  nothing changed. NOT seen on dev because every queue was empty: the Overview's
+  boxes, Accounts' Waiting for approval rows, Decide…, Moderation rows and
+  Review, Leave it serving, and the bell's staff entries; those stay as read
+  from the code. Every **Label** exists in src/src.
+
+  What the screen does that the help does not repeat (product bugs, reported
+  23 Oct): team rows' Billing… is clipped out of the actions column; the
+  acting-as banner names the personal space by its id and says Engage holds no
+  question sets; the Organisations and Accounts notes describe an access
+  request that is not built; Plan requests says "Standard plan" where the rows
+  say Organisation plan, and the Plan column reads Free for anything but Team.
 */
 
 /* ------------------------------------------------------------ the console */
@@ -44,6 +57,10 @@ const staffConsole = {
         {
           t: 'p',
           text: 'Engage staff are the accounts that are Engage admins. For them the row along the top of the console ends with **Engage**, marked Staff. Pick it to work as Engage rather than in Your space or a team: the console reloads with one menu, Engage, and opens on its Overview. This browser remembers the choice, as it does for any space.',
+        },
+        {
+          t: 'p',
+          text: 'Most Engage sections carry a banner, **You are acting as Engage.**, with a button that takes you back to your own space.',
         },
         {
           t: 'table',
@@ -127,7 +144,7 @@ const staffConsole = {
         },
         {
           t: 'p',
-          text: 'Below the boxes are the platform\'s numbers, as in Observability. The bell carries the same three queues, one entry each (for example, 2 accounts waiting for approval); a click switches to Engage and opens that section. Such an entry stays unread for as long as something waits; **Mark all read** does not clear it.',
+          text: 'Below the boxes, **Right now** gives the platform\'s numbers: accounts, organisations, sessions counted this month and question sets. Observability has the rest. The bell carries the same three queues, one entry each (for example, 2 accounts waiting for approval); a click switches to Engage and opens that section. Such an entry stays unread for as long as something waits; **Mark all read** does not clear it.',
         },
       ],
     },
@@ -148,7 +165,10 @@ const organisations = {
       "since Mon YYYY") / Plan (Team or Free) / Members / Status (Active,
       Pending, Suspended). Row: Approve (pending → active), Reinstate
       (suspended → active), Billing…, Activity… (AuditLogDialog for the org),
-      Suspend (active teams only; one click, no confirm). platform-orgs.js:
+      Suspend… (active teams only; a dialog asks first and needs a written
+      reason of 10 to 600 characters, sent to the server, stored on the row
+      and in the org's audit log; the row shows it under the name until
+      Reinstate, which stays one click and clears it). platform-orgs.js:
       personal spaces refused ("A personal space cannot be suspended. Disable
       the account instead."); the audit entry is written first or nothing
       changes (503). create-org.js: a new team is written 'active' on Free and
@@ -163,16 +183,16 @@ const organisations = {
       blocks: [
         {
           t: 'p',
-          text: 'Organisations lists every team and personal space on this tier, teams first: its name and how long it has existed, its plan, how many members it has and its status (Active, Pending or Suspended). The line at the top counts them.',
+          text: 'Organisations lists every team and personal space on this tier, teams first: its name and how long it has existed, its plan (Team means the Organisation plan), how many members it has and its status (Active, Pending or Suspended). The line at the top counts them.',
         },
         {
           t: 'list',
           items: [
             { title: '**Approve**', text: 'On a Pending organisation: makes it Active.' },
-            { title: '**Suspend**', text: 'On an active team: marks it Suspended. It takes effect on the click, with no confirmation. A personal space cannot be suspended: to stop a person, disable their account in Accounts.' },
-            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again.' },
+            { title: '**Suspend…**', text: 'On an active team: asks first, then marks it Suspended. Write a **Reason** of a few words and press **Suspend**. The reason shows under the team\'s name and goes in its log, which its owners and admins can read. Nothing else changes yet: its members can still sign in and run sessions. A personal space cannot be suspended: to stop a person, disable their account in Accounts.' },
+            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again, on the click, and clears the reason from the row.' },
             { title: '**Billing…**', text: 'The organisation\'s billing ledger (next section).' },
-            { title: '**Activity…** and **Staff activity…**', text: 'Activity… is one organisation\'s log of who changed what. Staff activity…, at the top, lists every staff action across organisations.' },
+            { title: '**Activity…** and **Staff activity…**', text: 'Activity… is one organisation\'s log of who changed what, the same list its owners and admins see in Data & privacy. Staff activity…, at the top, lists every change staff have made: to organisations, accounts, discount codes and Engage settings. Both keep entries for a year.' },
           ],
         },
         {
@@ -200,7 +220,7 @@ const organisations = {
       blocks: [
         {
           t: 'p',
-          text: '**Billing…** opens the organisation\'s ledger: this period\'s bill as it would be if the period ended today, and every adjustment ever granted, with who granted it, when and why.',
+          text: '**Billing…** opens the organisation\'s ledger: this period\'s bill as it would be if the period ended today, and every adjustment ever granted, with who granted it, when and why. Billing is a simulation for now: no card is charged and no money moves, and the drawer says so.',
         },
         {
           t: 'steps',
@@ -236,7 +256,7 @@ const organisations = {
       blocks: [
         {
           t: 'p',
-          text: 'Plan requests lists what organisations have asked for: a new team asking for the paid plan, or an owner asking to change plan. Each row shows who asked and when, the plan they are on and the one they want, any discount code they named, and their note. **Show** picks Waiting (the default), Approved, Declined, Withdrawn or All.',
+          text: 'Plan requests lists what organisations have asked for: a new team asking for the Organisation plan, or a team or personal space asking to change plan. Each row shows the organisation, who asked and when, the plan they are on and the one they want (for example Free → Organisation plan), any discount code they named, and their note; a decided row\'s note starts with the decision. **Show** picks Waiting (the default), Approved, Declined, Withdrawn or All.',
         },
         {
           t: 'steps',
@@ -285,7 +305,7 @@ const organisations = {
         },
         {
           t: 'p',
-          text: '**Retire** stops a code being used, after you confirm; teams that already used it keep their discount. Codes are retired, never deleted. A code also stops on its own when it expires or is used up.',
+          text: '**Retire** stops a code being used, after you confirm; teams that already used it keep their discount. Codes are retired, never deleted. A code also stops on its own when it expires or is used up. Only a code still in use has Retire; the others are marked Expired, Used up or Retired.',
         },
       ],
     },
@@ -382,7 +402,7 @@ const accounts = {
       blocks: [
         {
           t: 'p',
-          text: 'Below the queue, Members lists every approved account. Search by name, email or username, and filter with **Active**, **Admins**, **Hosts** or **Disabled**. Each row offers only the moves that apply to that person:',
+          text: 'Below the queue, Members lists every approved account. Search by name, email or username, and filter with **Active**, **Admins**, **Hosts** or **Disabled**. Point at a row to see its moves; each row offers only those that apply to that person:',
         },
         {
           t: 'list',
@@ -566,7 +586,8 @@ const platform = {
           t: 'list',
           items: [
             { title: 'Right now', text: 'Accounts, organisations, question sets and stored reports.' },
-            { title: 'This month, by team', text: 'Every team, most counted first. Open one to see its numbers; the visit is recorded in that team\'s log. **Engage sets** and **Public sets** list sets by use instead. **Download CSV** takes the month away.' },
+            { title: 'One month', text: 'Step between months with the arrows. Sessions counted, questions asked, participants, sessions kept and events run, then the same by engagement type. **Download CSV** takes the month away.' },
+            { title: 'Teams this month', text: 'Each team and personal space with numbers this month, most counted first. Open one to see its numbers; the visit is recorded in its log. **Engage sets** and **Public sets** list sets by use instead.' },
             { title: '**By month** and **By category**', text: 'Sessions created, started and counted, questions asked and answers given, month by month and by question category.' },
           ],
         },
@@ -600,7 +621,7 @@ const platform = {
           t: 'list',
           items: [
             { title: '**Claude models**', text: 'The **Anthropic 5.5** switch. On, which is the default, Engage\'s AI calls go to the newer Claude models on the Anthropic API, and a call that fails there is answered by the Bedrock model. Off, every call stays on Bedrock. **In use** marks the model answering now. A change reaches everything within a minute. If this tier has no Anthropic connection, the switch is greyed out and says so.' },
-            { title: '**Site look**', text: 'The look every page wears. Choose one and try it in this browser only with its Preview button (**End preview** stops it), then press the button that applies it for everyone. A reason is optional and goes in the audit log. A stage or room\'s window that is already open keeps its look until it is reloaded.' },
+            { title: '**Site look**', text: 'The look every page wears. Choose one and try it in this browser only with its Preview button (**End preview** stops it), then press the button that applies it for everyone (greyed out for the look already in use). A reason is optional and goes in the audit log. A stage or room\'s window that is already open keeps its look until it is reloaded.' },
           ],
         },
       ],

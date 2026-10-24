@@ -559,11 +559,14 @@ const hardStop = setTimeout(() => {
       { kind: 'suggest', prompt: 'What does the player do first?', category: 'Start' },
       { kind: 'choice', prompt: 'Which look?', category: 'Start', options: ['Pixel', 'Paper'] },
       { kind: 'rating', prompt: 'How fun is it?', category: 'While building' },
+      { kind: 'choice', prompt: 'Ship on Friday?', category: 'While building', options: ['Yes', 'No'], yesno: true },
     ] }] };
     try {
       const t = textOf(await mcp.request('tools/call', { name: 'room_status', arguments: {} }));
       assert.ok(/READY QUESTIONS for a game, from the host's question sets/.test(t), t.slice(-800));
       assert.ok(/Ideas: .*What does the player do first\?/.test(t) && /Choose: .*Which look\?.*\[.*Pixel.*\|.*Paper.*\]/.test(t) && /Rate: .*How fun is it\?/.test(t), t.slice(-800));
+      // 1.28.0: a Yes/No reads as one, asked as a choice of its two answers.
+      assert.ok(/Yes\/No: .*Ship on Friday\?.*\[.*Yes.*\|.*No.*\]/.test(t) && /Yes\/No = ask_room_to_choose with its two answers/.test(t), t.slice(-800));
       assert.ok(t.indexOf('Start') < t.indexOf('While building'), 'by section, in order');
     } finally {
       stateReady = null;

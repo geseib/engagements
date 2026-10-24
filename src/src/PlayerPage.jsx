@@ -3,6 +3,7 @@ import webSocketClient from './WebSocketClient';
 import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
+import { hasScoreboard } from './config/scoreboard';
 import { resolveInstruction, resolveRoundNoun } from './config/instructions';
 import { displayLabelFor, ownAnswerIndex } from './config/anonymity';
 import { feedbackRoundFrom } from './config/sessionHistory';
@@ -4432,7 +4433,11 @@ function PlayerPage({ event = null } = {}) {
       ? `${playerScoreInfo.rankDisplay} of ${playerScoreInfo.totalPlayers}`
       : null;
 
-    const scoreRows = (
+    /* ONLY WHERE SOMETHING IS SCORED (#43). Wavelength scores nobody, and a
+       poll or a survey is not scored, so "This round +0" and "Total 0" there
+       read as a wrong answer. The types with a scoreboard are the types that
+       score (config/scoreboard.js). */
+    const scoreRows = hasScoreboard(gameType) && (
       <>
         <hr className="plr-sep" />
         {/* `playerScoreInfo?.roundScore > 0` used to hide this line entirely
@@ -4604,10 +4609,8 @@ function PlayerPage({ event = null } = {}) {
          position — a reorder between VOTE and RESULTS would already be
          misattributing votes (§11.9).
 
-         OPEN-QUESTIONS §3: a poll still shows a score, because that is what the
-         code does. If a poll should not be scored, its results screen loses
-         three of its four rows and needs a different personal payoff, which is
-         a new design rather than a change here. */
+         OPEN-QUESTIONS §3: a poll is not scored, so `scoreRows` is empty for
+         one (and for a survey); only Call & Answer carries the score here. */
       const myRow = ownAnswerIdx !== null && ownAnswerIdx !== undefined && answers[ownAnswerIdx]
         ? answers[ownAnswerIdx]
         : null;

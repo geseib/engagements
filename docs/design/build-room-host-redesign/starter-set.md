@@ -1,3 +1,5 @@
+**Superseded 24 Oct 2026:** both sets below are now one Poll set, `sets/build-room-general.csv` (*Build Room: General*), with two Choose and three Yes/No added; see `starter-sets-by-kind.md`. The text below is kept as the history of the questions.
+
 # Build Room starter sets
 
 **Shipped (step 7b, 2026-10-06):** `sets/build-room-starters.csv` and

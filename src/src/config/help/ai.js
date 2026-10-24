@@ -658,7 +658,7 @@ const prompts = {
           rows: [
             ['Active', 'In use, and offered wherever a prompt of its type is chosen.'],
             ['Draft', 'Being worked on. Not offered.'],
-            ['Archived', 'Retired. Out of the list unless you filter for it.'],
+            ['Archived', 'Retired. Not offered, but still in the list, marked Archived. Choose a status in the filter to hide it.'],
           ],
         },
         {
@@ -678,7 +678,11 @@ const prompts = {
       AIGenerationPromptEditor passes neither. PromptLibraryPanel.jsx:804-826;
       the Retire dialog (AIPromptManager.jsx:1928-2009) "Open it and set Draft
       instead", "Retire it"; a retired default still runs (get-ai-summary.js
-      findDefaultPromptId never reads status).
+      findDefaultPromptId never reads status). A retired prompt is NOT dropped
+      from the list, whatever the row's tooltip and the Retire dialog say:
+      delete-ai-prompt.js sets status 'archived', fetchPrompts reads every
+      status and the Status filter defaults to all. Seen on dev 23 Oct 2026:
+      an Archived generator prompt listed under All Status.
     */
     {
       id: 'retire-or-copy',
@@ -694,7 +698,7 @@ const prompts = {
           head: ['Action', 'What it does', 'What it does not do'],
           rows: [
             ['**Copy to archive**', 'Puts a copy of the prompt in the shared archive so another environment can import it.', 'Does not remove it, change its status, or stop it being used.'],
-            ['**Retire**', 'Stops the prompt being offered and takes it out of the list. It can be set back to Active from the editor.', 'Does not copy it to the archive. Copy it first if another environment needs it.'],
+            ['**Retire**', 'Stops the prompt being offered and marks it Archived; it stays in the list. It can be set back to Active from the editor.', 'Does not copy it to the archive. Copy it first if another environment needs it.'],
           ],
         },
         {
@@ -733,7 +737,7 @@ const prompts = {
           t: 'list',
           items: [
             { title: 'Generator prompts', text: 'Name, engagement type and scenario, the base prompt, templates for the context, audience and categories the builder fills in, the output format, status, and **Default prompt for this type**.' },
-            { title: 'Results prompts', text: 'What the AI is given and what it writes, with the placeholders below. The editor also offers **Improve or simplify…** (Workie suggests changes, and runs its checks on them), **Download for an agent** and **Upload a revised file**, so another AI can work on the prompt as a file.' },
+            { title: 'Results prompts', text: 'What the AI is given and what it writes, with the placeholders below. The editor also offers **Improve or simplify…** (Workie suggests changes, and runs its checks on them; **Improve** on the row opens it there), **Download for an agent** and **Upload a revised file**, so another AI can work on the prompt as a file.' },
             { title: 'Populate Default Prompts', text: 'Writes the built-in results prompts. A prompt with the same name gets the built-in text as a new version; each type keeps its current default.' },
           ],
         },

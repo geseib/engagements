@@ -811,14 +811,16 @@ const scoring = {
     },
     {
       /* The phone shows This round / Total / Standing at results, and Final
-         score / Final standing at the end; never the whole board. */
+         score / Final standing at the end; never the whole board. Only for
+         the types that score (config/scoreboard.js hasScoreboard: Trivia and
+         Call & Answer); a Poll, Survey or Wavelength shows no score lines. */
       id: 'scoreboard',
       title: 'The scoreboard',
       icon: 'ChartLineUp',
       blocks: [
         {
           t: 'p',
-          text: 'Scores add up across the whole session and update at the end of each round, so a round in progress does not tip off the room about who is winning it. Your phone shows your own total and standing; the full board, when the host shows it, is on the main screen.',
+          text: 'Scores add up across the whole session and update at the end of each round, so a round in progress does not tip off the room about who is winning it. Your phone shows your own total and standing; the full board, when the host shows it, is on the main screen. Only Trivia and Call & Answer are scored: in a Poll or Wavelength your phone shows no points.',
         },
         {
           t: 'faq',

@@ -10,7 +10,7 @@
  * is zero and every such assertion passes unconditionally.
  */
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import QuickstartMenu from '../components/QuickstartMenu';
 
 jest.mock('../auth/authFetch', () => ({
@@ -57,6 +57,19 @@ const renderMenu = (props = {}) => {
   );
   return { ...utils, onGameCreated, onClose };
 };
+
+// Owner, 24 Oct: a Build Room set is asked in a Build Room, never quick-started as a session.
+test('a quick start set tagged build-room is not offered', async () => {
+  authFetch.mockImplementation(async (url) => {
+    if (String(url).endsWith('admin/question-sets')) {
+      return { ok: true, json: async () => ({ questionSets: [...SETS, { ...SETS[0], id: 'br-game', name: 'Build Room: Game', engagementType: 'poll', tags: ['build-room'] }] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  });
+  renderMenu();
+  await screen.findByRole('button', { name: /Tech Trends/ });
+  expect(screen.queryByRole('button', { name: /Build Room: Game/ })).toBeNull();
+});
 
 test('a set is a real button, not a div nobody can tab to', async () => {
   // rejects: the shipped state — `<div className="quickstart-set-card"
@@ -297,5 +310,201 @@ describe('screen mode in Quick start', () => {
     renderMenu({ roomScreen: 'two', onRoomScreen: jest.fn() });
     fireEvent.click(await screen.findByRole('button', { name: /Tech Trends/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/blocked the room's window/);
+  });
+});
+
+/* SEARCH (owner, 23 Oct 2026: "search, filter by mine/team/public/engage or by
+   date or by tag" as libraries grow). Quick start had no way to find a set
+   but paging each format's carousel four at a time. The matcher is the set
+   chooser's (config/setFinder.js SET_SEARCH_FIELDS), so these test what the
+   sheet does with it, not the matching itself. */
+describe('searching Quick start', () => {
+  const set = (id, name, engagementType, extra = {}) => ({
+    id, name, engagementType, description: '', totalQuestions: 10, categoryCount: 2, quickstart: true, active: true, ...extra,
+  });
+  // Six Call & Answer sets (two pages of four) and two Trivia sets.
+  const LIBRARY = [
+    set('ca1', 'Strategy offsite', 'call-and-answer'),
+    set('ca2', 'Team retro', 'call-and-answer'),
+    set('ca3', 'Budget planning', 'call-and-answer'),
+    set('ca4', 'Hiring loop', 'call-and-answer'),
+    set('ca5', 'Roadmap review', 'call-and-answer', { tags: ['planning'] }),
+    set('ca6', 'Customer voice', 'call-and-answer'),
+    set('tr1', 'Space trivia', 'trivia'),
+    set('tr2', 'Planning trivia', 'trivia'),
+  ];
+
+  beforeEach(() => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: LIBRARY }) };
+      return { ok: true, json: async () => ({ gameId: '4821' }) };
+    });
+  });
+
+  const box = () => screen.findByRole('searchbox', { name: /Search 8 quick start sets/ });
+  const heading = (label) => screen.getByRole('heading', { level: 3, name: new RegExp(label) });
+
+  // rejects: the search narrowing one carousel and not the other, or a tag
+  // match being missed (the set chooser's fields, not the name alone).
+  test('narrows every format, by name or tag, and the counts read "N of M"', async () => {
+    renderMenu();
+    fireEvent.change(await box(), { target: { value: 'planning' } });
+    expect(screen.getByRole('button', { name: /Budget planning/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Roadmap review/ })).toBeInTheDocument(); // by its tag
+    expect(screen.getByRole('button', { name: /Planning trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Strategy offsite/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Space trivia/ })).toBeNull();
+    expect(heading('Call & Answer')).toHaveTextContent('(2 of 6)');
+    expect(heading('Trivia')).toHaveTextContent('(1 of 2)');
+  });
+
+  // rejects: a format whose sets all fail the search still drawing its header
+  // and an empty carousel.
+  test('a format with no match drops out', async () => {
+    renderMenu();
+    fireEvent.change(await box(), { target: { value: 'space' } });
+    expect(screen.getByRole('button', { name: /Space trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: /Call & Answer/ })).toBeNull();
+  });
+
+  // rejects: an empty sheet with no reason given and no way back but deleting
+  // the words; and focus left on the button that unmounted.
+  test('no match says so, and Clear the search brings every set back', async () => {
+    renderMenu();
+    const input = await box();
+    fireEvent.change(input, { target: { value: 'zebra' } });
+    expect(screen.getByRole('status')).toHaveTextContent('No quick start set matches “zebra”.');
+    expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the search' }));
+    expect(input).toHaveValue('');
+    expect(input).toHaveFocus();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(heading('Call & Answer')).toHaveTextContent('(6 available)');
+    expect(heading('Trivia')).toHaveTextContent('(2 available)');
+  });
+
+  // rejects: the carousel keeping page 2 after a search, which can leave it
+  // past the end of its matches and showing nothing.
+  test('searching starts each carousel again at its first page', async () => {
+    renderMenu();
+    const input = await box();
+    fireEvent.click(screen.getByRole('button', { name: /More Call & Answer sets/ }));
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Customer voice/ })).toBeInTheDocument();
+    // Five Call & Answer sets carry an "r": still two pages, back on the first.
+    fireEvent.change(input, { target: { value: 'r' } });
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Strategy offsite/ })).toBeInTheDocument();
+  });
+
+  // rejects: Esc in the box closing the whole sheet when it should only empty
+  // the box; and an empty box swallowing Esc so the sheet never closes.
+  test('Esc clears the search first, then closes', async () => {
+    const { onClose } = renderMenu();
+    const input = await box();
+    fireEvent.change(input, { target: { value: 'space' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input).toHaveValue('');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Strategy offsite/ })).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // rejects: a search box over an empty library, where there is nothing to find.
+  test('an empty library keeps its own message and shows no search', async () => {
+    authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
+    renderMenu();
+    expect(await screen.findByText('No sets on the quick start menu yet')).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+
+  // rejects: the stale "Admin → Question Sets … check the 'Quickstart' box" (#43)
+  test('an empty library names today\'s control and opens Your question sets', async () => {
+    authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
+    const onQuestionSets = jest.fn();
+    renderMenu({ onQuestionSets });
+    const empty = (await screen.findByText('No sets on the quick start menu yet')).closest('.no-quickstart-sets');
+    expect(empty).toHaveTextContent(/Quickstart tag in Your question sets/);
+    expect(empty).not.toHaveTextContent(/Admin|check the/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Open your question sets' }));
+    expect(onQuestionSets).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* OWNER AND TAG FILTERS (owner, 23 Oct 2026: "add owner and tag filters to
+   Quick start too"). The same rules as the set chooser: whose set it is by
+   setOwnerTag, several tags meaning a set with ANY of them. */
+describe('filtering Quick start by owner and tag', () => {
+  const set = (id, name, engagementType, extra = {}) => ({
+    id, name, engagementType, description: '', totalQuestions: 10, categoryCount: 2, quickstart: true, active: true, ...extra,
+  });
+  const LIBRARY = [
+    set('m1', 'My retro', 'call-and-answer', { scope: 'org', mine: true, tags: ['retro'] }),
+    set('t1', 'Team planning', 'call-and-answer', { scope: 'org', mine: false, tags: ['planning'] }),
+    set('e1', 'Engage icebreaker', 'call-and-answer', { scope: 'platform', tags: ['icebreaker', 'retro'] }),
+    set('e2', 'Engage space trivia', 'trivia', { scope: 'platform', tags: ['space'] }),
+  ];
+  beforeEach(() => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: LIBRARY }) };
+      return { ok: true, json: async () => ({ gameId: '4821' }) };
+    });
+  });
+  const owners = () => screen.findByRole('radiogroup', { name: 'Whose sets' });
+
+  // rejects: an owner filter whose counts disagree with what pressing it shows,
+  // or one offering owners no quick start set has.
+  test('owners present, each counted; picking one narrows every format', async () => {
+    renderMenu();
+    const group = await owners();
+    expect(within(group).getAllByRole('radio').map((b) => b.textContent)).toEqual(['All4', 'Yours1', 'Team1', 'Engage2']);
+    fireEvent.click(within(group).getByRole('radio', { name: /Engage/ }));
+    expect(screen.getByRole('button', { name: /Engage icebreaker/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /My retro/ })).toBeNull();
+  });
+
+  // rejects: tags that AND together (two tags would usually find nothing), or
+  // a tag pill that cannot be let go.
+  test('tags: several at once, a set with any of them; pressing again lets one go', async () => {
+    renderMenu();
+    const tags = within(await screen.findByRole('group', { name: 'Tags' }));
+    expect(tags.getByRole('button', { name: /^retro/ }).textContent).toBe('retro2');
+    fireEvent.click(tags.getByRole('button', { name: /^planning/ }));
+    fireEvent.click(tags.getByRole('button', { name: /^space/ }));
+    expect(screen.getByRole('button', { name: /Team planning/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /My retro/ })).toBeNull();
+    fireEvent.click(tags.getByRole('button', { name: /^space/ }));
+    expect(tags.getByRole('button', { name: /^space/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: /Engage space trivia/ })).toBeNull();
+  });
+
+  // rejects: a no-match line that blames only the search when a filter did it,
+  // or a Clear that leaves the filters on.
+  test('nothing matching names the filters, and one press clears them all', async () => {
+    renderMenu();
+    // Tags are counted within the owner, so the tag goes first: Yours then shows 0.
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Tags' })).getByRole('button', { name: /^space/ }));
+    const yours = within(await owners()).getByRole('radio', { name: /Yours/ });
+    expect(yours.textContent).toBe('Yours0');
+    fireEvent.click(yours);
+    expect(screen.getByRole('status')).toHaveTextContent('No quick start set matches in Yours, tagged space.');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear the search and filters' }));
+    expect(screen.getByRole('button', { name: /My retro/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Engage space trivia/ })).toBeInTheDocument();
+    expect(within(screen.getByRole('radiogroup', { name: 'Whose sets' })).getByRole('radio', { name: /All/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  // rejects: an owner row over a library with one owner, which filters nothing.
+  test('one owner only: no owner row', async () => {
+    authFetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('admin/question-sets')) return { ok: true, json: async () => ({ questionSets: LIBRARY.filter((s) => s.scope === 'platform') }) };
+      return { ok: true, json: async () => ({}) };
+    });
+    renderMenu();
+    await screen.findByRole('group', { name: 'Tags' });
+    expect(screen.queryByRole('radiogroup', { name: 'Whose sets' })).toBeNull();
   });
 });

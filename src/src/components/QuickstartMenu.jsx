@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import SetImageBadge from './SetImageBadge';
@@ -7,6 +7,10 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
 import { gameTypeMeta } from '../config/gameTypes';
+import { makeListPredicate, ALL } from '../config/listControls';
+import { SET_SEARCH_FIELDS, TAGS_AXIS, joinTags, splitTags, offeredForSessions } from '../config/setFinder';
+import { tagIndex } from '../config/setShelfIndex';
+import { OWNER_OPTIONS, setOwnerTag } from '../utils/setOwnerTag';
 import { SCREEN_WORDS } from '../config/roomScreen';
 import { TWO_SURFACE_TYPES, presentHref } from '../config/surfaces';
 import { openPendingRoomWindow, willPlace } from '../present/roomWindow';
@@ -16,6 +20,22 @@ import {
 } from '../utils/unreadableSet';
 
 const API_BASE = window.API_BASE;
+
+// One matcher for the sheet's life: the fields are the set chooser's
+// (config/setFinder.js), so a word that finds a set there finds it here.
+/*
+  QUICK START'S FILTERS (owner, 23 Oct 2026: "add owner and tag filters to
+  Quick start too"): the search, whose set it is and its tags, on the same
+  rules as the set chooser and the console (config/setFinder.js): several tags
+  at once means a set with ANY of them.
+*/
+const QS_CONFIG = {
+  searchFields: SET_SEARCH_FIELDS,
+  axes: { owner: { get: (set) => setOwnerTag(set) }, tags: TAGS_AXIS },
+};
+const matches = makeListPredicate(QS_CONFIG);
+/** The tags shown before "More tags": the most used. */
+const TAGS_SHOWN = 10;
 
 /**
  * WHERE THE ROOM WATCHES, IN QUICK START (owner, 18 Oct 2026). Quick start
@@ -46,7 +66,7 @@ export function QuickScreens({ choice, onChoose, blocked = false }) {
   );
 }
 
-const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScreen = null }) => {
+const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScreen = null, onQuestionSets = null }) => {
   const [windowBlocked, setWindowBlocked] = useState(false);
   const [quickstartSets, setQuickstartSets] = useState({
     'call-and-answer': [],
@@ -68,6 +88,56 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
 
   const SETS_PER_PAGE = 4;
 
+  /*
+    A SEARCH (owner, 23 Oct 2026: "add search to Quick start"; issue #41). The
+    same fields as the set chooser and the console list (config/setFinder.js):
+    name, description, custom instruction and tags. Each format's carousel
+    shows only its matches and starts again at its first page — page 3 of a
+    twelve-set list is past the end of a two-match one. A format with no match
+    drops out rather than drawing an empty carousel.
+  */
+  const [query, setQuery] = useState('');
+  const [owner, setOwner] = useState(ALL);
+  const [tags, setTags] = useState('');
+  const [allTags, setAllTags] = useState(false);
+  const searchRef = useRef(null);
+  const state = { search: query, owner, tags };
+  const shownSets = useMemo(() => Object.fromEntries(
+    Object.entries(quickstartSets).map(([type, list]) => [type, list.filter((set) => matches(set, { search: query, owner, tags }))])
+  ), [quickstartSets, query, owner, tags]);
+  const everySet = Object.values(quickstartSets).flat();
+  const countWith = (patch) => everySet.filter((set) => matches(set, { ...state, ...patch })).length;
+  const ownersPresent = OWNER_OPTIONS.filter((o) => everySet.some((set) => setOwnerTag(set) === o.value));
+  const tagsChosen = splitTags(tags);
+  // Counted within the search and the owner, so a tag's number is what it adds.
+  const tagList = tagIndex(everySet.filter((set) => matches(set, { ...state, tags: '' })));
+  for (const t of tagsChosen) if (!tagList.some((x) => x.tag === t)) tagList.unshift({ tag: t, count: 0 });
+  const firstPage = () => setCurrentPage((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, 0])));
+  const search = (value) => { setQuery(value); firstPage(); };
+  const pickOwner = (value) => { setOwner(value); firstPage(); };
+  const toggleTag = (tag) => {
+    setTags(joinTags(tagsChosen.includes(tag) ? tagsChosen.filter((t) => t !== tag) : [...tagsChosen, tag]));
+    firstPage();
+  };
+  const filtersOn = owner !== ALL || tagsChosen.length > 0;
+  const clearAll = () => {
+    setQuery(''); setOwner(ALL); setTags(''); firstPage();
+    searchRef.current?.focus();
+  };
+  // Clear goes back to the box: the button that was pressed unmounts with the
+  // no-match line, and focus left on nothing drops a keyboard user to the top
+  // of the page, outside the sheet.
+  const clearSearch = () => {
+    search('');
+    searchRef.current?.focus();
+  };
+  const noMatch = (query.trim() !== '' || filtersOn) && Object.values(shownSets).every((list) => list.length === 0);
+  const noMatchWords = [
+    query.trim() ? `“${query.trim()}”` : '',
+    owner !== ALL ? `in ${OWNER_OPTIONS.find((o) => o.value === owner).label}` : '',
+    tagsChosen.length ? `tagged ${tagsChosen.join(' or ')}` : '',
+  ].filter(Boolean).join(', ');
+
   useEffect(() => {
     fetchQuickstartSets();
   }, []);
@@ -87,7 +157,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
       };
 
       (data.questionSets || []).forEach(set => {
-        if (set.quickstart && set.active) {
+        if (set.quickstart && set.active && offeredForSessions(set)) {
           const type = set.engagementType || 'call-and-answer';
           if (quickstartData[type]) {
             quickstartData[type].push(set);
@@ -224,7 +294,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const nextPage = (type) => {
-    const maxPage = Math.max(0, Math.ceil(quickstartSets[type].length / SETS_PER_PAGE) - 1);
+    const maxPage = Math.max(0, Math.ceil(shownSets[type].length / SETS_PER_PAGE) - 1);
     setCurrentPage(prev => ({
       ...prev,
       [type]: prev[type] >= maxPage ? 0 : prev[type] + 1 // Circular navigation
@@ -232,7 +302,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const prevPage = (type) => {
-    const maxPage = Math.max(0, Math.ceil(quickstartSets[type].length / SETS_PER_PAGE) - 1);
+    const maxPage = Math.max(0, Math.ceil(shownSets[type].length / SETS_PER_PAGE) - 1);
     setCurrentPage(prev => ({
       ...prev,
       [type]: prev[type] <= 0 ? maxPage : prev[type] - 1 // Circular navigation
@@ -240,7 +310,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
   };
 
   const getVisibleSets = (type) => {
-    const sets = quickstartSets[type];
+    const sets = shownSets[type];
     const startIdx = currentPage[type] * SETS_PER_PAGE;
     return sets.slice(startIdx, startIdx + SETS_PER_PAGE);
   };
@@ -317,13 +387,72 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
             <QuickScreens choice={roomScreen} onChoose={onRoomScreen} blocked={windowBlocked} />
           ) : null}
           {totalQuickstartSets === 0 ? (
+            /* Today's controls (#43): a set goes on the menu by its Quickstart
+               tag, in Your question sets or the console's Question sets. This
+               used to send hosts to an "Admin → Question Sets" checkbox. */
             <div className="no-quickstart-sets">
-              <h3>No Quickstart Sets Available</h3>
-              <p>To enable quickstart, go to Admin <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" /> Question Sets and check the "Quickstart" box for your desired question sets.</p>
+              <h3>No sets on the quick start menu yet</h3>
+              <p>To put one of your sets here, press its Quickstart tag in Your question sets; press it again to take it off. You can also do it from the console&apos;s Question sets.</p>
+              {onQuestionSets && (
+                <button type="button" className="quickstart-clear" onClick={onQuestionSets}>Open your question sets</button>
+              )}
             </div>
           ) : (
-            Object.entries(quickstartSets).map(([type, sets]) => {
+            <>
+            <label className="quickstart-search">
+              <Icon name="MagnifyingGlass" size={16} color="currentColor" aria-hidden="true" />
+              {/* Esc with words in the box clears them and stops there, as in
+                  the set chooser; Esc in an empty box falls through to the
+                  sheet's own handler and closes Quick start. */}
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(e) => search(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); search(''); } }}
+                placeholder={`Search ${totalQuickstartSets} quick start sets: name, description or tag`}
+                aria-label={`Search ${totalQuickstartSets} quick start sets: name, description or tag`}
+              />
+            </label>
+            {(ownersPresent.length > 1 || tagList.length > 0) && (
+              <div className="quickstart-filters">
+                {ownersPresent.length > 1 && (
+                  <div className="quickstart-owner" role="radiogroup" aria-label="Whose sets">
+                    {[{ value: ALL, label: 'All' }, ...ownersPresent].map((o) => (
+                      <button key={o.value} type="button" role="radio" aria-checked={owner === o.value} className={owner === o.value ? 'is-on' : ''} onClick={() => pickOwner(o.value)}>
+                        {o.label}<b>{countWith({ owner: o.value })}</b>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {tagList.length > 0 && (
+                  <div className="quickstart-tags" role="group" aria-label="Tags">
+                    {(allTags ? tagList : tagList.slice(0, TAGS_SHOWN)).map(({ tag, count }) => (
+                      <button key={tag} type="button" aria-pressed={tagsChosen.includes(tag)} className={tagsChosen.includes(tag) ? 'is-on' : ''} onClick={() => toggleTag(tag)}>
+                        {tag}<b>{count}</b>
+                      </button>
+                    ))}
+                    {tagList.length > TAGS_SHOWN && (
+                      <button type="button" className="quickstart-moretags" onClick={() => setAllTags((v) => !v)}>
+                        {allTags ? 'Fewer tags' : `More tags (${tagList.length - TAGS_SHOWN})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* The live region stays mounted: one that appears already holding
+                its sentence is often never read out. Only the sentence is in
+                it; the button beside it is not read out as part of the news. */}
+            <div className={noMatch ? 'quickstart-nomatch' : undefined}>
+              <p role="status" className="quickstart-status">{noMatch ? `No quick start set matches ${noMatchWords}.` : ''}</p>
+              {noMatch && (filtersOn
+                ? <button type="button" className="quickstart-clear" onClick={clearAll}>Clear the search and filters</button>
+                : <button type="button" className="quickstart-clear" onClick={clearSearch}>Clear the search</button>)}
+            </div>
+            {Object.entries(shownSets).map(([type, sets]) => {
               if (sets.length === 0) return null;
+              const all = (quickstartSets[type] || []).length;
               
               const visibleSets = getVisibleSets(type);
               const totalPages = Math.ceil(sets.length / SETS_PER_PAGE);
@@ -340,7 +469,7 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
                         color={gameTypeMeta(type).accent}
                       />{' '}
                       {gameTypeMeta(type).label}
-                      <span className="set-count">({sets.length} available)</span>
+                      <span className="set-count">({sets.length === all ? `${all} available` : `${sets.length} of ${all}`})</span>
                     </h3>
                   </div>
 
@@ -432,7 +561,8 @@ const QuickstartMenu = ({ onGameCreated, onClose, roomScreen = null, onRoomScree
                   )}
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
 

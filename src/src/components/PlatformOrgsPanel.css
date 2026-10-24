@@ -119,7 +119,7 @@
 
 .porgs-tbl {
   width: 100%;
-  min-width: 620px;
+  min-width: 700px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -145,7 +145,12 @@
 .porgs-col-num { width: 92px; text-align: right; }
 .porgs-col-plan { width: 108px; }
 .porgs-col-status { width: 118px; }
-.porgs-col-acts { width: 168px; }
+/* THREE BUTTONS AT MOST: Billing…, Activity… and Suspend (or Reinstate, or
+   Approve). At 168px a team's row clipped its first button, Billing…, out of
+   sight (#40, #43): the cells hide overflow and the buttons sit to the right.
+   Wide enough for three, and this cell never clips a button. */
+.porgs-col-acts { width: 252px; }
+.porgs-tbl td.porgs-col-acts { overflow: visible; text-overflow: clip; }
 
 .porgs-name { color: var(--text); font-weight: 600; }
 .porgs-meta { color: var(--muted); font-size: var(--porgs-t-floor); }
@@ -218,3 +223,86 @@
   color: var(--muted);
   padding: 18px 10px;
 }
+
+/* Why a row is suspended (#40): one line under the name, cut with an
+   ellipsis; the element's title carries the whole reason. */
+.porgs-why {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font-size: var(--porgs-t-label);
+  line-height: 1.3;
+}
+
+/* ---------------------------------------------------- the Suspend dialog -- */
+/* A descendant of .porgs (Modal does not portal), so the tokens and the dark
+   theme reach it. The scrim scrolls and the card centres with margin: auto. */
+.porgs-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: var(--scrim);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+}
+.porgs-modal {
+  margin: auto;
+  width: min(520px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--porgs-rule-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgb(var(--shade-rgb) / .5);
+  overflow-wrap: anywhere;
+}
+.porgs-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
+.porgs-modal-head h2 { margin: 0; color: var(--text); font: 800 var(--porgs-t-head)/1.2 var(--font-display); }
+.porgs-grow { flex: 1 1 auto; min-width: 0; }
+.porgs-dim { color: var(--muted); }
+.porgs-modal-head .porgs-dim { margin: 6px 0 0; font-size: var(--porgs-t-label); line-height: 1.5; }
+.porgs-x {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.porgs-x:hover:not(:disabled) { color: var(--text); }
+.porgs-x:disabled { opacity: .4; cursor: not-allowed; }
+.porgs-modal-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 18px 6px; }
+.porgs-modal-body .porgs-alert { margin: 0; }
+.porgs-field { display: flex; flex-direction: column; gap: 6px; }
+.porgs-lab { color: var(--text); font: 600 var(--porgs-t-label)/1.3 var(--font-ui); }
+.porgs-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--porgs-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--porgs-t-body)/1.5 var(--font-ui);
+  resize: vertical;
+}
+.porgs-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.porgs-help { color: var(--muted); font-size: var(--porgs-t-label); line-height: 1.45; }
+.porgs-modal-foot {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--porgs-rule);
+}
+.porgs-modal-foot .porgs-btn { min-height: 36px; padding: 0 14px; font-size: var(--porgs-t-label); }
