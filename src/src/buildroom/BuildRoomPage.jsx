@@ -572,6 +572,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+  // Escape takes the codes down on the two-screen console too (the Stage
+  // screen has its own); set each render below, null while there is nothing to take down.
+  const escCodesRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !escCodesRef.current || dialogOpen()) return;
+      escCodesRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const narrow = useNarrowHeader();
   const playerCount = room ? room.playerCount : undefined;
   useEffect(() => { loadPlayers(); }, [loadPlayers, playerCount]);
@@ -1139,6 +1150,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // it (BuildConsole.jsx). One screen, a phone, the Stage, Build and History
   // are exactly as before. Every panel below is the Host screen's own.
   const consoleOn = twoRef.current && screen === 'host' && !narrow;
+  escCodesRef.current = consoleOn && codesUp && !ended && !panel ? hideCodes : null;
   let consoleNode = null;
   if (consoleOn) {
     const pickNow = pick && current && pick.askId === current.askId ? pick.id : null;
@@ -1248,7 +1260,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     consoleNode = (
       <BuildConsole
         moment={moment}
-        top={{ title: room.title || 'Build Room', code: room.gameId, onJoin: showCodes, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' } }}
+        top={{ title: room.title || 'Build Room', code: room.gameId, onJoin: onJoinCode, joinHint: joinChipWords(ended, codesUp, demoLive), joinPressed: ended ? undefined : codesUp, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' } }}
         onLeave={() => window.location.assign('/')}
         topExtra={(
           <div className="bc-topx">

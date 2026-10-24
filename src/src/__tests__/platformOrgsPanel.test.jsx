@@ -146,8 +146,90 @@ describe('approving and suspending', () => {
       }));
     render(<PlatformOrgsPanel />);
     fireEvent.click(await screen.findByRole('button', { name: /suspend/i }));
-    expect(await screen.findByRole('alert'))
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /reason/i }), { target: { value: 'Phishing links in a public set.' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
+    expect(await within(dialog).findByRole('alert'))
       .toHaveTextContent('A personal space cannot be suspended.');
+  });
+});
+
+describe('Suspend asks first, with a reason (#40)', () => {
+  const WHY = 'Phishing links in a public set.';
+  const openDialog = async (posts) => {
+    serve([TEAM], { onPost: (url, body) => posts.push({ url, body }) });
+    render(<PlatformOrgsPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: /suspend/i }));
+    return screen.getByRole('dialog', { name: `Suspend ${TEAM.name}?` });
+  };
+
+  // rejects: Suspend acting on one click
+  it('the row\'s Suspend opens a dialog and sends nothing', async () => {
+    const posts = [];
+    const dialog = await openDialog(posts);
+    // Says what it does today, and promises nothing stronger.
+    expect(dialog).toHaveTextContent(/marks the organisation Suspended/);
+    expect(dialog).toHaveTextContent(/members can still sign in and run sessions/);
+    expect(posts).toHaveLength(0);
+  });
+
+  // rejects: a suspension with no reason, or one too short to say anything
+  it('Suspend stays off until a reason of a few words is written', async () => {
+    const posts = [];
+    const dialog = await openDialog(posts);
+    const go = within(dialog).getByRole('button', { name: 'Suspend' });
+    const box = within(dialog).getByRole('textbox', { name: /reason/i });
+    expect(go).toBeDisabled();
+    fireEvent.change(box, { target: { value: '   spam   ' } });
+    expect(go).toBeDisabled();
+    fireEvent.change(box, { target: { value: WHY } });
+    expect(go).toBeEnabled();
+    expect(box).toHaveAttribute('maxLength', '600');
+  });
+
+  it('sends the reason with the status, then closes and says so', async () => {
+    const posts = [];
+    const dialog = await openDialog(posts);
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /reason/i }), { target: { value: `  ${WHY}\n` } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].url).toBe(`https://api.test/platform/orgs/${TEAM.orgId}/status`);
+    expect(posts[0].body).toEqual({ status: 'suspended', reason: WHY });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('status')).toHaveTextContent('Northwind Learning is now suspended.');
+  });
+
+  // rejects: a dialog with no way out but the destructive button
+  it('Cancel and the X close it with nothing sent', async () => {
+    const posts = [];
+    let dialog = await openDialog(posts);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /suspend/i }));
+    dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(posts).toHaveLength(0);
+  });
+
+  it('Reinstate stays one click', async () => {
+    const posts = [];
+    serve([{ ...TEAM, status: 'suspended', suspendedReason: WHY }], { onPost: (url, body) => posts.push({ url, body }) });
+    render(<PlatformOrgsPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstate' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body).toEqual({ status: 'active' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // rejects: staff seeing Suspended with no idea why
+  it('a suspended row shows its reason, whole in the title', async () => {
+    serve([{ ...TEAM, status: 'suspended', suspendedReason: WHY, suspendedAt: '2026-10-24T09:00:00.000Z' }]);
+    render(<PlatformOrgsPanel />);
+    const row = (await screen.findByText('Northwind Learning')).closest('tr');
+    const why = within(row).getByText(/Phishing links/);
+    expect(why).toHaveTextContent(`Suspended 24 Oct 2026: ${WHY}`);
+    expect(why).toHaveAttribute('title', WHY);
   });
 });
 

@@ -136,6 +136,19 @@ const SECTION = {
     contentTheme: 'dark',
   },
   /*
+    REPORTS — the saved PDFs, which outlive their session (ReportsPanel.jsx,
+    docs/design/reports-list). The same list as the host start screen's
+    Reports, so wherever Sessions is offered, this is too.
+  */
+  reports: {
+    id: 'reports',
+    label: 'Reports',
+    icon: 'FileText',
+    title: 'Reports',
+    subtitle: 'Saved PDFs. They outlive their session: 90 days from saving, a year if kept.',
+    contentTheme: 'dark',
+  },
+  /*
     EVENTS (docs/design/agenda-redesign 01, 01b; roadmap M1) — one code for a
     whole agenda. Under Sessions, because every engagement in an event runs as
     a session. Shown only while the tier has the feature switched on
@@ -435,6 +448,7 @@ export function sectionsFor({
         SECTION.questionsets,
         SECTION.games,
         ...events,
+        SECTION.reports,
         SECTION.library,
         SECTION.prompts,
       ]),
@@ -456,6 +470,7 @@ export function sectionsFor({
     SECTION.questionsets,
     SECTION.games,
     ...events,
+    SECTION.reports,
     SECTION.library,
     ...(isTeamAdmin ? [SECTION.prompts] : []),
   ]);

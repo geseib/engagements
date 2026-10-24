@@ -11,7 +11,7 @@ import { helpFor } from '../../config/help/screens';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null, help = '' }) {
+export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null, help = '' }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -25,8 +25,10 @@ export default function ConsoleTop({ title, code, onJoin, presentHref, presentDe
       <span className="hc-brand">Engagements</span>
       <span className="hc-name">{title}</span>
       <span className="hc-spacer" />
+      {/* A type whose Join toggles (the Build Room) passes `joinHint`, what a
+          press does now, and `joinPressed`; Call & Answer's stays as it was. */}
       {code ? (
-        <button type="button" className="hc-code" onClick={onJoin} aria-label={`${CW.join} ${code}. Show the join code on the wall`} {...(codeProps || {})}>
+        <button type="button" className="hc-code" onClick={onJoin} title={joinHint || undefined} aria-label={`${CW.join} ${code}. ${joinHint || 'Show the join code on the wall'}`} aria-pressed={joinPressed} {...(codeProps || {})}>
           {CW.join} <b>{code}</b>
         </button>
       ) : null}

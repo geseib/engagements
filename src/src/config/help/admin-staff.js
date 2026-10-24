@@ -165,7 +165,10 @@ const organisations = {
       "since Mon YYYY") / Plan (Team or Free) / Members / Status (Active,
       Pending, Suspended). Row: Approve (pending → active), Reinstate
       (suspended → active), Billing…, Activity… (AuditLogDialog for the org),
-      Suspend (active teams only; one click, no confirm). platform-orgs.js:
+      Suspend… (active teams only; a dialog asks first and needs a written
+      reason of 10 to 600 characters, sent to the server, stored on the row
+      and in the org's audit log; the row shows it under the name until
+      Reinstate, which stays one click and clears it). platform-orgs.js:
       personal spaces refused ("A personal space cannot be suspended. Disable
       the account instead."); the audit entry is written first or nothing
       changes (503). create-org.js: a new team is written 'active' on Free and
@@ -186,8 +189,8 @@ const organisations = {
           t: 'list',
           items: [
             { title: '**Approve**', text: 'On a Pending organisation: makes it Active.' },
-            { title: '**Suspend**', text: 'On an active team: marks it Suspended. It takes effect on the click, with no confirmation. A personal space cannot be suspended: to stop a person, disable their account in Accounts.' },
-            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again.' },
+            { title: '**Suspend…**', text: 'On an active team: asks first, then marks it Suspended. Write a **Reason** of a few words and press **Suspend**. The reason shows under the team\'s name and goes in its log, which its owners and admins can read. Nothing else changes yet: its members can still sign in and run sessions. A personal space cannot be suspended: to stop a person, disable their account in Accounts.' },
+            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again, on the click, and clears the reason from the row.' },
             { title: '**Billing…**', text: 'The organisation\'s billing ledger (next section).' },
             { title: '**Activity…** and **Staff activity…**', text: 'Activity… is one organisation\'s log of who changed what, the same list its owners and admins see in Data & privacy. Staff activity…, at the top, lists every change staff have made: to organisations, accounts, discount codes and Engage settings. Both keep entries for a year.' },
           ],

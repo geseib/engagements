@@ -9,27 +9,41 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
-## 23 Oct 2026 (Organisations and Accounts): every row's buttons show in full
+## 24 Oct 2026 (small fixes): row buttons in full, Suspend asks why, Reports in the console
 
-**Test:** merge of dev `af36f047`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
-- Nothing new: this push is two fixes.
+- Nothing new: this push is fixes.
 
 ### Fixed
 
 - **Billing… was cut off on team rows** in Admin › Organisations ([#40](https://github.com/geseib/engagements/issues/40)): a team row has three buttons (Billing…, Activity…, Suspend, or Reinstate when suspended), the column was 168px wide, and the first one, Billing…, was clipped out of sight, even at 1920px. The column now fits all three, and that cell never hides a button.
 - **Make Engage admin was cut off on Accounts** ([#43](https://github.com/geseib/engagements/issues/43)): when you point at an account, its moves (*Make Engage admin*, *Make host* or *Disable*, and the bin) appear in a column sized at a fifth of the table, too narrow for the longest pair, so *Make Engage admin* lost its left edge. The moves now have a column wide enough for them, and the person's name takes the rest.
+- **Suspend acted on one click, with no reason** ([#40](https://github.com/geseib/engagements/issues/40)). In Admin › Organisations, **Suspend…** opens a small dialog that says what it does today (the team is marked Suspended; nothing else changes yet, its members can still sign in and run sessions) and needs a written reason of a few words. The reason goes in the team's log and shows under its name on the list until **Reinstate**, which stays one click.
+- **The console's Reports section could not be opened.** The Reports section (the saved PDFs, the same list as the start screen's **Reports**) was built but missing from the menu. It now sits under Sessions (and Events) for everyone who has Sessions.
+- **Build Room, two screens: Join now toggles** ([#43](https://github.com/geseib/engagements/issues/43)). On the console, Join only ever showed the codes; it now shows and hides them, as on one screen and as J does, and says which a press will do. Esc takes them down too.
+- **"← All sessions" said where it went wrongly.** Its tooltip said "Back to your sessions"; it goes to the start screen, and now says so (the session keeps running; Continue brings you back).
+- **Wavelength showed "This round +0" on the phone.** Wavelength scores nobody, so the phone's results no longer show the score lines there, nor for a poll; Trivia and Call & Answer keep them.
+- **Quick start's empty menu gave stale directions** ("go to Admin → Question Sets and check the Quickstart box"). It now says to press a set's **Quickstart** tag in Your question sets (or the console's Question sets), with an **Open your question sets** button.
 
 ### What to look at
 
-1. As Engage staff, open Admin › Organisations: every team row shows **Billing…**, **Activity…** and **Suspend** (or **Reinstate**); personal rows show Billing… and Activity…. **Billing…** opens the team's billing drawer.
+1. As Engage staff, open Admin › Organisations: every team row shows **Billing…**, **Activity…** and **Suspend…** (or **Reinstate**); personal rows show Billing… and Activity…. **Billing…** opens the team's billing drawer.
 2. Open Admin › Accounts and point at a host's row: **Make Engage admin**, **Disable** and the bin show in full; on an admin's row, **Make host**, **Disable** and the bin.
+3. Still in Organisations, press **Suspend…** on a test team: the dialog explains what Suspend does, and **Suspend** stays greyed out until you type a reason of a few words. Suspend it: the row reads Suspended with your reason under the name (point at it for the whole reason), and **Activity…** shows the entry with the reason. **Reinstate** acts on the click and the reason goes.
+4. In the console (as a host or a team member), the menu has **Reports** after Sessions; it lists the same saved reports as **Reports** on the start screen.
+5. Start a Build Room on two screens (or with the room's window up): press **Join** on the console's top line: the codes go up and Join reads as pressed; press it again: they come down. Put them up again and press **Esc**: they come down.
+6. On any console, point at **← All sessions**: the tooltip says it goes back to the start screen.
+7. Play a Wavelength subject on a phone to results: no "This round" or "Total" lines. A Trivia question still shows them.
+8. With no sets tagged Quickstart (a fresh personal space), open **Quick start**: the message names the Quickstart tag; **Open your question sets** opens them.
 
 ### Known gaps
 
 - On narrow windows the list scrolls sideways rather than squeezing the buttons (as before, it was already 620px wide at least; now 700px).
+- Suspending still does not stop a team's members working; the dialog says so. Enforcing it is a separate decision.
+- A team suspended before this push shows no reason on its row (none was asked for then).
 
 ---
 

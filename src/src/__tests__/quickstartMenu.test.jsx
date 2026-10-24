@@ -402,8 +402,20 @@ describe('searching Quick start', () => {
   test('an empty library keeps its own message and shows no search', async () => {
     authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
     renderMenu();
-    expect(await screen.findByText('No Quickstart Sets Available')).toBeInTheDocument();
+    expect(await screen.findByText('No sets on the quick start menu yet')).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+
+  // rejects: the stale "Admin → Question Sets … check the 'Quickstart' box" (#43)
+  test('an empty library names today\'s control and opens Your question sets', async () => {
+    authFetch.mockImplementation(async () => ({ ok: true, json: async () => ({ questionSets: [] }) }));
+    const onQuestionSets = jest.fn();
+    renderMenu({ onQuestionSets });
+    const empty = (await screen.findByText('No sets on the quick start menu yet')).closest('.no-quickstart-sets');
+    expect(empty).toHaveTextContent(/Quickstart tag in Your question sets/);
+    expect(empty).not.toHaveTextContent(/Admin|check the/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Open your question sets' }));
+    expect(onQuestionSets).toHaveBeenCalledTimes(1);
   });
 });
 

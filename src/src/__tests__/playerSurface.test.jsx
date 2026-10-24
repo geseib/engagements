@@ -802,6 +802,26 @@ describe('results shows the personal half and points at the room for the rest', 
     expect(screen.queryByText(/Total Responses/i)).toBeNull();
     expect(screen.queryByText(/Unique Words/i)).toBeNull();
   });
+
+  /* rejects: "This round +0" on a type that scores nobody (#43). Wavelength
+              writes no scores and a poll is not scored, so the line read as a
+              wrong answer; the scored types keep it. */
+  test.each([
+    ['wavelength', /Your words/i, false],
+    ['poll', /You didn’t send a response this round/i, false],
+    ['call-and-answer', /You didn’t send a response this round/i, true],
+    ['trivia', /You answered/i, true],
+  ])('%s results: the score lines only where the type scores', async (gameType, heading, scored) => {
+    const server = makeServer({ state: 'CREATED', gameType });
+    installFetch(server);
+    await join();
+    server.state = 'RESULTS#001';
+    await resync();
+
+    await waitFor(() => expect(screen.getByText(heading)).toBeInTheDocument());
+    expect(Boolean(screen.queryByText('This round'))).toBe(scored);
+    expect(Boolean(screen.queryByText('Total'))).toBe(scored);
+  });
 });
 
 describe('the states that did not exist', () => {

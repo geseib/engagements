@@ -530,7 +530,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Join in the header, the code on the Stage\'s left rail, or J puts the join code in a panel beside what is on the Stage, on this screen and on the room\'s window, without covering it. While the demo is shared on the Wi-Fi, its code sits under the join code. J takes them down again, and so do Join on one screen and Esc on the Stage. On the Stage, click a code in the panel to enlarge it on your own screen; the enlarged join code copies its link.',
+          text: 'Join in the header, the code on the Stage\'s left rail, or J puts the join code in a panel beside what is on the Stage, on this screen and on the room\'s window, without covering it. While the demo is shared on the Wi-Fi, its code sits under the join code. J takes them down again, and so does Join; so does Esc, on the Stage and on the two-screen console. On the Stage, click a code in the panel to enlarge it on your own screen; the enlarged join code copies its link.',
         },
       ],
     },
@@ -661,7 +661,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'The top line', text: '← **All sessions** (the session keeps running), the title, Join (shows the join code to the room; J takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
+            { title: 'The top line', text: '← **All sessions** (the start screen; the session keeps running), the title, Join (shows the join code to the room; press it again, J or Esc takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
             { title: 'The strip', text: 'Where the ask is: Opening, then Ask, Collect, Settle, Send to Claude, then Wrap up. Between asks it stays, dimmed, and says what is happening instead (Between asks, or the run list with how many are done).' },
             { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now**, and What\'s next below has the moves. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
             { title: 'Mockups ready', text: 'When Claude\'s mockups are all in, a card under Your part now shows them, with **Put to the room now** and **Next, after this ask**. It never replaces the main button.' },

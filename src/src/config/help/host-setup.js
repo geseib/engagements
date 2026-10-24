@@ -457,7 +457,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets.',
+          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets. While the menu is empty, Quick start says so, and **Open your question sets** takes you there.',
         },
       ],
     },
