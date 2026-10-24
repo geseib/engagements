@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 23 Oct 2026 (Organisations and Accounts): every row's buttons show in full
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `af36f047`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
