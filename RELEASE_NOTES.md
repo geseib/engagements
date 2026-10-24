@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
 
-**Test:** merge of dev `7566047c`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `91cc6b10`. Everything below this entry is already on test; this push adds only what is here.
 
 **Data on test (done with this push, 24 Oct):** the new sets were installed with `scripts/install-build-room-kind-sets.sh engagetest --apply`, and the ten old Build Room sets deleted with `scripts/delete-question-sets.js` (dry run first both times). Prod needs the same two steps when this goes there.
 
