@@ -2121,7 +2121,8 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
     playerCount: players.length,
     currentAskId: current ? current.AskId : null,
     current: current ? publicAsk(askView(current, room, 'public', me), forRoom) : null,
-    decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision).map((a) => ({
+    // A decision saved for later is the host's until it is sent (host review, 25 Oct 2026): not the phone's latest decision.
+    decisions: visibleAsks.filter((a) => a.Status === 'decided' && a.Decision && !heldBack(a, room)).map((a) => ({
       askId: a.AskId, prompt: a.Prompt || '', direction: a.Decision.roomHidden ? '' : a.Decision.direction || '', decidedAt: a.DecidedAt || null,
       ...(a.Decision.roomHidden ? { hidden: true } : {}),
     })),
@@ -2156,6 +2157,8 @@ function publicView({ gameId, meta, sessionState, room: whole, players, me, now 
     shownPoint: shownPointView(room),
     run: room.run && room.run.Status === 'running' ? runView(room.run, 'public') : null,
     agentConnected: agentStatus(room.state, [], now || new Date().toISOString()).connected,
+    // While the room frames the build a phone says so, never "not connected" (host review, 25 Oct 2026).
+    framing: phaseOf(room.state, room) === 'opening',
     // So a phone says "Claude is ready", not "building", while Claude waits for direction.
     agentListening: agentStatus(room.state, [], now || new Date().toISOString()).listening,
     mine,
@@ -2452,6 +2455,16 @@ function pendingDirections(room) {
  * words the reader may not see (the wall: a name the room meter hides); the
  * entry still counts, so the Stage still says Sent to Claude. Null when none.
  */
+/**
+ * HELD BACK (host review, 25 Oct 2026): a decision the host saved for later
+ * and has not yet sent in any direction. The room's reads do not show it as
+ * decided until it goes; the host's Later list says the room sees none of it.
+ */
+function heldBack(ask, room) {
+  if (!ask || !ask.Decision || !ask.Decision.heldForLater) return false;
+  return !((room && room.logs) || []).some((l) => l.Kind === 'direction' && l.ForAgent && l.From && (l.From.AskIds || []).includes(ask.AskId));
+}
+
 function sentView(room, hide = () => false, { forRoom = false } = {}) {
   let best = null;
   for (const l of (room && room.logs) || []) {
@@ -2473,6 +2486,9 @@ function sentView(room, hide = () => false, { forRoom = false } = {}) {
     askId: best.AskId || null,
     at: best.CreatedAt || null,
     pickedAt: best.DeliveredAt || null,
+    // QUEUED, NOT SENT (host review, 25 Oct 2026): Claude Code has never called in,
+    // so nothing has reached it yet. Every screen says "Queued for Claude" instead.
+    ...(room && room.state && room.state.AgentSeenAt ? {} : { queued: true }),
     ...(hidden ? { hidden: true } : {}),
     ...(pick ? { pick } : {}),
   };
@@ -2591,12 +2607,23 @@ function wheelLanded(ask) {
  * blue"). How the room got there (a vote, the wheel, the host's pick, said out
  * loud) is recorded on the decision (`method`) and never sent to Claude.
  */
-const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
+// The question's own end is dropped before the colon (host review, 25 Oct 2026: "…need it.: A volunteer…").
+const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?.!:;,]+$/, '');
 const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
 const DECISION_METHODS = Object.freeze(['vote', 'wheel', 'host', 'spoken']);
 /** A rating answer that carries its own meaning, so Claude and the log read it right. */
 const ratingAnswer = (avg) => (avg === null || avg === undefined || avg === '' ? '' : `${avg} out of 5 (5 is great, 1 needs work)`);
 const RATING_MEANING = '(5 is great, 1 needs work)';
+/**
+ * A RATING AS A SENTENCE (host review, 25 Oct 2026): the question as asked,
+ * then what the room gave it. "How clear is it? The room rated it 3 out of 5
+ * (5 is great, 1 needs work)." The same in src/src/buildroom/buildScreens.js.
+ */
+const ratingDirection = (prompt, avg) => {
+  if (avg === null || avg === undefined || avg === '') return '';
+  const q = String(prompt || '').trim().replace(/[\s:;,]+$/, '');
+  return `${q ? `${/[?.!]$/.test(q) ? q : `${q}.`} ` : ''}The room rated it ${avg} out of 5 ${RATING_MEANING}.`;
+};
 /** A rating decision always says what its numbers mean, even after the host rewrites it. */
 // Only when the sentence carries a score: "add dark mode" is a direction, not a
 // rating, and must not grow a bracket about a scale (owner, 2026-10-06).
@@ -2611,7 +2638,7 @@ function defaultDirection(ask, room) {
     const top = [...t.options].sort((a, b) => b.count - a.count)[0];
     return top && top.count ? questionAnswer(ask.Prompt, top.title) : '';
   }
-  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : questionAnswer(ask.Prompt, ratingAnswer(t.rating.avg));
+  if (ask.Kind === 'rating') return t.rating.avg === null ? '' : ratingDirection(ask.Prompt, t.rating.avg);
   const top = t.ranked[0];
   return top ? questionAnswer(ask.Prompt, top.text) : '';
 }
@@ -2648,7 +2675,10 @@ function decisionReworded(ask, room, chosen, direction, typed) {
     for (const r of tally(ask, room).ranked) if (picks.includes(r.respId)) add(qa(r.text));
     if (landed) add(qa(landed.text));
   } else if (ask.Kind === 'rating') {
-    for (const n of picks) add(qa(ratingAnswer(n)));
+    // The sentence a screen offers now, and the older "question: 4 out of 5" a screen loaded before it offered.
+    for (const n of picks) { add(ratingDirection(ask.Prompt, n)); add(qa(ratingAnswer(n))); }
+    const avg = tally(ask, room).rating.avg;
+    if (avg !== null) add(qa(ratingAnswer(avg)));
   }
   return defaults.size ? !defaults.has(direction) : null;
 }
@@ -2661,12 +2691,12 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
-  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView, roomHiddenOf, roomSafeEntry,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView, heldBack, roomHiddenOf, roomSafeEntry,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, ratingDirection, withRatingMeaning,
   MOCKUP_COUNTS, MOCKUPS_PLUGIN, POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,
