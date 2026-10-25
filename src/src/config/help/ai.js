@@ -1010,7 +1010,7 @@ const ai = {
         },
         {
           t: 'p',
-          text: 'It is given the set\'s description and instructions, the other questions in the chosen category (listed under Writing alongside these), and the titles already used. For trivia it writes options A to D; E and F are yours to add. A tag marks the question as drafted by AI; delete it if you rewrite the question as your own.',
+          text: 'It is given the set\'s description and instructions, the other questions in the chosen category (listed under Writing alongside these), and the titles already used. For trivia it writes as many options as most of the set\'s questions have (four in a new set), and the note above Draft it says how many; if its answer matches none of the options it fails and asks you to try again. For Wavelength it writes the subject only, with no sentence that frames it. A tag marks the question as drafted by AI; delete it if you rewrite the question as your own.',
         },
       ],
     },

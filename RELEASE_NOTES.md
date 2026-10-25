@@ -9,6 +9,45 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 26 Oct 2026 (AI set builders and prompt downloads brought up to date)
+
+**Test:** merge of dev `ae06e6dc`. Everything below this entry is already on test, except the **Build Room: quick wins** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.
+
+### New
+
+- **Use your own chatbot, for every kind of set.** New question set now offers trivia, Call & Answer, poll, survey, Wavelength and art-title the same three numbered steps: download the template, copy the prompt, upload the CSV it writes. Each step ticks off when done. After copying, a line names the file and how many [BRACKETS] to fill, and **Go to upload** takes you to the file chooser. **Show what is copied** shows the whole prompt first. The poll and survey prompts are built from the survey contract, so they list the real columns and allowed values.
+- **The AI Scenario Builder shows what the AI is asked.** The card's own prompt sits read-only under "What the AI is asked"; **Your additions** starts empty and holds only what you type. The detail level says what it makes: Brief — 1 sentence, Standard — 2 sentences, Detailed — up to 3. While it writes, one line says what is being written and that closing is safe; when it is done it says what to do next and repeats any warning from the generator.
+- **The agent download for a Workie carries the house rules.** "Download for an agent" now lists what the read check flags (numbers, claims, commitments, owners, practices, filler), so an agent revising a prompt writes next steps as suggestions from the start.
+
+### Fixed
+
+- **A trivia question could ship with the wrong answer.** If the AI's answer matched none of the options, the question was saved with Option A marked correct. Now that question is left out, and the job says how many were left out and why. Trivia prompts also carry accuracy rules: one definite answer, nothing that changes over time unless the year is given, no "all/none of the above", answers spread across positions.
+- **A new trivia question drafted with AI** matches the number of options the set's other questions have, and the note says how many it will write.
+- **Adding a Wavelength subject with AI wrote a framing sentence** that gives the room the words the round compares. It no longer does, as the set builder already didn't.
+- **The scenario builder sent its prompt twice**, and what a host typed could be read as instructions. Host text (context, audience, additions, the set's other questions) now goes to the AI marked as material, not rules, in every generator.
+- **The default Next Steps** (used by any Workie without its own sections) asked for "concrete actions". It now asks for suggestions, with no number, duration or owner unless an answer gave one. The Session Advisor persona asks for a suggestion tied to an answer instead of "a recommendation with a named owner", and the Amazon Leadership default no longer asks for "the strongest answer".
+- **Variables offered to prompt authors.** A survey is offered only the 16 variables its read fills (it was about 45, most always empty). A poll is pointed at its counted result, {triviaResponses}. Only Call & Answer is offered vote variables.
+- **The question-set templates** no longer teach the wrong habits: trivia's correct answer varies (A, C, B) with plausible wrong answers, Call & Answer instructions use the team lens, and the Wavelength template has no framing sentence. The AI scenario CSV export keeps each row's round kind.
+- **The "write me a prompt" helper** could return a cut-off rewrite as a success; it now says when the reply was cut off. Its wording no longer pushes for padding.
+
+### What to look at
+
+1. On engage.test, Admin › Question sets › New question set › Poll. Under **Use your own chatbot**, press Download template, then Copy prompt. Both steps tick, a line says how many [BRACKETS] to fill, and **Go to upload** moves to the file chooser. Do the same for Survey and Wavelength.
+2. Download the trivia template and open it: the correct answers are not all Option A.
+3. Open the AI Scenario Builder on a Call & Answer card. The card's prompt is read-only under "What the AI is asked", **Your additions** is empty, and the detail menu reads Brief / Standard / Detailed with sentence counts. Generate 3; the status line says what is being written and that you can close.
+4. In a trivia set, Add a question › Draft this with AI. The note says how many options it writes (the set's usual number), and the draft has that many.
+5. In a Wavelength set, Add a question › Draft this with AI. The draft has a subject and no detail sentence.
+6. Admin › Prompts › open any Workie › Download for an agent. The file has a "House rules (the read check)" section.
+7. Run a survey to its read: the read draws on the survey's results only. Run a Call & Answer round on a set with no Workie of its own: next steps start "**Suggested**".
+
+### Known gaps
+
+- Prod still has none of the 22 question-generation prompts, so its scenario builder runs on a generic brief. `scripts/apply-generation-prompts.js` creates them; it runs on prod after the next prod deploy.
+- Polls are still offered the tally and score variables, which come from vote points polls no longer earn.
+- The Session Advisor's new wording reaches a tier only when its persona rows are reseeded.
+
+---
+
 ## 25 Oct 2026 (Build Room: quick wins from the host review)
 
 **Test:** merge of dev `f29087d9`. Everything below this entry is already on test; this push adds only what is here.
