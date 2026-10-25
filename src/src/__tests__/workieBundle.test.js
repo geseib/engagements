@@ -109,6 +109,25 @@ describe('what the file tells the agent', () => {
     expect(md).toContain(String(SUMMARY_MODEL.temperature));
   });
 
+  test('the house rules, one per kind the read check emits (lambda-functions/game/read-check.js)', () => {
+    // rejects: an agent improving a Workie it was never told is checked after
+    // writing — the bundle once said nothing of **Suggested**, owners or hyperbole.
+    const source = fs.readFileSync(path.join(SRC, '..', '..', 'lambda-functions', 'game', 'read-check.js'), 'utf8');
+    const emitted = [...new Set([...source.matchAll(/kind: '([a-z]+)'/g)].map((m) => m[1]))];
+    expect(emitted.length).toBeGreaterThanOrEqual(6);
+    expect(md).toContain('## House rules (the read check)');
+    for (const kind of emitted) expect(md).toContain(`- **${kind}** — `);
+    for (const k of REFERENCE.readCheck.kinds) expect(md).toContain(k.rule);
+    expect(md).toContain('**Suggested**');
+    expect(md).toContain('the room has not agreed to these');
+    expect(md).toContain('never invent a split');
+  });
+
+  test('a bad outputSections is refused on save, not quietly discarded', () => {
+    expect(md).toContain('Engage refuses to save a declaration that breaks any one of them');
+    expect(md).not.toContain('is discarded WHOLE');
+  });
+
   test('the round angles and their house weights, for a Call & Answer prompt', () => {
     for (const a of ROUND_ANGLES) {
       expect(md).toContain(`\`${a.key}\``);

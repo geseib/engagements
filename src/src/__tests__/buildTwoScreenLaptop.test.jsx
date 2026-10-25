@@ -4,7 +4,7 @@
  * §2.7).
  *
  *   1  the header carries "Room's window ↗" and whether that window is up, on
- *      Host, Build and History; the Stage's dock carries it as PRESENT
+ *      Host, Build and History; the Stage's dock carries it as ROOM'S WINDOW
  *   2  while the window is up the laptop stays where it is: 2/3/4, P and "The
  *      room sees" send the screen to the window only; on one screen with none
  *      up, today's one screen exactly. Since B8 the laptop on two screens is
@@ -21,7 +21,7 @@
  */
 import React from 'react';
 import {
-  render, screen, fireEvent, waitFor, within,
+  render, screen, fireEvent, waitFor, within, cleanup,
 } from '@testing-library/react';
 import { authFetch } from '../auth/authFetch';
 import BuildRoomPage from '../buildroom/BuildRoomPage';
@@ -54,8 +54,8 @@ const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 const UP = { open: true, fullscreen: true, visible: true, statusAt: NOW, ageMs: 1000 };
 
-function hostState({ presenting = 0, detail = null, wallScreen = 'stage', rev = 1 } = {}) {
-  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, AgentSeenAt: ago(6), Phase: 'building' }]);
+function hostState({ presenting = 0, detail = null, wallScreen = 'stage', rev = 1, seen = true } = {}) {
+  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, ...(seen ? { AgentSeenAt: ago(6) } : {}), Phase: 'building' }]);
   const view = S.hostView({
     gameId: GAME,
     meta: { Title: 'Volunteer sign-up', Details: 'A one-page site to pick a shift in a minute.' },
@@ -145,7 +145,7 @@ describe('1. the room\'s window on the header and the Stage', () => {
     }
   });
 
-  test('the Stage carries it in its dock as PRESENT, with the window\'s state in its title', async () => {
+  test('the Stage carries it in its dock as ROOM\'S WINDOW, with the window\'s state in its title', async () => {
     classic();
     await openRoom(hostState());
     fireEvent.keyDown(window, { key: '2' });
@@ -153,6 +153,8 @@ describe('1. the room\'s window on the header and the Stage', () => {
     const present = within(dock).getByRole('link', { name: /Open the room's window/ });
     expect(present).toHaveAttribute('href', WALL);
     expect(present).toHaveAttribute('title', "Room's window: not open");
+    // Named as the header and help name it, never the retired PRESENT (host review, 25 Oct 2026).
+    expect(present.textContent).toBe("ROOM'S WINDOW");
     // HOST and SESSION stay the last two, as D1-D2 hold them.
     const items = [...dock.querySelectorAll('a, button')];
     expect(items[items.length - 1].textContent).toMatch(/SESSION/);
@@ -245,6 +247,20 @@ describe('3. where will the room watch?', () => {
     // The Build Room's own words for what stays private: no Workie here.
     expect(q.textContent).toMatch("Claude's questions, the room's ideas and what waits for you stay private");
     expect(q.textContent).not.toMatch(/Workie/);
+  });
+
+  test('before Claude connects, the chooser steps back: Connect is the one orange, above it (host review, 25 Oct 2026)', async () => {
+    window.localStorage.removeItem(SURFACES_KEY);
+    await openRoom(hostState({ seen: false }));
+    const q = screen.getByRole('region', { name: 'Where will the room watch?' });
+    const uses = [within(q).getByRole('button', { name: /Use two screens/ }), within(q).getByRole('button', { name: /Use one screen/ })];
+    uses.forEach((b) => expect(b.className).toMatch(/rsc-btn--quiet/));
+    const card = screen.getByRole('region', { name: 'How a Build Room works' });
+    expect(card.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+    await openRoom(hostState());
+    const after = screen.getByRole('region', { name: 'Where will the room watch?' });
+    expect(within(after).getByRole('button', { name: /Use one screen/ }).className).not.toMatch(/rsc-btn--quiet/);
   });
 
   test('Two screens: stored as Call & Answer stores it, and the room\'s window opens in the click, placed', async () => {

@@ -35,10 +35,14 @@ import ReportSavedDialog from '../components/ReportSavedDialog';
 import { saveReportPdf } from '../utils/saveReport';
 import { unexpectedSaveMessage } from '../config/reportPdf';
 import { safeHref, apiBase } from './buildHostApi';
+import { askOutcome, claudeEverConnected } from './buildScreens';
 import './BuildReport.css';
 
 const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
-const IDEA_STATUS = { new: 'New', promoted: 'Used', acknowledged: 'Acknowledged', later: 'Later', dismissed: 'Dismissed' };
+const IDEA_STATUS = { new: 'New', promoted: 'Used', acknowledged: 'Acknowledged', later: 'Saved for later, not sent', dismissed: 'Dismissed' };
+// HELD BACK, SAID SO (host review, 25 Oct 2026): what never reached Claude reads that way in the record.
+const HELD_LINE = 'Saved for later, not sent to Claude';
+const RECORD_LINE = 'Recorded only, not sent to Claude';
 
 function when(iso, opts) {
   const t = Date.parse(iso || '');
@@ -177,7 +181,7 @@ function WhoBuiltWhat({ crew }) {
   );
 }
 
-function Decision({ ask }) {
+function Decision({ ask, log = [] }) {
   const r = ask.results || {};
   // Answered FOR the room (people talked instead of tapping): say so, rather
   // than "0 answered", which reads as a room with no view.
@@ -214,6 +218,7 @@ function Decision({ ask }) {
       {ask.decision && (
         <div className="brr-direction">
           <b>Direction:</b> {ask.decision.direction}
+          {heldMark(ask, log) && <span className="brr-dim brr-held">{` · ${heldMark(ask, log)}`}</span>}
           {ask.decision.chosen && ask.decision.chosen.length > 0 && ask.kind === 'choice' && (
             <span className="brr-dim"> · chosen {ask.decision.chosen.join(', ')}</span>
           )}
@@ -222,6 +227,13 @@ function Decision({ ask }) {
       )}
     </div>
   );
+}
+
+/** A decision that never went to Claude, in words; '' for one that did. */
+function heldMark(ask, log) {
+  const o = askOutcome(ask, { log });
+  if (!o) return '';
+  return o.mark === 'later' ? HELD_LINE : o.mark === 'not-sent' ? RECORD_LINE : '';
 }
 
 export default function BuildReport({ state, onBack }) {
@@ -316,7 +328,8 @@ export default function BuildReport({ state, onBack }) {
         <div className="brr-kick">Build Room report{date ? ` · ${date}` : ''}{first ? ` · ${hhmm(first)}–${hhmm(last)}` : ''}</div>
         <h1>{s.title || 'Build Room'}</h1>
         <div className="brr-meta">
-          {s.playerCount || players.length} people · {s.agent?.name || 'Claude Code'} · {asks.length} asks · {log.length} timeline entries · code {s.gameId}
+          {/* Claude Code is named only when it called in (host review, 25 Oct 2026). */}
+          {s.playerCount || players.length} people · {claudeEverConnected(s.agent) || log.some((l) => l.by === 'agent') ? `${s.agent?.name || 'Claude Code'} · ` : ''}{asks.length} asks · {log.length} timeline entries · code {s.gameId}
         </div>
         {s.goal && <div className="brr-goal"><span className="brr-lbl">Goal</span>{s.goal}</div>}
 
@@ -356,7 +369,7 @@ export default function BuildReport({ state, onBack }) {
 
         <section aria-labelledby="brr-decisions">
           <h2 id="brr-decisions">Decisions</h2>
-          {asks.length ? asks.map((a) => <Decision key={a.askId} ask={a} />) : <p className="brr-dim">The room was not asked anything.</p>}
+          {asks.length ? asks.map((a) => <Decision key={a.askId} ask={a} log={s.log || []} />) : <p className="brr-dim">The room was not asked anything.</p>}
         </section>
 
         {others.length > 0 && (
@@ -401,6 +414,7 @@ export default function BuildReport({ state, onBack }) {
                     <td>
                       {l.text}
                       {l.detail && l.kind !== 'image' && <span className="brr-block brr-dim">{l.detail}</span>}
+                      {l.held && !l.sentAs && <span className="brr-block brr-dim">{HELD_LINE}</span>}
                       {safeHref(l.link) && <span className="brr-block"><Link href={l.link} /></span>}
                     </td>
                   </tr>

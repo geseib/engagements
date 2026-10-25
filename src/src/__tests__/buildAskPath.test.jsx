@@ -37,11 +37,33 @@ test('Collect: Ask folded, Show results focused, the steps to come one line', ()
 
 test('Collect: Answer for the room and Spin the wheel sit beside the primary; each does its thing', () => {
   const a = api();
-  mount({ ...base, status: 'live', results: { total: 7, options: [] } }, { api: a });
+  mount({ ...base, status: 'live', answerCount: 12, results: { total: 12, options: [] } }, { api: a });
   fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'close' });
   fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
   expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'wheel' });
+});
+
+test('an early Show results asks first, as the Stage dock does (host review, 25 Oct 2026)', () => {
+  const a = api();
+  mount({ ...base, status: 'live', answerCount: 5, results: { total: 5, options: [] } }, { api: a });
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
+  expect(a.askAction).not.toHaveBeenCalled();
+  expect(screen.getByText('7 of 12 still answering. Press again to show results.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show results anyway' }));
+  expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'close' });
+});
+
+test('an early Show results with nobody answered says so, and a vote counts votes', () => {
+  const a = api();
+  const { unmount } = mount({ ...base, status: 'live', answerCount: 0, results: { total: 0, options: [] } }, { api: a });
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
+  expect(screen.getByText('Nobody has answered yet. Press again to show results.')).toBeInTheDocument();
+  unmount();
+  mount({ ...base, kind: 'suggest', options: [], responses: [], status: 'voting', voteCount: 4, results: { total: 4 } }, { api: a });
+  fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
+  expect(screen.getByText('8 of 12 still voting. Press again to show results.')).toBeInTheDocument();
+  expect(a.askAction).not.toHaveBeenCalled();
 });
 
 test('Collect on an Ideas ask still taking ideas: Open voting is the primary', () => {
@@ -62,7 +84,7 @@ test('Settle with a winner: Send B to Claude is focused; Change before sending p
 test('Settle: clicking another option still goes through the confirm (onPick with no second argument)', () => {
   const onPick = jest.fn();
   mount({ ...base, status: 'results', results: won }, { onPick });
-  fireEvent.click(screen.getByRole('button', { name: 'Choose this instead' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose this' }));
   expect(onPick).toHaveBeenCalledWith('A');
 });
 
@@ -72,10 +94,10 @@ test('Settle with a tie: Spin the wheel is the focused move, Vote again beside i
   expect(screen.getByRole('button', { name: 'Vote again' })).toBeInTheDocument();
 });
 
-test('Settle on a rating: Send 3.5 to Claude; Change before sending carries the average', () => {
+test('Settle on a rating: Send to Claude; Change before sending carries the average', () => {
   const onPick = jest.fn();
   mount({ ...base, kind: 'rating', options: [], status: 'results', results: { total: 2, rating: { avg: 3.5, count: 2, dist: [0, 0, 1, 1, 0] } } }, { onPick });
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send 3.5 to Claude' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Send to Claude' }));
   fireEvent.click(screen.getByRole('button', { name: 'Change before sending' }));
   expect(onPick).toHaveBeenCalledWith('3.5', { confirmed: true });
 });

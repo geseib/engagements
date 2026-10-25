@@ -308,9 +308,11 @@ const questionSets = {
       NewSetDialog.jsx "New question set"; QuestionSetUploadPanel.jsx:
       "Engagement type"; routes "Generate with AI" (AI <type> builder),
       "Start from a template" (Download <type> template), "Use your own
-      chatbot" (Copy AI authoring prompt), "Start from the artwork template"
-      (Call & Answer only), "Manual builder"; survey: "Your own material"
-      (Write it from my material), "A template" (5 named), "A file". Then
+      chatbot" (Copy AI authoring prompt, every type; three steps, "Copied."
+      line with "Go to upload", "Show what is copied"), "Start from the
+      artwork template" and "Artwork, with your own chatbot" (Call & Answer
+      only), "Manual builder"; survey: "Your own material" (Write it from my
+      material), "A template" (5 named), "A file", "Use your own chatbot". Then
       "…then upload it here": file (.csv, .json for surveys), preflight in the
       browser, "Question set title *", Description, "Topic *", "Tags for this
       set", "Upload question set". Builders and drafts: ai.js (W9).
@@ -324,7 +326,7 @@ const questionSets = {
           t: 'steps',
           items: [
             { title: 'Press New set', text: 'It opens **New question set**. Choose the **Engagement type** first: it decides the builder, the template and how your file is read.' },
-            { title: 'Choose how to make it', text: '**Generate with AI** has Workie write a draft for you to review (see AI builders). **Start from a template** downloads a spreadsheet with the right columns. **Use your own chatbot** copies a prompt to paste, with the template, into another AI. A survey offers ready templates and **Write it from my material**.' },
+            { title: 'Choose how to make it', text: '**Generate with AI** has Workie write a draft for you to review (see AI builders). **Start from a template** downloads a spreadsheet with the right columns. **Use your own chatbot** copies a prompt to paste, with the template, into another AI: every format has one, its three steps are listed, and **Show what is copied** shows the prompt first. Call & Answer also offers one for an artwork round. A survey offers ready templates, **Write it from my material** and its own chatbot prompt.' },
             { title: 'Upload the file', text: 'Under **…then upload it here**, choose your CSV. Every row is checked in your browser first, and anything that would stop the import is listed before anything is sent.' },
             { title: 'Name it and file it', text: 'Fill in **Question set title *** and choose a **Topic *** so people can find it. Tags are optional. Press **Upload question set**.' },
           ],

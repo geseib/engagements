@@ -131,6 +131,22 @@ const AI_DRAFT_TAG = 'ai-drafted';
  * `createdBy` to anyone — decision 5, so that ownership becoming a GROUP later
  * is one function in one file.
  */
+/**
+ * The number of options most of a trivia set's questions have, or undefined
+ * when none has two. A set stores no choice count, so a new AI draft matches
+ * this shape; the generator assumes four otherwise. A question being refined
+ * is read for its own shape server-side (ai-generate-questions.js).
+ */
+export function usualChoiceCount(rows, exceptUid) {
+  const counts = (rows || [])
+    .filter((r) => !r.removed && r.uid !== exceptUid)
+    .map((r) => ['A', 'B', 'C', 'D', 'E', 'F'].filter((l) => String(r[`option${l}`] || '').trim()).length)
+    .filter((n) => n >= 2);
+  if (!counts.length) return undefined;
+  const tally = counts.reduce((m, n) => ({ ...m, [n]: (m[n] || 0) + 1 }), {});
+  return Number(Object.entries(tally).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0]);
+}
+
 export default function QuestionsPanel({
   questionSet,
   availableSets = [],
@@ -932,10 +948,12 @@ export default function QuestionsPanel({
     try {
       // Generation cannot run inside the request — API Gateway's 30s ceiling —
       // so this is the same start-a-job-and-poll shape every other builder uses.
+      const usualChoices = engagementType === 'trivia' ? usualChoiceCount(rows, draft?.uid) : undefined;
       const { jobId } = await startGenerationJob(endpoint, {
         engagementType,
         userInput: brief,
         questionCount: 1,
+        ...(usualChoices ? { numChoices: usualChoices, numCorrect: 1 } : {}),
         roundKind: draft?.roundKind || questionSet?.roundKind || '',
         roundKindBrief: questionSet?.roundKindBrief || '',
         context: buildAiContext(),
@@ -1682,6 +1700,7 @@ export default function QuestionsPanel({
               onToggle: () => setAiOpen((o) => !o),
               onBrief: setAiBrief,
               onGenerate: generateDraft,
+              choices: engagementType === 'trivia' ? usualChoiceCount(rows, draft?.uid) : undefined,
             } : null}
           />
         </Modal>
@@ -2114,7 +2133,13 @@ function QuestionForm({
             {siblings.length === 1 ? '' : 's'} shown under &ldquo;Writing alongside these&rdquo;,
             the categories already in the set, and the titles already used so it does not
             repeat one. Nothing it writes is saved — it fills this form in and you confirm it.
-            {engagementType === 'trivia' && ' It writes four options (A–D); E and F are yours to add.'}
+            {engagementType === 'trivia' && (() => {
+              const n = ai.choices || 4;
+              const last = 'ABCDEF'[n - 1];
+              return n === 4 && !ai.choices
+                ? ' It writes four options (A–D); E and F are yours to add.'
+                : ` It writes ${n} options (A–${last}), the shape most of this set's questions have.`;
+            })()}
           </p>
           <div className="qs-panel-actions">
             <button className="btn-primary btn-small" onClick={ai.onGenerate} disabled={ai.busy}>

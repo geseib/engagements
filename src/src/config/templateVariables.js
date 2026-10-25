@@ -73,9 +73,10 @@
  * turned on:
  *
  *   1. The vote tally loop is gated `gameType !== 'trivia' && !== 'wavelength'`
- *      (:803). Poll and survey run a VOTE phase (config/gameTypes.js `phases`)
- *      and take that loop; trivia and wavelength never store a `#VOTE#` row at
- *      all. So every first/second/third-place figure is zero for those two.
+ *      (:803). Only call-and-answer runs a VOTE phase now (config/gameTypes.js
+ *      `phases`; polls lost theirs on 27 Sep 2026, and a survey never had
+ *      one); trivia and wavelength never store a `#VOTE#` row at all. So every
+ *      first/second/third-place figure is zero for all but call-and-answer.
  *   2. Wavelength never writes a `PLAYER#…#SCORE` record — get-results.js:341
  *      routes it to handleWavelengthResults, which computes a team score and
  *      writes no per-player row. So the leaderboard (:1478) is empty and every
@@ -84,18 +85,23 @@
  *      (:1568, :1577, :1606, :1674). Both arms produce a value. A tag of
  *      `['call-and-answer']` on those hid a working variable from three types.
  *
- * `survey` is tagged as the code WOULD behave, and no survey round has ever
- * run: upload-questions.js refuses survey uploads, so no survey set exists.
- * A survey falls through the trivia and poll branches and takes the vote loop,
- * which is why it tracks poll everywhere except `pollOptions` — assigned only
- * inside `gameType === 'polls' || 'poll'` (:1863).
+ * `survey` WAS tagged as the code would behave on a survey round, which never
+ * runs: a survey falls through the trivia and poll branches, which is why
+ * `pollOptions` — assigned only inside `gameType === 'polls' || 'poll'`
+ * (:1863) — was never offered to it.
  *
  * SINCE 27 SEP 2026 A CLOSED SURVEY IS SUMMARISED, and not the way the
  * paragraph above guessed: get-ai-summary.js reads its frozen results, reads
  * no ANSWER or VOTE row at all, and hands them over as `{surveyResults}` —
- * the one variable that carries a survey's answers. The survey tags on the
- * answer, vote and score variables predate that path and are not yet
- * re-derived against it.
+ * the one variable that carries a survey's answers. RE-DERIVED 2026-10-25 by
+ * running that path (a closed survey through the real worker) with every
+ * variable in the prompt: it fills the set and event fields, the session's
+ * stand-in question (title, "A survey of N questions…", category 'Survey'),
+ * {totalParticipants} (the respondents) and {surveyResults}. Every answer,
+ * vote, tally, result and score variable came back empty, zero, a stock line
+ * or "No votes recorded", and so did the per-question ones (round number,
+ * task, reveal, background). Those are tagged ROUND_TYPES — every type but
+ * survey — and survey is offered only what it is given.
  *
  * `alwaysEmpty` is the one flag that overrides `gameTypes`: it marks a variable
  * that is hardcoded to '' on every path, deliberately. Two of them exist. They
@@ -121,22 +127,32 @@ const VARIABLE_CATEGORY_ORDER = [
 const ALL_TYPES = ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey'];
 
 /**
+ * The types that run ROUNDS: every one but survey, which is read once, whole,
+ * from its frozen results (see the survey note above) — no question REF, no
+ * ANSWER or VOTE row, no round number.
+ */
+const ROUND_TYPES = ['call-and-answer', 'trivia', 'poll', 'wavelength'];
+
+/**
  * The types that run a VOTE phase (config/gameTypes.js `phases`), and so are
  * the only ones with `QUESTION#nnn#VOTE#` rows for get-ai-summary.js:803-829
  * to tally. Trivia and wavelength are routed past that loop entirely, so every
- * ballot-derived figure is zero for them.
+ * ballot-derived figure is zero for them. Since 27 Sep 2026 a poll has no vote
+ * either (websocket/start-vote.js refuses one: "A poll has no vote"), and a
+ * survey never had one, so this is call-and-answer alone.
  */
-const VOTED_TYPES = ['call-and-answer', 'poll', 'survey'];
+const VOTED_TYPES = ['call-and-answer'];
 
 /**
- * Every type but wavelength: the ones whose round produces a per-player ranked
- * answer list AND accrues `PLAYER#…#SCORE` rows. This replaces the old
+ * Every round type but wavelength: the ones whose round produces a per-player
+ * ranked answer list AND accrues `PLAYER#…#SCORE` rows. This replaces the old
  * `SCORED_TYPES = ['call-and-answer', 'trivia']`, which was wrong in both
- * directions — poll and survey score exactly like call-and-answer
- * (get-results.js:465-511 is on their path), and wavelength scores per team
- * rather than per player and writes no score row at all.
+ * directions — poll scores like call-and-answer (get-results.js:465-511 is on
+ * its path), and wavelength scores per team rather than per player and writes
+ * no score row at all. Survey is out: its read takes no round, answer or
+ * score row (re-derived 2026-10-25, see the survey note above).
  */
-const RANKED_TYPES = ['call-and-answer', 'trivia', 'poll', 'survey'];
+const RANKED_TYPES = ['call-and-answer', 'trivia', 'poll'];
 
 const TEMPLATE_VARIABLES = [
   // ---- SET INFO ------------------------------------------------------------
@@ -211,7 +227,7 @@ const TEMPLATE_VARIABLES = [
     name: 'currentRound',
     description: 'Current round number being analysed',
     category: 'Game Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: '1, 3, 15',
   },
 
@@ -228,8 +244,8 @@ const TEMPLATE_VARIABLES = [
     // `(votes && votes.length > 0) ? votes.length : answers.length` on every
     // path — but trivia and wavelength never store a vote (:803), so for those
     // two it is `answers.length` by construction and the description above it
-    // ("participated in voting") states something that did not happen. Poll and
-    // survey do vote, so they are added and the two vote-less types stay out.
+    // ("participated in voting") states something that did not happen. Only
+    // call-and-answer votes now (VOTED_TYPES), so the rest stay out.
     name: 'activeParticipants',
     description: 'Number of players who participated in voting',
     category: 'Player Info',
@@ -240,13 +256,13 @@ const TEMPLATE_VARIABLES = [
     name: 'playerNames',
     description: 'Comma-separated list of all player names',
     category: 'Player Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Alice, Bob, Charlie, Diana',
   },
   {
     // AUDIT: was ['call-and-answer', 'trivia']. :1659 slices the leaderboard,
-    // which is built from `PLAYER#…#SCORE` rows (:1478). Poll and survey write
-    // those rows on the same path call-and-answer does (get-results.js:465);
+    // which is built from `PLAYER#…#SCORE` rows (:1478). Poll writes those
+    // rows on the same path call-and-answer does (get-results.js:465);
     // wavelength writes none (get-results.js:341).
     name: 'playerRankings',
     description: 'Formatted leaderboard with player rankings and scores',
@@ -299,7 +315,7 @@ const TEMPLATE_VARIABLES = [
     name: 'task',
     description: 'What the room was told to do: the task line on the answer screen',
     category: 'Question Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'What change does our team need to introduce, and what would stop it?',
   },
   {
@@ -320,7 +336,7 @@ const TEMPLATE_VARIABLES = [
     name: 'questionNumber',
     description: 'Current question number in the session',
     category: 'Question Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: '1, 5, 12',
   },
   {
@@ -359,7 +375,7 @@ const TEMPLATE_VARIABLES = [
     description: 'The same withheld note as {answerDetails}, under the name it is usually '
       + 'wanted for. Empty when the author left it blank.',
     category: 'Question Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York.',
   },
   {
@@ -368,7 +384,7 @@ const TEMPLATE_VARIABLES = [
     description: 'Background the question\'s author wrote for Workie: context, facts and angles to draw on. '
       + 'Never shown to players. Empty when the author left it blank.',
     category: 'Question Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Version control records every change to a codebase, so a team can see who changed what and undo it.',
   },
   {
@@ -407,7 +423,7 @@ const TEMPLATE_VARIABLES = [
       + 'the real answer and why, the actual title, the outcome. Never shown to players '
       + 'while they answer, so it is safe to put the spoiler here.',
     category: 'Question Info',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Real title: Mona Lisa (La Gioconda), Leonardo da Vinci, c. 1503-1519, Louvre, Paris.',
   },
   {
@@ -440,7 +456,7 @@ const TEMPLATE_VARIABLES = [
     name: 'playerAnswers',
     description: 'All player responses to the question, with names',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."',
   },
   {
@@ -449,7 +465,7 @@ const TEMPLATE_VARIABLES = [
     name: 'playerResponses',
     description: 'All player responses to the question, with names (same content as playerAnswers)',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."',
   },
   {
@@ -458,7 +474,7 @@ const TEMPLATE_VARIABLES = [
     name: 'responseCount',
     description: 'Number of players who submitted a response',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: '8 responses, 12 participants answered',
   },
   {
@@ -469,7 +485,7 @@ const TEMPLATE_VARIABLES = [
     name: 'responsesText',
     description: 'Numbered list of all player responses with names — the raw dump, not a summary',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: '1. Alice: "I approached this by...", 2. Bob: "My strategy was..."',
   },
   {
@@ -511,7 +527,7 @@ const TEMPLATE_VARIABLES = [
     name: 'uniqueAnswers',
     description: 'The distinct answers, comma-separated. NO COUNTS, and silently TRUNCATED TO FIVE.',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Ship it Friday, Wait for the audit, Ask legal first',
   },
   {
@@ -520,7 +536,7 @@ const TEMPLATE_VARIABLES = [
     name: 'answerCategories',
     description: 'NOT themes — a bare sentence counting the distinct responses. No grouping exists.',
     category: 'Answers',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: '7 unique responses across various themes',
   },
 
@@ -570,11 +586,13 @@ const TEMPLATE_VARIABLES = [
     // AUDIT: was ['call-and-answer', 'wavelength']. consensusLabel (:1598,
     // consensus.js) returns a fixed string for trivia and a real measure for
     // everything else; wavelength's is recomputed at :1999 from the connection
-    // score. Poll and survey take the measured branch and were missing.
+    // score. Poll took the measured branch while it voted; with no ballot its
+    // maxScore is 0 and the label is "No votes cast - nothing was ranked" on
+    // every round, so it is out again, with survey (no rounds at all).
     name: 'consensusLevel',
     description: 'Level of agreement among voters',
     category: 'Votes',
-    gameTypes: ['call-and-answer', 'poll', 'survey', 'wavelength'],
+    gameTypes: ['call-and-answer', 'wavelength'],
     example: 'Strong consensus, Moderate agreement, Diverse opinions',
   },
 
@@ -667,7 +685,7 @@ const TEMPLATE_VARIABLES = [
     name: 'resultsSummary',
     description: 'One-line summary of the round result and participation',
     category: 'Results',
-    gameTypes: ALL_TYPES,
+    gameTypes: ROUND_TYPES,
     example: 'Clear winner with 54% of possible vote points',
   },
   {
@@ -692,8 +710,8 @@ const TEMPLATE_VARIABLES = [
   // ---- SCORES --------------------------------------------------------------
   // Every entry here derives from either the `PLAYER#…#SCORE` rows (:1478) or
   // the round's `sortedAnswers`. Wavelength has neither in a per-player form,
-  // and poll and survey have both — the old `SCORED_TYPES` was wrong on all
-  // three counts.
+  // and poll has both — the old `SCORED_TYPES` was wrong on both counts.
+  // Survey has neither: its read takes no round.
   {
     name: 'cumulativeScores',
     description: 'All player scores accumulated across every round so far',

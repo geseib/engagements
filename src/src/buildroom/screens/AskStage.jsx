@@ -103,16 +103,15 @@ export function AskStage({
 }
 
 /**
- * "CHOOSE THIS INSTEAD" (owner, 2026-10-06), at results: the answer going to
- * Claude says so; every other one offers itself. On the Stage a click goes to
- * the Host with that answer's sentence in the direction; on the Host it swaps
- * the sentence in place, as often as the host changes their mind.
+ * "CHOOSE THIS" (owner, 2026-10-06; one word since the host review, 25 Oct
+ * 2026), at results and while the room answers: the answer going to Claude
+ * says so; every other one offers itself. On the Stage a click goes to the
+ * Host with that answer's sentence in the direction; on the Host it swaps the
+ * sentence in place, as often as the host changes their mind.
  */
 function PickButton({ id, current, onPick, idea = false, open = false }) {
-  if (open) return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>Pick this</button>;
-  if (current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
-  const label = `Choose this${idea ? ' idea' : ''}${current ? ' instead' : ''}`;
-  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{label}</button>;
+  if (!open && current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
+  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{W.chooseThis}</button>;
 }
 
 /** A click on an option card picks it, unless the click was on a link or button inside it. */
@@ -147,7 +146,7 @@ function ChoiceBoard({
         const won = Boolean(pick) && pick === o.label;
         const leads = tally && !room && lead && r.count === lead;
         return (
-          <div key={o.label} className={`brm-choice brm-choice--${i % 3}${leads ? ' is-lead' : ''}${won ? ' is-pick' : ''}${picking ? ' is-pickable' : ''}`} onClick={picking ? cardPick(onPick, o.label) : undefined} title={picking ? `Pick ${o.label}` : undefined} data-pick={won ? '' : undefined}>
+          <div key={o.label} className={`brm-choice brm-choice--${i % 3}${leads ? ' is-lead' : ''}${won ? ' is-pick' : ''}${picking ? ' is-pickable' : ''}`} onClick={picking ? cardPick(onPick, o.label) : undefined} title={picking ? W.pick(o.label) : undefined} data-pick={won ? '' : undefined}>
             {room && tally && <span className="brm-fill" aria-hidden="true" style={{ height: `${Math.max(0, Math.min(100, Number(r.pct) || 0))}%` }} />}
             <div className="brm-choice-head">
               <span className="brm-big" aria-hidden="true">{o.label}</span>

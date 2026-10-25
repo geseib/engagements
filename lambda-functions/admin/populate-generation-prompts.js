@@ -13,6 +13,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { normalizeGameType } = require('./shared/game-types');
+const { WAVELENGTH_SPEC } = require('./shared/wavelength-spec');
 
 const tableName = process.env.TABLE_NAME;
 const dynamoClient = new DynamoDBClient({});
@@ -22,12 +23,18 @@ const dynamodb = DynamoDBDocumentClient.from(dynamoClient, {
   }
 });
 
-// Shared framing for wavelength generation. Wavelength is a word-association
-// alignment game: the host shows a SUBJECT, every participant lists up to 10
-// words for it, and the game measures overlap across participants.
-const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
+// WHAT THE `outputFormat` FIELD IS NOW. Every generator writes through a tool
+// schema (shared/structured-generation.js buildItemsTool and the trivia, poll
+// and question builders' own), and none of them reads this field — so the
+// JSON-array instructions it used to hold were never sent, and the wavelength
+// one asked for "One sentence of framing", which the game forbids. The field
+// stays on the row because the generation prompt editor shows it.
+const SCHEMA_NOTE = 'Not sent to the model: the generator\'s tool schema is the output contract.';
 
-const WAVELENGTH_OUTPUT_FORMAT = '\n\nReturn as JSON array: [{"title": "Subject (1-4 words)", "detail": "One sentence of framing for the subject", "category": "Category", "customInstructions": "Enter up to 10 words or short phrases that come to mind when you think about this subject."}]\nReturn ONLY the JSON array.';
+// Not read by anything: TriviaAIBuilder and PollAIBuilder send no promptId, and
+// ai-generate-trivia.js / ai-generate-polls.js look no prompt row up. Kept as
+// the owner's prompt text, and labelled so nobody edits them expecting a change.
+const UNUSED = ' (Not used by the trivia/poll builders.)';
 
 // All generation prompts extracted from frontend components
 const generationPrompts = {
@@ -40,7 +47,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium", 
         numberOfCategories: 4,
@@ -60,7 +67,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 5,
@@ -80,7 +87,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -100,7 +107,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -120,7 +127,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -140,7 +147,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Title", "category": "Category", "detail": "Description", "school": "Professional Development", "customInstructions": "Instructions"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -159,12 +166,12 @@ const generationPrompts = {
   "trivia": {
     "general-knowledge": {
       name: "General Knowledge Trivia",
-      description: "Broad knowledge questions across various topics",
+      description: "Broad knowledge questions across various topics" + UNUSED,
       basePrompt: "Create general knowledge trivia questions covering history, science, geography, and culture",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Short title", "questionDetail": "Full question text", "category": "Category", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D", "correctAnswer": "OptionA", "answerDetails": "Explanation", "difficulty": "easy|medium|hard"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -178,12 +185,12 @@ const generationPrompts = {
     },
     "subject-specific": {
       name: "Subject-Specific Trivia",
-      description: "Deep dive into a specific subject or field",
+      description: "Deep dive into a specific subject or field" + UNUSED,
       basePrompt: "Generate trivia questions focused on a specific subject area with varying difficulty levels",
       contextTemplate: "\n\nTopic: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Short title", "questionDetail": "Full question text", "category": "Category", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D", "correctAnswer": "OptionA", "answerDetails": "Explanation", "difficulty": "easy|medium|hard"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -197,12 +204,12 @@ const generationPrompts = {
     },
     "workplace-trivia": {
       name: "Workplace & Business Trivia",
-      description: "Business knowledge and workplace concepts",
+      description: "Business knowledge and workplace concepts" + UNUSED,
       basePrompt: "Create trivia questions about business concepts, workplace skills, and professional knowledge",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Short title", "questionDetail": "Full question text", "category": "Category", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D", "correctAnswer": "OptionA", "answerDetails": "Explanation", "difficulty": "easy|medium|hard"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -216,12 +223,12 @@ const generationPrompts = {
     },
     "fun-facts": {
       name: "Fun Facts & Interesting Trivia",
-      description: "Entertaining and surprising facts",
+      description: "Entertaining and surprising facts" + UNUSED,
       basePrompt: "Generate fun and interesting trivia questions with surprising facts and entertaining knowledge",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Short title", "questionDetail": "Full question text", "category": "Category", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D", "correctAnswer": "OptionA", "answerDetails": "Explanation", "difficulty": "easy|medium|hard"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 5,
@@ -235,12 +242,12 @@ const generationPrompts = {
     },
     "custom-trivia": {
       name: "Custom Trivia Topics",
-      description: "Define your own trivia topic and requirements",
+      description: "Define your own trivia topic and requirements" + UNUSED,
       basePrompt: "Create trivia questions based on the specific topic and requirements provided",
       contextTemplate: "\n\nTopic: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize questions into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Short title", "questionDetail": "Full question text", "category": "Category", "optionA": "Choice A", "optionB": "Choice B", "optionC": "Choice C", "optionD": "Choice D", "correctAnswer": "OptionA", "answerDetails": "Explanation", "difficulty": "easy|medium|hard"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -258,12 +265,12 @@ const generationPrompts = {
   "poll": {
     "opinion-polls": {
       name: "Opinion & Preference Polls",
-      description: "Gather opinions and preferences from participants",
-      basePrompt: "Create poll questions that gather opinions, preferences, and viewpoints on various topics",
+      description: "Gather opinions and preferences from participants" + UNUSED,
+      basePrompt: "Create instant poll questions (choice, rating, yes/no or open) that gather opinions, preferences and viewpoints",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Question/prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -275,12 +282,12 @@ const generationPrompts = {
     },
     "decision-making": {
       name: "Decision-Making Polls",
-      description: "Help teams make decisions through voting",
-      basePrompt: "Generate poll questions that help teams make decisions and choose between options",
+      description: "Help teams make decisions with a quick poll" + UNUSED,
+      basePrompt: "Create instant poll questions, mostly choice and yes/no, that help a team choose between options",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Question/prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -288,16 +295,16 @@ const generationPrompts = {
       },
       status: "active",
       isDefault: true,
-      tags: ["poll", "decision-making", "voting", "choice"]
+      tags: ["poll", "decision-making", "choice"]
     },
     "feedback-polls": {
       name: "Feedback & Assessment Polls",
-      description: "Collect feedback and assess understanding",
-      basePrompt: "Create poll questions to gather feedback, assess understanding, and measure satisfaction",
+      description: "Collect feedback and assess understanding" + UNUSED,
+      basePrompt: "Create instant poll questions, mostly rating and choice, that gather feedback and measure satisfaction",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Question/prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -309,12 +316,12 @@ const generationPrompts = {
     },
     "icebreaker-polls": {
       name: "Icebreaker & Team Polls",
-      description: "Fun polls to break the ice and learn about team members",
-      basePrompt: "Generate fun and engaging poll questions that help team members get to know each other",
+      description: "Fun polls to break the ice and learn about team members" + UNUSED,
+      basePrompt: "Create light instant poll questions that help team members get to know each other",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Question/prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "easy",
         numberOfCategories: 4,
@@ -326,12 +333,12 @@ const generationPrompts = {
     },
     "custom-polls": {
       name: "Custom Poll Topics",
-      description: "Define your own poll topic and requirements",
-      basePrompt: "Create poll questions based on the specific topic and requirements provided",
+      description: "Define your own poll topic and requirements" + UNUSED,
+      basePrompt: "Create instant poll questions (choice, rating, yes/no or open) on the topic and requirements provided",
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize polls into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: '\n\nReturn as JSON array: [{"title": "Question/prompt", "detail": "Background context", "category": "Category", "customInstructions": "Response guidance"}]\nReturn ONLY the JSON array.',
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -355,7 +362,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -375,7 +382,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -395,7 +402,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "easy",
         numberOfCategories: 5,
@@ -415,7 +422,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 4,
@@ -435,7 +442,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "easy",
         numberOfCategories: 5,
@@ -455,7 +462,7 @@ const generationPrompts = {
       contextTemplate: "\n\nContext: {context}",
       audienceTemplate: "\nAudience: {audience}",
       categoryTemplate: "\nOrganize subjects into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}",
-      outputFormat: WAVELENGTH_OUTPUT_FORMAT,
+      outputFormat: SCHEMA_NOTE,
       defaultSettings: {
         difficulty: "medium",
         numberOfCategories: 3,
@@ -470,6 +477,9 @@ const generationPrompts = {
     }
   }
 };
+
+// Read by scripts/apply-generation-prompts.js, which compares before it writes.
+exports.generationPrompts = generationPrompts;
 
 exports.handler = async (event) => {
   console.log('🚀 Populating generation prompts...');

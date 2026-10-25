@@ -358,6 +358,8 @@ export function sentOf(room) {
     askId: typeof s.askId === 'string' && s.askId ? s.askId : null,
     at: s.at,
     pickedAt: Number.isFinite(timeOf(s.pickedAt)) ? s.pickedAt : null,
+    // QUEUED (host review, 25 Oct 2026): Claude Code has never called in; nothing has reached it yet.
+    queued: s.queued === true,
     // Don't show the room: the host's read keeps the words, the room's has none; either way the room sees none.
     hidden: s.hidden === true,
     pick: s.pick && Array.isArray(s.pick.items) && s.pick.items.length ? {
@@ -384,7 +386,7 @@ export function sentCard(sent, asks) {
   if (opened) return null;
   const hidden = sent.hidden || !sent.text;
   return {
-    head: W.sentHeadline,
+    head: sent.queued ? W.queuedHeadline : W.sentHeadline,
     text: hidden ? W.sentHiddenLine : sent.text,
     pick: !hidden && sent.pick && sent.pick.items.length ? W.sentPickLine(sent.pick.method, sent.pick.items) : '',
     hidden,
@@ -439,6 +441,8 @@ function sentState(room, now, { host = false } = {}, dl = null) {
   // Claude saying anything after the send ends it: a doing line, or a post.
   const said = log.some((l) => l.by === 'agent' && POST_KINDS.includes(l.kind) && timeOf(l.createdAt) > sentMs);
   if (said || (dl && timeOf(dl.startedAt) > sentMs)) return null;
+  // Never connected: queued, not sent, for as long as Claude stays away.
+  if (sent.queued) return { key: 'sent', queued: true, headline: W.queuedHeadline, line: host ? W.queuedHostLine : W.queuedLine, since: sent.at, sent };
   const pickedMs = sent.pickedAt ? timeOf(sent.pickedAt) : NaN;
   if (Number.isFinite(pickedMs) && at - pickedMs > SENT_PICKED_HOLD_MS) return null;
   let line;
@@ -503,7 +507,7 @@ function claudeBase(room, now, { host = false, continueOn = false } = {}, dl = n
  */
 export function stageSide(room) {
   const sent = sentOf(room);
-  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision)
+  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision && !a.decision.heldForLater)
     .reduce((best, a) => (!best || String(a.decidedAt) >= String(best.decidedAt) ? a : best), null);
   const decision = latestDecisionLine(room);
   const decidedMs = decided ? timeOf(decided.decidedAt) : NaN;
@@ -575,7 +579,8 @@ export { clockOf };
 
 /** The latest decision as "Question: answer", or ''. */
 export function latestDecisionLine(room) {
-  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision)
+  // Saved for later is not decided for the room until it is sent (host review, 25 Oct 2026).
+  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision && !a.decision.heldForLater)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   const d = decided[decided.length - 1];
   if (!d) return '';
@@ -705,7 +710,8 @@ export function stageModel(room, current, now = Date.now(), { crewOn = false, dr
       const landedPick = w.landed ? decisionChoices(current).find((c) => c.id === w.landed) : null;
       const status = w.landed
         ? (turning ? 'The wheel is turning' : `The wheel landed${landedPick && landedPick.label ? ` on ${landedPick.label}` : ''}`)
-        : w.spinner && w.armed ? `${w.spinner} spins the wheel` : W.spin;
+        // The dock is on the projected Stage: a name only with List names on (host review, 25 Oct 2026).
+        : w.spinner && w.armed ? (room && room.settings && room.settings.listNames ? `${w.spinner} spins the wheel` : W.someoneSpins) : W.spin;
       if (w.landed && turning) {
         return {
           phase: 'RESULTS', context, meter, status, wheel: true,
@@ -815,7 +821,8 @@ export function winnerOf(ask) {
  * "What should the background color be: blue". The same on the server
  * (build-store.js questionAnswer).
  */
-export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?]+$/, '');
+// The question's own end is dropped before the colon (host review, 25 Oct 2026: "…need it.: A volunteer…").
+export const questionOf = (prompt) => String(prompt || '').trim().replace(/[\s?.!:;,]+$/, '');
 export const questionAnswer = (prompt, answer) => (answer ? `${questionOf(prompt)}: ${answer}` : '');
 /**
  * WHAT THE ROOM VOTED ON, IN FULL (owner, 2026-10-10: "we only pass the title.
@@ -840,6 +847,16 @@ const optionDetail = (ask, labelOrTitle) => {
 export const RATING_SCALE = Object.freeze({ min: 1, max: 5, lowLabel: 'Needs work', highLabel: 'Great' });
 export const RATING_MEANING = '(5 is great, 1 needs work)';
 export const ratingAnswer = (n) => (n === null || n === undefined || n === '' ? '' : `${n} out of 5 ${RATING_MEANING}`);
+/**
+ * A RATING AS A SENTENCE (host review, 25 Oct 2026): the question as asked,
+ * then what the room gave it. "How clear is it? The room rated it 3 out of 5
+ * (5 is great, 1 needs work)." The same on the server (build-store.js ratingDirection).
+ */
+export const ratingDirection = (prompt, n) => {
+  if (n === null || n === undefined || n === '') return '';
+  const q = String(prompt || '').trim().replace(/[\s:;,]+$/, '');
+  return `${q ? `${/[?.!]$/.test(q) ? q : `${q}.`} ` : ''}The room rated it ${n} out of 5 ${RATING_MEANING}.`;
+};
 /** "1 · Needs work", "3", "5 · Great". */
 export const ratingStep = (n) => (n === 1 ? `1 · ${RATING_SCALE.lowLabel}` : n === 5 ? `5 · ${RATING_SCALE.highLabel}` : String(n));
 
@@ -895,7 +912,7 @@ export function defaultDirection(ask) {
   }
   if (ask.kind === 'rating') {
     return r.rating && r.rating.avg !== null && r.rating.avg !== undefined
-      ? questionAnswer(ask.prompt, ratingAnswer(r.rating.avg)) : '';
+      ? ratingDirection(ask.prompt, r.rating.avg) : '';
   }
   const top = (r.ranked || [])[0];
   return top ? questionAnswer(ask.prompt, top.text) : '';
@@ -946,7 +963,8 @@ export function settleSend(ask) {
   if (ask.kind === 'rating') {
     const r = ask.results && ask.results.rating;
     if (!r || r.avg === null || r.avg === undefined) return null;
-    return { id: String(r.avg), chosen: [], direction: defaultDirection(ask), button: W.send(r.avg) };
+    // "Send to Claude", never "Send 3 to Claude" (host review, 25 Oct 2026): the sentence says the number.
+    return { id: String(r.avg), chosen: [], direction: defaultDirection(ask), button: W.sendPlain };
   }
   const id = winnerOf(ask);
   if (!id) return null;
@@ -1001,6 +1019,16 @@ export const unheard = (room) => ((room && room.log) || []).filter((l) => l.forA
  * /engage:continue in Claude Code, so the host must be told.
  */
 export const agentStopped = (agent) => Boolean(agent && agent.lastSeenAt && !agent.connected && !agent.listening);
+
+/**
+ * CONNECTED AT LEAST ONCE (host review, 25 Oct 2026): Claude Code has called in
+ * with its key. Minting a key is not connecting; the Connect guidance stays
+ * until this is true.
+ */
+export const claudeEverConnected = (agent) => Boolean(agent && (agent.lastSeenAt || agent.connected || agent.listening));
+
+/** Claude Code has never called in: what is sent waits for it to connect. */
+export const agentNeverCame = (agent) => Boolean(agent) && !claudeEverConnected(agent);
 
 /**
  * WHAT CLAUDE GETS (step 7c, C14; owner, 2026-10-05): the four kinds of
@@ -1123,8 +1151,12 @@ function gaveChain(c, entry) {
  * own when it was sent, and every ask the room saw, decided or not, each with
  * its mark. A phone's story passes neither and is drawn as before.
  */
-export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null, gave = null, ended = false } = {}) {
+export function roomStory({ log = [], asks = null, decisions = null, images = [], myIdeas = [], doing = null, gave = null, ended = false, forRoom = false } = {}) {
   const items = [];
+  // THE ROOM SEES NONE OF LATER (host review, 25 Oct 2026): on a screen the room
+  // reads, nothing saved for later shows until it is sent; the host's History keeps it.
+  const heldFromRoom = (mark) => forRoom && mark === 'later';
+  const heldAsks = new Set();
   const gaveByAsk = new Map();
   for (const c of gave || []) {
     if (!c.askId) continue;
@@ -1162,6 +1194,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     : (decisions || []).map((d) => ({ askId: d.askId, direction: d.direction, at: d.decidedAt, hidden: d.hidden === true }));
   for (const d of decided) {
     const outcome = d.ask ? outcomeOf(d.ask) : null;
+    if (forRoom && d.ask && d.ask.decision.heldForLater && (!outcome || outcome.mark === 'later')) { heldAsks.add(d.askId); continue; }
     const notShown = notShownOf(d.ask ? d.ask.decision.hidden === true : d.hidden, d.direction);
     const detail = d.ask && notShown !== 'blank' ? decisionDetail(d.ask.decision) : null;
     const mockups = (images || []).filter((im) => im.askId === d.askId && im.label);
@@ -1183,19 +1216,21 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
   // EVERY ASK THE ROOM SAW (H3): one not decided yet, or closed without a decision.
   if (stamped) {
     for (const a of asks || []) {
-      if (a.status === 'decided' && a.decision) continue;
+      // A decision held back from the room reads as an ask that sent nothing yet.
+      if (a.status === 'decided' && a.decision && !heldAsks.has(a.askId)) continue;
       const o = outcomeOf(a);
       if (!o) continue;
+      const mark = heldAsks.has(a.askId) ? 'not-sent' : o.mark;
       items.push({
         id: `asked:${a.askId}`, at: a.openedAt || a.createdAt, type: 'asked', heading: W.storyAsk(askNo(a.askId)), text: a.prompt || '',
-        askId: a.askId, imageIds: [], chain: [o.mark === 'pending' ? W.withTheRoom : W.closedNothingSent], mark: o.mark,
+        askId: a.askId, imageIds: [], chain: [mark === 'pending' ? W.withTheRoom : W.closedNothingSent], mark,
         ...(gaveByAsk.has(a.askId) ? { ideas: gaveByAsk.get(a.askId) } : {}),
       });
     }
     // An idea that went on its own: when it was sent, never who sent it.
     const entryOf = new Map((log || []).map((e) => [e.logId, e]));
     for (const c of gave || []) {
-      if (c.askId) continue;
+      if (c.askId || heldFromRoom(c.mark)) continue;
       const first = c.logId ? entryOf.get(c.logId) : null;
       // Held for later, then sent: the entry that carried it says how it went.
       const entry = first && first.sentAs && entryOf.get(first.sentAs) ? entryOf.get(first.sentAs) : first;
@@ -1214,7 +1249,7 @@ export function roomStory({ log = [], asks = null, decisions = null, images = []
     // host sent on its own has its own entry. An idea's send is the idea's entry
     // above; a held one the host later sent shows once, as the one that carried it.
     for (const e of log || []) {
-      if (e.kind !== 'direction' || !e.considered || (!e.forAgent && !e.held) || e.sentAs) continue;
+      if (e.kind !== 'direction' || !e.considered || (!e.forAgent && !e.held) || e.sentAs || (forRoom && e.held)) continue;
       if (e.from && (e.from.ideaIds || []).length) continue;
       const notShown = notShownOf(e.hidden === true, e.text);
       const detail = notShown === 'blank' ? null : sentDetail(e);
@@ -1258,7 +1293,7 @@ function stepDur(ms) {
 export const STORY_FILTERS = Object.freeze([
   { key: 'all', label: 'Everything' },
   { key: 'decisions', label: 'Decisions' },
-  { key: 'pictures', label: 'Pictures' },
+  { key: 'pictures', label: 'Screenshots' },
 ]);
 // A step holds its own decisions and pictures: the filters look inside.
 const flatStory = (items) => items.flatMap((i) => (i.type === 'step' ? i.kids : [i]));
@@ -1494,8 +1529,8 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   if (newPoints >= 3 && !room.shownPoint) {
     moves.push({ key: 'talk-points', title: 'Talk over a point', hint: 'Tick one in Points', button: W.points });
   }
-  // Nothing runs without Claude: with none connected, that is the first move.
-  if (room && room.agent && !room.agent.key && !room.agent.connected && !framing) {
+  // Nothing runs without Claude: until it has called in, that is the first move (a key minted is not a connection).
+  if (room && room.agent && !claudeEverConnected(room.agent) && !framing) {
     moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing is built without it', button: 'Connect' });
   }
   // TICKED ON THE LATER LIST: the host chose these, so this leads (2 to 6 fit a vote).
@@ -1512,7 +1547,7 @@ export function combineLine(ask) {
   const d = String((ask.decision && ask.decision.direction) || '').trim();
   const answer = d.toLowerCase().startsWith(`${q.toLowerCase()}:`) ? d.slice(q.length + 1).trim() : d;
   if (!answer) return prompt;
-  return /[?:]$/.test(prompt) ? `${prompt} ${answer}` : `${prompt}: ${answer}`;
+  return /[?:]$/.test(prompt) ? `${prompt} ${answer}` : `${q}: ${answer}`;
 }
 
 export function combineText(asks) {

@@ -358,7 +358,10 @@ const decryptRow = async (orgId, row) => (orgId ? crypto.decryptItem(orgId, 'aiS
   const advisor = personas.SEED_PERSONAS.find((p) => p.personaId === 'session-advisor');
   await check('its required addition no longer demands a disagreement', () => {
     assert.ok(!/disagreement/i.test(advisor.requiredAddition), advisor.requiredAddition);
-    assert.match(advisor.requiredAddition, /recommendation with a named owner/);
+    assert.match(advisor.requiredAddition, /suggestion tied to a specific answer/);
+    // rejects: the owner the honesty rule forbids inventing, demanded every reply.
+    assert.ok(!/named owner/i.test(advisor.requiredAddition), advisor.requiredAddition);
+    assert.ok(!/no owner is an opinion/i.test(advisor.voice), advisor.voice);
   });
   await check('its voice reports a disagreement only when there is one', () => {
     assert.match(advisor.voice, /report any real disagreement/);

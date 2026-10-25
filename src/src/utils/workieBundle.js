@@ -26,8 +26,9 @@
  * for an agent that answers that way.
  *
  * WHERE THE FACTS COME FROM — never retyped here:
- *   the save rules, the variables, the section limits and default, and the
- *     assembly layers: the `reference` the server returns (lambda-functions/
+ *   the save rules, the variables, the section limits and default, the
+ *     assembly layers and the house rules the read check enforces: the
+ *     `reference` the server returns (lambda-functions/
  *     admin/shared/workie-reference.js), behind the prompt-authoring gate;
  *   how the reply is split (SECTION_SYNONYMS) and the model's budget
  *     (SUMMARY_MODEL): utils/promptPreflight.js, pinned to get-ai-summary.js by
@@ -146,7 +147,8 @@ function describeSections(draft, reference) {
     '',
     ...shown.map((s) => `- **${s && s.heading}**${s && s.guidance ? ` — ${String(s.guidance).replace(/\n/g, ' ')}` : ''}`),
     '',
-    'The rules — a declaration that breaks any one of them is discarded WHOLE, and the default runs instead:',
+    'The rules — Engage refuses to save a declaration that breaks any one of them (and one already stored that '
+      + 'breaks them is ignored whole when the round runs, so the default runs instead):',
     '',
     `- at most ${sections.maxSections} sections;`,
     `- each heading at most ${sections.maxHeadingChars} characters, on one line, plain text — no \`#\`, \`*\`, \`_\`, `
@@ -202,6 +204,19 @@ function describeVariables(reference, label) {
     '| Variable | Group | What it holds | Example |',
     '|---|---|---|---|',
     ...reference.variables.map((v) => `| \`{${v.name}}\` | ${cell(v.category)} | ${cell(v.description)} | ${cell(v.example)} |`),
+  ];
+}
+
+function describeReadCheck(reference) {
+  const check = reference.readCheck;
+  if (!check || !Array.isArray(check.kinds) || !check.kinds.length) return [];
+  return [
+    '## House rules (the read check)',
+    '',
+    `${check.intro} The prompt you write must ask for a reply that keeps every one of them:`,
+    '',
+    ...check.kinds.map((k) => `- **${k.kind}** — ${k.rule}`),
+    '',
   ];
 }
 
@@ -297,9 +312,10 @@ export function buildWorkieBundle({
     `You may change: ${AGENT_MAY_CHANGE.map((f) => `\`${f}\``).join(', ')}. Leave every other field exactly as it `
       + 'is — they identify the prompt, and Engage ignores changes to them.',
     '',
-    'Every rule under *Save rules* must still hold, and every variable must come from *Variables*. Engage runs its '
-      + 'checks again on the file when it comes back.',
+    'Every rule under *House rules* and *Save rules* must still hold, and every variable must come from '
+      + '*Variables*. Engage runs its checks again on the file when it comes back.',
     '',
+    ...describeReadCheck(reference),
     '## How to hand it back',
     '',
     'Return this whole file with your changes made inside the hand-back section below, between the '

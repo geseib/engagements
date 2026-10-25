@@ -1379,7 +1379,9 @@ async function openingAction(ctx, action, body) {
       kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
       text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
     });
-    await logEntry(ctx, { kind: 'milestone', text: 'The room framed the build. Claude is building.', by: 'system' });
+    // Only a Claude that has called in is building (host review, 25 Oct 2026); else it starts when it connects.
+    const seen = Boolean(room.state && room.state.AgentSeenAt);
+    await logEntry(ctx, { kind: 'milestone', text: seen ? 'The room framed the build. Claude is building.' : 'The room framed the build. Claude starts when it connects.', by: 'system' });
   } else if (action === 'resume') {
     // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
     // mistake and "the opening questioning was lost"). Nothing was lost: the

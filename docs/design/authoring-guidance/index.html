@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authoring Guidance</title>
+<style>
+/* Page shell: paper by default, dusk under prefers-color-scheme or ?theme=dark.
+   The FRAMES carry their own surface, as the product does: the console's
+   question-sets panel is dusk (AdminPage contentTheme 'dark'), and the AI
+   builder modal is white (BuilderPage.css .modal-content). */
+:root {
+  --page: #E9E4DA; --ink: #1B2942; --ink-muted: #5E6167; --ink-rule: #D8D1C4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0B1424; --ink: #F4EDE4; --ink-muted: #9BA8BE; --ink-rule: #25375A; }
+}
+:root[data-theme="dark"] { --page: #0B1424; --ink: #F4EDE4; --ink-muted: #9BA8BE; --ink-rule: #25375A; }
+
+/* Dusk console tokens (styles.css :root) */
+.dusk {
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A; --text: #F4EDE4; --muted: #9BA8BE;
+  --rule: rgba(244,237,228,.14); --primary: #F6A94C; --on-accent: #1B2942; --secondary: #7CA7E6;
+  --success-text: #6FD0A4; --success-bg: rgba(79,178,134,.16);
+}
+/* White builder modal tokens (re-derived on white, as SurveyAIBuilder.css does) */
+.paper {
+  --bg: #FFFFFF; --surface: #FFFFFF; --surface-2: #F4F6F8; --text: #2C3E50; --muted: #5B6B7C;
+  --rule: #E3E8EE; --edge: #7A8898; --primary: #F6A94C; --on-accent: #1B2942; --secondary: #2F5E9E;
+  --success-text: #1C7350; --success-bg: #DDF1E7; --amber-text: #8A5300; --amber-bg: #FBEBD6;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 Inter, "Segoe UI", system-ui, sans-serif; }
+.page { max-width: 1240px; margin: 0 auto; padding: 24px 16px 80px; }
+.page > h1 { font-size: 24px; margin: 0 0 6px; }
+.lede { color: var(--ink-muted); margin: 0 0 22px; max-width: 920px; }
+.shot { margin: 0 0 44px; }
+.shot > h2 { font-size: 19px; margin: 0 0 4px; }
+.why { color: var(--ink-muted); font-size: 15px; margin: 0 0 12px; max-width: 920px; }
+.why b { color: var(--ink); }
+
+.screen { background: var(--bg); color: var(--text); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.head h3 { margin: 0; font-size: 19px; }
+.crumb { color: var(--muted); font-size: 13px; }
+.grow { flex: 1; }
+.body { padding: 18px; display: grid; gap: 14px; }
+.foot { display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--rule); background: var(--surface); flex-wrap: wrap; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 7px 12px; border: 1px solid var(--rule); border-radius: 7px; background: var(--surface-2); color: var(--text); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.paper .btn { background: #fff; border-color: var(--edge); }
+.btn.primary { background: var(--primary); color: var(--on-accent); border-color: var(--primary); }
+.btn.sm { min-height: 30px; padding: 4px 10px; font-size: 12px; }
+.btn.link { border: 0; background: none; color: var(--secondary); padding: 0; min-height: 0; text-decoration: underline; text-underline-offset: 3px; }
+
+h4 { margin: 0 0 4px; font-size: 15px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.lab { font-size: 13px; font-weight: 700; }
+.inp { min-height: 36px; padding: 8px 10px; border: 1px solid var(--edge, var(--rule)); border-radius: 6px; background: #fff; color: var(--text); font-size: 15px; }
+.dusk .inp { background: var(--bg); }
+.inp.area { min-height: 84px; }
+.inp.ph { color: var(--muted); }
+.help { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* (a) routes */
+.routes { display: grid; gap: 10px; }
+.route { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.route.lead { border-color: var(--primary); }
+.route .nm { font-weight: 700; font-size: 15px; }
+.route .when { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13px; }
+.route .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.steps3 { grid-column: 1 / -1; margin: 8px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.steps3 li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 6px; background: var(--surface-2); font-size: 13px; }
+.steps3 .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: var(--on-accent); font-weight: 700; font-size: 12px; }
+.steps3 .done .n { background: var(--success-text); }
+.copied { grid-column: 1 / -1; margin: 8px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--success-bg); color: var(--text); font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.copied b { color: var(--success-text); }
+.preview { grid-column: 1 / -1; margin-top: 8px; }
+.preview summary { font-size: 13px; font-weight: 600; color: var(--secondary); cursor: pointer; }
+pre.prompt { margin: 8px 0 0; max-height: 260px; overflow: auto; padding: 10px 12px; border-radius: 6px; background: var(--bg); border: 1px solid var(--rule); font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.mark { background: rgba(246,169,76,.22); border-radius: 3px; padding: 0 2px; }
+.uploadzone { padding: 12px 14px; border: 1px dashed var(--secondary); border-radius: 8px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.ok { color: var(--success-text); font-weight: 600; font-size: 13px; }
+
+table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+th { text-align: left; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--rule); }
+td { padding: 8px 12px; border-bottom: 1px solid var(--rule); font-size: 13px; vertical-align: top; }
+td b { font-size: 15px; }
+
+/* (b) builder */
+.modal { max-width: 860px; margin: 0 auto; }
+.asked { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface-2); padding: 10px 12px; }
+.asked .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.asked .ttl { font-weight: 700; font-size: 13px; }
+.chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--rule); color: var(--muted); background: #fff; white-space: nowrap; }
+.chip.tuned { color: var(--amber-text); background: var(--amber-bg); border-color: #E9C79A; }
+.asked p.txt { margin: 6px 0 0; font-size: 15px; line-height: 1.5; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.runline { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface-2); font-size: 15px; }
+.runline .dot { flex: none; width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--secondary); }
+.runline.done .dot { background: var(--success-text); }
+.runline small { display: block; color: var(--muted); font-size: 13px; }
+.big { font-size: 30px; font-weight: 700; }
+.bar { height: 8px; border-radius: 4px; background: var(--rule); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 33%; background: var(--primary); }
+.rows { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.rows div { display: grid; grid-template-columns: 1fr 140px 120px; gap: 10px; align-items: center; min-height: 36px; padding: 6px 12px; border-bottom: 1px solid var(--rule); font-size: 15px; }
+.rows div:last-child { border-bottom: 0; }
+.rows .h { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--surface-2); min-height: 30px; }
+.warnbox { padding: 10px 12px; border-radius: 8px; background: var(--amber-bg); color: var(--text); font-size: 13px; }
+.warnbox b { color: var(--amber-text); }
+.annot { font-size: 13px; color: var(--ink-muted); margin: 8px 0 0; max-width: 920px; }
+.annot b { color: var(--ink); }
+@media (max-width: 760px) { .steps3, .two { grid-template-columns: 1fr; } .rows div { grid-template-columns: 1fr; } }
+</style>
+<script>
+  // ?theme=dark|light picks the page shell's theme (the frames keep theirs).
+  try { const t = new URLSearchParams(location.search).get('theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+</head>
+<body>
+<div class="page">
+  <h1>Authoring guidance: templates, AI prompts and the scenario builder</h1>
+  <p class="lede">For the owner, 25 Oct. Two screens change. <b>(a)</b> Every set type gets a prompt to copy into your own chatbot, next to its template, with the three steps written out and a way back to upload. <b>(b)</b> The AI Scenario Builder shows what the AI is asked as read-only text, keeps your own additions in a separate box that starts empty, labels the detail levels by what they produce, and says what is happening and what to do next. The console's type sizes (12 / 13 / 15 / 19 / 24 / 30, rows 36px). The question-sets panel is drawn in dusk, as the console shows it; the builder on white, as its modal is.</p>
+
+  <!-- ================================================================ A1 -->
+  <section class="shot">
+    <h2>a1 · New question set: the template and the chatbot prompt sit together, with the three steps</h2>
+    <p class="why">"Use your own chatbot" was offered for Trivia and Call &amp; Answer only. It is now offered for <b>every type</b>: Trivia, Call &amp; Answer, Poll, Survey, Wavelength, and Art Title (inside the artwork route). The route lists its three steps, so a host knows the template and the prompt go together and that the file comes back here. <b>Show what is copied</b> opens the full prompt before anything goes to the clipboard.</p>
+    <div class="screen dusk">
+      <div class="head"><span class="crumb">Question sets ›</span><h3>New question set</h3><span class="grow"></span><span class="btn">Close</span></div>
+      <div class="body">
+        <div class="field" style="max-width:340px"><span class="lab">Engagement type</span><span class="inp">Trivia</span></div>
+        <div>
+          <h4>How do you want to make it?</h4>
+          <p class="sub">These are not interchangeable. Each one says when it is the right one.</p>
+        </div>
+        <div class="routes">
+          <div class="route lead"><span class="nm">Generate with AI</span><span class="acts"><span class="btn primary">✦ AI Trivia builder</span></span><p class="when">Best when you have a topic and no source material. It writes the questions and leaves you a draft to review.</p></div>
+          <div class="route"><span class="nm">Start from a template</span><span class="acts"><span class="btn">Download Trivia template</span></span><p class="when">Best when you want to write the questions yourself but not guess at the columns.</p></div>
+          <div class="route">
+            <span class="nm">Use your own chatbot</span>
+            <span class="acts"><span class="btn">Copy AI authoring prompt</span></span>
+            <p class="when">Best when you would rather drive the AI yourself, in Claude or ChatGPT.</p>
+            <ol class="steps3">
+              <li><span class="n">1</span><span><b>Download the template</b> above. The prompt tells the AI to match it exactly.</span></li>
+              <li><span class="n">2</span><span><b>Copy the prompt</b>, paste it with the template into your chatbot, and fill in the <span class="mark">[BRACKETS]</span> at the top.</span></li>
+              <li><span class="n">3</span><span><b>Upload the CSV</b> it writes, under "…then upload it here" below. Every row is checked first.</span></li>
+            </ol>
+            <details class="preview"><summary>Show what is copied (Trivia, 41 lines)</summary></details>
+          </div>
+          <div class="route"><span class="nm">Manual builder</span><span class="acts"><span class="btn">Manual builder</span></span><p class="when">Best when you are writing three or four questions.</p></div>
+        </div>
+        <div><h4>…then upload it here</h4><p class="sub">Where every route above ends up. Already have a CSV? Start here.</p></div>
+        <div class="uploadzone"><span class="btn">Choose file</span><span class="sub">No file chosen</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ A2 -->
+  <section class="shot">
+    <h2>a2 · After Copy: what happened, what to do next, and a way back to upload</h2>
+    <p class="why">The confirmation sits in the route, where the host is looking, not at the foot of the panel. It names the file to paste beside the prompt and how many brackets to fill. <b>Go to upload</b> moves focus to the file chooser, so the host coming back from the chatbot lands in the right place. Step 2 shows as done. The preview is open here to show what is copied: the host's choices first, marked in brackets.</p>
+    <div class="screen dusk">
+      <div class="head"><span class="crumb">Question sets › New question set ›</span><h3>Trivia</h3></div>
+      <div class="body">
+        <div class="route">
+          <span class="nm">Use your own chatbot</span>
+          <span class="acts"><span class="btn">Copy again</span></span>
+          <ol class="steps3">
+            <li class="done"><span class="n">✓</span><span><b>Template downloaded</b>: trivia-template.csv</span></li>
+            <li class="done"><span class="n">✓</span><span><b>Prompt copied.</b> Paste it with the template; fill in the <span class="mark">[BRACKETS]</span>.</span></li>
+            <li><span class="n">3</span><span><b>Upload the CSV</b> it writes, below.</span></li>
+          </ol>
+          <p class="copied"><b>Copied.</b> Paste it into Claude or ChatGPT with trivia-template.csv, fill in the 6 [BRACKETS] at the top, and save its reply as a .csv file. <span class="grow"></span><span class="btn sm">Go to upload ↓</span></p>
+          <details class="preview" open><summary>Hide what is copied</summary>
+<pre class="prompt">I am creating a trivia question set for a live team session (multiple choice, played on phones, with the answer and an explanation revealed after each round). Please write the questions and give them back to me as a CSV file matching the template I am attaching.
+
+==== FILL THIS IN BEFORE SENDING (replace every [BRACKET]) ====
+- Topic / theme of the set: <span class="mark">[TOPIC — e.g. "lessons from great sports coaches"]</span>
+- Who is in the room: <span class="mark">[AUDIENCE — e.g. "a 12-person software delivery team"]</span>
+- Number of questions: <span class="mark">[COUNT — 10 to 25 works well]</span>
+- Categories to group them under: <span class="mark">[3 TO 8 CATEGORY NAMES, or "you choose"]</span>
+- Difficulty mix: <span class="mark">[e.g. "mostly medium, a few easy and a few hard"]</span>
+- How detailed the answer explanations should be: <span class="mark">[BRIEF / FULL]</span>
+===============================================================
+
+WHAT GOES IN EACH COLUMN:
+- optionA through optionD: four answer choices of the same kind (four dates, four names…), always filled…
+- correctAnswer: exactly one of OptionA … OptionF. Vary which letter is correct across the set…
+
+HOUSE RULES: plain words; nothing you are not certain of; no hyperbole…</pre>
+          </details>
+        </div>
+        <div><h4>…then upload it here</h4></div>
+        <div class="uploadzone" style="outline: 3px solid var(--primary); outline-offset: 2px;"><span class="btn">Choose file</span><span class="sub">← focus lands here from "Go to upload"</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ A3 -->
+  <section class="shot">
+    <h2>a3 · Every type has a prompt, and each asks for what that type needs</h2>
+    <p class="why">The prompts are built from the same rules the importer checks. Poll and survey take theirs from the survey contract (<code>shared/survey-kinds.js</code>): the columns each kind uses, the allowed values, and the limits, so a poll CSV's 27 columns stop being a mystery. Every prompt ends with the same house rules and "Engage checks every row when I upload it".</p>
+    <table>
+      <colgroup><col style="width:16%"><col style="width:34%"><col style="width:50%"></colgroup>
+      <thead><tr><th>Type</th><th>The host fills in</th><th>What the AI is told that it would otherwise get wrong</th></tr></thead>
+      <tbody>
+        <tr><td><b>Trivia</b></td><td>Topic, audience, count, categories, difficulty mix, explanation depth</td><td>Four same-kind options in A–D, E and F left empty; vary the correct letter; only facts it is certain of in the explanation.</td></tr>
+        <tr><td><b>Call &amp; Answer</b></td><td>Topic, audience, count, categories, lesson length, tone</td><td>A concrete lesson; the instruction is a forward-looking question through the team's lens ("What could our team…"), never "Recall a time you…".</td></tr>
+        <tr><td><b>Art Title</b></td><td>Theme or period, audience, count</td><td>Leave Detail_lesson empty (players see it while they invent a title); the real title goes only in AnswerDetails; an image URL only if it is certain, otherwise empty.</td></tr>
+        <tr><td><b>Wavelength</b></td><td>Topic, audience, count, categories</td><td>A subject of 1–4 words and nothing else: no description (it seeds the very words the round compares); the instruction cell is fixed.</td></tr>
+        <tr><td><b>Poll</b></td><td>Topic, audience, count, categories, which kinds</td><td>Kind is choice, rating, yesno or text; the columns each kind uses and leaving the rest empty; each row in a category the host can switch off.</td></tr>
+        <tr><td><b>Survey</b></td><td>What you want to find out, audience, count (up to 20), which kinds</td><td>All five kinds incl. rank; Category is always Survey; a follow-up needs its question; neutral wording, one thing per question.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================================================================ A4 -->
+  <section class="shot">
+    <h2>a4 · Survey: the chatbot route joins the survey's own ways in</h2>
+    <p class="why">A survey has its own routes (your material, a template, a file). The chatbot route is added in the same form as a1, pointing at the every-kind template.</p>
+    <div class="screen dusk">
+      <div class="body">
+        <div class="routes">
+          <div class="route lead"><span class="nm">Your own material</span><span class="acts"><span class="btn primary">✦ Write it from my material</span></span></div>
+          <div class="route"><span class="nm">A template</span><span class="acts"><span class="btn sm">Presentation feedback</span><span class="btn sm">Event feedback</span><span class="btn sm">Team pulse</span></span></div>
+          <div class="route"><span class="nm">A file</span><span class="acts"><span class="btn">Download the template</span></span></div>
+          <div class="route"><span class="nm">Use your own chatbot</span><span class="acts"><span class="btn">Copy AI authoring prompt</span></span>
+            <ol class="steps3"><li><span class="n">1</span><span><b>Download the template</b> (A file, above).</span></li><li><span class="n">2</span><span><b>Copy the prompt</b> and paste both; fill in the <span class="mark">[BRACKETS]</span>.</span></li><li><span class="n">3</span><span><b>Upload the CSV</b> below.</span></li></ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ B1 -->
+  <section class="shot">
+    <h2>b1 · Scenario builder: what the AI is asked, and your additions, apart</h2>
+    <p class="why">Today the box "Base Prompt &amp; Additional Requirements" is pre-filled with the card's prompt, so the prompt reaches the AI twice; on a built-in card the browser also writes context, audience and level into it, and the server adds them again. Now <b>What the AI is asked</b> shows the card's prompt read-only, with where it comes from. <b>Your additions</b> starts empty and is sent on its own. The detail levels say what they produce; all three stay inside the same length limit.</p>
+    <div class="screen paper modal">
+      <div class="head"><h3>✦ AI Scenario Builder</h3><span class="grow"></span><span class="btn sm">?</span><span class="btn sm">✕</span></div>
+      <div class="body">
+        <h3 style="margin:0;font-size:19px">Configure your scenarios</h3>
+        <div class="asked">
+          <div class="top"><span class="ttl">What the AI is asked</span><span class="chip tuned">Tuned in your library</span><span class="sub">· Lessons Learned Scenarios</span><span class="grow"></span><span class="btn link">Change card</span></div>
+          <p class="txt">Create scenarios based on common workplace challenges and the lessons learned from them.</p>
+          <p class="help" style="margin-top:6px">Your context, audience, categories and detail level below are added to this when the AI is asked. To change this text itself, edit the template in Prompts.</p>
+        </div>
+        <div class="two">
+          <div class="field"><span class="lab">Question set title</span><span class="inp">Hard-won lessons</span></div>
+          <div class="field"><span class="lab">Target audience</span><span class="inp">A 12-person software delivery team</span></div>
+        </div>
+        <div class="field"><span class="lab">Context / background</span><span class="inp area">Somebody recounts a real experience: what happened, what they did, what it taught them…</span></div>
+        <div class="field">
+          <span class="lab">Level of detail</span>
+          <span class="inp" style="max-width:340px">Standard — 2 sentences ▾</span>
+          <p class="help">The choices: Brief — 1 sentence · Standard — 2 sentences · Detailed — up to 3 sentences. All three stay within the same length limit, so a scenario always fits the room's screen.</p>
+        </div>
+        <div class="field">
+          <span class="lab">Your additions <span class="sub" style="display:inline;font-weight:400">— optional, sent separately</span></span>
+          <span class="inp area ph">Anything this set must do that the prompt above does not say, e.g. "Set every scenario in a hospital ward."</span>
+        </div>
+        <div class="runline"><span class="dot"></span><span><b>Ready to write 6 scenarios in 3 categories, Standard detail.</b><small>They come back as a draft for you to review. Nothing is saved until you accept it.</small></span></div>
+      </div>
+      <div class="foot"><span class="btn">← Back</span><span class="grow"></span><span class="btn primary">✦ Generate 6 scenarios</span></div>
+    </div>
+    <p class="annot"><b>A built-in card</b> (no saved prompt) shows its text the same way with a <span class="chip">Built in</span> chip. What is sent is that text as it is; the server adds the context, audience, categories and level, as it already does for saved prompts.</p>
+  </section>
+
+  <!-- ================================================================ B2 -->
+  <section class="shot">
+    <h2>b2 · While it writes: what is happening, and what you can do</h2>
+    <p class="why">One line above the progress says what is being written, from which card, at which level, and that closing is safe. The progress panel below it is today's, unchanged.</p>
+    <div class="screen paper modal">
+      <div class="head"><h3>✦ AI Scenario Builder</h3></div>
+      <div class="body">
+        <div class="runline"><span class="dot"></span><span><b>Writing 6 scenarios from "Lessons Learned Scenarios", Standard detail.</b><small>You can close this window. The bell tells you when the draft is ready, and it opens for review then.</small></span></div>
+        <div style="display:flex;gap:14px;align-items:center"><span class="big">2<span style="font-size:19px;color:var(--muted)"> / 6</span></span><span class="sub">Pass 1 done · runs on the server</span></div>
+        <div class="bar"><i></i></div>
+        <div class="foot" style="border:0;padding:0;background:none"><span class="btn primary">Close — you'll be notified</span><span class="btn">Stop</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ B3 -->
+  <section class="shot">
+    <h2>b3 · When it is done: how many, how many dropped and why, where to review</h2>
+    <p class="why">A finished run normally opens the draft review (the same as today). When it stays in the builder, the line turns to the next step, and any warning the generator reported is quoted under it. The shortfall box is today's: it says how many fewer than asked and why the server drops some.</p>
+    <div class="screen paper modal">
+      <div class="head"><h3>✦ AI Scenario Builder</h3></div>
+      <div class="body">
+        <div class="runline done"><span class="dot"></span><span><b>Done. Check each scenario below, then press Load 5 into System.</b><small>Edit opens one; Leave out drops it. Nothing is saved until you load them.<br>The generator reported: "A generation pass produced only duplicates; stopping early."</small></span></div>
+        <div class="warnbox"><b>You asked for 6 and got 5.</b> The server drops any scenario whose title is a near-duplicate of one it already kept, and it stops early when a pass produces nothing new.</div>
+        <div class="rows">
+          <div class="h"><span>Scenario</span><span>Category</span><span></span></div>
+          <div><span>The release we shipped on a Friday</span><span>Delivery</span><span class="btn sm">Edit</span></div>
+          <div><span>The estimate nobody questioned</span><span>Planning</span><span class="btn sm">Edit</span></div>
+          <div><span>The handover with no notes</span><span>Teamwork</span><span class="btn sm">Edit</span></div>
+        </div>
+      </div>
+      <div class="foot"><span class="btn">← Back to configuration</span><span class="grow"></span><span class="btn">Export CSV</span><span class="btn primary">Load 5 into System</span></div>
+    </div>
+    <p class="annot"><b>Export CSV</b> now writes a RoundKind column (the direction chosen on step 1, e.g. <code>apply</code>), so a downloaded file uploads back with its direction instead of reverting to Produce.</p>
+  </section>
+</div>
+</body>
+</html>

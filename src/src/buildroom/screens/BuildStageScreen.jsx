@@ -259,7 +259,7 @@ export default function BuildStageScreen({
       <section className="brm-stage brm-wheelstage" aria-label="The wheel">
         <span className="brm-eyebrow"><b>The wheel</b> · Ask {Number(current.askId) || current.askId}</span>
         <h2 className="brm-q">{current.prompt}</h2>
-        <BuildWheel wheel={current.wheel} size="lg" onSettled={setSettledSpin} />
+        <BuildWheel wheel={current.wheel} size="lg" onSettled={setSettledSpin} nameSpinner={Boolean(room.settings && room.settings.listNames)} />
         {/* SAME GOES FOR SPIN (owner, 2026-10-06): after it lands, the host may
             take the wheel's pick or an alternate, with the same question. */}
         {pickable && current.wheel.landed && !wheelTurning && (

@@ -1,0 +1,153 @@
+/* skin-allowance: colour=9 font=0 primary=0 */
+/* ============================================================================
+   AI SCENARIO BUILDER — the parts docs/design/authoring-guidance/ (b1–b3) adds
+   to components/AIScenarioBuilder.jsx: "What the AI is asked" (the card's base
+   prompt, read-only), the detail-level help line, and the status-and-next-step
+   line (RunLine). The rest of the builder is still BuilderPage.css.
+
+   Scoped under `.asb`; every new element carries the class on its own root, so
+   the tokens resolve wherever it sits in the modal.
+
+   DERIVED ON WHITE, like SurveyAIBuilder.css: the builder modal is
+   `.modal-content { background: white }` (BuilderPage.css) whatever theme the
+   page around it is in, so these are local tokens measured against the
+   surfaces they really sit on (__tests__/aiScenarioBuilderPalette.test.js):
+
+     --asb-text      #2c3e50 on #ffffff 10.98:1   on --asb-quiet #f4f6f8 10.14:1
+     --asb-muted     #56636f on #ffffff  6.16:1   on --asb-quiet          5.68:1
+     --asb-tuned-fg  #7a4a00 on --asb-tuned-bg #fbebd6                    6.40:1
+     --asb-link      #2f5e9e on --asb-quiet                               6.03:1
+     --asb-ok        #1c7350 the done dot, 5.36:1 on --asb-quiet (a mark needs 3:1)
+     --asb-run       #2f5e9e the running/ready dot, 6.03:1
+
+   Amber carries no text: #F6A94C on white is 1.96:1. The "Tuned in your
+   library" chip uses the deep amber-brown on its own wash.
+   ========================================================================== */
+
+.asb {
+  --asb-text: #2c3e50;
+  --asb-muted: #56636f;
+  --asb-quiet: #f4f6f8;
+  --asb-rule: #e3e8ee;
+  --asb-tuned-fg: #7a4a00;
+  --asb-tuned-bg: #fbebd6;
+  --asb-link: #2f5e9e;
+  --asb-ok: #1c7350;
+  --asb-run: #2f5e9e;
+
+  --asb-t-floor: 12px;
+  --asb-t-label: 13px;
+  --asb-t-body: 15px;
+}
+
+/* ---------------------------------------------------- what the AI is asked */
+
+.asb.asb-asked {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--asb-rule);
+  border-radius: 8px;
+  background: var(--asb-quiet);
+  color: var(--asb-text);
+}
+.asb-asked .asb-asked-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.asb-asked .asb-asked-h {
+  margin: 0;
+  font-size: var(--asb-t-label);
+  font-weight: 700;
+  color: var(--asb-text);
+}
+.asb-asked .asb-chip {
+  display: inline-flex;
+  padding: 2px 8px;
+  border: 1px solid var(--asb-rule);
+  border-radius: 999px;
+  font-size: var(--asb-t-floor);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--asb-muted);
+}
+.asb-asked .asb-chip--tuned {
+  background: var(--asb-tuned-bg);
+  color: var(--asb-tuned-fg);
+}
+/* A single text node with min-width 0, so the ellipsis works; the full name
+   rides on title=. */
+.asb-asked .asb-asked-card {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--asb-t-label);
+  color: var(--asb-muted);
+}
+.asb-asked .asb-link {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--asb-t-label);
+  font-weight: 600;
+  color: var(--asb-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.asb-asked .asb-asked-txt {
+  margin: 6px 0 0;
+  font-size: var(--asb-t-body);
+  line-height: 1.5;
+  color: var(--asb-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.asb .asb-help,
+.asb.asb-help {
+  margin: 6px 0 0;
+  font-size: var(--asb-t-label);
+  line-height: 1.45;
+  color: var(--asb-muted);
+}
+
+/* ------------------------------------------------------ status, next step */
+
+.asb.asb-run {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--asb-rule);
+  border-radius: 8px;
+  background: var(--asb-quiet);
+  color: var(--asb-text);
+  font-size: var(--asb-t-body);
+  line-height: 1.45;
+}
+.asb-run .asb-run-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--asb-run);
+}
+.asb-run--done .asb-run-dot { background: var(--asb-ok); }
+.asb-run .asb-run-text { min-width: 0; }
+.asb-run .asb-run-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--asb-t-label);
+  color: var(--asb-muted);
+}
+/* Above the progress panel and the review table, it leads rather than trails. */
+.asb-run--running,
+.asb-run--done { margin: 0 0 14px; }

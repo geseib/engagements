@@ -19,6 +19,7 @@ import {
   askPathStep, askPathSummaries, winnerOf, decisionChoices, settleMove, settleWords, decideBody, claudeKindLabel, defaultKind,
 } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
+import { earlyResultsArm } from './buildControls';
 import { W } from './words';
 import ActionRow from './BuildActionRow';
 import { HideFromRoom } from './BuildSendOptions';
@@ -206,6 +207,10 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
     return () => clearTimeout(t);
   }, [said]);
   const sending = useRef(false); // one send at a time, however fast the presses
+  // AN EARLY SHOW RESULTS ASKS FIRST (host review, 25 Oct 2026), as on the Stage dock and the console.
+  const [armed, setArmed] = useState('');
+  const armKey = `${ask.askId}:${ask.status}`;
+  useEffect(() => { setArmed(''); }, [armKey]);
   const step = askPathStep(ask, { pickId, answering });
   const sums = askPathSummaries(ask, { pickId, playerCount: room.playerCount });
   const at = ORDER.indexOf(step);
@@ -242,13 +247,26 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   let collectBody = null;
   if (stateOf('collect') === 'now') {
     const ideasOpen = ask.status === 'live' && ask.kind === 'suggest';
+    const voting = ask.status === 'voting';
+    const early = ideasOpen ? null : earlyResultsArm({
+      phase: voting ? 'VOTE' : 'ASK',
+      count: voting ? ask.voteCount || 0 : ask.answerCount || 0,
+      of: (Number(room.playerCount) || 0) + (ask.hostVoted ? 1 : 0),
+    }, W.showResults);
+    const isArmed = Boolean(early) && armed === armKey;
+    // First press of an early Show results says who is still answering; the second shows them.
+    const showResults = () => {
+      if (early && !isArmed) { setArmed(armKey); return undefined; }
+      setArmed('');
+      return act('close', W.resultsUp)();
+    };
     collectBody = (
       <>
         {board}
         {host && <MyVote ask={ask} busy={busy} run={run} api={api} />}
         {then(['3 Settle', '4 Send to Claude'])}
         {host && (
-          <ActionRow space={!said} hint={said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>
+          <ActionRow space={!said && !isArmed} hint={isArmed ? early.text : said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>
             {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={act('close', W.resultsUp)}>Close without a vote</button>}
             <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
@@ -257,7 +275,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             )}
             {ideasOpen
               ? <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
-              : <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('close', W.resultsUp)}>{W.showResults}</button>}
+              : <button type="button" className={`brm-btn${hot}`} data-next-primary data-armed={isArmed ? '' : undefined} disabled={busy} onClick={showResults}>{isArmed ? early.confirmLabel : W.showResults}</button>}
           </ActionRow>
         )}
       </>

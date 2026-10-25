@@ -20,7 +20,9 @@
  */
 
 const { makeGenerationHandler } = require('./shared/generation-handler');
-const { tagGuidance } = require('./shared/structured-generation');
+const {
+  tagGuidance, HOST_MATERIAL_NOTE, fenceHost, triviaAccuracyRules,
+} = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const { triviaToCsv } = require('./shared/generated-set');
 const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
@@ -120,11 +122,9 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
   if (guidance) p += `\n\n${guidance}\n`;
   const about = aboutSetBlock(config.aboutSet);
   if (about) p += `\n\n${about}\n`;
-  if (config.audience) p += `\nTarget audience: ${config.audience}.`;
   p += `\nDifficulty level: ${config.difficulty}.`;
   p += `\nEach question has exactly ${config.numChoices} answer choices.`;
   if (config.numCorrect > 1) p += `\nEach question has exactly ${config.numCorrect} correct answers.`;
-  if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
 
   // WHICH CATEGORY, AND WHICH NOT — the one rule every generator shares.
   const categories = categoryBlock({
@@ -134,6 +134,16 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     total: config.total,
   });
   if (categories) p += `\n\n${categories}`;
+
+  // THE HOST'S TEXT, FENCED, in one block under the line that says what the
+  // tags mean (structured-generation.js fenceHost) — the survey generator's
+  // pattern. The category names are in the category block above. With none
+  // of it, no block and no note.
+  const host = [
+    config.audience && `Target audience: ${fenceHost('audience', config.audience)}`,
+    config.customPrompt && `Additional Requirements: ${fenceHost('requirements', config.customPrompt)}`,
+  ].filter(Boolean);
+  if (host.length > 0) p += `\n\n${HOST_MATERIAL_NOTE}\n${host.join('\n')}`;
 
   if (alreadyUsedTitles.length > 0) {
     p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
@@ -151,7 +161,7 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     '- each option: 60 characters maximum.',
     'Write only what the content needs; do not pad to reach a limit.',
     '',
-    'The wrong answers must be plausible. An option nobody would pick is a wasted option.',
+    triviaAccuracyRules(config.numCorrect),
   ].join('\n');
   p += tagGuidance();
   p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
@@ -166,8 +176,11 @@ function normalizeItem(raw, config) {
   const valid = new Set(optionKeys.map((k) => `Option${k.slice(-1)}`));
 
   // The model occasionally answers with the option TEXT instead of its id. Map
-  // it back rather than dropping the question; an unmappable answer falls back
-  // to OptionA, which is what the old handler did unconditionally.
+  // it back rather than dropping the question. An answer that maps to no
+  // option DROPS the question: it used to be keyed to OptionA, which put a
+  // question in the set whose "right" answer was a guess. The worker's next
+  // pass replaces it (shared/generation-handler.js asks again until it has the
+  // count, and stops with a warning when a pass adds nothing).
   const toId = (value) => {
     const s = String(value || '').trim();
     if (valid.has(s)) return s;
@@ -179,10 +192,12 @@ function normalizeItem(raw, config) {
   if (config.numCorrect > 1) {
     const list = (Array.isArray(raw?.correctAnswer) ? raw.correctAnswer : [raw?.correctAnswer])
       .map(toId).filter(Boolean);
-    correctAnswer = list.length > 0 ? list : ['OptionA'];
+    if (list.length === 0) return null;
+    correctAnswer = [...new Set(list)];
   } else {
     const single = Array.isArray(raw?.correctAnswer) ? raw.correctAnswer[0] : raw?.correctAnswer;
-    correctAnswer = toId(single) || 'OptionA';
+    correctAnswer = toId(single);
+    if (!correctAnswer) return null;
   }
 
   const item = {

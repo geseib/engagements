@@ -421,7 +421,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'In Your question sets press **New question set**, pick the format, and choose how to make it. Each way says when it is the right one: have Workie write it, download a template and fill it in, paste a prompt into your own chatbot, or write a few questions in the manual builder. A filled-in template is uploaded at the foot of the same panel.',
+          text: 'In Your question sets press **New question set**, pick the format, and choose how to make it. Each way says when it is the right one: have Workie write it, download a template and fill it in, paste a prompt into your own chatbot, or write a few questions in the manual builder. Every format has a chatbot prompt: copy it, paste it with the template into Claude or ChatGPT, fill in the [BRACKETS], and **Go to upload** takes you back to the file chooser. A filled-in template is uploaded at the foot of the same panel.',
         },
         {
           t: 'p',

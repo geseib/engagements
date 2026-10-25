@@ -235,3 +235,43 @@ test('an ask the host answered for the room says "answered out loud", not "0 ans
   expect(within(s).queryByText(/0 answered/)).toBeNull();
   expect(within(s).getByText('The room rated this 4 out of 5 (said out loud).', { exact: false })).toBeInTheDocument();
 });
+
+describe('what never reached Claude says so (host review, 25 Oct 2026, F1 and F5)', () => {
+  const view = (rows) => S.hostView({ gameId: '4821', meta: { Title: 'Held room' }, sessionState: 'ENDED', room: S.roomFromRows(rows), players: [], now: T(59) });
+  const ask = (id, decision) => ({
+    SK: `BUILD#ASK#${id}`, AskId: id, Kind: 'choice', Prompt: `Ask ${id}?`, Status: 'decided', Source: 'host',
+    Options: [{ label: 'A', title: 'One' }, { label: 'B', title: 'Two' }], DecidedAt: T(20), Decision: { chosen: ['A'], note: '', ...decision },
+  });
+
+  test('a Claude that never called in is not listed in the header', () => {
+    render(<BuildReport state={view([{ SK: 'BUILD#STATE', Rev: 1 }])} />);
+    expect(screen.getByText(/0 people · 0 asks/)).toBeInTheDocument();
+    expect(screen.queryByText(/Claude Code ·/)).toBeNull();
+  });
+
+  test('a Claude that called in is', () => {
+    render(<BuildReport state={view([{ SK: 'BUILD#STATE', Rev: 1, AgentSeenAt: T(3) }])} />);
+    expect(screen.getByText(/0 people · Claude Code · 0 asks/)).toBeInTheDocument();
+  });
+
+  test('a decision saved for later, and one recorded only, are marked; a sent one is not', () => {
+    render(<BuildReport state={view([
+      { SK: 'BUILD#STATE', Rev: 1, AgentSeenAt: T(3) },
+      ask('001', { direction: 'Ask 001: One', heldForLater: true, as: 'later' }),
+      ask('002', { direction: 'Ask 002: One', sendToAgent: false }),
+      ask('003', { direction: 'Ask 003: One' }),
+    ])} />);
+    const s = section('Decisions');
+    expect(within(s).getAllByText(/Saved for later, not sent to Claude/)).toHaveLength(1);
+    expect(within(s).getAllByText(/Recorded only, not sent to Claude/)).toHaveLength(1);
+    expect(within(s).getByText(/Ask 003: One/).textContent).not.toMatch(/not sent/);
+  });
+
+  test('an idea saved for later says it was not sent', () => {
+    render(<BuildReport state={view([
+      { SK: 'BUILD#STATE', Rev: 1 },
+      { SK: 'BUILD#IDEA#1#i', IdeaId: '1-i', PlayerName: 'Jordan', Text: 'A parking map', Status: 'later', CreatedAt: T(41) },
+    ])} />);
+    expect(within(section('Unprompted ideas')).getByText('Saved for later, not sent')).toBeInTheDocument();
+  });
+});

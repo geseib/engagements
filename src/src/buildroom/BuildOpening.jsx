@@ -22,8 +22,11 @@ export function focusStep(opening, focus) {
   return stepOf(opening, focus) || stepOf(opening, opening.current) || null;
 }
 
+/** A step's own lead move: orange, unless Connect holds the screen's one orange (`calm`). */
+const lead = (calm) => (calm ? 'brm-btn' : 'brm-btn brm-btn--primary');
+
 /** Step 1: the list the room picks from, editable per session (up to six, for the wheel). */
-function KindStep({ step, kinds: initial, busy, run, api }) {
+function KindStep({ step, kinds: initial, busy, run, api, calm = false }) {
   const [q, setQ] = useState(step.question);
   const [kinds, setKinds] = useState(() => initial.map((k) => ({ ...k })));
   const [editing, setEditing] = useState(false);
@@ -86,7 +89,7 @@ function KindStep({ step, kinds: initial, busy, run, api }) {
             </>
           ) : (
             <>
-              <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !ready} onClick={ask}>Ask the room to pick</button>
+              <button type="button" className={lead(calm)} disabled={busy || !ready} onClick={ask}>Ask the room to pick</button>
               <button type="button" className="brm-btn" disabled={busy || !ready} onClick={spin}>{W.spin}</button>
               <button type="button" className="brm-btn brm-btn--ghost" disabled={busy || !ready} onClick={() => setPicking(true)}>Pick for the room</button>
               <button type="button" className="brm-btn brm-btn--link brm-push" onClick={() => setEditing(true)}>Edit the list</button>
@@ -99,7 +102,7 @@ function KindStep({ step, kinds: initial, busy, run, api }) {
 }
 
 /** Steps 2 to 9: ask the room, answer it yourself, or skip. Tools and style opens on Answer. */
-function AskStep({ step, busy, run, api }) {
+function AskStep({ step, busy, run, api, calm = false }) {
   const [q, setQ] = useState(step.question);
   const [answering, setAnswering] = useState(Boolean(step.host));
   const [text, setText] = useState('');
@@ -119,14 +122,14 @@ function AskStep({ step, busy, run, api }) {
           <span className="brm-lbl">Your answer</span>
           <textarea className="brm-input brm-ta brm-ta--sm" aria-label="Your answer" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} />
           <div className="brm-row brm-gap">
-            <button type="submit" className="brm-btn brm-btn--primary" disabled={busy || !text.trim()}>Save the answer</button>
+            <button type="submit" className={lead(calm)} disabled={busy || !text.trim()}>Save the answer</button>
             <button type="button" className="brm-btn" disabled={busy || !q.trim()} onClick={ask}>{step.host ? 'Ask the room instead' : 'Ask the room'}</button>
             {!step.host && <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setAnswering(false)}>Back</button>}
           </div>
         </form>
       ) : (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !q.trim()} onClick={ask}>Ask the room</button>
+          <button type="button" className={lead(calm)} disabled={busy || !q.trim()} onClick={ask}>Ask the room</button>
           <button type="button" className="brm-btn" onClick={() => setAnswering(true)}>Answer it yourself</button>
         </div>
       )}
@@ -200,7 +203,8 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
         <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
       </div>
       <p>{n} of {of} steps are framed. Claude gets the brief as it is now and starts planning and building.</p>
-      <p className="brm-hint">Nothing is lost: Back to the opening (in More) returns to these steps, and tells Claude to pause.</p>
+      {/* Where it really is (host review, 25 Oct 2026): there is no More. */}
+      <p className="brm-hint">Nothing is lost: Back to the opening, under SESSION, returns to these steps and tells Claude to pause.</p>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep framing</button>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={start}>Start building</button>
@@ -214,7 +218,11 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
  * and nothing is being asked. The step, the ways to answer it, Skip, and
  * Start building.
  */
-export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onShowWall }) {
+/*
+ * `calm` (host review, 25 Oct 2026): Claude Code has not called in, so Connect
+ * is the screen's one orange button and the step's own move steps back.
+ */
+export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onShowWall, calm = false }) {
   const opening = room.opening || { steps: [] };
   const step = focusStep(opening, focus);
   const n = step ? opening.steps.indexOf(step) + 1 : opening.steps.length;
@@ -241,8 +249,8 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
             </div>
           ) : (
             !ended && (step.key === 'kind'
-              ? <KindStep key={step.key} step={step} kinds={opening.kinds || []} busy={busy} run={run} api={api} />
-              : <AskStep key={step.key} step={step} busy={busy} run={run} api={api} />)
+              ? <KindStep key={step.key} step={step} kinds={opening.kinds || []} busy={busy} run={run} api={api} calm={calm} />
+              : <AskStep key={step.key} step={step} busy={busy} run={run} api={api} calm={calm} />)
           )}
           {!ended && step.status !== 'done' && (
             <div className="brm-row brm-gap">
@@ -316,9 +324,10 @@ export function WallBrief({ room }) {
   const b = room.brief || { lines: {}, keep: [] };
   const l = b.lines || {};
   const never = (b.keep || []).map((i) => i.text).join('; ');
+  // The host's line labels, word for word (host review, 25 Oct 2026: the Stage said "Today" and "Tools, style").
   const rows = [
-    ['Making', l.kind], ['For', b.forWhom], ['Today', l.problem], ['Good looks like', l.good], ['We will know', l.proof],
-    ['Never', never], ['First build', l.firstBuild], ['Tools, style', l.tools], ['Look and feel', l.look],
+    ['Making', l.kind], ['For', b.forWhom], ['The problem', l.problem], ['Good looks like', l.good], ['We will know', l.proof],
+    ['Never', never], ['First build', l.firstBuild], ['Tools and style', l.tools], ['Look and feel', l.look],
   ].filter(([, v]) => v);
   return (
     <section className="brm-stage brm-wallbrief" aria-label="The build brief">

@@ -9,6 +9,91 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 26 Oct 2026 (AI set builders and prompt downloads brought up to date)
+
+**Test:** merge of dev `ae06e6dc`. Everything below this entry is already on test, except the **Build Room: quick wins** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.
+
+### New
+
+- **Use your own chatbot, for every kind of set.** New question set now offers trivia, Call & Answer, poll, survey, Wavelength and art-title the same three numbered steps: download the template, copy the prompt, upload the CSV it writes. Each step ticks off when done. After copying, a line names the file and how many [BRACKETS] to fill, and **Go to upload** takes you to the file chooser. **Show what is copied** shows the whole prompt first. The poll and survey prompts are built from the survey contract, so they list the real columns and allowed values.
+- **The AI Scenario Builder shows what the AI is asked.** The card's own prompt sits read-only under "What the AI is asked"; **Your additions** starts empty and holds only what you type. The detail level says what it makes: Brief — 1 sentence, Standard — 2 sentences, Detailed — up to 3. While it writes, one line says what is being written and that closing is safe; when it is done it says what to do next and repeats any warning from the generator.
+- **The agent download for a Workie carries the house rules.** "Download for an agent" now lists what the read check flags (numbers, claims, commitments, owners, practices, filler), so an agent revising a prompt writes next steps as suggestions from the start.
+
+### Fixed
+
+- **A trivia question could ship with the wrong answer.** If the AI's answer matched none of the options, the question was saved with Option A marked correct. Now that question is left out, and the job says how many were left out and why. Trivia prompts also carry accuracy rules: one definite answer, nothing that changes over time unless the year is given, no "all/none of the above", answers spread across positions.
+- **A new trivia question drafted with AI** matches the number of options the set's other questions have, and the note says how many it will write.
+- **Adding a Wavelength subject with AI wrote a framing sentence** that gives the room the words the round compares. It no longer does, as the set builder already didn't.
+- **The scenario builder sent its prompt twice**, and what a host typed could be read as instructions. Host text (context, audience, additions, the set's other questions) now goes to the AI marked as material, not rules, in every generator.
+- **The default Next Steps** (used by any Workie without its own sections) asked for "concrete actions". It now asks for suggestions, with no number, duration or owner unless an answer gave one. The Session Advisor persona asks for a suggestion tied to an answer instead of "a recommendation with a named owner", and the Amazon Leadership default no longer asks for "the strongest answer".
+- **Variables offered to prompt authors.** A survey is offered only the 16 variables its read fills (it was about 45, most always empty). A poll is pointed at its counted result, {triviaResponses}. Only Call & Answer is offered vote variables.
+- **The question-set templates** no longer teach the wrong habits: trivia's correct answer varies (A, C, B) with plausible wrong answers, Call & Answer instructions use the team lens, and the Wavelength template has no framing sentence. The AI scenario CSV export keeps each row's round kind.
+- **The "write me a prompt" helper** could return a cut-off rewrite as a success; it now says when the reply was cut off. Its wording no longer pushes for padding.
+
+### What to look at
+
+1. On engage.test, Admin › Question sets › New question set › Poll. Under **Use your own chatbot**, press Download template, then Copy prompt. Both steps tick, a line says how many [BRACKETS] to fill, and **Go to upload** moves to the file chooser. Do the same for Survey and Wavelength.
+2. Download the trivia template and open it: the correct answers are not all Option A.
+3. Open the AI Scenario Builder on a Call & Answer card. The card's prompt is read-only under "What the AI is asked", **Your additions** is empty, and the detail menu reads Brief / Standard / Detailed with sentence counts. Generate 3; the status line says what is being written and that you can close.
+4. In a trivia set, Add a question › Draft this with AI. The note says how many options it writes (the set's usual number), and the draft has that many.
+5. In a Wavelength set, Add a question › Draft this with AI. The draft has a subject and no detail sentence.
+6. Admin › Prompts › open any Workie › Download for an agent. The file has a "House rules (the read check)" section.
+7. Run a survey to its read: the read draws on the survey's results only. Run a Call & Answer round on a set with no Workie of its own: next steps start "**Suggested**".
+
+### Known gaps
+
+- Prod still has none of the 22 question-generation prompts, so its scenario builder runs on a generic brief. `scripts/apply-generation-prompts.js` creates them; it runs on prod after the next prod deploy.
+- Polls are still offered the tally and score variables, which come from vote points polls no longer earn.
+- The Session Advisor's new wording reaches a tier only when its persona rows are reseeded.
+
+---
+
+## 25 Oct 2026 (Build Room: quick wins from the host review)
+
+**Test:** merge of dev `f29087d9`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Queued for Claude.** Until Claude Code has actually connected, anything sent says **Queued for Claude** instead of "Sent to Claude": the host's header, the Session panel, the Stage, the room's window and the phones. It turns into Sent to Claude once Claude calls in.
+- **Connect first.** How a Build Room works stays on the Host screen until Claude Code has really connected (making a key is not enough), and on the first view its **Connect Claude Code** is the one orange button, with "Where will the room watch?" below it in plain buttons. What's next keeps **Connect Claude Code** at the top for the same reason.
+- **A notice for directions waiting on a Claude that never came.** "Claude Code has not connected yet. Your direction waits for it", with Connect beside it.
+- **The report marks what never reached Claude:** "Saved for later, not sent to Claude" and "Recorded only, not sent to Claude" under a decision, and on held entries in the timeline. It names Claude Code in its header only if Claude connected.
+
+### Fixed
+
+- **"Claude is building" when no Claude was there.** Start building with no Claude connected now logs "The room framed the build. Claude starts when it connects."
+- **How a Build Room works step 2** said to paste a Kick off prompt. The start command already connects and kicks off; the step now says so.
+- **Saved for later reached the room.** Phones and the room's window no longer show a saved item as "Sent to Claude, for later", and the Stage no longer says "We decided" for a decision saved for later. History on the room's screens shows that ask as "closed, nothing sent to Claude" until it is sent. The host's own mark now reads **Saved for later, not sent**, and the Later list says truthfully that the room sees none of it (the person who sent a saved idea is told only that it was saved).
+- **Show results early on the Host screen now asks first,** as the Stage and the console already did ("7 of 12 still answering. Press again to show results."). Help said it did; now it does.
+- **The projected wheel named the spinner with List names off.** On one screen the Stage now says "Someone in the room spins the wheel" unless List names is on.
+- **One word per thing:** the Stage dock says **ROOM'S WINDOW** (not PRESENT); the console's way out says **Main menu**, as the one-screen header does; picking an option is **Choose this** everywhere in an ask (the confirm reads "Choose the room's pick?" and "Choose B"); images are **Screenshots** on History and the phones; the Stage's brief lines read **The problem** and **Tools and style**, as on the Host screen; the Start building confirm says Back to the opening is **under SESSION**.
+- **The Session panel's review switch read the wrong way round.** "Auto-open Claude's questions" is now **Review Claude's questions**, on meaning they wait for you, as on the create page and in Connect. The saved setting is unchanged.
+- **Directions read as sentences.** No more ".:" where a question ends in a full stop ("…the moment they need it: A first-time volunteer"). A rating goes as "How clear is it? The room rated it 3 out of 5 (5 is great, 1 needs work).", and its button says **Send to Claude**, not "Send 3 to Claude".
+- **Phone copy.** "Look at the big screen" shows only under an option whose mockup is on the big screen. An Ideas vote is headed by its own question, with "0 of 3 picked" under it, not "What would you build first?". No "0 people voted" under the wheel. During the opening phones say "The room is shaping the build", not "Claude Code is not connected". While an Ideas question is open, the separate "Send an idea to the host" box steps aside (the Ideas tab still takes other ideas).
+- **New Build Room:** **Before you start** opens in a new tab, so the form is kept, and the placeholders read as examples ("e.g. Volunteer sign-up for the food bank").
+
+### What to look at
+
+1. On engage.test, create a Build Room and do not connect Claude Code. How a Build Room works sits at the top, step 2 says the start command connects and kicks off, and **Connect Claude Code** is the only orange button; the screen chooser's buttons below it are plain.
+2. Open Connect and mint a key, but do not paste it. Close the window: How a Build Room works and What's next's **Connect Claude Code** are still there.
+3. Ask the room a Choose question from a phone, show results, and send the pick. The header chip, the Session panel's Claude line, the Stage and the phone all say **Queued for Claude**. A notice at the top of Waiting for you says the direction waits for Claude to connect.
+4. Press Start building from the opening. Phones and the timeline say "Claude starts when it connects", not "Claude is building".
+5. With two phones joined and one answered, press **Show results** on the Host screen. It asks first ("1 of 2 still answering. Press again"); press again and results show.
+6. Make a tie, choose Spin the wheel, press 2 for the Stage with List names off: it says "Someone in the room spins the wheel".
+7. Save a decision for later (Change before sending › Save for later). The phone and the room's window do not show it as sent, the Stage says no "We decided" for it, and the Later tab says the room sees none of it. Open the report: the decision says "Saved for later, not sent to Claude".
+8. Ask a Rate question. The sentence under the board reads "… The room rated it N out of 5 (5 is great, 1 needs work)." and the button says **Send to Claude**.
+9. On the Stage, the dock's button for the room's window says **ROOM'S WINDOW**. On two screens the top line's way out says **Main menu**. Session › Settings › Claude has **Review Claude's questions**, switched on.
+10. On a phone during an Ideas question, there is one box for your suggestion and no "Send an idea to the host" box under it. On a Choose question with no mockups there is no "Look at the big screen".
+11. On New Build Room, **Before you start** opens a new tab and the title box reads "e.g. …".
+
+### Known gaps
+
+- The rest of the host review is not done yet (review items 10 to 20 and 22): the setup checklist that gates the opening and "Practise without Claude" (10), Simple mode on the Host screen and the console (11), a three-step default opening (12), one loop model everywhere (13), the Ask the room dialog (Yes/No tab, spacing, recommended questions, advanced fields under More) (14), a prefilled wrap-up and end-of-session moves on the console (15), the report's brief section, its internal prompt text and wheel markers (16), a command palette (17), reveal by event (18), presets (19), dropping the host header from projected one-screen Build and History (20), and a practice room with a fake Claude (22).
+- A decision saved for later and later sent from the Later list shows to the room as what Claude was told ("We told Claude"), not as "We decided".
+- Sessions that already logged "The room framed the build. Claude is building." keep that line.
+
+---
+
 ## 25 Oct 2026 (Workie keeps questions in their category; the owner filter says "Your team")
 
 **Test:** merge of dev `9f16efd8`. Everything below this entry is already on test, except the **hints** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.

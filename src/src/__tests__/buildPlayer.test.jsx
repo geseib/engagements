@@ -249,6 +249,25 @@ describe('Ideas (suggest)', () => {
   });
 });
 
+describe('the phone\'s copy (host review, 25 Oct 2026, F11)', () => {
+  test('"Look at the big screen" only under an option whose mockup is on it', async () => {
+    serve(baseView({ currentAskId: '003', current: ask({ options: [{ label: 'A', title: 'Calm', imageId: 'img1' }, { label: 'B', title: 'Bold' }], maxPicks: 1 }) }));
+    await mount();
+    await screen.findByText('Bold');
+    expect(screen.getAllByText('Look at the big screen')).toHaveLength(1);
+  });
+
+  test('an open Ideas ask keeps its answer box; the separate idea box steps aside', async () => {
+    serve(baseView({ currentAskId: '004', current: ask({ askId: '004', kind: 'suggest', prompt: 'What stops a sign-up?' }) }));
+    await mount();
+    await screen.findByLabelText('Your suggestion');
+    expect(screen.queryByRole('button', { name: /Send an idea to the host/ })).toBeNull();
+    // The Ideas tab still takes anything else.
+    expect(document.querySelectorAll('.bpl-tab')).not.toHaveLength(0);
+    expect([...document.querySelectorAll('.bpl-tab')].some((b) => /Ideas/.test(b.textContent))).toBe(true);
+  });
+});
+
 describe('Choose (choice)', () => {
   const live = (over = {}) => baseView({
     currentAskId: '003',
@@ -264,7 +283,8 @@ describe('Choose (choice)', () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute('href', 'https://example.com/b');
     expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
-    expect(screen.getAllByText('Look at the big screen')).toHaveLength(2);
+    // Nothing on the big screen for these options, so the phone says nothing about it (host review, 25 Oct 2026).
+    expect(screen.queryByText('Look at the big screen')).toBeNull();
     expect(container.innerHTML).not.toMatch(/javascript:/);
 
     expect(screen.getByRole('button', { name: 'Pick an option' })).toBeDisabled();
@@ -437,6 +457,13 @@ describe('watching the build', () => {
     serve(baseView({ agentConnected: false }));
     await mount();
     expect(await screen.findByText('Claude Code is not connected')).toBeInTheDocument();
+  });
+
+  test('while the room frames the build the phone says so, not "not connected" (host review, 25 Oct 2026)', async () => {
+    serve(baseView({ agentConnected: false, framing: true }));
+    await mount();
+    expect(await screen.findByText('The room is shaping the build')).toBeInTheDocument();
+    expect(screen.queryByText('Claude Code is not connected')).toBeNull();
   });
 
   test('ENDED shows "What we built" with http(s) links only, and no idea composer', async () => {
@@ -671,7 +698,9 @@ describe('guidance', () => {
     });
     await screen.findByText('Parking');
     expect(container.querySelector('.bpl-intro')).toBeNull();
-    expect(screen.getByText(/What would you build first\?/)).toBeInTheDocument();
+    // The ask's own question heads the vote; the line under it counts the picks (host review, 25 Oct 2026).
+    expect(screen.queryByText(/What would you build first\?/)).toBeNull();
+    expect(screen.getByText('0 of 3 picked')).toBeInTheDocument();
   });
 
   test('no emoji anywhere on any screen', async () => {
@@ -759,6 +788,17 @@ describe('the wheel on a phone (owner, 2026-10-05)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Spin the wheel' }));
     await waitFor(() => expect(posts('spin')).toHaveLength(1));
     expect(posts('spin')[0].body).toEqual({ playerName: ME, clientId: CID, askId: '003' });
+  });
+
+  test('the wheel instead of a vote: no "0 people voted" under it (host review, 25 Oct 2026)', async () => {
+    serve(baseView({
+      currentAskId: '004',
+      current: ask({ askId: '004', kind: 'suggest', status: 'results', results: { total: 0, ranked: [{ respId: 'r1', text: 'Parking', votes: 0 }, { respId: 'r2', text: 'Accounts', votes: 0 }] }, wheel: wheel({ spinner: 'Dee', mine: false }) }),
+    }));
+    await mount();
+    expect(screen.getByRole('img', { name: /A wheel of 2/ })).toBeInTheDocument();
+    expect(screen.queryByText(/people voted/)).toBeNull();
+    expect(screen.queryByText(/0 votes/)).toBeNull();
   });
 
   test('every other phone sees the wheel and who spins, with no button', async () => {

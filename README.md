@@ -103,6 +103,18 @@ It runs the real list and update handlers locally with the tier's Lambda environ
 prompts edited on the tier since they came from the repo (`--include-edited` to replace
 them), and checks each saved prompt now matches. Prod also needs `--confirm-prod`.
 
+The question-GENERATION prompts the AI scenario builder reads (`gen-<type>-<scenario>`,
+defined in `lambda-functions/admin/populate-generation-prompts.js`) are separate rows with
+no versions. `scripts/apply-generation-prompts.js --tier <tier>` compares them with the
+repo and, with `--apply`, creates the missing ones; `--update` also rewrites changed rows
+after saving a local backup. A tier without them runs the builder on a generic brief.
+
+The question-set templates and each set type's "Use your own chatbot" prompt live in
+`lambda-functions/admin/download-template.js` and `src/src/config/aiAuthoringPrompt.js`.
+The poll and survey prompts are built from `src/src/config/surveyContract.json`, which
+`scripts/build-survey-contract.js` writes from `shared/survey-kinds.js`
+(`tests/survey-contract-fresh.js` fails when it is stale).
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.
@@ -148,7 +160,11 @@ queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` m
 reached Claude and links each mark to its History entry. What went to Claude last
 (`sentView` in `build-store.js`) leads the Stage, the room's window and phones until the
 next ask opens (`screens/SentStage.jsx`); a send with `hideFromRoom: true` reaches Claude
-word for word, but every room read carries it with no words. The host's live typing
+word for word, but every room read carries it with no words. Until Claude Code has called
+in (`AgentSeenAt`), `sentView` carries `queued: true` and every screen says **Queued for
+Claude**; a key minted is not a connection (`claudeEverConnected` in `buildScreens.js`).
+What the host saved for later stays off the room's screens until it is sent (`heldBack` in
+`build-store.js`; `roomStory({ forRoom: true })`). The host's live typing
 reaches the room's window only over a same-browser `BroadcastChannel`
 (`buildroom/typingMirror.js`), never through the server or the socket.
 
