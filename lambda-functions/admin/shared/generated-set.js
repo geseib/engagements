@@ -403,9 +403,22 @@ function byCategory(items, fallbackCategory) {
   return groups;
 }
 
-/** call-and-answer / wavelength. Mirrors AdminPage.generateScenariosCSV. */
-function scenariosToCsv(items) {
-  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
+/**
+ * call-and-answer / wavelength. Mirrors AIScenarioBuilder.generateCSVContent.
+ *
+ * `roundKind` (the set's direction) is written as a RoundKind column on every
+ * row when given, or when an item carries its own. The importer reads that
+ * column per row (upload-questions.js), so a CSV that leaves the set — the
+ * builder's Export CSV, a download — comes back with its direction instead of
+ * reverting to Produce. With no kind anywhere the header is byte-identical to
+ * what it always was.
+ */
+function scenariosToCsv(items, { roundKind = '' } = {}) {
+  const setKind = normalizeRoundKind(roundKind) || '';
+  const kindOf = (scenario) => normalizeRoundKind(scenario.roundKind || scenario.RoundKind) || setKind;
+  const writesKind = items.some((scenario) => kindOf(scenario));
+  const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background'
+    + (writesKind ? ',RoundKind' : '');
   const groups = byCategory(items, 'AI Generated');
   const rows = [];
   for (const category of Object.keys(groups)) {
@@ -419,6 +432,7 @@ function scenariosToCsv(items) {
         scenario.customInstructions || '',
         tagsToCsvCell(scenario.tags),
         scenario.background || '',
+        ...(writesKind ? [kindOf(scenario)] : []),
       ]));
     });
   }
@@ -508,7 +522,9 @@ const CSV_BY_TYPE = {
   trivia: (items) => triviaToCsv(items),
   poll: (items) => pollsToCsv(items),
   survey: (items) => itemsToSurveyCsv(items, { category: SURVEY_CATEGORY }),
-  'call-and-answer': (items) => scenariosToCsv(items),
+  // Only call-and-answer writes the direction per row: wavelength takes no
+  // round kind (shared/round-kinds.js), whatever the request carried.
+  'call-and-answer': (items, { roundKind } = {}) => scenariosToCsv(items, { roundKind }),
   wavelength: (items) => scenariosToCsv(items),
 };
 
@@ -535,7 +551,7 @@ async function importDraftAsSet({
     : (metadata.tags.length ? metadata.tags : normalizeSetTags(draft.suggestedTags));
   const body = {
     fileName: `${setTitle.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.csv`,
-    fileContent: toCsv(items),
+    fileContent: toCsv(items, { roundKind }),
     customTitle: setTitle,
     customDescription: metadata.description,
     customInstructions: metadata.customInstructions,

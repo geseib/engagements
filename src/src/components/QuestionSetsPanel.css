@@ -620,6 +620,86 @@ button.qsets-chip:hover { background: var(--qsets-row-hover); }
   .qsets-route .qsets-btn { grid-column: 1; grid-row: auto; justify-self: start; }
 }
 
+/* USE YOUR OWN CHATBOT — its three steps, the copy confirmation and the
+   preview (docs/design/authoring-guidance/ a1, a2). Everything spans the
+   route's full width under the name/button pair. No accent reads: the step
+   numbers are outlined in the strong rule, a done step and the "Copied" line
+   take the success tint the sheet already measures (--qsets-tint-ok under
+   --qsets-success-text, as the Active chip). */
+.qsets-chat-steps {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.qsets-chat-steps > li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--qsets-row-hover);
+  font-size: var(--qsets-t-label);
+  line-height: 1.45;
+  color: var(--text);
+}
+.qsets-chat-n {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--qsets-rule-strong);
+  font-size: var(--qsets-t-floor);
+  font-weight: 700;
+  color: var(--text);
+}
+.qsets-chat-steps > li.is-done .qsets-chat-n {
+  border-color: var(--qsets-success-text);
+  background: var(--qsets-tint-ok);
+  color: var(--qsets-success-text);
+}
+.qsets-chat-copied {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0 0;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: var(--qsets-tint-ok);
+  font-size: var(--qsets-t-label);
+  line-height: 1.45;
+  color: var(--text);
+}
+.qsets-chat-copied > span { flex: 1 1 240px; min-width: 0; }
+.qsets-chat-copied b { color: var(--qsets-success-text); }
+.qsets-chat-preview { grid-column: 1 / -1; margin: 6px 0 0; min-width: 0; }
+.qsets-chat-preview > summary {
+  cursor: pointer;
+  font-size: var(--qsets-t-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+.qsets-chat-preview > pre {
+  margin: 8px 0 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--qsets-rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--qsets-t-label)/1.5 var(--qsets-font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .qsets-field { display: flex; flex-direction: column; gap: 5px; margin: 0 0 12px; }
 .qsets-field > label { font-size: var(--qsets-t-label); font-weight: 600; color: var(--muted); }
 .qsets-field .qsets-input { padding-left: 9px; }

@@ -1,4 +1,3 @@
-// skin-allowance: colour=1
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
@@ -33,6 +32,7 @@ import {
 } from '../utils/generationJob';
 import useDraftRun from '../hooks/useDraftRun';
 import DestinationField from './DestinationField';
+import './AIScenarioBuilder.css';
 
 const API_BASE = window.API_BASE;
 
@@ -47,12 +47,63 @@ const ITEM_NOUN = {
   wavelength: 'prompts',
 };
 const itemNoun = (type) => ITEM_NOUN[type] || 'scenarios';
+const singularNoun = (type) => ({ trivia: 'question', poll: 'poll', wavelength: 'prompt' })[type] || 'scenario';
+
+/** The status-and-next-step line (authoring-guidance b1–b3). Polite live region: it changes as the run moves. */
+function RunLine({ tone, testid, children }) {
+  return (
+    <div className={`asb asb-run asb-run--${tone}`} role="status" aria-live="polite" data-testid={testid}>
+      <span className="asb-run-dot" aria-hidden="true" />
+      <span className="asb-run-text">{children}</span>
+    </div>
+  );
+}
 const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 
 // Shared framing for wavelength generation. Wavelength is a word-association
 // alignment game: the host shows a SUBJECT, every participant lists up to 10
 // words for it, and the game measures how many words overlap across players.
 const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
+
+/*
+  THE DETAIL LEVELS, LABELLED BY WHAT THEY PRODUCE (docs/design/authoring-
+  guidance/ b1). "Comprehensive" promised more than the hard length cap lets
+  any scenario be. The VALUES are unchanged — the server maps them to 1, 2 and
+  up to 3 sentences and other readers (utils/appendMode.js briefFromSet, the
+  set description) parse them — only what a host reads is new.
+*/
+export const DETAIL_LEVELS = [
+  { value: 'brief', label: 'Brief — 1 sentence', short: 'Brief detail' },
+  { value: 'detailed', label: 'Standard — 2 sentences', short: 'Standard detail' },
+  { value: 'comprehensive', label: 'Detailed — up to 3 sentences', short: 'Detailed (up to 3 sentences)' },
+];
+const detailShort = (value) => (DETAIL_LEVELS.find((l) => l.value === value) || {}).short || value;
+
+/** The card's base text exactly as stored or built in — what "What the AI is asked" shows and `prompt` carries. */
+export function cardPrompt(card) {
+  if (!card) return '';
+  if (card.source === 'database' && card.dbPrompt) return String(card.dbPrompt.basePrompt || '').trim();
+  return String(card.prompt || '').trim();
+}
+
+/*
+  A STORED CARD WITH NO CONTEXT OR AUDIENCE TEMPLATE. The server appends the
+  context and the audience only through the card's own templates
+  (`template.contextTemplate`), and an admin can clear those in Prompts. The
+  old client code covered that case by writing "Context: …" into the prompt
+  itself; with the prompt now sent as it is, the line goes after the host's
+  additions instead, so a typed context is never silently dropped. Seeded and
+  newly made prompts carry both templates, so this is normally a no-op.
+*/
+export function withMissingTemplateLines(customPrompt, card, { context = '', audience = '' } = {}) {
+  const own = String(customPrompt ?? '').trim();
+  const stored = card && card.source === 'database' && card.dbPrompt ? card.dbPrompt : null;
+  if (!stored) return own;
+  const lines = [];
+  if (String(context).trim() && !stored.contextTemplate) lines.push(`Context: ${String(context).trim()}`);
+  if (String(audience).trim() && !stored.audienceTemplate) lines.push(`Audience: ${String(audience).trim()}`);
+  return [own, ...lines].filter(Boolean).join('\n\n');
+}
 
 function AIScenarioBuilder({
   onClose, onScenariosGenerated, engagementType = 'call-and-answer', appendTo = null,
@@ -432,7 +483,13 @@ function AIScenarioBuilder({
         numberOfCategories: prompt.defaultSettings?.numberOfCategories || 3,
         mustHaveCategories: prompt.defaultSettings?.mustHaveCategories || '',
         difficulty: prompt.defaultSettings?.difficulty || (engagementType === 'trivia' ? 'medium' : 'detailed'),
-        customPrompt: prompt.basePrompt || '' // Pre-fill with the base prompt so admin can see and edit
+        // EMPTY, NOT THE BASE PROMPT. This box used to be pre-filled with
+        // prompt.basePrompt "so admin can see and edit", and was then sent as
+        // customPrompt — while the server reads the same basePrompt from the
+        // stored row. The model got the topic twice, the second time labelled
+        // "Additional Requirements". The base prompt is now shown read-only
+        // ("What the AI is asked"); this holds only the host's own words.
+        customPrompt: ''
       };
     }
     
@@ -678,75 +735,26 @@ function AIScenarioBuilder({
 
     try {
       const selectedType = scenarioTypes.find(t => t.id === scenarioConfig.type);
-      let basePrompt;
-      
-      if (selectedType && selectedType.source === 'database' && selectedType.dbPrompt) {
-        // Use database prompt with templates
-        const selectedPrompt = selectedType.dbPrompt;
-        basePrompt = selectedPrompt.basePrompt;
-        
-        // Apply templates if provided (custom prompts may have empty templates)
-        if (scenarioConfig.context && selectedPrompt.contextTemplate) {
-          basePrompt += selectedPrompt.contextTemplate.replace('{context}', scenarioConfig.context);
-        } else if (scenarioConfig.context && !selectedPrompt.contextTemplate) {
-          // For minimal custom prompts, add context directly
-          basePrompt += `\n\nContext: ${scenarioConfig.context}`;
-        }
-        
-        if (scenarioConfig.audience && selectedPrompt.audienceTemplate) {
-          basePrompt += selectedPrompt.audienceTemplate.replace('{audience}', scenarioConfig.audience);
-        } else if (scenarioConfig.audience && !selectedPrompt.audienceTemplate) {
-          // For minimal custom prompts, add audience directly
-          basePrompt += `\nAudience: ${scenarioConfig.audience}`;
-        }
-        
-        if (selectedPrompt.categoryTemplate) {
-          let categoryText = selectedPrompt.categoryTemplate;
-          categoryText = categoryText.replace('{numberOfCategories}', scenarioConfig.numberOfCategories);
-          if (scenarioConfig.mustHaveCategories) {
-            categoryText = categoryText.replace('{mustHaveCategories}', scenarioConfig.mustHaveCategories);
-          }
-          basePrompt += categoryText;
-        } else {
-          // For minimal custom prompts, add category info directly if needed
-          if (scenarioConfig.numberOfCategories > 1) {
-            basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
-          }
-          if (scenarioConfig.mustHaveCategories) {
-            basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
-          }
-        }
-        
-        // Add difficulty/detail level
-        const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
-        basePrompt += `\n\n${levelLabel}: ${scenarioConfig.difficulty}`;
-        
-      } else {
-        // Fallback to hardcoded prompt structure. `selectedType?.` and a
-        // last-resort instruction, so a type id that matches no card degrades
-        // to a custom-style run instead of killing the job on `.prompt` of
-        // undefined — the "Lost contact with the job" failure.
-        basePrompt = (selectedType && selectedType.prompt)
-          || 'Create scenarios based on the custom requirements provided';
-        if (scenarioConfig.context) {
-          basePrompt += `\n\nContext: ${scenarioConfig.context}`;
-        }
-        if (scenarioConfig.audience) {
-          basePrompt += `\nAudience: ${scenarioConfig.audience}`;
-        }
-        
-        const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
-        basePrompt += `\n\n${levelLabel}: ${scenarioConfig.difficulty}`;
-        basePrompt += `\nNumber of categories needed: ${scenarioConfig.numberOfCategories}`;
-        
-        if (scenarioConfig.mustHaveCategories) {
-          basePrompt += `\nMust include these categories: ${scenarioConfig.mustHaveCategories}`;
-        }
-      }
+      /*
+        THE CARD'S OWN TEXT, AS IT IS — and nothing composed onto it.
 
-      if (scenarioConfig.customPrompt) {
-        basePrompt += `\n\nAdditional Requirements: ${scenarioConfig.customPrompt}`;
-      }
+        This used to build the whole prompt here: the base prompt, then the
+        context, audience, categories and level folded in through the card's
+        templates (with `.replace('{context}', x)`, which also mangles `$&` in
+        what a host types), then "Additional Requirements: <customPrompt>". The
+        server does all of that itself from the fields sent alongside
+        (ai-generate-scenarios.js buildPrompt), so for a built-in card the
+        model read the context, the audience and the level twice, and for a
+        stored card the server ignored this text anyway and used the row's.
+
+        Now `prompt` is the card's base text (what the read-only "What the AI
+        is asked" panel shows), `customPrompt` is only what the host typed,
+        and every other choice travels in its own field. That works whether or
+        not the server also drops an exact duplicate of the base prompt.
+      */
+      const basePrompt = cardPrompt(selectedType)
+        || 'Create scenarios based on the custom requirements provided';
+      const additions = withMissingTemplateLines(scenarioConfig.customPrompt, selectedType, scenarioConfig);
 
       // Generation runs as an ASYNCHRONOUS JOB, not inside this request.
       //
@@ -795,7 +803,7 @@ function AIScenarioBuilder({
         difficulty: scenarioConfig.difficulty,
         context: scenarioConfig.context,
         audience: scenarioConfig.audience,
-        customPrompt: withAppendRequirement(scenarioConfig.customPrompt, appendTo),
+        customPrompt: withAppendRequirement(additions, appendTo),
         customTitle: scenarioConfig.customTitle,
         numberOfCategories: scenarioConfig.numberOfCategories,
         mustHaveCategories: scenarioConfig.mustHaveCategories,
@@ -871,7 +879,14 @@ function AIScenarioBuilder({
   };
 
   const generateCSVContent = () => {
-    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background';
+    // THE DIRECTION GOES WITH THE FILE. The importer reads a RoundKind column
+    // per row (upload-questions.js); without it a set exported here and
+    // uploaded back reverted to Produce, whatever step 1 chose. Only where a
+    // direction applies (not wavelength), and the same column the server's
+    // writer adds (shared/generated-set.js scenariosToCsv).
+    const roundKind = roundKindApplies(engagementType) ? String(scenarioConfig.roundKind || '').trim() : '';
+    const headers = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags,Background'
+      + (roundKind ? ',RoundKind' : '');
 
     // First, group scenarios by category. Excluded rows are excluded
     // everywhere — exporting one the operator just dropped would make the CSV
@@ -898,7 +913,8 @@ function AIScenarioBuilder({
           scenario.school || 'Professional Development',
           scenario.customInstructions || '',
           tagsToCsvCell(scenario.tags),
-          scenario.background || ''
+          scenario.background || '',
+          ...(roundKind ? [roundKind] : [])
         ]));
       });
     });
@@ -1052,6 +1068,7 @@ function AIScenarioBuilder({
     }
   };
 
+  const selectedCard = scenarioTypes.find(t => t.id === scenarioConfig.type) || null;
   const currentScenario = generatedScenarios[currentScenarioIndex];
   const keptScenarios = generatedScenarios.filter((_, index) => !excluded.has(index));
 
@@ -1384,6 +1401,33 @@ function AIScenarioBuilder({
                 ].filter(Boolean)}
               />
 
+              {/*
+                WHAT THE AI IS ASKED (docs/design/authoring-guidance/ b1). The
+                card's base prompt, read-only, with where it comes from. It used
+                to be pre-filled into the editable requirements box and so reached
+                the model twice; edited there, it also silently diverged from the
+                stored prompt it claimed to show. Changing it is a Prompts job.
+              */}
+              {selectedCard && (
+                <section className="asb asb-asked" aria-labelledby="asb-asked-h" data-testid="asb-asked">
+                  <div className="asb-asked-top">
+                    <h4 id="asb-asked-h" className="asb-asked-h">What the AI is asked</h4>
+                    <span className={`asb-chip${selectedCard.source === 'database' ? ' asb-chip--tuned' : ''}`}>
+                      {selectedCard.source === 'database' ? 'Tuned in your library' : 'Built in'}
+                    </span>
+                    <span className="asb-asked-card" title={selectedCard.title}>{selectedCard.title}</span>
+                    {!isAppend(appendTo) && (
+                      <button type="button" className="asb-link" onClick={() => setStep(1)}>Change card</button>
+                    )}
+                  </div>
+                  <p className="asb-asked-txt">{cardPrompt(selectedCard) || 'Create scenarios based on the custom requirements provided'}</p>
+                  <p className="asb-help">
+                    Your context, audience, categories and detail level below are added to this when the AI is asked.
+                    {selectedCard.source === 'database' ? ' To change this text itself, edit the template in Prompts.' : ''}
+                  </p>
+                </section>
+              )}
+
               <div className="config-form">
                 {/* ADDING ONLY, and first: this batch's instruction. */}
                 {isAppend(appendTo) && <BatchGuidanceField value={batchGuidance} onChange={setBatchGuidance} />}
@@ -1487,30 +1531,35 @@ function AIScenarioBuilder({
                           <option value="hard">Hard</option>
                         </>
                       ) : (
-                        <>
-                          <option value="brief">Brief</option>
-                          <option value="detailed">Detailed</option>
-                          <option value="comprehensive">Comprehensive</option>
-                        </>
+                        DETAIL_LEVELS.map((level) => (
+                          <option key={level.value} value={level.value}>{level.label}</option>
+                        ))
                       )}
                     </select>
+                    {engagementType !== 'trivia' && (
+                      <p className="asb asb-help" data-testid="asb-detail-help">
+                        All three stay within the same length limit, so a scenario always fits the room&rsquo;s screen.
+                      </p>
+                    )}
                   </div>
                 </div>
 
+                {/* YOUR ADDITIONS, AND ONLY YOURS. Starts empty; sent as
+                    customPrompt, apart from the card's text above. */}
                 <div className="form-group">
                   <div className="label-row">
-                    <label>Base Prompt &amp; Additional Requirements</label>
+                    <label htmlFor="asb-additions">
+                      Your additions <span className="field-hint">optional, sent separately from the prompt above</span>
+                    </label>
                     {lockFor('customPrompt')}
                   </div>
                   <textarea
+                    id="asb-additions"
                     value={scenarioConfig.customPrompt}
                     onChange={(e) => setScenarioConfig(prev => ({ ...prev, customPrompt: e.target.value }))}
-                    placeholder="Edit the base generation prompt or add specific requirements, themes, or constraints..."
-                    rows="4"
+                    placeholder={'Anything this set must do that the prompt above does not say, e.g. "Set every scenario in a hospital ward."'}
+                    rows="3"
                   />
-                  <small style={{color: '#666', fontSize: '12px'}}>
-                    This shows the base prompt from your selected template. You can edit it or add additional requirements.
-                  </small>
                 </div>
 
                 <FileUploadPrompt
@@ -1524,11 +1573,56 @@ function AIScenarioBuilder({
                   label="Or upload a document with context/examples"
                 />
               </div>
+
+              <RunLine tone="ready" testid="asb-ready">
+                <b>
+                  {isAppend(appendTo) ? 'Ready to add' : 'Ready to write'} {scenarioConfig.count} {itemNoun(engagementType)}
+                  {appendsToExisting(appendTo) ? '' : ` in ${scenarioConfig.numberOfCategories} ${scenarioConfig.numberOfCategories === 1 ? 'category' : 'categories'}`}
+                  {engagementType === 'trivia' ? '' : `, ${detailShort(scenarioConfig.difficulty)}`}.
+                </b>
+                <small>They come back as a draft for you to review. Nothing is saved until you accept it.</small>
+              </RunLine>
             </div>
           )}
 
           {step === 3 && (
             <div className="scenario-generation">
+              {/*
+                WHAT IS HAPPENING, AND WHAT TO DO NEXT (authoring-guidance b2,
+                b3). One line above today's panels. While it runs: what is being
+                written, from which card, at which level, and that closing is
+                safe. When it stays here to be reviewed: the next step, and any
+                warning the generator itself reported, quoted. The shortfall
+                ("you asked for 6 and got 5") is GeneratedItemsTable's to say,
+                so it is not repeated here.
+              */}
+              {interpreted.outcome === 'running' && !transportError && (
+                <RunLine tone="running" testid="asb-running">
+                  <b>
+                    {isAppend(appendTo) ? 'Adding' : 'Writing'} {interpreted.requested || scenarioConfig.count} {itemNoun(engagementType)}
+                    {selectedCard ? ` from “${selectedCard.title}”` : ''}
+                    {engagementType === 'trivia' ? '' : `, ${detailShort(scenarioConfig.difficulty)}`}.
+                  </b>
+                  <small>You can close this window. The bell tells you when the draft is ready, and it opens for review then.</small>
+                </RunLine>
+              )}
+              {reviewing && !editingItem && (
+                <RunLine tone="done" testid="asb-done">
+                  <b>
+                    {interpreted.createdSet
+                      ? `Done. The set is saved as “${interpreted.createdSet.setName}”: open it to check and edit each one.`
+                      : `Done. Check each ${singularNoun(engagementType)} below, then press ${isAppend(appendTo) ? `Add ${keptScenarios.length}` : `Load ${keptScenarios.length} into System`}.`}
+                  </b>
+                  {!interpreted.createdSet && (
+                    <small>Edit opens one; Leave out drops it. Nothing is saved until you {isAppend(appendTo) ? 'add' : 'load'} them.</small>
+                  )}
+                  {interpreted.warnings.length > 0 && (
+                    <small data-testid="asb-warnings">
+                      The generator reported: {interpreted.warnings.map((w) => `“${w}”`).join(' ')}
+                    </small>
+                  )}
+                </RunLine>
+              )}
               {!reviewing ? (
                 <GenerationJobPanel
                   job={interpreted}
