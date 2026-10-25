@@ -278,7 +278,7 @@ export default function HostActionBar({
             <span>{labelOf(primary)}</span>
           </button>
           {!primary.disabled && shortcutsEnabled && (
-            <kbd className="host-action-bar__kbd" aria-hidden="true">Space</kbd>
+            <span className="host-action-bar__kbd" aria-hidden="true">or press Space</span>
           )}
         </div>
         {/*

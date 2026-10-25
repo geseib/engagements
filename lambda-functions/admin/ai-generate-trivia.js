@@ -25,6 +25,7 @@ const { normalizeTags } = require('./shared/tags');
 const { triviaToCsv } = require('./shared/generated-set');
 const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 const { clampBackground, BACKGROUND_TRUTH_RULE } = require('./shared/question-background');
+const { categoryBlock, aboutSetBlock, categoryList } = require('./shared/category-brief');
 
 const MAX_COUNT = 100;
 const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
@@ -46,6 +47,10 @@ function parseRequest(payload) {
       customPrompt: payload.customPrompt || '',
       numChoices, numCorrect, categories,
       mustHaveCategories: payload.mustHaveCategories || '',
+      // The set's categories and what the set is about — shared/category-brief.js.
+      setCategories: categoryList([...categoryList(payload.categories), ...categoryList(payload.mustHaveCategories)]),
+      aboutSet: payload.aboutSet && typeof payload.aboutSet === 'object' ? payload.aboutSet : null,
+      total,
       // ONE RUN'S INSTRUCTION, not the set's brief — see shared/batch-guidance.js.
       batchGuidance: readBatchGuidance(payload.batchGuidance),
     },
@@ -113,15 +118,22 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
   // none, nothing changes.
   const guidance = batchGuidanceBlock(config.batchGuidance);
   if (guidance) p += `\n\n${guidance}\n`;
-  if (config.category) p += `\nCategory: ${config.category}.`;
+  const about = aboutSetBlock(config.aboutSet);
+  if (about) p += `\n\n${about}\n`;
   if (config.audience) p += `\nTarget audience: ${config.audience}.`;
   p += `\nDifficulty level: ${config.difficulty}.`;
   p += `\nEach question has exactly ${config.numChoices} answer choices.`;
   if (config.numCorrect > 1) p += `\nEach question has exactly ${config.numCorrect} correct answers.`;
   if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
 
-  p += `\n\nOrganize questions into EXACTLY ${config.categories} categories - no more, no less.`;
-  if (config.mustHaveCategories) p += `\nMust include these categories: ${config.mustHaveCategories}`;
+  // WHICH CATEGORY, AND WHICH NOT — the one rule every generator shares.
+  const categories = categoryBlock({
+    target: config.category,
+    categories: config.setCategories,
+    count: config.categories,
+    total: config.total,
+  });
+  if (categories) p += `\n\n${categories}`;
 
   if (alreadyUsedTitles.length > 0) {
     p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;

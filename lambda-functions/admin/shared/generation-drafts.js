@@ -474,12 +474,22 @@ async function prepareDraftRun({
       const category = clean(regen.category).slice(0, 120);
       const inCategory = items.filter((it) => clean(it.item.category) === category).length;
       const count = Math.min(Math.max(parseInt(regen.count, 10) || inCategory || 1, 1), maxCount);
+      // THE OTHER CATEGORIES, AND WHAT THE SET IS ABOUT (shared/category-brief.js):
+      // a regenerated category must not drift into its neighbours, and the
+      // set's own copy is what gives the category names their meaning.
+      const meta = base.setMetadata || {};
       runPayload = {
         ...base,
         count,
         numberOfCategories: 1,
         mustHaveCategories: category,
         category,
+        categories: [...new Set(items.map((it) => clean(it.item.category)).filter(Boolean))],
+        ...(base.aboutSet || meta.title || meta.description || meta.aiContextInstructions ? {
+          aboutSet: base.aboutSet || {
+            title: meta.title, description: meta.description, aiContext: meta.aiContextInstructions,
+          },
+        } : {}),
         customPrompt: `${clean(base.customPrompt)}\n\nWrite ONLY for the category "${category}", and use exactly that category name.`.trim(),
         appendOnly: true,
         setMetadata: undefined,

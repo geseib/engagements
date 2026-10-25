@@ -6,7 +6,7 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import CountField from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, withAppendRequirement } from '../utils/appendMode';
+import { isAppend, appendsToExisting, withAppendRequirement, appendCategoryContext } from '../utils/appendMode';
 import RoundKindPicker from './RoundKindPicker';
 import {
   roundKindParticipantInstruction, roundKindGaps, DEFAULT_ROUND_KIND,
@@ -223,7 +223,14 @@ function PollAIBuilder({
         difficulty: pollConfig.difficulty,
         count: appendTo?.count || pollConfig.count,
         kinds: pollConfig.kinds,
-        customPrompt: withAppendRequirement(pollConfig.customPrompt, appendTo),
+        // A poll run writes ONE category, so adding to the set's own categories
+        // sends that one plus the others (appendCategoryContext) rather than
+        // the trivia builder's "use only these, spread evenly", which
+        // contradicted the single category this builder asks for.
+        customPrompt: appendsToExisting(appendTo)
+          ? String(pollConfig.customPrompt ?? '').trim()
+          : withAppendRequirement(pollConfig.customPrompt, appendTo),
+        ...appendCategoryContext(appendTo),
         roundKind: pollConfig.roundKind,
         roundKindBrief: pollConfig.roundKindBrief,
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the
