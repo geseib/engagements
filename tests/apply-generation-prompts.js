@@ -39,10 +39,18 @@ check('missing rows are created; matching rows are kept', () => {
   assert.ok(p.slice(1).every((e) => e.action === 'create'));
 });
 
-check('a differing row is an update naming its fields', () => {
+check('a differing row is an update naming its text fields; settings alone are not a difference', () => {
   const live = { [first.promptId]: { ...first, basePrompt: 'old text', tags: ['x'] } };
   const e = script.plan(repo, live)[0];
-  assert.deepStrictEqual([e.action, e.changed], ['update', ['basePrompt', 'tags']]);
+  assert.deepStrictEqual([e.action, e.changed], ['update', ['basePrompt']]);
+  const tuned = script.plan(repo, { [first.promptId]: { ...first, defaultSettings: { difficulty: 'hard' } } })[0];
+  assert.strictEqual(tuned.action, 'keep');
+});
+
+check('an update keeps the tier\'s settings', () => {
+  const live = { [first.promptId]: { ...first, basePrompt: 'old', defaultSettings: { difficulty: 'hard' }, tags: ['mine'] } };
+  const item = script.itemFor(script.plan(repo, live)[0], '2026-10-25T00:00:00Z');
+  assert.deepStrictEqual([item.defaultSettings, item.tags, item.basePrompt], [{ difficulty: 'hard' }, ['mine'], first.basePrompt]);
 });
 
 check('an update keeps createdAt and identity, takes the repo text', () => {
