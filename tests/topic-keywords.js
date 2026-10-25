@@ -156,6 +156,16 @@ check('the prompt block names every id and its label', () => {
   for (const id of SET_TOPIC_IDS) assert.ok(block.includes(`- ${id}: `), id);
 });
 
+// rejects: ids and labels alone. set-topics.js calls the one-line blurb
+// load-bearing — a catch-all with nothing said about it is where every set lands.
+check('the prompt block gives each shelf its one-line description', () => {
+  const { SET_TOPICS } = require(path.join(REPO, 'lambda-functions/admin/shared/set-topics.js'));
+  const block = D.topicPromptBlock();
+  for (const id of SET_TOPIC_IDS) {
+    assert.ok(block.includes(`- ${id}: ${SET_TOPICS[id].label} — ${SET_TOPICS[id].blurb}`), id);
+  }
+});
+
 check('a model answer on the shelf is read; one off it is not', () => {
   assert.deepStrictEqual(D.readModelTopic({ setTopic: 'history', setTags: ['Pharaohs', 'history', 'Nile Delta'] }),
     { topic: 'history', tags: ['pharaohs', 'nile-delta'] });
