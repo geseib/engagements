@@ -471,6 +471,9 @@ const generationPrompts = {
   }
 };
 
+// Read by scripts/apply-generation-prompts.js, which compares before it writes.
+exports.generationPrompts = generationPrompts;
+
 exports.handler = async (event) => {
   console.log('🚀 Populating generation prompts...');
 
