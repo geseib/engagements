@@ -148,7 +148,11 @@ queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` m
 reached Claude and links each mark to its History entry. What went to Claude last
 (`sentView` in `build-store.js`) leads the Stage, the room's window and phones until the
 next ask opens (`screens/SentStage.jsx`); a send with `hideFromRoom: true` reaches Claude
-word for word, but every room read carries it with no words. The host's live typing
+word for word, but every room read carries it with no words. Until Claude Code has called
+in (`AgentSeenAt`), `sentView` carries `queued: true` and every screen says **Queued for
+Claude**; a key minted is not a connection (`claudeEverConnected` in `buildScreens.js`).
+What the host saved for later stays off the room's screens until it is sent (`heldBack` in
+`build-store.js`; `roomStory({ forRoom: true })`). The host's live typing
 reaches the room's window only over a same-browser `BroadcastChannel`
 (`buildroom/typingMirror.js`), never through the server or the socket.
 

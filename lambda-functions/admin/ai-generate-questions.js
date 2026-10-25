@@ -362,6 +362,14 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     const categories = textList(context?.categories, 24);
     if (categories.length > 0) {
       p += `\nCATEGORIES ALREADY IN THIS SET (prefer one of these; a new one is a real cost): ${fenceHost('categories', categories.join(', '))}\n`;
+      // WHICH CATEGORY, AND WHICH NOT (owner, 2026-10-25; shared/category-brief.js
+      // says the same to the set builders): written for one category, the
+      // question must not be one that belongs in a neighbour.
+      const want = String(context?.category || '').trim();
+      const others = categories.filter((c) => c.toLowerCase() !== want.toLowerCase());
+      if (want && others.length > 0) {
+        p += `A question that belongs better in ${others.join(', ')} is not a "${want}" question: write one that only "${want}" fits.\n`;
+      }
     }
 
     // "Writing alongside these." The author is shown this exact list in the

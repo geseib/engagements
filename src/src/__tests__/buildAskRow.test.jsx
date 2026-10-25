@@ -56,7 +56,7 @@ describe('the row is the same shape on every step', () => {
 
   test('a press is confirmed in the hint slot', async () => {
     const a = api();
-    mount({ ...base, status: 'live', results: { total: 7, options: [] } }, { api: a });
+    mount({ ...base, status: 'live', answerCount: 12, results: { total: 12, options: [] } }, { api: a });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show results' })); });
     expect(a.askAction).toHaveBeenLastCalledWith('004', { action: 'close' });
     expect(within(row()).getByText('Results are up')).toBeInTheDocument();
@@ -116,7 +116,8 @@ describe('Settle with a clear winner sends in one press', () => {
 
   test('a rating says its average; an Ideas ask says the top idea', () => {
     const { unmount } = mount({ ...base, kind: 'rating', options: [], status: 'results', results: { total: 2, rating: { avg: 3.5, count: 2, dist: [0, 0, 1, 1, 0] } } });
-    expect(primaryOf().textContent.trim()).toBe('Send 3.5 to Claude');
+    // The sentence says the number; the button says only where it goes (host review, 25 Oct 2026).
+    expect(primaryOf().textContent.trim()).toBe('Send to Claude');
     unmount();
     mount({ ...base, kind: 'suggest', options: [], status: 'results', results: { total: 3, ranked: [{ respId: 'r2', text: 'Not seeing open shifts', votes: 2 }, { respId: 'r1', text: 'Account', votes: 1 }] } });
     expect(primaryOf().textContent.trim()).toBe('Send the top idea to Claude');

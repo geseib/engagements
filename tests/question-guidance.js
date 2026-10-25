@@ -299,7 +299,8 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
 
   await test('with no guidance the trivia prompt opens exactly as it always has', () => {
     // Pinned text, not a comparison with this build's own output: this is the
-    // opening the generator wrote before `batchGuidance` existed.
+    // opening the generator wrote before `batchGuidance` existed, with the
+    // category block as shared/category-brief.js writes it (2026-10-25).
     const prompt = triviaPrompt(TRIVIA_PAYLOAD);
     // The host's text has been fenced, in one block after the set's shape,
     // since the generation audit (shared/structured-generation.js fenceHost).
@@ -307,10 +308,12 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
     assert.ok(prompt.startsWith(
       'You are an expert trivia question creator. Create 5 trivia questions about Historic figures.\n'
       + 'Difficulty level: medium.\nEach question has exactly 4 answer choices.\n\n'
-      + 'Organize questions into EXACTLY 3 categories - no more, no less.\n\n'
+      + 'CATEGORIES: organize the questions into EXACTLY 3 categories'
+      + ' - no more, no less. These must be among them, spelled exactly as written:\n- Presidents\n'
+      + 'Choose the other 2 so that no two categories overlap, and file every question under the one category'
+      + ' it clearly belongs to; a question that fits a named category belongs in that one.\n\n'
       + `${HOST_MATERIAL_NOTE}\n`
       + 'Target audience: <audience>Adults</audience>\n'
-      + 'Must include these categories: <categories>Presidents</categories>\n'
       + 'Additional Requirements: <requirements>Keep it fun.</requirements>\n\nLENGTH LIMITS (hard limits, not targets):'),
     `the no-guidance opening moved:\n${prompt.slice(0, 400)}`);
     assert.ok(!prompt.includes(LABEL));
@@ -328,7 +331,7 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
     // audience" is not read as more of the guidance.
     assert.ok(prompt.includes(`${GW}\n\nDifficulty level: medium.`), 'the guidance runs into the brief');
     const guidanceAt = prompt.indexOf(GW);
-    for (const later of ['Target audience:', 'Additional Requirements:', 'Organize questions into', 'LENGTH LIMITS']) {
+    for (const later of ['Target audience:', 'Additional Requirements:', 'CATEGORIES:', 'LENGTH LIMITS']) {
       assert.ok(guidanceAt < prompt.indexOf(later), `the guidance comes after "${later}"`);
     }
   });

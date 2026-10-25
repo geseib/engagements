@@ -21,6 +21,13 @@ export const W = Object.freeze({
   sentWaiting: (t) => (t ? `${t} \u00b7 waiting for Claude to pick it up` : 'Waiting for Claude to pick it up'),
   sentPicked: (t) => (t ? `Claude picked it up at ${t}` : 'Claude picked it up'),
   sentNotPicked: "Claude hasn't picked this up yet. Is Claude Code still running?",
+  // QUEUED, NOT SENT (host review, 25 Oct 2026): Claude Code has never called in, so nothing has reached it.
+  queuedHeadline: 'Queued for Claude',
+  queuedLine: 'Claude Code is not connected yet. It gets this when it connects.',
+  queuedHostLine: 'Claude Code is not connected yet. Connect it and it gets this first.',
+  /** The directions-waiting notice for a Claude that never called in. */
+  neverCameBefore: (n) => `Claude Code has not connected yet. ${n === 1 ? 'Your direction waits' : `${n} directions wait`} for it.`,
+  connectClaude: 'Connect Claude Code',
   // THE SENT TO CLAUDE CARD (owner, 23 Oct 2026): what Claude was told leads the Stage until the next ask opens.
   sentPickLine: (method, items) => `${{ host: 'The host chose', wheel: 'The wheel chose', spoken: 'The room said' }[method] || 'The room chose'} ${items.map((i) => (i.title ? `${i.label} · ${i.title}` : i.label)).join(', ')}`,
   sentHiddenLine: 'The host sent Claude a direction',
@@ -67,7 +74,7 @@ export const W = Object.freeze({
   // Moving an ask on
   showResults: 'Show results',
   openVoting: 'Open voting',
-  /** Send B to Claude · Send the top idea to Claude · Send 3.4 to Claude */
+  /** Send B to Claude · Send the top idea to Claude (a rating sends with sendPlain: its sentence says the number) */
   send: (what) => `Send ${what} to Claude`,
   /** A spoken answer, or no single pick to name. */
   sendPlain: 'Send to Claude',
@@ -95,6 +102,8 @@ export const W = Object.freeze({
   ideaTag: 'Idea from the room',
   directionTag: 'Direction for Claude',
   laterNote: 'Claude has not heard these',
+  /** The Later tab's line (host review, 25 Oct 2026): true to what the room's screens show. */
+  laterRoomNote: 'The room sees none of these. Whoever sent an idea hears only that it was saved.',
   laterEmpty: 'Nothing saved for later.',
   putToVote: (n) => `Put ${n} to a vote`,
   putToAVote: 'Put to a vote',
@@ -214,8 +223,13 @@ export const W = Object.freeze({
   savedLater: 'Saved for later',
   /** The steps still to come, as one line. */
   nextSteps: (names) => `Next: ${names.join(' \u00b7 ')}`,
-  pickRoomChoice: "Pick the room's choice?",
-  pick: (label) => `Pick ${label}`,
+  pickRoomChoice: "Choose the room's pick?",
+  pickAlternate: 'Choose an alternate?',
+  pick: (label) => `Choose ${label}`,
+  /** Picking an option, everywhere in the ask path (host review, 25 Oct 2026). */
+  chooseThis: 'Choose this',
+  /** A spinner's name never reaches a projected screen unless List names is on (F10). */
+  someoneSpins: 'Someone in the room spins the wheel',
   // Talking points (docs/design/build-room-talking-points): the Points tab beside Later
   points: 'Points',
   pointsNew: (n) => `${n} new`,
@@ -374,6 +388,9 @@ export const W = Object.freeze({
   tipSignedOut: 'You come straight back here.',
   signedOut: 'Signed out. Sign in again; nothing is lost.',
   tipAuto: "Claude's questions skip your review.",
+  // THE REVIEW GATE, ONE WAY ROUND (host review, 25 Oct 2026): on means you review, as on the create page and Connect.
+  reviewAsks: "Review Claude's questions",
+  tipReview: "On: Claude's questions wait for you before the room sees them.",
   stoppedBefore: (n) => `Claude Code stopped before ${n === 1 ? 'your last direction' : `${n} directions`}.`,
   tipCopyContinue: 'Copy, then paste into Claude Code.',
   copiedPaste: 'Copied. Paste into Claude Code.',
@@ -658,7 +675,7 @@ export const W = Object.freeze({
   wifiSameAdvice: 'Same Wi-Fi; no mobile data, no VPN.',
   departedNote: 'Their ideas and votes stay in the report.',
   roomMeterNote: 'Off: the Stage shows only the count.',
-  autoNote: "On: Claude's questions skip your review.",
+  autoNote: "On: Claude's questions wait for you. Off: they open to the room as Claude asks them.",
   crewNote: 'Up to 8 builders, each with their own Claude.',
   startUndoNote: 'Nothing in the brief is lost.',
   endsForAll: 'Ends it for everyone.',
@@ -668,7 +685,10 @@ export const W = Object.freeze({
   noNamesOnWall: (n) => `No names on the wall. Up to ${n}.`,
   changeUntilClose: 'Change it until voting closes.',
   pickedOf: (n, max) => `${n} of ${max} picked`,
-  buildFirst: (n, max) => `What would you build first? ${n} of ${max}`,
+  // The phones while the room frames the build: no "not connected" (host review, 25 Oct 2026).
+  shapingBuild: 'The room is shaping the build',
+  /** Under an option with a mockup only: there is something on the big screen to look at. */
+  lookBigScreen: 'Look at the big screen',
   thanksSent: 'Thanks. Sent to the host.',
   builtSoFar: 'Built so far',
   haveALook: 'Have a look',
@@ -748,6 +768,8 @@ export const W = Object.freeze({
   screensGroup: 'Screens',
   screensScope: 'Applies now',
   wallOpen: "Room's window ↗",
+  /** The Stage dock's door to the same window, in the dock's capitals (it said PRESENT, a retired word). */
+  dockWindow: "ROOM'S WINDOW",
   wallOpenHint: 'Opens the room’s own window: the Stage, Build or History you pick here, with nothing to press and no names.',
   wallFollows: 'The window follows what you show: 2 Stage, 3 Build, 4 History. While it is open, this laptop stays where it is.',
   wallNewLink: 'New link',
@@ -802,7 +824,8 @@ export const W = Object.freeze({
   // The tick is an Icon beside the words (BuildConsider SentMark): no glyph in the copy (tests/build-room-copy.js).
   markSent: 'Sent to Claude',
   markReworded: 'Sent to Claude, reworded',
-  markLater: 'Sent to Claude, for later',
+  // Not sent at all (host review, 25 Oct 2026): the old "Sent to Claude, for later" said otherwise.
+  markLater: 'Saved for later, not sent',
   markQueued: 'Queued for the room',
   markOpens: 'Opens History at this entry',
   historyAsWritten: 'sent as written',
@@ -858,4 +881,12 @@ export const RETIRED = Object.freeze([
   // Two codes (2026-10-11): Settings shows the codes; the Stage card has one place for them.
   { word: 'Show the QR on the wall', enforced: true, task: 'two-codes' },
   { word: 'Scan the code, or press Open the demo.', enforced: true, task: 'two-codes' },
+  // The host review's glossary pass (25 Oct 2026): one word per concept.
+  { word: 'Pick this', enforced: true, task: 'host-review' },
+  { word: 'Choose this instead', enforced: true, task: 'host-review' },
+  { word: 'Choose this idea', prefix: true, enforced: true, task: 'host-review' },
+  { word: 'Sent to Claude, for later', enforced: true, task: 'host-review' },
+  { word: "Pick the room's choice?", enforced: true, task: 'host-review' },
+  { word: 'Pick an alternate?', enforced: true, task: 'host-review' },
+  { word: 'Artifacts', files: ['BuildHistoryScreen.jsx'], enforced: true, task: 'host-review' },
 ]);

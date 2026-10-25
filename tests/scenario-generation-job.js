@@ -708,7 +708,9 @@ async function runJob(body, workerCtx = ctx()) {
     assert.ok(p.includes('Context: <context>A $& b</context>'), p);
     assert.ok(p.includes("Audience: <audience>c $' d</audience>"));
     assert.ok(p.includes('<requirements>e $` f</requirements>'));
-    assert.ok(p.includes('Must include these categories: <categories>G $& H</categories>'));
+    // Category names go through the shared category block (shared/category-brief.js),
+    // a template string, so a `$&` in a name is written as typed.
+    assert.ok(p.includes('- G $& H'), p);
     assert.ok(p.indexOf(structured.HOST_MATERIAL_NOTE) < p.indexOf('<context>'), 'the note must come before the material');
     // No must-haves: no bare placeholder left behind.
     assert.ok(!promptFor({}).includes('{mustHaveCategories}'));

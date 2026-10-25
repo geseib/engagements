@@ -10,7 +10,7 @@ import { csvRow, buildCsv } from '../utils/csv';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor, appendCategoryContext } from '../utils/appendMode';
 import BatchGuidanceField from './BatchGuidanceField';
 import RoundKindPicker from './RoundKindPicker';
 import { samplesForKind } from '../config/scenarioSamples';
@@ -817,6 +817,8 @@ function AIScenarioBuilder({
         // ADDING TO A SET'S OWN CATEGORIES: forced at send time, because
         // choosing a topic card resets both fields from the prompt's defaults.
         ...appendCategoryDefaults(appendTo),
+        // What the set being added to is about, and its categories.
+        ...appendCategoryContext(appendTo),
         // …naming the set, so the server drafts it in THAT set's library.
         ...(isAppend(appendTo) ? { appendOnly: true, ...(run.appendTarget ? { appendTo: run.appendTarget } : {}) } : {}),
         // THIS BATCH'S GUIDANCE, its own field and never inside customPrompt;

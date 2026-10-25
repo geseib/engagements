@@ -2,7 +2,7 @@
  * HISTORY (step 5, C9 and C10; parity PLAN §2.5, B6): the session's story for
  * the room, a display component. Everything is what Claude showed, what was
  * decided and how, and what the room said, newest first, with the pictures at
- * the moment they were made; Decisions is the decisions alone; Artifacts is
+ * the moment they were made; Decisions is the decisions alone; Screenshots is
  * every picture, each saying what it was for; Full timeline is the room's
  * whole timeline. Nothing here edits: that stays on the Host screen.
  *
@@ -32,7 +32,8 @@ import { storyHolds } from '../sentMarks';
 const HISTORY_FILTERS = [
   { key: 'all', label: 'Everything' },
   { key: 'decisions', label: 'Decisions' },
-  { key: 'artifacts', label: 'Artifacts' },
+  // One word for images (host review, 25 Oct 2026): Screenshots, as the Host screen's fold.
+  { key: 'artifacts', label: 'Screenshots' },
   { key: 'timeline', label: 'Full timeline' },
 ];
 
@@ -172,11 +173,12 @@ export default function BuildHistoryScreen({
   // (H4): an idea the room voted on, sent, or written into a direction; not one in a vote the room
   // has not seen, nor one only put on the wall (Q13).
   const gave = contributionsOf(room);
-  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave, ended: room.state === 'ENDED' });
+  // The room reads this screen: nothing saved for later shows until it is sent (host review, 25 Oct 2026).
+  const story = roomStory({ log: room.log || [], asks, images: room.images || [], doing: doingLine(room.doing, now), gave, ended: room.state === 'ENDED', forRoom: true });
   const arts = artifactsOf({ images: room.images || [], asks });
   const shown = filterStory(story, filter === 'decisions' ? 'decisions' : 'all');
   const decided = asks
-    .filter((a) => a.status === 'decided' && a.decision)
+    .filter((a) => a.status === 'decided' && a.decision && !a.decision.heldForLater)
     .sort((a, b) => String(a.decidedAt).localeCompare(String(b.decidedAt)));
   // The wall's read carries only the used ideas, and the counts beside them.
   const ideaTotal = room.ideaCounts ? Number(room.ideaCounts.total) || 0 : (room.ideas || []).length;
@@ -194,7 +196,7 @@ export default function BuildHistoryScreen({
         <ClaudeStatus rc={buildRoomContent('BUILD_HISTORY', profile, room, null, now)} />
         {filter === 'timeline' && <Timeline log={room.log || []} host={false} busy={false} ended run={noop} api={null} deleteAs="" />}
         {filter === 'artifacts' && (arts.length ? (
-          <ul className="brm-arts" aria-label="Artifacts">
+          <ul className="brm-arts" aria-label="Screenshots">
             {arts.map((a) => (
               <li key={a.imageId} className={`brm-art${a.chosen ? ' is-chosen' : ''}`}>
                 <BuildImage imageId={a.imageId} alt={a.title} className="brm-shot brm-art-img" />

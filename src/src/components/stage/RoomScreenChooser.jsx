@@ -55,7 +55,13 @@ function Choice({ value, picked, onPick }) {
   );
 }
 
-export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null, type = '' }) {
+/*
+ * `quiet` (the Build Room before Claude connects, host review 25 Oct 2026):
+ * the two Use buttons step back to the quiet style, so the screen's one
+ * orange button is the move that matters first.
+ */
+export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null, type = '', quiet = false }) {
+  const useCls = `rsc-btn${quiet ? ' rsc-btn--quiet' : ''}`;
   const W = roomWordsFor(type);
   const [helping, setHelping] = useState(false);
   const [answers, setAnswers] = useState({});
@@ -123,7 +129,7 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
             {presentHref ? (
               <RoomWindowLink className="rsc-btn rsc-btn--quiet" href={presentHref}>{W.openPresent}</RoomWindowLink>
             ) : null}
-            <button type="button" className="rsc-btn" aria-pressed={current === 'two'} onClick={() => onChoose('two')}>
+            <button type="button" className={useCls} aria-pressed={current === 'two'} onClick={() => onChoose('two')}>
               {current === 'two' ? W.chosen : W.useTwo}
             </button>
           </div>
@@ -133,7 +139,7 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
           <h3 className="rsc-card-h">{W.oneTitle}</h3>
           <p className="rsc-card-p">{W.oneBody}</p>
           <div className="rsc-card-acts">
-            <button type="button" className="rsc-btn" aria-pressed={current === 'classic'} onClick={() => onChoose('classic')}>
+            <button type="button" className={useCls} aria-pressed={current === 'classic'} onClick={() => onChoose('classic')}>
               {current === 'classic' ? W.chosen : W.useOne}
             </button>
           </div>

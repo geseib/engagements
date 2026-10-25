@@ -265,7 +265,7 @@ describe('R3: the Stage at results', () => {
     const rating = { ...ASK, Kind: 'rating', Options: [], Prompt: 'How was the demo?' };
     const answers = ['Ana', 'Sam'].map((n, i) => ({ SK: `BUILD#ANS#004#${n}`, AskId: '004', PlayerName: n, Rating: i ? 5 : 4, CreatedAt: ago(500) }));
     await openStage(baseRows(rating, answers));
-    fireEvent.click(dock().getByRole('button', { name: 'Send 4.5 to Claude' }));
+    fireEvent.click(dock().getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: [], sendToAgent: true }));
   });
 });
@@ -458,7 +458,7 @@ describe('R5: Re-ask', () => {
 describe('review fixes', () => {
   test('a click on an option at results opens the window with that pick, not the Host screen', async () => {
     await openStage();
-    fireEvent.click(screen.getByTitle('Pick A'));
+    fireEvent.click(screen.getByTitle('Choose A'));
     const win = await screen.findByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('button', { name: /Calm and clear/ })).toHaveAttribute('aria-pressed', 'true');
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');

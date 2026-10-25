@@ -9,6 +9,84 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 25 Oct 2026 (Build Room: quick wins from the host review)
+
+**Test:** merge of dev `f29087d9`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Queued for Claude.** Until Claude Code has actually connected, anything sent says **Queued for Claude** instead of "Sent to Claude": the host's header, the Session panel, the Stage, the room's window and the phones. It turns into Sent to Claude once Claude calls in.
+- **Connect first.** How a Build Room works stays on the Host screen until Claude Code has really connected (making a key is not enough), and on the first view its **Connect Claude Code** is the one orange button, with "Where will the room watch?" below it in plain buttons. What's next keeps **Connect Claude Code** at the top for the same reason.
+- **A notice for directions waiting on a Claude that never came.** "Claude Code has not connected yet. Your direction waits for it", with Connect beside it.
+- **The report marks what never reached Claude:** "Saved for later, not sent to Claude" and "Recorded only, not sent to Claude" under a decision, and on held entries in the timeline. It names Claude Code in its header only if Claude connected.
+
+### Fixed
+
+- **"Claude is building" when no Claude was there.** Start building with no Claude connected now logs "The room framed the build. Claude starts when it connects."
+- **How a Build Room works step 2** said to paste a Kick off prompt. The start command already connects and kicks off; the step now says so.
+- **Saved for later reached the room.** Phones and the room's window no longer show a saved item as "Sent to Claude, for later", and the Stage no longer says "We decided" for a decision saved for later. History on the room's screens shows that ask as "closed, nothing sent to Claude" until it is sent. The host's own mark now reads **Saved for later, not sent**, and the Later list says truthfully that the room sees none of it (the person who sent a saved idea is told only that it was saved).
+- **Show results early on the Host screen now asks first,** as the Stage and the console already did ("7 of 12 still answering. Press again to show results."). Help said it did; now it does.
+- **The projected wheel named the spinner with List names off.** On one screen the Stage now says "Someone in the room spins the wheel" unless List names is on.
+- **One word per thing:** the Stage dock says **ROOM'S WINDOW** (not PRESENT); the console's way out says **Main menu**, as the one-screen header does; picking an option is **Choose this** everywhere in an ask (the confirm reads "Choose the room's pick?" and "Choose B"); images are **Screenshots** on History and the phones; the Stage's brief lines read **The problem** and **Tools and style**, as on the Host screen; the Start building confirm says Back to the opening is **under SESSION**.
+- **The Session panel's review switch read the wrong way round.** "Auto-open Claude's questions" is now **Review Claude's questions**, on meaning they wait for you, as on the create page and in Connect. The saved setting is unchanged.
+- **Directions read as sentences.** No more ".:" where a question ends in a full stop ("…the moment they need it: A first-time volunteer"). A rating goes as "How clear is it? The room rated it 3 out of 5 (5 is great, 1 needs work).", and its button says **Send to Claude**, not "Send 3 to Claude".
+- **Phone copy.** "Look at the big screen" shows only under an option whose mockup is on the big screen. An Ideas vote is headed by its own question, with "0 of 3 picked" under it, not "What would you build first?". No "0 people voted" under the wheel. During the opening phones say "The room is shaping the build", not "Claude Code is not connected". While an Ideas question is open, the separate "Send an idea to the host" box steps aside (the Ideas tab still takes other ideas).
+- **New Build Room:** **Before you start** opens in a new tab, so the form is kept, and the placeholders read as examples ("e.g. Volunteer sign-up for the food bank").
+
+### What to look at
+
+1. On engage.test, create a Build Room and do not connect Claude Code. How a Build Room works sits at the top, step 2 says the start command connects and kicks off, and **Connect Claude Code** is the only orange button; the screen chooser's buttons below it are plain.
+2. Open Connect and mint a key, but do not paste it. Close the window: How a Build Room works and What's next's **Connect Claude Code** are still there.
+3. Ask the room a Choose question from a phone, show results, and send the pick. The header chip, the Session panel's Claude line, the Stage and the phone all say **Queued for Claude**. A notice at the top of Waiting for you says the direction waits for Claude to connect.
+4. Press Start building from the opening. Phones and the timeline say "Claude starts when it connects", not "Claude is building".
+5. With two phones joined and one answered, press **Show results** on the Host screen. It asks first ("1 of 2 still answering. Press again"); press again and results show.
+6. Make a tie, choose Spin the wheel, press 2 for the Stage with List names off: it says "Someone in the room spins the wheel".
+7. Save a decision for later (Change before sending › Save for later). The phone and the room's window do not show it as sent, the Stage says no "We decided" for it, and the Later tab says the room sees none of it. Open the report: the decision says "Saved for later, not sent to Claude".
+8. Ask a Rate question. The sentence under the board reads "… The room rated it N out of 5 (5 is great, 1 needs work)." and the button says **Send to Claude**.
+9. On the Stage, the dock's button for the room's window says **ROOM'S WINDOW**. On two screens the top line's way out says **Main menu**. Session › Settings › Claude has **Review Claude's questions**, switched on.
+10. On a phone during an Ideas question, there is one box for your suggestion and no "Send an idea to the host" box under it. On a Choose question with no mockups there is no "Look at the big screen".
+11. On New Build Room, **Before you start** opens a new tab and the title box reads "e.g. …".
+
+### Known gaps
+
+- The rest of the host review is not done yet (review items 10 to 20 and 22): the setup checklist that gates the opening and "Practise without Claude" (10), Simple mode on the Host screen and the console (11), a three-step default opening (12), one loop model everywhere (13), the Ask the room dialog (Yes/No tab, spacing, recommended questions, advanced fields under More) (14), a prefilled wrap-up and end-of-session moves on the console (15), the report's brief section, its internal prompt text and wheel markers (16), a command palette (17), reveal by event (18), presets (19), dropping the host header from projected one-screen Build and History (20), and a practice room with a fake Claude (22).
+- A decision saved for later and later sent from the Later list shows to the room as what Claude was told ("We told Claude"), not as "We decided".
+- Sessions that already logged "The room framed the build. Claude is building." keep that line.
+
+---
+
+## 25 Oct 2026 (Workie keeps questions in their category; the owner filter says "Your team")
+
+**Test:** merge of dev `9f16efd8`. Everything below this entry is already on test, except the **hints** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.
+
+### New
+
+- **Workie is told what a set is about and what its categories are when it writes questions** (owner, 25 Oct: "make sure the questions generated related to that category and not what really belongs in another category"). When you add questions to a set (**Add questions…** → Write), Workie now gets the set's name, description and AI context, and every category in the set. Writing for one category, it is told the others and that a question belonging better in one of them is not for this one. Writing across several, it is told to keep them distinct, with about how many in each. The same goes for a draft's **Regenerate this category**, and for **Draft this with AI** on a question in the set editor. This covers Trivia, Poll, Call & Answer and Wavelength.
+- Measured before shipping: asked for eight Poll questions for "Communication" in a set that also has Meetings, Tools & systems, Workload and Recognition (three runs each, a second model sorting every question into the category it fits best), the old prompt kept **11 of 24** in Communication and the new one **23 of 24**.
+
+### Fixed
+
+- **The Poll builder told Workie two different things** when adding to a set's own categories: write for one category, and spread the questions evenly across all of them. Questions came out spread over the whole set. It now says only the one category, and names the others to stay out of.
+- **Call & Answer and Wavelength sent the literal text "{mustHaveCategories}"** to the model whenever no category was named, and could say the category instructions twice. Both gone.
+- **The prompt library's owner filter said "Team"** where the Owner column says **Your team**. Both say Your team.
+
+### What to look at
+
+1. In the console, open a Poll set that has three or more categories, press **Add questions…**, choose **More in each of the set's categories**, and write 6. In the builder pick one category and generate. Every question in the draft should be about that category; none should be one that obviously belongs in another of the set's categories.
+2. Do the same on a Trivia set with two or more categories: the draft fills each category with questions that fit it, about evenly.
+3. In a draft review, press **Regenerate this category** on one category: the new questions stay in it.
+4. In the set editor, open a question in one category and press **Draft this with AI**: the draft fits that category.
+5. Admin › Prompts in a team with its own Workie: the owner filter reads **Your team**, as the Owner column does.
+6. Press **?** in the set editor and read *Adding questions to a set you have* and *Reviewing a draft* (its *Regenerate this category* step): each says Workie knows the set and its categories.
+
+### Known gaps
+
+- Categories have names only; nothing describes what belongs in each. Workie reads each category's meaning from its name and the set's description, so a set with a vague description and overlapping names still gets less separation.
+- Making a **new** set does not send its description: it is drafted from the same form fields the topic comes from, so it would add nothing.
+- Surveys have no categories, so they are unchanged.
+
+---
+
 ## 25 Oct 2026 (hints that looked like controls)
 
 **Test:** merge of dev `e06807b2`. Everything below this entry is already on test; this push adds only what is here.

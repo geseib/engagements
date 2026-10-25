@@ -6,7 +6,7 @@ import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
 import { SetSizeField } from './CountField';
 import AppendModeSwitch from './AppendModeSwitch';
-import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor } from '../utils/appendMode';
+import { isAppend, appendsToExisting, appendCategoryDefaults, withAppendRequirement, batchGuidanceFor, appendCategoryContext } from '../utils/appendMode';
 import BatchGuidanceField from './BatchGuidanceField';
 import { tagsToCsvCell, normalizeTags } from '../utils/tags';
 import { csvRow, buildCsv } from '../utils/csv';
@@ -226,6 +226,8 @@ function TriviaAIBuilder({
         numberOfCategories: appendTo?.numberOfCategories || triviaConfig.numberOfCategories,
         mustHaveCategories: triviaConfig.mustHaveCategories,
         customPrompt: withAppendRequirement(triviaConfig.customPrompt, appendTo),
+        // What the set being added to is about, and its categories.
+        ...appendCategoryContext(appendTo),
         // Its own field, never folded into customPrompt; absent when blank.
         ...(sentGuidance ? { batchGuidance: sentGuidance } : {}),
         // THE SET'S OWN COPY, SENT WITH THE REQUEST. The worker creates the

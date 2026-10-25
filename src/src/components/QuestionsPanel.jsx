@@ -1839,6 +1839,13 @@ export default function QuestionsPanel({
           categories: existingCategories(rows),
           // The brief the set was made from — topic, audience, difficulty.
           brief: briefFromSet(questionSet || {}),
+          // The set's own copy, sent as-is: what the set is about
+          // (utils/appendMode.js appendCategoryContext).
+          about: {
+            title: questionSet?.name || '',
+            description: questionSet?.description || '',
+            aiContext: questionSet?.aiContextInstruction ?? questionSet?.aiContextInstructions ?? '',
+          },
           // "Am I adding 25 or growing to 25?" — the builder states both.
           existingTotal: live.length,
           // WHICH SET, so the server drafts the run in that set's own library

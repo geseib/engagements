@@ -5,7 +5,8 @@ import {
   defaultDirection,
   SCREENS, PROJECTED, isProjected, screenForKey, togglePresent, waitingCount, askPill, latestBuild, stageModel, settleMove,
   queueItems, filterQueue, laterIdeas, claudeState, latestDecisionLine, doingLine, roomStory, filterStory,
-  decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep,
+  decisionChoices, winnerOf, directionFor, questionAnswer, decisionMethod, RATING_SCALE, ratingAnswer, ratingStep, ratingDirection,
+  sentOf, sentCard, stageSide, claudeEverConnected, agentNeverCame, contributionsOf,
   askPathStep, askPathSummaries, whatsNextMoves, combineLine, combineText, mockupsReady, looksWords, decideBody, roomChoice,
 } from '../buildroom/buildScreens';
 import { W } from '../buildroom/words';
@@ -141,7 +142,9 @@ describe('the Stage with the wheel up', () => {
   const room = { playerCount: 18, agent: { connected: true } };
   const results = (wheel) => ({ askId: '003', kind: 'choice', status: 'results', results: { total: 4 }, wheel });
   test('someone has the turn; the host can always spin; deciding stays on the Host', () => {
-    expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
+    // The dock is on the projected Stage: no name with List names off (host review, 25 Oct 2026).
+    expect(stageModel(room, results({ spinner: 'Dee', armed: true, landed: null, spins: [] })).status).toBe('Someone in the room spins the wheel');
+    expect(stageModel({ ...room, settings: { listNames: true } }, results({ spinner: 'Dee', armed: true, landed: null, spins: [] }))).toMatchObject({
       status: 'Dee spins the wheel', wheel: true,
       primary: { action: 'spin', label: 'Spin the wheel' }, secondary: { action: 'edit', label: 'Change before sending' },
     });
@@ -216,7 +219,7 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
     expect(stageModel({ playerCount: 3 }, { askId: '3', ...choose([5, 5, 0]) }).status).toBe('Tied, 5 to 5');
     const rated = stageModel({ playerCount: 3 }, { askId: '5', kind: 'rating', status: 'results', results: { total: 10, rating: { avg: 3.4, count: 10, dist: [] } } });
     expect(rated.status).toBe('Average 3.4 from 10');
-    expect(rated.primary.label).toBe('Send 3.4 to Claude');
+    expect(rated.primary.label).toBe('Send to Claude');
   });
   test('a draft the host changed on the Host screen is what the Stage sends: kind and words', () => {
     const ask = { askId: '3', ...choose([1, 3, 0]) };
@@ -238,7 +241,7 @@ describe('deciding: the winner by default, any other on a click (owner, 2026-10-
   });
   test('a rating sends its average; no ratings yet has none to send', () => {
     const rated = stageModel({ playerCount: 3 }, { askId: '5', kind: 'rating', status: 'results', results: { total: 3, rating: { avg: 4.2, count: 3, dist: [0, 0, 0, 2, 1] } } });
-    expect(rated.primary).toEqual({ action: 'to-claude', label: 'Send 4.2 to Claude', verb: 'send' });
+    expect(rated.primary).toEqual({ action: 'to-claude', label: 'Send to Claude', verb: 'send' });
     expect(rated.secondary).toEqual({ action: 'edit', label: 'Change before sending' });
   });
   test('the ideas winner reads as the top idea', () => {
@@ -260,6 +263,74 @@ describe('the fixed rating scale (owner, 2026-10-06)', () => {
     expect(ratingAnswer(null)).toBe('');
     expect(questionAnswer('How close is this?', ratingAnswer('4'))).toBe('How close is this: 4 out of 5 (5 is great, 1 needs work)');
     expect([1, 3, 5].map(ratingStep)).toEqual(['1 · Needs work', '3', '5 · Great']);
+  });
+});
+
+describe('directions that read as sentences (host review, 25 Oct 2026, F12)', () => {
+  test('the question\'s own end goes before the colon: no ".:"', () => {
+    expect(questionAnswer('Who is it for? Name a person and the moment they need it.', 'A first-time volunteer'))
+      .toBe('Who is it for? Name a person and the moment they need it: A first-time volunteer');
+    expect(questionAnswer('Pick one:', 'Blue')).toBe('Pick one: Blue');
+    expect(questionAnswer('What colour?', 'Blue')).toBe('What colour: Blue');
+  });
+  test('a rating is a sentence, and its button names no number', () => {
+    expect(ratingDirection('How clear is the sign-up page?', 3)).toBe('How clear is the sign-up page? The room rated it 3 out of 5 (5 is great, 1 needs work).');
+    expect(ratingDirection('Rate the sign-up page', 4.2)).toBe('Rate the sign-up page. The room rated it 4.2 out of 5 (5 is great, 1 needs work).');
+    expect(ratingDirection('Rate it', null)).toBe('');
+    const ask = { askId: '5', kind: 'rating', prompt: 'How clear is it?', status: 'results', results: { total: 3, rating: { avg: 3, count: 3, dist: [] } } };
+    expect(defaultDirection(ask)).toBe('How clear is it? The room rated it 3 out of 5 (5 is great, 1 needs work).');
+    expect(settleMove(ask).label).toBe('Send to Claude');
+  });
+  test('combining a decided question that ends in a full stop reads cleanly', () => {
+    expect(combineLine({ prompt: 'Name the moment they need it.', decision: { direction: 'Name the moment they need it: at the door' } })).toBe('Name the moment they need it: at the door');
+  });
+});
+
+describe('queued, not sent, until Claude has called in (host review, 25 Oct 2026, F1)', () => {
+  const NOW = Date.parse('2026-10-25T10:00:00Z');
+  const sent = (extra = {}) => ({ verb: 'told', text: 'Make it blue', at: '2026-10-25T09:59:00Z', ...extra });
+  test('the server says queued: every screen says Queued for Claude', () => {
+    const room = { agent: { connected: false, listening: false, lastSeenAt: null, key: { keyId: 'k1' } }, sent: sent({ queued: true }), log: [] };
+    expect(sentOf(room).queued).toBe(true);
+    expect(claudeState(room, NOW, { host: true })).toMatchObject({ key: 'sent', queued: true, headline: 'Queued for Claude', line: W.queuedHostLine });
+    expect(claudeState(room, NOW)).toMatchObject({ headline: 'Queued for Claude', line: W.queuedLine });
+    expect(sentCard(sentOf(room), []).head).toBe('Queued for Claude');
+  });
+  test('once Claude has called in it is Sent to Claude, as before', () => {
+    const room = { agent: { connected: true, lastSeenAt: '2026-10-25T09:58:00Z' }, sent: sent(), log: [] };
+    expect(claudeState(room, NOW)).toMatchObject({ key: 'sent', headline: 'Sent to Claude' });
+    expect(sentCard(sentOf(room), []).head).toBe('Sent to Claude');
+  });
+  test('a key minted is not a connection', () => {
+    expect(claudeEverConnected({ key: { keyId: 'k1' } })).toBe(false);
+    expect(agentNeverCame({ key: { keyId: 'k1' } })).toBe(true);
+    expect(claudeEverConnected({ lastSeenAt: '2026-10-25T09:00:00Z' })).toBe(true);
+    expect(agentNeverCame(undefined)).toBe(false);
+  });
+});
+
+describe('saved for later stays off the room\'s screens (host review, 25 Oct 2026, F5)', () => {
+  const held = { askId: '003', kind: 'choice', prompt: 'Which header?', status: 'decided', openedAt: '2026-10-25T09:00:00Z', decidedAt: '2026-10-25T09:05:00Z', options: [{ label: 'A', title: 'Calm' }],
+    decision: { direction: 'Which header: Calm', chosen: ['A'], heldForLater: true, sentToAgent: true, decidedAt: '2026-10-25T09:05:00Z' } };
+  test('the Stage never says We decided for it', () => {
+    expect(stageSide({ asks: [held] })).toBeNull();
+    expect(latestDecisionLine({ asks: [held] })).toBe('');
+  });
+  test('the room\'s story shows the ask as nothing sent yet; the host\'s keeps the decision', () => {
+    const room = { asks: [held], log: [], ideas: [] };
+    const roomSide = roomStory({ log: [], asks: [held], gave: contributionsOf(room), forRoom: true });
+    expect(roomSide.find((i) => i.type === 'decided')).toBeUndefined();
+    expect(roomSide.find((i) => i.id === 'asked:003')).toMatchObject({ mark: 'not-sent', chain: [W.closedNothingSent] });
+    const hostSide = roomStory({ log: [], asks: [held], gave: contributionsOf(room) });
+    expect(hostSide.find((i) => i.type === 'decided')).toBeTruthy();
+  });
+  test('an idea held for later is not in the room\'s story', () => {
+    const room = { asks: [], ideas: [{ ideaId: 'i1', text: 'Dark mode', status: 'promoted', promotedVia: 'claude', createdAt: '2026-10-25T09:00:00Z' }],
+      log: [{ logId: 'l1', kind: 'idea', ideaId: 'i1', text: 'Dark mode', held: true, createdAt: '2026-10-25T09:01:00Z' }] };
+    const gave = contributionsOf(room);
+    expect(gave[0].mark).toBe('later');
+    expect(roomStory({ log: room.log, asks: [], gave, forRoom: true }).some((i) => i.id === 'gave:i1')).toBe(false);
+    expect(roomStory({ log: room.log, asks: [], gave }).some((i) => i.id === 'gave:i1')).toBe(true);
   });
 });
 
@@ -618,7 +689,9 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
     const m = whatsNextMoves(room({ asks }));
     expect(m[0]).toMatchObject({ key: 'open-proposed', askId: '006', title: "Open Claude's question", button: 'Open it' });
     expect(whatsNextMoves(room({ asks, agent: { connected: false } }))[0]).toMatchObject({ key: 'connect', button: 'Connect' });
-    expect(whatsNextMoves(room({ agent: { key: 'k1' } })).map((x) => x.key)).not.toContain('connect');
+    // A key minted is not a connection (host review, 25 Oct 2026): Connect stays until Claude calls in.
+    expect(whatsNextMoves(room({ agent: { key: 'k1' } }))[0]).toMatchObject({ key: 'connect' });
+    expect(whatsNextMoves(room({ agent: { key: 'k1', lastSeenAt: '2026-10-25T09:00:00Z' } })).map((x) => x.key)).not.toContain('connect');
     expect(whatsNextMoves(room()).find((x) => x.key === 'tell').hint).toBe('Do now, keep in mind, or ask Claude');
   });
   test('otherwise the starter questions lead, and combine is not offered with nothing ticked', () => {

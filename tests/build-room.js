@@ -1441,6 +1441,48 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const d = (await agentCall('GET', 'inbox')).body.inbox[0];
     assert.strictEqual(d.as, 'do-now');
     assert.ok(/^The room has framed the build\. Plan 3 to 6 steps/.test(d.text) && /The problem today: Board games take setup/.test(d.text), d.text);
+    // Claude called in before the start (the inbox read above): the milestone may say it is building.
+    assert.ok((await state()).log.some((l) => l.kind === 'milestone' && l.text === 'The room framed the build. Claude is building.'));
+  });
+  await check('Start building with no Claude yet: the milestone and every read say queued, not building (host review, 25 Oct 2026)', async () => {
+    seed();
+    await hostCall('POST', 'opening/start', {});
+    const st = await state();
+    assert.ok(st.log.some((l) => l.kind === 'milestone' && l.text === 'The room framed the build. Claude starts when it connects.'), JSON.stringify(st.log.map((l) => l.text)));
+    assert.ok(!st.log.some((l) => /Claude is building/.test(l.text)));
+    assert.strictEqual(st.sent.queued, true);
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.sent.queued, true);
+    // Claude calls in: what went is sent, not queued.
+    await agentCall('GET', 'inbox');
+    assert.strictEqual((await state()).sent.queued, undefined);
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.sent.queued, undefined);
+  });
+  await check('a phone hears the room is framing the build, and a decision saved for later is not its latest decision', async () => {
+    seed();
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.framing, true);
+    await hostCall('POST', 'opening/start', {});
+    assert.strictEqual((await playCall('GET', 'state', priya)).body.framing, false);
+    const c = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is it?' });
+    await hostCall('POST', `asks/${c.body.ask.askId}`, { action: 'decide', direction: 'Add dark mode', as: 'later' });
+    assert.deepStrictEqual((await playCall('GET', 'state', priya)).body.decisions, []);
+    const c2 = await hostCall('POST', 'asks', { kind: 'rating', prompt: 'How is the colour?' });
+    await hostCall('POST', `asks/${c2.body.ask.askId}`, { action: 'decide', direction: 'Warmer colours' });
+    assert.deepStrictEqual((await playCall('GET', 'state', priya)).body.decisions.map((d) => d.direction), ['Warmer colours']);
+  });
+  await check('heldBack: held and never carried; carried by a sent direction, it is not', () => {
+    const ask = { AskId: '003', Decision: { heldForLater: true } };
+    assert.strictEqual(S.heldBack(ask, { logs: [] }), true);
+    assert.strictEqual(S.heldBack(ask, { logs: [{ Kind: 'direction', ForAgent: true, From: { AskIds: ['003'] } }] }), false);
+    assert.strictEqual(S.heldBack({ AskId: '004', Decision: {} }, { logs: [] }), false);
+  });
+  await check('directions read as sentences: no ".:", and a rating says what the room gave it (host review, 25 Oct 2026)', () => {
+    assert.strictEqual(S.questionAnswer('Name a person and the moment they need it.', 'A volunteer'), 'Name a person and the moment they need it: A volunteer');
+    assert.strictEqual(S.questionAnswer('What colour?', 'Blue'), 'What colour: Blue');
+    assert.strictEqual(S.ratingDirection('How clear is it?', 3), 'How clear is it? The room rated it 3 out of 5 (5 is great, 1 needs work).');
+    assert.strictEqual(S.ratingDirection('Rate the page', 4.5), 'Rate the page. The room rated it 4.5 out of 5 (5 is great, 1 needs work).');
+    assert.strictEqual(S.ratingDirection('Rate it', null), '');
+    // The sentence already carries its scale: no second bracket.
+    assert.strictEqual(S.withRatingMeaning('rating', S.ratingDirection('How clear?', 3)), S.ratingDirection('How clear?', 3));
   });
   await check('Claude drafts the brief once who, the problem and good are known; the host edits it and uses it', async () => {
     seed();

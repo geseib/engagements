@@ -51,6 +51,7 @@ const {
   POLL_MAX_OPTIONS, pollItemProperties, pollKindGuide, typedPollFields,
 } = require('./shared/kind-generation');
 const { pollsToCsv } = require('./shared/generated-set');
+const { categoryBlock, aboutSetBlock, categoryList } = require('./shared/category-brief');
 
 const MAX_COUNT = 100;
 
@@ -100,6 +101,10 @@ function parseRequest(payload) {
       // the write paths. See shared/round-kinds.js.
       roundKind: normalizeRoundKind(payload.roundKind),
       roundKindBrief: String(payload.roundKindBrief || '').trim(),
+      // The set's categories and what the set is about — shared/category-brief.js.
+      setCategories: categoryList(payload.categories),
+      aboutSet: payload.aboutSet && typeof payload.aboutSet === 'object' ? payload.aboutSet : null,
+      total,
     },
   };
 }
@@ -168,6 +173,13 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     p += `\n\n${direction}\n\nWhere the direction above and the topic disagree, follow the direction.`;
   }
 
+  const about = aboutSetBlock(config.aboutSet);
+  if (about) p += `\n\n${about}`;
+  // WHICH CATEGORY, AND WHICH NOT — the one rule every generator shares. A
+  // poll run writes for ONE category (the builder picks it), so the set's
+  // other categories are named as the ones not to drift into.
+  const categories = categoryBlock({ target: config.category, categories: config.setCategories, total: config.total });
+  if (categories) p += `\n\n${categories}\n`;
   p += `\nComplexity level: ${config.difficulty}.`;
 
   p += `\n\n${pollKindGuide(config.kinds)}`;
@@ -190,7 +202,6 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
   // (structured-generation.js fenceHost) — where the host's own requirements
   // always sat in this prompt's order.
   const host = [
-    config.category && `Category: ${fenceHost('category', config.category)}`,
     config.audience && `Target audience: ${fenceHost('audience', config.audience)}`,
     config.customPrompt && `Additional Requirements: ${fenceHost('requirements', config.customPrompt)}`,
   ].filter(Boolean);

@@ -62,6 +62,7 @@ const {
 const drafts = require('./shared/generation-drafts');
 const { withTopicFields, topicPromptBlock, readModelTopic } = require('./shared/draft-topic');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
+const { categoryBlock, aboutSetBlock, categoryList } = require('./shared/category-brief');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = new LambdaClient({ region: process.env.AWS_REGION });
@@ -180,7 +181,7 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt, pro
 function buildPrompt({
   template, engagementType, count, difficulty, context, audience, customPrompt,
   categories, mustHaveCategories, alreadyUsedTitles, roundKind, roundKindBrief,
-  batchGuidance,
+  batchGuidance, category = '', setCategories = [], aboutSet = null, total = 0,
 }) {
   const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
 
@@ -221,6 +222,9 @@ function buildPrompt({
     p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
   }
 
+  const about = aboutSetBlock(aboutSet);
+  if (about) p += `\n\n${about}`;
+
   // THE HOST'S TEXT, FENCED (structured-generation.js fenceHost): each piece in
   // its own tag, under one line saying it is material and not rules. Every
   // substitution is a FUNCTION replacer — with a string, `$&` or `$'` in what
@@ -228,7 +232,7 @@ function buildPrompt({
   const requirements = withoutBasePrompt(customPrompt, template.basePrompt);
   const hostContext = context && template.contextTemplate;
   const hostAudience = audience && template.audienceTemplate;
-  if (hostContext || hostAudience || requirements || mustHaveCategories) p += `\n\n${HOST_MATERIAL_NOTE}`;
+  if (hostContext || hostAudience || requirements) p += `\n\n${HOST_MATERIAL_NOTE}`;
   if (hostContext) p += template.contextTemplate.replace('{context}', () => fenceHost('context', context));
   if (hostAudience) p += template.audienceTemplate.replace('{audience}', () => fenceHost('audience', audience));
   if (requirements) p += `\n\nAdditional Requirements: ${fenceHost('requirements', requirements)}`;
@@ -238,15 +242,30 @@ function buildPrompt({
   // not a free word beside it that contradicted the limit.
   if (difficulty && engagementType === 'trivia') p += `\n\nDifficulty Level: ${difficulty}`;
 
-  if (template.categoryTemplate && (categories || mustHaveCategories)) {
-    let categoryText = template.categoryTemplate;
-    if (categories) categoryText = categoryText.replace('{numberOfCategories}', () => String(categories));
-    categoryText = mustHaveCategories
-      ? categoryText.replace('{mustHaveCategories}', () => fenceHost('categories', mustHaveCategories))
-      // No must-haves: the line that would have shown the bare placeholder goes.
-      : categoryText.split('\n').filter((line) => !line.includes('{mustHaveCategories}')).join('\n');
-    p += `\n${categoryText}`;
-  }
+  /*
+    WHICH CATEGORY, AND WHICH NOT (shared/category-brief.js) — the owner,
+    2026-10-25: questions must belong to their category "and not what really
+    belongs in another category".
+
+    The shared block says the count, the names and the rule that keeps them
+    apart, so it replaces the stored template's category text whenever it has
+    anything to say; the template's text is the fallback. Its
+    `{mustHaveCategories}` line is never sent: it used to reach the model as
+    the literal "{mustHaveCategories}" whenever the author named none (the
+    count is always set, so the template always ran).
+  */
+  const names = categoryList([...categoryList(setCategories), ...categoryList(mustHaveCategories)]);
+  const shared = categoryBlock({ target: category, categories: names, count: categories, total });
+  const templateLines = template.categoryTemplate && !category
+    ? String(template.categoryTemplate)
+      .split('\n')
+      .filter((line) => !line.includes('{mustHaveCategories}'))
+      .map((line) => line.replace('{numberOfCategories}', categories))
+      .filter((line) => line.trim() && !line.includes('{'))
+      .join('\n')
+    : '';
+  if (shared) p += `\n\n${shared}`;
+  else if (templateLines) p += `\n${templateLines}`;
 
   // Later chunks must know what earlier ones produced. The old design had no
   // equivalent — twenty parallel calls each believed they were the only one.
@@ -445,6 +464,16 @@ async function runWorker(event, context) {
     // the TOTAL, which is the number that was always meant.
     const categories = Math.min(parseInt(numberOfCategories, 10) || 3, 24, Math.max(total, 1));
 
+    // The one category this run writes for (a draft's "Regenerate this
+    // category"), the set's categories, and what the set is about — every
+    // pass gets the same. shared/category-brief.js.
+    const categoryInputs = {
+      category: typeof payload.category === 'string' ? payload.category.trim() : '',
+      setCategories: categoryList(payload.categories),
+      aboutSet: payload.aboutSet && typeof payload.aboutSet === 'object' ? payload.aboutSet : null,
+      total,
+    };
+
     const { template, source, chosenMissing } = await resolvePromptTemplate({
       scenarioType, engagementType, prompt, promptId,
     });
@@ -510,6 +539,7 @@ async function runWorker(event, context) {
         roundKind,
         roundKindBrief,
         batchGuidance,
+        ...categoryInputs,
       });
       const askingTopicNow = asksTopic && isFirstPass;
       const withTopic = (p) => (askingTopicNow ? `${p}\n${topicPromptBlock()}` : p);
@@ -537,7 +567,7 @@ async function runWorker(event, context) {
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: [...seedTitles, ...produced.map((s) => s.title)],
-              roundKind, roundKindBrief, batchGuidance,
+              roundKind, roundKindBrief, batchGuidance, ...categoryInputs,
             })),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),

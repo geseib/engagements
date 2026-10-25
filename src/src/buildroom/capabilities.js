@@ -95,7 +95,7 @@ export const CAPABILITIES = Object.freeze([
     twoScreens: 'Session slot: Screens',
   },
   {
-    id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "The header's Room's window ↗ (Host, Build, History), the Stage dock's PRESENT; Session, Settings, Screens: Room's window",
+    id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "The header's Room's window ↗ (Host, Build, History), the Stage dock's ROOM'S WINDOW; Session, Settings, Screens: Room's window",
     twoScreens: "Top line: Room's window ↗ and its status, The room sees: Stage, Build, History, See it here",
   },
   // The release gate (owner, 17 Oct 2026; parity PLAN §2c).

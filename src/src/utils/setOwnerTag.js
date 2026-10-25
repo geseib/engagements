@@ -131,8 +131,12 @@ export const promptOwnerTag = (prompt) => {
   return tag === YOURS ? TEAM : tag;
 };
 export const promptOwnerRank = (prompt) => RANK[promptOwnerTag(prompt)];
+/* "Your team", not the sets' "Team": the prompt library's Owner column says
+   "Your team" (PromptReadOnlyView promptLibraryLabel), and the filter has to
+   use the column's word (owner, 2026-10-25). */
+const PROMPT_LABELS = { ...LABELS, [TEAM]: 'Your team' };
 export const PROMPT_OWNER_OPTIONS = [TEAM, ENGAGE, PUBLIC].map((value) => ({
-  value, label: LABELS[value],
+  value, label: PROMPT_LABELS[value],
 }));
 
 export default { setOwnerTag, setOwnerLabel, setOwnerTitle, setOwnerIsOurs, setOwnerRank };

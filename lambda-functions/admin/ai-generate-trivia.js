@@ -27,6 +27,7 @@ const { normalizeTags } = require('./shared/tags');
 const { triviaToCsv } = require('./shared/generated-set');
 const { readBatchGuidance, batchGuidanceBlock } = require('./shared/batch-guidance');
 const { clampBackground, BACKGROUND_TRUTH_RULE } = require('./shared/question-background');
+const { categoryBlock, aboutSetBlock, categoryList } = require('./shared/category-brief');
 
 const MAX_COUNT = 100;
 const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
@@ -48,6 +49,10 @@ function parseRequest(payload) {
       customPrompt: payload.customPrompt || '',
       numChoices, numCorrect, categories,
       mustHaveCategories: payload.mustHaveCategories || '',
+      // The set's categories and what the set is about — shared/category-brief.js.
+      setCategories: categoryList([...categoryList(payload.categories), ...categoryList(payload.mustHaveCategories)]),
+      aboutSet: payload.aboutSet && typeof payload.aboutSet === 'object' ? payload.aboutSet : null,
+      total,
       // ONE RUN'S INSTRUCTION, not the set's brief — see shared/batch-guidance.js.
       batchGuidance: readBatchGuidance(payload.batchGuidance),
     },
@@ -115,19 +120,27 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
   // none, nothing changes.
   const guidance = batchGuidanceBlock(config.batchGuidance);
   if (guidance) p += `\n\n${guidance}\n`;
+  const about = aboutSetBlock(config.aboutSet);
+  if (about) p += `\n\n${about}\n`;
   p += `\nDifficulty level: ${config.difficulty}.`;
   p += `\nEach question has exactly ${config.numChoices} answer choices.`;
   if (config.numCorrect > 1) p += `\nEach question has exactly ${config.numCorrect} correct answers.`;
 
-  p += `\n\nOrganize questions into EXACTLY ${config.categories} categories - no more, no less.`;
+  // WHICH CATEGORY, AND WHICH NOT — the one rule every generator shares.
+  const categories = categoryBlock({
+    target: config.category,
+    categories: config.setCategories,
+    count: config.categories,
+    total: config.total,
+  });
+  if (categories) p += `\n\n${categories}`;
 
   // THE HOST'S TEXT, FENCED, in one block under the line that says what the
   // tags mean (structured-generation.js fenceHost) — the survey generator's
-  // pattern. With none of it, no block and no note.
+  // pattern. The category names are in the category block above. With none
+  // of it, no block and no note.
   const host = [
-    config.category && `Category: ${fenceHost('category', config.category)}`,
     config.audience && `Target audience: ${fenceHost('audience', config.audience)}`,
-    config.mustHaveCategories && `Must include these categories: ${fenceHost('categories', config.mustHaveCategories)}`,
     config.customPrompt && `Additional Requirements: ${fenceHost('requirements', config.customPrompt)}`,
   ].filter(Boolean);
   if (host.length > 0) p += `\n\n${HOST_MATERIAL_NOTE}\n${host.join('\n')}`;
