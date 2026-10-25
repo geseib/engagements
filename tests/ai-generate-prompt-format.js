@@ -13,6 +13,7 @@
  * The model call is stubbed at shared/claude-route.js's `send`, which is the
  * one door every call goes through. Plain node; judged by exit code.
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -113,5 +114,6 @@ const call = (gameType = 'call-and-answer') => generate.handler({
   });
 
   say(`\n${failed ? `${failed} failed` : 'all passed'}`);
+  suiteFinished();
   if (failed) process.exit(1);
 })();
