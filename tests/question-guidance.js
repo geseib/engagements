@@ -298,13 +298,14 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
 
   await test('with no guidance the trivia prompt opens exactly as it always has', () => {
     // Pinned text, not a comparison with this build's own output: this is the
-    // opening the generator wrote before `batchGuidance` existed.
+    // opening the generator wrote before `batchGuidance` existed, with the
+    // category block as shared/category-brief.js writes it (2026-10-25).
     const prompt = triviaPrompt(TRIVIA_PAYLOAD);
     assert.ok(prompt.startsWith(
       'You are an expert trivia question creator. Create 5 trivia questions about Historic figures.\n'
       + 'Target audience: Adults.\nDifficulty level: medium.\nEach question has exactly 4 answer choices.\n\n'
-      + 'Additional Requirements: Keep it fun.\n\nOrganize questions into EXACTLY 3 categories - no more, no less.\n'
-      + 'Must include these categories: Presidents\n\nLENGTH LIMITS (hard limits, not targets):'),
+      + 'Additional Requirements: Keep it fun.\n\nCATEGORIES: organize the questions into EXACTLY 3 categories'
+      + ' - no more, no less. These must be among them, spelled exactly as written:\n- Presidents\n'),
     `the no-guidance opening moved:\n${prompt.slice(0, 400)}`);
     assert.ok(!prompt.includes(LABEL));
   });
@@ -321,7 +322,7 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
     // audience" is not read as more of the guidance.
     assert.ok(prompt.includes(`${GW}\n\nTarget audience: Adults.`), 'the guidance runs into the brief');
     const guidanceAt = prompt.indexOf(GW);
-    for (const later of ['Target audience:', 'Additional Requirements:', 'Organize questions into', 'LENGTH LIMITS']) {
+    for (const later of ['Target audience:', 'Additional Requirements:', 'CATEGORIES:', 'LENGTH LIMITS']) {
       assert.ok(guidanceAt < prompt.indexOf(later), `the guidance comes after "${later}"`);
     }
   });

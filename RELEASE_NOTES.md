@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 25 Oct 2026 (Build Room: quick wins from the host review)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `f29087d9`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
@@ -52,6 +52,38 @@ Entries name the dev commit that was merged, so the review can be matched to the
 - The rest of the host review is not done yet (review items 10 to 20 and 22): the setup checklist that gates the opening and "Practise without Claude" (10), Simple mode on the Host screen and the console (11), a three-step default opening (12), one loop model everywhere (13), the Ask the room dialog (Yes/No tab, spacing, recommended questions, advanced fields under More) (14), a prefilled wrap-up and end-of-session moves on the console (15), the report's brief section, its internal prompt text and wheel markers (16), a command palette (17), reveal by event (18), presets (19), dropping the host header from projected one-screen Build and History (20), and a practice room with a fake Claude (22).
 - A decision saved for later and later sent from the Later list shows to the room as what Claude was told ("We told Claude"), not as "We decided".
 - Sessions that already logged "The room framed the build. Claude is building." keep that line.
+
+---
+
+## 25 Oct 2026 (Workie keeps questions in their category; the owner filter says "Your team")
+
+**Test:** merge of dev `9f16efd8`. Everything below this entry is already on test, except the **hints** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.
+
+### New
+
+- **Workie is told what a set is about and what its categories are when it writes questions** (owner, 25 Oct: "make sure the questions generated related to that category and not what really belongs in another category"). When you add questions to a set (**Add questions…** → Write), Workie now gets the set's name, description and AI context, and every category in the set. Writing for one category, it is told the others and that a question belonging better in one of them is not for this one. Writing across several, it is told to keep them distinct, with about how many in each. The same goes for a draft's **Regenerate this category**, and for **Draft this with AI** on a question in the set editor. This covers Trivia, Poll, Call & Answer and Wavelength.
+- Measured before shipping: asked for eight Poll questions for "Communication" in a set that also has Meetings, Tools & systems, Workload and Recognition (three runs each, a second model sorting every question into the category it fits best), the old prompt kept **11 of 24** in Communication and the new one **23 of 24**.
+
+### Fixed
+
+- **The Poll builder told Workie two different things** when adding to a set's own categories: write for one category, and spread the questions evenly across all of them. Questions came out spread over the whole set. It now says only the one category, and names the others to stay out of.
+- **Call & Answer and Wavelength sent the literal text "{mustHaveCategories}"** to the model whenever no category was named, and could say the category instructions twice. Both gone.
+- **The prompt library's owner filter said "Team"** where the Owner column says **Your team**. Both say Your team.
+
+### What to look at
+
+1. In the console, open a Poll set that has three or more categories, press **Add questions…**, choose **More in each of the set's categories**, and write 6. In the builder pick one category and generate. Every question in the draft should be about that category; none should be one that obviously belongs in another of the set's categories.
+2. Do the same on a Trivia set with two or more categories: the draft fills each category with questions that fit it, about evenly.
+3. In a draft review, press **Regenerate this category** on one category: the new questions stay in it.
+4. In the set editor, open a question in one category and press **Draft this with AI**: the draft fits that category.
+5. Admin › Prompts in a team with its own Workie: the owner filter reads **Your team**, as the Owner column does.
+6. Press **?** in the set editor and read *Adding questions to a set you have* and *Reviewing a draft* (its *Regenerate this category* step): each says Workie knows the set and its categories.
+
+### Known gaps
+
+- Categories have names only; nothing describes what belongs in each. Workie reads each category's meaning from its name and the set's description, so a set with a vague description and overlapping names still gets less separation.
+- Making a **new** set does not send its description: it is drafted from the same form fields the topic comes from, so it would add nothing.
+- Surveys have no categories, so they are unchanged.
 
 ---
 

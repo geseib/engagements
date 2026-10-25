@@ -51,6 +51,29 @@ export function batchGuidanceFor(appendTo, text) {
   return String(text ?? '').trim().slice(0, BATCH_GUIDANCE_MAX).trim();
 }
 
+/**
+ * WHAT THE SET IS ABOUT, AND ITS CATEGORIES, for the job payload (owner,
+ * 2026-10-25: the model must know what the set is about and its other
+ * categories, so a question lands in the category it belongs to).
+ * lambda-functions/admin/shared/category-brief.js writes them into the prompt.
+ * Adding only: a new set's copy is drafted from the form the topic already
+ * comes from, so sending it would say the same thing twice.
+ */
+export function appendCategoryContext(appendTo) {
+  if (!isAppend(appendTo)) return {};
+  const about = appendTo.about || {};
+  const aboutSet = {
+    title: String(about.title ?? appendTo.setName ?? '').trim(),
+    description: String(about.description ?? '').trim(),
+    aiContext: String(about.aiContext ?? '').trim(),
+  };
+  const categories = (appendTo.categories || []).map((c) => String(c ?? '').trim()).filter(Boolean);
+  return {
+    ...(aboutSet.title || aboutSet.description || aboutSet.aiContext ? { aboutSet } : {}),
+    ...(categories.length ? { categories } : {}),
+  };
+}
+
 /** `customPrompt` with the requirement appended, for the job payload. */
 export function withAppendRequirement(customPrompt, appendTo) {
   const extra = appendRequirement(appendTo);

@@ -637,11 +637,11 @@ describe('the Owner filter and sort — your team\'s prompts vs Engage\'s and sh
     .map((tr) => OWNED.find((p) => tr.textContent.includes(p.name)).name);
 
   // rejects: THE REQUEST — no way to narrow prompts to whose they are.
-  test('there is an Owner filter offering Team, Engage and Public — and no empty Yours', () => {
+  test('there is an Owner filter offering Your team, Engage and Public — the column\'s words — and no empty Yours', () => {
     show(base);
     const select = screen.getByRole('combobox', { name: /owner/i });
     const labels = within(select).getAllByRole('option').map((o) => o.textContent);
-    expect(labels).toEqual(['All owners', 'Team', 'Engage', 'Public']);
+    expect(labels).toEqual(['All owners', 'Your team', 'Engage', 'Public']);
   });
 
   // rejects: the owner's 2026-10-24 report — Team offered on a library that
@@ -665,7 +665,7 @@ describe('the Owner filter and sort — your team\'s prompts vs Engage\'s and sh
     render(<PromptLibraryPanel prompts={[OWNED[1]]} filters={{ ...base, owner: 'team' }} onFilterChange={jest.fn()} />);
     const select = screen.getByRole('combobox', { name: /owner/i });
     expect(within(select).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['All owners', 'Team', 'Engage']);
+      .toEqual(['All owners', 'Your team', 'Engage']);
   });
 
   // rejects: the owner's 2026-10-24 report — whose a prompt is, drawn as a chip
