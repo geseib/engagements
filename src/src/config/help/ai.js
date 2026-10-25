@@ -618,10 +618,13 @@ const prompts = {
     },
     /*
       PromptLibraryPanel.jsx:430-511: engagement type, scenario (generator) or
-      category (results), status, owner (All owners, Team, Engage, Public), sort
-      (Default order, Owner (team first)), search, count "N prompts · N shown";
-      no-match: one-click "Removing any one of these gets you results", "Clear
-      all filters". Columns Prompt, Type, Scenario/Category, (Version), State.
+      category (results), status, owner (All owners, then only the owners the
+      library holds among Team, Engage, Public) and sort (Default order, Owner
+      (team first)) — both drawn only when there are two owners to choose
+      between; search, count "N prompts · N shown"; no-match: one-click
+      "Removing any one of these gets you results", "Clear all filters".
+      Columns Prompt, Type, Scenario/Category, Owner (Engage / Your team /
+      Public), (Version), State.
     */
     {
       id: 'finding-a-prompt',
@@ -630,14 +633,14 @@ const prompts = {
       blocks: [
         {
           t: 'p',
-          text: 'Each library is a table: the prompt\'s name and description, its engagement type, its scenario (generator prompts) or category (results prompts), and its state. Above it you can filter by:',
+          text: 'Each library is a table: the prompt\'s name and description, its engagement type, its scenario (generator prompts) or category (results prompts), whose it is (**Owner**: Engage, Your team or Public), and its state. Above it you can filter by:',
         },
         {
           t: 'list',
           items: [
             'Engagement type, and then the scenario or category within it.',
             'Status: Active, Draft or Archived.',
-            'Owner: Team, Engage or Public. **Owner (team first)** sorts your team\'s own prompts to the top.',
+            'Owner, when the library holds prompts from more than one: Team, Engage or Public, offering only the ones there are. **Owner (team first)** sorts your team\'s own prompts to the top.',
             'Words, in **Search prompts...**.',
           ],
         },

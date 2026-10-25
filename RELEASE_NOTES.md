@@ -34,6 +34,34 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 24 Oct 2026 (prompt library): an Owner column, and an owner filter with only real choices
+
+**Test:** merge of dev `7d621789`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Owner is a column of its own** in both prompt libraries (Admin › Prompts › results prompts and generation prompts), headed **Owner**, saying **Engage**, **Your team** or **Public** for every row. It shows in Engage mode too, where there was no owner at all before.
+
+### Fixed
+
+- **The owner sat in the State column with no heading** (owner, 24 Oct: "the column in the admin prompts page showing owner is not aligned nor does it have a header"). In a team's read-only view it was a chip squeezed in beside Active and Draft. It is now the Owner column above, and State holds only state.
+- **The owner filter offered owners that have no prompts** (owner, 24 Oct: a filter for team prompts, with no way to create one). It now lists only the owners the library holds. With one owner, as in Engage's own library, the owner filter and the **Owner (team first)** sort are not shown. An owner already chosen stays in the list until cleared, so a filter that empties the table can always be undone.
+
+### What to look at
+
+1. On engage.test, as staff in **Engage** mode, open **Prompts**, then the results prompts library. The columns read Prompt, Type, Category, **Owner**, Version, State, and every Owner cell says *Engage*. There is no owner filter and no sort control, because every prompt is Engage's.
+2. Open the generation prompts library: Prompt, Type, Scenario, **Owner**, State. Same: every row *Engage*, no owner filter.
+3. If a team on test has its own Workie (one made before prompts became Engage-only; not checked for this push), switch to it and open Prompts. The Owner column says *Your team* on that row and *Engage* on the rest, and the owner filter offers **Team** and **Engage** only, with no Public. Choose Team: only the team's rows are left.
+4. In a team with no Workie of its own, Prompts shows no owner filter.
+5. Press **?** on the Prompts screen and read *Finding a prompt*: it describes the Owner column and the filter as above.
+
+### Known gaps
+
+- Teams still cannot create prompts: prompts are changed in Engage mode only (owner, 24 Sep). Letting teams write their own Workies, with guardrail checks and Engage review, is drafted as a design (`docs/design/prompt-guardrails/`, not in this push) and needs the owner's answers before it is built.
+- The filter says **Team** where the column says **Your team**. They are the same owner.
+
+---
+
 ## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
 
 **Test:** merge of dev `91cc6b10`. Everything below this entry is already on test; this push adds only what is here.
