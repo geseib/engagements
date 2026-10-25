@@ -168,7 +168,8 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     await runJob({ ...BASE, count: 5, numberOfCategories: 4, mustHaveCategories: 'Physics, Chemistry' });
     const prompt = state.bedrockCalls[0].prompt;
     assert.match(prompt, /EXACTLY 4 categories/, 'the trivia UI has always sent this and the handler always dropped it');
-    assert.match(prompt, /Physics, Chemistry/);
+    // Named, one per line, as the ones that must be among the four.
+    assert.match(prompt, /- Physics\n- Chemistry/);
   });
 
   await test('the category clamp uses the TOTAL, never the chunk size', async () => {
@@ -177,7 +178,7 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     state.bedrockHandler = () => toolResponse(makeTrivia(1, 'solo'));
     await runJob({ ...BASE, count: 1, numberOfCategories: 5 });
     const prompt = state.bedrockCalls[0].prompt;
-    assert.match(prompt, /EXACTLY 1 categories/,
+    assert.match(prompt, /under one category/,
       'one item genuinely cannot span 5 categories — but the clamp must come from the total, not the chunk');
 
     reset();

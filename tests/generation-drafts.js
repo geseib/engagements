@@ -308,6 +308,9 @@ const APPEND = {
     const prompt = state.bedrockCalls[state.bedrockCalls.length - 1].prompt;
     assert.ok(prompt.includes('Keep me'), 'the other category\'s titles were not passed as already used');
     assert.ok(prompt.includes('Treaties'), 'the category was not named to the model');
+    // The set's other categories, as the ones not to drift into
+    // (shared/category-brief.js; owner, 2026-10-25).
+    assert.ok(prompt.includes('other categories are: Founders.'), 'the neighbouring category was not named');
     const items = parse(await route('GET', draftId)).body.items;
     const titles = items.map((i) => i.item.title).sort();
     assert.deepStrictEqual(titles, ['A fresh treaty question', 'Keep me']);

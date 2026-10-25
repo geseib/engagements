@@ -158,7 +158,7 @@ const aiBuilders = {
           t: 'steps',
           items: [
             { title: 'Open the set and press Add questions…', text: 'It is in the set editor\'s Questions panel. The dialog shows each category and how many it holds.' },
-            { title: 'Choose where they go', text: 'More in each of the set\'s categories, or a number of new categories. One or the other per run.' },
+            { title: 'Choose where they go', text: 'More in each of the set\'s categories, or a number of new categories. One or the other per run. Workie is told what the set is about (its name, description and AI context) and every category in it, and writes each question for the one category it fits, not one that belongs in another.' },
             { title: 'Press Write and the number', text: 'The builder opens with the numbers filled in and starts the run; if it waits, press its Generate button. Any guidance you type is for this run only.' },
             { title: 'Review', text: 'The questions wait in a draft. Accepting them saves one new version of the set.' },
           ],
@@ -332,7 +332,7 @@ const drafts = {
             { title: 'Keep or leave out', text: 'Untick a question to leave it out, or untick a category to leave out all of it.' },
             { title: 'Edit', text: 'Change the title, the text and, for trivia, the options and which one is correct. **Save edit** keeps it; the question is marked edited.' },
             { title: 'Problems', text: 'A question with something wrong, such as no correct answer, is marked. You are asked before accepting one.' },
-            { title: 'Regenerate this category', text: 'Writes new questions in place of that category\'s. If fewer arrived than you asked for, it offers to generate the rest into this draft. Each says how big it is first and takes optional guidance; press **Write them**. Not offered for surveys.' },
+            { title: 'Regenerate this category', text: 'Writes new questions in place of that category\'s, told the draft\'s other categories so the new ones stay in this one. If fewer arrived than you asked for, it offers to generate the rest into this draft. Each says how big it is first and takes optional guidance; press **Write them**. Not offered for surveys.' },
             { title: 'Stop', text: 'While questions are still being written, stops after the current pass and keeps what it wrote.' },
           ],
         },
