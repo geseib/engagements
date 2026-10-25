@@ -619,7 +619,7 @@ const prompts = {
     /*
       PromptLibraryPanel.jsx:430-511: engagement type, scenario (generator) or
       category (results), status, owner (All owners, then only the owners the
-      library holds among Team, Engage, Public) and sort (Default order, Owner
+      library holds among Your team, Engage, Public) and sort (Default order, Owner
       (team first)) — both drawn only when there are two owners to choose
       between; search, count "N prompts · N shown"; no-match: one-click
       "Removing any one of these gets you results", "Clear all filters".
@@ -640,7 +640,7 @@ const prompts = {
           items: [
             'Engagement type, and then the scenario or category within it.',
             'Status: Active, Draft or Archived.',
-            'Owner, when the library holds prompts from more than one: Team, Engage or Public, offering only the ones there are. **Owner (team first)** sorts your team\'s own prompts to the top.',
+            'Owner, when the library holds prompts from more than one: Your team, Engage or Public, offering only the ones there are. **Owner (team first)** sorts your team\'s own prompts to the top.',
             'Words, in **Search prompts...**.',
           ],
         },
