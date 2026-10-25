@@ -63,7 +63,14 @@ const ENDPOINT = `${API_BASE}admin/ai-generate-scenarios`;
 // Shared framing for wavelength generation. Wavelength is a word-association
 // alignment game: the host shows a SUBJECT, every participant lists up to 10
 // words for it, and the game measures how many words overlap across players.
-const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
+// Same words as lambda-functions/admin/shared/wavelength-spec.js. No example
+// subjects: examples in a spec come back as subjects.
+const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association alignment game. '
+  + 'Each item is a single short, evocative SUBJECT of 1-4 words that every participant responds to '
+  + 'by listing up to 10 words or short phrases that come to mind; the game then measures how many '
+  + 'words overlap across participants. Pick subjects broad enough that everyone can produce 10 '
+  + 'associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. '
+  + 'Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.';
 
 /*
   THE DETAIL LEVELS, LABELLED BY WHAT THEY PRODUCE (docs/design/authoring-
@@ -74,7 +81,7 @@ const WAVELENGTH_SPEC = 'Create wavelength subjects for a team word-association 
 */
 export const DETAIL_LEVELS = [
   { value: 'brief', label: 'Brief — 1 sentence', short: 'Brief detail' },
-  { value: 'detailed', label: 'Standard — 2 sentences', short: 'Standard detail' },
+  { value: 'standard', label: 'Standard — 2 sentences', short: 'Standard detail' },
   { value: 'comprehensive', label: 'Detailed — up to 3 sentences', short: 'Detailed (up to 3 sentences)' },
 ];
 const detailShort = (value) => (DETAIL_LEVELS.find((l) => l.value === value) || {}).short || value;
@@ -130,7 +137,7 @@ function AIScenarioBuilder({
     // ADDING TO A SET starts from what that set says about itself.
     context: appendTo?.brief?.context || '',
     audience: appendTo?.brief?.audience || '',
-    difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
+    difficulty: engagementType === 'trivia' ? 'medium' : 'standard',
     count: 6,
     customPrompt: '',
     customTitle: '',
@@ -482,7 +489,7 @@ function AIScenarioBuilder({
         audience: '', // Leave blank for admin to specify
         numberOfCategories: prompt.defaultSettings?.numberOfCategories || 3,
         mustHaveCategories: prompt.defaultSettings?.mustHaveCategories || '',
-        difficulty: prompt.defaultSettings?.difficulty || (engagementType === 'trivia' ? 'medium' : 'detailed'),
+        difficulty: prompt.defaultSettings?.difficulty || (engagementType === 'trivia' ? 'medium' : 'standard'),
         // EMPTY, NOT THE BASE PROMPT. This box used to be pre-filled with
         // prompt.basePrompt "so admin can see and edit", and was then sent as
         // customPrompt — while the server reads the same basePrompt from the
@@ -500,7 +507,7 @@ function AIScenarioBuilder({
       audience: '',
       numberOfCategories: 3,
       mustHaveCategories: '',
-      difficulty: engagementType === 'trivia' ? 'medium' : 'detailed',
+      difficulty: engagementType === 'trivia' ? 'medium' : 'standard',
       customPrompt: ''
     };
   };

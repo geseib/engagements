@@ -133,10 +133,10 @@ describe('3 · detail levels say what they produce', () => {
     const options = within(select).getAllByRole('option').map((o) => [o.value, o.textContent]);
     expect(options).toEqual([
       ['brief', 'Brief — 1 sentence'],
-      ['detailed', 'Standard — 2 sentences'],
+      ['standard', 'Standard — 2 sentences'],
       ['comprehensive', 'Detailed — up to 3 sentences'],
     ]);
-    expect(DETAIL_LEVELS.map((l) => l.value)).toEqual(['brief', 'detailed', 'comprehensive']);
+    expect(DETAIL_LEVELS.map((l) => l.value)).toEqual(['brief', 'standard', 'comprehensive']);
     expect(screen.queryByText(/Comprehensive/)).toBeNull();
   });
 });

@@ -661,6 +661,33 @@ describe('drafting a question with AI', () => {
     await addQuestion();
 
     fireEvent.click(screen.getByRole('button', { name: /Draft this with AI/i }));
+    // This set's questions use six options, so the draft is asked for six.
+    expect(await screen.findByText(/writes 6 options \(A–F\), the shape most of this set's questions have/i))
+      .toBeInTheDocument();
+  });
+
+  it('asks for the number of options the set\'s questions already have', async () => {
+    // rejects: a new trivia draft always written with four options in a set
+    // whose questions all have six (the generator assumed four until told).
+    const { aiPosts } = mockApi({ questions: TRIVIA_QUESTIONS });
+    renderPanel({ questionSet: TRIVIA_SET });
+    await screen.findByText('WHO SANG THIS');
+    await addQuestion();
+    fireEvent.click(screen.getByRole('button', { name: /Draft this with AI/i }));
+    fireEvent.change(await screen.findByLabelText(/What should this question be about/i), {
+      target: { value: 'a 1985 number one' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Draft it$/i }));
+    await waitFor(() => expect(aiPosts).toHaveLength(1));
+    expect([aiPosts[0].numChoices, aiPosts[0].numCorrect]).toEqual([6, 1]);
+  });
+
+  it('says four options when the set has no trivia question yet', async () => {
+    mockApi({ questions: { ...TRIVIA_QUESTIONS, questions: [] } });
+    renderPanel({ questionSet: TRIVIA_SET });
+    await screen.findByRole('button', { name: /Add a question/i });
+    await addQuestion();
+    fireEvent.click(screen.getByRole('button', { name: /Draft this with AI/i }));
     expect(await screen.findByText(/writes four options \(A–D\); E and F are yours to add/i))
       .toBeInTheDocument();
   });

@@ -250,10 +250,10 @@ const AUTHORING_RULES = Object.freeze([
     id: 'avoid-misleading-variables',
     gate: null,
     text: 'Prefer {responseCount} over {totalParticipants} (which counts this round\'s answers, '
-      + 'not the room), {voteCount} over {activeParticipants} (which silently becomes the answer '
-      + 'count when nobody voted), {voteTally} over {topVotedAnswers} (which carries no answer '
-      + 'text outside trivia), and {consensusLevel} over {votingPattern} (which compares vote '
-      + 'points against a count of people).',
+      + 'not the room). Where the round has a vote (Call & Answer only), prefer {voteCount} over '
+      + '{activeParticipants} (which silently becomes the answer count when nobody voted), '
+      + '{voteTally} over {topVotedAnswers} (which carries no answer text outside trivia), and '
+      + '{consensusLevel} over {votingPattern} (which compares vote points against a count of people).',
   }),
 ]);
 

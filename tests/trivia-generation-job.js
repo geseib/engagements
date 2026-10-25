@@ -159,6 +159,9 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     const { job } = await runJob({ ...BASE, count: 4 });
     assert.ok(!job.items.some((i) => /unkeyed/.test(i.title)), 'an unkeyed question reached the set');
     assert.ok(job.items.every((i) => i.correctAnswer === 'OptionB'), 'option text maps back to its id');
+    assert.ok(job.warnings.some((w) => /left out because .*matched none of the options/.test(w)),
+      `the host is told why the set came up short: ${JSON.stringify(job.warnings)}`);
+    assert.ok(!job.warnings.some((w) => /only duplicates/.test(w)), 'unusable items are not called duplicates');
 
     const { normalizeItem, parseRequest } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
     const multi = parseRequest({ ...BASE, numCorrect: 2 }).config;
