@@ -241,7 +241,8 @@ export default function Dock({
           title={present.title || 'Drag it to the second screen and press F'}
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
-          <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>
+          {/* A surface may name it in its own words (`label`: the Build Room's "ROOM'S WINDOW"). */}
+          <span className="dock-more-lbl">{present.label || (present.presenting > 0 ? 'PRESENTING' : 'PRESENT')}</span>
         </RoomWindowLink>
       )}
       {home}

@@ -13,7 +13,7 @@
  *      the decide panel is drawn open (answer (a)); one Send
  *   4  People ticks who has answered, by name, never what they chose (e)
  *   5  the keys: 2/3/4 and P go to the room's window, Space presses the
- *      card's main button; "All sessions" leaves
+ *      card's main button; "Main menu" leaves
  *
  * Fixtures from the REAL backend's pure half (build-store.js hostView) plus
  * what build-room.js adds to the host's read. NO GEOMETRIC ASSERTIONS.
@@ -169,7 +169,9 @@ describe('1. the console on two screens, never on one', () => {
     const sees = within(top).getByRole('group', { name: 'The room sees' });
     expect(within(sees).getAllByRole('button').map((b) => b.getAttribute('aria-label') || b.textContent)).toEqual(['Stage', 'Build', 'History', 'See it here']);
     expect(within(sees).getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(top).getByRole('button', { name: /All sessions/ })).toBeInTheDocument();
+    // The Build Room's one word for the way out, on one screen and two (host review, 25 Oct 2026).
+    expect(within(top).getByRole('button', { name: /Main menu/ })).toBeInTheDocument();
+    expect(within(top).queryByRole('button', { name: /All sessions/ })).toBeNull();
   });
 });
 
@@ -256,7 +258,7 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     const panel = within(consoleEl().querySelector('.hc-main')).getByRole('region', { name: 'This ask' });
     // The board's own pick: B is going to Claude, A offers itself.
     expect(within(panel).getByText('Going to Claude')).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Choose this instead' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Choose this' }));
     await waitFor(() => expect(mainButton()).toHaveTextContent('Send A to Claude'));
     expect(within(panel).getByRole('textbox', { name: 'Direction for Claude' }).value).toMatch('One long list of shifts');
   });

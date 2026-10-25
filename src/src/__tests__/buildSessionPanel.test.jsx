@@ -153,7 +153,7 @@ describe('opening and closing', () => {
     ['Connect Claude Code', 'Open to a crew', 'Wrap up', 'Report', 'End session'].forEach((name) => {
       expect(within(p).getByRole('button', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
     });
-    expect(within(p).getByRole('switch', { name: /Auto-open Claude's questions/ })).toBeInTheDocument();
+    expect(within(p).getByRole('switch', { name: /Review Claude's questions/ })).toBeInTheDocument();
   });
 
   test('the SESSION button is the last control in the header', async () => {

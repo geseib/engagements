@@ -138,7 +138,7 @@ export function IdleStage({ room, now, host }) {
             {st.line}{sinceText && !st.doing && <span className="brm-muted"> · since {sinceText}</span>}
           </p>
         )}
-        {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code, then paste the Kick off prompt.</p>}
+        {host && st.key === 'none' && <p className="brm-stagehint">Connect Claude Code: its start command connects and kicks off.</p>}
         {work && <WorkRow work={work} />}
         {latestShot && <BuildImage imageId={latestShot.imageId} caption={latestShot.caption} className="brm-shot brm-shot--latest" />}
       </div>

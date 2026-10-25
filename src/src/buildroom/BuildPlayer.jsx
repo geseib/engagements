@@ -336,9 +336,10 @@ function OptionCard({ option, index, checked, disabled, role, onToggle }) {
         <a className="bpl-preview" href={option.url} target="_blank" rel="noopener noreferrer">
           Open preview<span className="bpl-sr"> of choice {option.label}</span>
         </a>
-      ) : option.imageId ? null : (
-        <span className="bpl-look">Look at the big screen</span>
-      )}
+      ) : option.imageId ? (
+        // Only where the big screen shows this option's mockup (host review, 25 Oct 2026).
+        <span className="bpl-look">{W.lookBigScreen}</span>
+      ) : null}
     </div>
   );
 }
@@ -503,8 +504,9 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
       <>
         <Eyebrow word="Vote" askId={ask.askId} extra={`pick up to ${max}`} />
         <h2 className="plr-q bpl-text">{ask.prompt}</h2>
+        {/* The ask's own question is the heading above; this says only how many are picked (host review, 25 Oct 2026). */}
         <p className="plr-rule">
-          {W.buildFirst(sel.length, max)}
+          {W.pickedOf(sel.length, max)}
         </p>
         {responses.length === 0 ? (
           <p className="plr-lede plr-muted">Nothing to vote on yet.</p>
@@ -740,9 +742,10 @@ function Feed({ view, showGoal = true, skipAskId = null }) {
   const latest = last && last.askId !== skipAskId ? last : null;
   return (
     <section className="bpl-feed" aria-label="Watch the build">
+      {/* While the room frames the build, that is the news (host review, 25 Oct 2026), not Claude's absence. */}
       {view.state !== 'ENDED' && (
         <p className={`bpl-agent${view.agentConnected ? ' bpl-agent--on' : ''}`}>
-          {view.agentConnected ? 'Claude Code is connected' : 'Claude Code is not connected'}
+          {view.agentConnected ? 'Claude Code is connected' : view.framing ? W.shapingBuild : 'Claude Code is not connected'}
         </p>
       )}
       {showGoal && view.goal ? (
@@ -1109,7 +1112,7 @@ function HistoryTab({ view, api, onResult, now }) {
           <button key={f.key} type="button" className={`bpl-filter${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>
         ))}
       </div>
-      {!shown.length && <p className="plr-help">{filter === 'decisions' ? 'Nothing decided yet.' : filter === 'pictures' ? 'No pictures yet.' : W.nothingYet}</p>}
+      {!shown.length && <p className="plr-help">{filter === 'decisions' ? 'Nothing decided yet.' : filter === 'pictures' ? 'No screenshots yet.' : W.nothingYet}</p>}
       <ol className="bpl-story">
         {shown.map((it) => (
           <li key={it.id} className={`bpl-story-it bpl-story-it--${it.type}`}>
@@ -1384,13 +1387,16 @@ export default function BuildPlayer({
           <button type="button" className="bpl-send bpl-send--alt" onClick={() => setTab('ideas')}>{W.readAndAnswer}</button>
         </section>
       )}
-      <section className="bpl-ideas">
-        <button type="button" className="bpl-ideabtn" onClick={() => setTab('ideas')}>
-          <Icon name="Lightbulb" size={18} />
-          <span>Send an idea to the host</span>
-          {myIdeas.length ? <span className="bpl-ideacount">{myIdeas.length} sent</span> : null}
-        </button>
-      </section>
+      {/* An Ideas ask is open: its answer box is the one to use; the Ideas tab still takes anything else (host review, 25 Oct 2026). */}
+      {ask && ask.status === 'live' && ask.kind === 'suggest' ? null : (
+        <section className="bpl-ideas">
+          <button type="button" className="bpl-ideabtn" onClick={() => setTab('ideas')}>
+            <Icon name="Lightbulb" size={18} />
+            <span>Send an idea to the host</span>
+            {myIdeas.length ? <span className="bpl-ideacount">{myIdeas.length} sent</span> : null}
+          </button>
+        </section>
+      )}
     </>
   );
   const page = ({ dock = null, volume = 'watch', phase, body, centre = false }) => shell({
@@ -1457,7 +1463,8 @@ export default function BuildPlayer({
           <h2 className="plr-q bpl-text">{ask.prompt}</h2>
           {decided && !sentNow ? <Decided decision={ask.decision} /> : null}
           {ask.wheel ? <PhoneWheel ask={ask} api={api} onResult={onResult} /> : null}
-          <Results ask={ask} mine={mine} />
+          {/* The wheel instead of a vote: no "0 people voted" under it (host review, 25 Oct 2026). */}
+          {ask.wheel && !(Number(ask.results && ask.results.total) > 0) ? null : <Results ask={ask} mine={mine} />}
           <Whys whys={ask.results && ask.results.whys} />
           {!decided ? null : null}
           {nowExtras}

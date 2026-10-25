@@ -201,7 +201,18 @@ describe('the New Build Room page and the empty room', () => {
   test('one line says what the laptop needs, linking to Before you start', () => {
     render(<BuildCreate navigate={jest.fn()} />);
     expect(document.querySelector('.brm-needline').textContent).toContain(W.needLine);
-    expect(screen.getByRole('link', { name: W.beforeYouStart })).toHaveAttribute('href', '/build-room#before-you-start');
+    const link = screen.getByRole('link', { name: new RegExp(W.beforeYouStart) });
+    expect(link).toHaveAttribute('href', '/build-room#before-you-start');
+    // A new tab, so the half-filled form is not lost (host review, 25 Oct 2026, F16).
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toMatch(/noopener/);
+  });
+
+  test('the placeholders read as examples, not filled values', () => {
+    render(<BuildCreate navigate={jest.fn()} />);
+    const ph = [...document.querySelectorAll('.brm-create input, .brm-create textarea')].map((el) => el.getAttribute('placeholder')).filter(Boolean);
+    expect(ph).toEqual(expect.arrayContaining(['e.g. Volunteer sign-up for the food bank']));
+    expect(ph.filter((p) => p !== 'Access code').every((p) => p.startsWith('e.g. '))).toBe(true);
   });
 
   test('step 1 of How a Build Room works names the install', () => {

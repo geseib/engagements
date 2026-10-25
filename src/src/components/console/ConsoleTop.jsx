@@ -11,7 +11,7 @@ import { helpFor } from '../../config/help/screens';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent, onLeave = null, children = null, short = false, codeProps = null, help = '' }) {
+export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent, onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '' }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -19,7 +19,8 @@ export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPre
           keeps running; Continue brings the host back. */}
       {onLeave ? (
         <button type="button" className="hc-leave" onClick={onLeave} title={CW.allSessionsHint}>
-          <span aria-hidden="true">←</span> {CW.allSessions}
+          {/* `leaveLabel`: a surface's own word for the way out (the Build Room's Main menu). */}
+          <span aria-hidden="true">←</span> {leaveLabel || CW.allSessions}
         </button>
       ) : null}
       <span className="hc-brand">Engagements</span>

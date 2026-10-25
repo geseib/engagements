@@ -59,7 +59,8 @@ export default function BuildLaterPoints({
         <button type="button" role="tab" id="brm-tab-points" data-capability="points" aria-selected={tab === 'points'} aria-controls="brm-tabpanel" className={`brm-lp-tab${tab === 'points' ? ' is-on' : ''}`} onClick={() => choose('points')}>
           {W.points} <b>{total}</b>{fresh > 0 && <span className="brm-lp-new"> · {W.pointsNew(fresh)}</span>}
         </button>
-        <span className="brm-hint brm-push">{W.roomSeesNone}</span>
+        {/* True of each list (host review, 25 Oct 2026): a sender of a saved idea is told only that it was saved. */}
+        <span className="brm-hint brm-push">{tab === 'later' ? W.laterRoomNote : W.roomSeesNone}</span>
       </div>
       <div id="brm-tabpanel" role="tabpanel" aria-labelledby={tab === 'later' ? 'brm-tab-later' : 'brm-tab-points'}>
         {tab === 'later' ? (

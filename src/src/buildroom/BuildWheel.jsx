@@ -66,8 +66,9 @@ function prefersStill() {
  * turn it is); `spinLabel` names it. `spinPrimary` marks it as the Host
  * screen's next move (useNextFocus: focus lands on it, Space presses it).
  * `spinSecondary` draws it as an outline: another button on that screen is the main one.
+ * `nameSpinner` false (a projected Stage with List names off) says "Someone in the room spins".
  */
-export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, busy = false, size = 'md', spinPrimary = false, spinSecondary = false, onSettled = null }) {
+export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, busy = false, size = 'md', spinPrimary = false, spinSecondary = false, onSettled = null, nameSpinner = true }) {
   const slices = (wheel && wheel.slices) || [];
   const n = slices.length;
   const spins = (wheel && wheel.spins) || [];
@@ -114,7 +115,8 @@ export default function BuildWheel({ wheel, onSpin = null, spinLabel = W.spin, b
   let caption;
   if (moving) caption = 'Spinning…';
   else if (winner) caption = `The wheel picked ${winner.label ? `${winner.label}: ` : ''}${winner.text}`;
-  else if (wheel.spinner && wheel.armed) caption = `${wheel.spinner} spins the wheel`;
+  // A projected wheel names nobody unless List names is on (host review, 25 Oct 2026; F10).
+  else if (wheel.spinner && wheel.armed) caption = nameSpinner ? `${wheel.spinner} spins the wheel` : W.someoneSpins;
   else caption = 'Ready to spin';
 
   return (
