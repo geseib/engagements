@@ -598,8 +598,7 @@ a.dock-more{text-decoration:none}
   border:0;background:var(--primary);color:#14203A;cursor:pointer;white-space:nowrap}
 .btn.ghost{background:transparent;color:var(--text);border:var(--hair) solid var(--rule)}
 .btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
-.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.75;letter-spacing:.07em;
-  border:var(--hair) solid var(--rule);border-radius:6px;padding:.2em .5em;font-weight:700;white-space:nowrap}
+.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.85;font-weight:500;white-space:nowrap}
 /* FIXED SLOTS (Dock.jsx; parity PLAN §2a). With Space off the cap keeps its
    width, so the main button beside it never slides; it only goes invisible. */
 .dock .kbd[data-off]{visibility:hidden}

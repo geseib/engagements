@@ -579,7 +579,7 @@ describe('the dock', () => {
     expect(container.querySelector('.kbd')).toBeNull();
     rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go</button></Dock>);
     const kbd = container.querySelector('.kbd');
-    expect(kbd.textContent).toBe('SPACE');
+    expect(kbd.textContent).toBe('or press Space');
     // A visual affordance for the operator, not a control the room's assistive
     // tech should announce between the button and its status.
     expect(kbd.getAttribute('aria-hidden')).toBe('true');

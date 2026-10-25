@@ -39,13 +39,13 @@ describe('the SPACE cap keeps its place', () => {
   test('with Space off ("" passed) the cap is still there, hidden, so the main button does not move', () => {
     const { container, rerender } = render(dockWith({ kbd: 'SPACE' }));
     const on = container.querySelector('.dock .kbd');
-    expect(on.textContent).toBe('SPACE');
+    expect(on.textContent).toBe('or press Space');
     expect(on).not.toHaveAttribute('data-off');
     rerender(dockWith({ kbd: '' }));
     const off = container.querySelector('.dock .kbd');
     expect(off).toBe(on);
     expect(off).toHaveAttribute('data-off');
-    expect(off.textContent).toBe('SPACE');
+    expect(off.textContent).toBe('or press Space');
     expect(off.getAttribute('aria-hidden')).toBe('true');
   });
 
@@ -57,6 +57,25 @@ describe('the SPACE cap keeps its place', () => {
   test('the stylesheet hides an off cap without taking its width away', () => {
     const css = require('fs').readFileSync(require('path').join(__dirname, '../styles/stage.css'), 'utf8');
     expect(css).toMatch(/\.dock \.kbd\[data-off\]\{visibility:hidden\}/);
+  });
+
+  test('the hint reads as words, not a second button (owner, 25 Oct 2026)', () => {
+    // A boxed "SPACE" beside the main button read as a control that was not one.
+    const fs = require('fs');
+    const path = require('path');
+    const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    const rule = (css, sel) => (css.match(new RegExp(`${sel}\\s*\\{([^}]*)\\}`)) || [])[1] || '';
+    const dock = rule(read('styles/stage.css'), '\\.dock \\.kbd');
+    const bar = rule(read('styles.css'), '\\.host-action-bar__kbd');
+    for (const body of [dock, bar]) {
+      expect(body).not.toBe('');
+      expect(body).not.toMatch(/border(-radius)?\s*:\s*(?!0|none)/);
+      expect(body).not.toMatch(/text-transform\s*:\s*uppercase/);
+    }
+    // And the New Build Room's "what the laptop needs" line is a note, not a field.
+    const need = rule(read('buildroom/BuildRoom.css'), '\\.brm \\.brm-needline');
+    expect(need).toMatch(/border:\s*0/);
+    expect(need).toMatch(/background:\s*none/);
   });
 });
 

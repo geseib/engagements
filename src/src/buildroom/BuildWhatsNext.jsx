@@ -66,7 +66,7 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
       </div>
       <div className="brm-row brm-gap">
         <h3 className="brm-h5" id="brm-wnext-h">What&apos;s next</h3>
-        {!outline && <span className="brm-spacehint"><kbd>Space</kbd> does the first</span>}
+        {!outline && <span className="brm-spacehint">Press <kbd>Space</kbd> for the first</span>}
       </div>
       <ul className="brm-wnlist" aria-labelledby="brm-wnext-h">
         {moves.map((m, i) => (

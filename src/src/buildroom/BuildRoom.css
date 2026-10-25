@@ -557,7 +557,9 @@
    form's width, 14px above it. PendingInvites.css owns its look. */
 .brm.brm-createpage > .pinv { width: min(560px, 100%); margin: 0 0 14px; }
 /* Before you start (2026-10-10, owner: option A): what the laptop needs, one line. */
-.brm .brm-needline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--brm-rule); border-radius: 10px; background: var(--bg); font-size: var(--brm-t-label); color: var(--muted); }
+/* A note, not a field (owner, 25 Oct: the boxed line read as an entry box):
+   no outline and no field background, a left accent rule instead. */
+.brm .brm-needline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; margin: 0 0 16px; padding: 2px 0 2px 12px; border: 0; border-left: 3px solid var(--brm-line-blue); border-radius: 0; background: none; font-size: var(--brm-t-label); color: var(--muted); }
 .brm .brm-needline a { color: var(--secondary); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .brm .brm-needline a:hover { text-decoration: underline; }
 .brm .brm-needline a:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; border-radius: 4px; }
@@ -1323,8 +1325,8 @@
 .brm .brm-path [data-next-primary]:focus { outline: 3px solid var(--secondary); outline-offset: 3px; }
 .brm .brm-spacehint { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: var(--brm-t-floor); color: var(--muted); }
 .brm .brm-spacehint kbd {
-  font-family: var(--font-ui); font-size: var(--brm-t-floor); font-weight: 700; line-height: 1;
-  border: 1px solid var(--brm-rule); border-radius: 4px; padding: 3px 6px; color: var(--text);
+  /* A key named in a sentence, not a box that looks like a button (owner, 25 Oct). */
+  font-family: var(--font-ui); font-size: var(--brm-t-floor); font-weight: 700; line-height: 1; color: var(--text);
 }
 .brm .brm-path-keys { margin: 0; }
 /* THE ACTION ROW (batch 2-3, B1): the hint at the left, ghosts, secondaries,

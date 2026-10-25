@@ -9,6 +9,31 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 25 Oct 2026 (hints that looked like controls)
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new. This entry is two fixes to hints that read as controls.
+
+### Fixed
+
+- **The "SPACE" pill is gone** (owner, 25 Oct: "a hint SPACE that appears like a button but is not"). Beside the main button the dock, the single-screen action bar and Build Room's What's next now say **or press Space** in plain muted words, with no box, outline or capitals. The key works as before.
+- **New Build Room's "what this laptop needs" line no longer looks like an entry box.** It is a note with a blue rule down its left edge, not an outlined field, and **Before you start** is still its link.
+
+### What to look at
+
+1. Host any Call & Answer session on engage.test. Beside the main button at the bottom it reads "or press Space" as words. Press Space and the round still advances.
+2. Open **New Build Room**. The line above the form is a note, not a box you could type in.
+3. In a Build Room with ready questions, What's next reads "Press Space for the first", with no box round Space.
+
+### Known gaps
+
+- None from this change. The wider Build Room host review is a separate piece of work.
+
+---
+
 ## 24 Oct 2026 (Build Room question sets): four types, one set per kind, out of the classic pickers
 
 **Test:** merge of dev `91cc6b10`. Everything below this entry is already on test; this push adds only what is here.
