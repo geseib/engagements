@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Room, simpler</title>
+<meta name="description" content="The recommended first Build Room session after the simplicity test: create, the first view (today and proposed), the opening, an ask, between asks, and the wrap-up.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/*
+ * Build Room "Dusk" tokens, copied from what ships: styles/skins/classic.css
+ * (--sk-dark-*) and buildroom/BuildRoom.css (.brm). The Build Room forces
+ * data-theme="dark" on its root (BuildRoomPage.jsx:321, 1515), so this page
+ * is dark only, on purpose. Laptop ladder 12/13/15/19/24/30, rows 36px.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #0F1A2E;
+  --bar: #0C1628;
+  --surface: #1B2942;
+  --surface-2: #25375A;
+  --text: #F4EDE4;
+  --muted: #9BA8BE;
+  --rule: rgba(155,168,190,.22);
+  --primary: #F6A94C;
+  --on-primary: #0F1A2E;
+  --info: #7CA7E6;
+  --success: #4FB286;
+  --success-text: #6FD0A4;
+  --danger-text: #EF8C86;
+  --tint-amber: rgba(246,169,76,.13);
+  --line-amber: rgba(246,169,76,.45);
+  --tint-green: rgba(79,178,134,.14);
+  --line-green: rgba(79,178,134,.5);
+  --tint-blue: rgba(124,167,230,.14);
+  --tint-red: rgba(229,100,94,.12);
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-display: "Archivo", system-ui, sans-serif;
+  --t-floor: 12px; --t-label: 13px; --t-body: 15px; --t-head: 19px; --t-title: 24px; --t-num: 30px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 400 var(--t-body)/1.45 var(--font-ui); }
+.page { max-width: 1320px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font: 800 30px/1.1 var(--font-display); margin: 0 0 8px; letter-spacing: .01em; }
+.lede { color: var(--muted); max-width: 760px; margin: 0 0 8px; }
+.lede b { color: var(--text); }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; padding: 0; list-style: none; }
+.toc a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--rule); border-radius: 999px; color: var(--text); text-decoration: none; font-size: var(--t-label); font-weight: 600; }
+.toc a:hover, .toc a:focus-visible { border-color: var(--primary); }
+.toc .n { color: var(--primary); font-weight: 800; }
+
+section.frame { margin-top: 44px; }
+.fh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 6px; }
+.fh h2 { font: 800 var(--t-head)/1.2 var(--font-display); margin: 0; }
+.fh .k { font: 800 var(--t-label)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--primary); }
+.why { color: var(--muted); margin: 0 0 14px; max-width: 860px; }
+.why b { color: var(--text); font-weight: 600; }
+
+.pair { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 1100px) { .pair { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1100px) { .pair.pair--stack { grid-template-columns: 1fr; } }
+.tag { display: inline-flex; align-items: center; gap: 8px; font: 800 var(--t-floor)/1 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; }
+.tag--today { color: var(--danger-text); }
+.tag--new { color: var(--success-text); }
+.count { font: 700 var(--t-label)/1 var(--font-ui); color: var(--muted); letter-spacing: 0; text-transform: none; }
+.count b { color: var(--text); font-size: var(--t-head); font-family: var(--font-display); }
+
+/* ---- a screen ----------------------------------------------------------- */
+.scr { background: var(--bg); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.4); min-width: 0; }
+.hbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bar); border-bottom: 1px solid var(--rule); }
+.hbar .ttl { font: 800 15px/1.1 var(--font-display); margin-right: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.views { display: inline-flex; gap: 2px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 2px; }
+.view { font: 700 var(--t-floor)/1 var(--font-ui); color: var(--muted); padding: 6px 8px; border-radius: 6px; }
+.view.on { background: var(--surface-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--primary); }
+.push { margin-left: auto; }
+.join { display: inline-flex; align-items: baseline; gap: 5px; font-size: var(--t-floor); color: var(--muted); }
+.join b { font: 800 17px/1 var(--font-display); color: var(--primary); letter-spacing: .05em; }
+.dot { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-floor); color: var(--muted); white-space: nowrap; }
+.dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot--ok::before { background: var(--success); }
+.dot--wait::before { background: var(--primary); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--text); font: 600 var(--t-label)/1.1 var(--font-ui); white-space: nowrap; }
+.btn--sm { min-height: 28px; padding: 0 10px; font-size: var(--t-floor); border-radius: 6px; }
+.btn--primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+.btn--ghost { background: transparent; }
+.btn--link { background: transparent; border-color: transparent; color: var(--info); padding: 0 4px; text-decoration: underline; text-underline-offset: 3px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); font: 600 var(--t-floor)/1 var(--font-ui); }
+kbd { font: 700 11px/1 var(--font-ui); color: var(--muted); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
+
+.body { display: grid; gap: 12px; padding: 12px; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .body--3 { grid-template-columns: 1.35fr 1fr 1fr; } .body--2 { grid-template-columns: 1.6fr 1fr; } }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.colh { font: 800 var(--t-floor)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); margin: 2px 0; }
+.colh b { color: var(--primary); }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card--amber { border-color: var(--line-amber); }
+.card--green { border-color: var(--line-green); }
+.card h3 { font: 700 var(--t-body)/1.25 var(--font-ui); margin: 0; }
+.card .q { font: 800 var(--t-head)/1.2 var(--font-display); margin: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hint { color: var(--muted); font-size: var(--t-label); margin: 0; }
+.hint b { color: var(--text); font-weight: 600; }
+.quiet { color: var(--muted); font-size: var(--t-label); padding: 10px 12px; border: 1px dashed var(--rule); border-radius: 10px; }
+.input { min-height: 36px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--muted); padding: 8px 10px; font-size: var(--t-body); }
+.input--line { display: flex; align-items: center; gap: 8px; }
+.input--line span { flex: 1; min-width: 0; }
+
+/* today's density, drawn plainly */
+.dense .btn { min-height: 26px; padding: 0 8px; font-size: 11.5px; }
+.dense .card { gap: 7px; padding: 10px; }
+.dense .input { min-height: 28px; padding: 4px 8px; font-size: var(--t-floor); }
+.fold { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); font-size: var(--t-floor); font-weight: 600; }
+.fold i { font-style: normal; color: var(--muted); }
+.mark { outline: 2px dashed rgba(239,140,134,.55); outline-offset: 2px; border-radius: 10px; }
+.flag { font: 700 11.5px/1.3 var(--font-ui); color: var(--danger-text); }
+
+/* the setup card */
+.setup li { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--rule); }
+.setup li:first-child { border-top: 0; }
+.setup ol { list-style: none; margin: 0; padding: 0; }
+.tick { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 800 12px/1 var(--font-ui); border: 2px solid var(--muted); color: var(--muted); }
+.tick--ok { border-color: var(--success); background: var(--tint-green); color: var(--success-text); }
+.tick--now { border-color: var(--primary); color: var(--primary); }
+.setup .t b { display: block; font-weight: 600; }
+.setup .t span { color: var(--muted); font-size: var(--t-label); }
+
+/* the opening */
+.steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.step { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--rule); font: 600 var(--t-floor)/1 var(--font-ui); color: var(--muted); }
+.step.done { color: var(--success-text); border-color: var(--line-green); background: var(--tint-green); }
+.step.now { color: var(--primary); border-color: var(--line-amber); background: var(--tint-amber); }
+.brief { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.brief li { display: grid; grid-template-columns: 12px 108px 1fr; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--rule); font-size: var(--t-label); }
+.brief li:first-child { border-top: 0; }
+.brief .d { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; border: 2px solid var(--muted); }
+.brief .done .d { background: var(--success); border-color: var(--success); }
+.brief .now .d { border-color: var(--primary); background: var(--primary); }
+.brief .k { font-weight: 700; }
+.brief .v { color: var(--muted); }
+.brief .done .v { color: var(--text); }
+
+/* the ask path */
+.path { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.path > li { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.path .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); font: 800 12px/1 var(--font-ui); margin-right: 6px; }
+.path .done { color: var(--muted); }
+.path .done .n { background: var(--tint-green); color: var(--success-text); }
+.path .open { border-color: var(--line-green); }
+.path .open .n { background: var(--primary); color: var(--on-primary); }
+.path .todo { opacity: .55; }
+.bars { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.bar { display: grid; grid-template-columns: 22px 1fr 54px; gap: 8px; align-items: center; font-size: var(--t-label); }
+.bar .l { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--tint-blue); color: var(--info); font-weight: 800; font-size: 12px; }
+.bar .fill { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.bar .fill i { display: block; height: 100%; background: var(--info); }
+.bar.win .l { background: var(--tint-amber); color: var(--primary); }
+.bar.win .fill i { background: var(--primary); }
+.bar .c { text-align: right; color: var(--muted); }
+.told { border-left: 3px solid var(--primary); padding: 6px 10px; background: var(--tint-amber); border-radius: 0 8px 8px 0; font-size: var(--t-label); }
+.told b { display: block; font-size: var(--t-floor); color: var(--primary); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font: 600 var(--t-floor)/1 var(--font-ui); color: var(--muted); }
+.strip span { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--rule); }
+.strip .on { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+.strip .ok { color: var(--success-text); border-color: var(--line-green); }
+.strip i { font-style: normal; opacity: .6; }
+
+/* between asks */
+.wn { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wn li { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); }
+.wn li.lead { border-color: var(--line-amber); }
+.wn .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); font: 800 13px/1 var(--font-ui); color: var(--text); }
+.wn .lead .ic { background: var(--tint-amber); color: var(--primary); }
+.wn .t b { display: block; font-size: var(--t-label); }
+.wn .t span { color: var(--muted); font-size: var(--t-floor); }
+.idea { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); }
+.idea .box { width: 18px; height: 18px; border: 2px solid var(--muted); border-radius: 4px; margin-top: 2px; }
+.idea .w { font-weight: 600; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+.idea .by { color: var(--muted); font-size: var(--t-floor); }
+.claudeline { display: flex; align-items: center; gap: 8px; font-size: var(--t-label); }
+.claudeline::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--success); flex: none; }
+
+/* the wrap-up */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field .lbl { font: 600 var(--t-label)/1.2 var(--font-ui); color: var(--muted); }
+.field .val { border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); padding: 8px 10px; font-size: var(--t-label); }
+.field .val small { display: block; color: var(--muted); font-size: var(--t-floor); margin-top: 2px; }
+.links { display: grid; grid-template-columns: 1fr 1.6fr; gap: 6px; }
+.pre { font: 700 var(--t-floor)/1 var(--font-ui); color: var(--info); letter-spacing: .06em; text-transform: uppercase; }
+
+.note { margin-top: 10px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 720px) { .note { grid-template-columns: repeat(3, 1fr); } }
+.note div { border-top: 2px solid var(--rule); padding-top: 8px; font-size: var(--t-label); color: var(--muted); }
+.note div b { display: block; color: var(--text); font-size: var(--t-label); margin-bottom: 2px; }
+.note .gone { border-top-color: var(--danger-text); }
+.note .kept { border-top-color: var(--success); }
+.note .moved { border-top-color: var(--info); }
+
+.verdicts { margin-top: 48px; }
+.vt { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--t-label); }
+.vt th, .vt td { text-align: left; padding: 9px 10px; border-top: 1px solid var(--rule); vertical-align: top; }
+.vt th { color: var(--muted); font-weight: 700; font-size: var(--t-floor); letter-spacing: .1em; text-transform: uppercase; }
+.vt td:first-child { width: 44px; color: var(--muted); font-weight: 700; }
+.vt .v { width: 130px; font-weight: 700; }
+.v--build { color: var(--success-text); }
+.v--smaller { color: var(--primary); }
+.v--drop { color: var(--danger-text); }
+.v--merge { color: var(--info); }
+@media (max-width: 640px) {
+  .vt .v { width: 96px; }
+  .vt td:nth-child(2) { display: none; }
+  .vt th:nth-child(2) { display: none; }
+  .brief li { grid-template-columns: 12px 88px 1fr; }
+  .hbar .ttl { max-width: 140px; }
+}
+footer { margin-top: 40px; color: var(--muted); font-size: var(--t-label); }
+</style>
+</head>
+<body>
+<main class="page">
+  <h1>Build Room, simpler</h1>
+  <p class="lede">The recommended first session after testing each of the host review's bigger changes for simplicity. <b>Seven items are built, most of them in a smaller form, and five are dropped or merged.</b> The verdicts and the counts are in <code>PLAN.md</code> beside this page.</p>
+  <p class="lede">Counts are of controls a host can press, measured on today's page (dev <code>172baad9</code>) in each state. The Build Room is dark only (its root forces <code>data-theme="dark"</code>), so this page is too.</p>
+  <ul class="toc" aria-label="Frames">
+    <li><a href="#f0"><span class="n">0</span> Create</a></li>
+    <li><a href="#f1"><span class="n">1</span> First view, today and proposed</a></li>
+    <li><a href="#f2"><span class="n">2</span> The opening</a></li>
+    <li><a href="#f3"><span class="n">3</span> An ask</a></li>
+    <li><a href="#f4"><span class="n">4</span> Between asks</a></li>
+    <li><a href="#f5"><span class="n">5</span> Wrap up</a></li>
+    <li><a href="#verdicts">Verdicts</a></li>
+  </ul>
+
+  <!-- ================================================================ 0 -->
+  <section class="frame" id="f0" aria-labelledby="f0h">
+    <div class="fh"><span class="k">Frame 0</span><h2 id="f0h">Create: unchanged</h2></div>
+    <p class="why">One card with good defaults already (review §2, step 0). None of the bigger changes touch it, and presets (item 19) are dropped: <b>the defaults already do what a preset would.</b></p>
+    <div class="scr" style="max-width:560px">
+      <div class="body">
+        <div class="card">
+          <h3>New Build Room</h3>
+          <div class="field"><span class="lbl">Title</span><div class="val" style="color:var(--muted)">e.g. Volunteer sign-up for the food bank</div></div>
+          <div class="field"><span class="lbl">What to build</span><div class="row"><span class="chip" style="color:var(--text);border-color:var(--line-amber)">The room decides</span><span class="chip">I've set the goal</span></div></div>
+          <div class="field"><span class="lbl">Who can join</span><div class="row"><span class="chip" style="color:var(--text);border-color:var(--line-amber)">Anyone with the code</span><span class="chip">Private: an access code as well</span></div></div>
+          <div class="row"><span class="tick tick--ok" aria-hidden="true">✓</span><span class="hint"><b>Review Claude's questions</b> before the room sees them</span></div>
+          <div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Create the room</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ 1 -->
+  <section class="frame" id="f1" aria-labelledby="f1h">
+    <div class="fh"><span class="k">Frame 1</span><h2 id="f1h">The first view</h2><span class="count">Items 10, 13, 18</span></div>
+    <p class="why">Today, 29 of the 59 controls are empty lists and tools for things that have not happened yet. In the proposed view, <b>one card says what to do before the room starts</b>, and the opening card sits directly under it. Empty lists are not drawn, but every column keeps its place, so nothing jumps when a list fills.</p>
+    <div class="pair pair--stack">
+      <!-- TODAY -->
+      <div>
+        <p class="tag tag--today">Today <span class="count"><b>59</b> controls · 412 words · 2 panels before the opening</span></p>
+        <div class="scr dense" aria-label="Today's first view">
+          <div class="hbar">
+            <span class="btn btn--sm btn--ghost">Main menu</span>
+            <span class="ttl">Volunteer sign-up</span>
+            <span class="views"><span class="view on">Host</span><span class="view">Stage</span><span class="view">Build</span><span class="view">History</span></span>
+            <span class="btn btn--sm btn--ghost">Room's window ↗</span><span class="dot">Not open</span><span class="btn btn--sm btn--link">Open as a tab</span>
+            <span class="btn btn--sm mark">Open the build</span>
+            <span class="dot dot--wait">Not connected</span>
+            <span class="join">Join <b>4821</b></span><span class="chip">4 joined</span><span class="btn btn--sm btn--ghost">?</span><span class="btn btn--sm">SESSION <kbd>\</kbd></span>
+          </div>
+          <div class="body body--3">
+            <div class="col">
+              <div class="card">
+                <h3>How a Build Room works</h3>
+                <p class="hint">1 Connect Claude Code: install the plugin, then paste one command. 2 That command opens Claude Code, connects it to this room and kicks off. 3 Claude asks the room. You shape each answer and send it back. 4 Wrap up, then share the report.</p>
+                <div class="row"><span class="btn btn--primary">Connect Claude Code</span></div>
+              </div>
+              <div class="card">
+                <h3>Where will the room watch?</h3>
+                <div class="row"><span class="btn">Open the room's window</span><span class="btn">Use two screens</span><span class="btn">Use one screen</span><span class="btn btn--link">Help me pick</span></div>
+              </div>
+              <div class="card">
+                <p class="hint">Opening · step 1 of 9 · Planning: Claude writes no code yet</p>
+                <div class="input">What are we making?</div>
+                <div class="row"><span class="btn">Ask the room to pick</span><span class="btn">Spin the wheel</span><span class="btn btn--ghost">Pick for the room</span><span class="btn btn--link">Edit the list</span></div>
+                <div class="row"><span class="btn btn--link">Skip this step</span><span class="btn">Show the brief on the wall</span><span class="btn">Start building</span></div>
+              </div>
+              <div class="card mark">
+                <h3>Add something</h3>
+                <div class="input">An idea, a note, or what the room said</div>
+                <div class="row"><span class="chip">Don't show the room</span><span class="btn">Send to Claude</span><span class="btn">▾</span><span class="btn">Save for later</span></div>
+                <div class="row"><span class="btn">Log it as ▾</span><span class="chip">Also tell Claude</span><span class="btn">Log it</span></div>
+                <div class="row"><span class="hint">Ask the room</span><span class="btn">Ideas</span><span class="btn">Choose</span><span class="btn">Rate</span></div>
+                <span class="flag">11 controls, nothing to log or tell yet</span>
+              </div>
+            </div>
+            <div class="col">
+              <p class="colh">Waiting for you</p>
+              <div class="row mark" style="padding:6px"><span class="chip">All</span><span class="chip">Claude · 0</span><span class="chip">Room · 0</span><span class="chip">You · 0</span><span class="chip">Later 0</span><span class="chip">Points 0</span></div>
+              <span class="flag">6 filters on an empty list</span>
+            </div>
+            <div class="col">
+              <div class="fold"><span>The opening</span><i>0</i></div>
+              <div class="card" style="gap:4px">
+                <p class="hint">Making · For · The problem · Good looks like · We will know · Never · First build · Tools and style · Look and feel</p>
+                <span class="flag">9 lines repeat the opening card</span>
+              </div>
+              <div class="mark" style="display:flex;flex-direction:column;gap:6px;padding:4px">
+                <div class="fold"><span>Decided</span><i>0</i></div>
+                <div class="fold"><span>Timeline</span><i>0</i></div>
+                <div class="fold"><span>Asks</span><i>0</i></div>
+                <div class="fold"><span>Screenshots</span><i>0</i></div>
+                <div class="fold"><span>Room brief</span><i>0</i></div>
+                <div class="fold"><span>History</span><i>0</i></div>
+              </div>
+              <span class="flag">6 empty folds</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- PROPOSED -->
+      <div>
+        <p class="tag tag--new">Proposed <span class="count"><b>≤ 33</b> controls · about 200 words · 1 panel before the opening</span></p>
+        <div class="scr" aria-label="Proposed first view">
+          <div class="hbar">
+            <span class="btn btn--sm btn--ghost">Main menu</span>
+            <span class="ttl">Volunteer sign-up</span>
+            <span class="views"><span class="view on">Host</span><span class="view">Stage</span><span class="view">Build</span><span class="view">History</span></span>
+            <span class="btn btn--sm btn--ghost">Room's window ↗</span>
+            <span class="dot dot--wait push">Not connected</span>
+            <span class="join">Join <b>4821</b></span><span class="chip">4 joined</span><span class="btn btn--sm btn--ghost">?</span><span class="btn btn--sm">SESSION <kbd>\</kbd></span>
+          </div>
+          <div class="body body--3">
+            <div class="col">
+              <div class="card card--amber setup">
+                <h3>Before the room starts</h3>
+                <ol>
+                  <li><span class="tick tick--now" aria-hidden="true">1</span><span class="t"><b>Connect Claude Code</b><span>One command opens Claude Code in a new folder and connects it.</span></span><span class="btn btn--primary">Connect</span></li>
+                  <li><span class="tick tick--ok" aria-hidden="true">✓</span><span class="t"><b>The room joins</b><span>4 joined with code 4821</span></span><span class="btn btn--sm">Show the code</span></li>
+                  <li><span class="tick tick--ok" aria-hidden="true">✓</span><span class="t"><b>The room watches this laptop</b><span>One screen. Using a projector as a second display?</span></span><span class="btn btn--sm btn--link">Use two screens</span></li>
+                </ol>
+                <p class="hint">You can start the opening now. Anything you send waits for Claude.</p>
+              </div>
+              <div class="card">
+                <div class="row"><b style="font-size:var(--t-label)">Opening · step 1 of 5</b><span class="hint push">Claude plans, writes no code yet</span></div>
+                <p class="q">What are we making?</p>
+                <div class="row"><span class="btn">Ask the room to pick</span><span class="btn">Spin the wheel</span><span class="btn btn--ghost">Pick for the room</span><span class="btn btn--link">Edit the list</span></div>
+                <div class="row"><span class="btn btn--link">Skip this step</span><span class="btn btn--sm push">Show the brief on the wall</span><span class="btn btn--sm">Start building</span></div>
+              </div>
+              <div class="input input--line"><span>Tell Claude…</span><span class="btn btn--sm">Ask the room</span></div>
+            </div>
+            <div class="col">
+              <p class="colh">Waiting for you</p>
+              <div class="quiet">Nothing yet. Claude's questions and the room's ideas land here.</div>
+            </div>
+            <div class="col">
+              <p class="colh">The build brief</p>
+              <div class="card">
+                <ul class="brief">
+                  <li class="now"><span class="d"></span><span class="k">Making</span><span class="v">Asking next</span></li>
+                  <li><span class="d"></span><span class="k">For</span><span class="v">Who is it for?</span></li>
+                  <li><span class="d"></span><span class="k">The problem</span><span class="v">What problem do they have today?</span></li>
+                  <li><span class="d"></span><span class="k">Good looks like</span><span class="v">Write the launch-day headline</span></li>
+                  <li><span class="d"></span><span class="k">First build</span><span class="v">The smallest version to show today</span></li>
+                </ul>
+                <span class="btn btn--sm btn--link" style="align-self:flex-start">4 more questions</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="gone"><b>Not drawn until it has something</b>Six empty folds, six queue filters, "Open the build", the window's "Not open" and "Open as a tab" line, and the composer's nine other controls.</div>
+      <div class="moved"><b>One card instead of two</b>How a Build Room works and Where will the room watch? become Before the room starts. Each row turns green when it is done; the card folds to one line once Claude connects.</div>
+      <div class="kept"><b>Kept as it is</b>The four screens and SESSION, the one orange button, Space for the lead move, the opening's Ask, Spin, Pick and Skip, and Start building with its confirm.</div>
+    </div>
+  </section>
+
+  <!-- ================================================================ 2 -->
+  <section class="frame" id="f2" aria-labelledby="f2h">
+    <div class="fh"><span class="k">Frame 2</span><h2 id="f2h">The opening: five core steps</h2><span class="count">Item 12, smaller</span></div>
+    <p class="why">Claude has connected, so the setup card has folded to one line and the opening's lead takes the orange. The core is the five steps the owner named and Claude's draft needs (who, the problem, good). <b>The other four are one click away, and they still fill the brief.</b></p>
+    <div class="scr">
+      <div class="hbar">
+        <span class="ttl">Volunteer sign-up</span>
+        <span class="views"><span class="view on">Host</span><span class="view">Stage</span><span class="view">Build</span><span class="view">History</span></span>
+        <span class="dot dot--ok push">Claude connected</span>
+        <span class="join">Join <b>4821</b></span><span class="chip">11 joined</span><span class="btn btn--sm">SESSION <kbd>\</kbd></span>
+      </div>
+      <div class="body body--2">
+        <div class="col">
+          <div class="row hint" style="padding:2px 4px"><span class="tick tick--ok" aria-hidden="true" style="width:18px;height:18px;font-size:10px">✓</span> Claude connected · folder volunteer-sign-up · 11 joined · One screen</div>
+          <div class="card card--amber">
+            <div class="steps"><span class="step done">Making</span><span class="step now">For</span><span class="step">The problem</span><span class="step">Good looks like</span><span class="step">First build</span></div>
+            <div class="row"><b style="font-size:var(--t-label)">Opening · step 2 of 5</b><span class="hint push">Claude plans, writes no code yet</span></div>
+            <p class="q">Who is it for? Name a person and the moment they need it.</p>
+            <div class="row"><span class="btn btn--primary">Ask the room</span><span class="btn">Answer it yourself</span><span class="btn btn--link">Skip this step</span></div>
+            <p class="hint">Making: <b>A website or page</b>, so the next questions are a website's.</p>
+          </div>
+          <div class="input input--line"><span>Tell Claude…</span><span class="btn btn--sm">Ask the room</span></div>
+        </div>
+        <div class="col">
+          <p class="colh">The build brief · <b>1 of 5</b></p>
+          <div class="card">
+            <ul class="brief">
+              <li class="done"><span class="d"></span><span class="k">Making</span><span class="v">A website or page</span></li>
+              <li class="now"><span class="d"></span><span class="k">For</span><span class="v">Asking now</span></li>
+              <li><span class="d"></span><span class="k">The problem</span><span class="v">What problem do they have today?</span></li>
+              <li><span class="d"></span><span class="k">Good looks like</span><span class="v">Write the launch-day headline</span></li>
+              <li><span class="d"></span><span class="k">First build</span><span class="v">The smallest version to show today</span></li>
+            </ul>
+            <details open>
+              <summary class="hint" style="cursor:pointer">4 more questions, if the room has time</summary>
+              <ul class="brief" style="margin-top:6px">
+                <li><span class="d"></span><span class="k">We will know</span><span class="v">How will we know it worked?</span></li>
+                <li><span class="d"></span><span class="k">Never</span><span class="v">What must it never do?</span></li>
+                <li><span class="d"></span><span class="k">Tools and style</span><span class="v">You answer this one</span></li>
+                <li><span class="d"></span><span class="k">Look and feel</span><span class="v">How should it look and feel?</span></li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="gone"><b>Shorter default path</b>"Step 2 of 9" becomes "step 2 of 5". After the fifth step the card reads "The core is framed. Start building, or ask one of the 4 more."</div>
+      <div class="kept"><b>Kept</b>The kind still reshapes steps 2 to 5, probes stay on done lines, Ask Claude to draft the brief appears once For, The problem and Good looks like are in, and Start building still asks first.</div>
+      <div class="moved"><b>Not built</b>A gate that waits for Claude. The opening runs without Claude, and whatever is decided waits as Queued for Claude.</div>
+    </div>
+  </section>
+
+  <!-- ================================================================ 3 -->
+  <section class="frame" id="f3" aria-labelledby="f3h">
+    <div class="fh"><span class="k">Frame 3</span><h2 id="f3h">An ask: the same four steps, with one set of names</h2><span class="count">Item 13 (words), item 14</span></div>
+    <p class="why">The review called the ask path the thing worth keeping, so it stays. The change is to its names: the strip, the ask path, the setup card and the help all use <b>Ask · Collect · Settle · Send to Claude</b>. In the Ask the room dialog, "Claude gets it as" moves under More options, because Send asks it again.</p>
+    <div class="pair">
+      <div class="scr">
+        <div class="body">
+          <div class="strip" aria-label="The loop"><span class="ok">Opening</span><i>›</i><span class="ok">Ask</span><span class="ok">Collect</span><span class="on">Settle</span><span>Send to Claude</span><i>›</i><span>Wrap up</span></div>
+          <ol class="path">
+            <li class="done"><span class="n">✓</span>Ask · Which sign-up should volunteers see first?</li>
+            <li class="done"><span class="n">✓</span>Collect · 11 of 11 chose</li>
+            <li class="open">
+              <div class="row"><span><span class="n">3</span><b>Settle</b></span><span class="hint push">The room chose B</span></div>
+              <div class="bars">
+                <div class="bar"><span class="l">A</span><span class="fill"><i style="width:27%"></i></span><span class="c">3</span></div>
+                <div class="bar win"><span class="l">B</span><span class="fill"><i style="width:64%"></i></span><span class="c">7</span></div>
+                <div class="bar"><span class="l">C</span><span class="fill"><i style="width:9%"></i></span><span class="c">1</span></div>
+              </div>
+              <div class="told"><b>Claude will be told</b>Which sign-up should volunteers see first? B: a list of this week's shifts, one tap to take one.</div>
+              <div class="row" style="margin-top:8px"><span class="btn btn--primary">Send to Claude</span><span class="btn">Change before sending</span><span class="hint push">Press <kbd>Space</kbd></span></div>
+            </li>
+            <li class="todo"><span class="n">4</span>Send to Claude</li>
+          </ol>
+        </div>
+      </div>
+      <div class="scr">
+        <div class="body">
+          <div class="card">
+            <div class="row"><h3>Ask the room</h3><span class="btn btn--sm btn--ghost push" aria-label="Close">✕</span></div>
+            <div class="row"><span class="btn btn--sm">Ideas</span><span class="btn btn--sm" style="border-color:var(--line-amber);color:var(--primary)">Choose</span><span class="btn btn--sm">Yes / No</span><span class="btn btn--sm">Rate</span></div>
+            <div class="field"><span class="lbl">Question</span><div class="val">Which sign-up should volunteers see first?</div></div>
+            <div class="field"><span class="lbl">Options</span>
+              <div class="val">A · A calendar of the whole month</div>
+              <div class="val">B · A list of this week's shifts, one tap to take one</div>
+              <div class="val">C · Pick a role first, then a time</div>
+            </div>
+            <span class="btn btn--sm btn--ghost" style="align-self:flex-start">+ Add option</span>
+            <details>
+              <summary class="hint" style="cursor:pointer">More options: Claude gets it as <b>Do now</b>, a private note, save as a draft</summary>
+            </details>
+            <div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Ask the room</span></div>
+          </div>
+          <p class="hint">The form drops from 17 controls to 12. Yes/No is its own kind, as the owner asked on 24 Oct, instead of quietly becoming a two-option Choose. A ready question still brings its own Claude gets it as.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ 4 -->
+  <section class="frame" id="f4" aria-labelledby="f4h">
+    <div class="fh"><span class="k">Frame 4</span><h2 id="f4h">Between asks: three ideas from phones</h2><span class="count">Item 18 (absorbs 11)</span></div>
+    <p class="why">Today this state shows 76 controls, and each idea carries eight buttons. There is <b>no Simple mode</b>. Each idea row keeps the routes every item shares (Send to Claude, Ask the room), the rest go under More, and clicking the idea's words opens Consider. Proposed: no more than 40 controls on both layouts, because the console reuses these same panels.</p>
+    <div class="scr">
+      <div class="hbar">
+        <span class="ttl">Volunteer sign-up</span>
+        <span class="views"><span class="view on">Host</span><span class="view">Stage</span><span class="view">Build</span><span class="view">History</span></span>
+        <span class="btn btn--sm btn--ghost push">Open the build ↗</span>
+        <span class="dot dot--ok">Claude building</span>
+        <span class="join">Join <b>4821</b></span><span class="chip">11 joined</span><span class="btn btn--sm">SESSION <kbd>\</kbd></span>
+      </div>
+      <div class="body body--3">
+        <div class="col">
+          <div class="card">
+            <p class="claudeline"><b>Claude is building</b>&nbsp;<span class="hint">the shift list, step 2 of 4</span></p>
+            <p class="colh" style="margin-top:4px">What's next</p>
+            <ul class="wn">
+              <li class="lead"><span class="ic">3</span><span class="t"><b>Put 3 ideas to a vote</b><span>The room picks one</span></span><span class="btn btn--sm btn--primary">To a vote</span></li>
+              <li><span class="ic">?</span><span class="t"><b>Ask the room</b><span>A question, a choice or a rating</span></span><span class="btn btn--sm">Ask</span></li>
+              <li><span class="ic">✎</span><span class="t"><b>Tell Claude</b><span>Do now, keep in mind, or ask Claude</span></span><span class="btn btn--sm">Write</span></li>
+            </ul>
+            <p class="hint">Press <kbd>Space</kbd> for the first. <kbd>?</kbd> lists every key.</p>
+          </div>
+          <div class="input input--line"><span>Tell Claude…</span><span class="btn btn--sm">Ask the room</span></div>
+        </div>
+        <div class="col">
+          <p class="colh">Waiting for you · <b>3</b></p>
+          <div class="row"><span class="hint">3 ideas from the room</span><span class="btn btn--sm btn--link push">Acknowledge all 3</span></div>
+          <div class="idea"><span class="box" aria-hidden="true"></span><div><div class="w">Show where to park</div><div class="by">Ana · 2 min ago</div><div class="row" style="margin-top:6px"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">More ▾</span></div></div></div>
+          <div class="idea"><span class="box" aria-hidden="true"></span><div><div class="w">Print a rota for the noticeboard</div><div class="by">Dee · 3 min ago</div><div class="row" style="margin-top:6px"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">More ▾</span></div></div></div>
+          <div class="idea"><span class="box" aria-hidden="true"></span><div><div class="w">Text a reminder the day before</div><div class="by">Sam · 4 min ago</div><div class="row" style="margin-top:6px"><span class="btn btn--sm">Send to Claude</span><span class="btn btn--sm">Ask the room</span><span class="btn btn--sm btn--ghost">More ▾</span></div></div></div>
+          <p class="hint">More: Save for later · Acknowledge · Dismiss · Reply to Ana · Send to Claude as…</p>
+        </div>
+        <div class="col">
+          <div class="fold"><span>Decided</span><i>2</i></div>
+          <div class="fold"><span>Asks</span><i>3</i></div>
+          <div class="fold"><span>History</span><i>6</i></div>
+          <p class="hint">Timeline, Screenshots, Later and Points appear once they have something. Ask Claude for points is in What's next and in the composer's More.</p>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="gone"><b>From 8 controls per idea to 3</b>Plus the tick, which is still how several ideas go to one vote.</div>
+      <div class="kept"><b>Nothing lost</b>All 21 capabilities stay reachable on both layouts. The capabilities test gains one walk of an empty room, which checks that Points and Later still have a way in.</div>
+      <div class="moved"><b>Not built</b>A Simple and Full switch, a command palette and presets. Each is a new idea the host must learn, and a switch would mean four layouts to test instead of two.</div>
+    </div>
+  </section>
+
+  <!-- ================================================================ 5 -->
+  <section class="frame" id="f5" aria-labelledby="f5h">
+    <div class="fh"><span class="k">Frame 5</span><h2 id="f5h">Wrap up, then the report, then end</h2><span class="count">Items 15, 16</span></div>
+    <p class="why">Today the host starts from four blank fields, typing links as <code>label | https://…</code>, and the console then says "No main move now". In the proposed flow, <b>Claude writes the wrap-up with one press</b>. Without Claude, the fields are filled from what the room decided. After that, What's next leads to the report and then to End session, on both layouts.</p>
+    <div class="pair">
+      <div class="scr">
+        <div class="body">
+          <div class="card">
+            <p class="colh">What's next</p>
+            <ul class="wn">
+              <li class="lead"><span class="ic">✓</span><span class="t"><b>Wrap up</b><span>Claude writes what was built and the next steps; you check it</span></span><span class="btn btn--sm btn--primary">Ask Claude to wrap up</span></li>
+              <li><span class="ic">✎</span><span class="t"><b>Write it yourself</b><span>Filled in from the 4 decisions and the brief</span></span><span class="btn btn--sm">Write it myself</span></li>
+            </ul>
+          </div>
+          <div class="card card--green">
+            <p class="hint"><b>Wrap-up saved.</b> Check the report, then end the session.</p>
+            <ul class="wn">
+              <li class="lead"><span class="ic">1</span><span class="t"><b>Check the report</b><span>The brief, 4 decisions, 3 screenshots</span></span><span class="btn btn--sm btn--primary">Report</span></li>
+              <li><span class="ic">2</span><span class="t"><b>End the session</b><span>Phones show what we built</span></span><span class="btn btn--sm">End session</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="scr">
+        <div class="body">
+          <div class="card">
+            <div class="row"><h3>Wrap up</h3><span class="pre push">Filled in from the session</span><span class="btn btn--sm btn--ghost" aria-label="Close">✕</span></div>
+            <div class="field"><span class="lbl">Summary</span><div class="val">A one-page sign-up where a first-time volunteer picks a shift in under a minute.<small>From the brief's headline</small></div></div>
+            <div class="field"><span class="lbl">What we built, one per line</span><div class="val">This week's shifts as a list, one tap to take one<br>Where to park, under each shift<br>A reminder text the day before<small>From the 4 decisions</small></div></div>
+            <div class="field"><span class="lbl">Links</span>
+              <div class="links"><div class="val">The demo</div><div class="val">http://localhost:5173/</div></div>
+              <span class="btn btn--sm btn--ghost" style="align-self:flex-start">+ Add a link</span>
+            </div>
+            <div class="field"><span class="lbl">Next steps, one per line</span><div class="val" style="color:var(--muted)">What happens after today?</div></div>
+            <div class="row"><span class="btn btn--ghost">Cancel</span><span class="btn btn--primary push">Save wrap-up</span></div>
+          </div>
+          <p class="hint">The report also gets a <b>Build brief</b> section and a <b>Settled by the wheel</b> line under a wheel's pick. Its timeline says "Start building: Claude got the brief" instead of printing the internal prompt.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ verdicts -->
+  <section class="verdicts" id="verdicts" aria-labelledby="vh">
+    <div class="fh"><span class="k">Summary</span><h2 id="vh">The verdicts</h2></div>
+    <table class="vt">
+      <thead><tr><th>#</th><th>Item</th><th>Verdict</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>10</td><td>Setup checklist that gates the opening</td><td class="v v--smaller">Build smaller</td><td>One card with three rows and no gate. Queued for Claude already makes it safe to frame first.</td></tr>
+        <tr><td>11</td><td>Simple / Full mode</td><td class="v v--merge">Merge into 18</td><td>A mode means the same task done two ways, and it doubles the layouts to test.</td></tr>
+        <tr><td>12</td><td>Three-step opening</td><td class="v v--smaller">Build smaller</td><td>Five core steps. Three would drop The problem and Good looks like, and Claude's draft with them.</td></tr>
+        <tr><td>13</td><td>One loop model</td><td class="v v--smaller">Build smaller</td><td>Words only: Ask · Collect · Settle · Send to Claude.</td></tr>
+        <tr><td>14</td><td>Ask the room dialog</td><td class="v v--smaller">Build smaller</td><td>A Yes/No kind. Claude gets it as goes under More options, because Send asks it again.</td></tr>
+        <tr><td>15</td><td>Wrap-up and end moves</td><td class="v v--build">Build</td><td>Ask Claude to wrap up, a filled-in fallback, and Report then End leading on both layouts.</td></tr>
+        <tr><td>16</td><td>Report fixes</td><td class="v v--build">Build</td><td>A brief section, no internal prompt text, wheel marks.</td></tr>
+        <tr><td>17</td><td>Command palette</td><td class="v v--drop">Drop</td><td>A new idea for experts who are not here yet. A <kbd>?</kbd> list of keys covers it.</td></tr>
+        <tr><td>18</td><td>Reveal by event</td><td class="v v--build">Build</td><td>It removes 29 of the 59 first-view controls without adding anything new to learn.</td></tr>
+        <tr><td>19</td><td>Presets</td><td class="v v--drop">Drop</td><td>The defaults already do this, and the owner shelved templates.</td></tr>
+        <tr><td>20</td><td>No header on projected Build/History</td><td class="v v--drop">Drop</td><td>The header is built to be safe for the room, and two screens is the real fix.</td></tr>
+        <tr><td>22</td><td>Practice room with a fake Claude</td><td class="v v--drop">Drop</td><td>Fake activity would repeat F1 ("Claude appears to be working"). A room without a gate already works as a rehearsal.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>Design only, 25 Oct 2026. Nothing in the product changes until the owner chooses. Phases and targets are in PLAN.md §5.</footer>
+</main>
+</body>
+</html>
