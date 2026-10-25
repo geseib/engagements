@@ -51,7 +51,7 @@ const aiBuilders = {
             { title: 'Open New question set', text: 'In the console\'s Question sets (or Your question sets on the host side), start a new set and pick the engagement type. Under **Generate with AI**, press the AI builder button for that type. For a survey the button is **Write it from my material**.' },
             { title: 'Check Save into', text: 'It is at the top of the form. See Choosing where it is saved, below.' },
             { title: 'Describe it', text: 'Fill in the form for that type (What each builder asks, below). Building with AI, in the builder guides, has advice on describing it well.' },
-            { title: 'Generate', text: 'Press the button at the foot, for example **Generate Trivia Questions**. It runs on the server; you can close the builder straight away.' },
+            { title: 'Generate', text: 'Press the button at the foot, for example **Generate Trivia Questions**. It runs on the server; you can close the builder straight away. In the Call & Answer and Wavelength builder a line above the button says what will be written, and while it runs, what is being written and that closing is safe.' },
             { title: 'Review the draft', text: 'When it is done, the review opens, or the bell tells you it is ready. Nothing is saved until you accept. See Drafts and the bell.' },
           ],
         },
@@ -115,7 +115,11 @@ const aiBuilders = {
       count, "Kinds of poll question"); AIScenarioBuilder (direction + ideas or
       "Or start from a saved template", then Question Set Title,
       Context/Background, Target Audience, Categories, Must Have Categories,
-      Level of Detail, Base Prompt & Additional Requirements; max 50);
+      Level of Detail (Brief — 1 sentence / Standard — 2 sentences /
+      Detailed — up to 3 sentences), "What the AI is asked" (the card's base
+      prompt, read-only, "Tuned in your library" or "Built in", "Change
+      card"), "Your additions" (empty, sent separately); the status line
+      "Ready to write N … / Writing N … / Done. Check each …"; max 50);
       SurveyAIBuilder (outline/deck, "What do you want to find out?", "Kinds of
       question", "How many questions" 1-20, "Name it", "Anything else Workie
       must obey"). FileUploadPrompt: .txt/.pdf/.md/.docx, 5 MB.
@@ -131,7 +135,7 @@ const aiBuilders = {
           rows: [
             ['Trivia', 'A topic, the audience, the difficulty, how many categories and questions in each (up to 100 in all), four to six answer choices, one to three correct answers, categories it must include, and anything else it must follow.'],
             ['Poll', '**What will the room do with each one?** (the direction), then a topic, a category, the audience, how many, and **Kinds of poll question**: pick from choices, rate, yes or no, open answer.'],
-            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50 in all), and the base prompt, which you may edit.'],
+            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50 in all), and the level of detail: **Brief — 1 sentence**, **Standard — 2 sentences** or **Detailed — up to 3 sentences**, all within the same length limit. **What the AI is asked** shows the chosen card\'s prompt, read-only (edit a tuned one in Prompts). **Your additions** starts empty: type anything the set must do that the prompt does not say.'],
             ['Survey', 'The session\'s outline or deck, **What do you want to find out?**, **Kinds of question**, how many (up to 20), a name, and **Anything else Workie must obey**.'],
           ],
         },
@@ -931,7 +935,7 @@ const ai = {
             ['A topic and no material', 'An AI builder (**Generate with AI** in New question set). It writes the whole set into a draft.'],
             ['A set, and want more of it', '**Add questions…** in the set editor. Workie writes more in the same voice.'],
             ['One question to write', '**Add a question**, and **Draft this with AI** in it if you want a first go.'],
-            ['Material and your own AI', 'A template, or the prompt to paste into your own chatbot, then upload the file.'],
+            ['Material and your own AI', '**Use your own chatbot** in New question set: download the template, copy the prompt (every format has one, and **Show what is copied** shows it first), paste both into Claude or ChatGPT, fill in the [BRACKETS], then upload the CSV it writes. **Go to upload** takes you to the file chooser.'],
             ['Three or four questions in mind', 'Write them by hand. See Writing questions.'],
           ],
         },

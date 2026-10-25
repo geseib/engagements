@@ -33,7 +33,7 @@ export const BUILDER_FORM_FIELDS = {
       { key: 'context', label: 'Context/Background' },
       { key: 'audience', label: 'Target Audience' },
       { key: 'mustHaveCategories', label: 'Must Have Categories' },
-      { key: 'customPrompt', label: 'Base Prompt & Additional Requirements' },
+      { key: 'customPrompt', label: 'Your additions' },
     ],
   },
   trivia: {
