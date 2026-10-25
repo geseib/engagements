@@ -93,11 +93,18 @@ exports.handler = async (event) => {
     let csvTemplate, filename;
 
     if (templateType === 'trivia') {
+      // AN EXAMPLE IS A RULE TO AN AI. A host pastes this file beside the
+      // authoring prompt (src/src/config/aiAuthoringPrompt.js), and a model
+      // copies what it sees before it reads what it is told. So the rows obey
+      // that prompt: the correct letter varies (A, C, B), A-D are four
+      // plausible answers of the same kind, E and F are left empty, and one
+      // row shows the optional trailing Background column. Every row used to
+      // be correct on OptionA with two joke options. tests/template-roundtrip.js.
       filename = 'trivia-template.csv';
-      csvTemplate = 'id,title,questionDetail,category,optionA,optionB,optionC,optionD,optionE,optionF,correctAnswer,answerDetails,difficulty,Tags\n' +
-        '1,"What is the primary purpose of a SWOT analysis?","What is the primary purpose of a SWOT analysis in business strategy?","Business","To evaluate strengths, weaknesses, opportunities, and threats","To calculate financial ratios","To manage employee performance","To design marketing campaigns","To create organizational charts","To analyze customer feedback","OptionA","SWOT analysis is a strategic planning tool used to evaluate Strengths, Weaknesses, Opportunities, and Threats that can affect a business or project. It provides a structured approach to strategic planning by examining internal factors (strengths and weaknesses) and external factors (opportunities and threats).","medium","strategy|business-analysis|planning"\n' +
-        '2,"Which programming language is primarily used for web development?","Which programming language is most commonly used for client-side web development?","Technology","JavaScript","Assembly","COBOL","Fortran","BASIC","Pascal","OptionA","JavaScript is the primary programming language for client-side web development. It runs in web browsers and enables interactive web pages, dynamic content updates, and modern web applications. While other languages can be used for web development, JavaScript is essential for front-end development.","easy","technology|web-development|programming"\n' +
-        '3,"What is emotional intelligence in leadership?","What does emotional intelligence mean in the context of leadership?","Leadership","The ability to understand and manage emotions","The ability to solve complex problems","The ability to memorize information","The ability to work with numbers","The ability to lift heavy objects","The ability to run fast","OptionA","Emotional intelligence in leadership refers to the ability to recognize, understand, and manage both your own emotions and the emotions of others. This includes self-awareness, self-regulation, empathy, and social skills - all crucial for effective leadership and team management.","medium","leadership|soft-skills|emotional-intelligence"';
+      csvTemplate = 'id,title,questionDetail,category,optionA,optionB,optionC,optionD,optionE,optionF,correctAnswer,answerDetails,difficulty,Tags,Background\n' +
+        '1,"What a SWOT analysis is for","What is a SWOT analysis used for?","Business","Weighing strengths, weaknesses, opportunities and threats","Forecasting next year\'s revenue","Ranking staff by performance","Setting the marketing budget","","","OptionA","SWOT stands for Strengths, Weaknesses, Opportunities and Threats. The first two look inward at the organisation; the last two look outward at its market.","easy","strategy|planning",""\n' +
+        '2,"The language every browser runs","Which programming language runs natively in every major web browser?","Technology","Python","Java","JavaScript","C#","","","OptionC","JavaScript is the language browsers run directly. Python, Java and C# reach a web page only through a server or an extra layer.","easy","technology|web","JavaScript was created at Netscape in 1995. Despite the name it is unrelated to Java."\n' +
+        '3,"Emotional intelligence at work","In leadership, what does emotional intelligence mean?","Leadership","Solving technical problems quickly","Recognising and managing emotions, your own and other people\'s","Remembering detail under pressure","Reading financial statements","","","OptionB","Emotional intelligence is noticing and managing emotions, in yourself and in others. In a leader it shows up as staying steady under pressure and reading how the team is really doing.","medium","leadership|people",""';
     } else if (templateType === 'poll') {
       // A POLL TEMPLATE IS THE CONTRACT CSV — a survey's columns, with each
       // row keeping its own Category — built by the same shared/survey-kinds.js
@@ -127,12 +134,15 @@ exports.handler = async (event) => {
         { category: SURVEY_CATEGORY });
     } else if (templateType === 'wavelength') {
       // Wavelength: short evocative SUBJECTS players free-associate on
-      // (up to 10 words each); the game measures word overlap across players
+      // (up to 10 words each); the game measures word overlap across players.
+      // Detail_lesson is EMPTY on purpose: a sentence about what the subject
+      // means seeds the very words the round exists to compare, which is why
+      // the generator strips it (ai-generate-scenarios.js normalizeItem).
       filename = 'wavelength-template.csv';
       csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags\n' +
-        '"Workplace",1,"Remote Work","How and where we get our best work done.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","remote-work"\n' +
-        '"Culture",2,"Customer Trust","What it takes to earn and keep the confidence of the people we serve.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","trust|culture"\n' +
-        '"Team",3,"Accountability","Who owns outcomes and how ownership shows up day to day.","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","accountability|team"';
+        '"Workplace",1,"Remote Work","","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","remote-work"\n' +
+        '"Culture",2,"Customer Trust","","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","trust|culture"\n' +
+        '"Team",3,"Accountability","","General","Enter up to 10 words or short phrases that come to mind when you think about this subject.","accountability|team"';
     } else if (templateType === 'art-title' || templateType === 'art') {
       // Art Title: an ordinary call-and-answer round that carries an Image URL.
       // Players view the artwork and invent their own title, then vote as usual.
@@ -150,12 +160,17 @@ exports.handler = async (event) => {
         '"Post-Impressionism",2,"A SWIRLING NIGHT SKY","","Vincent van Gogh, 1889","","Real title: The Starry Night, Vincent van Gogh, 1889, Museum of Modern Art, New York. Trivia: van Gogh painted it from the window of his room at the Saint-Paul asylum in Saint-Remy-de-Provence, where he had admitted himself voluntarily the year before.","https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900","post-impressionism|landscape"\n' +
         '"Ukiyo-e",3,"THE TOWERING SEA","","Katsushika Hokusai, c. 1831","","Real title: The Great Wave off Kanagawa, from Thirty-six Views of Mount Fuji, Katsushika Hokusai, c. 1831. Trivia: it is a woodblock print rather than a painting, so thousands of impressions were pulled - and the small peak in the trough of the wave is Mount Fuji, which most people miss on first look.","https://commons.wikimedia.org/wiki/Special:FilePath/The_Great_Wave_off_Kanagawa.jpg?width=900","ukiyo-e|woodblock"';
     } else {
-      // call-and-answer (default)
+      // call-and-answer (default). The rows follow the authoring prompt
+      // (src/src/config/aiAuthoringPrompt.js) because an AI copies them: a
+      // lesson is one concrete practice in plain words, and the instruction
+      // is the owner's rule — forward-looking, through the TEAM's lens, a
+      // question. It used to read "How would you apply… in your current team"
+      // over "greatest of all time" boilerplate. tests/template-roundtrip.js.
       filename = 'call-and-answer-template.csv';
       csvTemplate = 'Category,Question#,Title,Detail_lesson,School,CustomInstruction,Tags\n' +
-        '"Leadership",1,"MOST EFFECTIVE LEADERSHIP STYLE","Leadership is about inspiring others to achieve their potential. From transformational leaders who create vision to servant leaders who put team first. Consider different situations where different approaches work better. Think about technical skill, cultural impact, innovation, and lasting influence.","School of Management","How would you apply this leadership principle in your current team or organization?","leadership|management"\n' +
-        '"Innovation",2,"GREATEST INNOVATION METHOD","Innovation drives progress and competitive advantage. From design thinking to lean startup methodology to blue ocean strategy. Consider methods that improve quality of life, enable other innovations, transform society, or solve fundamental problems.","School of Innovation","What innovative approach would you implement in your current project?","innovation|strategy"\n' +
-        '"Strategy",3,"BEST STRATEGIC APPROACH","Strategic thinking involves long-term planning and competitive positioning. From Porter\'s Five Forces to Blue Ocean Strategy to systems thinking approaches. Consider frameworks that provide competitive advantage while remaining adaptable to changing conditions.","School of Strategy","How would you adapt this strategic concept to your industry?","strategy|planning"';
+        '"Learning",1,"THE BLAMELESS REVIEW","After something goes wrong, the team writes down what happened and why without naming anyone as at fault. The aim is to fix the conditions that allowed the mistake, so people report problems early instead of hiding them.","Site Reliability Engineering","What would our team need to change to run a review like this after our next setback?","learning|incidents"\n' +
+        '"Quality",2,"STOP THE LINE","On a Toyota assembly line, any worker can stop production when they spot a defect. Stopping costs minutes; a defect that travels down the line costs far more. The person closest to the problem is trusted to act on it.","Toyota Production System","Where could our team give the person closest to a problem the right to stop the work?","quality|lean"\n' +
+        '"Decisions",3,"DISAGREE AND COMMIT","Once a decision has been argued out, everyone backs it fully, including the people who argued against it. The disagreement happens before the decision is made, not afterwards in the corridor.","Amazon Leadership Principles","Which decision could our team commit to fully, now that it has been argued out?","decisions|teamwork"';
     }
 
     return {
