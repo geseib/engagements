@@ -20,6 +20,7 @@
  *
  * Grown from the audit's scratch harness (tmpl-roundtrip.js, 2026-10-25).
  */
+const suiteFinished = require('./helpers/finish-guard');
 const path = require('path');
 const assert = require('assert');
 
@@ -282,5 +283,6 @@ const label = (t) => (t.template ? `${t.type} (${t.template})` : t.type);
   });
 
   say(`\n${passed} passed, ${failed} failed`);
+  suiteFinished();
   process.exit(failed ? 1 : 0);
 })();
