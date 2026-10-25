@@ -285,6 +285,33 @@ const CHECKS = [
     assert.strictEqual(shape.MAX_SECTIONS, 8);
     assert.strictEqual(shape.MAX_HEADING_CHARS, 60);
     assert.strictEqual(shape.MAX_GUIDANCE_CHARS, 600);
+    // The default next steps carry the house rule (read-check.js passes a step
+    // starting **Suggested**); "concrete actions" invited invented owners.
+    const steps = shape.DEFAULT_OUTPUT_SECTIONS.find((s) => s.heading === 'Next Steps');
+    assert.ok(steps, 'default keeps the Next Steps heading the parsers and previews key on');
+    assert.ok(/\*\*Suggested\*\*/.test(steps.guidance), steps.guidance);
+    assert.ok(/The room has not agreed to these\./.test(steps.guidance), steps.guidance);
+    assert.ok(/only if an answer gives one/.test(steps.guidance), steps.guidance);
+    assert.ok(!/concrete actions/i.test(steps.guidance), steps.guidance);
+  });
+
+  await check('the house rules name exactly the kinds read-check.js emits, each with a revision note', () => {
+    /*
+      rejects: an export that tells an outside agent less than the check its
+      reply will be held to. The admin lambda cannot require game/read-check.js,
+      so its kinds are read from the source here.
+    */
+    const src = fs.readFileSync(path.join(REPO, 'lambda-functions/game/read-check.js'), 'utf8');
+    const emitted = [...new Set([...src.matchAll(/kind: '([a-z]+)'/g)].map((m) => m[1]))].sort();
+    const listed = reference.READ_CHECK.kinds.map((k) => k.kind).sort();
+    assert.deepStrictEqual(listed, emitted);
+    const { revisionNote } = require(path.join(REPO, 'lambda-functions/game/read-check.js'));
+    for (const kind of emitted) assert.ok(revisionNote([{ kind, token: 'x' }]).includes('"x'), kind);
+    assert.deepStrictEqual(r.readCheck.kinds.map((k) => k.kind).sort(), emitted);
+    const all = reference.READ_CHECK.intro + reference.READ_CHECK.kinds.map((k) => k.rule).join(' ');
+    for (const phrase of ['**Suggested**', 'the room has not agreed to these', 'never invent a split', 'strongest']) {
+      assert.ok(all.includes(phrase), phrase);
+    }
   });
 
   await check('the layers are the order get-ai-summary.js actually assembles the prompt in', () => {

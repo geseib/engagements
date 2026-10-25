@@ -97,8 +97,13 @@ const DEFAULT_OUTPUT_SECTIONS = [
       'responses — a question that would fit any session is a wasted one.',
   },
   {
+    // The heading stays 'Next Steps': PromptShapePreview.jsx mirrors it as
+    // DEFAULT_OUTPUT_HEADINGS. The guidance carries the house rule instead.
     heading: 'Next Steps',
-    guidance: 'Two to four numbered, concrete actions.',
+    guidance:
+      'Two to four numbered suggestions, each one sentence starting **Suggested**, then the role an ' +
+      'answer implies and a first action. Use a number, a duration or an owner only if an answer ' +
+      'gives one. The room has not agreed to these.',
   },
 ];
 
