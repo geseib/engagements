@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 25 Oct 2026 (hints that looked like controls)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `e06807b2`. Everything below this entry is already on test; this push adds only what is here.
 
 ### New
 
