@@ -59,6 +59,27 @@ check('every entry has a name, a game type, its fields and the lambda\'s hashes 
   }
 });
 
+check('no repo prompt asks for what the read check flags (house rules, read-check.js)', () => {
+  /*
+    rejects: "for the strongest answer" (a ranking measures preference, not
+    strength), a next step handed to "the owner, a colon" or "an owner" with
+    no grounding beside it, and a prompt's own example number ("a
+    fifteen-minute argument") leaking into a read.
+  */
+  const banned = [
+    /\b(?:for|on|to) the strongest\b/i,
+    /then the owner, a colon/i,
+    /then an owner, then/i,
+    /each: an owner, then/i,
+    /concrete actions/i,
+    /fifteen-minute argument/i,
+  ];
+  for (const p of committed.prompts) {
+    const text = JSON.stringify(p.values);
+    for (const re of banned) assert.ok(!re.test(text), `${p.key}: ${re}`);
+  }
+});
+
 check('a stale file is caught (one changed word)', () => {
   const tampered = JSON.parse(JSON.stringify(committed));
   tampered.prompts[0].values.instructions += ' changed';
