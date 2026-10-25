@@ -41,7 +41,7 @@
  */
 
 const { makeGenerationHandler } = require('./shared/generation-handler');
-const { tagGuidance } = require('./shared/structured-generation');
+const { tagGuidance, HOST_MATERIAL_NOTE, fenceHost } = require('./shared/structured-generation');
 const { normalizeTags } = require('./shared/tags');
 const {
   normalizeRoundKind, roundKindDirection, roundKindDetailCeiling,
@@ -168,8 +168,6 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     p += `\n\n${direction}\n\nWhere the direction above and the topic disagree, follow the direction.`;
   }
 
-  if (config.category) p += `\nCategory: ${config.category}.`;
-  if (config.audience) p += `\nTarget audience: ${config.audience}.`;
   p += `\nComplexity level: ${config.difficulty}.`;
 
   p += `\n\n${pollKindGuide(config.kinds)}`;
@@ -188,7 +186,15 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     '- Answers never overlap, and together they cover the realistic range of views.',
   ].join('\n');
 
-  if (config.customPrompt) p += `\n\nAdditional Requirements: ${config.customPrompt}`;
+  // THE HOST'S TEXT, FENCED, under the line that says what the tags mean
+  // (structured-generation.js fenceHost) — where the host's own requirements
+  // always sat in this prompt's order.
+  const host = [
+    config.category && `Category: ${fenceHost('category', config.category)}`,
+    config.audience && `Target audience: ${fenceHost('audience', config.audience)}`,
+    config.customPrompt && `Additional Requirements: ${fenceHost('requirements', config.customPrompt)}`,
+  ].filter(Boolean);
+  if (host.length > 0) p += `\n\n${HOST_MATERIAL_NOTE}\n${host.join('\n')}`;
 
   if (alreadyUsedTitles.length > 0) {
     p += `\n\nALREADY GENERATED for this set — do not repeat, rephrase, or write a near-variant of any of these:\n`;
