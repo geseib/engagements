@@ -82,7 +82,7 @@ const playerBuildRoom = {
       blocks: [
         {
           t: 'p',
-          text: '**Send an idea to the host** is there on every screen. Type it and press **Send idea**. The host sees your name with it; the main screen does not.',
+          text: '**Send an idea to the host** is there on every screen but an open Ideas question, whose own box takes your suggestions (the Ideas tab still takes anything else). Type it and press **Send idea**. The host sees your name with it; the main screen does not.',
         },
         {
           t: 'p',
@@ -111,7 +111,7 @@ const playerBuildRoom = {
           t: 'list',
           items: [
             { title: 'Results and decisions', text: 'After a question you see what the room chose.' },
-            { title: 'Sent to Claude', text: 'Once the host sends Claude something, **Sent to Claude** leads Now until the next question: what Claude was told, and the room\'s pick it came from. If the host kept the words for Claude alone, it says only that the host sent Claude a direction.' },
+            { title: 'Sent to Claude', text: 'Once the host sends Claude something, **Sent to Claude** leads Now until the next question: what Claude was told, and the room\'s pick it came from. Before Claude Code has connected it reads **Queued for Claude**. If the host kept the words for Claude alone, it says only that the host sent Claude a direction. Something the host saved for later does not show until it is sent.' },
             { title: 'What Claude is doing', text: 'Between questions, Now shows Claude\'s updates and screenshots as the host shares them.' },
             { title: 'A list', text: 'When Claude works through a list, Now shows which item it is on.' },
             { title: 'A preview', text: 'When Claude shows the work, you can answer **Looks good** or **Needs a change** (and say what).' },
