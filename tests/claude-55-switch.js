@@ -296,6 +296,18 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
     }
     return out;
   };
+  /*
+    CHANGES MADE ON PURPOSE SINCE THE PIN, each one named here so the freeze
+    still holds for everything else: [site, text at the pin, text now].
+    - ai-generate-prompt.js's budget: 2000 cut a long rewrite off mid-section,
+      and nothing checked stop_reason (the generation audit, item 6).
+  */
+  const INTENDED = [
+    ['lambda-functions/admin/ai-generate-prompt.js', 'max_tokens: 2000,', 'max_tokens: MAX_TOKENS,'],
+  ];
+  const asIntended = (site, lits) => lits.map((lit) => INTENDED
+    .filter(([s]) => s === site)
+    .reduce((text, [, was, now]) => text.split(was).join(now), lit));
   let head = true;
   try { execFileSync('git', ['cat-file', '-e', 'HEAD'], { cwd: REPO, stdio: 'ignore' }); } catch { head = false; }
   for (const site of SITES) {
@@ -306,7 +318,7 @@ const decode = (res) => JSON.parse(new TextDecoder().decode(res.body));
       if (head) {
         let before = null;
         try { before = execFileSync('git', ['show', `454145ab:${site}`], { cwd: REPO, encoding: 'utf8' }); } catch { before = null; }
-        if (before !== null) assert.deepStrictEqual(lits, literals(before));
+        if (before !== null) assert.deepStrictEqual(lits, asIntended(site, literals(before)));
       }
       // Nothing calls Bedrock's send with a fresh InvokeModelCommand directly.
       assert.ok(!/\.send\(new InvokeModelCommand\(/.test(nowText), 'a direct bedrock.send(new InvokeModelCommand(...)) remains');

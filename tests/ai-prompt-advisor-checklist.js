@@ -498,6 +498,17 @@ function asksForTheChecklist(prompt) {
     assert.deepStrictEqual(applied.payload.input.issues[0], TICKED[0]);
   });
   await check('the model is sent the two halves separately', () => sentSeparately(applyPrompt));
+  // rejects: leaning on APPLY_TEMPERATURE alone — claude-route.js drops
+  // temperature on the 5.5 path, so the instruction has to say it in words.
+  await check('…told in words that every untouched line comes back byte-identical', () => {
+    assert.match(applyPrompt, /Every other line is returned\s+byte-identical/);
+  });
+  // rejects: naming one model ("Claude Haiku 4.5") for summaries that run on
+  // Haiku 5.5 whenever the Engage switch is on.
+  await check('…and the summary model is not named', () => {
+    assert.ok(!/Claude Haiku 4\.5/.test(applyPrompt));
+    assert.match(applyPrompt, /a fast Claude model/);
+  });
   await check('…and every ticked fix, and nothing about the one left unticked', () => {
     for (const t of TICKED) {
       assert.ok(applyPrompt.includes(t.id), `ticked ${t.id} is not in the prompt`);

@@ -10,6 +10,7 @@ const {
   describeAuthoringRules,
   assertNoBracketDirections,
 } = require('./shared/template-variable-usage');
+const { variablesForGameType } = require('./shared/template-variables');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
@@ -21,15 +22,51 @@ const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION 
 // them. Where the table did hit, its wavelength row named five variables that
 // have never existed. It is gone; shared/template-variables.js is the list now.
 
+// What each category's summaries are for, in plain words. The house style is
+// short and grounded; these once read "comprehensive frameworks" and "deep
+// expertise", and the model wrote prompts in that voice.
 const CATEGORY_CONTEXTS = {
-  'lessons-learned': 'analyzing team experiences and extracting strategic insights for future application',
-  'problem-solving': 'evaluating solution approaches and building comprehensive frameworks for complex challenges',
-  'amazon-principles': 'applying Amazon Leadership Principles in practical business situations and leadership development',
-  'interview-prep': 'providing feedback on interview responses using STAR method and behavioral competencies',
-  'team-building': 'fostering collaboration, communication, and team effectiveness',
-  'opinions': 'synthesizing diverse viewpoints and finding common ground while respecting different perspectives',
-  'custom': 'providing flexible analysis that adapts to the specific scenario and business context'
+  'lessons-learned': 'what the team learned from what happened, and what to do differently',
+  'problem-solving': 'which approaches the room proposed and how they compare',
+  'amazon-principles': 'how the answers show Amazon Leadership Principles in practice',
+  'interview-prep': 'feedback on interview answers, using the STAR method',
+  'team-building': 'how the team works together and talks to each other',
+  'opinions': 'where views differ and where they agree',
+  'custom': 'what the room said about the question it was asked'
 };
+const DEFAULT_CATEGORY_CONTEXT = 'what the room said, and what it suggests doing next';
+
+/**
+ * THE EXAMPLE'S SECOND VARIABLE, FROM THIS GAME TYPE'S OWN CATALOGUE. The
+ * example used to show {voteTally} for every type — a variable wavelength does
+ * not have, and one a poll (which has no vote) reads as a ranking. The first
+ * of these the catalogue lists for the type is used, with its label.
+ */
+const EXAMPLE_VARIABLES = {
+  'call-and-answer': [['voteTally', 'How the vote fell']],
+  trivia: [['triviaCorrectness', 'Who got it right']],
+  poll: [['resultsSummary', 'How the room answered']],
+  wavelength: [['commonWords', 'Words everyone used']],
+  survey: [['surveyResults', 'What the survey found']],
+};
+function exampleVariableFor(gameType) {
+  const known = new Set(variablesForGameType(gameType).map((v) => v.name));
+  const found = (EXAMPLE_VARIABLES[gameType] || []).find(([name]) => known.has(name));
+  return found || ['responseCount', 'How many answered'];
+}
+
+/** The answer budget. 2000 cut a long rewrite off mid-section; see askModel. */
+const MAX_TOKENS = 8000;
+
+/** A reply that ran out of budget — a cut-off prompt, never one to hand back. */
+class TruncatedReplyError extends Error {
+  constructor() {
+    super('The AI\'s answer ran past its length limit before it finished, so nothing was changed. '
+      + 'Try again, or shorten the current instructions first.');
+    this.name = 'TruncatedReplyError';
+    this.statusCode = 502;
+  }
+}
 
 /**
  * One ask, with the Sonnet fallback the wand has always had. Lifted out of the
@@ -44,12 +81,16 @@ async function askModel(promptText) {
       modelId,
       body: JSON.stringify({
         anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 2000,
+        max_tokens: MAX_TOKENS,
         temperature: 0.7,
         messages: [{ role: 'user', content: promptText }]
       })
     }), { site: 'generate-prompt', timeoutMs: 15000 });
-    return JSON.parse(new TextDecoder().decode(response.body));
+    const body = JSON.parse(new TextDecoder().decode(response.body));
+    // THE CHECK THIS HELPER NEVER MADE: a reply cut off at the budget was
+    // parsed as if whole, and half a prompt came back as the answer.
+    if (body && body.stop_reason === 'max_tokens') throw new TruncatedReplyError();
+    return body;
   };
 
   const haikuProfileArn = `arn:aws:bedrock:us-east-1:${process.env.ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`;
@@ -59,6 +100,8 @@ async function askModel(promptText) {
     console.log('✅ Successfully called Claude Haiku 4.5 via inference profile');
     return body;
   } catch (primaryError) {
+    // The fallback has the same budget, so a truncation is the answer, not a reason to ask again.
+    if (primaryError instanceof TruncatedReplyError) throw primaryError;
     console.error('❌ Error with Claude Haiku 4.5:', primaryError);
     console.log('🔄 BEDROCK: Trying Claude Sonnet 4.6 as fallback...');
     try {
@@ -101,12 +144,25 @@ const FALLBACK_OUTPUT_FORMAT = `## Summary
 Name three actions the responses actually support, one sentence each.`;
 
 /**
- * Read the model's reply, tolerating the two ways it goes wrong: prose wrapped
- * around the JSON, and no JSON at all.
+ * Read the model's reply. It writes each half between its own tags — the
+ * format ai-prompt-advisor.js uses for its rewrites, because a long prompt
+ * escaped into a JSON string is one missed quote from unreadable. A JSON reply
+ * is still read if the model sends one, and the old prose fallbacks remain.
  */
+function betweenTags(text, tag) {
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  const start = text.indexOf(open);
+  const end = text.lastIndexOf(close);
+  if (start < 0 || end < start + open.length) return undefined;
+  return text.slice(start + open.length, end).replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+}
+
 function parseGeneratedContent(responseBody, category, categoryContext) {
   try {
     const content = responseBody.content[0].text;
+    const tagged = { instructions: betweenTags(content, 'instructions'), outputFormat: betweenTags(content, 'outputFormat') };
+    if (tagged.instructions !== undefined && tagged.outputFormat !== undefined) return tagged;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
 
@@ -115,7 +171,7 @@ function parseGeneratedContent(responseBody, category, categoryContext) {
     return {
       instructions: instructionsMatch
         ? instructionsMatch[1].trim().replace(/^["']|["']$/g, '')
-        : `Expert analysis focused on ${categoryContext}`,
+        : `Summarise ${categoryContext}.`,
       outputFormat: outputFormatMatch
         ? outputFormatMatch[1].trim().replace(/^["']|["']$/g, '')
         : FALLBACK_OUTPUT_FORMAT,
@@ -123,9 +179,8 @@ function parseGeneratedContent(responseBody, category, categoryContext) {
   } catch (parseError) {
     console.error('Error parsing Claude response:', parseError);
     return {
-      instructions: `You are a ${category} specialist and strategic consultant. Analyse the `
-        + `responses with deep expertise in ${categoryContext}. Provide thoughtful, actionable `
-        + 'insights that help teams improve performance and achieve strategic objectives.',
+      instructions: `Read the room's answers and summarise ${categoryContext}. Use only what the `
+        + 'answers say; name no number, person or fact they do not contain.',
       outputFormat: FALLBACK_OUTPUT_FORMAT,
     };
   }
@@ -155,6 +210,11 @@ function bracketViolation(generated) {
     return err.message;
   }
 }
+
+// Exported for tests/ai-generate-prompt-format.js.
+exports.parseGeneratedContent = parseGeneratedContent;
+exports.exampleVariableFor = exampleVariableFor;
+exports.TruncatedReplyError = TruncatedReplyError;
 
 exports.handler = async (event) => {
   /*
@@ -243,12 +303,13 @@ exports.handler = async (event) => {
       err.statusCode = 500;
       throw err;
     }
-    const categoryContext = CATEGORY_CONTEXTS[category] || 'providing comprehensive analysis and actionable insights';
+    const categoryContext = CATEGORY_CONTEXTS[category] || DEFAULT_CATEGORY_CONTEXT;
+    const [exampleVariable, exampleLabel] = exampleVariableFor(canonicalGameType);
 
     // Build the AI generation prompt
-    const aiPrompt = `You are an expert AI prompt engineer specializing in enhancing and improving prompts for analyzing engagement activities and team interactions.
+    const aiPrompt = `You write the prompts Engage uses to summarise a room's answers on screen.
 
-TASK: Enhance and improve the existing AI prompt sections for ${canonicalGameType} activities in the ${category} category.
+TASK: Write or improve the two sections of a summary prompt for ${canonicalGameType} rounds in the ${category} category.
 
 ADMIN PROVIDED CONTEXT:
 - Prompt Name: ${promptName || 'Not provided'}
@@ -256,7 +317,7 @@ ADMIN PROVIDED CONTEXT:
 - Game Type: ${canonicalGameType}
 - Category: ${category} (focused on ${categoryContext})
 
-EXISTING CONTENT TO ENHANCE:
+EXISTING CONTENT:
 - Current Instructions: ${currentInstructions || 'None provided - please create from scratch'}
 - Current Output Format: ${currentOutputFormat || 'None provided - please create from scratch'}
 
@@ -278,33 +339,31 @@ line, no square brackets anywhere:
 **What the room said**
 {responsesText}
 
-**How the vote fell**
-{voteTally}
+**${exampleLabel}**
+{${exampleVariable}}
 
 **The through-line**
 Two or three sentences naming the ideas that recur, in the voice above.
 
-ENHANCEMENT REQUIREMENTS:
-1. PRESERVE the admin's original intent and purpose - do not change the core direction
-2. If instructions exist, enhance them with more detail, specificity, and expertise
-3. If output format exists, improve its structure, following the rules and example above
-4. If sections are missing, create them based on the description and category context
-5. Add specific expertise and domain knowledge relevant to ${category}
-6. Where the output should carry data, use a variable from the exhaustive list above —
-   on its own line under a label, never inside a sentence, and never twice
-7. Maintain professional tone suitable for business contexts
-8. Focus on actionable insights and strategic thinking
+HOW TO WRITE IT:
+1. Keep the admin's purpose and voice. Do not change what the prompt is for.
+2. Where a section exists, make it clearer and shorter: cut repetition and words that do nothing.
+3. Where a section is missing, write it from the description and category above.
+4. Where the output should carry data, use a variable from the exhaustive list above —
+   on its own line under a label, never inside a sentence, and never twice.
+5. Plain words, short sentences. No hyperbole ("powerful", "comprehensive", "game-changing").
+6. Never ask the summary for numbers, names or facts the round's data does not contain.
 
-ENHANCEMENT APPROACH:
-- For existing content: Add detail, improve clarity, enhance with domain expertise
-- For missing content: Create based on description and category focus
-- Always respect the admin's vision while making it more effective
+HOW TO REPLY. Not JSON. Write each section in full between its tags, exactly as it should be
+saved — plain text, nothing escaped, no code fence. Nothing before the first tag and nothing
+after the last:
 
-RESPONSE FORMAT (return as JSON):
-{
-  "instructions": "Enhanced/created instructions that preserve admin intent",
-  "outputFormat": "Enhanced/created output format with better structure and template variables"
-}`;
+<instructions>
+The complete instructions section
+</instructions>
+<outputFormat>
+The complete output-format section
+</outputFormat>`;
 
     // ONE ASK, AND POSSIBLY A SECOND — see askModel and the bracket gate below.
     let responseBody = await askModel(aiPrompt);
