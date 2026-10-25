@@ -15,7 +15,7 @@ import {
 } from '../config/gameTypes';
 import { selectableSummaryPrompts } from '../utils/questionSetEditing';
 import { preflight, describePreflight } from '../utils/csvPreflight';
-import { authoringPrompt } from '../config/aiAuthoringPrompt';
+import { authoringPrompt, fillInCount, templateFileFor } from '../config/aiAuthoringPrompt';
 import './QuestionSetsPanel.css';
 
 /*
@@ -175,6 +175,13 @@ export default function QuestionSetUploadPanel({
   // out, not an upload fault (22-plan-limit-notice.html).
   const [limit, setLimit] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  // THE CHATBOT ROUTE'S THREE STEPS, as far as this panel can see them
+  // (docs/design/authoring-guidance/ a1–a2): which templates came down in this
+  // visit, by type → filename, and which type's prompt was just copied. The
+  // copy is confirmed IN the route, where the host is looking, not in the
+  // status line at the foot of the panel.
+  const [downloadedFiles, setDownloadedFiles] = useState({});
+  const [copiedType, setCopiedType] = useState('');
 
   /*
     SCROLL AND MOVE FOCUS, NOT ONE OR THE OTHER.
@@ -268,6 +275,7 @@ export default function QuestionSetUploadPanel({
       anchor.click();
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(url);
+      setDownloadedFiles((prev) => ({ ...prev, [templateType]: result.filename }));
       setStatus({ text: `${result.filename} downloaded.`, tone: 'success' });
     } catch (error) {
       setStatus({ text: `Failed to download template: ${error.message}`, tone: 'error' });
@@ -284,9 +292,12 @@ export default function QuestionSetUploadPanel({
     The execCommand fallback exists because navigator.clipboard is
     secure-context only — a host on a plain-http lab screen still gets a copy
     instead of a dead button.
+
+    `type` is the panel's type except for the artwork route, whose prompt is
+    Art Title's while the panel says Call & Answer.
   */
-  const copyAuthoringPrompt = async () => {
-    const text = authoringPrompt(engagementType);
+  const copyAuthoringPrompt = async (type = engagementType) => {
+    const text = authoringPrompt(type);
     if (!text) return;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -299,14 +310,32 @@ export default function QuestionSetUploadPanel({
         document.execCommand('copy');
         document.body.removeChild(scratch);
       }
-      setStatus({
-        text: 'AI authoring prompt copied. Paste it into Claude or ChatGPT together with the downloaded template, fill in the [BRACKETS] at the top, and upload the CSV it returns here.',
-        tone: 'success',
-      });
+      setStatus(null);
+      setCopiedType(type);
     } catch (error) {
+      setCopiedType('');
       setStatus({ text: `Could not copy the prompt: ${error.message}`, tone: 'error' });
     }
   };
+
+  /** Back from the chatbot: to the file chooser, by focus and by scroll. */
+  const goToUpload = () => {
+    const input = document.getElementById('qsets-file-upload');
+    if (!input) return;
+    if (typeof input.scrollIntoView === 'function') input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.focus({ preventScroll: true });
+  };
+
+  const chatbotRoute = (type, extra = {}) => (
+    <ChatbotRoute
+      type={type}
+      downloaded={downloadedFiles[type] || ''}
+      copied={copiedType === type}
+      onCopy={() => copyAuthoringPrompt(type)}
+      onGoToUpload={goToUpload}
+      {...extra}
+    />
+  );
 
   const upload = async () => {
     if (!file || !title.trim()) return;
@@ -405,6 +434,7 @@ export default function QuestionSetUploadPanel({
             // survey block), so a stale report would be a confident wrong answer.
             setReport(null);
             resetFile();
+            setCopiedType('');
           }}
         >
           {GAME_TYPE_LIST.map((meta) => (
@@ -446,6 +476,7 @@ export default function QuestionSetUploadPanel({
               showAIBuilder={showAIBuilder}
               onOpenBuilder={onOpenBuilder}
               onDownloadTemplate={downloadTemplate}
+              chatbot={chatbotRoute('survey', { templateWhere: '(A template or A file, above)' })}
             />
           )}
           {!isSurvey && showAIBuilder && (
@@ -475,27 +506,10 @@ export default function QuestionSetUploadPanel({
             </button>
           </div>
           )}
-          {/* Beside the template it pairs with, and only for the types whose
-              prompt exists — authoringPrompt() returns null for the rest, so
-              adding a type later is a config entry, not panel surgery. */}
-          {authoringPrompt(engagementType) && (
-            <div className="qsets-route">
-              <span className="qsets-route-nm">Use your own chatbot</span>
-              <p className="qsets-route-when">
-                Best when you would rather drive the AI yourself. Paste this prompt and the
-                template into Claude or ChatGPT and upload the CSV it writes.
-              </p>
-              <button
-                type="button"
-                className="qsets-btn"
-                onClick={copyAuthoringPrompt}
-                title="Copy instructions you can paste into Claude or ChatGPT, together with the downloaded template, to have it write the CSV for you. The bits you fill in (topic, count, difficulty…) are marked in [BRACKETS]."
-              >
-                <Icon name="ClipboardText" weight="bold" size={14} color="currentColor" />
-                Copy AI authoring prompt
-              </button>
-            </div>
-          )}
+          {/* Beside the template it pairs with. Every type with a template has
+              a prompt now; authoringPrompt() is null for anything else, and
+              ChatbotRoute renders nothing on null. */}
+          {!isSurvey && chatbotRoute(engagementType)}
           {engagementType === 'call-and-answer' && (
             <div className="qsets-route">
               <span className="qsets-route-nm">Start from the artwork template</span>
@@ -514,6 +528,12 @@ export default function QuestionSetUploadPanel({
               </button>
             </div>
           )}
+          {engagementType === 'call-and-answer' && chatbotRoute('art-title', {
+            name: 'Artwork, with your own chatbot',
+            when: 'The same three steps for an artwork round. Its prompt keeps the real title out of what players see, and never invents an image link.',
+            buttonLabel: 'Copy Art Title AI prompt',
+            templateWhere: '(Download Art Title template, above)',
+          })}
           {/* Not for a survey: /builder has no survey form. */}
           {showManualBuilder && !isSurvey && (
           <div className="qsets-route">
@@ -714,7 +734,84 @@ export default function QuestionSetUploadPanel({
  * hold five). The every-kind template is offered with the file route, where
  * the mockup's "Download the template" link is.
  */
-function SurveyRoutes({ showAIBuilder, onOpenBuilder, onDownloadTemplate }) {
+/**
+ * USE YOUR OWN CHATBOT — the route, its three steps, the copy confirmation and
+ * a preview of what is copied (docs/design/authoring-guidance/ a1, a2).
+ *
+ * The steps are the whole point: the prompt is useless without the template,
+ * and the file the chatbot writes has to come back here. A step turns done
+ * when the panel saw it happen (the template downloaded in this visit, the
+ * prompt copied); the third is the upload below, which the panel's own
+ * preflight reports on. "Go to upload" moves focus to the file chooser, so a
+ * host coming back from another tab lands where the next step is.
+ *
+ * The preview is a <details>, shut by default: a host should be able to see
+ * what they are handing to another AI before it reaches the clipboard.
+ */
+function ChatbotRoute({
+  type, downloaded, copied, onCopy, onGoToUpload,
+  name = 'Use your own chatbot',
+  when = 'Best when you would rather drive the AI yourself, in Claude or ChatGPT.',
+  buttonLabel = 'Copy AI authoring prompt',
+  templateWhere = '(Start from a template, above)',
+}) {
+  const text = authoringPrompt(type);
+  if (!text) return null;
+  const file = downloaded || templateFileFor(type);
+  const brackets = fillInCount(type);
+  const lines = text.split('\n').length;
+  return (
+    <div className="qsets-route qsets-chat" data-testid={`qsets-chat-${type}`}>
+      <span className="qsets-route-nm">{name}</span>
+      <p className="qsets-route-when">{when}</p>
+      <button
+        type="button"
+        className="qsets-btn"
+        onClick={onCopy}
+        title="Copy instructions you can paste into Claude or ChatGPT, together with the downloaded template, to have it write the CSV for you. The bits you fill in (topic, count, difficulty…) are marked in [BRACKETS]."
+      >
+        <Icon name="ClipboardText" weight="bold" size={14} color="currentColor" />
+        {copied ? 'Copy again' : buttonLabel}
+      </button>
+      <ol className="qsets-chat-steps">
+        <li className={downloaded ? 'is-done' : undefined}>
+          <span className="qsets-chat-n" aria-hidden="true">{downloaded ? <Icon name="Check" weight="bold" size={12} color="currentColor" /> : '1'}</span>
+          <span>
+            {downloaded
+              ? <><b>Template downloaded:</b> {downloaded}</>
+              : <><b>Download the template</b> {templateWhere}. The prompt tells the AI to match it exactly.</>}
+          </span>
+        </li>
+        <li className={copied ? 'is-done' : undefined}>
+          <span className="qsets-chat-n" aria-hidden="true">{copied ? <Icon name="Check" weight="bold" size={12} color="currentColor" /> : '2'}</span>
+          <span><b>{copied ? 'Prompt copied.' : 'Copy the prompt'}</b>{copied ? ' Paste it with the template; fill in the [BRACKETS].' : ', paste it with the template into your chatbot, and fill in the [BRACKETS] at the top.'}</span>
+        </li>
+        <li>
+          <span className="qsets-chat-n" aria-hidden="true">3</span>
+          <span><b>Upload the CSV</b> it writes, under “…then upload it here” below. Every row is checked first.</span>
+        </li>
+      </ol>
+      {copied && (
+        <p className="qsets-chat-copied" role="status">
+          <span>
+            <b>Copied.</b> Paste it into Claude or ChatGPT with {file}, fill in the {brackets} [BRACKETS] at
+            the top, and save its reply as a .csv file.
+          </span>
+          <button type="button" className="qsets-btn qsets-btn--sm" onClick={onGoToUpload}>
+            <Icon name="ArrowDown" weight="bold" size={12} color="currentColor" />
+            Go to upload
+          </button>
+        </p>
+      )}
+      <details className="qsets-chat-preview">
+        <summary>Show what is copied ({lines} lines)</summary>
+        <pre>{text}</pre>
+      </details>
+    </div>
+  );
+}
+
+function SurveyRoutes({ showAIBuilder, onOpenBuilder, onDownloadTemplate, chatbot = null }) {
   return (
     <>
       {showAIBuilder && (
@@ -762,6 +859,8 @@ function SurveyRoutes({ showAIBuilder, onOpenBuilder, onDownloadTemplate }) {
           Download the template
         </button>
       </div>
+
+      {chatbot}
     </>
   );
 }
