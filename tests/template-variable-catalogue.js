@@ -362,14 +362,16 @@ check('triviaResponses is offered to polls too, because the poll branch assigns 
   assert.deepStrictEqual(typesFor('triviaResponses').sort(), ['poll', 'trivia']);
 });
 
-check('the ballot-derived variables exclude the two types that never store a vote', () => {
+check('the ballot-derived variables are call-and-answer\'s alone, the one type that still votes', () => {
   /*
     :803 gates the whole tally loop on `gameType !== 'trivia' && !== 'wavelength'`,
     so firstPlace/secondPlace/thirdPlace are zero for those two and every figure
     built from them is a row of zeroes.
 
     rejects: re-adding trivia to votingBreakdown or voteCount, which is the tag
-    they carried before poll and survey were even considered.
+    they carried before poll and survey were even considered — and re-adding
+    poll, which lost its vote on 27 Sep 2026 (start-vote.js refuses one), or
+    survey, which never had one. Offered there they read "No votes recorded".
   */
   assert(/gameType !== 'trivia' && gameType !== 'wavelength'/.test(summarySource),
     'the vote-loop guard has changed; re-derive the ballot variables');
@@ -377,8 +379,12 @@ check('the ballot-derived variables exclude the two types that never store a vot
     const types = typesFor(name);
     assert(!types.includes('trivia'), `${name} must not be offered to trivia`);
     assert(!types.includes('wavelength'), `${name} must not be offered to wavelength`);
-    assert(types.includes('poll'), `${name} must be offered to polls, which do vote`);
+    assert(!types.includes('poll'), `${name} must not be offered to polls, which no longer vote`);
+    assert(!types.includes('survey'), `${name} must not be offered to surveys, which never vote`);
   }
+  const startVote = fs.readFileSync(path.join(REPO, 'lambda-functions', 'websocket', 'start-vote.js'), 'utf8');
+  assert(/A poll has no vote/.test(startVote), 'start-vote.js accepts a poll again; re-derive VOTED_TYPES');
+  assert(!typesFor('consensusLevel').includes('poll'), 'consensusLevel reads "No votes cast" on every poll');
 });
 
 check('scoringSystem is not offered to trivia, whose points come from somewhere else', () => {
@@ -407,8 +413,8 @@ check('the score variables exclude wavelength alone, which writes no player scor
     'wavelength no longer bypasses the scoring path; re-derive the score variables');
   for (const name of ['cumulativeScores', 'leaderboard', 'playerRankings', 'averageScore', 'roundScores']) {
     assert.deepStrictEqual(typesFor(name).sort(),
-      ['call-and-answer', 'poll', 'survey', 'trivia'],
-      `${name} has drifted from the four types that accrue per-player scores`);
+      ['call-and-answer', 'poll', 'trivia'],
+      `${name} has drifted from the three types that accrue per-player scores`);
   }
 });
 
@@ -423,7 +429,27 @@ check('every type gained variables it can actually use', () => {
   );
   assert(counts.poll >= 30, `poll offers only ${counts.poll} variables`);
   assert(counts.wavelength >= 28, `wavelength offers only ${counts.wavelength} variables`);
-  assert(counts.survey >= 28, `survey offers only ${counts.survey} variables`);
+});
+
+check('a survey is offered exactly what its closed-survey read fills', () => {
+  /*
+    Re-derived 2026-10-25 by running a closed survey through the real worker
+    (the survey-workie-read.js harness) with every variable in the prompt. The
+    read takes no REF, ANSWER or VOTE row, so every answer, vote, tally, score
+    and per-question variable came back empty, zero, a stock line or "No
+    votes recorded" — ~45 of them were offered anyway.
+
+    rejects: putting survey back on an answer, vote or score variable (the
+    pre-2026-10-25 tags), or dropping a field the survey read does fill.
+  */
+  assert(/answersQuery = isSurveySummary \? \{ Items: \[\] \}/.test(summarySource),
+    'a survey read now queries answer rows; re-derive the survey tags');
+  const offered = variablesForGameType('survey').map((v) => v.name).sort();
+  assert.deepStrictEqual(offered, [
+    'categoryCount', 'eventTitle', 'gameId', 'gameType', 'question', 'questionCategory', 'questionDetail',
+    'questionInfo', 'questionSetDescription', 'questionSetName', 'questionTitle', 'sessionContext',
+    'sessionDuration', 'surveyResults', 'totalParticipants', 'totalQuestions',
+  ]);
 });
 
 check('{questionInfo} exists, is composite, and labels both halves', () => {
@@ -714,13 +740,14 @@ check('every ANSWER_TOKEN is a variable that actually resolves', () => {
 
 check('the reveal field is offered for every type that can carry it', () => {
   // rejects: the stale `gameTypes: ['trivia']`. This is the assertion that
-  // would have caught the original defect, and it fails against it.
+  // would have caught the original defect, and it fails against it. Survey is
+  // the exception: its read is of the whole survey, with no question row.
   for (const name of ['answerDetails', 'reveal']) {
     const v = TEMPLATE_VARIABLES.find((x) => x.name === name);
     assert.ok(v, `${name} is not in the catalogue`);
     assert.deepStrictEqual(
       [...v.gameTypes].sort(),
-      ['call-and-answer', 'poll', 'survey', 'trivia', 'wavelength'],
+      ['call-and-answer', 'poll', 'trivia', 'wavelength'],
       `${name} is tagged for fewer types than upload-questions.js stores it for`
     );
   }
