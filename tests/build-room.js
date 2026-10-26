@@ -1399,7 +1399,7 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const kinds = (await state()).opening.kinds.map((k) => ({ title: k.title }));
     const k = await hostCall('POST', 'asks', { kind: 'choice', prompt: 'What are we making?', options: kinds, openingStep: 'kind' });
     assert.strictEqual(k.body.ask.openingStep, 'kind');
-    assert.deepStrictEqual([k.body.ask.openingIndex, k.body.ask.openingOf], [1, 9]);
+    assert.deepStrictEqual([k.body.ask.openingIndex, k.body.ask.openingOf], [1, 5], 'step 1 of the five-step core');
     assert.strictEqual((await state()).opening.steps[0].status, 'asking');
     await hostCall('POST', `asks/${k.body.ask.askId}`, { action: 'decide', direction: 'What are we making: A game', chosen: ['C'] });
     let st = await state();
@@ -1430,6 +1430,49 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     assert.strictEqual((await hostCall('POST', 'opening/reopen', { step: 'kind' })).body.opening.steps[0].status, 'next');
     assert.strictEqual((await hostCall('POST', 'opening/skip', { step: 'nope' })).status, 400);
     assert.strictEqual((await agentCall('POST', 'opening/skip', { step: 'kind' })).status, 403);
+  });
+  // Simplify PLAN item 12, phase 2 (owner, 26 Oct 2026): five core steps, four more one press away.
+  await check('the five-step core: Making, For, The problem, Good looks like, First build; the other four are marked more', async () => {
+    seed();
+    const st = await state();
+    assert.deepStrictEqual(st.opening.steps.filter((x) => x.core).map((x) => x.key), ['kind', 'forWhom', 'problem', 'good', 'firstBuild']);
+    assert.deepStrictEqual(S.OPENING_MORE, ['proof', 'never', 'tools', 'look']);
+    assert.deepStrictEqual(st.opening.steps.map((x) => x.key), S.OPENING_KEYS, 'every step is still offered, in the same order');
+  });
+  await check('after Good looks like the next step is First build, and once the core is framed nothing is next', async () => {
+    seed();
+    for (const [step, text] of [['kind', 'A website'], ['forWhom', 'Volunteers'], ['problem', 'Shifts are on paper'], ['good', 'Pick a shift in a minute']]) {
+      await hostCall('POST', 'opening/answer', { step, text });
+    }
+    let st = await state();
+    assert.strictEqual(st.opening.current, 'firstBuild', 'We will know and Never are not on the default path');
+    assert.strictEqual(st.opening.readyForDraft, true, 'the draft still waits only for For, The problem and Good looks like');
+    await hostCall('POST', 'opening/answer', { step: 'firstBuild', text: 'The shift list' });
+    st = await state();
+    assert.strictEqual(st.opening.current, null, 'the core is framed');
+    assert.deepStrictEqual(st.opening.steps.filter((x) => x.status === 'next').map((x) => x.key), ['proof', 'never', 'tools', 'look'], 'the more questions wait, unanswered');
+    // One of the more questions, asked: it is the step in hand, it fills the brief, and a phone counts nothing for it.
+    const m = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'How will we know it worked?', openingStep: 'proof' });
+    assert.strictEqual(m.body.ask.openingMore, true);
+    assert.strictEqual(m.body.ask.openingIndex, undefined);
+    assert.strictEqual((await state()).opening.current, 'proof');
+    await hostCall('POST', `asks/${m.body.ask.askId}`, { action: 'decide', direction: 'How will we know it worked: ten sign-ups in a week' });
+    st = await state();
+    assert.strictEqual(st.brief.lines.proof, 'ten sign-ups in a week');
+    assert.ok(S.briefText(st.brief).includes('We will know it worked when: ten sign-ups in a week'), 'Claude reads it in the brief');
+  });
+  await check('a room mid-opening from before the core (We will know answered, Never asking) keeps both and goes on', async () => {
+    seed();
+    await hostCall('POST', 'opening/answer', { step: 'kind', text: 'A website' });
+    await hostCall('POST', 'opening/answer', { step: 'proof', text: 'Ten sign-ups' });
+    const n = await hostCall('POST', 'asks', { kind: 'suggest', prompt: 'What must it never do?', openingStep: 'never' });
+    let st = await state();
+    assert.strictEqual(st.opening.current, 'never', 'the step being asked stays in hand');
+    assert.strictEqual(st.opening.steps.find((x) => x.key === 'proof').status, 'done');
+    await hostCall('POST', `asks/${n.body.ask.askId}`, { action: 'decide', direction: 'What must it never do: ask for an account' });
+    st = await state();
+    assert.strictEqual(st.opening.current, 'forWhom', 'then the core again, where it was left');
+    assert.deepStrictEqual(st.brief.keep.map((i) => i.text), ['ask for an account']);
   });
   await check('Start building ends the opening and sends Claude the whole brief as Do now', async () => {
     seed();

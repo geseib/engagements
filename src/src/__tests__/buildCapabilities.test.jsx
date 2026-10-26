@@ -221,6 +221,53 @@ test('one screen: every capability has an entry point, and the page names no cap
   expect([...all].filter((id) => !CAPABILITY_IDS.includes(id))).toEqual([]);
 });
 
+/**
+ * AN EMPTY ROOM (simplify PLAN item 18, phase 2): Later and Points are drawn only once
+ * they have something, so each keeps a door that does not depend on content. Points:
+ * What's next's Ask Claude for points between asks, and the composer's More always;
+ * Later: Save for later in the composer. Walked on both layouts, before any building ask
+ * (the starter question, no What's next) and between asks.
+ */
+function emptyRoom({ decided = false } = {}) {
+  const rows = [
+    { SK: 'BUILD#STATE', Rev: 3, AgentSeenAt: ago(6), Phase: 'building' },
+    ...(decided ? [{ SK: 'BUILD#ASK#002', Source: 'agent', CreatedAt: ago(600), ...DECIDED }] : []),
+  ];
+  const view = S.hostView({
+    gameId: GAME, meta: { Title: 'Volunteer sign-up', Details: '' }, sessionState: 'STARTED', room: S.roomFromRows(rows), players: ['Ana', 'Dee'], now: NOW,
+  });
+  return { ...view, wallKey: 'K'.repeat(43), wall: { screen: 'stage', codes: 'none', profile: 'room', rev: 1 }, presenting: 0, presentDetail: null };
+}
+
+test.each([
+  ['one screen', false], ['two screens', true],
+])('an empty room, %s: Points and Later each keep a door with nothing in them', async (_, two) => {
+  for (const decided of [false, true]) {
+    if (two) window.localStorage.setItem(SURFACES_KEY, 'two');
+    serve(emptyRoom({ decided }));
+    window.history.pushState({}, '', `/build?gameId=${GAME}`);
+    render(<BuildRoomPage />);
+    // eslint-disable-next-line no-await-in-loop
+    await screen.findAllByText('Volunteer sign-up');
+    // Nothing in either list: no Points tab drawn, no Later list on one screen.
+    expect(screen.queryByRole('tab', { name: /^Points/ })).toBeNull();
+    if (decided) {
+      // Between asks: What's next carries Ask Claude for points.
+      const move = within(screen.getByRole('list', { name: "What's next" })).getByRole('button', { name: 'Ask Claude' });
+      expect(move).toHaveAttribute('data-capability', 'points');
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Tell Claude…' }));
+    const found = new Set();
+    seenIn(found);
+    expect(found).toContain('points');
+    expect(found).toContain('later');
+    const composer = screen.getByRole('region', { name: 'Tell Claude' });
+    expect(within(composer).getByRole('button', { name: 'Save for later' })).toHaveAttribute('data-capability', 'later');
+    cleanup();
+    window.localStorage.clear();
+  }
+});
+
 test('the Stage carries its own: the moves, the board pick, HOST and SESSION', async () => {
   serve(MOMENTS[0][1]());
   window.history.pushState({}, '', `/build?gameId=${GAME}`);

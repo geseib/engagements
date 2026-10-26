@@ -9,6 +9,61 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 26 Oct 2026 (Build Room, simpler: the opening and between asks)
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+Phase 2 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`): review item 12 (smaller) and the second half of item 18, on one screen and on two. No mode switch. Nothing was taken away: every capability is still reachable once it applies, and Later and Points keep a door while they are empty.
+
+### New
+
+- **A five-step opening.** The default path is **Making, For, The problem, Good looks like, First build**, and the card counts "step 2 of 5". We will know, Never, Tools and style and Look and feel are under **More framing questions** in The opening, one press away; they fill the brief exactly as before. After the fifth step the card says "The core is framed. Start building, or ask one of the 4 under More framing questions." Nothing opens by itself, and **Start building** still asks first ("5 of 5 core steps are framed").
+- **Phones count the core too:** "Shaping the build · step 2 of 5"; one of the more questions reads "Shaping the build · one more question".
+- **An idea shows three things:** **Send to Claude**, **Ask the room** and **More**, with its tick. Click the idea's words to Consider it. Under **More**: Consider…, Send to Claude as (Do now, Keep in mind, Ask Claude), Save for later, Acknowledge, Reply to the sender, Dismiss. From the keyboard, More opens with the focus on its first choice, and Esc closes it back onto More.
+- **Later and Points appear when used,** while building as well as in the opening. Later comes with its first saved item (Save for later on an idea's More, or in the composer). Points comes when Claude posts one or a request is out. Before that, **Ask Claude for points** in What's next opens the Points tab with the focus on it, and the composer's new **More** asks Claude for Research…, Ideas…, Mockups…, a Walkthrough, or to Preview the work.
+- **Preview the work** is on the Now card until Claude has shown a build; then **Open the build** is in the header, and Preview the work is under the composer's More.
+- **Counted, so it stays this way:** the count test now also holds between asks with three ideas, and three routes per idea.
+
+| Measured (the count test's own fixtures) | Before (after phase 1) | Now |
+|---|---|---|
+| First view, one screen | 32 | 29 |
+| First view, console | 36 | 33 |
+| Between asks, three ideas, one screen | 58 (76 in the plan) | 40 |
+| Between asks, three ideas, console | 62 (75 in the plan) | 46 |
+| Controls on one idea | 8 and the tick | 3 and the tick |
+| Opening steps on the default path | 9 | 5 |
+
+### Fixed
+
+- **"When do I stop?"** The opening read "step 2 of 9" and walked into We will know and Never before First build. It now goes Making, For, The problem, Good looks like, First build, and stops there.
+- **Eight buttons on every idea** (27 controls for three ideas). Now three and the tick.
+- **Empty Later and Points tabs** sat in Waiting for you once building started. They wait until there is something in them.
+- **Show the build on the Now card** did what the header's Build (or 3) does; on two screens, what The room sees: Build does. It is no longer repeated.
+
+### What to look at
+
+1. On engage.test, create a Build Room. The opening card reads **Opening · step 1 of 5**. In The opening on the right: five lines (Making, For, The problem, Good looks like, First build), then a folded **More framing questions · 4, if the room has time**. The first view was 32 controls; it should be 29.
+2. Settle Making (Pick for the room is quickest), then answer For, The problem and Good looks like (Answer it yourself). The next step is **First build**, not We will know. **Ask Claude to draft the brief** appears as before once For, The problem and Good looks like are in.
+3. Answer First build. The card says "The core is framed. Start building, or ask one of the 4 under More framing questions." and nothing new opens.
+4. Open **More framing questions**, click **Never**, and **Ask the room**. A phone says "Shaping the build · one more question". Settle it: it lands in the brief as a Keep in mind rule, as before.
+5. Press **Start building**: the confirm says "5 of 5 core steps are framed, and 1 more." Keep framing, then start.
+6. Connect Claude Code and let it show something (Open the build appears in the header). Send three ideas from three phones. Between asks the page should be about 40 controls (it was 58): each idea shows **Send to Claude**, **Ask the room**, **More** and its tick. No Later or Points tab, no Show the build, no Preview the work on the Now card.
+7. Click an idea's words: Consider opens. Close it, Tab to the idea's **More** and press Enter: the focus is on Consider…; the menu has Send to Claude as, Save for later, Acknowledge, Reply to the sender and Dismiss. Esc closes it with the focus back on More.
+8. Press **Save for later** under an idea's More: the Later tab appears, with it.
+9. In What's next, press **Ask Claude** (Ask Claude for points): the Points tab appears, focused, with Research…, Ideas…, Mockups… and Walkthrough. Open **Tell Claude…**, press its **More**: the same four, and Preview the work.
+10. Use two screens and repeat 6 to 9 on the console: the same idea cards in the rail (46 controls, was 62), Ask Claude for points opens Later and Points in the middle.
+11. Open help (?): The opening names the five core steps and More framing questions; An idea in Waiting for you describes More; Between asks names Ask Claude for points.
+
+### Known gaps
+
+- **Phase 3 is not done:** the Ask the room dialog's Yes/No tab and More options (item 14), Ask Claude to wrap up with a prefilled wrap-up and Report and End as What's next moves on both layouts (15), and the report's brief section, plain Start building line and wheel marks (16).
+- **The console between asks is 46 controls, not 40.** Its top line and rail are shared with Call & Answer and were left as they are, as in phase 1; the 6 over are there (three ways to the room's window, See it here, Mark all seen, Open the queue in the main area). The one-screen page meets 40.
+- With Share demo's one-time nudge still up (Not now, Share demo), between asks is two more on either layout until the host answers it.
+- **Decided still opens by itself** in the side column between asks (host-flow H1), as it did; the mockup's frame 4 drew it folded. Folding it would take 4 more controls off; that is the owner's call.
+- The idea's words are a click target, not a tab stop: from the keyboard Consider is the first choice under More.
+
+---
+
 ## 26 Oct 2026 (Build Room, simpler: the first view)
 
 **Test:** merge of dev `6f19e1d3`. Everything below this entry is already on test; this push adds only what is here.

@@ -1045,6 +1045,11 @@
 /* Menus on an idea open under their own button, rightward, so they stay in the
    column (a menu opening leftward from a left-hand button ran off its edge). */
 .brm .brm-idea-acts .brm-more-panel { min-width: 260px; left: 0; right: auto; }
+/* An idea's words open Consider (simplify PLAN item 18, phase 2); More's Consider… is the keyboard's door. */
+.brm .brm-idea-text.is-door { cursor: pointer; border-radius: 6px; margin: 0 -4px; padding: 2px 4px; }
+.brm .brm-idea-text.is-door:hover { background: var(--surface-2); text-decoration: underline; text-decoration-color: var(--muted); }
+.brm .brm-more-grp { display: grid; gap: 6px; }
+.brm .brm-more-k { color: var(--muted); font-size: var(--brm-t-floor); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 2px 0; }
 /* C3b: a waiting vote shows a tile per option, its mockup as Claude attaches it. */
 .brm .brm-mocktiles { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .brm .brm-mocktiles li { display: grid; gap: 6px; align-content: start; min-width: 0; }
@@ -1172,6 +1177,12 @@
 .brm .brm-bp-it.is-asking .brm-bp-dot { background: var(--primary); border-color: var(--primary); }
 .brm .brm-bp-it.is-focus .brm-bp-line { background: var(--brm-tint-amber); border-color: var(--brm-line-amber); }
 .brm .brm-bp-probes { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px 30px; }
+/* The more framing questions (simplify PLAN item 12, phase 2): one press away, under the core's five. */
+.brm .brm-bp-more { margin-top: 8px; }
+.brm .brm-bp-more > summary { cursor: pointer; padding: 6px 8px; border-radius: 8px; font-size: var(--brm-t-label); font-weight: 600; }
+.brm .brm-bp-more > summary:hover { background: var(--surface-2); }
+.brm .brm-bp-more > summary:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+.brm .brm-bp-more > .brm-bp { margin-top: 4px; }
 .brm .brm-wallbrief { display: grid; gap: 18px; align-content: start; }
 .brm .brm-wb-lines { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 24px; margin: 0; font-size: var(--brm-st-body); line-height: 1.3; }
 .brm .brm-wb-lines dt { color: var(--muted); font-size: var(--brm-st-meta); text-transform: uppercase; letter-spacing: 0.08em; padding-top: 4px; }

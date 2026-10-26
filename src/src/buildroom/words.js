@@ -858,6 +858,31 @@ export const W = Object.freeze({
   // Waiting for you with nothing in it: one quiet line, so the column keeps its place.
   waitingEmpty: "Nothing yet. Claude's questions and the room's ideas land here.",
   sideEmpty: 'Decisions, the timeline and screenshots land here.',
+  // THE FIVE-STEP CORE (PLAN item 12, smaller; owner, 26 Oct 2026: "go to phase 2"):
+  // Making, For, The problem, Good looks like, First build. The other four are one
+  // press away, under More framing questions, and still fill the brief.
+  openingStepOf: (n, of) => `step ${n} of ${of}`,
+  openingMoreStep: 'one more question',
+  openingMore: 'More framing questions',
+  openingMoreHint: (n) => `${n}, if the room has time`,
+  openingFramed: (n, of, more) => `${n} of ${of} framed${more ? `, and ${more} more` : ''}. Claude gets the brief as it is.`,
+  openingCoreDone: (more) => `The core is framed. Start building, or ask ${more === 1 ? 'the last' : `one of the ${more}`} under More framing questions.`,
+  openingAllDone: 'Every step is answered or skipped. Start building when the room is ready.',
+  startConfirmFramed: (n, of, more) => `${n} of ${of} core steps are framed${more ? `, and ${more} more` : ''}. Claude gets the brief as it is now and starts planning and building.`,
+  // AN IDEA'S CARD (PLAN item 18, second half): Send to Claude and Ask the room on the
+  // card, the idea's words open Consider, the rest under More. Every item keeps the
+  // same routes (owner, 5 Oct); the card shows three of them.
+  ideaMore: 'More',
+  ideaMoreLabel: (words) => `More for: ${words}`,
+  ideaWordsTip: 'Consider: send it to Claude your way, or queue it for the room',
+  considerItem: 'Consider…',
+  sendAsHead: 'Send to Claude as',
+  // POINTS AND LATER, WHEN USED (PLAN item 18): the door to points no longer needs an empty tab.
+  askForPoints: 'Ask Claude for points',
+  askForPointsHint: 'Research, ideas, mockups or a walkthrough, to talk over',
+  askForPointsBtn: 'Ask Claude',
+  composeMore: 'More',
+  composeMoreHead: 'Ask Claude for',
 });
 
 /**
@@ -940,4 +965,7 @@ export const RETIRED = Object.freeze([
   { word: 'The room is voting', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
   // A vote on ideas is still the Collect step.
   { word: 'Vote', files: ['buildConsole.js', 'BuildConsoleAsk.jsx'], enforced: true, task: 'simplify-1' },
+  // Phase 2 (26 Oct 2026): the Now card no longer repeats the header's Build; the opening counts its core.
+  { word: 'Show the build', enforced: true, task: 'simplify-2' },
+  { word: 'Every step is answered or skipped. Show the brief on the wall, then start building.', enforced: true, task: 'simplify-2' },
 ]);

@@ -111,6 +111,20 @@ async function openRoom(state) {
 const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
   .filter((b) => !b.closest('[role="dialog"], .brm-modal'));
 const panel = () => screen.getByRole('region', { name: 'Points' });
+/**
+ * An empty Points tab is not drawn (simplify PLAN item 18, phase 2; owner, 26 Oct 2026):
+ * between asks What's next's Ask Claude for points draws it, with the focus on it.
+ */
+const askForPoints = () => {
+  fireEvent.click(within(screen.getByRole('list', { name: "What's next" })).getByRole('button', { name: 'Ask Claude' }));
+};
+/** The same requests under the composer's More: the door while an ask is open, or before any building ask. */
+const fromComposerMore = (name) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Tell Claude…' }));
+  const composer = screen.getByRole('region', { name: 'Tell Claude' });
+  fireEvent.click(within(composer).getByRole('button', { name: /^More/ }));
+  fireEvent.click(within(composer).getByRole('button', { name }));
+};
 const tick = (text) => fireEvent.click(within(panel()).getByRole('checkbox', { name: `Tick: ${text}` }));
 
 beforeEach(() => {
@@ -126,10 +140,10 @@ const RESEARCH_STATE = (over = {}) => hostState({
 });
 
 describe('the Points tab beside Later', () => {
-  test('both tabs show; Points opens by itself when points are the only thing held', async () => {
+  test('points are the only thing held: Points alone, open; Later appears with its first item (simplify PLAN item 18)', async () => {
     await openRoom(RESEARCH_STATE());
     const tabs = screen.getByRole('tablist');
-    expect(within(tabs).getByRole('tab', { name: /^Later/ })).toBeInTheDocument();
+    expect(within(tabs).queryByRole('tab', { name: /^Later/ })).toBeNull();
     const pointsTab = within(tabs).getByRole('tab', { name: /^Points 3/ });
     expect(pointsTab).toHaveAttribute('aria-selected', 'true');
     expect(pointsTab.textContent).toMatch('3 new');
@@ -146,9 +160,11 @@ describe('the Points tab beside Later', () => {
     expect(screen.getByRole('region', { name: 'Later' })).toBeInTheDocument();
   });
 
-  test('empty: says what Research and Ideas do', async () => {
-    await openRoom(hostState());
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
+  test('empty: no tab until asked for; Ask Claude for points draws it, focused, saying what Research and Ideas do', async () => {
+    await openRoom(hostState({ asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(100), Decision: { direction: 'Go calm', chosen: ['B'] } }] }));
+    expect(screen.queryByRole('tab', { name: /^Points/ })).toBeNull();
+    askForPoints();
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Points/ })).toHaveFocus());
     expect(within(panel()).getByText(/No points yet\./)).toBeInTheDocument();
     expect(within(panel()).getByRole('button', { name: 'Research…' })).toBeInTheDocument();
     expect(within(panel()).getByRole('button', { name: 'Ideas…' })).toBeInTheDocument();
@@ -202,8 +218,8 @@ describe('the Points tab beside Later', () => {
 describe('Research… and Ideas…', () => {
   test('Research opens a window prefilled from the open ask, and Send posts the request', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }] }));
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Research…' }));
+    // An ask is open, so What's next is not: the composer's More asks for points.
+    fromComposerMore('Research…');
     const dlg = screen.getByRole('dialog');
     const box = within(dlg).getByLabelText('What should Claude look up?');
     expect(box).toHaveValue('Which header should volunteers see first?');
@@ -216,8 +232,7 @@ describe('Research… and Ideas…', () => {
 
   test('with no ask, the subject comes from Claude\'s last step; Ctrl Enter sends', async () => {
     await openRoom(hostState({ logs: [{ Kind: 'milestone', By: 'agent', Text: 'header built' }] }));
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Ideas…' }));
+    fromComposerMore('Ideas…');
     const box = within(screen.getByRole('dialog')).getByLabelText('Ideas about what?');
     expect(box).toHaveValue('header built');
     fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
@@ -227,8 +242,7 @@ describe('Research… and Ideas…', () => {
 
   test('Send needs a subject; Close leaves without sending', async () => {
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Research…' }));
+    fromComposerMore('Research…');
     const dlg = screen.getByRole('dialog');
     expect(within(dlg).getByRole('button', { name: 'Send to Claude' })).toBeDisabled();
     const closers = within(dlg).getAllByRole('button', { name: 'Close' });
@@ -239,8 +253,7 @@ describe('Research… and Ideas…', () => {
 
   test('Claude not connected: the window says it will wait, and still sends', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Ideas…' }));
+    fromComposerMore('Ideas…');
     const dlg = screen.getByRole('dialog');
     expect(within(dlg).getByText('Claude starts when it reconnects.')).toBeInTheDocument();
     fireEvent.change(within(dlg).getByLabelText('Ideas about what?'), { target: { value: 'where it goes next' } });
@@ -249,8 +262,7 @@ describe('Research… and Ideas…', () => {
 
   test('exactly one orange button in the open window', async () => {
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Research…' }));
+    fromComposerMore('Research…');
     const dlg = screen.getByRole('dialog');
     expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
   });

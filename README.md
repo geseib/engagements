@@ -175,7 +175,17 @@ runs before Claude connects), the composer as one line until clicked, and no emp
 queue filter or Open the build until there is something in it, on one screen and the console
 alike. An ask's steps are named Ask · Collect · Settle · Send to Claude everywhere (`LOOP` in
 `buildroom/words.js`). `__tests__/buildRoomCounts.test.jsx` renders the real first view and
-holds it to at most 36 controls (59 before).
+holds it to at most 33 controls (59 before).
+
+**The opening and between asks** (phase 2): the opening's default path is five core steps
+(`core` on `OPENING_STEPS` in `build-store.js`: Making, For, The problem, Good looks like,
+First build); We will know, Never, Tools and style and Look and feel are still steps, kept
+under More framing questions and filling the brief as before, and `opening.current` never
+moves to one by itself. An idea in Waiting for you shows Send to Claude, Ask the room and
+More (its words open Consider); Later and Points are drawn once they hold something, with
+Save for later and **Ask Claude for points** (What's next, and the composer's More) as their
+doors. The same count test holds between asks with three ideas to at most 40 controls (58
+after phase 1).
 
 Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
 not in the material, claims the vote does not support, next steps written as decided and
