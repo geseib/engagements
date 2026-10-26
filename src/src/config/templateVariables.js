@@ -144,15 +144,30 @@ const ROUND_TYPES = ['call-and-answer', 'trivia', 'poll', 'wavelength'];
 const VOTED_TYPES = ['call-and-answer'];
 
 /**
- * Every round type but wavelength: the ones whose round produces a per-player
- * ranked answer list AND accrues `PLAYER#…#SCORE` rows. This replaces the old
- * `SCORED_TYPES = ['call-and-answer', 'trivia']`, which was wrong in both
- * directions — poll scores like call-and-answer (get-results.js:465-511 is on
- * its path), and wavelength scores per team rather than per player and writes
- * no score row at all. Survey is out: its read takes no round, answer or
- * score row (re-derived 2026-10-25, see the survey note above).
+ * The round types whose round produces a per-player ranked answer list AND
+ * accrues `PLAYER#…#SCORE` rows: call-and-answer (vote points) and trivia
+ * (points for a correct answer). Wavelength scores per team and writes no
+ * score row. A poll was here while it voted; since typed polls (27 Sep 2026)
+ * its round is counted, never voted on, and earns no points
+ * (get-results.js handlePollResults: "no vote and no points"), so every score
+ * and ranking variable read "0 points", "No scores this round" or nothing for
+ * a poll (re-derived 2026-10-26 by running a closed poll round through the
+ * real summary with every variable in the prompt). Survey is out: its read
+ * takes no round, answer or score row.
  */
-const RANKED_TYPES = ['call-and-answer', 'trivia', 'poll'];
+const RANKED_TYPES = ['call-and-answer', 'trivia'];
+
+/**
+ * The round types whose read is handed each person's answer under their name.
+ * Every round type but poll: a typed poll's result is counted and nameless
+ * (poll-round.js reads only PollValue, "so no name reaches the result"), and
+ * its read carries that count in {triviaResponses}. Offered to a poll, these
+ * gave the model the names the poll's own screens never show, an answer list
+ * ranked "1st Place … (0 vote points)" for a round nobody voted in, or "No
+ * votes recorded". (The author's reveal and background stay offered: the
+ * upload keeps them for every type, and they carry no name.)
+ */
+const NAMED_ROUND_TYPES = ['call-and-answer', 'trivia', 'wavelength'];
 
 const TEMPLATE_VARIABLES = [
   // ---- SET INFO ------------------------------------------------------------
@@ -256,7 +271,7 @@ const TEMPLATE_VARIABLES = [
     name: 'playerNames',
     description: 'Comma-separated list of all player names',
     category: 'Player Info',
-    gameTypes: ROUND_TYPES,
+    gameTypes: NAMED_ROUND_TYPES,
     example: 'Alice, Bob, Charlie, Diana',
   },
   {
@@ -456,7 +471,7 @@ const TEMPLATE_VARIABLES = [
     name: 'playerAnswers',
     description: 'All player responses to the question, with names',
     category: 'Answers',
-    gameTypes: ROUND_TYPES,
+    gameTypes: NAMED_ROUND_TYPES,
     example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."',
   },
   {
@@ -465,7 +480,7 @@ const TEMPLATE_VARIABLES = [
     name: 'playerResponses',
     description: 'All player responses to the question, with names (same content as playerAnswers)',
     category: 'Answers',
-    gameTypes: ROUND_TYPES,
+    gameTypes: NAMED_ROUND_TYPES,
     example: 'Alice: "I approached the customer concern by...", Bob: "In my experience..."',
   },
   {
@@ -485,7 +500,7 @@ const TEMPLATE_VARIABLES = [
     name: 'responsesText',
     description: 'Numbered list of all player responses with names — the raw dump, not a summary',
     category: 'Answers',
-    gameTypes: ROUND_TYPES,
+    gameTypes: NAMED_ROUND_TYPES,
     example: '1. Alice: "I approached this by...", 2. Bob: "My strategy was..."',
   },
   {
@@ -685,7 +700,7 @@ const TEMPLATE_VARIABLES = [
     name: 'resultsSummary',
     description: 'One-line summary of the round result and participation',
     category: 'Results',
-    gameTypes: ROUND_TYPES,
+    gameTypes: NAMED_ROUND_TYPES,
     example: 'Clear winner with 54% of possible vote points',
   },
   {

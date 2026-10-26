@@ -402,20 +402,46 @@ check('scoringSystem is not offered to trivia, whose points come from somewhere 
   assert(!typesFor('scoringSystem').includes('trivia'));
 });
 
-check('the score variables exclude wavelength alone, which writes no player score row', () => {
-  // rejects: leaving the old SCORED_TYPES = ['call-and-answer','trivia'] in
-  // place. Poll and survey take get-results.js's vote path, which writes
-  // PLAYER#…#SCORE rows exactly as call-and-answer does; wavelength is routed
-  // to handleWavelengthResults, which writes none, so the leaderboard is empty
-  // for wavelength and only for wavelength.
+check('the score variables are call-and-answer\'s and trivia\'s, the two types that still score players', () => {
+  // rejects: leaving the old SCORED_TYPES = ['call-and-answer','trivia'] gap
+  // for wavelength in reverse — and re-adding poll. Wavelength is routed to
+  // handleWavelengthResults, which writes no PLAYER#…#SCORE row. Since typed
+  // polls (27 Sep 2026) a poll is routed to handlePollResults: counted, "no
+  // vote and no points", so a poll's leaderboard was always empty.
   const results = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'get-results.js'), 'utf8');
   assert(/if \(gameType === 'wavelength'\) \{\s*\n\s*return await handleWavelengthResults/.test(results),
     'wavelength no longer bypasses the scoring path; re-derive the score variables');
+  assert(/return await handlePollResults/.test(results) && /no vote and no points/.test(results),
+    'a poll may score again; re-derive the score variables');
   for (const name of ['cumulativeScores', 'leaderboard', 'playerRankings', 'averageScore', 'roundScores']) {
     assert.deepStrictEqual(typesFor(name).sort(),
-      ['call-and-answer', 'poll', 'trivia'],
-      `${name} has drifted from the three types that accrue per-player scores`);
+      ['call-and-answer', 'trivia'],
+      `${name} has drifted from the two types that accrue per-player scores`);
   }
+});
+
+check('a poll is offered what its counted, nameless read fills, and no name', () => {
+  /*
+    Re-derived 2026-10-26 by running a closed poll round through the real
+    summary with every variable in the prompt: scores and rankings read "0
+    points" or nothing, the vote figures "No votes recorded", {responsesText}
+    ranked every answer "1st Place … (0 vote points)", and {playerAnswers},
+    {playerResponses} and {playerNames} handed the model the names the poll's
+    own result never shows (poll-round.js reads only PollValue).
+
+    rejects: offering a poll any name-carrying, score or vote variable again.
+  */
+  const poll = variablesForGameType('poll').map((v) => v.name);
+  for (const name of ['playerNames', 'playerAnswers', 'playerResponses', 'responsesText', 'resultsSummary',
+    'leaderboard', 'cumulativeScores', 'voteTally', 'topVotedAnswers', 'winnerInfo', 'scoreChanges']) {
+    assert(!poll.includes(name), `${name} is offered to polls`);
+  }
+  for (const name of ['pollOptions', 'triviaResponses', 'responseCount', 'questionTitle', 'reveal', 'background']) {
+    assert(poll.includes(name), `${name} is no longer offered to polls`);
+  }
+  const pollRound = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'poll-round.js'), 'utf8');
+  assert(/only `PollValue` is read, so no name reaches the result/.test(pollRound),
+    'poll-round.js may read names now; re-derive the poll variables');
 });
 
 check('every type gained variables it can actually use', () => {
@@ -427,7 +453,7 @@ check('every type gained variables it can actually use', () => {
     ['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey']
       .map((t) => [t, variablesForGameType(t).length])
   );
-  assert(counts.poll >= 30, `poll offers only ${counts.poll} variables`);
+  // A poll's count is pinned below to what its read fills, not to a floor.
   assert(counts.wavelength >= 28, `wavelength offers only ${counts.wavelength} variables`);
 });
 
