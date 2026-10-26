@@ -28,7 +28,7 @@
  *     since the extraction they live inside components/GameSetupDialog.jsx,
  *     which unmounts when the dialog closes: confirmingClose, engagementType, newGameSetKey,
  *     randomizeQuestions, anonymousResponses, eventDetails, gameAiContext,
- *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle,
+ *     newGamePersonaId, newGamePromptId, promptList, localSets, localTitle, chooserOpen,
  *     editCategoryNames, knownPromptIds, namesChoice (a survey's Names),
  *     target (the goal of N questions, events M1b — and since then
  *     promptList and knownPromptIds live in components/SessionOptions.jsx),

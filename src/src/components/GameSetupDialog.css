@@ -92,6 +92,11 @@
   max-width: 680px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
+/* Wide while the set list is open (GameSetupDialog's chooserOpen). */
+.gsd.new-game-dialog.gsd--wide { max-width: min(1120px, calc(100vw - 48px)); }
+@media (prefers-reduced-motion: no-preference) {
+  .gsd.new-game-dialog { transition: max-width 0.2s ease-out; }
+}
 
 .gsd h2 {
   margin: 0;

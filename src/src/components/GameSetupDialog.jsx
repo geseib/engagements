@@ -261,6 +261,12 @@ export default function GameSetupDialog({
     setNamesChoice(namesMode(id).id);
   };
   const [showSetsDialog, setShowSetsDialog] = useState(false);
+  /* THE CARD WIDENS WHILE THE SET LIST IS OPEN (owner, 26 Oct 2026: "it is
+     difficult to see all the info you need because it is so narrow a modal").
+     680px suits the form; a table of sets with descriptions, owners, topics
+     and tags needs the width a laptop has. It narrows again once a set is
+     picked and the list folds to one line. */
+  const [chooserOpen, setChooserOpen] = useState(false);
   /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
   const [localSets, setLocalSets] = useState(null);
 
@@ -508,7 +514,7 @@ export default function GameSetupDialog({
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName="new-game-dialog gsd"
+      contentClassName={`new-game-dialog gsd${chooserOpen ? ' gsd--wide' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
       /* THE BACKDROP STAYS INERT. This is not a dialog over a screen — the page
@@ -646,6 +652,8 @@ export default function GameSetupDialog({
                 }))}
               idPrefix="gsd-set"
               theme="dark"
+              wide
+              onOpenChange={setChooserOpen}
             />
             {/* THE ENTRY POINT. Always offered in create mode, not only when
                 the list is empty: "I need to fix the title on the set I made
