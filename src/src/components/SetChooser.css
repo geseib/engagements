@@ -250,6 +250,32 @@
 }
 .schs .schs-exit b { margin-left: auto; font-weight: 400; color: var(--schs-muted); font-size: var(--schs-t-label); }
 
+/* WIDE (owner, 26 Oct 2026: the narrow modal hid what a host needs to pick):
+   a taller list, two-line rows with the description, Topic and Tags. */
+.schs.schs--wide .schs-list { max-height: min(56vh, 560px); }
+.schs.schs--wide .schs-tbl td { height: 52px; vertical-align: middle; }
+.schs.schs--wide .schs-tbl .schs-c-own { width: 120px; }
+.schs.schs--wide .schs-tbl .schs-c-topic { width: 150px; }
+.schs.schs--wide .schs-tbl .schs-c-tags { width: 200px; }
+.schs .schs-desc {
+  display: block;
+  margin: 2px 0 0 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--schs-muted);
+  font-size: var(--schs-t-label);
+}
+.schs .schs-tag { display: inline-block; margin-right: 4px; padding: 1px 6px; border: 1px solid var(--schs-rule); border-radius: 6px; font-size: var(--schs-t-floor); color: var(--schs-text); }
+
+/* A narrow window: the two extra columns go; the description stays. */
+@media (max-width: 900px) {
+  .schs.schs--wide .schs-tbl .schs-c-topic,
+  .schs.schs--wide .schs-tbl .schs-c-tags { width: 0; }
+  .schs.schs--wide .schs-tbl .schs-col-topic,
+  .schs.schs--wide .schs-tbl .schs-col-tags { display: none; }
+}
+
 @media (max-width: 560px) {
   .schs .schs-tbl .schs-c-when { width: 0; }
   .schs .schs-tbl th:nth-child(4), .schs .schs-tbl td:nth-child(4) { display: none; }

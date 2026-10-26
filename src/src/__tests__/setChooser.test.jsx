@@ -226,3 +226,26 @@ describe('nothing matches (S3)', () => {
     expect(rowNames()).toEqual(['Pulse: how is the week going?']);
   });
 });
+
+describe('wide (owner, 26 Oct 2026: the narrow modal hid what a host needs)', () => {
+  test('each row shows its description, topic and tags; the open state is reported', () => {
+    const onOpenChange = jest.fn();
+    mount({ wide: true, onOpenChange });
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    open();
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Topic', 'Tags', 'Used / updated']);
+    const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
+    expect(row.textContent).toMatch('How the team is doing');
+    expect(row.textContent).toMatch('Business & Work');
+    expect(within(row).getByText('team-health')).toBeInTheDocument();
+    expect(screen.getByText('Used by you lately').getAttribute('colspan')).toBe('6');
+  });
+
+  test('not wide: four columns, no description', () => {
+    mount();
+    open();
+    expect(screen.getAllByRole('columnheader').length).toBe(4);
+    expect(screen.queryByText('How the team is doing')).toBeNull();
+  });
+});

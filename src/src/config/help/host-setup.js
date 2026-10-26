@@ -272,7 +272,7 @@ const gameSetup = {
             { title: 'Nothing matches', text: 'Each way out says how many sets it would find, including the same search in another format. **Make a new set** opens your question sets.' },
           ],
         },
-        { t: 'p', text: 'The same chooser picks the set for an agenda item in an event.' },
+        { t: 'p', text: 'In Create engagement the dialog widens while the list is open, so each set shows its description, topic and tags; a narrow window leaves out topic and tags. The same chooser picks the set for an agenda item in an event.' },
       ],
     },
     /*
