@@ -129,7 +129,7 @@ describe('the generation library is a table, not a wall of cards', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(4);
     expect(
       within(table).getAllByRole('columnheader').map((th) => th.textContent)
-    ).toEqual(['Prompt', 'Type', 'Scenario', 'State', '']);
+    ).toEqual(['Prompt', 'Type', 'Scenario', 'Owner', 'State', '']);
 
     const row = rowFor('Lessons Learned Scenarios');
     expect(within(row).getByText('Retrospective prompts for a project review.')).toBeInTheDocument();

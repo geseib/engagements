@@ -45,7 +45,9 @@ const { clampBackground } = require('./shared/question-background');
 const {
   itemsPerCall, maxTokensFor, perItemTokens,
   lengthGuidance, tagGuidance, buildItemsTool, invokeStructured,
+  HOST_MATERIAL_NOTE, fenceHost,
 } = require('./shared/structured-generation');
+const { WAVELENGTH_SPEC } = require('./shared/wavelength-spec');
 const {
   newJobId, createJob, updateJobProgress, completeJob, failJob, getJob, jobToResponse,
   openJob, isCallersJob, workerCaller, claimJob,
@@ -60,6 +62,7 @@ const {
 const drafts = require('./shared/generation-drafts');
 const { withTopicFields, topicPromptBlock, readModelTopic } = require('./shared/draft-topic');
 const { callerOrgId, callerOrgRole } = require('./shared/tenant');
+const { categoryBlock, aboutSetBlock, categoryList } = require('./shared/category-brief');
 
 const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 const lambda = new LambdaClient({ region: process.env.AWS_REGION });
@@ -80,13 +83,15 @@ const MAX_COUNT = 100;
 const JOB_KIND = 'scenarios';
 /** Observed Sonnet throughput on this account. Used only to budget the deadline. */
 const OUTPUT_TOKENS_PER_SEC = 45;
+/** Kept back from a model call's deadline, to write the draft and the job row afterwards. */
+const DEADLINE_MARGIN_MS = 15000;
 
 // ---------------------------------------------------------------- templates
 
 const buildFallbackTemplate = (engagementType, prompt) => {
   if (engagementType === 'wavelength') {
     return {
-      basePrompt: prompt || 'Create wavelength subjects for a team word-association alignment game. Each item is a single short, evocative SUBJECT (1-4 words, e.g. "Remote Work", "Customer Trust") that every participant responds to by listing up to 10 words or short phrases that come to mind; the game then measures how many words overlap across participants. Pick subjects broad enough that everyone can produce 10 associations, yet specific enough that overlap is meaningful. Mix concrete and abstract subjects. Do NOT write questions, scenarios, sentences to complete, or anything with a correct answer.',
+      basePrompt: prompt || WAVELENGTH_SPEC,
       contextTemplate: '\n\nContext: {context}',
       audienceTemplate: '\nAudience: {audience}',
       categoryTemplate: '\nOrganize subjects into EXACTLY {numberOfCategories} categories - no more, no less.\nMust include these categories: {mustHaveCategories}',
@@ -176,7 +181,7 @@ async function resolvePromptTemplate({ scenarioType, engagementType, prompt, pro
 function buildPrompt({
   template, engagementType, count, difficulty, context, audience, customPrompt,
   categories, mustHaveCategories, alreadyUsedTitles, roundKind, roundKindBrief,
-  batchGuidance,
+  batchGuidance, category = '', setCategories = [], aboutSet = null, total = 0,
 }) {
   const itemNoun = engagementType === 'wavelength' ? 'wavelength subjects' : 'scenarios';
 
@@ -217,19 +222,50 @@ function buildPrompt({
     p = `Create ${count} ${itemNoun}. ${template.basePrompt}`;
   }
 
-  if (context && template.contextTemplate) p += template.contextTemplate.replace('{context}', context);
-  if (audience && template.audienceTemplate) p += template.audienceTemplate.replace('{audience}', audience);
-  if (customPrompt) p += `\n\nAdditional Requirements: ${customPrompt}`;
+  const about = aboutSetBlock(aboutSet);
+  if (about) p += `\n\n${about}`;
 
-  const levelLabel = engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail';
-  if (difficulty) p += `\n\n${levelLabel}: ${difficulty}`;
+  // THE HOST'S TEXT, FENCED (structured-generation.js fenceHost): each piece in
+  // its own tag, under one line saying it is material and not rules. Every
+  // substitution is a FUNCTION replacer — with a string, `$&` or `$'` in what
+  // the host typed would be read as a replacement pattern.
+  const requirements = withoutBasePrompt(customPrompt, template.basePrompt);
+  const hostContext = context && template.contextTemplate;
+  const hostAudience = audience && template.audienceTemplate;
+  if (hostContext || hostAudience || requirements) p += `\n\n${HOST_MATERIAL_NOTE}`;
+  if (hostContext) p += template.contextTemplate.replace('{context}', () => fenceHost('context', context));
+  if (hostAudience) p += template.audienceTemplate.replace('{audience}', () => fenceHost('audience', audience));
+  if (requirements) p += `\n\nAdditional Requirements: ${fenceHost('requirements', requirements)}`;
 
-  if (template.categoryTemplate && (categories || mustHaveCategories)) {
-    let categoryText = template.categoryTemplate;
-    if (categories) categoryText = categoryText.replace('{numberOfCategories}', categories);
-    if (mustHaveCategories) categoryText = categoryText.replace('{mustHaveCategories}', mustHaveCategories);
-    p += `\n${categoryText}`;
-  }
+  // Trivia's level is a difficulty and stays a word. Everywhere else it is a
+  // level of detail, and that is now the length rule below (lengthGuidance),
+  // not a free word beside it that contradicted the limit.
+  if (difficulty && engagementType === 'trivia') p += `\n\nDifficulty Level: ${difficulty}`;
+
+  /*
+    WHICH CATEGORY, AND WHICH NOT (shared/category-brief.js) — the owner,
+    2026-10-25: questions must belong to their category "and not what really
+    belongs in another category".
+
+    The shared block says the count, the names and the rule that keeps them
+    apart, so it replaces the stored template's category text whenever it has
+    anything to say; the template's text is the fallback. Its
+    `{mustHaveCategories}` line is never sent: it used to reach the model as
+    the literal "{mustHaveCategories}" whenever the author named none (the
+    count is always set, so the template always ran).
+  */
+  const names = categoryList([...categoryList(setCategories), ...categoryList(mustHaveCategories)]);
+  const shared = categoryBlock({ target: category, categories: names, count: categories, total });
+  const templateLines = template.categoryTemplate && !category
+    ? String(template.categoryTemplate)
+      .split('\n')
+      .filter((line) => !line.includes('{mustHaveCategories}'))
+      .map((line) => line.replace('{numberOfCategories}', categories))
+      .filter((line) => line.trim() && !line.includes('{'))
+      .join('\n')
+    : '';
+  if (shared) p += `\n\n${shared}`;
+  else if (templateLines) p += `\n${templateLines}`;
 
   // Later chunks must know what earlier ones produced. The old design had no
   // equivalent — twenty parallel calls each believed they were the only one.
@@ -238,10 +274,30 @@ function buildPrompt({
     p += alreadyUsedTitles.map((t) => `- ${t}`).join('\n');
   }
 
-  p += lengthGuidance(engagementType, roundKind);
+  p += lengthGuidance(engagementType, roundKind, difficulty);
   p += tagGuidance();
   p += `\n\nReturn the items by calling the emit_items tool. Do not write prose.`;
   return p;
+}
+
+const squashSpace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * THE BASE PROMPT, SAID ONCE. AIScenarioBuilder pre-fills "Additional
+ * Requirements" with the chosen prompt's basePrompt so the admin can see it,
+ * and sends it back as customPrompt — so the TOPIC arrived a second time as a
+ * requirement. Compared with whitespace squashed: requirements equal to the
+ * base prompt are dropped; requirements that contain it keep only what the
+ * admin added around it.
+ */
+function withoutBasePrompt(customPrompt, basePrompt) {
+  const custom = squashSpace(customPrompt);
+  const base = squashSpace(basePrompt);
+  if (!custom) return '';
+  if (!base) return String(customPrompt).trim();
+  if (custom === base) return '';
+  if (custom.includes(base)) return squashSpace(custom.split(base).join(' '));
+  return String(customPrompt).trim();
 }
 
 // ------------------------------------------------------------ normalisation
@@ -408,6 +464,16 @@ async function runWorker(event, context) {
     // the TOTAL, which is the number that was always meant.
     const categories = Math.min(parseInt(numberOfCategories, 10) || 3, 24, Math.max(total, 1));
 
+    // The one category this run writes for (a draft's "Regenerate this
+    // category"), the set's categories, and what the set is about — every
+    // pass gets the same. shared/category-brief.js.
+    const categoryInputs = {
+      category: typeof payload.category === 'string' ? payload.category.trim() : '',
+      setCategories: categoryList(payload.categories),
+      aboutSet: payload.aboutSet && typeof payload.aboutSet === 'object' ? payload.aboutSet : null,
+      total,
+    };
+
     const { template, source, chosenMissing } = await resolvePromptTemplate({
       scenarioType, engagementType, prompt, promptId,
     });
@@ -429,7 +495,10 @@ async function runWorker(event, context) {
     // A drafted run also asks for the set's TOPIC in this same call
     // (shared/draft-topic.js) — first pass only, as generation-handler.js does.
     const asksTopic = Boolean(draftRun && draftRun.asksTopic);
-    const tool = asksTopic ? withTopicFields(buildItemsTool(engagementType, roundKind)) : buildItemsTool(engagementType, roundKind);
+    // The level of detail is in the tool schema as well as the prompt: the two
+    // are one instruction and must say the same sentence count.
+    const itemsTool = buildItemsTool(engagementType, roundKind, difficulty);
+    const tool = asksTopic ? withTopicFields(itemsTool) : itemsTool;
     let isFirstPass = true;
 
     await updateJobProgress(dynamodb, tableName, jobId, {
@@ -470,9 +539,14 @@ async function runWorker(event, context) {
         roundKind,
         roundKindBrief,
         batchGuidance,
+        ...categoryInputs,
       });
       const askingTopicNow = asksTopic && isFirstPass;
       const withTopic = (p) => (askingTopicNow ? `${p}\n${topicPromptBlock()}` : p);
+
+      // THE CALL'S DEADLINE: what the function has left, less a margin to
+      // write the draft and the job row (structured-generation.js).
+      const deadline = Number.isFinite(remainingMs) ? Date.now() + remainingMs - DEADLINE_MARGIN_MS : undefined;
 
       let result;
       try {
@@ -480,6 +554,7 @@ async function runWorker(event, context) {
           prompt: withTopic(chunkPrompt),
           tool,
           maxTokens: maxTokensFor(engagementType, chunkSize),
+          deadline,
         });
       } catch (error) {
         if (error.name === 'OutputTruncatedError' && chunkSize > 1) {
@@ -492,10 +567,11 @@ async function runWorker(event, context) {
               template, engagementType, count: halved, difficulty, context: brief, audience,
               customPrompt, categories, mustHaveCategories,
               alreadyUsedTitles: [...seedTitles, ...produced.map((s) => s.title)],
-              roundKind, roundKindBrief, batchGuidance,
+              roundKind, roundKindBrief, batchGuidance, ...categoryInputs,
             })),
             tool,
             maxTokens: maxTokensFor(engagementType, halved),
+            deadline,
           });
         } else {
           throw error;
@@ -583,6 +659,7 @@ async function runWorker(event, context) {
 
 // The prompt's own tests (tests/question-guidance.js) read this directly.
 exports.buildPrompt = buildPrompt;
+exports.withoutBasePrompt = withoutBasePrompt;
 
 exports.handler = async (event, context) => {
   // Async worker: invoked with InvocationType 'Event', so it runs against the

@@ -470,7 +470,6 @@ function AIGenerationPromptEditor({ readOnly = false }) {
             + 'builder falls back to the template compiled into the code.'
           }
           onView={readOnly ? setViewingPrompt : undefined}
-          showOwner={readOnly}
           onEdit={readOnly ? undefined : handleEditPrompt}
           onCreate={readOnly ? undefined : handleCreateNew}
           onToggleStatus={readOnly ? undefined : applyStatus}

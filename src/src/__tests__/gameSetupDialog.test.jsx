@@ -153,6 +153,19 @@ describe('the question set', () => {
     expect(listedSets()).toEqual(['Room Mood']);
   });
 
+  // Owner, 24 Oct: "the question set filter on the new engagements puts the build question
+  // sets into the call and answer". rejects: a set tagged build-room listed under its type.
+  test('a Build Room set is not offered, under its own type or another\'s', () => {
+    setup({ questionSets: [
+      ...SETS,
+      { id: 'br-game', name: 'Build Room: Game', totalQuestions: 22, engagementType: 'poll', tags: ['build-room', 'for-game'] },
+      { id: 'br-old', name: 'Build Room: Game questions', totalQuestions: 14, engagementType: 'call-and-answer', tags: ['Build-Room'] },
+    ] });
+    expect(listedSets()).toEqual(['Strategic Pricing Plays']);
+    fireEvent.click(pill('Poll'));
+    expect(listedSets()).toEqual(['Room Mood']);
+  });
+
   // rejects: dropping the callback, which is the only thing that loads the
   // categories the create payload then carries.
   test('tells the page which set was chosen, so it can load the categories', () => {

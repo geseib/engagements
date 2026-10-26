@@ -1379,7 +1379,9 @@ async function openingAction(ctx, action, body) {
       kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
       text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
     });
-    await logEntry(ctx, { kind: 'milestone', text: 'The room framed the build. Claude is building.', by: 'system' });
+    // Only a Claude that has called in is building (host review, 25 Oct 2026); else it starts when it connects.
+    const seen = Boolean(room.state && room.state.AgentSeenAt);
+    await logEntry(ctx, { kind: 'milestone', text: seen ? 'The room framed the build. Claude is building.' : 'The room framed the build. Claude starts when it connects.', by: 'system' });
   } else if (action === 'resume') {
     // BACK TO THE OPENING (owner, 2026-10-06: Start building was pressed by
     // mistake and "the opening questioning was lost"). Nothing was lost: the
@@ -2760,7 +2762,7 @@ const QUESTIONS_VERB = 'Write a question set for the room (the build-room skill,
  * POST question-sets (Claude): the set it wrote. Kept on the room for the host
  * to use at once or save to their sets (the AI drafts review behind the bell);
  * the request it answers, if any, is done. Body: { requestId?, name, kind?,
- * questions: [{ kind: 'ideas'|'choose'|'rate', prompt, category, detail?, options? }], file? }.
+ * questions: [{ kind: 'ideas'|'choose'|'yesno'|'rate', prompt, category, detail?, options? }], file? }.
  */
 async function postClaudeSet(ctx, body) {
   const norm = S.normalizeClaudeSet(body);

@@ -110,6 +110,7 @@ function makeGenerationHandler(config) {
     const produced = [];
     const keptTokenSets = [];
     const warnings = [];
+    let droppedUnusable = 0;
     let meta = null;
     let generationError = null;
     // The set's topic, as the model proposed it on the first pass, or null
@@ -246,10 +247,14 @@ function makeGenerationHandler(config) {
         }
 
         let added = 0;
+        let unusable = 0;
         for (const raw of batch) {
           if (produced.length >= total) break;
           const item = normalizeItem(raw, reqConfig);
-          if (!item) continue;
+          // normalizeItem returns null for an item it cannot ship as written
+          // (a trivia answer that matches no option, a poll of no known kind).
+          // Counted, so the host is told why the set came up short.
+          if (!item) { unusable += 1; continue; }
           const title = titleOf(item);
           if (!title) continue;
           if (isNearDuplicate(title, keptTokenSets)) {
@@ -272,8 +277,13 @@ function makeGenerationHandler(config) {
         if (draftRun) await draftRun.progress(produced);
 
         // No forward progress means another pass will not help either.
+        if (unusable > 0) {
+          droppedUnusable += unusable;
+        }
         if (added === 0) {
-          warnings.push('A generation pass produced only duplicates; stopping early.');
+          warnings.push(unusable === 0
+            ? 'A generation pass produced only duplicates; stopping early.'
+            : 'A generation pass produced nothing new that could be used; stopping early.');
           break;
         }
       }
@@ -281,6 +291,10 @@ function makeGenerationHandler(config) {
     } catch (error) {
       console.error(`❌ Job ${jobId} failed:`, error);
       generationError = error;
+    }
+    if (droppedUnusable > 0) {
+      warnings.push(`${droppedUnusable} item${droppedUnusable === 1 ? ' was' : 's were'} left out because `
+        + `${droppedUnusable === 1 ? 'it' : 'they'} could not be used as written (for trivia: an answer that matched none of the options).`);
     }
 
     // THE SET IS CREATED BEFORE THE JOB GOES TERMINAL, and the order is the

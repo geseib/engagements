@@ -83,8 +83,8 @@ npm run build
 `npm start` in `src/` runs a local dev server against the dev API.
 
 `npm run build` first runs `scripts/build-repo-prompts.js` (the `prebuild` script), which
-copies the repo's prompt files — `demo-sets/*.prompt.json` and
-`lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
+copies the repo's prompt files — `demo-sets/*.prompt.json`, `prompts/tier-defaults/*.prompt.json`
+(the per-game-type defaults first curated on a tier) and `lambda-functions/admin/default-ai-prompts.json` — into `src/src/config/repoPrompts.json`.
 The admin Prompts library compares each live prompt with that file ("Repo has a newer
 version") and its Review saves the repo's text as a new prompt version. The output is
 committed: after editing a prompt file, run `node scripts/build-repo-prompts.js` and commit
@@ -94,14 +94,26 @@ both, or `tests/repo-prompts-fresh.js` fails. Every prompt save is a version; se
 To do that Review → Save for every prompt on a tier at once, after the deploy has landed:
 
 ```bash
-aws sso login --profile <profile>
-AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com           # dry run
-AWS_PROFILE=<profile> node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
+aws sso login --profile adminaccess
+AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test --by you@example.com
+AWS_PROFILE=adminaccess node scripts/apply-repo-prompts.js --tier test --by you@example.com --apply
 ```
 
 It runs the real list and update handlers locally with the tier's Lambda environment, skips
 prompts edited on the tier since they came from the repo (`--include-edited` to replace
 them), and checks each saved prompt now matches. Prod also needs `--confirm-prod`.
+
+The question-GENERATION prompts the AI scenario builder reads (`gen-<type>-<scenario>`,
+defined in `lambda-functions/admin/populate-generation-prompts.js`) are separate rows with
+no versions. `scripts/apply-generation-prompts.js --tier <tier>` compares them with the
+repo and, with `--apply`, creates the missing ones; `--update` also rewrites changed rows
+after saving a local backup. A tier without them runs the builder on a generic brief.
+
+The question-set templates and each set type's "Use your own chatbot" prompt live in
+`lambda-functions/admin/download-template.js` and `src/src/config/aiAuthoringPrompt.js`.
+The poll and survey prompts are built from `src/src/config/surveyContract.json`, which
+`scripts/build-survey-contract.js` writes from `shared/survey-kinds.js`
+(`tests/survey-contract-fresh.js` fails when it is stale).
 
 ## The Build Room plugin
 
@@ -118,13 +130,21 @@ Bump the plugin's `VERSION` with any change to it (`tests/engage-plugin-version.
 
 **Question sets in a Build Room** (plan `docs/superpowers/plans/2026-10-22-build-room-question-sets.md`):
 Ask the room's ready questions list every Call & Answer or Poll set tagged `build-room`,
-ordered by a `for-<kind>` tag once the room has said what it is making; Engage's starter sets
-for a training site, game, document and dashboard are installed per tier with
-`scripts/install-build-room-kind-sets.sh <table> --apply`. The opening's steps also follow the kind
+ordered by a `for-<kind>` tag once the room has said what it is making, at any point in the
+room; such a set is never offered by Create engagement, Quick start or an agenda item
+(`config/setFinder.js` `offeredForSessions`), only by the console's Question sets. Each
+question is asked as one of four types, read from the Poll question's kind
+(`buildroom/readyQuestions.js`): open answer → **Ideas**, choice of 2–6 → **Choose**, yes/no →
+**Yes/No** (asked as a choice of its two answers), 1–5 rating → **Rate**; a Call & Answer
+question is Ideas. The library filters by type. Engage's starter sets, one Poll set per kind
+(training site, game, document, dashboard: `sets/build-room-<kind>.csv`), are installed per tier
+with `scripts/install-build-room-kind-sets.sh <table> --apply`, which also switches off the two
+sets per kind it replaces (`scripts/retire-question-sets.js`); run it without `--apply` first.
+The opening's steps also follow the kind
 (`build-store.js` `OPENING_BY_KIND`). **Ask Claude for
-questions** (plugin 1.26.0) has Claude write a set into the project
+questions** (plugin 1.26.0; Yes/No since 1.28.0) has Claude write a set into the project
 (`build-room/questions/<kind>-<name>.json`), commit it and send it (`POST build/question-sets`,
-kept as `BUILD#QSET#` rows, sealed for teams); **Save to my sets** turns it into AI drafts
+kept as `BUILD#QSET#` rows, sealed for teams); **Save to my sets** turns it into an AI draft
 through `POST /admin/generation-drafts/from-build`, which the host accepts from the bell.
 An unsaved set puts a quiet entry in the host's bell that turns into a reminder two days
 before the session ends (#45; `notifications.js`, copied identically into `game/`).
@@ -140,7 +160,11 @@ queues an item for the room or sends it to Claude with a `why`; `sentMarks.js` m
 reached Claude and links each mark to its History entry. What went to Claude last
 (`sentView` in `build-store.js`) leads the Stage, the room's window and phones until the
 next ask opens (`screens/SentStage.jsx`); a send with `hideFromRoom: true` reaches Claude
-word for word, but every room read carries it with no words. The host's live typing
+word for word, but every room read carries it with no words. Until Claude Code has called
+in (`AgentSeenAt`), `sentView` carries `queued: true` and every screen says **Queued for
+Claude**; a key minted is not a connection (`claudeEverConnected` in `buildScreens.js`).
+What the host saved for later stays off the room's screens until it is sent (`heldBack` in
+`build-store.js`; `roomStory({ forRoom: true })`). The host's live typing
 reaches the room's window only over a same-browser `BroadcastChannel`
 (`buildroom/typingMirror.js`), never through the server or the socket.
 

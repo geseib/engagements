@@ -111,7 +111,7 @@ describe('R3: the Stage at results', () => {
     // Same order as the Host: the change is to the left of the main button.
     const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
     expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
-    expect(spaceCap()).toBe('SPACE');
+    expect(spaceCap()).toBe('or press Space');
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('aria-keyshortcuts', 'Space ArrowRight');
     expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
   });
@@ -168,7 +168,7 @@ describe('R3: the Stage at results', () => {
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toHaveClass('host-action-bar__primary');
-    expect(spaceCap()).toBe('SPACE');
+    expect(spaceCap()).toBe('or press Space');
   });
 
   test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
@@ -258,14 +258,14 @@ describe('R3: the Stage at results', () => {
     // A wheel already still on arrival is settled.
     await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
-    expect(spaceCap()).toBe('SPACE');
+    expect(spaceCap()).toBe('or press Space');
   });
 
   test('a rating sends its average', async () => {
     const rating = { ...ASK, Kind: 'rating', Options: [], Prompt: 'How was the demo?' };
     const answers = ['Ana', 'Sam'].map((n, i) => ({ SK: `BUILD#ANS#004#${n}`, AskId: '004', PlayerName: n, Rating: i ? 5 : 4, CreatedAt: ago(500) }));
     await openStage(baseRows(rating, answers));
-    fireEvent.click(dock().getByRole('button', { name: 'Send 4.5 to Claude' }));
+    fireEvent.click(dock().getByRole('button', { name: 'Send to Claude' }));
     await waitFor(() => expect(lastPost().body).toMatchObject({ action: 'decide', chosen: [], sendToAgent: true }));
   });
 });
@@ -458,7 +458,7 @@ describe('R5: Re-ask', () => {
 describe('review fixes', () => {
   test('a click on an option at results opens the window with that pick, not the Host screen', async () => {
     await openStage();
-    fireEvent.click(screen.getByTitle('Pick A'));
+    fireEvent.click(screen.getByTitle('Choose A'));
     const win = await screen.findByRole('dialog', { name: 'Change before sending' });
     expect(within(win).getByRole('button', { name: /Calm and clear/ })).toHaveAttribute('aria-pressed', 'true');
     expect(within(win).getByRole('textbox', { name: 'Direction for Claude' }).value).toBe('How should it look and feel: Calm and clear');

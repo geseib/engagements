@@ -273,6 +273,7 @@ const gameSetup = {
           ],
         },
         { t: 'p', text: 'In Create engagement the dialog widens while the list is open, so each set shows its description, topic and tags; a narrow window leaves out topic and tags. The same chooser picks the set for an agenda item in an event.' },
+        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions, at any point in the room. They stay in your question sets, where you change them.' },
       ],
     },
     /*
@@ -385,7 +386,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list; this dialog is where you change them.',
+          text: 'Open them with **Question sets** on the start screen, or **Your question sets** in Create engagement. Every set you can play is in the Create engagement list, except Build Room sets, which a Build Room asks from inside the room; this dialog is where you change them all.',
         },
         {
           t: 'p',
@@ -420,7 +421,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'In Your question sets press **New question set**, pick the format, and choose how to make it. Each way says when it is the right one: have Workie write it, download a template and fill it in, paste a prompt into your own chatbot, or write a few questions in the manual builder. A filled-in template is uploaded at the foot of the same panel.',
+          text: 'In Your question sets press **New question set**, pick the format, and choose how to make it. Each way says when it is the right one: have Workie write it, download a template and fill it in, paste a prompt into your own chatbot, or write a few questions in the manual builder. Every format has a chatbot prompt: copy it, paste it with the template into Claude or ChatGPT, fill in the [BRACKETS], and **Go to upload** takes you back to the file chooser. A filled-in template is uploaded at the foot of the same panel.',
         },
         {
           t: 'p',
@@ -457,7 +458,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets.',
+          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets. While the menu is empty, Quick start says so, and **Open your question sets** takes you there.',
         },
       ],
     },

@@ -625,7 +625,7 @@ describe('T7b the Stage and room safety', () => {
     await openRoom(RUNNING(true));
     fireEvent.keyDown(window, { key: '2' });
     await screen.findByRole('region', { name: 'Working through' });
-    expect(document.querySelector('.dock .kbd').textContent).toBe('SPACE');
+    expect(document.querySelector('.dock .kbd').textContent).toBe('or press Space');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
     expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1' });

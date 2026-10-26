@@ -166,6 +166,12 @@ const MAX_ISSUE_TEXT = 2000;
  * A rewrite is an EDIT: the model is asked to change only what was ticked, and
  * a creative temperature is how an edit turns into a new draft. The two lenses
  * keep the temperature the advisor always used.
+ *
+ * NOT TO BE LEANT ON. claude-route.js drops `temperature` on the 5.5 path (a
+ * non-default value is a 400 there), so the low temperature holds only on
+ * Bedrock. The apply prompt therefore says in words that every line no ticked
+ * fix touches is returned byte-identical, and normaliseRewrite hands back any
+ * half no fix names exactly as it went in, whatever the model sent.
  */
 const APPLY_TEMPERATURE = 0.2;
 const ANALYSIS_TEMPERATURE = 0.7;
@@ -369,7 +375,7 @@ ${input.promptText}
   return `
 The prompt has two halves. At run time they are joined — the instructions, a blank
 line, then the output format — the round's data is substituted into the {variables},
-and the result is sent to Claude Haiku 4.5, whose reply is shown to the room.
+and the result is sent to a fast Claude model, whose reply is shown to the room.
 
 **Half 1 — "instructions" (what the AI is given):**
 <instructions>
@@ -535,7 +541,7 @@ Do not rewrite the admin's approach; report what is wrong with it.`,
     role: 'You are an expert AI prompt engineer for Engage, a live engagement platform. '
       + 'Suggest improvements that keep the admin\'s purpose and voice.',
     ask: `**Suggest improvements to:**
-1. **Effectiveness** — will Haiku write a better, more useful summary for the room if this
+1. **Effectiveness** — will the model write a better, more useful summary for the room if this
    changes? Specific asks, a clear shape for the reply, the right emphasis.
 2. **Tightening** — cut repetition and words that do nothing; make it shorter where
    shorter says the same thing.
@@ -696,9 +702,10 @@ ${describeTheRules()}
 ${describeTheTickedFixes(input.issues || [])}
 
 **How to apply them:**
-- Change only what these fixes need. Every other word, line break, heading and variable
-  stays exactly as it is — including typographic quotes and apostrophes (’ “ ”), which
-  are not to be straightened.
+- Change only the lines these ticked fixes need. Every other line is returned
+  byte-identical: the same words, spacing, line breaks, headings and variables, including
+  typographic quotes and apostrophes (’ “ ”), which are not to be straightened. Do not
+  reword, reorder or tidy anything a ticked fix does not name.
 - A half that no fix names is returned exactly as it was given, character for character.
 - If a fix cannot be applied without breaking a rule above, apply it in the way that keeps
   the rule, or leave it out and do not list its id in "applied".

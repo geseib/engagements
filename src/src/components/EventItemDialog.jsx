@@ -9,6 +9,7 @@ import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOpt
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import { NAMES_DEFAULT, namesMode } from '../config/surveyNames';
+import { offeredForSessions } from '../config/setFinder';
 import {
   addItem, updateItem, removeItem, signDeckUpload, putDeckFile,
 } from '../utils/eventsApi';
@@ -193,7 +194,7 @@ export default function EventItemDialog({
 
   const keyOf = (s) => `${s.scope || 'platform'}|${s.id}`;
   const candidates = picking
-    ? sets.filter((s) => s.active !== false && !s.decryptFailed && rules.canonicalSetType(s.engagementType) === type)
+    ? sets.filter((s) => s.active !== false && !s.decryptFailed && offeredForSessions(s) && rules.canonicalSetType(s.engagementType) === type)
     : [];
   const chosen = candidates.find((s) => keyOf(s) === setKey) || null;
 

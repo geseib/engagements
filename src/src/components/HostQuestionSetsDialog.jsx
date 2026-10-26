@@ -611,8 +611,9 @@ export default function HostQuestionSetsDialog({
             <Icon name="Books" weight="duotone" size={34} color="var(--muted)" />
             <h3>You haven&apos;t made a question set yet</h3>
             <p>
-              Download the template for the format you want, fill in your questions, and upload
-              it. It becomes yours: only you and an administrator can change it.
+              Download the template for the format you want (or copy its prompt into your own
+              chatbot), fill in your questions, and upload it. It becomes yours: only you and an
+              administrator can change it.
             </p>
           </div>
         )}
@@ -997,8 +998,9 @@ export default function HostQuestionSetsDialog({
             heading="New question set"
             intro={
               <>
-                Download the template for the format you want, fill it in, and upload it. The
-                format decides how your columns are read, so pick it first.
+                Pick the format first: it decides how your columns are read. Then fill in its
+                template yourself, or copy its prompt into your own chatbot, and upload the file
+                at the foot of this panel.
               </>
             }
             onUploaded={(message) => {

@@ -120,6 +120,9 @@ function useCrowded(ref, deps) {
   say whether its panel is open, without a second SESSION button;
   `setupProps` are extra attributes for it (a data- attribute, say).
 */
+/** How a key reads in a sentence: 'SPACE' → 'Space', '→' stays '→'. */
+export const keyName = (k) => (/^[A-Z]{2,}$/.test(String(k)) ? String(k).charAt(0) + String(k).slice(1).toLowerCase() : String(k));
+
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
@@ -161,7 +164,9 @@ export default function Dock({
       {hint && <span className="hint">{hint}</span>}
       {children}
       {typeof kbd === 'string' && (
-        <span className="kbd" aria-hidden="true" data-off={kbd ? undefined : ''}>{kbd || 'SPACE'}</span>
+        // A hint, not a control (owner, 25 Oct: a boxed "SPACE" beside the main
+        // button read as a second button). Words in a sentence, no outline.
+        <span className="kbd" aria-hidden="true" data-off={kbd ? undefined : ''}>or press {keyName(kbd || 'SPACE')}</span>
       )}
       {/*
         HELP (Help Phase 3): `help` is a screen id from config/help/screens.js,
@@ -236,7 +241,8 @@ export default function Dock({
           title={present.title || 'Drag it to the second screen and press F'}
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
-          <span className="dock-more-lbl">{present.presenting > 0 ? 'PRESENTING' : 'PRESENT'}</span>
+          {/* A surface may name it in its own words (`label`: the Build Room's "ROOM'S WINDOW"). */}
+          <span className="dock-more-lbl">{present.label || (present.presenting > 0 ? 'PRESENTING' : 'PRESENT')}</span>
         </RoomWindowLink>
       )}
       {home}

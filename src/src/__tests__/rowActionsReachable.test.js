@@ -139,7 +139,7 @@ describe('the prompt library inherited the fix, not just the shape', () => {
 
   test('every column is declared, and they add to 100', () => {
     const cols = ['.plib-col-name', '.plib-col-type', '.plib-col-cat',
-      '.plib-col-state', '.plib-col-acts'];
+      '.plib-col-owner', '.plib-col-state', '.plib-col-acts'];
     expect(cols.reduce((a, s) => a + pctP(s), 0)).toBe(100);
     // The four-button actions column needs more than the sets screen's two did.
     expect(pctP('.plib-col-acts')).toBeGreaterThanOrEqual(pct('.qsets-col-acts'));

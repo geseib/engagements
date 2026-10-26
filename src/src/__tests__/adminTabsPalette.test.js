@@ -189,3 +189,13 @@ describe('the type ladder these screens are built on', () => {
     expect(SESSIONS_CSS).toMatch(/--sp-row-h:\s*36px/);
   });
 });
+
+// #43: the Accounts row's moves ("Make Engage admin", "Make host" and the bin,
+// 272px in Chromium) were squeezed into 20% of the table and lost their left edge.
+describe('the account moves fit their column', () => {
+  test('a fixed width wide enough for the longest row, and the last cell never clips', () => {
+    const width = Number((/\.um-col-acts\s*\{\s*width:\s*(\d+)px/.exec(USERS_CSS) || [])[1]);
+    expect(width).toBeGreaterThanOrEqual(292);
+    expect(USERS_CSS).toMatch(/\.um-tbl td:last-child\s*\{[^}]*overflow:\s*visible/);
+  });
+});

@@ -14,6 +14,8 @@
  *              with its meaning and example
  *   sections   prompt-shape.js's limits and its default triad
  *   layers     what get-ai-summary.js wraps a prompt in, in order
+ *   readCheck  the house rules game/read-check.js checks every reply against
+ *              after it is written, one entry per issue kind it emits
  *
  * The frontend adds what it owns (the parse contract, the model, the round
  * angles, the screens — src/src/utils/workieBundle.js) and composes the file.
@@ -96,6 +98,52 @@ const ASSEMBLY_LAYERS = Object.freeze([
   }),
 ]);
 
+/**
+ * THE HOUSE RULES, AS THE READ CHECK ENFORCES THEM (game/read-check.js, the
+ * backstop of docs/design/workie-grounding/STEP0.md). Not an assembly layer:
+ * it runs on the reply AFTER it is written, and a reply that breaks one is
+ * written once more with a note naming the words. The admin lambda cannot
+ * require game/, so the kinds are listed here and tests/prompt-workbench.js
+ * fails if read-check.js emits a kind this list does not name, or the reverse.
+ */
+const READ_CHECK = Object.freeze({
+  intro: 'Every claim comes from the material — the question, the answers, the votes, the event and the host\'s '
+    + 'context. A persona\'s voice may colour the wording but never adds a fact. After the reply is written, Engage '
+    + 'checks it against these rules; a reply that breaks one is sent back once with the exact words to change.',
+  kinds: Object.freeze([
+    Object.freeze({
+      kind: 'number',
+      rule: 'No number, duration, time, percentage or amount the material does not contain. The counts and points '
+        + 'the round printed are fine.',
+    }),
+    Object.freeze({
+      kind: 'claim',
+      rule: 'No word about the room the vote does not show: "unanimous" or "everyone" only when every point went to '
+        + 'one answer, "consensus" or "clear winner" only on a strong consensus, and no hyperbole such as '
+        + '"strongest" — a ranking measures preference, not strength. Name a disagreement only when two answers '
+        + 'genuinely conflict; never invent a split.',
+    }),
+    Object.freeze({
+      kind: 'commitment',
+      rule: 'Next steps are suggestions, not decisions: each starts **Suggested**, and the reply says the room has '
+        + 'not agreed to these. Never "X will …", "has agreed to", "owns", or a task handed out as "Owner: do this".',
+    }),
+    Object.freeze({
+      kind: 'owner',
+      rule: 'Never name an owner — a person or a role — that no answer names. Use the role an answer implies.',
+    }),
+    Object.freeze({
+      kind: 'practice',
+      rule: 'Never say what the organisation currently, habitually or already does unless an answer says so; what '
+        + 'the answers propose is their proposal.',
+    }),
+    Object.freeze({
+      kind: 'filler',
+      rule: 'No generic AI filler or hype ("game-changer", "powerful", "delve").',
+    }),
+  ]),
+});
+
 /** The layers as a list for a model prompt. */
 function describeAssemblyLayers() {
   return ASSEMBLY_LAYERS.map((layer, i) => `${i + 1}. ${layer.name} — ${layer.text}`).join('\n');
@@ -119,7 +167,8 @@ function buildWorkieReference(gameType) {
       default: DEFAULT_OUTPUT_SECTIONS,
     },
     layers: ASSEMBLY_LAYERS.map((layer) => ({ ...layer })),
+    readCheck: { intro: READ_CHECK.intro, kinds: READ_CHECK.kinds.map((k) => ({ ...k })) },
   };
 }
 
-module.exports = { ASSEMBLY_LAYERS, describeAssemblyLayers, buildWorkieReference };
+module.exports = { ASSEMBLY_LAYERS, READ_CHECK, describeAssemblyLayers, buildWorkieReference };

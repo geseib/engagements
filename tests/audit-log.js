@@ -454,7 +454,7 @@ async function withAuditWritesFailing(fn) {
 
   await H.test('a status change whose entry cannot be written leaves the team as it was', async () => {
     H.reset(); seedOrg(TEAM, 'Northwind', [OWNER]);
-    const res = await withAuditWritesFailing(() => setStatus(TEAM, 'suspended'));
+    const res = await withAuditWritesFailing(() => setStatus(TEAM, 'suspended', 'Phishing links in a public set.'));
     assert.strictEqual(res.statusCode, 503, res.body);
     assert.strictEqual(H.state.ddb.get(`ORG#${TEAM}|METADATA`).status, 'active');
     assert.strictEqual(H.state.ddb.get(`ORGS|ORG#${TEAM}`).status, 'active');
@@ -566,14 +566,14 @@ async function withAuditWritesFailing(fn) {
 
   await H.test('a team\'s owner and admins read its log; a member and an outsider do not', async () => {
     H.reset(); seedOrg(TEAM, 'Northwind', [OWNER, ADMIN, MEMBER]);
-    await setStatus(TEAM, 'suspended', 'Why.');
+    await setStatus(TEAM, 'suspended', 'Spam in a public set.');
     for (const m of [OWNER, ADMIN]) {
       // eslint-disable-next-line no-await-in-loop
       const res = await readAs(m, TEAM);
       assert.strictEqual(res.statusCode, 200, `${m.role}: ${res.body}`);
       const e = parse(res).entries[0];
       assert.strictEqual(e.action, 'org.suspend');
-      assert.strictEqual(e.reason, 'Why.');
+      assert.strictEqual(e.reason, 'Spam in a public set.');
       assert.strictEqual(e.actor.name, STAFF.name);
     }
     assert.strictEqual((await readAs(MEMBER, TEAM)).statusCode, 403);
@@ -589,7 +589,7 @@ async function withAuditWritesFailing(fn) {
   await H.test('...they read any team\'s log, and the staff-wide feed, from the platform route', async () => {
     const one = await platformOrgs(staffEvent({ method: 'GET', rawPath: '/platform/audit', query: { orgId: TEAM } }));
     assert.strictEqual(one.statusCode, 200, one.body);
-    assert.strictEqual(parse(one).entries[0].reason, 'Why.');
+    assert.strictEqual(parse(one).entries[0].reason, 'Spam in a public set.');
     const feed = await platformOrgs(staffEvent({ method: 'GET', rawPath: '/platform/audit' }));
     assert.strictEqual(feed.statusCode, 200, feed.body);
     assert.strictEqual(parse(feed).entries[0].orgId, TEAM);

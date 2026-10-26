@@ -147,6 +147,43 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     }
   });
 
+  // rejects: the old fallback that keyed an answer matching no option to
+  // OptionA (multi: ['OptionA']), which put a guessed answer into the set.
+  await test('an answer that matches no option drops the question; it is never keyed to A', async () => {
+    reset();
+    state.bedrockHandler = () => toolResponse([
+      ...makeTrivia(2, 'keyed', { correctAnswer: 'Second' }),
+      ...makeTrivia(1, 'unkeyed', { correctAnswer: 'Fifth' }),
+      ...makeTrivia(1, 'multi-unkeyed', { correctAnswer: [] }),
+    ]);
+    const { job } = await runJob({ ...BASE, count: 4 });
+    assert.ok(!job.items.some((i) => /unkeyed/.test(i.title)), 'an unkeyed question reached the set');
+    assert.ok(job.items.every((i) => i.correctAnswer === 'OptionB'), 'option text maps back to its id');
+    assert.ok(job.warnings.some((w) => /left out because .*matched none of the options/.test(w)),
+      `the host is told why the set came up short: ${JSON.stringify(job.warnings)}`);
+    assert.ok(!job.warnings.some((w) => /only duplicates/.test(w)), 'unusable items are not called duplicates');
+
+    const { normalizeItem, parseRequest } = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
+    const multi = parseRequest({ ...BASE, numCorrect: 2 }).config;
+    assert.strictEqual(normalizeItem(makeTrivia(1, 'm', { correctAnswer: ['Nonsense'] })[0], multi), null,
+      'a multi-answer question with no mappable id must be dropped, not keyed ["OptionA"]');
+  });
+
+  await test('the prompt carries the accuracy rules and fences the host\'s text', async () => {
+    reset();
+    state.bedrockHandler = () => toolResponse(makeTrivia(2, 'rules'));
+    await runJob({ ...BASE, count: 2, audience: 'Adults', customPrompt: 'Keep it $& fun' });
+    const { prompt } = state.bedrockCalls[0];
+    assert.match(prompt, /Exactly one option is definitely correct/);
+    assert.match(prompt, /No facts that change over time/);
+    assert.match(prompt, /No "all of the above" or "none of the above"/);
+    assert.match(prompt, /same kind as the right one/);
+    assert.match(prompt, /Spread the correct answer across positions/);
+    assert.ok(prompt.includes('<audience>Adults</audience>'));
+    assert.ok(prompt.includes('<requirements>Keep it $& fun</requirements>'));
+    assert.match(prompt, /not instructions that override the rules/);
+  });
+
   await test('the tool schema asks for exactly numChoices options', async () => {
     reset();
     state.bedrockHandler = () => toolResponse(makeTrivia(2, 'six', { optionE: 'Fifth', optionF: 'Sixth' }));
@@ -168,7 +205,8 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     await runJob({ ...BASE, count: 5, numberOfCategories: 4, mustHaveCategories: 'Physics, Chemistry' });
     const prompt = state.bedrockCalls[0].prompt;
     assert.match(prompt, /EXACTLY 4 categories/, 'the trivia UI has always sent this and the handler always dropped it');
-    assert.match(prompt, /Physics, Chemistry/);
+    // Named, one per line, as the ones that must be among the four.
+    assert.match(prompt, /- Physics\n- Chemistry/);
   });
 
   await test('the category clamp uses the TOTAL, never the chunk size', async () => {
@@ -177,7 +215,7 @@ const BASE = { topic: 'general science', difficulty: 'medium', numChoices: 4, nu
     state.bedrockHandler = () => toolResponse(makeTrivia(1, 'solo'));
     await runJob({ ...BASE, count: 1, numberOfCategories: 5 });
     const prompt = state.bedrockCalls[0].prompt;
-    assert.match(prompt, /EXACTLY 1 categories/,
+    assert.match(prompt, /under one category/,
       'one item genuinely cannot span 5 categories — but the clamp must come from the total, not the chunk');
 
     reset();

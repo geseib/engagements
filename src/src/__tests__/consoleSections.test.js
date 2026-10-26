@@ -133,7 +133,7 @@ describe('a personal space (mockup 12)', () => {
   // section from the person most likely to be editing prompts.
   test('is Your space then Account, exactly as drawn', () => {
     expect(labels(PERSONAL)).toEqual(['Your space', 'Account']);
-    expect(ids(PERSONAL)).toEqual(['overview', 'questionsets', 'games', 'library', 'prompts', 'billing', 'privacy']);
+    expect(ids(PERSONAL)).toEqual(['overview', 'questionsets', 'games', 'reports', 'library', 'prompts', 'billing', 'privacy']);
   });
 
   // rejects: heading the personal group with the person's own name
@@ -153,12 +153,12 @@ describe('a team', () => {
   // rejects: a member getting Prompts — the owner, 2026-09-24: "team admins could view
   // them". Owners and admins read the library (read-only); members do not get the section.
   test('a member sees Members and neither Plan & usage nor Data & privacy, nor Prompts', () => {
-    expect(ids(TEAM_MEMBER)).toEqual(['overview', 'questionsets', 'games', 'library', 'members']);
+    expect(ids(TEAM_MEMBER)).toEqual(['overview', 'questionsets', 'games', 'reports', 'library', 'members']);
   });
 
   // rejects: an owner losing billing because only 'admin' was checked
   test('owner and admin both get the full Team group', () => {
-    const full = ['overview', 'questionsets', 'games', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
+    const full = ['overview', 'questionsets', 'games', 'reports', 'library', 'prompts', 'members', 'activity', 'billing', 'privacy'];
     expect(ids(TEAM_ADMIN)).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'owner' })).toEqual(full);
     expect(ids({ ...TEAM_ADMIN, orgRole: 'OWNER' })).toEqual(full);
@@ -178,6 +178,20 @@ describe('Activity (usage stats, owner 2026-10-11)', () => {
     const team = ids(TEAM_ADMIN);
     expect(team.indexOf('activity')).toBe(team.indexOf('members') + 1);
     expect(team.indexOf('billing')).toBe(team.indexOf('activity') + 1);
+  });
+});
+
+describe('Reports (the saved PDFs, docs/design/reports-list)', () => {
+  // rejects: a section AdminPage renders that no nav offers, so the console's
+  // Reports could not be opened while the host start screen's could
+  test('wherever Sessions is offered, Reports follows it; never in platform mode', () => {
+    for (const input of [PERSONAL, TEAM_MEMBER, TEAM_ADMIN]) {
+      const list = ids(input);
+      expect(list.indexOf('reports')).toBe(list.indexOf('games') + 1);
+    }
+    expect(ids({ ...TEAM_ADMIN, eventsEnabled: true }).indexOf('reports')).toBe(ids({ ...TEAM_ADMIN, eventsEnabled: true }).indexOf('events') + 1);
+    expect(ids(PLATFORM)).not.toContain('reports');
+    expect(ids(NO_ORG)).not.toContain('reports');
   });
 });
 

@@ -1,0 +1,15 @@
+{
+  "name": "Poll - Round Read",
+  "gameType": "poll",
+  "promptType": "analysis",
+  "category": "general",
+  "isDefault": true,
+  "status": "active",
+  "description": "The results-time analysis prompt for a poll round. Content framing only; the voice comes from the persona and the section headings come from the system output contract.",
+  "outputFormat": "Write clean Markdown. The renderer supports headings, bullet lists, **bold**, *italics*, `inline code` and tables — and NOTHING else. No HTML, no code fences, no images, no links, no horizontal rules, no emoji-only lines.\n\nUse these cues, because the screen is built for them:\n\n- Write every bullet as `**Lead phrase**: the rest of the point.` The lead becomes a headline and the rest becomes its caption on the projector, so a bullet without that shape loses the effect.\n- Keep bullets to one sentence after the colon. Long bullets wrap badly at projected size.\n- Use **bold** the first time you state what the room landed on, so it is findable at a glance from the back of a room.\n- Use a table ONLY for a vote distribution, and only when there are four or fewer rows.\n- Quote a participant's words in *italics*, not in quotation marks — quotation marks at projected size read as scare quotes.\n- Never use a heading other than the ones the system asks you for.\n\nWhat belongs in each section:\n\n- The summary section is the read of the round: what the room was asked, what it said, what it chose, and where writing and voting disagreed. Two to four sentences. This is the part that gets read aloud, so write it for the ear.\n- The discussion section is one to three things worth putting back to the room — a tension in the answers, a minority view worth hearing out, a \"why did we all reach for that\". Questions, not statements.\n- The next-steps section is the smallest of the three. One or two lines pointing at what is coming, or a thread to pick up in a later round. If there is genuinely nothing, one line is enough — do not pad it.",
+  "tags": [
+    "poll",
+    "results",
+    "round-read"
+  ]
+}

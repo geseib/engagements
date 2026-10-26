@@ -51,7 +51,7 @@ const aiBuilders = {
             { title: 'Open New question set', text: 'In the console\'s Question sets (or Your question sets on the host side), start a new set and pick the engagement type. Under **Generate with AI**, press the AI builder button for that type. For a survey the button is **Write it from my material**.' },
             { title: 'Check Save into', text: 'It is at the top of the form. See Choosing where it is saved, below.' },
             { title: 'Describe it', text: 'Fill in the form for that type (What each builder asks, below). Building with AI, in the builder guides, has advice on describing it well.' },
-            { title: 'Generate', text: 'Press the button at the foot, for example **Generate Trivia Questions**. It runs on the server; you can close the builder straight away.' },
+            { title: 'Generate', text: 'Press the button at the foot, for example **Generate Trivia Questions**. It runs on the server; you can close the builder straight away. In the Call & Answer and Wavelength builder a line above the button says what will be written, and while it runs, what is being written and that closing is safe.' },
             { title: 'Review the draft', text: 'When it is done, the review opens, or the bell tells you it is ready. Nothing is saved until you accept. See Drafts and the bell.' },
           ],
         },
@@ -115,7 +115,11 @@ const aiBuilders = {
       count, "Kinds of poll question"); AIScenarioBuilder (direction + ideas or
       "Or start from a saved template", then Question Set Title,
       Context/Background, Target Audience, Categories, Must Have Categories,
-      Level of Detail, Base Prompt & Additional Requirements; max 50);
+      Level of Detail (Brief — 1 sentence / Standard — 2 sentences /
+      Detailed — up to 3 sentences), "What the AI is asked" (the card's base
+      prompt, read-only, "Tuned in your library" or "Built in", "Change
+      card"), "Your additions" (empty, sent separately); the status line
+      "Ready to write N … / Writing N … / Done. Check each …"; max 50);
       SurveyAIBuilder (outline/deck, "What do you want to find out?", "Kinds of
       question", "How many questions" 1-20, "Name it", "Anything else Workie
       must obey"). FileUploadPrompt: .txt/.pdf/.md/.docx, 5 MB.
@@ -131,7 +135,7 @@ const aiBuilders = {
           rows: [
             ['Trivia', 'A topic, the audience, the difficulty, how many categories and questions in each (up to 100 in all), four to six answer choices, one to three correct answers, categories it must include, and anything else it must follow.'],
             ['Poll', '**What will the room do with each one?** (the direction), then a topic, a category, the audience, how many, and **Kinds of poll question**: pick from choices, rate, yes or no, open answer.'],
-            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50 in all), and the base prompt, which you may edit.'],
+            ['Call & Answer and Wavelength', 'Call & Answer asks the direction first and offers ideas to start from; Wavelength offers topic cards. **Or start from a saved template** shows the saved templates. Then a title, context, audience, categories and how many in each (up to 50 in all), and the detail (1, 2 or up to 3 sentences). **What the AI is asked** shows the card\'s prompt, read-only; **Your additions** holds anything else.'],
             ['Survey', 'The session\'s outline or deck, **What do you want to find out?**, **Kinds of question**, how many (up to 20), a name, and **Anything else Workie must obey**.'],
           ],
         },
@@ -158,7 +162,7 @@ const aiBuilders = {
           t: 'steps',
           items: [
             { title: 'Open the set and press Add questions…', text: 'It is in the set editor\'s Questions panel. The dialog shows each category and how many it holds.' },
-            { title: 'Choose where they go', text: 'More in each of the set\'s categories, or a number of new categories. One or the other per run.' },
+            { title: 'Choose where they go', text: 'More in each of the set\'s categories, or a number of new categories. One or the other per run. Workie is told what the set is about (its name, description and AI context) and every category in it, and writes each question for the one category it fits, not one that belongs in another.' },
             { title: 'Press Write and the number', text: 'The builder opens with the numbers filled in and starts the run; if it waits, press its Generate button. Any guidance you type is for this run only.' },
             { title: 'Review', text: 'The questions wait in a draft. Accepting them saves one new version of the set.' },
           ],
@@ -332,7 +336,7 @@ const drafts = {
             { title: 'Keep or leave out', text: 'Untick a question to leave it out, or untick a category to leave out all of it.' },
             { title: 'Edit', text: 'Change the title, the text and, for trivia, the options and which one is correct. **Save edit** keeps it; the question is marked edited.' },
             { title: 'Problems', text: 'A question with something wrong, such as no correct answer, is marked. You are asked before accepting one.' },
-            { title: 'Regenerate this category', text: 'Writes new questions in place of that category\'s. If fewer arrived than you asked for, it offers to generate the rest into this draft. Each says how big it is first and takes optional guidance; press **Write them**. Not offered for surveys.' },
+            { title: 'Regenerate this category', text: 'Writes new questions in place of that category\'s, told the draft\'s other categories so the new ones stay in this one. If fewer arrived than you asked for, it offers to generate the rest into this draft. Each says how big it is first and takes optional guidance; press **Write them**. Not offered for surveys.' },
             { title: 'Stop', text: 'While questions are still being written, stops after the current pass and keeps what it wrote.' },
           ],
         },
@@ -618,10 +622,13 @@ const prompts = {
     },
     /*
       PromptLibraryPanel.jsx:430-511: engagement type, scenario (generator) or
-      category (results), status, owner (All owners, Team, Engage, Public), sort
-      (Default order, Owner (team first)), search, count "N prompts · N shown";
-      no-match: one-click "Removing any one of these gets you results", "Clear
-      all filters". Columns Prompt, Type, Scenario/Category, (Version), State.
+      category (results), status, owner (All owners, then only the owners the
+      library holds among Your team, Engage, Public) and sort (Default order, Owner
+      (team first)) — both drawn only when there are two owners to choose
+      between; search, count "N prompts · N shown"; no-match: one-click
+      "Removing any one of these gets you results", "Clear all filters".
+      Columns Prompt, Type, Scenario/Category, Owner (Engage / Your team /
+      Public), (Version), State.
     */
     {
       id: 'finding-a-prompt',
@@ -630,14 +637,14 @@ const prompts = {
       blocks: [
         {
           t: 'p',
-          text: 'Each library is a table: the prompt\'s name and description, its engagement type, its scenario (generator prompts) or category (results prompts), and its state. Above it you can filter by:',
+          text: 'Each library is a table: the prompt\'s name and description, its engagement type, its scenario (generator prompts) or category (results prompts), whose it is (**Owner**: Engage, Your team or Public), and its state. Above it you can filter by:',
         },
         {
           t: 'list',
           items: [
             'Engagement type, and then the scenario or category within it.',
             'Status: Active, Draft or Archived.',
-            'Owner: Team, Engage or Public. **Owner (team first)** sorts your team\'s own prompts to the top.',
+            'Owner, when the library holds prompts from more than one: Your team, Engage or Public, offering only the ones there are. **Owner (team first)** sorts your team\'s own prompts to the top.',
             'Words, in **Search prompts...**.',
           ],
         },
@@ -928,7 +935,7 @@ const ai = {
             ['A topic and no material', 'An AI builder (**Generate with AI** in New question set). It writes the whole set into a draft.'],
             ['A set, and want more of it', '**Add questions…** in the set editor. Workie writes more in the same voice.'],
             ['One question to write', '**Add a question**, and **Draft this with AI** in it if you want a first go.'],
-            ['Material and your own AI', 'A template, or the prompt to paste into your own chatbot, then upload the file.'],
+            ['Material and your own AI', '**Use your own chatbot** in New question set: download the template, copy the prompt (every format has one, and **Show what is copied** shows it first), paste both into Claude or ChatGPT, fill in the [BRACKETS], then upload the CSV it writes. **Go to upload** takes you to the file chooser.'],
             ['Three or four questions in mind', 'Write them by hand. See Writing questions.'],
           ],
         },
@@ -1003,7 +1010,7 @@ const ai = {
         },
         {
           t: 'p',
-          text: 'It is given the set\'s description and instructions, the other questions in the chosen category (listed under Writing alongside these), and the titles already used. For trivia it writes options A to D; E and F are yours to add. A tag marks the question as drafted by AI; delete it if you rewrite the question as your own.',
+          text: 'It is given the set\'s description and instructions, the other questions in the chosen category (listed under Writing alongside these), and the titles already used. For trivia it writes as many options as most of the set\'s questions have (four in a new set), and the note above Draft it says how many; if its answer matches none of the options it fails and asks you to try again. For Wavelength it writes the subject only, with no sentence that frames it. A tag marks the question as drafted by AI; delete it if you rewrite the question as your own.',
         },
       ],
     },

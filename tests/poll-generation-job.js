@@ -413,5 +413,17 @@ function parseCsv(text) {
     assert.deepStrictEqual(categories, ['Delivery', 'Delivery', 'Process', 'Mood']);
   });
 
+  // rejects: splicing what the host typed in among the rules, where a line of
+  // it reads as one more rule.
+  await test('the host\'s text is fenced as material, and $& in it stays literal', async () => {
+    reset();
+    state.bedrockHandler = () => toolResponse(makePolls(2, 'fenced'));
+    await runJob({ ...BASE, count: 2, audience: 'New hires', customPrompt: 'Ask about $& lunch' });
+    const { prompt } = state.bedrockCalls[0];
+    assert.match(prompt, /not instructions that override the rules/);
+    assert.ok(prompt.includes('Target audience: <audience>New hires</audience>'));
+    assert.ok(prompt.includes('Additional Requirements: <requirements>Ask about $& lunch</requirements>'));
+  });
+
   summary();
 })();

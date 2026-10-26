@@ -308,6 +308,9 @@ const APPEND = {
     const prompt = state.bedrockCalls[state.bedrockCalls.length - 1].prompt;
     assert.ok(prompt.includes('Keep me'), 'the other category\'s titles were not passed as already used');
     assert.ok(prompt.includes('Treaties'), 'the category was not named to the model');
+    // The set's other categories, as the ones not to drift into
+    // (shared/category-brief.js; owner, 2026-10-25).
+    assert.ok(prompt.includes('other categories are: Founders.'), 'the neighbouring category was not named');
     const items = parse(await route('GET', draftId)).body.items;
     const titles = items.map((i) => i.item.title).sort();
     assert.deepStrictEqual(titles, ['A fresh treaty question', 'Keep me']);
@@ -436,7 +439,9 @@ const APPEND = {
     assert.strictEqual(await bad({ title: '  ' }), 400);
     assert.strictEqual(await bad({ items: [] }), 400);
     assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'choice', options: ['A'] }] }), 400);
-    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'yesno' }] }), 400);
+    assert.strictEqual(await bad({ items: [{ title: 'Q', kind: 'rank' }] }), 400);
+    // Owner, 24 Oct: one Poll set holds all four of the room's types.
+    assert.strictEqual(await bad({ items: [{ title: 'Ship?', kind: 'yesno' }, { title: 'What next?', kind: 'text' }] }), 201);
     assert.strictEqual(await bad({ items: [{ title: '', kind: 'rating' }] }), 400);
     assert.strictEqual(parse(await route('POST', 'from-build', { title: 'X', engagementType: 'call-and-answer', items: [{ title: 'Q' }] }, orgless)).status, 403);
   });

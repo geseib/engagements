@@ -521,16 +521,70 @@ const say = (s) => console.log(s);
     assert.strictEqual(store.get(key('ORGS', `ORG#${NW}`)).status, 'active');
   });
 
-  await check('a suspension records who did it and when', async () => {
+  const WHY = 'Phishing links in a public set.';
+  const suspend = (body) => platformOrgs(evt({
+    method: 'POST', ...STAFF, pathParams: { orgId: NW }, body: { status: 'suspended', ...body },
+  }));
+
+  await check('a suspension records who did it, when and why, on BOTH rows', async () => {
     reset();
     await seedOrg(NW, 'Northwind');
-    await platformOrgs(evt({
-      method: 'POST', ...STAFF, pathParams: { orgId: NW }, body: { status: 'suspended' },
+    const res = await suspend({ reason: `  ${WHY}  ` });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    for (const row of [store.get(key(`ORG#${NW}`, 'METADATA')), store.get(key('ORGS', `ORG#${NW}`))]) {
+      assert.strictEqual(row.status, 'suspended');
+      assert.strictEqual(row.statusChangedBy, 'u_staff');
+      assert.ok(row.statusChangedAt, 'the time must be recorded');
+      assert.strictEqual(row.suspendedReason, WHY);
+      assert.strictEqual(row.suspendedBy, 'u_staff');
+      assert.strictEqual(row.suspendedAt, row.statusChangedAt);
+    }
+    // The staff list says why.
+    const list = bodyOf(await platformOrgs(evt({ method: 'GET', ...STAFF })));
+    const nw = list.orgs.find((o) => o.orgId === NW);
+    assert.strictEqual(nw.suspendedReason, WHY);
+    assert.ok(nw.suspendedAt);
+  });
+
+  // rejects: Suspend on one click with nothing saying why (#40)
+  await check('a suspension with no reason, or a word or two, is refused and nothing moves', async () => {
+    for (const body of [{}, { reason: '' }, { reason: '   ' }, { reason: 'spam' }, { reason: 42 }]) {
+      reset();
+      await seedOrg(NW, 'Northwind');
+      // eslint-disable-next-line no-await-in-loop
+      const res = await suspend(body);
+      assert.strictEqual(res.statusCode, 400, `${JSON.stringify(body)}: ${res.body}`);
+      assert.strictEqual(store.get(key(`ORG#${NW}`, 'METADATA')).status, 'active');
+      assert.strictEqual(store.get(key('ORGS', `ORG#${NW}`)).status, 'active');
+      assert.strictEqual([...store.keys()].filter((k) => /AUDIT/.test(k)).length, 0, 'a refused change writes no audit entry');
+    }
+  });
+
+  // rejects: cutting a long reason mid-sentence, which stores a different reason
+  await check('a reason over the cap is refused, not truncated', async () => {
+    reset();
+    await seedOrg(NW, 'Northwind');
+    const { SUSPEND_REASON_MAX } = require('../lambda-functions/admin/orgs/platform-orgs');
+    assert.strictEqual((await suspend({ reason: 'x'.repeat(SUSPEND_REASON_MAX + 1) })).statusCode, 400);
+    assert.strictEqual(store.get(key(`ORG#${NW}`, 'METADATA')).status, 'active');
+    assert.strictEqual((await suspend({ reason: 'x'.repeat(SUSPEND_REASON_MAX) })).statusCode, 200);
+  });
+
+  await check('reinstating clears the reason from both rows; Reinstate needs none', async () => {
+    reset();
+    await seedOrg(NW, 'Northwind');
+    await suspend({ reason: WHY });
+    const res = await platformOrgs(evt({
+      method: 'POST', ...STAFF, pathParams: { orgId: NW }, body: { status: 'active' },
     }));
-    const meta = store.get(key(`ORG#${NW}`, 'METADATA'));
-    assert.strictEqual(meta.status, 'suspended');
-    assert.strictEqual(meta.statusChangedBy, 'u_staff');
-    assert.ok(meta.statusChangedAt, 'the time must be recorded');
+    assert.strictEqual(res.statusCode, 200, res.body);
+    for (const row of [store.get(key(`ORG#${NW}`, 'METADATA')), store.get(key('ORGS', `ORG#${NW}`))]) {
+      assert.strictEqual(row.status, 'active');
+      assert.strictEqual(row.suspendedReason, undefined);
+      assert.strictEqual(row.suspendedAt, undefined);
+    }
+    const nw = bodyOf(await platformOrgs(evt({ method: 'GET', ...STAFF }))).orgs.find((o) => o.orgId === NW);
+    assert.strictEqual(nw.suspendedReason, undefined);
   });
 
   // rejects: suspending somebody's own home, which is an account deletion with

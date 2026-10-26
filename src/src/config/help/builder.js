@@ -118,6 +118,33 @@ const manual = {
       ],
     },
     /*
+      QuestionsPanel.jsx BuildRoomFields ("In a Build Room": "Asked as …",
+      "When decided, Claude gets it as", "Note for Claude"), shown for a set
+      tagged build-room; the type from buildroom/readyQuestions.js
+      buildAskFromQuestion (owner, 24 Oct 2026).
+    */
+    {
+      id: 'build-room-set',
+      title: 'A Build Room set',
+      icon: 'Wrench',
+      blocks: [
+        {
+          t: 'p',
+          text: 'A set tagged build-room is asked inside a Build Room, from Ask the room, and is not offered when you create an ordinary session. Make it a Poll set and one set holds all four of the room\'s types; each question\'s kind decides how the room is asked it:',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Open answer: Ideas', text: 'Everyone writes an answer, then votes. Most of a Build Room set is these.' },
+            { title: 'Multiple choice: Choose', text: 'Two to six short options, one pick.' },
+            { title: 'Yes / No: Yes/No', text: 'The room answers yes or no, in the two buttons\' own words if you renamed them.' },
+            { title: 'Rating: Rate', text: 'On 1 to 5 only: 1 needs work, 5 is great.' },
+          ],
+        },
+        { t: 'p', text: 'A Call and Answer set tagged build-room is all Ideas. Each question\'s **In a Build Room** box says how it is asked, or why it cannot be (a ranking, a 1 to 10 scale, more than six options), and holds what Claude gets once the room decides and a note for Claude. Add a for- tag (for-game, for-training…) to put the set first in rooms making that kind of thing.' },
+      ],
+    },
+    /*
       THE FIELD THIS GUIDE EXISTS FOR. The owner's framing, which is broader
       than the field's name and is why the `{reveal}` alias was added
       alongside it: *"it could be any information that the host doesnt want

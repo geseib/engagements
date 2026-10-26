@@ -42,6 +42,16 @@ const { platformSettings } = require('./platform-settings');
 /** The statuses an organisation can be in, and who may move it between them. */
 const STATUSES = ['pending', 'active', 'suspended'];
 
+/*
+  A SUSPENSION CARRIES A WRITTEN REASON (#40). Suspend used to act on one click
+  with nothing saying why. The reason is required, a few words at least, and
+  refused rather than cut when it runs long: a reason truncated mid-sentence is
+  a different reason. It goes to the audit log (sealed, as every reason is) and
+  onto both rows, so the staff list can say why a team is suspended.
+*/
+const SUSPEND_REASON_MIN = 10;
+const SUSPEND_REASON_MAX = 600;
+
 /**
  * Engage staff, and nothing less.
  *
@@ -121,6 +131,9 @@ async function listOrgs(event) {
       plan: G.clean(row.plan) || 'free',
       type: G.clean(row.type) || 'team',
       status: G.clean(row.status) || 'active',
+      // Why it is suspended, for staff (#40); absent on rows suspended before the reason was asked.
+      ...(G.clean(row.status) === 'suspended' && G.clean(row.suspendedReason)
+        ? { suspendedReason: G.clean(row.suspendedReason), suspendedAt: row.suspendedAt || null } : {}),
       createdAt: row.createdAt || null,
       members: await memberCount(orgId),
       usage: await usageFor(orgId),
@@ -178,6 +191,16 @@ async function setStatus(event) {
     return G.fail(409, "A personal space cannot be suspended. Disable the account instead.");
   }
 
+  const reason = G.clean(body.reason).replace(/\s+/g, ' ').trim();
+  if (status === 'suspended') {
+    if (reason.length < SUSPEND_REASON_MIN) {
+      return G.fail(400, 'Say why this organisation is being suspended, in a few words.');
+    }
+    if (reason.length > SUSPEND_REASON_MAX) {
+      return G.fail(400, `Keep the reason to ${SUSPEND_REASON_MAX} characters.`);
+    }
+  }
+
   const now = new Date().toISOString();
   const actor = G.callerSub(event);
   const from = G.clean(meta.status) || 'active';
@@ -193,7 +216,7 @@ async function setStatus(event) {
           : (from === 'pending' ? 'org.approve' : 'org.reinstate'),
       actor: actorFromEvent(event, 'platform-admin'),
       target: { type: 'org', id: orgId, title: G.clean(meta.name) },
-      reason: G.clean(body.reason).slice(0, 600),
+      reason: reason.slice(0, SUSPEND_REASON_MAX),
       detail: { from, to: status },
     });
   } catch (e) {
@@ -213,9 +236,16 @@ async function setStatus(event) {
       await G.db.send(new UpdateCommand({
         TableName: G.tableName(),
         Key,
-        UpdateExpression: 'SET #s = :s, statusChangedAt = :t, statusChangedBy = :a',
+        /* The reason stays on the rows while the suspension does; lifting it
+           clears them, and the audit log keeps the history. */
+        ...(status === 'suspended' ? {
+          UpdateExpression: 'SET #s = :s, statusChangedAt = :t, statusChangedBy = :a, suspendedReason = :r, suspendedAt = :t, suspendedBy = :a',
+          ExpressionAttributeValues: { ':s': status, ':t': now, ':a': actor, ':r': reason },
+        } : {
+          UpdateExpression: 'SET #s = :s, statusChangedAt = :t, statusChangedBy = :a REMOVE suspendedReason, suspendedAt, suspendedBy',
+          ExpressionAttributeValues: { ':s': status, ':t': now, ':a': actor },
+        }),
         ExpressionAttributeNames: { '#s': 'status' },
-        ExpressionAttributeValues: { ':s': status, ':t': now, ':a': actor },
       }));
     }
   } catch (e) {
@@ -283,3 +313,5 @@ exports.handler = async (event) => {
 };
 
 exports.STATUSES = STATUSES;
+exports.SUSPEND_REASON_MIN = SUSPEND_REASON_MIN;
+exports.SUSPEND_REASON_MAX = SUSPEND_REASON_MAX;

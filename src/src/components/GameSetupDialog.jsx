@@ -92,6 +92,7 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
 import { BUILD_KIND, EVENT_KIND, kindLabel } from '../config/engagementKinds';
+import { offeredForSessions } from '../config/setFinder';
 import pricing from '../../../lambda-functions/game/pricing';
 import SetChooser from './SetChooser';
 import './GameSetupDialog.css';
@@ -323,7 +324,9 @@ export default function GameSetupDialog({
     return Array.from(byRef.values());
   }, [questionSets, localSets]);
 
-  const setsForType = allSets.filter((set) => set.engagementType === engagementType);
+  // A Build Room set is asked in a Build Room, never picked here (config/setFinder.js).
+  const sessionSets = allSets.filter(offeredForSessions);
+  const setsForType = sessionSets.filter((set) => set.engagementType === engagementType);
   /*
     A SURVEY IS A SESSION WITH NO ROUNDS (surveys phase 2). Three cards on this
     screen are about rounds and hide for it: the categories grid (a survey set
@@ -644,7 +647,7 @@ export default function GameSetupDialog({
                 .filter((type) => type.id !== engagementType)
                 .map((type) => ({
                   label: type.label,
-                  sets: allSets.filter((set) => set.engagementType === type.id),
+                  sets: sessionSets.filter((set) => set.engagementType === type.id),
                   onPick: () => chooseFormat(type.id),
                 }))}
               idPrefix="gsd-set"

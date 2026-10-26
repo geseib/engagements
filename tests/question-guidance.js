@@ -196,6 +196,7 @@ const say = (...a) => process.stdout.write(a.join(' ') + '\n');
 // ---- The real modules -----------------------------------------------------
 const triviaModule = require(path.join(REPO, 'lambda-functions/admin/ai-generate-trivia.js'));
 const scenariosModule = require(path.join(REPO, 'lambda-functions/admin/ai-generate-scenarios.js'));
+const { HOST_MATERIAL_NOTE } = require(path.join(REPO, 'lambda-functions/admin/shared/structured-generation.js'));
 const trivia = triviaModule.handler;
 const scenarios = scenariosModule.handler;
 
@@ -298,13 +299,22 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
 
   await test('with no guidance the trivia prompt opens exactly as it always has', () => {
     // Pinned text, not a comparison with this build's own output: this is the
-    // opening the generator wrote before `batchGuidance` existed.
+    // opening the generator wrote before `batchGuidance` existed, with the
+    // category block as shared/category-brief.js writes it (2026-10-25).
     const prompt = triviaPrompt(TRIVIA_PAYLOAD);
+    // The host's text has been fenced, in one block after the set's shape,
+    // since the generation audit (shared/structured-generation.js fenceHost).
+    // The opening line has not moved.
     assert.ok(prompt.startsWith(
       'You are an expert trivia question creator. Create 5 trivia questions about Historic figures.\n'
-      + 'Target audience: Adults.\nDifficulty level: medium.\nEach question has exactly 4 answer choices.\n\n'
-      + 'Additional Requirements: Keep it fun.\n\nOrganize questions into EXACTLY 3 categories - no more, no less.\n'
-      + 'Must include these categories: Presidents\n\nLENGTH LIMITS (hard limits, not targets):'),
+      + 'Difficulty level: medium.\nEach question has exactly 4 answer choices.\n\n'
+      + 'CATEGORIES: organize the questions into EXACTLY 3 categories'
+      + ' - no more, no less. These must be among them, spelled exactly as written:\n- Presidents\n'
+      + 'Choose the other 2 so that no two categories overlap, and file every question under the one category'
+      + ' it clearly belongs to; a question that fits a named category belongs in that one.\n\n'
+      + `${HOST_MATERIAL_NOTE}\n`
+      + 'Target audience: <audience>Adults</audience>\n'
+      + 'Additional Requirements: <requirements>Keep it fun.</requirements>\n\nLENGTH LIMITS (hard limits, not targets):'),
     `the no-guidance opening moved:\n${prompt.slice(0, 400)}`);
     assert.ok(!prompt.includes(LABEL));
   });
@@ -319,9 +329,9 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
     assert.ok(prompt.startsWith(`${opening}\n\n${LABEL}`), `not straight after the opening:\n${prompt.slice(0, 300)}`);
     // Its own paragraph: a blank line before the brief resumes, so "Target
     // audience" is not read as more of the guidance.
-    assert.ok(prompt.includes(`${GW}\n\nTarget audience: Adults.`), 'the guidance runs into the brief');
+    assert.ok(prompt.includes(`${GW}\n\nDifficulty level: medium.`), 'the guidance runs into the brief');
     const guidanceAt = prompt.indexOf(GW);
-    for (const later of ['Target audience:', 'Additional Requirements:', 'Organize questions into', 'LENGTH LIMITS']) {
+    for (const later of ['Target audience:', 'Additional Requirements:', 'CATEGORIES:', 'LENGTH LIMITS']) {
       assert.ok(guidanceAt < prompt.indexOf(later), `the guidance comes after "${later}"`);
     }
   });
@@ -350,7 +360,11 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
 
   await test('with no guidance and no direction the scenario prompt opens exactly as it always has', () => {
     const prompt = scenarioPrompt(WAVELENGTH);
-    assert.ok(prompt.startsWith('Create 4 wavelength subjects. TOPIC-BASE-PROMPT\n\nContext: Historic figures\nAudience: Team leads\n\nAdditional Requirements: Keep it fun.'),
+    // The host's text has been fenced since the generation audit (shared/
+    // structured-generation.js fenceHost); the opening line itself has not moved.
+    assert.ok(prompt.startsWith(`Create 4 wavelength subjects. TOPIC-BASE-PROMPT\n\n${HOST_MATERIAL_NOTE}\n\n`
+      + 'Context: <context>Historic figures</context>\nAudience: <audience>Team leads</audience>\n\n'
+      + 'Additional Requirements: <requirements>Keep it fun.</requirements>'),
       `the no-guidance opening moved:\n${prompt.slice(0, 300)}`);
     assert.ok(!prompt.includes(LABEL));
   });
@@ -382,7 +396,7 @@ const scenarioPrompt = (overrides = {}) => scenariosModule.buildPrompt({
   await test('with no direction, guidance restructures the opening so TOPIC follows it', () => {
     const prompt = scenarioPrompt({ ...WAVELENGTH, batchGuidance: GW });
     assert.ok(prompt.startsWith(`Create 4 wavelength subjects.\n\n${LABEL}`), prompt.slice(0, 200));
-    assert.ok(prompt.includes(`${GW}\n\nTOPIC: TOPIC-BASE-PROMPT\n\nContext: Historic figures`));
+    assert.ok(prompt.includes(`${GW}\n\nTOPIC: TOPIC-BASE-PROMPT\n\n${HOST_MATERIAL_NOTE}\n\nContext: <context>Historic figures</context>`));
     // Everything after the topic sentence is untouched.
     const tail = (p, marker) => p.slice(p.indexOf(marker) + marker.length);
     assert.strictEqual(tail(prompt, 'TOPIC: TOPIC-BASE-PROMPT'),

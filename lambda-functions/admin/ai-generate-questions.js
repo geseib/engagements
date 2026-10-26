@@ -18,7 +18,10 @@
  */
 
 const { makeGenerationHandler } = require('./shared/generation-handler');
-const { tagGuidance } = require('./shared/structured-generation');
+const {
+  tagGuidance, HOST_MATERIAL_NOTE, fenceHost, triviaAccuracyRules,
+} = require('./shared/structured-generation');
+const { clampBackground, BACKGROUND_TRUTH_RULE } = require('./shared/question-background');
 const { normalizeTags } = require('./shared/tags');
 const { normalizeGameType } = require('./shared/game-types');
 const {
@@ -30,6 +33,33 @@ const {
 } = require('./shared/kind-generation');
 
 const MAX_COUNT = 100;
+const OPTION_KEYS = ['optionA', 'optionB', 'optionC', 'optionD', 'optionE', 'optionF'];
+const optionId = (key) => `Option${key.slice(-1)}`;
+
+/** What a single trivia draft says when its answer key matches no option. */
+const UNKEYED_DRAFT_ERROR = 'The AI\'s answer did not match any option; try again.';
+
+const clampInt = (value, lo, hi) => {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? Math.min(Math.max(n, lo), hi) : null;
+};
+
+/**
+ * A TRIVIA DRAFT HAS THE SET'S SHAPE — its number of choices and of correct
+ * answers — not always four and one. Read from `numChoices`/`numCorrect` when
+ * the caller sends them (top level or on `context`), else from the question
+ * being refined, else the house four and one.
+ */
+function triviaShapeFrom(payload, existing) {
+  const context = payload.context || {};
+  const filled = existing ? OPTION_KEYS.filter((k) => String(existing[k] || '').trim()).length : 0;
+  const keyed = existing
+    ? String(existing.correctAnswer || '').split(',').filter((id) => /^Option[A-F]$/.test(id.trim())).length
+    : 0;
+  const numChoices = clampInt(payload.numChoices ?? context.numChoices, 2, 6) || (filled >= 2 ? filled : 4);
+  const numCorrect = clampInt(payload.numCorrect ?? context.numCorrect, 1, numChoices) || Math.min(keyed || 1, numChoices);
+  return { numChoices, numCorrect };
+}
 
 const textList = (value, limit) => (Array.isArray(value) ? value : [])
   .map((entry) => String(entry ?? '').trim())
@@ -84,6 +114,11 @@ function parseRequest(payload) {
     total,
     config: {
       gameType: normalizeGameType(payload.engagementType),
+      // ONE DRAFT, as the console's add-a-question modal asks for: an item that
+      // cannot be used fails the job with a sentence rather than being dropped
+      // into an empty result (normalizeItem).
+      single: total === 1,
+      ...triviaShapeFrom(payload, existing),
       userInput: String(payload.userInput || '').trim(),
       existingQuestion: existing,
       context: payload.context || {},
@@ -130,22 +165,43 @@ function buildTool(config) {
   let required = [...baseRequired];
 
   if (config.gameType === 'trivia') {
+    // The set generator's shape (ai-generate-trivia.js buildTool): the set's
+    // number of options and of correct answers, and the background the set
+    // generator requires — QuestionsPanel's form has a Background field, and a
+    // drafted question without one was the only trivia question in its set
+    // with nothing for the summariser.
+    const optionKeys = OPTION_KEYS.slice(0, config.numChoices);
+    const ids = optionKeys.map(optionId);
+    const options = {};
+    for (const key of optionKeys) options[key] = { type: 'string', description: `Answer choice ${key.slice(-1)}.` };
     properties = {
       ...properties,
       questionDetail: { type: 'string', description: 'The question text shown to players, 200 characters maximum.' },
-      optionA: { type: 'string', description: 'Answer choice A.' },
-      optionB: { type: 'string', description: 'Answer choice B.' },
-      optionC: { type: 'string', description: 'Answer choice C.' },
-      optionD: { type: 'string', description: 'Answer choice D.' },
-      correctAnswer: {
-        type: 'string',
-        enum: ['OptionA', 'OptionB', 'OptionC', 'OptionD'],
-        description: 'The correct option id. NOT the answer text.',
-      },
+      ...options,
+      correctAnswer: config.numCorrect > 1
+        ? {
+            type: 'array',
+            items: { type: 'string', enum: ids },
+            description: `Exactly ${config.numCorrect} correct option ids, e.g. ["OptionA","OptionC"].`,
+          }
+        : { type: 'string', enum: ids, description: 'The correct option id. NOT the answer text.' },
       answerDetails: { type: 'string', description: 'Why the correct answer is correct, 1-3 sentences.' },
       difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'], description: 'Difficulty of this question.' },
+      background: { type: 'string', description: 'The story around the answer that makes good '
+        + 'commentary, 1-3 sentences, 400 characters maximum. Not why it is correct — that is '
+        + 'answerDetails. Never shown to players.' },
     };
-    required = [...required, 'questionDetail', 'optionA', 'optionB', 'optionC', 'optionD', 'correctAnswer', 'answerDetails', 'difficulty'];
+    required = [...required, 'questionDetail', ...optionKeys, 'correctAnswer', 'answerDetails', 'difficulty', 'background'];
+  } else if (config.gameType === 'wavelength') {
+    // NO DETAIL, as the wavelength set generator (structured-generation.js
+    // lengthGuidance): a sentence about the subject seeds the very words the
+    // round exists to compare.
+    properties = {
+      ...properties,
+      title: { type: 'string', description: 'The subject, 1-4 words.' },
+      detail: { type: 'string', description: 'Leave empty. Never describe or define the subject — the players supply the meaning.' },
+    };
+    required = required.filter((key) => key !== 'detail');
   } else if (config.gameType === 'poll') {
     // The same kind and kind fields the poll set generator offers
     // (shared/kind-generation.js), so a poll question drafted into a set is
@@ -193,7 +249,9 @@ function lengthGuidanceFor(gameType, roundKind) {
       '',
       'LENGTH LIMITS (hard limits, not targets):',
       '- title: the subject, 1-4 words. Not a question and not a sentence.',
-      '- detail: one short scenario introducing the subject, 200 characters maximum.',
+      '- detail: LEAVE EMPTY (""). Never describe, define or hint at the',
+      '  subject — the players supply the meaning; any framing contaminates',
+      '  their answers.',
       '- customInstructions: "What are the first 10 words you think of when you think of this word?"',
       '',
       'Wavelength is a word-association alignment game: every participant lists words',
@@ -229,6 +287,13 @@ function lengthGuidanceFor(gameType, roundKind) {
     '- title: 3-10 words. Do not use a colon to bolt a subtitle onto the title.',
     `- detail: ${detailMax > 350 ? '3-8' : '2-4'} sentences, ${detailMax} characters maximum.`,
     '- customInstructions: 1-2 sentences, 200 characters maximum.',
+    // The set generator's trivia limits (ai-generate-trivia.js).
+    ...(gameType === 'trivia' ? [
+      '- questionDetail: the question as asked, 200 characters maximum.',
+      '- answerDetails: 1-3 sentences, 300 characters maximum.',
+      `- background: 1-3 sentences, 400 characters maximum. ${BACKGROUND_TRUTH_RULE}`,
+      '- each option: 60 characters maximum.',
+    ] : []),
     'Write only what the content needs; do not pad to reach a limit.',
   ].join('\n');
 }
@@ -250,9 +315,14 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     p += `${direction}\n\nThis direction governs the shape of every question below.\n\n`;
   }
 
+  // The host's text — the question being refined, the feedback, the set's
+  // fields, its other questions — is fenced (structured-generation.js
+  // fenceHost) under the one line that says what the tags mean.
+  p += `${HOST_MATERIAL_NOTE}\n\n`;
+
   if (existingQuestion) {
     p += `Improve the following ${gameType} question based on the user's feedback.\n\n`;
-    p += 'EXISTING QUESTION:\n';
+    let shown = '';
     for (const [label, value] of [
       ['Title', existingQuestion.title],
       ['Category', existingQuestion.category],
@@ -260,29 +330,30 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
       ['Correct Answer', existingQuestion.correctAnswer],
       ['Answer Explanation', existingQuestion.answerDetails],
     ]) {
-      if (value) p += `${label}: ${value}\n`;
+      if (value) shown += `${label}: ${value}\n`;
     }
     if (gameType === 'poll') {
       // The poll as it stands, kind first: without it a rating or a yes/no
       // under refinement is a title with nothing to say what it asks for, and
       // comes back as whatever the model guesses.
-      p += describePollFields(existingQuestion);
+      shown += describePollFields(existingQuestion);
     } else if (Array.isArray(existingQuestion.options) && existingQuestion.options.length > 0) {
-      p += `Options: ${existingQuestion.options.join(', ')}\n`;
+      shown += `Options: ${existingQuestion.options.join(', ')}\n`;
     }
-    for (const key of ['optionA', 'optionB', 'optionC', 'optionD']) {
-      if (existingQuestion[key]) p += `${key}: ${existingQuestion[key]}\n`;
+    for (const key of OPTION_KEYS) {
+      if (existingQuestion[key]) shown += `${key}: ${existingQuestion[key]}\n`;
     }
-    p += `\nUSER FEEDBACK: ${userInput}\n`;
+    p += `EXISTING QUESTION:\n${fenceHost('existing_question', shown)}\n`;
+    p += `\nUSER FEEDBACK: ${fenceHost('feedback', userInput)}\n`;
     p += '\nReturn exactly ONE improved question.';
     if (gameType === 'poll') p += ' Keep its kind unless the feedback asks for another.';
   } else {
-    p += `Create ${count} high-quality ${gameType} questions.\n\nREQUIREMENTS: ${userInput}\n`;
-    if (context?.title) p += `Question Set Title: ${context.title}\n`;
-    if (context?.description) p += `Description: ${context.description}\n`;
-    if (context?.customInstructions) p += `Set Instructions: ${context.customInstructions}\n`;
-    if (context?.aiContextInstructions) p += `Additional Context: ${context.aiContextInstructions}\n`;
-    if (context?.category) p += `Category to write in: ${context.category}\n`;
+    p += `Create ${count} high-quality ${gameType} questions.\n\nREQUIREMENTS: ${fenceHost('requirements', userInput)}\n`;
+    if (context?.title) p += `Question Set Title: ${fenceHost('set_title', context.title)}\n`;
+    if (context?.description) p += `Description: ${fenceHost('set_description', context.description)}\n`;
+    if (context?.customInstructions) p += `Set Instructions: ${fenceHost('set_instructions', context.customInstructions)}\n`;
+    if (context?.aiContextInstructions) p += `Additional Context: ${fenceHost('set_context', context.aiContextInstructions)}\n`;
+    if (context?.category) p += `Category to write in: ${fenceHost('category', context.category)}\n`;
 
     // THE SET'S SHAPE, which the console's add-a-question modal can see and
     // this prompt previously could not. Both blocks are additive: a caller
@@ -290,7 +361,15 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     // got.
     const categories = textList(context?.categories, 24);
     if (categories.length > 0) {
-      p += `\nCATEGORIES ALREADY IN THIS SET (prefer one of these; a new one is a real cost): ${categories.join(', ')}\n`;
+      p += `\nCATEGORIES ALREADY IN THIS SET (prefer one of these; a new one is a real cost): ${fenceHost('categories', categories.join(', '))}\n`;
+      // WHICH CATEGORY, AND WHICH NOT (owner, 2026-10-25; shared/category-brief.js
+      // says the same to the set builders): written for one category, the
+      // question must not be one that belongs in a neighbour.
+      const want = String(context?.category || '').trim();
+      const others = categories.filter((c) => c.toLowerCase() !== want.toLowerCase());
+      if (want && others.length > 0) {
+        p += `A question that belongs better in ${others.join(', ')} is not a "${want}" question: write one that only "${want}" fits.\n`;
+      }
     }
 
     // "Writing alongside these." The author is shown this exact list in the
@@ -303,12 +382,14 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     if (siblings.length > 0) {
       p += '\nWRITING ALONGSIDE THESE — existing questions from the same set. Match their voice,'
         + ' their length and their level of specificity. Do not repeat them:\n';
+      let listed = '';
       for (const s of siblings) {
-        p += `- ${String(s.title).trim()}`;
-        if (s.detail) p += `\n  ${String(s.detail).trim()}`;
-        if (s.customInstructions) p += `\n  Instruction: ${String(s.customInstructions).trim()}`;
-        p += '\n';
+        listed += `- ${String(s.title).trim()}`;
+        if (s.detail) listed += `\n  ${String(s.detail).trim()}`;
+        if (s.customInstructions) listed += `\n  Instruction: ${String(s.customInstructions).trim()}`;
+        listed += '\n';
       }
+      p += `${fenceHost('other_questions', listed)}\n`;
     }
 
     // The caller's titles and this job's own, in one list: the model needs to
@@ -329,6 +410,14 @@ function buildPrompt({ config, count, alreadyUsedTitles }) {
     p += `\n\n${pollKindGuide(config.pollKinds)}`;
   }
 
+  if (gameType === 'trivia') {
+    // The set generator's shape and accuracy rules (ai-generate-trivia.js), so
+    // a question drafted into a set is held to what the set was.
+    p += `\n\nThe question has exactly ${config.numChoices} answer choices`
+      + (config.numCorrect > 1 ? `, exactly ${config.numCorrect} of them correct.` : '.');
+    p += `\n\n${triviaAccuracyRules(config.numCorrect)}`;
+  }
+
   p += lengthGuidanceFor(gameType, roundKind);
   p += tagGuidance();
   p += `\n\nReturn the questions by calling the emit_items tool. Do not write prose.`;
@@ -344,23 +433,45 @@ function normalizeItem(raw, config) {
     active: true,
     title,
     category: String(raw?.category || 'General').trim(),
-    detail: String(raw?.detail || '').trim(),
+    // A wavelength subject carries NO detail, whatever the model wrote — the
+    // same guarantee as the set generator's (ai-generate-scenarios.js).
+    detail: config.gameType === 'wavelength' ? '' : String(raw?.detail || '').trim(),
     school: String(raw?.school || 'Business School').trim(),
     customInstructions: String(raw?.customInstructions || '').trim(),
     tags: normalizeTags(raw?.tags),
   };
 
   if (config.gameType === 'trivia') {
-    const valid = new Set(['OptionA', 'OptionB', 'OptionC', 'OptionD']);
-    const answer = String(raw?.correctAnswer || '').trim();
+    const optionKeys = OPTION_KEYS.slice(0, config.numChoices);
+    const valid = new Set(optionKeys.map(optionId));
+    // An id, or the option's own text mapped back to its id.
+    const toId = (value) => {
+      const s = String(value || '').trim();
+      if (valid.has(s)) return s;
+      const match = optionKeys.find((k) => String(raw?.[k] || '').trim() === s);
+      return match ? optionId(match) : null;
+    };
+    const answers = (Array.isArray(raw?.correctAnswer) ? raw.correctAnswer : String(raw?.correctAnswer || '').split(','))
+      .map(toId).filter(Boolean);
+    const keyed = [...new Set(answers)].slice(0, config.numCorrect);
+    // AN ANSWER THAT MATCHES NO OPTION IS NOT KEYED TO A. It used to be, which
+    // drafted a question whose "right" answer was a guess. One draft fails with
+    // a sentence the host can read; a bulk run drops the item, and the worker
+    // asks again for the shortfall (shared/generation-handler.js).
+    if (keyed.length === 0) {
+      if (config.single) throw new Error(UNKEYED_DRAFT_ERROR);
+      return null;
+    }
     item.questionDetail = String(raw?.questionDetail || title).trim();
-    item.optionA = String(raw?.optionA || '').trim();
-    item.optionB = String(raw?.optionB || '').trim();
-    item.optionC = String(raw?.optionC || '').trim();
-    item.optionD = String(raw?.optionD || '').trim();
-    item.correctAnswer = valid.has(answer) ? answer : 'OptionA';
+    for (const key of OPTION_KEYS) {
+      item[key] = optionKeys.includes(key) ? String(raw?.[key] || '').trim() : '';
+    }
+    // Comma-joined for several, as the CSV and QuestionsPanel's form store it
+    // (shared/generated-set.js triviaToCsv).
+    item.correctAnswer = config.numCorrect > 1 ? keyed.join(',') : keyed[0];
     item.answerDetails = String(raw?.answerDetails || '').trim();
     item.difficulty = String(raw?.difficulty || 'medium').trim();
+    item.background = clampBackground(raw?.background);
   } else if (config.gameType === 'poll') {
     // The kind and the fields it uses, repaired and validated by the contract
     // (shared/kind-generation.js typedPollFields); a choice with one option, or
@@ -372,6 +483,14 @@ function normalizeItem(raw, config) {
 
   return item;
 }
+
+// Exported for tests/question-generation-job.js, which drives the drafter's
+// schema, prompt and normaliser directly as well as through the job.
+exports.parseRequest = parseRequest;
+exports.buildTool = buildTool;
+exports.buildPrompt = buildPrompt;
+exports.normalizeItem = normalizeItem;
+exports.UNKEYED_DRAFT_ERROR = UNKEYED_DRAFT_ERROR;
 
 exports.handler = makeGenerationHandler({
   kind: 'question',

@@ -67,15 +67,26 @@ function holdFor(move, m) {
   return '';
 }
 
+/**
+ * AN EARLY SHOW RESULTS ASKS FIRST, wherever it is pressed: the Stage dock, the
+ * console and, since the host review (25 Oct 2026), the Host screen's ask path.
+ * `phase` ASK or VOTE, `count` of `of` done; null when everyone is in.
+ */
+export function earlyResultsArm({ phase, count, of }, label) {
+  // Nobody in the room at all (0 of 0): still an early advance, so it asks (QA 2026-10-18 C3).
+  if (of !== null && of !== undefined && !(Number(of) > 0)) {
+    return { text: W.armNobodyHere, confirmLabel: W.armedLabel(label), inPlace: true };
+  }
+  const left = stillToAct(count, of);
+  if (left > 0) return { text: W.armStill(left, of, phase === 'VOTE' ? 'voting' : 'answering'), confirmLabel: W.armedLabel(label), inPlace: true };
+  return null;
+}
+
 /** The arm for a move, or null: the early and lossy advances only. */
 function armFor(move, m) {
   if (move.action === 'close' && (m.phase === 'ASK' || m.phase === 'VOTE') && m.meter) {
-    // Nobody in the room at all (0 of 0): still an early advance, so it asks (QA 2026-10-18 C3).
-    if (m.meter.of !== null && m.meter.of !== undefined && !(Number(m.meter.of) > 0)) {
-      return { text: W.armNobodyHere, confirmLabel: W.armedLabel(move.label), inPlace: true };
-    }
-    const left = stillToAct(m.meter.count, m.meter.of);
-    if (left > 0) return { text: W.armStill(left, m.meter.of, m.phase === 'VOTE' ? 'voting' : 'answering'), confirmLabel: W.armedLabel(move.label), inPlace: true };
+    const arm = earlyResultsArm({ phase: m.phase, count: m.meter.count, of: m.meter.of }, move.label);
+    if (arm) return arm;
   }
   if (move.action === 'run-next' && !move.claudeDone && m.run) {
     return { text: W.armRunEarly(m.run.cur, move.k), confirmLabel: W.armedLabel(move.label), inPlace: true };

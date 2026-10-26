@@ -13,7 +13,7 @@
  *      the decide panel is drawn open (answer (a)); one Send
  *   4  People ticks who has answered, by name, never what they chose (e)
  *   5  the keys: 2/3/4 and P go to the room's window, Space presses the
- *      card's main button; "All sessions" leaves
+ *      card's main button; "Main menu" leaves
  *
  * Fixtures from the REAL backend's pure half (build-store.js hostView) plus
  * what build-room.js adds to the host's read. NO GEOMETRIC ASSERTIONS.
@@ -169,7 +169,9 @@ describe('1. the console on two screens, never on one', () => {
     const sees = within(top).getByRole('group', { name: 'The room sees' });
     expect(within(sees).getAllByRole('button').map((b) => b.getAttribute('aria-label') || b.textContent)).toEqual(['Stage', 'Build', 'History', 'See it here']);
     expect(within(sees).getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(top).getByRole('button', { name: /All sessions/ })).toBeInTheDocument();
+    // The Build Room's one word for the way out, on one screen and two (host review, 25 Oct 2026).
+    expect(within(top).getByRole('button', { name: /Main menu/ })).toBeInTheDocument();
+    expect(within(top).queryByRole('button', { name: /All sessions/ })).toBeNull();
   });
 });
 
@@ -256,7 +258,7 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     const panel = within(consoleEl().querySelector('.hc-main')).getByRole('region', { name: 'This ask' });
     // The board's own pick: B is going to Claude, A offers itself.
     expect(within(panel).getByText('Going to Claude')).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Choose this instead' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Choose this' }));
     await waitFor(() => expect(mainButton()).toHaveTextContent('Send A to Claude'));
     expect(within(panel).getByRole('textbox', { name: 'Direction for Claude' }).value).toMatch('One long list of shifts');
   });
@@ -355,6 +357,27 @@ describe('5. the keys and the way out', () => {
     expect(document.querySelector('[data-capability="build-screen"]')).not.toBeNull();
     fireEvent.keyDown(window, { key: '1' });
     expect(consoleEl()).not.toBeNull();
+  });
+
+  test('Join toggles the codes, as on one screen; its words say what a press does; Escape takes them down', async () => {
+    await openRoom(MOMENTS['a · between asks']());
+    const top = consoleEl().querySelector('.hc-top');
+    const join = within(top).getByRole('button', { name: /^Join 4821/ });
+    expect(join).toHaveAttribute('aria-pressed', 'false');
+    expect(join).toHaveAttribute('title', 'Show the join code on the Stage');
+    fireEvent.click(join);
+    await waitFor(() => expect(posts('/build/wall')).toContainEqual(expect.objectContaining({ codes: 'join' })));
+    expect(join).toHaveAttribute('aria-pressed', 'true');
+    expect(join).toHaveAttribute('title', 'Hide the join code on the Stage');
+    fireEvent.click(join);
+    await waitFor(() => expect(posts('/build/wall')).toContainEqual(expect.objectContaining({ codes: 'none' })));
+    expect(join).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(join);
+    await waitFor(() => expect(join).toHaveAttribute('aria-pressed', 'true'));
+    const before = posts('/build/wall').filter((b) => b.codes === 'none').length;
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(join).toHaveAttribute('aria-pressed', 'false'));
+    expect(posts('/build/wall').filter((b) => b.codes === 'none').length).toBe(before + 1);
   });
 
   test('the Session slot opens the Session panel; \\ does too', async () => {

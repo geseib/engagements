@@ -347,11 +347,18 @@
 .um-tbl tbody tr:hover td { background: var(--um-row-hover); }
 .um-busy td { opacity: .55; }
 
-.um-col-person { width: 38%; }
+/* THE MOVES NEED A FIXED WIDTH: a row's two role moves and the bin, at most
+   "Make Engage admin", "Make host" and the bin (272px in Chromium) plus the
+   cell's padding. At 20% of the table they were wider than their column, and
+   as the cells hide overflow and the moves sit to the right, "Make Engage
+   admin" lost its left edge (#43). The moves get what they need; the person
+   takes the rest, and the last cell never clips. */
+.um-col-person { width: auto; }
 .um-col-role   { width: 14%; }
 .um-col-idp    { width: 14%; }
 .um-col-when   { width: 14%; }
-.um-col-acts   { width: 20%; }
+.um-col-acts   { width: 300px; }
+.um-tbl td:last-child { overflow: visible; text-overflow: clip; }
 
 .um-nm {
   font-weight: 600;
