@@ -149,10 +149,10 @@ describe('1. the console on two screens, never on one', () => {
     expect(document.querySelector('.brm-hbar')).not.toBeNull();
   });
 
-  test('not chosen yet: today\'s Host screen, with the question', async () => {
+  test('not chosen yet: today\'s Host screen, one screen without asking (simplify PLAN item 10)', async () => {
     await openRoom(MOMENTS['a · between asks'](), null);
     expect(consoleEl()).toBeNull();
-    expect(screen.getByRole('region', { name: 'Where will the room watch?' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Where will the room watch?' })).toBeNull();
   });
 
   test('a room\'s window up, even on a browser that said one screen: the console', async () => {
@@ -182,13 +182,19 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     expect(titles).toEqual(['Waiting for you', 'People', 'Later', 'Session']);
   });
 
-  test('the side column holds Now, then the folds: Decided, Timeline, Asks, Screenshots, Room brief, History', async () => {
+  test('the side column holds Now, then the folds in their order, each drawn once it has something (simplify PLAN item 18)', async () => {
     await openRoom(MOMENTS['a · between asks']());
     expect(within(side()).getByText('Now')).toBeInTheDocument();
     expect(side().textContent).toMatch('Last decided, ask 2: Who is it for: busy volunteers, often on an old phone.');
-    const folds = [...side().querySelectorAll('.brm-stackhead')].map((b) => b.textContent.replace(/ · .*/, ''));
+    const heads = [...side().querySelectorAll('.brm-stackhead')];
+    const folds = heads.map((b) => b.textContent.replace(/ · .*/, ''));
+    const ORDER = ['Decided', 'Timeline', 'Asks', 'Screenshots', 'Room brief', 'History'];
+    expect(folds).toEqual(ORDER.filter((f) => folds.includes(f)));
+    expect(folds).toEqual(expect.arrayContaining(['Decided', 'Asks', 'History']));
+    // None empty: an empty fold is not drawn.
+    heads.forEach((b) => expect(b.textContent).not.toMatch(/ · 0\b/));
     // History last: a Sent to Claude mark on the console opens it at its entry (Consider, 19 Oct).
-    expect(folds).toEqual(['Decided', 'Timeline', 'Asks', 'Screenshots', 'Room brief', 'History']);
+    expect(folds[folds.length - 1]).toBe('History');
   });
 
   test('a · between asks: "Your part now" at the top of the centre, no main button, the slot held and named (b)', async () => {

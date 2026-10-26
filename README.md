@@ -138,7 +138,8 @@ An unsaved set puts a quiet entry in the host's bell that turns into a reminder 
 before the session ends (#45; `notifications.js`, copied identically into `game/`).
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
-Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the
+Room's window ↗ on the host's header, or **Use two screens** in the Host screen's
+**Before the room starts** card, `buildroom/BuildSetup.jsx`; one screen until then, and the
 choice is `engage.surfaces`, shared with Call & Answer): public, read-only, no names
 (`src/src/present/buildwall/`, read `GET …/build-play/wall`). Claude's posts and
 screenshots reach the room only after the host releases them from the queue
@@ -155,6 +156,14 @@ What the host saved for later stays off the room's screens until it is sent (`he
 `build-store.js`; `roomStory({ forRoom: true })`). The host's live typing
 reaches the room's window only over a same-browser `BroadcastChannel`
 (`buildroom/typingMirror.js`), never through the server or the socket.
+
+**The first view** (phase 1 of `docs/design/build-room-simplify/PLAN.md`): one Before the
+room starts card (connect Claude Code, the join code, the room's screen; no gate, the opening
+runs before Claude connects), the composer as one line until clicked, and no empty fold,
+queue filter or Open the build until there is something in it, on one screen and the console
+alike. An ask's steps are named Ask · Collect · Settle · Send to Claude everywhere (`LOOP` in
+`buildroom/words.js`). `__tests__/buildRoomCounts.test.jsx` renders the real first view and
+holds it to at most 36 controls (59 before).
 
 Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
 not in the material, claims the vote does not support, next steps written as decided and

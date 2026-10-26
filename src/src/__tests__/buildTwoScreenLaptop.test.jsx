@@ -10,8 +10,9 @@
  *      up, today's one screen exactly. Since B8 the laptop on two screens is
  *      the console (__tests__/buildTwoScreen.test.jsx); its top line carries
  *      the header's window parts, so `header()` reads either
- *   3  "Where will the room watch?" once on the Host screen, the same choice
- *      Call & Answer stores; Two screens opens the room's window in the click;
+ *   3  which screen: since the simplify plan (26 Oct 2026) one screen without
+ *      asking, Use two screens a row of Before the room starts (the same
+ *      choice Call & Answer stores; it opens the room's window in the click);
  *      Settings, Screens shows and changes it
  *   4  no second display: Open as a tab (placed=1) and one visible line
  *
@@ -236,44 +237,54 @@ describe('2. while the room\'s window is up, the laptop stays where it is', () =
   });
 });
 
-describe('3. where will the room watch?', () => {
+/*
+ * 3, SINCE THE SIMPLIFY PLAN (item 10; owner, 26 Oct 2026): nothing asks
+ * "Where will the room watch?" on the Host screen. One screen is the default;
+ * Use two screens is a row of Before the room starts, and Settings, Screens
+ * changes it later.
+ */
+describe('3. which screen the room watches', () => {
   const fakeWindow = () => ({ opener: {}, focus: jest.fn(), moveTo: jest.fn(), resizeTo: jest.fn(), location: {} });
+  const setup = () => screen.getByRole('region', { name: 'Before the room starts' });
 
-  test('asked once on the Host screen, with Help me pick, until this browser has chosen', async () => {
-    window.localStorage.removeItem(SURFACES_KEY);
-    await openRoom(hostState());
-    const q = screen.getByRole('region', { name: 'Where will the room watch?' });
-    expect(within(q).getByRole('button', { name: 'Help me pick' })).toBeInTheDocument();
-    // The Build Room's own words for what stays private: no Workie here.
-    expect(q.textContent).toMatch("Claude's questions, the room's ideas and what waits for you stay private");
-    expect(q.textContent).not.toMatch(/Workie/);
-  });
-
-  test('before Claude connects, the chooser steps back: Connect is the one orange, above it (host review, 25 Oct 2026)', async () => {
+  test('not chosen: no question; the card reads one screen, with Use two screens as a row', async () => {
     window.localStorage.removeItem(SURFACES_KEY);
     await openRoom(hostState({ seen: false }));
-    const q = screen.getByRole('region', { name: 'Where will the room watch?' });
-    const uses = [within(q).getByRole('button', { name: /Use two screens/ }), within(q).getByRole('button', { name: /Use one screen/ })];
-    uses.forEach((b) => expect(b.className).toMatch(/rsc-btn--quiet/));
-    const card = screen.getByRole('region', { name: 'How a Build Room works' });
-    expect(card.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    cleanup();
-    await openRoom(hostState());
-    const after = screen.getByRole('region', { name: 'Where will the room watch?' });
-    expect(within(after).getByRole('button', { name: /Use one screen/ }).className).not.toMatch(/rsc-btn--quiet/);
+    expect(screen.queryByRole('region', { name: 'Where will the room watch?' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Help me pick' })).toBeNull();
+    const row = within(setup()).getByText('The room watches this laptop').closest('li');
+    expect(row).toHaveClass('is-done');
+    expect(within(row).getByRole('button', { name: 'Use two screens' })).toBeInTheDocument();
+    // One screen without asking: 3 shows Build on this laptop.
+    fireEvent.keyDown(window, { key: '3' });
+    expect(onHost()).toBe(false);
+  });
+
+  test('before Claude connects, Connect is the card\'s one orange, above the screen row (host review, 25 Oct 2026)', async () => {
+    window.localStorage.removeItem(SURFACES_KEY);
+    await openRoom(hostState({ seen: false }));
+    const connect = within(setup()).getByRole('button', { name: /Connect/ });
+    expect(connect).toHaveClass('brm-btn--primary');
+    const two = within(setup()).getByRole('button', { name: 'Use two screens' });
+    expect(two.className).not.toMatch(/brm-btn--primary/);
+    expect(connect.compareDocumentPosition(two) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelectorAll('.brm-host .brm-btn--primary')).toHaveLength(1);
   });
 
   test('Two screens: stored as Call & Answer stores it, and the room\'s window opens in the click, placed', async () => {
     window.localStorage.removeItem(SURFACES_KEY);
     const open = jest.spyOn(window, 'open').mockImplementation(() => fakeWindow());
     try {
-      await openRoom(hostState());
+      await openRoom(hostState({ seen: false }));
       fireEvent.click(screen.getByRole('button', { name: 'Use two screens' }));
       expect(open).toHaveBeenCalledTimes(1);
       expect(open.mock.calls[0][0]).toBe(`${WALL}&placed=1`);
       expect(open.mock.calls[0][1]).toBe('engage-room');
       expect(window.localStorage.getItem(SURFACES_KEY)).toBe('two');
-      expect(screen.queryByRole('region', { name: 'Where will the room watch?' })).toBeNull();
+      // The console now, and the card's row says two screens.
+      expect(document.querySelector('.hc--build')).not.toBeNull();
+      expect(setup().textContent).toMatch('The room watches its own window');
+      expect(screen.queryByRole('button', { name: 'Use two screens' })).toBeNull();
     } finally {
       open.mockRestore();
     }
@@ -283,7 +294,7 @@ describe('3. where will the room watch?', () => {
     window.localStorage.removeItem(SURFACES_KEY);
     const open = jest.spyOn(window, 'open').mockImplementation(() => null);
     try {
-      await openRoom(hostState());
+      await openRoom(hostState({ seen: false }));
       fireEvent.click(screen.getByRole('button', { name: 'Use two screens' }));
       expect(screen.getByRole('alert')).toHaveTextContent("The browser blocked the room's window. Open it from Room's window ↗ at the top.");
     } finally {
@@ -291,22 +302,7 @@ describe('3. where will the room watch?', () => {
     }
   });
 
-  test('One screen: stored, nothing opens, the page is today\'s', async () => {
-    window.localStorage.removeItem(SURFACES_KEY);
-    const open = jest.spyOn(window, 'open').mockImplementation(() => fakeWindow());
-    try {
-      await openRoom(hostState());
-      fireEvent.click(screen.getByRole('button', { name: 'Use one screen' }));
-      expect(open).not.toHaveBeenCalled();
-      expect(window.localStorage.getItem(SURFACES_KEY)).toBe('classic');
-      fireEvent.keyDown(window, { key: '3' });
-      expect(onHost()).toBe(false);
-    } finally {
-      open.mockRestore();
-    }
-  });
-
-  test('a browser that has chosen is not asked', async () => {
+  test('a browser that has chosen is not asked either', async () => {
     window.localStorage.setItem(SURFACES_KEY, 'classic');
     await openRoom(hostState());
     expect(screen.queryByRole('region', { name: 'Where will the room watch?' })).toBeNull();
@@ -333,12 +329,14 @@ describe('3. where will the room watch?', () => {
     }
   });
 
-  test('a window already up: choosing two screens opens no second one', async () => {
+  test('a window already up: the row is done and offers no second window', async () => {
     window.localStorage.removeItem(SURFACES_KEY);
     const open = jest.spyOn(window, 'open').mockImplementation(() => fakeWindow());
     try {
-      await openRoom(hostState({ presenting: 1, detail: UP }));
-      fireEvent.click(screen.getByRole('button', { name: 'Use two screens' }));
+      await openRoom(hostState({ presenting: 1, detail: UP, seen: false }));
+      const row = within(setup()).getByText('The room watches its own window').closest('li');
+      expect(row).toHaveClass('is-done');
+      expect(within(row).queryByRole('button')).toBeNull();
       expect(open).not.toHaveBeenCalled();
     } finally {
       open.mockRestore();

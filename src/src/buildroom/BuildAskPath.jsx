@@ -6,7 +6,12 @@
  *   1 Ask        done once it is live; opens to Edit wording and Discard
  *   2 Collect    the room answers; Show results (or Open voting)
  *   3 Settle     Send B to Claude in one press, or spin, vote again, or pick
- *   4 Change before sending   the direction and the kind, the cursor in it
+ *   4 Send to Claude   Change before sending: the direction and the kind
+ *
+ * ONE LOOP (simplify PLAN item 13; owner, 26 Oct 2026): the steps are named
+ * with words.js LOOP, as the console's strip and the help name them. What the
+ * room is doing is a step's summary, never its name, and "Change before
+ * sending" is a button, never step 4's name.
  *
  * A done step folds to one line (askPathSummaries), the open step has one
  * primary move marked `data-next-primary`, and the steps still to come are
@@ -20,7 +25,7 @@ import {
 } from './buildScreens';
 import { useNextFocus } from './useNextFocus';
 import { earlyResultsArm } from './buildControls';
-import { W } from './words';
+import { W, LOOP } from './words';
 import ActionRow from './BuildActionRow';
 import { HideFromRoom } from './BuildSendOptions';
 import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
@@ -81,14 +86,6 @@ export function MyVote({ ask, busy, run, api }) {
       <p className="brm-hint">{W.myVoteHint}</p>
     </section>
   );
-}
-
-/** What the room is doing while it answers, and what it did once it has. */
-function collectTitle(ask, done) {
-  if (ask.status === 'voting') return done ? 'The room voted' : 'The room is voting';
-  if (ask.kind === 'suggest') return done ? 'The room suggested' : 'The room is suggesting';
-  if (ask.kind === 'rating') return done ? 'The room rated' : 'The room is rating';
-  return done ? 'The room chose' : 'The room is choosing';
 }
 
 /** "B leads, 7 to 4", "A tie: A and B", or nothing yet. */
@@ -264,7 +261,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
       <>
         {board}
         {host && <MyVote ask={ask} busy={busy} run={run} api={api} />}
-        {then(['3 Settle', '4 Send to Claude'])}
+        {then([`3 ${LOOP.settle}`, `4 ${LOOP.send}`])}
         {host && (
           <ActionRow space={!said && !isArmed} hint={isArmed ? early.text : said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>
             {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={act('close', W.resultsUp)}>Close without a vote</button>}
@@ -366,7 +363,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
             {win ? W.clickToPick : tied.length >= 2 ? W.tiePickHint : W.spinPickHint}
           </p>
         )}
-        {then(['4 Change before sending'])}
+        {then([`4 ${LOOP.send}`])}
         {host && move && !held && <HideFromRoom checked={hide} onChange={setHide} disabled={busy} />}
         {row}
       </>
@@ -393,35 +390,35 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
       ? <DecidePanel ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} spoken onCancel={() => setAnswering(false)} next onSent={sent} draft={forThis} onDraft={keep} />
       : <DecidePanel key={`wheel:${wheel ? wheel.spins.length : 0}`} ask={ask} busy={busy} run={run} api={api} playerCount={room.playerCount} pickId={ask.kind === 'rating' ? null : pickId} next onSent={sent} draft={forThis} onDraft={keep} />;
   }
-
-  let settleTitle = 'Settle';
+  // Settle keeps its name; once settled, what was settled is its summary.
+  let settleSum = stateOf('settle') === 'now' ? settleLine(ask) : '';
   if (stateOf('settle') === 'done') {
-    if (answering) settleTitle = 'You answer for the room';
-    else if (ask.kind === 'rating') settleTitle = W.averageOf5(avg !== null ? avg : pickId);
-    else settleTitle = settleSummary(ask, pickId, sums) || 'Settled';
+    if (answering) settleSum = 'You answer for the room';
+    else if (ask.kind === 'rating') settleSum = W.averageOf5(avg !== null ? avg : pickId);
+    else settleSum = settleSummary(ask, pickId, sums) || 'Settled';
   }
   const shown = (name) => stateOf(name) !== 'next';
 
   return (
     <ol className="brm-path" aria-label="This ask" ref={ref}>
-      <Step n={1} state="done" title={`Ask: ${ask.prompt}`} summary={`${sums.ask} · ${KIND_LABEL[ask.kind] || 'Ask'}`}
+      <Step n={1} state="done" title={`${LOOP.ask}: ${ask.prompt}`} summary={`${sums.ask} · ${KIND_LABEL[ask.kind] || 'Ask'}`}
         open={opened === 'ask'} onToggle={host ? toggle('ask') : null}>
         {host && <AskWording key={ask.prompt} ask={ask} busy={busy} run={run} api={api} />}
       </Step>
       {shown('collect') && (
-        <Step n={2} state={stateOf('collect')} title={collectTitle(ask, stateOf('collect') === 'done' && !answering)} summary={sums.collect}
+        <Step n={2} state={stateOf('collect')} title={LOOP.collect} summary={sums.collect}
           open={opened === 'collect'} onToggle={collectBody ? toggle('collect') : null}>
           {collectBody}
         </Step>
       )}
       {shown('settle') && (
-        <Step n={3} state={stateOf('settle')} title={settleTitle} summary={stateOf('settle') === 'now' ? settleLine(ask) : ''}
+        <Step n={3} state={stateOf('settle')} title={LOOP.settle} summary={settleSum}
           open={opened === 'settle'} onToggle={settleBody ? toggle('settle') : null}>
           {settleBody}
         </Step>
       )}
       {shown('send') && (
-        <Step n={4} state={stateOf('send')} title={answering ? W.sendPlain : W.change}>
+        <Step n={4} state={stateOf('send')} title={LOOP.send}>
           {sendBody}
         </Step>
       )}

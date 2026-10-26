@@ -14,8 +14,8 @@
                                components/WelcomeScreen.jsx (the Build Room
                                door); GameSetupDialog.jsx (Set up the Build Room)
     the Host screen, header    BuildRoomPage.jsx RoomHeader/HeaderTools,
-                               AgentChip, ConnectionChip; config/roomScreen.js
-                               (Where will the room watch?)
+                               AgentChip, ConnectionChip; BuildSetup.jsx
+                               (Before the room starts, since 26 Oct 2026)
     the Session panel          buildroom/BuildSessionPanel.jsx (Players filters
                                Here/Away/Builders; Settings groups Screens, The
                                room, Claude, Crew, This session)
@@ -53,6 +53,13 @@
                                CLOSE_STEPS (README, DECISIONS.md, NEXT.md, tag)
   The dock's button for the room's window reads ROOM'S WINDOW since the host
   review (25 Oct 2026); its old label is a retired word (decision 1).
+
+  Phase 1 of the simplify plan (docs/design/build-room-simplify, 26 Oct 2026):
+  one Before the room starts card replaced How a Build Room works and Where
+  will the room watch?; the loop is Ask, Collect, Settle, Send to Claude
+  everywhere (words.js LOOP); the composer is one line until clicked; empty
+  folds, empty queue filters and Open the build are not drawn until they
+  have something.
 */
 
 /* ------------------------------------------------------------ setting up */
@@ -131,9 +138,10 @@ const buildRoom = {
         {
           t: 'list',
           items: [
-            { title: 'Where will the room watch?', text: 'Asked once per browser: **Use two screens** or **Use one screen**. **Help me pick** asks three questions. Change it later in the Session panel, Settings, Screens.' },
-            { title: 'How a Build Room works', text: 'The four steps, and **Connect Claude Code**: the orange button until anything else has happened. It stays until Claude Code has really connected, not just until a key is made. Start there.' },
+            { title: 'Before the room starts', text: 'One card, three rows that turn green as they happen. **Connect Claude Code**: its **Connect** is the orange button, and the row is done only once Claude Code has called in, not when a key is made. **The room joins**: the code, and **Show the code** for the Stage. **The room watches this laptop**: one screen unless you press **Use two screens**. All done, the card folds to one line.' },
+            { title: 'No need to wait for Claude', text: 'Start the opening straight away. Anything you send first waits, marked Queued for Claude.' },
             { title: 'The opening', text: 'Frames the build with the room before Claude writes code. See Running a Build Room.' },
+            { title: 'Only what is in use', text: 'A list or fold with nothing in it is not drawn yet; it appears with its first item, in the same place. **Open the build** appears once Claude has a build to open.' },
           ],
         },
         {
@@ -180,7 +188,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'On one screen the Host screen has three columns. On the left, Now: the open ask or the opening, What\'s next between asks, and Add something. In the middle, Waiting for you: Claude\'s questions, the room\'s ideas and Claude\'s held posts, with Later and Points below. On the right, folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History. On two screens the laptop shows the console instead; see Build Room on two screens.',
+          text: 'On one screen the Host screen has three columns. On the left, Now: the open ask or the opening, What\'s next between asks, and one line, **Tell Claude…** with **Ask the room**, that opens into the composer when you click it. In the middle, Waiting for you: Claude\'s questions, the room\'s ideas and Claude\'s held posts, with chips to filter by who sent them once more than one has something waiting, and Later and Points below. On the right, folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History, each drawn once it has something in it. On two screens the laptop shows the console instead; see Build Room on two screens.',
         },
         {
           t: 'keys',
@@ -238,7 +246,7 @@ const running = {
       title: 'Asking the room',
       icon: 'Question',
       blocks: [
-        { t: 'p', text: 'Claude asks at its decision points, and you can ask too: **Ask the room**, in Add something or in What\'s next, opens one window.' },
+        { t: 'p', text: 'Claude asks at its decision points, and you can ask too: **Ask the room**, beside Tell Claude… or in What\'s next, opens one window.' },
         {
           t: 'list',
           items: [
@@ -303,14 +311,14 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'An open ask runs down numbered steps in the Now column: the ask, the room answering, Settle, then **Change before sending**. The step\'s main button is the orange one; Space presses it, and the line beside it says what it will do. Showing results while people are still answering asks you to press again.',
+          text: 'Every ask runs the same four steps, named the same way on the Host screen, the console\'s strip and here: **Ask**, **Collect**, **Settle**, **Send to Claude**. In the Now column they are numbered; a done step folds to one line. The step\'s main button is the orange one; Space presses it, and the line beside it says what it will do. Showing results while people are still answering asks you to press again.',
         },
         {
           t: 'list',
           items: [
-            { title: 'While the room answers', text: 'Answers arrive as they come, with names that only you see. For Ideas: **Open voting** when ideas slow, or **Close without a vote**. For Choose and Rate: **Show results** when answers stop. **Answer for the room** records an answer said out loud.' },
+            { title: 'Collect', text: 'While the room answers. Answers arrive as they come, with names that only you see. For Ideas: **Open voting** when ideas slow, or **Close without a vote**. For Choose and Rate: **Show results** when answers stop. **Answer for the room** records an answer said out loud.' },
             { title: 'Settle', text: 'The room\'s choice leads, marked **Going to Claude**, with the line saying exactly what Claude will be told. Click another option to pick it instead. **Hide** takes an idea off what the room sees.' },
-            { title: 'Change before sending', text: 'Opens the direction to edit before it goes. See Sending Claude a direction.' },
+            { title: 'Send to Claude', text: 'Settle\'s orange button sends the room\'s choice in one press. **Change before sending** opens the direction to edit first. See Sending Claude a direction.' },
           ],
         },
       ],
@@ -433,8 +441,8 @@ const running = {
           t: 'list',
           items: [
             { title: 'What\'s next', text: 'With no ask open, the likely moves, most likely first; Space presses the first. Among them: **Connect Claude Code**, open Claude\'s question, put new ideas to a vote, **Ask the room**, Tell Claude, **Preview the work** and **Copy the Continue prompt**.' },
-            { title: 'Combine', text: 'Tick decided asks in Decided, then press **Combine** in What\'s next (or **Add to the prompt**): their answers go into one prompt in Add something, yours to edit before you send it.' },
-            { title: 'Add something', text: 'Type an idea, a note or what the room said. **Send to Claude** (its arrow picks Do now, Keep in mind or Ask Claude), **Save for later**, or log it as Room said, a host note that is never shown, or a milestone, with Also tell Claude if Claude should hear it, then **Log it**.' },
+            { title: 'Combine', text: 'Tick decided asks in Decided, then press **Combine** in What\'s next (or **Add to the prompt**): their answers go into one prompt in the composer, which opens for it, yours to edit before you send it.' },
+            { title: 'Tell Claude…', text: 'One line until you click it. Then type an idea, a note or what the room said. **Send to Claude** (its arrow picks Do now, Keep in mind or Ask Claude), **Save for later**, or log it as Room said, a host note that is never shown, or a milestone, with Also tell Claude if Claude should hear it, then **Log it**.' },
             { title: 'Claude\'s status', text: 'The chip in the header says what Claude is doing. When Claude Code has stopped it reads last seen, and a click copies the continue command.' },
           ],
         },
@@ -448,7 +456,8 @@ const running = {
         {
           t: 'list',
           items: [
-            'Later, in the middle column, holds what you held back: room ideas you saved, and directions and decisions you saved for later. Claude has not heard them. The room\'s screens show none of them until you send one: no Sent to Claude, no We decided. Whoever sent a saved idea is told only that it was saved.',
+            'Later, in the middle column, holds what you held back. While the room frames the build it appears with its first item; once building starts it is always there.',
+            'It holds room ideas you saved, and directions and decisions you saved for later. Claude has not heard them. The room\'s screens show none of them until you send one: no Sent to Claude, no We decided. Whoever sent a saved idea is told only that it was saved.',
             'Each item has **Send to Claude now** (as Do now), **Ask the room**, and **Remove**.',
             'Tick two to six and What\'s next offers to put them to a vote.',
             'History shows an item only once it has left the list.',
@@ -665,7 +674,7 @@ const twoScreens = {
       blocks: [
         {
           t: 'p',
-          text: 'With Two screens chosen, or the room\'s window open, the laptop shows the console. One screen is unchanged.',
+          text: 'With Two screens chosen (**Use two screens** in Before the room starts, or Settings, Screens), or the room\'s window open, the laptop shows the console. One screen is unchanged. Before the room starts sits at the top of the console\'s middle too, and its screen row says to open the room\'s window from the top line.',
         },
         {
           t: 'list',
@@ -688,7 +697,7 @@ const twoScreens = {
           items: [
             { title: 'Left', text: 'Waiting for you (open it in the middle for more room), People (who has answered, by name, while the room answers or votes, never what they chose), Later with Points inside, and Session.' },
             { title: 'Session', text: 'Connect Claude, Claude\'s plugin, **Copy the Continue prompt** while Claude is away, the crew, Build and History to look at privately, the Session panel, **Back to the opening**, **Wrap up**, **Report** and **End session**.' },
-            { title: 'Right', text: 'Now, then Decided, Timeline, Asks, Screenshots, Room brief and History.' },
+            { title: 'Right', text: 'Now, once something is decided or shown, then Decided, Timeline, Asks, Screenshots, Room brief and History, each once it has something in it.' },
           ],
         },
       ],

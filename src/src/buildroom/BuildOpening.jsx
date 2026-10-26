@@ -263,7 +263,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
       )}
       {!ended && (
         <div className="brm-op-start">
-          <span>{doneCount(opening)} of {opening.steps.length} framed. Start building whenever you like; Claude gets the brief as it is.</span>
+          <span>{doneCount(opening)} of {opening.steps.length} framed. Claude gets the brief as it is.</span>
           {opening.readyForDraft && !room.briefDraft && (
             <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
               onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true }))}>
@@ -295,7 +295,7 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
           {room.brief.summary && <span>{room.brief.summary}</span>}
         </div>
       )}
-      <p className="brm-hint">One line per step. Click a line to work on it; Claude reads each as it lands.</p>
+      <p className="brm-hint">Click a line to work on that step.</p>
       <ol className="brm-bp">
         {opening.steps.map((st) => (
           <li key={st.key} className={`brm-bp-it is-${st.status}${cur && cur.key === st.key ? ' is-focus' : ''}`}>

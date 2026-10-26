@@ -434,6 +434,8 @@ describe('one orange on the whole Host screen, with Points', () => {
   test('Ctrl Enter does nothing while typing, with a dialog open, or when the row does not lead', async () => {
     await openRoom(RESEARCH_STATE());
     tick('Finding number 1');
+    // The composer is one line until clicked (simplify PLAN item 18).
+    fireEvent.click(screen.getByRole('button', { name: 'Tell Claude…' }));
     const box = screen.getByLabelText('Tell Claude, or log what the room said');
     box.focus();
     fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });

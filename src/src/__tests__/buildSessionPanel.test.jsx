@@ -186,6 +186,8 @@ describe('opening and closing', () => {
 
   test('backslash while typing in a box does not open it', async () => {
     await openRoom(hostState());
+    // The composer is one line until clicked (simplify PLAN item 18).
+    fireEvent.click(screen.getByRole('button', { name: 'Tell Claude…' }));
     const box = document.querySelector('textarea');
     fireEvent.keyDown(box, { key: '\\' });
     expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();

@@ -98,11 +98,10 @@ describe('the live build', () => {
     }
   });
 
-  test('with no link yet it is there, disabled, and says why', async () => {
+  test('with no link yet it is not drawn: nothing to open (simplify PLAN item 18, F17)', async () => {
     await open([base]);
-    const b = screen.getByRole('button', { name: 'Open the build' });
-    expect(b).toBeDisabled();
-    expect(b).toHaveAttribute('title', "Claude hasn't started the app yet");
+    expect(screen.queryByRole('button', { name: 'Open the build' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the build' })).toBeNull();
   });
 
   test('the Stage dock carries it too, as a small link under the status, once there is a link', async () => {

@@ -483,7 +483,6 @@ export const W = Object.freeze({
   tipSeen: 'Their screen says Seen.',
   tipWall: '20 seconds on the Stage, no name.',
   tipTickAnother: 'Tick another idea.',
-  nothingWaiting: 'Nothing waiting.',
   // The Host alert on the Stage and the Build / History header (owner, 2026-10-10): fixed labels and numbers, never a name or a typed word.
   hostAlertName: 'Host',
   hostScreen: 'Host screen',
@@ -834,7 +833,48 @@ export const W = Object.freeze({
   storyFromRoom: (askNo) => (askNo ? `Ask ${askNo} · from the room` : 'From the room'),
   historySection: 'History',
   showingEntry: 'showing the entry',
+  // BEFORE THE ROOM STARTS (build-room-simplify PLAN item 10, smaller; owner, 26 Oct 2026:
+  // "go, build phase 1 on dev"): one card with three rows, in place of How a Build
+  // Room works and Where will the room watch?. No gate: the opening runs without Claude.
+  setupHead: 'Before the room starts',
+  setupConnectHint: 'Install the plugin, then paste one command: it opens Claude Code and connects it.',
+  setupConnectBtn: 'Connect',
+  setupConnected: (folder) => (folder ? `Claude Code connected, in ${folder}` : 'Claude Code connected'),
+  setupJoin: 'The room joins',
+  setupJoined: (n, code) => (n ? `${n} joined with code ${code}` : `Nobody yet. The code is ${code}`),
+  setupShowCode: 'Show the code',
+  setupScreenOne: 'The room watches this laptop',
+  setupScreenOneHint: 'One screen. A projector as a second display?',
+  setupScreenTwo: "The room watches its own window",
+  setupScreenTwoOpen: "Two screens. The room's window is open.",
+  setupScreenTwoClosed: "Two screens. Open Room's window \u2197 at the top, on the projector.",
+  useTwoScreens: 'Use two screens',
+  setupStartNow: 'You can start the opening now. Anything you send waits for Claude.',
+  setupDone: (n, two) => `Claude connected · ${n} joined · ${two ? 'Two screens' : 'One screen'}`,
+  // THE COMPOSER, ONE LINE (PLAN item 18, first half): it opens when clicked.
+  tellClaudeLine: 'Tell Claude…',
+  tellClaudeHead: 'Tell Claude',
+  composeClose: 'Close',
+  // Waiting for you with nothing in it: one quiet line, so the column keeps its place.
+  waitingEmpty: "Nothing yet. Claude's questions and the room's ideas land here.",
+  sideEmpty: 'Decisions, the timeline and screenshots land here.',
 });
+
+/**
+ * ONE LOOP, ONE SET OF WORDS (build-room-simplify PLAN item 13; owner, 26 Oct
+ * 2026). An ask runs Ask, Collect, Settle, Send to Claude, everywhere it is
+ * named: the console's strip, the ask path's steps, the setup card and the
+ * help. The session runs Opening › asks › Wrap up. "Change before sending" is
+ * a button, never a step's name.
+ */
+export const LOOP = Object.freeze({
+  ask: 'Ask', collect: 'Collect', settle: 'Settle', send: 'Send to Claude',
+});
+export const LOOP_STEPS = Object.freeze([LOOP.ask, LOOP.collect, LOOP.settle, LOOP.send]);
+export const LOOP_LINE = LOOP_STEPS.join(' · ');
+export const SESSION_LOOP = Object.freeze({ opening: 'Opening', asks: 'asks', wrap: 'Wrap up' });
+/** The setup card's one line on the loop. */
+export const loopLead = () => `Each ask then runs ${LOOP_LINE}.`;
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */
 export const KIND_WORDS = Object.freeze([W.doNow, W.keepInMind, W.askClaude]);
@@ -889,4 +929,15 @@ export const RETIRED = Object.freeze([
   { word: "Pick the room's choice?", enforced: true, task: 'host-review' },
   { word: 'Pick an alternate?', enforced: true, task: 'host-review' },
   { word: 'Artifacts', files: ['BuildHistoryScreen.jsx'], enforced: true, task: 'host-review' },
+  // Phase 1 of the simplify plan (26 Oct 2026): one card before the room starts, one loop.
+  { word: 'How a Build Room works', enforced: true, task: 'simplify-1' },
+  { word: 'Where will the room watch?', enforced: true, task: 'simplify-1' },
+  { word: 'Add something', enforced: true, task: 'simplify-1' },
+  // The ask path's step 2 is Collect; what the room is doing is its summary, never its name.
+  { word: 'The room is choosing', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is suggesting', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is rating', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is voting', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  // A vote on ideas is still the Collect step.
+  { word: 'Vote', files: ['buildConsole.js', 'BuildConsoleAsk.jsx'], enforced: true, task: 'simplify-1' },
 ]);

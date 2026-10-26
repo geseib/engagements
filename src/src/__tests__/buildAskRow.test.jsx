@@ -76,7 +76,8 @@ describe('Settle with a clear winner sends in one press', () => {
   test('a line under the board names exactly what Claude will be told', () => {
     mount({ ...base, status: 'results', results: won });
     expect(screen.getByText('Claude will be told, as Do now: "How should it look and feel: Playful"')).toBeInTheDocument();
-    expect(screen.getByText('Next: 4 Change before sending')).toBeInTheDocument();
+    // One loop (simplify PLAN item 13, 26 Oct 2026): step 4 is named Send to Claude; Change before sending is a button.
+    expect(screen.getByText('Next: 4 Send to Claude')).toBeInTheDocument();
   });
 
   test('the line follows the question\'s own kind', () => {
@@ -222,9 +223,10 @@ describe('Settle with a tie, and after the wheel', () => {
 describe('Change before sending (step 4)', () => {
   const open = (props = {}) => mount({ ...base, status: 'results', results: won }, { pickId: 'B', ...props });
 
-  test('titled for what it is; three kinds; no on/off switch; the row is Record only, Save for later, Send B', () => {
+  test('named by the loop; three kinds; no on/off switch; the row is Record only, Save for later, Send B', () => {
     open();
-    expect(screen.getAllByRole('listitem').some((li) => /Change before sending/.test(li.textContent))).toBe(true);
+    // One loop (simplify PLAN item 13): step 4 is Send to Claude, never "Change before sending".
+    expect(screen.getAllByRole('listitem').some((li) => /^4Send to Claude/.test(li.textContent))).toBe(true);
     const kinds = within(screen.getByRole('radiogroup', { name: 'Claude gets it as' })).getAllByRole('radio').map((r) => r.textContent);
     expect(kinds).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
     expect(screen.queryByRole('switch')).toBeNull();
