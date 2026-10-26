@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 26 Oct 2026 (Build Room, simpler: the opening and between asks)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `ba581c68`. Everything below this entry is already on test; this push adds only what is here.
 
 Phase 2 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`): review item 12 (smaller) and the second half of item 18, on one screen and on two. No mode switch. Nothing was taken away: every capability is still reachable once it applies, and Later and Points keep a door while they are empty.
 
