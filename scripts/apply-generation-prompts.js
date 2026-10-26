@@ -8,9 +8,10 @@
  *   AWS_PROFILE=adminaccess node scripts/apply-generation-prompts.js --tier prod --apply --confirm-prod
  *
  *   options:
- *     --update        also rewrite rows whose text differs from the repo (default:
- *                     only create the missing ones). The previous rows are saved
- *                     to --backup first.
+ *     --update        also rewrite the prompt TEXT of rows that differ from the repo
+ *                     (default: only create the missing ones). Settings an admin may
+ *                     have tuned (defaultSettings, tags, status) are kept. The previous
+ *                     rows are saved to --backup first.
  *     --backup <file> where --update writes the rows it replaces
  *                     (default: generation-prompts-<tier>-<time>.json here)
  *
@@ -32,9 +33,14 @@ const { createRequire } = require('module');
 const REPO = path.join(__dirname, '..');
 const STACKS = { dev: 'engagedev', test: 'engagetest', prod: 'engageprod' };
 const PK = 'AIPROMPTS';
-// What the scenario builder reads, plus what the admin list shows.
-const CONTENT = ['name', 'description', 'basePrompt', 'contextTemplate', 'audienceTemplate', 'categoryTemplate',
-  'outputFormat', 'defaultSettings', 'tags', 'status'];
+// The prompt's text: what the scenario builder sends and the admin list shows.
+// An update replaces only these.
+const TEXT = ['name', 'description', 'basePrompt', 'contextTemplate', 'audienceTemplate', 'categoryTemplate',
+  'outputFormat'];
+// Settings an admin may have tuned on the tier. A created row takes the repo's;
+// an update never touches them.
+const SETTINGS = ['defaultSettings', 'tags', 'status'];
+const CONTENT = [...TEXT, ...SETTINGS];
 
 const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
 
@@ -60,7 +66,7 @@ function plan(repo, liveById) {
   return repo.map((row) => {
     const live = liveById[row.promptId];
     if (!live) return { row, action: 'create', changed: [] };
-    const changed = CONTENT.filter((k) => !same(live[k], row[k]));
+    const changed = TEXT.filter((k) => !same(live[k], row[k]));
     return { row, live, action: changed.length ? 'update' : 'keep', changed };
   });
 }
@@ -70,13 +76,13 @@ function itemFor(entry, now) {
   if (entry.action === 'create') return { ...entry.row, createdAt: now, updatedAt: now, version: '1.0.0' };
   return {
     ...entry.live,
-    ...Object.fromEntries(CONTENT.map((k) => [k, entry.row[k]])),
+    ...Object.fromEntries(TEXT.map((k) => [k, entry.row[k]])),
     updatedAt: now,
     updatedBy: 'script:apply-generation-prompts',
   };
 }
 
-module.exports = { repoRows, plan, itemFor, CONTENT };
+module.exports = { repoRows, plan, itemFor, CONTENT, TEXT, SETTINGS };
 
 async function main() {
   const args = process.argv.slice(2);
@@ -155,7 +161,7 @@ async function main() {
   for (const e of todo) {
     // eslint-disable-next-line no-await-in-loop
     const got = (await db.send(new GetCommand({ TableName: table, Key: { PK, SK: e.row.SK } }))).Item;
-    const ok = got && CONTENT.every((k) => same(got[k], e.row[k]));
+    const ok = got && (e.action === 'create' ? CONTENT : TEXT).every((k) => same(got[k], e.row[k]));
     if (!ok) bad += 1;
     console.log(`  ${ok ? 'verified' : 'MISMATCH'} ${e.row.promptId}`);
   }

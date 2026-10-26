@@ -45,15 +45,33 @@ check('one tier default per game type, each in the game-type defaults the summar
   const tier = committed.prompts.filter((p) => p.source === 'prompts/tier-defaults');
   assert.deepStrictEqual(tier.map((p) => p.gameType).sort(), ['call-and-answer', 'poll', 'trivia', 'wavelength']);
   for (const p of tier) assert.strictEqual(p.isDefault, true, p.key);
+  // rejects: a tier default copied from the library list's top-level fields,
+  // which carry no instructions (the text is under promptContent) — the
+  // mistake these files were first made with, on 2026-10-24. Saved from the
+  // repo, such a file would leave the game type with no usable default.
+  const { isUsableSummaryPrompt } = require(path.join(REPO, 'lambda-functions', 'game', 'prompt-shape.js'));
+  for (const p of tier) assert.ok(isUsableSummaryPrompt(p.values), `${p.key} is not a usable summary prompt`);
+});
+
+check('every tier default uses only the variables its game type is offered', () => {
+  // rejects: the vote-era poll read (2026-10-26) that read {playerResponses},
+  // {voteTally} and {consensusLevel} — names, and figures that are empty for
+  // a typed poll — and never the counted result in {triviaResponses}.
+  const { variablesForGameType } = require(path.join(REPO, 'lambda-functions', 'game', 'template-variables.js'));
+  for (const p of committed.prompts.filter((e) => e.source === 'prompts/tier-defaults')) {
+    const offered = new Set(variablesForGameType(p.gameType).map((v) => v.name));
+    const used = [...new Set((p.values.instructions || '').match(/\{([a-zA-Z]+)\}/g) || [])].map((t) => t.slice(1, -1));
+    const stray = used.filter((n) => !offered.has(n));
+    assert.deepStrictEqual(stray, [], `${p.key} uses variables a ${p.gameType} read does not fill`);
+  }
+  const poll = committed.prompts.find((e) => e.key === 'prompts/tier-defaults/poll-round-read.prompt.json');
+  assert.ok(poll.values.instructions.includes('{triviaResponses}'), 'the poll read must get the counted result');
 });
 
 check('every entry has a name, a game type, its fields and the lambda\'s hashes of them', () => {
   for (const p of committed.prompts) {
     assert.ok(p.name && p.gameType && p.path && p.key, p.key);
-    // A tier default runs on the built-in instructions and carries only its
-    // format and sections; every other repo prompt carries its own text.
-    const text = p.source === 'prompts/tier-defaults' ? ['outputFormat'] : ['instructions', 'template'];
-    assert.ok(text.some((f) => p.fields.includes(f)), `${p.key}: no text`);
+    assert.ok(p.fields.includes('instructions') || p.fields.includes('template'), `${p.key}: no text`);
     assert.deepStrictEqual(p.fieldHashes, versions.fieldHashes(p.values, p.fields), `${p.key}: field hashes`);
     assert.strictEqual(p.hash, versions.contentHash(p.values, p.fields), `${p.key}: hash`);
   }

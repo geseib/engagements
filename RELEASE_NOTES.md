@@ -9,6 +9,33 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 26 Oct 2026 (later: poll reads)
+
+**Test:** merge of dev `912632a4`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new to use. This push fixes what a poll's Workie read is given.
+
+### Fixed
+
+- **A poll's Workie read was written for the old voting poll.** The poll default, **Poll - Round Read**, gave the model every answer under its author's name, an uncounted list of answers, and vote figures that are empty for a poll, and told it to name the authors of answers that did well. It never got the counted result. It now reads the options, the result counted in the question's own words (each option's count, a scale's spread, open answers quoted), how many answered, and anything the author wrote for after the result. It names nobody, declares no winner, and its next steps are suggestions.
+- **Prompt authors were offered poll variables a poll never fills:** scores, rankings, vote figures, and the variables that carry names. A poll is now offered the 26 its read actually fills.
+- **The Call & Answer default (Advisor Read)** no longer carries the example owner "whoever runs the weekly release", which review #46 found turning up in reads as an owner nobody named. Its next steps start **Suggested**.
+
+### What to look at
+
+1. On engage.test, run a session with a poll set: ask a choice question, answer from two or three phones, show results, and open Workie's read. It quotes the counts ("Monday: 2, Friday: 1"), names nobody, and does not talk about votes or a winner.
+2. Do the same with an open (text) poll question: the read quotes the answers without saying who wrote them.
+3. Admin › Prompts › open **Poll - Round Read** › Versions: the newest version says "From the repo". Its text reads "A poll is counted, not voted on".
+4. In that prompt's editor, the variable panel for a poll no longer lists Leaderboard, Vote tally or Player answers.
+
+### Known gaps
+
+- The new poll and Advisor Read text reaches a tier's library only when `scripts/apply-repo-prompts.js` is run there after the deploy (test: run with this push; prod: after the next prod deploy).
+
+---
+
 ## 26 Oct 2026 (AI set builders and prompt downloads brought up to date)
 
 **Test:** merge of dev `ae06e6dc`. Everything below this entry is already on test, except the **Build Room: quick wins** entry directly below: it was written for a push that had not happened yet, and arrives on test with this one.
