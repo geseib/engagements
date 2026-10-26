@@ -513,9 +513,11 @@ describe('samples resolve through database supersession', () => {
     // Resolved to the db card: its scenarioType travels, and its tuned base
     // prompt is what the request is built on.
     expect(posted[0].scenarioType).toBe('lessons-learned');
-    expect(posted[0].prompt).toContain('DB LESSONS BASE PROMPT');
-    // The sample's brief still rode along as the editable context.
-    expect(posted[0].prompt).toContain('recounts a real experience');
+    // prompt is what the request is built on — sent as it is, nothing composed onto it.
+    expect(posted[0].prompt).toBe('DB LESSONS BASE PROMPT');
+    // The sample's brief still rode along as the editable context, in its own field.
+    expect(posted[0].context).toContain('recounts a real experience');
+    expect(posted[0].prompt).not.toContain('recounts a real experience');
   });
 
   test('with no database templates the hardcoded card still serves the sample', async () => {

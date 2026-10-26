@@ -71,6 +71,25 @@ check('any single answer token anywhere satisfies it — including section guida
   assertReceivesResponses({ instructions: 'no data here', section2: 'quote {voteTally} sparingly' });
 });
 
+check('a poll is pointed at {triviaResponses}, its counted result — not {uniqueAnswers}', () => {
+  // rejects: the old advice. {uniqueAnswers} carries no counts and stops at
+  // five (get-ai-summary.js uniqueAnswers.slice(0, 5)); the typed-poll tally
+  // is assigned to triviaResponses, which every shipped poll prompt uses.
+  const { AUTHORING_RULES } = require(path.join(REPO, 'lambda-functions', 'admin', 'shared', 'template-variable-usage.js'));
+  const rule = AUTHORING_RULES.find((r) => r.id === 'receives-the-responses');
+  assert(/\{triviaResponses\} for trivia and for a poll/.test(rule.text), rule.text);
+  assert(!/uniqueAnswers\} for a poll/.test(rule.text), rule.text);
+  try {
+    assertReceivesResponses({ instructions: 'nothing' });
+  } catch (e) {
+    assert(/\{triviaResponses\} for trivia and for a poll/.test(e.message), e.message);
+    assert(!/uniqueAnswers\} for a poll/.test(e.message), e.message);
+  }
+  assertReceivesResponses({ instructions: 'The result:\n{triviaResponses}' });
+  const summary = fs.readFileSync(path.join(REPO, 'lambda-functions', 'game', 'get-ai-summary.js'), 'utf8');
+  assert(/triviaResponses = described \|\|/.test(summary), 'the typed-poll tally no longer lands in triviaResponses');
+});
+
 check('the token list matches promptPreflight\'s ANSWER_TOKENS byte for byte', () => {
   // The editor's advice and the server's wall must not disagree about which
   // prompts are clean — the preflight list already paid for its lessons

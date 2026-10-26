@@ -103,6 +103,18 @@ It runs the real list and update handlers locally with the tier's Lambda environ
 prompts edited on the tier since they came from the repo (`--include-edited` to replace
 them), and checks each saved prompt now matches. Prod also needs `--confirm-prod`.
 
+The question-GENERATION prompts the AI scenario builder reads (`gen-<type>-<scenario>`,
+defined in `lambda-functions/admin/populate-generation-prompts.js`) are separate rows with
+no versions. `scripts/apply-generation-prompts.js --tier <tier>` compares them with the
+repo and, with `--apply`, creates the missing ones; `--update` also rewrites changed rows
+after saving a local backup. A tier without them runs the builder on a generic brief.
+
+The question-set templates and each set type's "Use your own chatbot" prompt live in
+`lambda-functions/admin/download-template.js` and `src/src/config/aiAuthoringPrompt.js`.
+The poll and survey prompts are built from `src/src/config/surveyContract.json`, which
+`scripts/build-survey-contract.js` writes from `shared/survey-kinds.js`
+(`tests/survey-contract-fresh.js` fails when it is stale).
+
 ## The Build Room plugin
 
 A Build Room connects the host's Claude Code to the room through a Claude Code plugin.

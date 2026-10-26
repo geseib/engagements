@@ -71,7 +71,10 @@ function topicPromptBlock() {
     'the way a bookshop files a book on one shelf — and "setTags": up to',
     `${MAX_SUGGESTED_SET_TAGS} lower-case kebab-case words for what the set is specifically about.`,
     'Use general-knowledge only for a genuine mix that spans several topics.',
-    ...SET_TOPIC_IDS.map((id) => `- ${id}: ${SET_TOPICS[id].label}`),
+    // WITH ITS BLURB, which set-topics.js calls load-bearing: a shelf named
+    // and not described is a label to guess at, and the catch-all is the one a
+    // guess lands on.
+    ...SET_TOPIC_IDS.map((id) => `- ${id}: ${SET_TOPICS[id].label} — ${SET_TOPICS[id].blurb}`),
   ].join('\n');
 }
 

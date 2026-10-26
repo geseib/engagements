@@ -670,6 +670,98 @@ async function runJob(body, workerCtx = ctx()) {
     assert.ok(budget > 1150, 'the exact budget that produced the incident must never come back');
   });
 
+  console.log('\nthe prompt says each thing once, and the host\'s text is material');
+
+  const scenarios = require(path.join(REPO, 'lambda-functions/admin/ai-generate-scenarios.js'));
+  const structured = require(path.join(REPO, 'lambda-functions/admin/shared/structured-generation.js'));
+  const TEMPLATE = {
+    basePrompt: 'Create scenarios based on common workplace challenges',
+    contextTemplate: '\n\nContext: {context}',
+    audienceTemplate: '\nAudience: {audience}',
+    categoryTemplate: '\nOrganize scenarios into {numberOfCategories} categories.\nMust include these categories: {mustHaveCategories}',
+  };
+  const promptFor = (over = {}) => scenarios.buildPrompt({
+    template: TEMPLATE, engagementType: 'call-and-answer', count: 3, difficulty: 'detailed',
+    categories: 3, alreadyUsedTitles: [], roundKind: 'produce', ...over,
+  });
+  const occurrences = (text, needle) => text.split(needle).length - 1;
+
+  // rejects: the builder pre-fills "Additional Requirements" with the base
+  // prompt, so the TOPIC reached the model twice — once as the topic, once as
+  // a requirement.
+  await test('requirements that repeat the base prompt are not sent twice', () => {
+    const same = promptFor({ customPrompt: `  ${TEMPLATE.basePrompt.replace(/ /g, '\n ')}  ` });
+    assert.strictEqual(occurrences(same, TEMPLATE.basePrompt), 1, 'an identical requirement must be dropped');
+    assert.ok(!/Additional Requirements/.test(same));
+
+    const added = promptFor({ customPrompt: `${TEMPLATE.basePrompt}\n\nSet them in a hospital.` });
+    assert.strictEqual(occurrences(added, TEMPLATE.basePrompt), 1, 'the base prompt inside a requirement must go');
+    assert.ok(added.includes('<requirements>Set them in a hospital.</requirements>'), 'what the admin added must stay');
+
+    const other = promptFor({ customPrompt: 'Set them in a hospital.' });
+    assert.ok(other.includes('<requirements>Set them in a hospital.</requirements>'));
+  });
+
+  await test('the host\'s text is fenced, and $& or $\' in it is literal', () => {
+    const p = promptFor({ context: 'A $& b', audience: "c $' d", customPrompt: 'e $` f', mustHaveCategories: 'G $& H' });
+    assert.ok(p.includes(structured.HOST_MATERIAL_NOTE));
+    assert.ok(p.includes('Context: <context>A $& b</context>'), p);
+    assert.ok(p.includes("Audience: <audience>c $' d</audience>"));
+    assert.ok(p.includes('<requirements>e $` f</requirements>'));
+    // Category names go through the shared category block (shared/category-brief.js),
+    // a template string, so a `$&` in a name is written as typed.
+    assert.ok(p.includes('- G $& H'), p);
+    assert.ok(p.indexOf(structured.HOST_MATERIAL_NOTE) < p.indexOf('<context>'), 'the note must come before the material');
+    // No must-haves: no bare placeholder left behind.
+    assert.ok(!promptFor({}).includes('{mustHaveCategories}'));
+  });
+
+  // rejects: "Level of Detail: comprehensive" as a free word beside a hard
+  // limit of 2-4 sentences — two instructions that disagree.
+  await test('the level of detail IS the length rule, in the prompt and the schema alike', () => {
+    for (const [level, rule] of [['brief', '1 sentence'], ['standard', '2 sentences'], ['medium', '2 sentences'],
+      ['detailed', 'up to 3 sentences'], ['comprehensive', 'up to 3 sentences']]) {
+      const p = promptFor({ difficulty: level });
+      assert.ok(!/Level of Detail/.test(p), `${level}: the free word is still sent`);
+      assert.ok(p.includes(`- detail: ${rule}, 350 characters maximum.`), `${level}: ${p.slice(-900)}`);
+      const tool = structured.buildItemsTool('call-and-answer', 'produce', level);
+      assert.match(tool.input_schema.properties.items.items.properties.detail.description, new RegExp(`^The scenario itself, ${rule},`));
+    }
+    assert.ok(promptFor({ difficulty: 'whatever' }).includes('- detail: 2-4 sentences'), 'an unknown level keeps the default');
+    // A round that carries material keeps room to carry it.
+    assert.ok(promptFor({ difficulty: 'brief', roundKind: 'apply' }).includes('- detail: 3-8 sentences'));
+    // Trivia's level is a difficulty and stays a word.
+    assert.match(promptFor({ engagementType: 'trivia', difficulty: 'hard' }), /Difficulty Level: hard/);
+  });
+
+  await test('the wavelength fallback is the one shared spec, with no example subjects', async () => {
+    reset({ seedCurated: false });
+    bedrockHandler = () => toolResponse(makeItems(2, 'subject'));
+    await runJob({ scenarioType: 'custom', engagementType: 'wavelength', count: 2 });
+    const { WAVELENGTH_SPEC } = require(path.join(REPO, 'lambda-functions/admin/shared/wavelength-spec.js'));
+    assert.ok(bedrockCalls[0].prompt.includes(WAVELENGTH_SPEC));
+    assert.ok(!/Remote Work|Customer Trust/.test(bedrockCalls[0].prompt), 'example subjects come back as output');
+  });
+
+  // rejects: 240s per attempt across Sonnet → Haiku (each with claude-route's
+  // Bedrock retry) outliving the 900s Lambda while the worker budgeted one call.
+  await test('a structured call respects the deadline it is handed', async () => {
+    reset();
+    bedrockHandler = () => toolResponse(makeItems(1, 'late'));
+    await assert.rejects(
+      structured.invokeStructured(new BedrockRuntimeClient(), InvokeModelCommand, {
+        prompt: 'p', tool: structured.buildItemsTool('call-and-answer'), maxTokens: 1000, deadline: Date.now() + 5000,
+      }),
+      (error) => error.name === 'DeadlineError' && /Run again/.test(error.message));
+    assert.strictEqual(bedrockCalls.length, 0, 'no call may start with too little time left to finish');
+
+    // With time left, it calls as before.
+    const out = await structured.invokeStructured(new BedrockRuntimeClient(), InvokeModelCommand, {
+      prompt: 'p', tool: structured.buildItemsTool('call-and-answer'), maxTokens: 1000, deadline: Date.now() + 120000,
+    });
+    assert.strictEqual(out.items.length, 1);
+  });
+
   console.log('\njob records carry an optional set-level meta');
 
   await test('a job with no meta polls cleanly as meta: null', async () => {

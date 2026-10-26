@@ -141,34 +141,72 @@ describe('one engagement-type control, once', () => {
     expect(onOpenBuilder).toHaveBeenCalledWith('trivia');
   });
 
-  test('the AI authoring prompt copies for the two scoped types, and only those', async () => {
+  test('the AI authoring prompt copies, and the route says what to do next', async () => {
     /*
       The owner: "if you clicked the button, would copy to clipboard AI
       instructions that i could pass along to an AI tool like Claude or Chat
-      gpt with the template and ask it to fill out the csv... for now just do
-      call and answer and trivia."
+      gpt with the template and ask it to fill out the csv."
+      docs/design/authoring-guidance/ a2: the confirmation sits in the route,
+      names the file to paste beside it, and offers the way back to upload.
     */
     const { authoringPrompt } = require('../config/aiAuthoringPrompt');
     const writeText = jest.fn().mockResolvedValue();
     Object.assign(navigator, { clipboard: { writeText } });
 
-    const { unmount } = mount({ engagementType: 'trivia' });
-    fireEvent.click(screen.getByRole('button', { name: /copy ai authoring prompt/i }));
+    mount({ engagementType: 'trivia' });
+    const route = screen.getByTestId('qsets-chat-trivia');
+    fireEvent.click(within(route).getByRole('button', { name: /copy ai authoring prompt/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(authoringPrompt('trivia')));
-    // The status says where to paste it — a copy with no destination is a
-    // clipboard full of mystery.
-    expect(await screen.findByText(/paste it into Claude or ChatGPT/i)).toBeInTheDocument();
-    unmount();
+    // A copy with no destination is a clipboard full of mystery.
+    const copied = await within(route).findByRole('status');
+    expect(copied).toHaveTextContent(/Paste it into Claude or ChatGPT with trivia-template\.csv/);
+    expect(copied).toHaveTextContent(/fill in the 6 \[BRACKETS\]/);
+    expect(within(route).getByRole('button', { name: /copy again/i })).toBeInTheDocument();
 
-    // Call-and-answer gets it too; poll does not — authoringPrompt() is null
-    // there and a button that copies null is worse than no button.
-    mount({ engagementType: 'call-and-answer' });
-    expect(screen.getByRole('button', { name: /copy ai authoring prompt/i })).toBeInTheDocument();
+    // "Go to upload" puts the host on the file chooser.
+    fireEvent.click(within(copied).getByRole('button', { name: /go to upload/i }));
+    expect(document.activeElement).toBe(document.getElementById('qsets-file-upload'));
   });
 
-  test('no authoring-prompt button for a type without a prompt', () => {
+  test('step 1 says the template came down, by its file name', async () => {
+    authFetch.mockResolvedValue(jsonResponse(200, { filename: 'trivia-template.csv', content: 'id,title\n' }));
+    window.URL.createObjectURL = jest.fn(() => 'blob:x');
+    window.URL.revokeObjectURL = jest.fn();
+    mount({ engagementType: 'trivia' });
+    const route = screen.getByTestId('qsets-chat-trivia');
+    expect(route).toHaveTextContent(/Download the template/);
+    fireEvent.click(screen.getByRole('button', { name: /Download Trivia template/i }));
+    await waitFor(() => expect(route).toHaveTextContent(/Template downloaded: trivia-template\.csv/));
+  });
+
+  test('the full prompt can be read before it is copied', () => {
+    const { authoringPrompt } = require('../config/aiAuthoringPrompt');
     mount({ engagementType: 'poll' });
-    expect(screen.queryByRole('button', { name: /copy ai authoring prompt/i })).toBeNull();
+    const preview = screen.getByTestId('qsets-chat-poll').querySelector('details');
+    expect(preview.querySelector('summary')).toHaveTextContent(/Show what is copied/);
+    expect(preview.querySelector('pre').textContent).toBe(authoringPrompt('poll'));
+  });
+
+  test.each(['call-and-answer', 'trivia', 'poll', 'wavelength', 'survey'])(
+    'every type offers its chatbot prompt: %s',
+    (type) => {
+      // rejects: the old scoping (Call & Answer and Trivia only), which left a
+      // poll host with 27 unexplained columns.
+      mount({ engagementType: type, onOpenBuilder: jest.fn() });
+      expect(screen.getByRole('button', { name: /copy ai authoring prompt/i })).toBeInTheDocument();
+    }
+  );
+
+  test('call-and-answer also offers the Art Title prompt, beside the artwork template', async () => {
+    const { authoringPrompt } = require('../config/aiAuthoringPrompt');
+    const writeText = jest.fn().mockResolvedValue();
+    Object.assign(navigator, { clipboard: { writeText } });
+    mount({ engagementType: 'call-and-answer' });
+    fireEvent.click(screen.getByRole('button', { name: /copy art title ai prompt/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(authoringPrompt('art-title')));
+    // Only the route that was copied says so.
+    expect(within(screen.getByTestId('qsets-chat-art-title')).getByRole('status')).toHaveTextContent(/art-title-template\.csv/);
+    expect(within(screen.getByTestId('qsets-chat-call-and-answer')).queryByRole('status')).toBeNull();
   });
 
   test('changing the type is reported upwards rather than kept locally', () => {
@@ -453,7 +491,7 @@ describe('a survey has four ways in (mockup 01)', () => {
     // rejects: offering the manual /builder (it has no survey form) and the
     // generic template button beside the five named ones.
     mount({ engagementType: 'survey', onOpenBuilder: jest.fn() });
-    expect(routeNames()).toEqual(['Your own material', 'A template', 'A file']);
+    expect(routeNames()).toEqual(['Your own material', 'A template', 'A file', 'Use your own chatbot']);
     expect(screen.queryByRole('button', { name: /Manual builder/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Survey template/i })).toBeNull();
   });
