@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import MarketingShell, { goToAuth } from './MarketingShell';
 import { pluginSlash, pluginPaths } from '../buildroom/pluginTier';
+import { LOOP_LINE } from '../buildroom/words';
 import './BuildRoomPage.css';
 
 const LOOP = ['Ask', 'Decide', 'Build', 'Test', 'Remember'];
@@ -126,6 +127,9 @@ export default function BuildRoomPage() {
               </li>
             ))}
           </ol>
+          {/* The method keeps its own five words; one line maps them to the host's loop
+              (simplify PLAN item 13; owner, 26 Oct 2026). */}
+          <p className="mk-muted mk-br-maps">On the host&apos;s screen each question is one ask: {LOOP_LINE}. That is Ask and Decide; Claude Code then builds.</p>
         </div>
       </section>
 

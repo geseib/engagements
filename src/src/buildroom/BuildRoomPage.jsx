@@ -63,8 +63,8 @@ import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
-import RoomScreenChooser from '../components/stage/RoomScreenChooser';
 import RoomWindowStatus from '../components/stage/RoomWindowStatus';
+import RoomWindowLink from '../components/stage/RoomWindowLink';
 import { storedRoomScreen, storeRoomScreen, SCREEN_WORDS } from '../config/roomScreen';
 import { presentStatusFrom, windowIsOpen } from '../config/presentStatus';
 import { presentHref } from '../config/surfaces';
@@ -91,6 +91,7 @@ import {
   SendOptionsProvider, SendExtras, HideFromRoom, useMirror,
 } from './BuildSendOptions';
 import useStageMoves from './useStageMoves';
+import BuildSetup from './BuildSetup';
 import { buildControls } from './buildControls';
 import BuildConsole, {
   PeopleList, SessionSlot, ClaudeLine, NowCard, ConsolePoint,
@@ -145,37 +146,6 @@ export function stageHint(ask) {
     case 'results': return W.hintCheckWords;
     default: return '';
   }
-}
-
-/** The first-run strip on an empty room. */
-export const HOW_IT_WORKS = [
-  'Connect Claude Code: install the plugin, then paste one command.',
-  // The start command connects and kicks off (host review, 25 Oct 2026): there is no second prompt to find.
-  'That command opens Claude Code, connects it to this room and kicks off. Nothing else to paste.',
-  'Claude asks the room. You shape each answer and send it back.',
-  'Wrap up, then share the report.',
-];
-
-/**
- * HOW A BUILD ROOM WORKS (host review, 25 Oct 2026): the four steps and
- * Connect Claude Code until Claude Code has called in. A key minted is not a
- * connection, so Connect stays. On the first view (`lead`) Connect is the
- * screen's one orange button; once an ask runs, the ask's move is.
- */
-export function HowItWorks({ onConnect, lead = true }) {
-  return (
-    <section className="brm-panel brm-howto" aria-labelledby="brm-howto-h">
-      <h2 className="brm-h" id="brm-howto-h">How a Build Room works</h2>
-      <ol className="brm-steps">
-        {HOW_IT_WORKS.map((text, i) => (
-          <li key={text}><span className="brm-n">{i + 1}</span>{text}</li>
-        ))}
-      </ol>
-      <button type="button" className={`brm-btn${lead ? ' brm-btn--primary' : ''}`} onClick={onConnect}>
-        <Icon name="Lock" size={16} /> {W.connectClaude}
-      </button>
-    </section>
-  );
 }
 
 /** The prompt cards (PLAN §7). The MCP server serves the same four as slash commands. */
@@ -459,6 +429,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [pointTicked, setPointTicked] = useState([]);
   /** Counts the times What's next sent the host to the Points tab. */
   const [pointsTab, setPointsTab] = useState(0);
+  // What's next's Ask Claude for points draws the Points tab before there are any (simplify PLAN item 18).
+  const [pointsAsked, setPointsAsked] = useState(false);
   /** Take it down, with 2 or more ideas in (T4c): the ideas offered a vote, else null. */
   const [takeDown, setTakeDown] = useState(null);
   /** Picks per person the vote window opens with: 1 by default, 3 from the take-down offer. */
@@ -1027,12 +999,33 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // A draft left on an ask that is no longer current, and not yet decided.
   const unsentAsk = asks.find((a) => drafts[a.askId] && (!current || a.askId !== current.askId)
     && !['decided', 'discarded'].includes(a.status) && String(drafts[a.askId].direction || '').trim()) || null;
-  // HOW A BUILD ROOM WORKS stays until Claude has really called in (host review, 25 Oct 2026):
+  // CONNECT stays until Claude has really called in (host review, 25 Oct 2026):
   // not until the first ask, and not until a key is minted.
   const claudeAway = !ended && !claudeEverConnected(room.agent) && !(room.log || []).some((l) => l.by === 'agent');
-  const firstRun = claudeAway;
   // On the first view (no ask yet) Connect is the one orange button; later the card stays, its button plain.
-  const connectLeads = firstRun && !asks.length;
+  const connectLeads = claudeAway && !asks.length;
+  // BEFORE THE ROOM STARTS (simplify PLAN item 10, smaller; owner, 26 Oct 2026): one card,
+  // three rows, no gate, in place of How a Build Room works and the screen chooser. It
+  // stays while Claude has not called in (as the old card did), and through the opening
+  // until its rows are done; done, it folds to one line until the opening ends.
+  const framingNow = Boolean(room.opening && room.opening.phase === 'opening');
+  const setupNode = !ended && (claudeAway || framingNow) ? (
+    <BuildSetup
+      s={{
+        connected: !claudeAway,
+        folder: (room.agent && room.agent.folder) || '',
+        connectLeads,
+        joined: room.playerCount || 0,
+        code: room.gameId,
+        codesUp,
+        two: roomChoice === 'two' || windowOpen,
+        windowOpen,
+        onConnect: () => setDialog('connect'),
+        onCodes: toggleCodes,
+        onTwo: () => chooseRoom('two'),
+      }}
+    />
+  ) : null;
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const onCrew = Boolean(crew) && stage === 'crew';
   const openShare = crew && openShareId ? (crew.shares || []).find((x) => x.shareId === openShareId) || null : null;
@@ -1064,6 +1057,14 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     if (key === 'combine') combine();
     else if (key === 'tell') setComposeFocus((n) => n + 1);
     else if (key === 'talk-points') setPointsTab((n) => n + 1);
+    else if (key === 'ask-points') {
+      // The Points tab, drawn now with its four requests and the focus on it; on two screens, in the main area.
+      setPointsAsked(true);
+      setPointsTab((n) => n + 1);
+      if (twoRef.current) setCentre('later');
+      // The tab is drawn by this press, so the focus follows it once it is there.
+      window.setTimeout(() => { const tab = document.getElementById('brm-tab-points'); if (tab) tab.focus(); }, 0);
+    }
     else if (key === 'ask-room') setDialog({ compose: 'suggest' });
     else if (key === 'connect') setDialog('connect');
     else if (key === 'open-proposed') {
@@ -1087,6 +1088,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const whatsNextShown = !onCrew && !current && !(room.opening && room.opening.phase === 'opening') && nowFlags(room).whatsNext;
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
   const sendPointRequest = (kind, subject, extra) => run(() => api.pointRequest(kind, subject, extra));
+  // Preview the work from the composer's More: the Now card's own button, once a build is there to open.
+  const previewWork = () => run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true }));
   // Put N to a vote opens the window (T5); its Open voting makes the ask.
   const putPointsToVote = (ids) => { setPointVote(ids); return undefined; };
   const openPointsVote = async (body) => {
@@ -1254,6 +1257,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
         pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
         onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
+        asked={pointsAsked}
       />
     );
     const waitingTop = (
@@ -1337,7 +1341,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           waiting: {
             title: BCW.waiting, summary: String(waiting), alert: waiting > 0, capability: 'queue',
             body: <>{waitingTop}{centre === 'queue' ? <p className="hc-muted">{BCW.inMainNote}</p> : queueNode}</>,
-            link: centre === 'queue' ? null : BCW.openInMain, onLink: () => setCentre('queue'),
+            // Nothing to open while nothing waits (simplify PLAN item 18).
+            link: centre === 'queue' || !queueItems(room).length ? null : BCW.openInMain, onLink: () => setCentre('queue'),
           },
           people: {
             title: BCW.people, summary: people.summary, capability: 'players',
@@ -1374,13 +1379,13 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         }}
         side={(
           <>
-            <NowCard card={nowCard(room)} />
+            {!nowCard(room).empty && <NowCard card={nowCard(room)} />}
             <div data-capability="whats-next" className="bc-folds">
               <HistoryStack
                 openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
                 items={[
                   ...(room.opening && room.opening.phase === 'opening' ? [{
-                    key: 'opening', label: 'The opening', capability: 'opening',
+                    key: 'opening', label: 'The opening', capability: 'opening', keep: true,
                     count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
                     body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
                   }] : []),
@@ -1430,13 +1435,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</button>
           </div>
         )}
-        {firstRun && <HowItWorks lead={connectLeads} onConnect={() => setDialog('connect')} />}
-        {!ended && roomChoice === null && wallHref && (
-          <section className="brm-panel brm-roomwatch" data-capability="screens">
-            <RoomScreenChooser type="build" current={null} presentHref={wallHref} onChoose={chooseRoom} quiet={connectLeads} />
-          </section>
-        )}
-        {!ended && <ClaudeLine state={claudeState(room, now, { host: true })} />}
+        {setupNode}
+        {/* On the first view the card's Connect row says what this line would; once anything
+            has been asked the line is back, to say Queued for Claude (host review F1). */}
+        {!ended && !(setupNode && connectLeads) && <ClaudeLine state={claudeState(room, now, { host: true })} />}
         {crew && centre === null && <StageTabs stage={stage} onStage={setStage} crew={crew} host={host} />}
         {centre === 'queue' ? inMain(BCW.queueInMain, <>{waitingTop}{queueNode}</>) : null}
         {centre === 'later' ? inMain(BCW.laterInMain, laterNode) : null}
@@ -1496,9 +1498,9 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             ) : (
               room.opening && room.opening.phase === 'opening'
                 ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => showRoom('stage')} calm={connectLeads} />
-                : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => showRoom('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={Boolean(bar.primary) || pointsLead || listRunning || demoLeads || connectLeads} />
+                : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={Boolean(bar.primary) || pointsLead || listRunning || demoLeads || connectLeads} />
             )}
-            {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows />}
+            {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows onRequest={(kind) => setDialog({ points: kind })} onPreview={previewWork} />}
           </>
         )}
       </BuildConsole>
@@ -1561,7 +1563,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         onScreen={showRoom}
         ended={ended}
         roomWindow={{
-          href: wallHref, detail: windowDetail, open: windowOpen, sees: wallScreen,
+          href: wallHref, detail: windowDetail, open: windowOpen, sees: wallScreen, two: roomChoice === 'two',
           onSeeHere: () => setScreen(wallScreen),
         }}
         connection={connection}
@@ -1630,17 +1632,10 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</button>
             </div>
           )}
-          {/* WHERE WILL THE ROOM WATCH? once, until this browser has chosen
-              (parity PLAN §2.7, B9): Call & Answer's chooser, its words for a
-              Build Room. Settings, Screens changes it later. */}
-          {/* CONNECT FIRST (host review, 25 Oct 2026): while Claude has not called in, How a Build
-              Room works leads with Connect as the one orange button, and the chooser below steps back. */}
-          {firstRun && <HowItWorks lead={connectLeads} onConnect={() => setDialog('connect')} />}
-          {!ended && roomChoice === null && wallHref && (
-            <section className="brm-panel brm-roomwatch" data-capability="screens">
-              <RoomScreenChooser type="build" current={null} presentHref={wallHref} onChoose={chooseRoom} quiet={connectLeads} />
-            </section>
-          )}
+          {/* BEFORE THE ROOM STARTS (simplify PLAN item 10): Connect, the code and the room's
+              screen, one card; one screen without asking, Use two screens a visible row, and
+              Settings, Screens changes it later. Connect is its orange while it leads. */}
+          {setupNode}
 
           {crew && <StageTabs stage={stage} onStage={setStage} crew={crew} host={host} />}
 
@@ -1709,12 +1704,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => showRoom('stage')} calm={connectLeads} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onShowBuild={() => showRoom('build')} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads || connectLeads} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads || connectLeads} />
               )}
             </>
           )}
 
-          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows />}
+          {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows onRequest={(kind) => setDialog({ points: kind })} onPreview={previewWork} />}
         </main>
 
         {/* WAITING FOR YOU: Claude's proposed asks first (Claude is waiting on
@@ -1746,6 +1741,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               onAskRoom={(text) => setDialog({ compose: 'suggest', prompt: text })}
               pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={pointsLead && !pointVote && !listRunning} askOpen={Boolean(current)} openPoints={pointsTab}
               onRequest={(kind, extra) => setDialog({ points: kind, ...(extra || {}) })} onVotePoints={putPointsToVote}
+              pointsAsked={pointsAsked}
             />
           )}
         </section>
@@ -1759,7 +1755,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
             items={[
               ...(room.opening && room.opening.phase === 'opening' ? [{
-                key: 'opening', label: 'The opening', capability: 'opening',
+                key: 'opening', label: 'The opening', capability: 'opening', keep: true,
                 count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
                 body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
               }] : []),
@@ -2172,11 +2168,22 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
  * dialog closes the menu; a switch leaves it open. A click inside a dialog
  * the menu opened (Run crew code asks first) is not "outside".
  */
-function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost', placeKey }) {
+/*
+ * `focusFirst` (an idea's More, simplify PLAN item 18, phase 2): opening the menu puts the
+ * focus on its first move, and Escape closes it with the focus back on the button, so the
+ * moves under More are as near to the keyboard as they were on the card.
+ */
+function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost', placeKey, focusFirst = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const panelRef = useRef(null);
+  const buttonRef = useRef(null);
   useKeepOnScreen(panelRef, open, placeKey);
+  useEffect(() => {
+    if (!open || !focusFirst || !panelRef.current) return;
+    const first = panelRef.current.querySelector('button:not([disabled])');
+    if (first) first.focus();
+  }, [open, focusFirst]);
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
@@ -2184,17 +2191,21 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
       if (e.target && e.target.closest && e.target.closest('[role="dialog"]')) return;
       setOpen(false);
     };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      if (focusFirst && buttonRef.current) buttonRef.current.focus();
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, focusFirst]);
   return (
     <div className="brm-more" ref={ref}>
-      <button type="button" className={buttonClass} aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((o) => !o)}>
+      <button type="button" ref={buttonRef} className={buttonClass} aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((o) => !o)}>
         {label}{label ? ' ' : ''}<Icon name="CaretDown" size={14} />
       </button>
       {open && (
@@ -2206,12 +2217,14 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
   );
 }
 
-/** One always-visible control: opens the build in a new tab, or says why it cannot yet. */
+/**
+ * Opens the build in a new tab. NOT DRAWN BEFORE THERE IS A BUILD (simplify
+ * PLAN item 18, F17): with no link yet there is nothing to open, so the header
+ * leaves it out rather than showing it disabled.
+ */
 function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild', onPick }) {
   const href = safeHref(link);
-  if (!href) {
-    return <button type="button" className={className} disabled title="Claude hasn't started the app yet">{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></button>;
-  }
+  if (!href) return null;
   return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title={`Opens ${href} in a new tab`} onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></a>;
 }
 
@@ -2357,7 +2370,12 @@ function RoomHeader({
       {/* The room's window and whether it is really up, on Host, Build and
           History (owner, 19 Oct 2026; C&A's console top line, the same part).
           The Stage carries it in its dock. */}
-      {rw.href && (
+      {/* One screen with no window up (simplify PLAN item 18): the link alone. Its state and
+          Open as a tab say nothing until the host uses two screens or a window is up. */}
+      {rw.href && !rw.open && !rw.two && (
+        <RoomWindowLink className="brm-btn brm-btn--sm brm-btn--ghost brm-rwlink" href={rw.href} data-capability="room-window">{W.wallOpen}</RoomWindowLink>
+      )}
+      {rw.href && (rw.open || rw.two) && (
         <RoomWindowStatus
           className="rws brm-rws"
           href={rw.href}
@@ -2465,16 +2483,38 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
 }
 
-function HistoryStack({ items, openKey = null }) {
+function HistoryStack({ items: all, openKey = null }) {
+  // NOT DRAWN UNTIL IT HAS SOMETHING (simplify PLAN item 18, phase 1; owner,
+  // 26 Oct 2026): a fold with nothing in it is left out (`keep` holds one that
+  // means something empty: The opening, whose lines are the steps to come).
+  // The column stays where it is, with one quiet line when nothing is in it.
+  const items = all.filter((it) => it.keep || it.count > 0);
   // The first item opens, unless it has nothing in it yet (`skip`: an empty
   // Decided); an item that has gone (The opening, once building starts) opens
   // the first one again. `openKey` ({key, n}) opens one from outside: a sent
   // mark opening History (Consider), each press once.
-  const first = () => (items.find((it) => !it.skip) || items[0]).key;
+  const first = () => ((items.find((it) => !it.skip) || items[0]) || {}).key;
   const [chosen, setOpen] = useState(first);
   const asked = openKey ? `${openKey.key}:${openKey.n}` : '';
   useEffect(() => { if (openKey) setOpen(openKey.key); }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = items.some((it) => it.key === chosen) ? chosen : first();
+  if (!items.length) return <p className="brm-quiet">{W.sideEmpty}</p>;
+  // One fold alone has nothing to fold against: its head is a heading, not a button.
+  if (items.length === 1) {
+    const it = items[0];
+    return (
+      <div className="brm-stack">
+        <div className="brm-stackitem is-open" data-capability={it.capability}>
+          <h2 className="brm-stackhead brm-stackhead--only">
+            {it.label}
+            <span className="brm-muted">{` · ${it.count}`}</span>
+            {it.hint && <span className="brm-muted brm-stackhint">{` · ${it.hint}`}</span>}
+          </h2>
+          <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="brm-stack">
       {items.map((it) => {
@@ -3116,11 +3156,12 @@ const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
  */
 export const STARTER_PROMPT = 'What should we build?';
 
-function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose, ticked = null, laterTicked = 0, onMove = null, leadOutline = false }) {
+function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = null, laterTicked = 0, onMove = null, leadOutline = false }) {
   const [sent, setSent] = useState(false);
   if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
   const agent = room.agent || {};
   const quiet = !(agent.listening || agent.connected);
+  const built = Boolean(latestBuild(room).link);
   const line = ended ? 'Session ended.' : claudeState(room, now).headline;
   // A ROOM THAT BEGINS WITH AN ASK (owner, 2026-10-05): before anything is
   // built, the room picks what to build. The host lists the options or the
@@ -3159,22 +3200,24 @@ function NowBuilding({ room, now, ended, busy, run, api, onShowBuild, onCompose,
         ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} laterTicked={laterTicked} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} outline={leadOutline} />
         : <p className="brm-nowline">{line}</p>}
       {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
-      {!ended && (
+      {/* SHOW THE BUILD is the header's Build (3), and on two screens The room sees: Build; the
+          Now card no longer repeats it (simplify PLAN item 18, phase 2). PREVIEW THE WORK (owner,
+          2026-10-04: one click, Claude builds, serves and screenshots a preview) is here until
+          there is a build to open; then Open the build is in the header, and Preview the work is
+          under the composer's More with the other things to ask Claude for. */}
+      {!ended && (!built || (quiet && CONTINUE_PROMPT)) && (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn" onClick={onShowBuild} title="Show the room the build (3)">
-            <Icon name="Monitor" size={16} /> Show the build
-          </button>
-          {/* One click: Claude builds and serves a local preview, puts its
-              link on this screen and screenshots it (owner, 2026-10-04). */}
-          <button
-            type="button"
-            className="brm-btn"
-            disabled={busy || quiet}
-            title={quiet ? 'Connect Claude Code first' : W.tipPreview}
-            onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true })); if (ok !== undefined) setSent(true); }}
-          >
-            Preview the work
-          </button>
+          {!built && (
+            <button
+              type="button"
+              className="brm-btn"
+              disabled={busy || quiet}
+              title={quiet ? 'Connect Claude Code first' : W.tipPreview}
+              onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true })); if (ok !== undefined) setSent(true); }}
+            >
+              Preview the work
+            </button>
+          )}
           {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
         </div>
       )}
@@ -3227,28 +3270,42 @@ export function SendToClaude({ onSend, busy, disabled = false, small = false, pr
  *   Log it          into the timeline as what the room said, a host note or
  *                   a milestone; "Also tell Claude" sends it too
  *   Ask the room    Ideas, Choose or Rate (the Ask the room dialog)
+ *
+ * ONE LINE UNTIL CLICKED (simplify PLAN item 18, phase 1; owner, 26 Oct 2026):
+ * "Tell Claude…" and Ask the room, until the host clicks the line, or What's
+ * next's Combine or Write sends the cursor here (`focusKey`). A send folds it
+ * again; words left in it stay, and the line shows them.
+ *
+ * ITS MORE (simplify PLAN item 18, phase 2): what the host asks Claude for that
+ * is not a direction, Research…, Ideas…, Mockups…, Walkthrough (`onRequest`,
+ * the Points requests) and Preview the work (`onPreview`), so none of them
+ * needs an empty tab or a button of its own on the Now card.
  */
-function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds = [], focusKey = 0, leadShows = true }) {
+function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds = [], focusKey = 0, leadShows = true, onRequest = null, onPreview = null }) {
   const [said, setSaid] = useState('');
+  const [open, setOpen] = useState(false);
+  const [focusNow, setFocusNow] = useState(0);
   const box = useRef(null);
-  // What's next's Combine and Write send the cursor here, at the end of the words.
+  // What's next's Combine and Write open it, and send the cursor here, at the end of the words.
+  useEffect(() => { if (focusKey) { setOpen(true); setFocusNow((n) => n + 1); } }, [focusKey]);
   useEffect(() => {
     const el = box.current;
-    if (!focusKey || !el) return;
+    if (!focusNow || !el) return;
     el.focus();
     const end = el.value.length;
     if (typeof el.setSelectionRange === 'function') el.setSelectionRange(end, end);
     if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
-  }, [focusKey]);
+  }, [focusNow, open]);
   const [logKind, setLogKind] = useState('verbal');
   const [alsoTell, setAlsoTell] = useState(false);
   const [hide, setHide] = useState(false);
   const mirror = useMirror();
   const words = text.trim();
+  const done = (line) => { setText(''); setSaid(line); setOpen(false); };
   const tellAs = async (as) => {
     if (!words) return;
     const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }, { hideFromRoom: hide }));
-    if (ok !== undefined) { mirror.done(); setText(''); setSaid(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
+    if (ok !== undefined) { mirror.done(); done(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };
   // QUEUE IT (step 4, C1): the host's own idea, waiting in the queue for later.
@@ -3261,17 +3318,32 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
       if (id) await api.ideaAction(id, 'later');
       return made;
     });
-    if (ok !== undefined) { setText(''); setSaid(`${W.savedLater}.`); }
+    if (ok !== undefined) done(`${W.savedLater}.`);
   };
   const log = async () => {
     if (!words) return;
     const tells = logKind !== 'note' && alsoTell;
     const ok = await run(() => api.postLog({ kind: logKind, text: words, forAgent: tells, ...(tells && hide ? { hideFromRoom: true } : {}) }));
-    if (ok !== undefined) { mirror.done(); setText(''); setAlsoTell(false); setSaid('Logged.'); }
+    if (ok !== undefined) { mirror.done(); setAlsoTell(false); done('Logged.'); }
   };
+  if (!open) {
+    const kept = words.length > 60 ? `${words.slice(0, 60).trimEnd()}…` : words;
+    return (
+      <section className="brm-composer brm-composer--line" aria-label={W.tellClaudeHead} data-capability="composer">
+        <div className="brm-composeline">
+          <button type="button" className="brm-composeline-box" onClick={() => { setOpen(true); setFocusNow((n) => n + 1); }}>{kept || W.tellClaudeLine}</button>
+          <button type="button" className="brm-btn brm-btn--sm" onClick={() => onCompose('suggest')}>{W.askRoom}</button>
+        </div>
+        {said && <p className="brm-hint" role="status">{said}</p>}
+      </section>
+    );
+  }
   return (
     <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h" data-capability="composer">
-      <h2 className="brm-h5" id="brm-compose-h">Add something</h2>
+      <div className="brm-row brm-gap">
+        <h2 className="brm-h5" id="brm-compose-h">{W.tellClaudeHead}</h2>
+        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setOpen(false)}>{W.composeClose}</button>
+      </div>
       <form onSubmit={tell}>
         <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
         <textarea
@@ -3288,7 +3360,8 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
         <div className="brm-row brm-gap">
           {/* The one orange button is the step's or What's next's lead; Send is outline while one shows. */}
           <SendToClaude onSend={tellAs} busy={busy} disabled={!words} primary={!leadShows} submit />
-          <button type="button" className="brm-btn" disabled={busy || !words} title="Keep it on your Later list" onClick={queue}>{W.saveLater}</button>
+          {/* The way into Later while the list is empty and not drawn (simplify PLAN item 18). */}
+          <button type="button" className="brm-btn" data-capability="later" disabled={busy || !words} title="Keep it on your Later list" onClick={queue}>{W.saveLater}</button>
           <span className="brm-row brm-push">
             <select className="brm-input brm-input--sm brm-select" aria-label="Log it as" value={logKind} onChange={(e) => setLogKind(e.target.value)}>
               {LOG_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -3301,10 +3374,37 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
           </span>
         </div>
         <div className="brm-row brm-gap">
-          <span className="brm-label">Ask the room</span>
+          <span className="brm-label">{W.askRoom}</span>
           <button type="button" className="brm-btn brm-btn--sm" title="Everyone suggests, then votes" onClick={() => onCompose('suggest')}>Ideas</button>
           <button type="button" className="brm-btn brm-btn--sm" title="A, B or C" onClick={() => onCompose('choice')}>Choose</button>
           <button type="button" className="brm-btn brm-btn--sm" title="A 1 to 5 pulse" onClick={() => onCompose('rating')}>Rate</button>
+          {(onRequest || onPreview) && (
+            <span className="brm-push" data-capability="points">
+              <SessionMenu label={W.composeMore} groupLabel={W.composeMoreHead} focusFirst>
+                {(close) => (
+                  <>
+                    <span className="brm-more-k">{W.composeMoreHead}</span>
+                    {onRequest && (
+                      <>
+                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.researchTip} onClick={() => { close(); onRequest('research'); }}>{W.research}</button>
+                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.ideasTip} onClick={() => { close(); onRequest('ideas'); }}>{W.ideasAsk}</button>
+                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.mockupsTip} onClick={() => { close(); onRequest('mockups'); }}>{W.mockupsAsk}</button>
+                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.walkthroughTip} onClick={() => { close(); onRequest('walkthrough'); }}>{W.walkthroughAsk}</button>
+                      </>
+                    )}
+                    {onPreview && (
+                      <button
+                        type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipPreview}
+                        onClick={async () => { close(); const ok = await onPreview(); if (ok !== undefined) setSaid(W.askedPreview); }}
+                      >
+                        Preview the work
+                      </button>
+                    )}
+                  </>
+                )}
+              </SessionMenu>
+            </span>
+          )}
         </div>
         {said && <p className="brm-hint" role="status">{said}</p>}
       </form>
@@ -3365,6 +3465,9 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
 /** What happened to a handled idea, in the host's words. */
 const HANDLED = { promoted: 'used', acknowledged: 'acknowledged', dismissed: 'dismissed' };
 
+/** Points in use: Claude has posted one, or a request for some is out. */
+const pointsInUse = (room) => Boolean(room.points && (((room.points.items || []).length > 0) || ((room.points.requests || []).length > 0)));
+
 /** The ask the room is answering now, or null. */
 const openAskOf = (room) => (room.asks || []).find((a) => a.askId === room.currentAskId && ['live', 'voting'].includes(a.status)) || null;
 
@@ -3381,13 +3484,18 @@ function ideaWho(idea) {
  * Claude's asks first, then oldest first. Filters by who it came from; tick
  * ideas to act on several at once, or put them to a vote.
  */
-function Queue({ startFilter = 'all', room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined, withLater = true }) {
-  const [filter, setFilter] = useState(startFilter);
+function Queue({ startFilter = 'all', room, current, busy, ended, run, api, laterTicked = [], setLaterTicked = () => {}, onVoteLater = () => {}, onAskRoom = () => {}, pointTicked = [], setPointTicked = () => {}, leadsRow = false, askOpen = false, openPoints = 0, onRequest = () => {}, onVotePoints = () => undefined, withLater = true, pointsAsked = false }) {
+  const [chosenFilter, setFilter] = useState(startFilter);
   const [ticked, setTicked] = useState([]);
   const [voteOf, setVoteOf] = useState(null);
   // Don't show the room, for every Send to Claude in the queue: one box over the list, unticked by default.
   const [hide, setHide] = useState(false);
   const items = queueItems(room);
+  // FILTERS ONLY WHEN THEY SORT SOMETHING (simplify PLAN item 18, phase 1): a source
+  // with nothing waiting has no chip, and one source alone has no chips at all.
+  const sources = QUEUE_FILTERS.filter((f) => f.key !== 'all' && filterQueue(items, f.key).length > 0);
+  const filters = sources.length >= 2 ? QUEUE_FILTERS.filter((f) => f.key === 'all' || sources.includes(f)) : [];
+  const filter = filters.some((f) => f.key === chosenFilter) ? chosenFilter : 'all';
   const shown = filterQueue(items, filter);
   const ideas = room.ideas || [];
   const live = new Set(items.filter((x) => x.type === 'idea').map((x) => x.idea.ideaId));
@@ -3411,14 +3519,16 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
 
   return (
     <section className="brm-queue" aria-label="The queue">
-      <div className="brm-qfilters" role="group" aria-label="Show">
-        {QUEUE_FILTERS.map((f) => (
-          <button key={f.key} type="button" className={`brm-qchip${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-            {f.label}{f.key !== 'all' ? ` · ${count(f.key)}` : ''}
-          </button>
-        ))}
-        <span className="brm-hint brm-push">Claude first, then oldest</span>
-      </div>
+      {filters.length > 0 && (
+        <div className="brm-qfilters" role="group" aria-label="Show">
+          {filters.map((f) => (
+            <button key={f.key} type="button" className={`brm-qchip${filter === f.key ? ' is-on' : ''}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
+              {f.label}{f.key !== 'all' ? ` · ${count(f.key)}` : ''}
+            </button>
+          ))}
+          <span className="brm-hint brm-push">Claude first, then oldest</span>
+        </div>
+      )}
       {!ended && items.some((x) => x.type === 'idea') && <HideFromRoom checked={hide} onChange={setHide} disabled={busy} />}
 
       {!ended && tickedLive.length > 0 && (
@@ -3446,7 +3556,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
       {/* THE RELEASE GATE (§2c): Claude's posts, all at once. */}
       <ReleaseAll posts={heldPosts(room)} busy={busy} ended={ended} run={run} api={api} />
 
-      {!items.length && <p className="brm-empty">{W.nothingWaiting}</p>}
+      {!items.length && <p className="brm-quiet">{W.waitingEmpty}</p>}
       {items.length > 0 && !shown.length && <p className="brm-hint">Nothing from {QUEUE_FILTERS.find((f) => f.key === filter).label.toLowerCase()} right now.</p>}
 
       {shown.map((x) => (x.type === 'ask' ? (
@@ -3467,12 +3577,18 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
         />
       )))}
 
-      {/* On two screens Later and Points have their own rail slot (B8): `withLater` false. */}
-      {withLater && (
+      {/* On two screens Later and Points have their own rail slot (B8): `withLater` false.
+          The slot is drawn once it has something: Later with its first saved item, Points when
+          Claude posts one or a request is out, or when the host asks for points (What's next's
+          Ask Claude for points, `pointsAsked`). Before, in the opening and while building alike
+          (simplify PLAN item 18, phases 1 and 2), Save for later and Ask Claude for points are
+          the ways in. */}
+      {withLater && (laterItems(room).length > 0 || pointsInUse(room) || pointsAsked || openPoints > 0) && (
         <BuildLaterPoints
           room={room} ended={ended} busy={busy} run={run} api={api}
           laterTicked={laterTicked} setLaterTicked={setLaterTicked} onVoteLater={onVoteLater} onAskRoom={onAskRoom}
           pointTicked={pointTicked} setPointTicked={setPointTicked} leadsRow={leadsRow} askOpen={askOpen} openPoints={openPoints} onRequest={onRequest} onVotePoints={onVotePoints}
+          asked={pointsAsked}
         />
       )}
 
@@ -3505,8 +3621,22 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
   );
 }
 
-/** One idea in the queue (C1): tick it, or send it where it belongs. */
+/**
+ * One idea in the queue (C1): tick it, or send it where it belongs.
+ *
+ * THREE ROUTES ON THE CARD (simplify PLAN item 18, second half; owner, 26 Oct
+ * 2026: "go to phase 2"): Send to Claude and Ask the room; the idea's words
+ * open Consider; Consider…, Send to Claude as, Save for later, Acknowledge,
+ * Reply and Dismiss under More. Every item keeps the same routes (owner,
+ * 5 Oct); the card shows three of them. The words are a click target, as a
+ * Decided row is; More's Consider… is the keyboard's way to the same panel.
+ */
 function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVote, voteCount, onAskIdeas = () => {}, onMockups = null, run, api }) {
+  const c = useContext(ConsiderContext);
+  const [replying, setReplying] = useState(false);
+  const item = { key: itemKeys.idea(idea.ideaId), words: idea.text, type: 'idea', ideaId: idea.ideaId };
+  const consider = !ended && c && !c.ended ? () => c.open(item) : null;
+  const canReply = idea.source !== 'host' && Boolean(idea.playerName);
   return (
     <div className={`brm-idea brm-qidea${ticked ? ' is-ticked' : ''}`}>
       <div className="brm-row brm-gap">
@@ -3514,14 +3644,16 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
           <input type="checkbox" className="brm-qtick" checked={ticked} onChange={onTick} aria-label={`Tick: ${idea.text}`} />
         )}
         <span className="brm-who">{ideaWho(idea)} · {clockTime(idea.createdAt)}</span>
-        {/* CONSIDER (frames 2-3): the one panel for this card's two doors; the mark once it is queued or sent. */}
-        <span className="brm-push"><ItemTools item={{ key: itemKeys.idea(idea.ideaId), words: idea.text, type: 'idea', ideaId: idea.ideaId }} consider={!ended} /></span>
+        {/* The mark once it is queued or sent (Consider, frames 2-3); Consider itself is the words. */}
+        <span className="brm-push"><ItemTools item={item} consider={false} /></span>
       </div>
-      <div className="brm-idea-text">{idea.text}</div>
+      <div className={`brm-idea-text${consider ? ' is-door' : ''}`} title={consider ? W.ideaWordsTip : undefined} onClick={consider || undefined}>{idea.text}</div>
       {!ended && (
         <div className="brm-idea-acts">
-          <SendToClaude small busy={busy} onSend={(as) => onAct('direct', asField(as))} />
-          <SessionMenu label="Ask the room" groupLabel="Ask the room">
+          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Do now: the next thing Claude builds" onClick={() => onAct('direct', {})}>
+            <Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}
+          </button>
+          <SessionMenu label={W.askRoom} groupLabel={W.askRoom}>
             {(close) => (
               <>
                 {/* NOTHING GREYED OUT (owner, 18 Oct): a vote opens from one idea and adds others in its dialog;
@@ -3541,14 +3673,31 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
               </>
             )}
           </SessionMenu>
-          {/* SAVE FOR LATER (owner, 2026-10-08): the host's "not now", onto the one Later list. Nothing goes to Claude. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSavedLater} onClick={() => onAct('later')}>{W.saveLater}</button>
-          {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSeen} onClick={() => onAct('acknowledge')}>Acknowledge</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => onAct('dismiss')}>Dismiss</button>
+          <SessionMenu label={W.ideaMore} groupLabel={W.ideaMore} ariaLabel={W.ideaMoreLabel(idea.text)} focusFirst>
+            {(close) => (
+              <>
+                {consider && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { close(); consider(); }}>{W.considerItem}</button>}
+                {/* SEND TO CLAUDE AS (step 7c, C14): the kinds, each saying what Claude does with it. */}
+                <div className="brm-more-grp" role="group" aria-label={W.sendAsHead}>
+                  <span className="brm-more-k" aria-hidden="true">{W.sendAsHead}</span>
+                  {HOST_KINDS.map((k) => (
+                    <button key={k.key} type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-kindopt" disabled={busy} onClick={() => { close(); onAct('direct', asField(k.key)); }}>
+                      <b>{k.label}</b><span>{k.hint}</span>
+                    </button>
+                  ))}
+                </div>
+                {/* SAVE FOR LATER (owner, 2026-10-08): the host's "not now", onto the one Later list. Nothing goes to Claude. */}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipSavedLater} onClick={() => { close(); onAct('later'); }}>{W.saveLater}</button>
+                {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipSeen} onClick={() => { close(); onAct('acknowledge'); }}>Acknowledge</button>
+                {canReply && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { close(); setReplying(true); }}>{W.replyTo(idea.playerName)}</button>}
+                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => { close(); onAct('dismiss'); }}>Dismiss</button>
+              </>
+            )}
+          </SessionMenu>
         </div>
       )}
-      {run && api && <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />}
+      {run && api && <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} open={replying} setOpen={setReplying} doorOnCard={false} />}
     </div>
   );
 }
@@ -3566,9 +3715,16 @@ export function latestWords(idea) {
  * his phone once the host has written. An idea the host typed, or one made
  * from a vote's option, has no one to reply to, so no button.
  */
-function IdeaThread({ idea, busy, ended, run, api }) {
+/*
+ * `open`/`setOpen` let the card hold it (Reply to Joe is under the card's More, simplify
+ * PLAN item 18); `doorOnCard` false leaves the door off until there is a thread to open.
+ */
+function IdeaThread({ idea, busy, ended, run, api, open: heldOpen, setOpen: setHeldOpen, doorOnCard = true }) {
   const thread = idea.thread || [];
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const held = typeof setHeldOpen === 'function';
+  const open = held ? Boolean(heldOpen) : ownOpen;
+  const setOpen = held ? setHeldOpen : setOwnOpen;
   const [draft, setDraft] = useState('');
   if (idea.source === 'host' || !idea.playerName) return null;
   const name = idea.playerName;
@@ -3582,6 +3738,7 @@ function IdeaThread({ idea, busy, ended, run, api }) {
   };
   if (!open) {
     if (ended && !thread.length) return null;
+    if (!doorOnCard && !thread.length) return null;
     return (
       <div className="brm-row brm-gap brm-thread-door">
         <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen(true)}>

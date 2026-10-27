@@ -21,6 +21,7 @@
  */
 import { askPathStep, runOf, runDoneCount, whatsNextMoves } from './buildScreens';
 import { KIND_LABEL, askNumber } from './screens/common';
+import { LOOP, SESSION_LOOP } from './words';
 
 /** The console's own words (sentence case, plain; the rest are words.js's). */
 export const BCW = Object.freeze({
@@ -148,15 +149,16 @@ export function consoleStrip(room, current, { pickId = null, answering = false, 
     if (at === undefined) at = 1;
   }
   const loopIds = ['ask', 'collect', 'settle', 'send'];
-  const loopLabels = { ask: 'Ask', collect: current && current.status === 'voting' ? 'Vote' : 'Collect', settle: 'Settle', send: 'Send to Claude' };
+  // ONE LOOP (simplify PLAN item 13, 26 Oct 2026): the same four words as the ask path, voting or not.
+  const loopLabels = LOOP;
   const loop = loopIds.map((id, i) => ({
     id, label: loopLabels[id], loop: true, explain: EXPLAIN[id],
     state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'live' : 'todo',
   }));
   const steps = [
-    { id: 'setup', label: 'Opening', explain: EXPLAIN.setup, state: opening ? 'live' : 'done' },
+    { id: 'setup', label: SESSION_LOOP.opening, explain: EXPLAIN.setup, state: opening ? 'live' : 'done' },
     ...loop,
-    { id: 'finish', label: 'Wrap up', explain: EXPLAIN.finish, state: ended ? 'done' : wrapped ? 'live' : 'todo' },
+    { id: 'finish', label: SESSION_LOOP.wrap, explain: EXPLAIN.finish, state: ended ? 'done' : wrapped ? 'live' : 'todo' },
   ];
   const round = current
     ? { label: `Ask ${askNumber(current.askId)} · ${KIND_LABEL[current.kind] || 'Ask'}` }
@@ -264,5 +266,7 @@ export function nowCard(room) {
     const short = d.length > 90 ? `${d.slice(0, 90).trimEnd()}…` : d.replace(/[.!?]+$/, '');
     line = BCW.lastDecided(askNumber(last.askId), short);
   }
-  return { line, shots: BCW.shotsSoFar(((room && room.images) || []).length) };
+  const shots = ((room && room.images) || []).length;
+  // Nothing decided and nothing shown yet: the card is not drawn (simplify PLAN item 18).
+  return { line, shots: BCW.shotsSoFar(shots), empty: !last && !shots };
 }

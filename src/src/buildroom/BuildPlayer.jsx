@@ -171,6 +171,8 @@ function Eyebrow({ word, askId, extra }) {
  * questions lead somewhere.
  */
 function OpeningProgress({ ask }) {
+  // One of the more framing questions, past the five-step core, counts nothing (simplify PLAN item 12).
+  if (ask.openingMore) return <div className="bpl-opening"><p className="plr-help bpl-opening-t">Shaping the build · one more question</p></div>;
   if (!ask.openingIndex || !ask.openingOf) return null;
   return (
     <div className="bpl-opening" aria-label={`Shaping the build, step ${ask.openingIndex} of ${ask.openingOf}`}>

@@ -5,17 +5,34 @@
  * in order and can skip, reword, probe or answer any of them; Start building
  * sends Claude the whole brief and the session moves to building.
  *
+ * THE FIVE-STEP CORE (simplify PLAN item 12, smaller; owner, 26 Oct 2026: "go
+ * to phase 2"): the default path is Making, For, The problem, Good looks like
+ * and First build, "step 2 of 5". We will know, Never, Tools and style and Look
+ * and feel sit under More framing questions in the brief, one press away, and
+ * fill the brief as before. A room part-way through its opening keeps every
+ * answer: a more question it already asked or answered opens that fold.
+ *
  * The steps and the kinds come from the server (build-store.js OPENING_STEPS,
  * OPENING_KINDS) on room.opening, so the page and Claude read the same list.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 import Icon from '../components/Icon';
 import { questionAnswer } from './buildScreens';
 import { W } from './words';
 
 const stepOf = (opening, key) => (opening.steps || []).find((x) => x.key === key) || null;
-const doneCount = (opening) => (opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length;
+const framed = (x) => ['done', 'skipped'].includes(x.status);
+// The server marks the core (`core`); a server from before phase 2 does not, so its five keys stand in.
+const CORE_KEYS = Object.freeze(['kind', 'forWhom', 'problem', 'good', 'firstBuild']);
+export const isCore = (st) => (typeof st.core === 'boolean' ? st.core : CORE_KEYS.includes(st.key));
+export const coreSteps = (opening) => (opening.steps || []).filter(isCore);
+export const moreSteps = (opening) => (opening.steps || []).filter((x) => !isCore(x));
+/** How far the opening has got: the core framed, of how many, and the more questions framed. */
+export function framedCount(opening) {
+  const core = coreSteps(opening);
+  return { n: core.filter(framed).length, of: core.length, more: moreSteps(opening).filter(framed).length };
+}
 
 /** The step the host is on: the one they chose in the brief, else the next one. */
 export function focusStep(opening, focus) {
@@ -190,8 +207,7 @@ export function DraftCard({ room, busy, run, api }) {
  * come back to it.
  */
 export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
-  const n = doneCount(opening);
-  const of = (opening.steps || []).length;
+  const { n, of, more } = framedCount(opening);
   const start = async () => {
     const ok = await run(() => api.openingAction('start', {}));
     if (ok !== undefined) onClose();
@@ -202,7 +218,7 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
         <h2 className="brm-h" id="brm-startbuild-title">Start building?</h2>
         <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
       </div>
-      <p>{n} of {of} steps are framed. Claude gets the brief as it is now and starts planning and building.</p>
+      <p>{W.startConfirmFramed(n, of, more)}</p>
       {/* Where it really is (host review, 25 Oct 2026): there is no More. */}
       <p className="brm-hint">Nothing is lost: Back to the opening, under SESSION, returns to these steps and tells Claude to pause.</p>
       <div className="brm-row brm-gap">
@@ -225,12 +241,16 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
 export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onShowWall, calm = false }) {
   const opening = room.opening || { steps: [] };
   const step = focusStep(opening, focus);
-  const n = step ? opening.steps.indexOf(step) + 1 : opening.steps.length;
+  const core = coreSteps(opening);
+  const count = framedCount(opening);
+  const moreLeft = moreSteps(opening).filter((x) => !framed(x)).length;
+  // "step 2 of 5" on the core; one of the more questions counts nothing (phase 2).
+  const where = !step ? '' : isCore(step) ? W.openingStepOf(core.indexOf(step) + 1, core.length) : W.openingMoreStep;
   const [confirming, setConfirming] = useState(false);
   return (
     <section className="brm-panel brm-nowcard brm-opening" aria-labelledby="brm-opening-h">
       <div className="brm-row brm-gap">
-        <h2 className="brm-h5 brm-op-phase" id="brm-opening-h">Opening{step ? ` · step ${n} of ${opening.steps.length}` : ''}</h2>
+        <h2 className="brm-h5 brm-op-phase" id="brm-opening-h">Opening{where ? ` · ${where}` : ''}</h2>
         <span className="brm-hint brm-push">Planning: Claude writes no code yet</span>
       </div>
       {room.briefDraft && !ended && <DraftCard key={room.briefDraft.at || room.briefDraft.headline} room={room} busy={busy} run={run} api={api} />}
@@ -259,11 +279,11 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
           )}
         </>
       ) : (
-        <p className="brm-hint">Every step is answered or skipped. Show the brief on the wall, then start building.</p>
+        <p className="brm-hint">{moreLeft ? W.openingCoreDone(moreLeft) : W.openingAllDone}</p>
       )}
       {!ended && (
         <div className="brm-op-start">
-          <span>{doneCount(opening)} of {opening.steps.length} framed. Start building whenever you like; Claude gets the brief as it is.</span>
+          <span>{W.openingFramed(count.n, count.of, count.more)}</span>
           {opening.readyForDraft && !room.briefDraft && (
             <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
               onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true }))}>
@@ -282,11 +302,32 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
 /**
  * THE BRIEF IS THE PATH (O1, O2): one line per step, done, asking now or
  * next. A line opens that step on the Now card; a done line offers its probes.
+ * The core's five lines first, then the more questions in their own fold (phase 2).
  */
 export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
   const opening = room.opening || { steps: [] };
   const cur = focusStep(opening, focus);
+  const more = moreSteps(opening);
+  // The more questions fold open by themselves once one is in use: asked, answered, skipped
+  // or picked, so a room that was part-way through them before phase 2 sees them as it left them.
+  const moreInUse = more.some((st) => st.status !== 'next') || Boolean(cur && !isCore(cur));
+  const [moreOpen, setMoreOpen] = useState(moreInUse);
+  useEffect(() => { if (moreInUse) setMoreOpen(true); }, [moreInUse]);
   const probe = (step, question) => run(() => api.createAsk({ kind: 'suggest', prompt: question, detail: '', openingStep: step.key, probe: true }));
+  const line = (st) => (
+    <li key={st.key} className={`brm-bp-it is-${st.status}${cur && cur.key === st.key ? ' is-focus' : ''}`}>
+      <button type="button" className="brm-bp-line" onClick={() => setFocus(st.key)} aria-current={cur && cur.key === st.key ? 'step' : undefined}>
+        <span className="brm-bp-dot" aria-hidden="true" />
+        <span className="brm-bp-k">{st.label}</span>
+        <span className="brm-bp-v">{st.value || (st.status === 'skipped' ? 'Skipped' : st.status === 'asking' ? 'Asking the room now' : st.host ? 'You answer this one' : st.question)}</span>
+      </button>
+      {!ended && st.status === 'done' && st.probes.length > 0 && (
+        <div className="brm-bp-probes" role="group" aria-label={`Probe ${st.label}`}>
+          {st.probes.map((p) => <button key={p} type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => probe(st, p)}>{p}</button>)}
+        </div>
+      )}
+    </li>
+  );
   return (
     <section className="brm-briefpath" aria-label="The opening: the build brief">
       {(room.brief || {}).headline && (
@@ -295,23 +336,14 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
           {room.brief.summary && <span>{room.brief.summary}</span>}
         </div>
       )}
-      <p className="brm-hint">One line per step. Click a line to work on it; Claude reads each as it lands.</p>
-      <ol className="brm-bp">
-        {opening.steps.map((st) => (
-          <li key={st.key} className={`brm-bp-it is-${st.status}${cur && cur.key === st.key ? ' is-focus' : ''}`}>
-            <button type="button" className="brm-bp-line" onClick={() => setFocus(st.key)} aria-current={cur && cur.key === st.key ? 'step' : undefined}>
-              <span className="brm-bp-dot" aria-hidden="true" />
-              <span className="brm-bp-k">{st.label}</span>
-              <span className="brm-bp-v">{st.value || (st.status === 'skipped' ? 'Skipped' : st.status === 'asking' ? 'Asking the room now' : st.host ? 'You answer this one' : st.question)}</span>
-            </button>
-            {!ended && st.status === 'done' && st.probes.length > 0 && (
-              <div className="brm-bp-probes" role="group" aria-label={`Probe ${st.label}`}>
-                {st.probes.map((p) => <button key={p} type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => probe(st, p)}>{p}</button>)}
-              </div>
-            )}
-          </li>
-        ))}
-      </ol>
+      <p className="brm-hint">Click a line to work on that step.</p>
+      <ol className="brm-bp">{coreSteps(opening).map(line)}</ol>
+      {more.length > 0 && (
+        <details className="brm-bp-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
+          <summary>{W.openingMore}<span className="brm-muted">{` · ${W.openingMoreHint(more.length)}`}</span></summary>
+          <ol className="brm-bp">{more.map(line)}</ol>
+        </details>
+      )}
     </section>
   );
 }

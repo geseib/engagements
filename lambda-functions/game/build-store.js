@@ -108,18 +108,29 @@ const BRIEF_MAX_ITEMS = 30;
  * working-backwards order, each filling one line of the brief; a guided path
  * the host can skip; Tools and style the host answers by default.
  */
+/*
+ * THE FIVE-STEP CORE (simplify PLAN item 12, phase 2; owner, 26 Oct 2026: "go
+ * to phase 2"): Making, For, The problem, Good looks like and First build are
+ * the default path (`core`), the working-backwards core the owner named on
+ * 6 Oct and what Claude's draft waits for. The other four stay, one press
+ * away under "More framing questions", and still fill the brief. The order and
+ * the keys do not change, so a room part-way through its opening reads the
+ * same: a step it already answered stays answered.
+ */
 const OPENING_STEPS = Object.freeze([
-  { key: 'kind', label: 'Making', question: 'What are we making?', ask: 'choice' },
-  { key: 'forWhom', label: 'For', question: 'Who is it for? Name a person and the moment they need it.', ask: 'suggest', probes: ['Who else is it for?', 'Who is it not for?'] },
-  { key: 'problem', label: 'The problem', question: 'What problem do they have today?', ask: 'suggest', probes: ['What do they do instead today?', 'Why is that not good enough?'] },
-  { key: 'good', label: 'Good looks like', question: 'It is launch day. Write the headline.', ask: 'suggest', probes: ['What would they tell a friend?'] },
+  { key: 'kind', label: 'Making', question: 'What are we making?', ask: 'choice', core: true },
+  { key: 'forWhom', label: 'For', question: 'Who is it for? Name a person and the moment they need it.', ask: 'suggest', probes: ['Who else is it for?', 'Who is it not for?'], core: true },
+  { key: 'problem', label: 'The problem', question: 'What problem do they have today?', ask: 'suggest', probes: ['What do they do instead today?', 'Why is that not good enough?'], core: true },
+  { key: 'good', label: 'Good looks like', question: 'It is launch day. Write the headline.', ask: 'suggest', probes: ['What would they tell a friend?'], core: true },
   { key: 'proof', label: 'We will know', question: 'How will we know it worked?', ask: 'suggest', probes: ['What would we see, or count?'] },
   { key: 'never', label: 'Never', question: 'What must it never do?', ask: 'suggest' },
-  { key: 'firstBuild', label: 'First build', question: 'What is the smallest version we could show today?', ask: 'suggest' },
+  { key: 'firstBuild', label: 'First build', question: 'What is the smallest version we could show today?', ask: 'suggest', core: true },
   { key: 'tools', label: 'Tools and style', question: 'Any tools, frameworks, libraries or styles to use, or to avoid?', ask: 'suggest', host: true },
   { key: 'look', label: 'Look and feel', question: 'How should it look and feel?', ask: 'suggest' },
 ]);
 const OPENING_KEYS = Object.freeze(OPENING_STEPS.map((x) => x.key));
+const OPENING_CORE = Object.freeze(OPENING_STEPS.filter((x) => x.core).map((x) => x.key));
+const OPENING_MORE = Object.freeze(OPENING_KEYS.filter((k) => !OPENING_CORE.includes(k)));
 /** Step 1's list: six, so it fits the wheel. The host may edit it per session. */
 const OPENING_KINDS = Object.freeze([
   { title: 'A website or page', detail: 'Something people visit' },
@@ -407,7 +418,9 @@ function openingView(state, room) {
     value: valueOf(st.key),
     status: asking.has(st.key) ? 'asking' : brief.steps[st.key] || 'next',
   }));
-  const current = steps.find((st) => st.status === 'asking') || steps.find((st) => st.status === 'next') || null;
+  // The step being asked, else the next core step. Once the core is framed there is no
+  // next step: the host starts building, or picks one of the more questions (phase 2).
+  const current = steps.find((st) => st.status === 'asking') || steps.find((st) => st.core && st.status === 'next') || null;
   // Enough for Claude to draft the one page: who, the problem, and good.
   const readyForDraft = Boolean(brief.forWhom && brief.lines.problem && brief.lines.good);
   return { phase, steps, current: current ? current.key : null, kinds: OPENING_KINDS, readyForDraft, drafted: Boolean(brief.headline) };
@@ -1038,11 +1051,14 @@ function askView(ask, room, audience, me) {
   if (isHost && ask.AboutIdea) out.aboutIdea = ask.AboutIdea;
   // Queued for the room from one thing the room gave (Consider): its item key.
   if (isHost && ask.FromItem) out.fromItem = ask.FromItem;
-  // An opening step (and whether it is a probe): phones see the step too, for "step 3 of 9".
+  // An opening step (and whether it is a probe): phones see the step too, "step 3 of 5" on
+  // the core; one of the more questions counts nothing, it is marked `openingMore` (phase 2).
   if (ask.OpeningStep) {
     out.openingStep = ask.OpeningStep;
-    out.openingIndex = OPENING_KEYS.indexOf(ask.OpeningStep) + 1;
-    out.openingOf = OPENING_KEYS.length;
+    if (OPENING_CORE.includes(ask.OpeningStep)) {
+      out.openingIndex = OPENING_CORE.indexOf(ask.OpeningStep) + 1;
+      out.openingOf = OPENING_CORE.length;
+    } else out.openingMore = true;
     if (ask.Probe) out.probe = true;
   }
   if (ask.AskForMockups && isHost) {
@@ -2696,7 +2712,7 @@ module.exports = {
   roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,
   WHEEL_MIN, WHEEL_MAX, WHEEL_KEEP_SPINS, tiedIds, wheelSlices, wheelView, wheelLanded,
-  WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, ratingDirection, withRatingMeaning,
+  WALL_COMMENT_MS, wallCommentView, DRAFT_LIMITS, normalizeDraft, draftView, OPENING_STEPS, OPENING_KEYS, OPENING_CORE, OPENING_MORE, OPENING_KINDS, BRIEF_LINES, briefWithStep, phaseOf, openingView, CLAUDE_GETS, claudeGetsOf, briefView, briefWith, normalizeBrief, briefText, BRIEF_MAX_ITEMS, voteFromIdeas, mockupDirection, mockupProgress, DEFAULT_VOTE_PROMPT, questionAnswer, DECISION_METHODS, RATING_SCALE, ratingAnswer, ratingDirection, withRatingMeaning,
   MOCKUP_COUNTS, MOCKUPS_PLUGIN, POINT_KINDS, POINT_STATUSES, OPEN_POINT_STATUSES, REQUEST_KINDS, REQUEST_STATUSES, POINT_LIMITS, REQUEST_STALE_MS, POINT_OUTCOMES,
   normalizePoint, normalizePointsPost, normalizePointRequest, pointIdOf, requestIdOf, isOpenPoint, openPointCount, activeRequests,
   POINT_VOTE, RUN_MAX_ITEMS, RUN_STATES, siteOf, pointVoteAsk, pointVoteCounts, outcomeFor, runPendingIds, runDirection, runItemText, runView, shownPointView,

@@ -9,7 +9,8 @@
  *    in three states: not yet known, up to date (command folded), out of date
  *    (Copy is the one orange).
  * 3. The New Build Room page says what the laptop needs, with a link.
- * 4. The empty room's first "How a Build Room works" step names the install.
+ * 4. The empty room's Before the room starts card names the install in its
+ *    Connect row (simplify PLAN item 10, 26 Oct 2026).
  *
  * NO GEOMETRIC ASSERTIONS — jsdom has no layout engine.
  */
@@ -20,7 +21,8 @@ import {
   render, screen, within, fireEvent,
 } from '@testing-library/react';
 import MarketingBuildRoomPage from '../marketing/BuildRoomPage';
-import { BuildCreate, ConnectPanel, HOW_IT_WORKS } from '../buildroom/BuildRoomPage';
+import { BuildCreate, ConnectPanel } from '../buildroom/BuildRoomPage';
+import BuildSetup from '../buildroom/BuildSetup';
 import { W } from '../buildroom/words';
 
 jest.mock('../auth/navigate', () => ({ navigateTo: jest.fn() }));
@@ -215,7 +217,9 @@ describe('the New Build Room page and the empty room', () => {
     expect(ph.filter((p) => p !== 'Access code').every((p) => p.startsWith('e.g. '))).toBe(true);
   });
 
-  test('step 1 of How a Build Room works names the install', () => {
-    expect(HOW_IT_WORKS[0]).toBe('Connect Claude Code: install the plugin, then paste one command.');
+  test('the Connect row of Before the room starts names the install', () => {
+    render(<BuildSetup s={{ connected: false, connectLeads: true, joined: 0, code: '4821', two: false, onConnect: jest.fn(), onCodes: jest.fn(), onTwo: jest.fn() }} />);
+    const row = screen.getByText(W.connectClaude).closest('li');
+    expect(row.textContent).toContain('Install the plugin, then paste one command');
   });
 });

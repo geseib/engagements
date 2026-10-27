@@ -1529,6 +1529,12 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   if (newPoints >= 3 && !room.shownPoint) {
     moves.push({ key: 'talk-points', title: 'Talk over a point', hint: 'Tick one in Points', button: W.points });
   }
+  // ASK CLAUDE FOR POINTS (simplify PLAN item 18, phase 2): with no points and no request yet
+  // the Points tab is not drawn, so its door is here (and under the composer's More). Never the lead.
+  const pts = room && room.points;
+  if (pts && !framing && !(room.outcome && room.outcome.summary) && !(pts.items || []).length && !(pts.requests || []).length) {
+    moves.push({ key: 'ask-points', title: W.askForPoints, hint: W.askForPointsHint, button: W.askForPointsBtn, capability: 'points' });
+  }
   // Nothing runs without Claude: until it has called in, that is the first move (a key minted is not a connection).
   if (room && room.agent && !claudeEverConnected(room.agent) && !framing) {
     moves.unshift({ key: 'connect', title: 'Connect Claude Code', hint: 'Nothing is built without it', button: 'Connect' });

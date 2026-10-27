@@ -25,7 +25,7 @@ import { useNextFocus } from './useNextFocus';
 import { ItemMark } from './BuildConsider';
 import { itemKeys } from './sentMarks';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks', 'ask-points': 'MagnifyingGlass' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -82,6 +82,7 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
               type="button"
               className={`brm-btn brm-btn--sm${i === 0 && !outline ? ' brm-btn--primary' : ''}`}
               data-next-primary={i === 0 && !outline ? true : undefined}
+              data-capability={m.capability}
               onClick={() => onMove(m.key)}
             >
               {m.button}
