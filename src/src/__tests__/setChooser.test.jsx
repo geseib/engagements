@@ -249,3 +249,20 @@ describe('wide (owner, 26 Oct 2026: the narrow modal hid what a host needs)', ()
     expect(screen.queryByText('How the team is doing')).toBeNull();
   });
 });
+
+describe('a narrow window (a browser at 820px, 26 Oct 2026)', () => {
+  // rejects: hiding the Topic and Tags cells with CSS under a fixed table
+  // layout, which slid Used / updated into a zero-width column.
+  test('wide but under 900px: the extra columns are left out of the markup, header and cells alike', () => {
+    const before = window.matchMedia;
+    window.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
+    try {
+      mount({ wide: true });
+      open();
+      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Used / updated']);
+      const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
+      expect(row.querySelectorAll('td').length).toBe(4);
+      expect(row.textContent).toMatch('How the team is doing');
+    } finally { window.matchMedia = before; }
+  });
+});

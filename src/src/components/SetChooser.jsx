@@ -38,6 +38,24 @@ import './SetChooser.css';
  * The sets arrive already narrowed to the chosen format; the caller owns the
  * selection (a pair key, utils/setRef.js) and what happens on a pick.
  */
+/** Below this window width the wide chooser leaves out Topic and Tags. */
+export const WIDE_COLUMNS_MIN = 900;
+
+/** True while the window is at least `px` wide (true where there is no window). */
+function useRoomy(px) {
+  const query = `(min-width: ${px}px)`;
+  const get = () => (typeof window === 'undefined' || !window.matchMedia ? true : window.matchMedia(query).matches);
+  const [roomy, setRoomy] = useState(get);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setRoomy(mq.matches);
+    if (mq.addEventListener) mq.addEventListener('change', on); else mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else mq.removeListener(on); };
+  }, [query]);
+  return roomy;
+}
+
 export default function SetChooser({
   sets = [],
   value = '',
@@ -80,6 +98,22 @@ export default function SetChooser({
   const [state, setState] = useState(() => initialListState(config));
   const [openState, setOpen] = useState(false);
   const open = stayOpen || openState;
+  // THE TWO EXTRA COLUMNS NEED THE ROOM (a browser at 820px showed why CSS
+  // alone will not do: hiding cells under a fixed table layout slid Updated
+  // into a zero-width column). Decided here, from the window, so the columns
+  // and the cells always agree.
+  const roomy = useRoomy(WIDE_COLUMNS_MIN);
+  const wideCols = wide && roomy;
+  const rootRef = useRef(null);
+  const opened = useRef(false);
+  useEffect(() => {
+    // Opened by the host (not mounted open): bring the chooser to the top of
+    // the dialog, so the list is in view rather than below the fold.
+    if (open && !stayOpen && opened.current && rootRef.current && rootRef.current.scrollIntoView) {
+      rootRef.current.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    opened.current = true;
+  }, [open, stayOpen]);
   const tellOpen = useRef(onOpenChange);
   tellOpen.current = onOpenChange;
   useEffect(() => { if (tellOpen.current) tellOpen.current(open); }, [open]);
@@ -105,7 +139,7 @@ export default function SetChooser({
   // USED BY YOU LATELY (S0, S1): the newest three, while nothing narrows the list.
   const recentSets = [...sets].filter((s) => recent.get(keyOf(s)) && pickable(s))
     .sort((a, b) => recent.get(keyOf(b)) - recent.get(keyOf(a))).slice(0, 3);
-  const cols = wide ? 6 : 4;
+  const cols = wideCols ? 6 : 4;
   const grouped = !filtered && state.sort === 'recent' && recentSets.length > 0;
   const rows = grouped
     ? [...recentSets, ...shown.filter((s) => !recentSets.includes(s))]
@@ -208,7 +242,7 @@ export default function SetChooser({
   const team = teamName ? <> in <b>{teamName}</b></> : null;
 
   return (
-    <div className={`schs schs--open${wide ? ' schs--wide' : ''}`} data-testid="set-chooser" data-value={value} data-theme={theme}>
+    <div ref={rootRef} className={`schs schs--open${wide ? ' schs--wide' : ''}`} data-testid="set-chooser" data-value={value} data-theme={theme}>
       <div className="schs-head">
         <span className="schs-dim" role="status">
           {filtered ? `${shown.length} of ${sets.length} sets` : `${sets.length} ${fmt}sets you can use`}{team}
@@ -226,7 +260,16 @@ export default function SetChooser({
             )}
           </span>
         )}
-        {!stayOpen && <button type="button" className="schs-link schs-push" onClick={() => { setOpen(false); setTagMenu(false); }}>{chosen ? 'Keep the set I had' : 'Close'}</button>}
+        {/* Sort sits up here, beside the count it orders, so the filters
+            below fit on one line in a laptop-sized dialog (checked in a
+            browser at 1280×720, 26 Oct 2026). */}
+        <label className="schs-sel schs-push">
+          <span>Sort</span>
+          <select value={state.sort} onChange={(e) => patch({ sort: e.target.value })} aria-label="Sort">
+            {CHOOSER_SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+        {!stayOpen && <button type="button" className="schs-link" onClick={() => { setOpen(false); setTagMenu(false); }}>{chosen ? 'Keep the set I had' : 'Close'}</button>}
       </div>
       {searchBox(`Search ${sets.length} ${fmt}sets: name, description or tag`)}
       <div className="schs-filters">
@@ -276,12 +319,6 @@ export default function SetChooser({
             ))}
           </select>
         </label>
-        <label className="schs-sel schs-push">
-          <span>Sort</span>
-          <select value={state.sort} onChange={(e) => patch({ sort: e.target.value })} aria-label="Sort">
-            {CHOOSER_SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
       </div>
       {chips.length > 0 && (
         <div className="schs-chips">
@@ -321,12 +358,12 @@ export default function SetChooser({
           <table className="schs-tbl">
             <colgroup>
               <col className="schs-c-name" /><col className="schs-c-qs" /><col className="schs-c-own" />
-              {wide && <><col className="schs-c-topic" /><col className="schs-c-tags" /></>}
+              {wideCols && <><col className="schs-c-topic" /><col className="schs-c-tags" /></>}
               <col className="schs-c-when" />
             </colgroup>
             <thead><tr>
               <th>Name</th><th>Qs</th><th>Owner</th>
-              {wide && <><th className="schs-col-topic">Topic</th><th className="schs-col-tags">Tags</th></>}
+              {wideCols && <><th className="schs-col-topic">Topic</th><th className="schs-col-tags">Tags</th></>}
               <th>{state.updated === 'used' || grouped ? 'Used / updated' : 'Updated'}</th>
             </tr></thead>
             <tbody>
@@ -352,7 +389,7 @@ export default function SetChooser({
                       </td>
                       <td>{set.totalQuestions || set.questionCount || 0}</td>
                       <td><span className={`schs-own${setOwnerIsOurs(set) ? '' : ' schs-own--off'}`} title={setOwnerTitle(set)}>{ownerChip(set)}</span></td>
-                      {wide && (
+                      {wideCols && (
                         <>
                           <td className="schs-col-topic schs-dim">{setTopicLabel(set.topic)}</td>
                           <td className="schs-col-tags" title={(set.tags || []).join(', ')}>

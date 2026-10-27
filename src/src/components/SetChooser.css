@@ -139,7 +139,7 @@
 .schs .schs-sel { display: inline-flex; align-items: center; gap: 6px; font-size: var(--schs-t-label); color: var(--schs-muted); }
 .schs .schs-sel select {
   min-height: 34px;
-  max-width: 190px;
+  max-width: 170px;
   border: 1px solid var(--schs-rule);
   border-radius: 8px;
   background: var(--schs-field);
@@ -252,7 +252,15 @@
 
 /* WIDE (owner, 26 Oct 2026: the narrow modal hid what a host needs to pick):
    a taller list, two-line rows with the description, Topic and Tags. */
-.schs.schs--wide .schs-list { max-height: min(56vh, 560px); }
+.schs.schs--wide .schs-list {
+  /* What a laptop dialog has left once its header, footer and the chooser's
+     own head, search and filters are on screen (a browser at 1280×720 showed
+     the list starting under the fold at 56vh). */
+  max-height: clamp(240px, calc(100vh - 440px), 560px);
+}
+/* Clears the dialog's own sticky header (about 75px) when the open list is
+   scrolled to the top, so the count, Sort and Close stay in sight. */
+.schs.schs--wide { scroll-margin-top: 92px; }
 .schs.schs--wide .schs-tbl td { height: 52px; vertical-align: middle; }
 .schs.schs--wide .schs-tbl .schs-c-own { width: 120px; }
 .schs.schs--wide .schs-tbl .schs-c-topic { width: 150px; }
@@ -268,12 +276,10 @@
 }
 .schs .schs-tag { display: inline-block; margin-right: 4px; padding: 1px 6px; border: 1px solid var(--schs-rule); border-radius: 6px; font-size: var(--schs-t-floor); color: var(--schs-text); }
 
-/* A narrow window: the two extra columns go; the description stays. */
-@media (max-width: 900px) {
-  .schs.schs--wide .schs-tbl .schs-c-topic,
-  .schs.schs--wide .schs-tbl .schs-c-tags { width: 0; }
-  .schs.schs--wide .schs-tbl .schs-col-topic,
-  .schs.schs--wide .schs-tbl .schs-col-tags { display: none; }
+/* A narrow window: SetChooser.jsx leaves the two extra columns out (useRoomy). */
+/* There the filters wrap to a second line, so the list gives that line back. */
+@media (max-width: 899px) {
+  .schs.schs--wide .schs-list { max-height: clamp(240px, calc(100vh - 500px), 560px); }
 }
 
 @media (max-width: 560px) {
