@@ -228,8 +228,39 @@
 .brm .brm-main { display: grid; gap: 16px; min-width: 0; }
 .brm .brm-side { display: grid; gap: 16px; min-width: 0; }
 
-/* ---- the first-run strip ------------------------------------------------ */
-.brm .brm-howto { border-color: var(--brm-line-amber); }
+/* ---- before the room starts (simplify PLAN item 10, 26 Oct 2026) -------- */
+.brm .brm-setup { border-color: var(--brm-line-amber); }
+.brm .brm-setup-rows { margin: 8px 0 0; padding: 0; list-style: none; display: grid; }
+.brm .brm-setup-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 8px 0; border-top: 1px solid var(--brm-rule);
+}
+.brm .brm-setup-row:first-child { border-top: 0; }
+.brm .brm-setup-tick {
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 var(--brm-t-floor)/1 var(--font-ui); border: 2px solid var(--muted); color: var(--muted);
+}
+.brm .brm-setup-row.is-done .brm-setup-tick,
+.brm .brm-setup-tick.is-small { border-color: var(--success); background: var(--brm-tint-green); color: var(--brm-success-text); }
+.brm .brm-setup-tick.is-small { width: 18px; height: 18px; border-width: 1.5px; }
+.brm .brm-setup-t { display: grid; gap: 2px; min-width: 0; }
+.brm .brm-setup-t b { font-weight: 600; font-size: var(--brm-t-body); }
+.brm .brm-setup-t span { color: var(--muted); font-size: var(--brm-t-label); }
+.brm .brm-setup-act { display: inline-flex; gap: 6px; }
+.brm .brm-setup .brm-hint { margin: 8px 0 0; }
+/* Folded: one line once every row is done. */
+.brm .brm-setupdone { display: flex; align-items: center; gap: 8px; margin: 0; padding: 2px 4px; color: var(--muted); font-size: var(--brm-t-label); }
+/* A list with nothing in it yet: one quiet line, so the column keeps its place. */
+.brm .brm-quiet { margin: 0; padding: 10px 12px; border: 1px dashed var(--brm-rule); border-radius: 10px; color: var(--muted); font-size: var(--brm-t-label); }
+/* The composer, folded to one line until clicked. */
+.brm .brm-composeline { display: flex; align-items: center; gap: 8px; }
+.brm .brm-composeline-box {
+  flex: 1; min-width: 0; min-height: var(--brm-row-h); padding: 0 10px; text-align: left; cursor: text;
+  border: 1px solid var(--brm-rule); border-radius: 8px; background: var(--bg); color: var(--muted);
+  font: 400 var(--brm-t-body)/1.2 var(--font-ui);
+}
+.brm .brm-composeline-box:hover { border-color: var(--muted); }
+.brm .brm-composeline-box:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
 .brm .brm-steps { margin: 8px 0 14px; padding: 0; list-style: none; display: grid; gap: 8px; }
 .brm .brm-steps li { display: flex; gap: 10px; align-items: flex-start; font-size: var(--brm-t-body); color: var(--text); }
 .brm .brm-n {
@@ -710,11 +741,6 @@
 }
 .brm .brm-seehere:disabled { color: var(--muted); text-decoration: none; cursor: default; }
 .brm .brm-seehere:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
-/* "Where will the room watch?" on the Host screen: the shared chooser
-   (RoomScreenChooser.css) reads the stage ladder's --t-meta / --t-body, which
-   the Host screen does not carry, so it gets the laptop ladder's here. */
-.brm .brm-roomwatch { --t-meta: var(--brm-t-body); --t-body: var(--brm-t-head); }
-.brm .brm-roomwatch .wfs-view { padding: 0; background: transparent; overflow: visible; }
 
 /* A screen the room sees, below the header. */
 .brm .brm-screenbody { padding: 16px; display: grid; gap: 16px; }
@@ -858,7 +884,6 @@
 .brm .brm-nowcard { display: grid; gap: 10px; }
 .brm .brm-nowcard .brm-h5 { margin: 0; }
 .brm .brm-nowline { margin: 0; font-size: var(--brm-t-title); font-weight: 800; line-height: 1.2; }
-.brm .brm-nowcard .brm-activity { background: transparent; border: 0; padding: 0; }
 .brm .brm-composer .brm-ta { min-height: 72px; }
 .brm .brm-composer .brm-label { margin: 0 4px 0 0; }
 .brm .brm-fold { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; }
@@ -884,7 +909,8 @@
 
 /* THE HOST SCREEN NEVER SCROLLS THE WINDOW (owner, 2026-10-05). On a laptop
    the screen is the window's height; each column scrolls inside itself, and
-   in the right column only the one open section does (HistoryStack). On a
+   in the right column only the one open section does (HistoryStack: The
+   brief or History, under Claude now; owner, 28 Oct 2026). On a
    small screen, where three columns cannot fit, the page scrolls as before. */
 .brm .brm-stack { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .brm .brm-stackitem { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; min-height: 0; }
@@ -894,6 +920,7 @@
   background: transparent; border: 0; color: var(--text); cursor: pointer; text-align: left;
   font: 700 var(--brm-t-body)/1.2 var(--font-ui);
 }
+.brm .brm-stackhead--only { margin: 0; cursor: default; }
 .brm .brm-stackhead:focus-visible { outline: 2px solid var(--secondary); outline-offset: -2px; border-radius: 12px; }
 .brm .brm-stackbody { border-top: 1px solid var(--brm-rule); }
 /* The section's own panel and heading sit inside the row that names it. */
@@ -904,6 +931,21 @@
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 .brm .brm-stackbody > .brm-empty { margin: 12px; }
+
+/* THE RIGHT COLUMN (owner, 28 Oct 2026): Claude now's state line, The brief's
+   body, and History's chips, which stay at the top while the list scrolls. */
+.brm .brm-claudenow-t { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: var(--brm-t-body); }
+.brm .brm-claudenow-t .brm-cdot { align-self: center; }
+.brm .brm-claudenow-t .brm-muted { font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-claudenow-sent { margin: 0; font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-brieffold { display: grid; gap: 12px; padding: 10px 12px 12px; }
+.brm .brm-brieflines { display: grid; gap: 6px; }
+.brm .brm-brieflines-h { margin: 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-brieflines-dl { margin: 0; display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 4px 8px; font-size: var(--brm-t-label); }
+.brm .brm-brieflines-dl dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--brm-t-floor); padding-top: 2px; }
+.brm .brm-brieflines-dl dd { margin: 0; overflow-wrap: anywhere; }
+.brm .brm-histchips { position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 10px; background: var(--surface); border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-decided-hint { margin: 0; }
 
 @media (min-width: 1201px) {
   /* position: relative + overflow: hidden: nothing absolute inside the Host
@@ -916,7 +958,10 @@
   .brm.brm-room--host > .brm-host { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
   .brm.brm-room--host .brm-hostcol { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .brm.brm-room--host .brm-hostcol--stack { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; }
+  /* Claude now never folds and never takes the column: past 40% it scrolls itself. */
+  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; max-height: 40%; overflow-y: auto; }
+  /* What's next's own Claude line is Claude now's, beside it: said once (as on the console). */
+  .brm.brm-room--host .brm-wnext > .brm-claudeline { display: none; }
   .brm.brm-room--host .brm-stack { flex: 1; }
   .brm.brm-room--host .brm-stackitem { flex: none; }
   .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
@@ -1018,6 +1063,11 @@
 /* Menus on an idea open under their own button, rightward, so they stay in the
    column (a menu opening leftward from a left-hand button ran off its edge). */
 .brm .brm-idea-acts .brm-more-panel { min-width: 260px; left: 0; right: auto; }
+/* An idea's words open Consider (simplify PLAN item 18, phase 2); More's Consider… is the keyboard's door. */
+.brm .brm-idea-text.is-door { cursor: pointer; border-radius: 6px; margin: 0 -4px; padding: 2px 4px; }
+.brm .brm-idea-text.is-door:hover { background: var(--surface-2); text-decoration: underline; text-decoration-color: var(--muted); }
+.brm .brm-more-grp { display: grid; gap: 6px; }
+.brm .brm-more-k { color: var(--muted); font-size: var(--brm-t-floor); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 2px 0; }
 /* C3b: a waiting vote shows a tile per option, its mockup as Claude attaches it. */
 .brm .brm-mocktiles { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .brm .brm-mocktiles li { display: grid; gap: 6px; align-content: start; min-width: 0; }
@@ -1069,6 +1119,21 @@
 /* A Choose question's options under its words; a type chip's count (owner, 24 Oct). */
 .brm .brm-lib-opts { display: block; color: var(--muted); font-size: var(--brm-t-floor); }
 .brm .brm-qchip-n { margin-left: 2px; font-variant-numeric: tabular-nums; }
+/* The form's kinds (PLAN item 14): four equal tabs on a row of their own, never squeezed by the source line. */
+.brm .brm-seg--askkinds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.brm .brm-seg--askkinds .brm-segbtn { padding: 0 8px; white-space: nowrap; }
+.brm .brm-askmore { margin: 4px 0 12px; }
+.brm .brm-askmore > summary .brm-hint { font-weight: 400; }
+.brm .brm-askmore > .brm-field:first-of-type { margin-top: 6px; }
+.brm .brm-selfstart { align-self: flex-start; justify-self: start; }
+/* Wrap up's links (PLAN item 15): label and address, two boxes a row. */
+.brm .brm-wraplink { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.brm .brm-wrap-filled { margin-left: 8px; }
+@media (max-width: 480px) {
+  .brm .brm-seg--askkinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brm .brm-wraplink { grid-template-columns: minmax(0, 1fr) 36px; }
+  .brm .brm-wraplink > input:first-child { grid-column: 1 / -1; }
+}
 @media (max-width: 860px) {
   .brm .brm-libgrid { grid-template-columns: 1fr; }
   .brm .brm-lib { max-height: 40vh; }
@@ -1145,6 +1210,12 @@
 .brm .brm-bp-it.is-asking .brm-bp-dot { background: var(--primary); border-color: var(--primary); }
 .brm .brm-bp-it.is-focus .brm-bp-line { background: var(--brm-tint-amber); border-color: var(--brm-line-amber); }
 .brm .brm-bp-probes { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px 30px; }
+/* The more framing questions (simplify PLAN item 12, phase 2): one press away, under the core's five. */
+.brm .brm-bp-more { margin-top: 8px; }
+.brm .brm-bp-more > summary { cursor: pointer; padding: 6px 8px; border-radius: 8px; font-size: var(--brm-t-label); font-weight: 600; }
+.brm .brm-bp-more > summary:hover { background: var(--surface-2); }
+.brm .brm-bp-more > summary:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+.brm .brm-bp-more > .brm-bp { margin-top: 4px; }
 .brm .brm-wallbrief { display: grid; gap: 18px; align-content: start; }
 .brm .brm-wb-lines { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 24px; margin: 0; font-size: var(--brm-st-body); line-height: 1.3; }
 .brm .brm-wb-lines dt { color: var(--muted); font-size: var(--brm-st-meta); text-transform: uppercase; letter-spacing: 0.08em; padding-top: 4px; }
@@ -1392,7 +1463,6 @@
 .brm .brm-dec .brm-qtick { margin: 2px 0 0; }
 .brm .brm-dec.is-ticked { border-color: var(--primary); }
 .brm .brm-dec.is-pick { cursor: pointer; }
-.brm .brm-stackhint { font-size: var(--brm-t-floor); font-weight: 400; }
 .brm .brm-dec-t { grid-column: 2; min-width: 0; }
 .brm .brm-dec-q { margin: 0; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
 .brm .brm-dec-a { margin: 2px 0 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }

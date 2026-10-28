@@ -21,6 +21,7 @@
  */
 import { askPathStep, runOf, runDoneCount, whatsNextMoves } from './buildScreens';
 import { KIND_LABEL, askNumber } from './screens/common';
+import { LOOP, SESSION_LOOP, W } from './words';
 
 /** The console's own words (sentence case, plain; the rest are words.js's). */
 export const BCW = Object.freeze({
@@ -65,10 +66,6 @@ export const BCW = Object.freeze({
   wrapUp: 'Wrap up',
   report: 'Report',
   endSession: 'End session',
-  now: 'Now',
-  lastDecided: (n, what) => `Last decided, ask ${n}: ${what}.`,
-  nothingDecided: 'Nothing decided yet.',
-  shotsSoFar: (n) => (n === 1 ? '1 screenshot so far.' : `${n} screenshots so far.`),
   forYou: 'For you · note for Claude',
   claudeAsked: 'Claude asked this.',
   askAnswerForRoom: 'Answer for the room',
@@ -82,7 +79,6 @@ export const BCW = Object.freeze({
   ideasJoinWaiting: 'Each idea joins Waiting for you. Taking the point down offers to put them to a vote.',
   theSource: 'For you · the source',
   sourceNever: 'The room sees the point, never the source line.',
-  claudeNow: 'Claude now',
 });
 
 // ── The moment ──────────────────────────────────────────────────────────────
@@ -148,15 +144,16 @@ export function consoleStrip(room, current, { pickId = null, answering = false, 
     if (at === undefined) at = 1;
   }
   const loopIds = ['ask', 'collect', 'settle', 'send'];
-  const loopLabels = { ask: 'Ask', collect: current && current.status === 'voting' ? 'Vote' : 'Collect', settle: 'Settle', send: 'Send to Claude' };
+  // ONE LOOP (simplify PLAN item 13, 26 Oct 2026): the same four words as the ask path, voting or not.
+  const loopLabels = LOOP;
   const loop = loopIds.map((id, i) => ({
     id, label: loopLabels[id], loop: true, explain: EXPLAIN[id],
     state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'live' : 'todo',
   }));
   const steps = [
-    { id: 'setup', label: 'Opening', explain: EXPLAIN.setup, state: opening ? 'live' : 'done' },
+    { id: 'setup', label: SESSION_LOOP.opening, explain: EXPLAIN.setup, state: opening ? 'live' : 'done' },
     ...loop,
-    { id: 'finish', label: 'Wrap up', explain: EXPLAIN.finish, state: ended ? 'done' : wrapped ? 'live' : 'todo' },
+    { id: 'finish', label: SESSION_LOOP.wrap, explain: EXPLAIN.finish, state: ended ? 'done' : wrapped ? 'live' : 'todo' },
   ];
   const round = current
     ? { label: `Ask ${askNumber(current.askId)} · ${KIND_LABEL[current.kind] || 'Ask'}` }
@@ -165,6 +162,23 @@ export function consoleStrip(room, current, { pickId = null, answering = false, 
 }
 
 // ── "Your part now" (answer (b)) ───────────────────────────────────────────
+
+/**
+ * WRAPPED, NOT YET ENDED (PLAN item 15). Between asks the card's slot is held
+ * empty ("No main move now"); once a wrap-up is saved there is one: Check the
+ * report, then End session, the same two moves What's next leads with on one
+ * screen. The page presses them (`report`, `end`). Any other moment keeps the
+ * bar's own moves, and the Stage dock never gets these.
+ */
+export function finishControls(room, current, controls) {
+  const wrapped = Boolean(room && room.outcome && room.outcome.summary);
+  if (!wrapped || current || (room && room.state === 'ENDED') || (controls && controls.primary)) return controls;
+  return {
+    ...controls,
+    primary: { action: 'report', label: W.checkReport, id: 'p:report', icon: 'FileText', disabled: false, capability: 'report' },
+    secondary: { action: 'end', label: W.endSessionBtn, id: 's:end', icon: 'FlagCheckered', disabled: false, capability: 'report' },
+  };
+}
 
 const part = (before, action = '', after = '') => ({ before, action, after });
 
@@ -198,6 +212,7 @@ export function consolePart(moment, controls, room, current, { answering = false
     return part('When Claude finishes the item, ', p.label, '.');
   }
   if (moment === 'point' && p) return part('The room talks it over. Then ', p.label, '.');
+  if (p && p.action === 'report') return part(`${room && room.outcome && room.outcome.by === 'agent' ? 'Claude has wrapped up' : 'Wrap-up saved'}. `, p.label, ', then end the session.');
   if (p) return part('', p.label, '.');
   // No main move: the likely one, in words, never as a button (answer (b)).
   const moves = room ? whatsNextMoves(room) : [];
@@ -249,20 +264,4 @@ export function peopleRows(room, current) {
   const here = (room && room.playerCount) || names.length;
   const summary = open ? `${n} of ${here} ${verb}` : `${here} here`;
   return { rows, summary, verb, open };
-}
-
-// ── The side column's Now card ─────────────────────────────────────────────
-
-/** "Last decided, ask 2: a week calendar." and the screenshots so far. */
-export function nowCard(room) {
-  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided')
-    .sort((a, b) => String(a.decidedAt || '').localeCompare(String(b.decidedAt || '')));
-  const last = decided[decided.length - 1] || null;
-  let line = BCW.nothingDecided;
-  if (last) {
-    const d = String((last.decision && last.decision.direction) || last.prompt || '').trim();
-    const short = d.length > 90 ? `${d.slice(0, 90).trimEnd()}…` : d.replace(/[.!?]+$/, '');
-    line = BCW.lastDecided(askNumber(last.askId), short);
-  }
-  return { line, shots: BCW.shotsSoFar(((room && room.images) || []).length) };
 }

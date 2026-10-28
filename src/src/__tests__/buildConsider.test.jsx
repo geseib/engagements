@@ -267,7 +267,15 @@ describe('the host\'s page: Consider on an arriving idea, and the mark opening H
     const q = screen.getByRole('region', { name: 'The queue' });
     const card = within(q).getByText('a dark mode').closest('.brm-qidea');
     expect(within(card).getByText('Queued for the room')).toBeInTheDocument();
-    expect(within(card).getByRole('button', { name: 'Consider: a dark mode' })).toBeInTheDocument();
+    // Its words open Consider (simplify PLAN item 18, phase 2) ...
+    fireEvent.click(within(card).getByText('a dark mode'));
+    expect(screen.getByRole('dialog')).toHaveTextContent('“a dark mode”');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close this window' }));
+    // ... and so does Consider… under More, the keyboard's way to the same panel.
+    fireEvent.click(within(card).getByRole('button', { name: 'More for: a dark mode' }));
+    expect(within(card).getByRole('button', { name: 'Consider…' })).toHaveFocus();
+    fireEvent.click(within(card).getByRole('button', { name: 'Consider…' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('“a dark mode”');
   });
 });
 

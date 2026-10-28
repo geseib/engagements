@@ -127,6 +127,20 @@ describe('the format picker', () => {
   });
 });
 
+describe('the card widens while the set list is open (owner, 26 Oct 2026)', () => {
+  // rejects: a 680px card holding a six-column table, which the owner found
+  // too narrow to see what a set is.
+  test('wide while the list is open, back to the form width once a set is picked', () => {
+    setup();
+    const card = () => document.querySelector('.new-game-dialog');
+    expect(card()).not.toHaveClass('gsd--wide');
+    listedSets();
+    expect(card()).toHaveClass('gsd--wide');
+    pickSet('platform:pricing');
+    expect(card()).not.toHaveClass('gsd--wide');
+  });
+});
+
 describe('the question set', () => {
   // rejects: the mockup's single hardcoded option, which loses the type filter,
   // the question count and the image marker.

@@ -25,10 +25,11 @@ import { WheelPanel, DecidePanel } from './BuildRoomPage';
 import { AskWording } from './BuildAskPath';
 import { askPathStep } from './buildScreens';
 import { KIND_LABEL, askNumber } from './screens/common';
-import { W } from './words';
+import { W, LOOP } from './words';
 import { BCW } from './buildConsole';
 
-const STEP_WORD = { collect: 'Collect', settle: 'Settle', send: 'Settle' };
+// The strip's words (simplify PLAN item 13): the kicker names the step the strip lights.
+const STEP_WORD = { collect: LOOP.collect, settle: LOOP.settle, send: LOOP.send };
 
 export default function BuildConsoleAsk({
   ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft, sendRef, onWheelSettled = null,
@@ -40,7 +41,7 @@ export default function BuildConsoleAsk({
   const wheel = ask.wheel && !ask.revotedAs ? ask.wheel : null;
   const tied = (ask.results && ask.results.tied) || [];
   const act = (action) => () => run(() => api.askAction(ask.askId, { action }));
-  const stepWord = ask.status === 'voting' ? 'Vote' : STEP_WORD[step] || 'Collect';
+  const stepWord = STEP_WORD[step] || LOOP.collect;
   // At results a click on another option is the pick, made here (no confirm: nothing closes).
   const boardPick = !host ? null : settle ? (id) => onPick(id, { confirmed: true }) : (id) => onPick(id);
   const forThis = draft && draft.spoken === answering && (answering || draft.pickId === pickId) ? draft : null;

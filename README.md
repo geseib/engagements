@@ -136,7 +136,8 @@ room; such a set is never offered by Create engagement, Quick start or an agenda
 question is asked as one of four types, read from the Poll question's kind
 (`buildroom/readyQuestions.js`): open answer → **Ideas**, choice of 2–6 → **Choose**, yes/no →
 **Yes/No** (asked as a choice of its two answers), 1–5 rating → **Rate**; a Call & Answer
-question is Ideas. The library filters by type. Engage's starter sets, one Poll set per kind
+question is Ideas. The library filters by type, and the Ask the room form has the same four
+tabs: a Yes/No the host writes is stored as a ready one is, a choice of its two answers. Engage's starter sets, one Poll set per kind
 (training site, game, document, dashboard: `sets/build-room-<kind>.csv`), are installed per tier
 with `scripts/install-build-room-kind-sets.sh <table> --apply`, which also switches off the two
 sets per kind it replaces (`scripts/retire-question-sets.js`); run it without `--apply` first.
@@ -150,7 +151,8 @@ An unsaved set puts a quiet entry in the host's bell that turns into a reminder 
 before the session ends (#45; `notifications.js`, copied identically into `game/`).
 
 A Build Room's **room's window** is `/present?gameId=…&type=build&k=…` (opened from
-Room's window ↗ on the host's header, or Two screens in "Where will the room watch?"; the
+Room's window ↗ on the host's header, or **Use two screens** in the Host screen's
+**Before the room starts** card, `buildroom/BuildSetup.jsx`; one screen until then, and the
 choice is `engage.surfaces`, shared with Call & Answer): public, read-only, no names
 (`src/src/present/buildwall/`, read `GET …/build-play/wall`). Claude's posts and
 screenshots reach the room only after the host releases them from the queue
@@ -167,6 +169,24 @@ What the host saved for later stays off the room's screens until it is sent (`he
 `build-store.js`; `roomStory({ forRoom: true })`). The host's live typing
 reaches the room's window only over a same-browser `BroadcastChannel`
 (`buildroom/typingMirror.js`), never through the server or the socket.
+
+**The first view** (phase 1 of `docs/design/build-room-simplify/PLAN.md`): one Before the
+room starts card (connect Claude Code, the join code, the room's screen; no gate, the opening
+runs before Claude connects), the composer as one line until clicked, and no empty fold,
+queue filter or Open the build until there is something in it, on one screen and the console
+alike. An ask's steps are named Ask · Collect · Settle · Send to Claude everywhere (`LOOP` in
+`buildroom/words.js`). `__tests__/buildRoomCounts.test.jsx` renders the real first view and
+holds it to at most 33 controls (59 before).
+
+**The opening and between asks** (phase 2): the opening's default path is five core steps
+(`core` on `OPENING_STEPS` in `build-store.js`: Making, For, The problem, Good looks like,
+First build); We will know, Never, Tools and style and Look and feel are still steps, kept
+under More framing questions and filling the brief as before, and `opening.current` never
+moves to one by itself. An idea in Waiting for you shows Send to Claude, Ask the room and
+More (its words open Consider); Later and Points are drawn once they hold something, with
+Save for later and **Ask Claude for points** (What's next, and the composer's More) as their
+doors. The same count test holds between asks with three ideas to at most 40 controls (58
+after phase 1).
 
 Every Workie read is checked after writing (`lambda-functions/game/read-check.js`): numbers
 not in the material, claims the vote does not support, next steps written as decided and

@@ -10,6 +10,8 @@
  *   DecidedList  every decided ask, oldest first, with a tick. The ticked ones
  *                combine into one prompt in the Composer, which the host edits
  *                and sends the usual way; a combined row says "In a prompt".
+ *                It is History's Decided chip (owner, 28 Oct 2026), newest
+ *                first there, and no longer opens by itself.
  *
  * While points are ticked (talking points T3) the Points action row holds the
  * one orange button: `outline` turns the lead to an outline button and takes
@@ -25,7 +27,7 @@ import { useNextFocus } from './useNextFocus';
 import { ItemMark } from './BuildConsider';
 import { itemKeys } from './sentMarks';
 
-const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks' };
+const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks', 'ask-points': 'MagnifyingGlass' };
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -82,6 +84,7 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
               type="button"
               className={`brm-btn brm-btn--sm${i === 0 && !outline ? ' brm-btn--primary' : ''}`}
               data-next-primary={i === 0 && !outline ? true : undefined}
+              data-capability={m.capability}
               onClick={() => onMove(m.key)}
             >
               {m.button}
@@ -93,8 +96,11 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
   );
 }
 
-export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, ended = false }) {
+export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, ended = false, newestFirst = false, hint = '' }) {
   const rows = decidedAsks(asks);
+  // In History (owner, 28 Oct 2026) the list reads newest first, as History does; Combine
+  // still writes them in the order they were decided.
+  const shown = newestFirst ? rows.slice().reverse() : rows;
   const live = rows.filter((a) => ticked.has(a.askId));
   const toggle = (id) => {
     const next = new Set(ticked);
@@ -104,8 +110,9 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
   if (!rows.length) return <p className="brm-empty">Nothing decided yet.</p>;
   return (
     <div className="brm-decided">
+      {hint && <p className="brm-hint brm-decided-hint">{hint}</p>}
       <ul className="brm-declist">
-        {rows.map((a) => {
+        {shown.map((a) => {
           const on = ticked.has(a.askId);
           const method = a.decision.method && METHOD_WORDS[a.decision.method];
           const how = used[a.askId] ? `In a prompt · ${clockOf(used[a.askId])}` : upFirst(method || '');

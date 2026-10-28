@@ -681,6 +681,17 @@ describe('whatsNextMoves: the host between asks, most likely first', () => {
     expect(m[0]).toMatchObject({ key: 'vote-ideas', count: 2, button: 'To a vote' });
     expect(m.map((x) => x.key)).toEqual(['vote-ideas', 'combine', 'ask-room', 'tell']);
   });
+  test('no points and no request: Ask Claude for points, last and never the lead (simplify PLAN item 18, phase 2)', () => {
+    const empty = { items: [], requests: [], open: 0 };
+    const m = whatsNextMoves(room({ points: empty }));
+    expect(m.map((x) => x.key)).toEqual(['ask-room', 'tell', 'ask-points']);
+    expect(m[2]).toEqual({ key: 'ask-points', title: 'Ask Claude for points', hint: 'Research, ideas, mockups or a walkthrough, to talk over', button: 'Ask Claude', capability: 'points' });
+    // Once points are in use the Points tab is the door, and while the room frames the build there is no What's next.
+    expect(whatsNextMoves(room({ points: { ...empty, items: [{ id: 'p1', status: 'sent' }] } })).map((x) => x.key)).not.toContain('ask-points');
+    expect(whatsNextMoves(room({ points: { ...empty, requests: [{ id: 'r1' }] } })).map((x) => x.key)).not.toContain('ask-points');
+    expect(whatsNextMoves(room({ points: empty, opening: { phase: 'opening' } })).map((x) => x.key)).not.toContain('ask-points');
+    expect(whatsNextMoves(room()).map((x) => x.key)).not.toContain('ask-points');
+  });
   test('ticked answers lead when fewer than two ideas wait', () => {
     expect(whatsNextMoves(room(), { ticked: 3 })[0]).toMatchObject({ key: 'combine', count: 3, button: 'Combine' });
   });

@@ -226,3 +226,53 @@ describe('nothing matches (S3)', () => {
     expect(rowNames()).toEqual(['Pulse: how is the week going?']);
   });
 });
+
+describe('wide (owner, 26 Oct 2026: the narrow modal hid what a host needs)', () => {
+  test('each row shows its description, topic and tags; the open state is reported', () => {
+    const onOpenChange = jest.fn();
+    mount({ wide: true, onOpenChange });
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    open();
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Topic', 'Tags', 'Used / updated']);
+    const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
+    expect(row.textContent).toMatch('How the team is doing');
+    expect(row.textContent).toMatch('Business & Work');
+    expect(within(row).getByText('team-health')).toBeInTheDocument();
+    expect(screen.getByText('Used by you lately').getAttribute('colspan')).toBe('6');
+  });
+
+  test('not wide: four columns, no description', () => {
+    mount();
+    open();
+    expect(screen.getAllByRole('columnheader').length).toBe(4);
+    expect(screen.queryByText('How the team is doing')).toBeNull();
+  });
+});
+
+describe('a narrow window (a browser at 820px, 26 Oct 2026)', () => {
+  // rejects: hiding the Topic and Tags cells with CSS under a fixed table
+  // layout, which slid Used / updated into a zero-width column.
+  test('wide but under 900px: the extra columns are left out of the markup, header and cells alike', () => {
+    const before = window.matchMedia;
+    window.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
+    try {
+      mount({ wide: true });
+      open();
+      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Used / updated']);
+      const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
+      expect(row.querySelectorAll('td').length).toBe(4);
+      expect(row.textContent).toMatch('How the team is doing');
+    } finally { window.matchMedia = before; }
+  });
+});
+
+describe('whose sets offers only owners the list has', () => {
+  // rejects: "Team 0" for a host in a personal space, a choice that never matches.
+  test('a personal space (all org sets are mine): no Team button', () => {
+    mount({ teamName: '', sets: SETS.map((s) => (s.scope === 'org' ? { ...s, mine: true } : s)) });
+    open();
+    const whose = screen.getByRole('radiogroup', { name: 'Whose sets' });
+    expect(within(whose).getAllByRole('radio').map((b) => b.textContent)).toEqual(['All5', 'Yours3', 'Engage1', 'Public1']);
+  });
+});

@@ -483,7 +483,6 @@ export const W = Object.freeze({
   tipSeen: 'Their screen says Seen.',
   tipWall: '20 seconds on the Stage, no name.',
   tipTickAnother: 'Tick another idea.',
-  nothingWaiting: 'Nothing waiting.',
   // The Host alert on the Stage and the Build / History header (owner, 2026-10-10): fixed labels and numbers, never a name or a typed word.
   hostAlertName: 'Host',
   hostScreen: 'Host screen',
@@ -834,7 +833,125 @@ export const W = Object.freeze({
   storyFromRoom: (askNo) => (askNo ? `Ask ${askNo} · from the room` : 'From the room'),
   historySection: 'History',
   showingEntry: 'showing the entry',
+  // BEFORE THE ROOM STARTS (build-room-simplify PLAN item 10, smaller; owner, 26 Oct 2026:
+  // "go, build phase 1 on dev"): one card with three rows, in place of How a Build
+  // Room works and Where will the room watch?. No gate: the opening runs without Claude.
+  setupHead: 'Before the room starts',
+  setupConnectHint: 'Install the plugin, then paste one command: it opens Claude Code and connects it.',
+  setupConnectBtn: 'Connect',
+  setupConnected: (folder) => (folder ? `Claude Code connected, in ${folder}` : 'Claude Code connected'),
+  setupJoin: 'The room joins',
+  setupJoined: (n, code) => (n ? `${n} joined with code ${code}` : `Nobody yet. The code is ${code}`),
+  setupShowCode: 'Show the code',
+  setupScreenOne: 'The room watches this laptop',
+  setupScreenOneHint: 'One screen. A projector as a second display?',
+  setupScreenTwo: "The room watches its own window",
+  setupScreenTwoOpen: "Two screens. The room's window is open.",
+  setupScreenTwoClosed: "Two screens. Open Room's window \u2197 at the top, on the projector.",
+  useTwoScreens: 'Use two screens',
+  setupStartNow: 'You can start the opening now. Anything you send waits for Claude.',
+  setupDone: (n, two) => `Claude connected · ${n} joined · ${two ? 'Two screens' : 'One screen'}`,
+  // THE COMPOSER, ONE LINE (PLAN item 18, first half): it opens when clicked.
+  tellClaudeLine: 'Tell Claude…',
+  tellClaudeHead: 'Tell Claude',
+  composeClose: 'Close',
+  // Waiting for you with nothing in it: one quiet line, so the column keeps its place.
+  waitingEmpty: "Nothing yet. Claude's questions and the room's ideas land here.",
+  sideEmpty: 'The brief and what happened land here.',
+  // THE RIGHT COLUMN, THREE SECTIONS (owner, 28 Oct 2026: "go on the right column, and
+  // fold Decided"): Claude now, The brief, History. History is one list with a chip per
+  // slice; the chip names are the old folds' (Decided, Asks, Screenshots) and Claude for
+  // the timeline. "The opening", "Room brief" and "Timeline" are no longer fold names.
+  briefSection: 'The brief',
+  historyShow: 'Show in History',
+  histAll: 'All',
+  histAsks: 'Asks',
+  histShots: 'Screenshots',
+  histClaude: 'Claude',
+  decidedTick: 'Tick answers to put them in one prompt.',
+  // THE FIVE-STEP CORE (PLAN item 12, smaller; owner, 26 Oct 2026: "go to phase 2"):
+  // Making, For, The problem, Good looks like, First build. The other four are one
+  // press away, under More framing questions, and still fill the brief.
+  openingStepOf: (n, of) => `step ${n} of ${of}`,
+  openingMoreStep: 'one more question',
+  openingMore: 'More framing questions',
+  openingMoreHint: (n) => `${n}, if the room has time`,
+  openingFramed: (n, of, more) => `${n} of ${of} framed${more ? `, and ${more} more` : ''}. Claude gets the brief as it is.`,
+  openingCoreDone: (more) => `The core is framed. Start building, or ask ${more === 1 ? 'the last' : `one of the ${more}`} under More framing questions.`,
+  openingAllDone: 'Every step is answered or skipped. Start building when the room is ready.',
+  startConfirmFramed: (n, of, more) => `${n} of ${of} core steps are framed${more ? `, and ${more} more` : ''}. Claude gets the brief as it is now and starts planning and building.`,
+  // AN IDEA'S CARD (PLAN item 18, second half): Send to Claude and Ask the room on the
+  // card, the idea's words open Consider, the rest under More. Every item keeps the
+  // same routes (owner, 5 Oct); the card shows three of them.
+  ideaMore: 'More',
+  ideaMoreLabel: (words) => `More for: ${words}`,
+  ideaWordsTip: 'Consider: send it to Claude your way, or queue it for the room',
+  considerItem: 'Consider…',
+  sendAsHead: 'Send to Claude as',
+  // POINTS AND LATER, WHEN USED (PLAN item 18): the door to points no longer needs an empty tab.
+  askForPoints: 'Ask Claude for points',
+  askForPointsHint: 'Research, ideas, mockups or a walkthrough, to talk over',
+  askForPointsBtn: 'Ask Claude',
+  composeMore: 'More',
+  composeMoreHead: 'Ask Claude for',
+  // THE ASK THE ROOM FORM (PLAN item 14; owner, 28 Oct 2026: "then start phase 3"). Yes/No is
+  // its own kind (owner, 24 Oct: "some are yes no. we need to store that info"); what Claude
+  // gets is asked again at Send, so here it is under More options with a default.
+  kindOfAsk: 'Kind of ask',
+  yesNoKind: 'Yes/No',
+  yesAnswer: 'The yes answer',
+  noAnswer: 'The no answer',
+  yesNoRename: 'Rename them if the question needs other words, such as Approve and Decline.',
+  askMoreOptions: 'More options',
+  askMoreSummary: (kind) => `Claude gets it as ${kind}, a private note, save as a draft`,
+  askMoreSummaryChoice: (kind) => `Claude gets it as ${kind}, preview links, a private note, save as a draft`,
+  askClaudeGetsHint: 'Asked again when you send the result.',
+  previewLinks: 'Preview links (optional)',
+  optionPreview: (l) => `Option ${l} preview URL`,
+  // WRAP UP AND END (PLAN item 15): one press when Claude is connected, the form filled in from
+  // the session when it is not; once saved, the report and then End session lead, on both layouts.
+  wrapMove: 'Wrap up',
+  wrapClaudeHint: 'Claude writes what was built and the next steps; you check it',
+  wrapClaudeBtn: 'Ask Claude to wrap up',
+  wrapWriteHint: (n) => (n ? `Filled in from the ${n === 1 ? 'decision' : `${n} decisions`} and the brief` : 'Filled in from the brief and the latest build'),
+  wrapAskedHint: 'Claude is writing it. Or write it yourself',
+  wrapWriteBtn: 'Write it myself',
+  wrapAsked: 'Asked Claude to wrap up. Its wrap-up appears here when it is written.',
+  wrapOrClaude: 'Claude can write this for you.',
+  wrapFilled: 'Filled in from the session',
+  wrapFromHeadline: "From the brief's headline",
+  wrapFromDecisions: (n) => `From the ${n === 1 ? 'decision' : `${n} decisions`}`,
+  wrapFromBuild: 'From the latest build',
+  wrapLinks: 'Links',
+  wrapLinkLabel: (i) => `Link ${i} label`,
+  wrapLinkUrl: (i) => `Link ${i} address`,
+  wrapLinkLabelPh: 'The demo',
+  wrapAddLink: 'Add a link',
+  wrapRemoveLink: (i) => `Remove link ${i}`,
+  wrapDemoLabel: 'The demo',
+  checkReport: 'Check the report',
+  checkReportHint: (decisions, shots) => `The brief, ${decisions} ${decisions === 1 ? 'decision' : 'decisions'}, ${shots} ${shots === 1 ? 'screenshot' : 'screenshots'}`,
+  reportBtn: 'Report',
+  endTheSession: 'End the session',
+  endHint: 'Phones show what we built',
+  endSessionBtn: 'End session',
 });
+
+/**
+ * ONE LOOP, ONE SET OF WORDS (build-room-simplify PLAN item 13; owner, 26 Oct
+ * 2026). An ask runs Ask, Collect, Settle, Send to Claude, everywhere it is
+ * named: the console's strip, the ask path's steps, the setup card and the
+ * help. The session runs Opening › asks › Wrap up. "Change before sending" is
+ * a button, never a step's name.
+ */
+export const LOOP = Object.freeze({
+  ask: 'Ask', collect: 'Collect', settle: 'Settle', send: 'Send to Claude',
+});
+export const LOOP_STEPS = Object.freeze([LOOP.ask, LOOP.collect, LOOP.settle, LOOP.send]);
+export const LOOP_LINE = LOOP_STEPS.join(' · ');
+export const SESSION_LOOP = Object.freeze({ opening: 'Opening', asks: 'asks', wrap: 'Wrap up' });
+/** The setup card's one line on the loop. */
+export const loopLead = () => `Each ask then runs ${LOOP_LINE}.`;
 
 /** The three kinds the host may choose. `later` is accepted by the server only. */
 export const KIND_WORDS = Object.freeze([W.doNow, W.keepInMind, W.askClaude]);
@@ -889,4 +1006,25 @@ export const RETIRED = Object.freeze([
   { word: "Pick the room's choice?", enforced: true, task: 'host-review' },
   { word: 'Pick an alternate?', enforced: true, task: 'host-review' },
   { word: 'Artifacts', files: ['BuildHistoryScreen.jsx'], enforced: true, task: 'host-review' },
+  // Phase 1 of the simplify plan (26 Oct 2026): one card before the room starts, one loop.
+  { word: 'How a Build Room works', enforced: true, task: 'simplify-1' },
+  { word: 'Where will the room watch?', enforced: true, task: 'simplify-1' },
+  { word: 'Add something', enforced: true, task: 'simplify-1' },
+  // The ask path's step 2 is Collect; what the room is doing is its summary, never its name.
+  { word: 'The room is choosing', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is suggesting', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is rating', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  { word: 'The room is voting', files: ['BuildAskPath.jsx'], enforced: true, task: 'simplify-1' },
+  // A vote on ideas is still the Collect step.
+  { word: 'Vote', files: ['buildConsole.js', 'BuildConsoleAsk.jsx'], enforced: true, task: 'simplify-1' },
+  // Phase 2 (26 Oct 2026): the Now card no longer repeats the header's Build; the opening counts its core.
+  { word: 'Show the build', enforced: true, task: 'simplify-2' },
+  { word: 'Every step is answered or skipped. Show the brief on the wall, then start building.', enforced: true, task: 'simplify-2' },
+  // The right column (owner, 28 Oct 2026): The brief replaces the Room brief fold, and Decided
+  // is a chip in History with no hint of its own. "Timeline" stays: the report and the room's
+  // History screen still use it; "The opening" stays as the console strip's moment.
+  { word: 'Room brief', enforced: true, task: 'right-column' },
+  { word: 'Tick to combine', enforced: true, task: 'right-column' },
+  // Phase 3 (28 Oct 2026): a link is two boxes, label and address, never the pipe syntax.
+  { word: 'Links (one per line: label | https://…)', enforced: true, task: 'simplify-3' },
 ]);

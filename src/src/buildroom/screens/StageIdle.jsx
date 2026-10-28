@@ -11,8 +11,12 @@ import {
 } from '../buildScreens';
 import { OpenLink } from './common';
 
-/** Claude has wrapped up: the stage says so, and the demo is one click away. */
-export function WrappedStage({ outcome, agent, images = [] }) {
+/**
+ * Claude has wrapped up: the stage says so, and the demo is one click away.
+ * On the Host screen the report holds the one orange (PLAN item 15), so the
+ * demo link is plain there (`plainLinks`).
+ */
+export function WrappedStage({ outcome, agent, images = [], plainLinks = false }) {
   const links = outcome.links || [];
   const finals = images.filter((i) => i.kind === 'final');
   return (
@@ -31,7 +35,7 @@ export function WrappedStage({ outcome, agent, images = [] }) {
       {links.length > 0 && (
         <div className="brm-openrow">
           {links.map((l, i) => (
-            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (i === 0 ? 'Open the demo' : l.url)} primary={i === 0} />
+            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (i === 0 ? 'Open the demo' : l.url)} primary={i === 0 && !plainLinks} />
           ))}
         </div>
       )}

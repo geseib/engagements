@@ -1000,9 +1000,15 @@ describe('Now · Ideas · History, on a phone or a laptop (step 7, C11)', () => 
 
 describe('the opening on a phone (owner, 2026-10-06)', () => {
   test('a question that frames the build says which step of the opening it is', async () => {
-    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'What problem do they have today?', openingStep: 'problem', openingIndex: 3, openingOf: 9 }) }));
+    serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'What problem do they have today?', openingStep: 'problem', openingIndex: 3, openingOf: 5 }) }));
     await mount();
-    expect(await screen.findByText('Shaping the build · step 3 of 9')).toBeInTheDocument();
+    expect(await screen.findByText('Shaping the build · step 3 of 5')).toBeInTheDocument();
+  });
+  test('one of the more framing questions, past the five-step core, counts nothing (simplify PLAN item 12)', async () => {
+    serve(baseView({ currentAskId: '004', current: ask({ askId: '004', kind: 'suggest', prompt: 'How will we know it worked?', openingStep: 'proof', openingMore: true }) }));
+    await mount();
+    expect(await screen.findByText('Shaping the build · one more question')).toBeInTheDocument();
+    expect(screen.queryByText(/step \d of/)).toBeNull();
   });
   test('an ordinary question says nothing about the opening', async () => {
     serve(baseView({ currentAskId: '003', current: ask({ askId: '003', kind: 'suggest', prompt: 'Which colour?' }) }));

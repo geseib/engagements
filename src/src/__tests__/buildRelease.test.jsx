@@ -170,6 +170,8 @@ describe('the rest of the host\'s screen', () => {
 
   test('the host\'s Timeline marks held and kept posts', async () => {
     await openRoom(hostState());
+    // The timeline is History's Claude chip (owner, 28 Oct 2026).
+    fireEvent.click(within(screen.getByRole('group', { name: 'Show in History' })).getByRole('button', { name: /^Claude/ }));
     const tl = screen.getByRole('region', { name: 'Timeline' });
     expect(within(tl).getAllByText('Not shown to the room')).toHaveLength(2);
     expect(within(tl).getByText('Kept to yourself')).toBeInTheDocument();
