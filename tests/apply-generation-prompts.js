@@ -70,5 +70,27 @@ check('a create is shaped as the seeder writes it', () => {
   );
 });
 
+// rejects: prod, 2026-10-28 — every row written was reported MISMATCH because
+// DynamoDB handed `defaultSettings` back with its keys in another order.
+check('a map read back with its keys in another order is the same value', () => {
+  assert.ok(script.same({ count: 10, difficulty: 'medium' }, { difficulty: 'medium', count: 10 }));
+  assert.ok(script.same({ a: { y: 1, x: [1, 2] } }, { a: { x: [1, 2], y: 1 } }));
+  assert.ok(script.same(undefined, null));
+});
+
+check('a real difference is still a difference, and array order still counts', () => {
+  assert.ok(!script.same({ count: 10 }, { count: 11 }));
+  assert.ok(!script.same(['a', 'b'], ['b', 'a']));
+  assert.ok(!script.same({ count: 10 }, { count: 10, extra: true }));
+});
+
+check('a live row whose settings differ only in key order is kept, not updated', () => {
+  const settings = first.defaultSettings && typeof first.defaultSettings === 'object' ? first.defaultSettings : { a: 1, b: 2 };
+  const reordered = Object.fromEntries(Object.entries(settings).reverse());
+  const row = { ...first, defaultSettings: settings };
+  const p = script.plan([row], { [first.promptId]: { ...row, defaultSettings: reordered } });
+  assert.strictEqual(p[0].action, 'keep');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
