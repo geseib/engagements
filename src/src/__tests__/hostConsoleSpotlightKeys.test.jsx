@@ -9,6 +9,16 @@
 import React from 'react';
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 
+/*
+  HOW LONG TO WAIT FOR THE PAGE TO LOAD ITS ROUND. Measured 291ms for the first
+  test here on an idle machine; CodeBuild, 28 Oct 2026, ran the same test past
+  the old 5000ms (dev 8b79866, line 107) — the cold first render of
+  GameHostPage under a full parallel suite. jest.config.js's rule is that a
+  limit fires for a hung test, never a slow one, and stays under its 30s
+  testTimeout: 15s is both.
+*/
+const LOAD_WAIT = 15000;
+
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
   useAuth: () => ({
@@ -104,7 +114,7 @@ afterEach(() => {
 
 test('a response put on the wall from the console: → → still drives the footer', async () => {
   const { container } = render(<GameHostPage />);
-  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: LOAD_WAIT });
   const bar = container.querySelector('.hc-now .host-action-bar');
   expect(bar).toBeTruthy();
 
@@ -130,7 +140,7 @@ test('a response put on the wall from the console: → → still drives the foot
 */
 test('every answer fits: the console says "All answers · On the wall now", not Response 1', async () => {
   const { container } = render(<GameHostPage />);
-  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: LOAD_WAIT });
   expect(container.querySelector('.hc-main [data-testid="hc-overview"]').textContent).toBe('All answers · On the wall now');
   expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"].is-onwall')).toHaveLength(0);
   // Putting one up moves the mark to it.
@@ -147,22 +157,22 @@ test('every answer fits: the console says "All answers · On the wall now", not 
 test('before the vote\'s rows land the console says "Gathering responses…", lists none, then lists them', async () => {
   answersDelay = 400;
   const { container } = render(<GameHostPage />);
-  await screen.findByText('Gathering responses…', {}, { timeout: 5000 });
+  await screen.findByText('Gathering responses…', {}, { timeout: LOAD_WAIT });
   expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')).toHaveLength(0);
   expect(container.querySelector('.hc-main').textContent).not.toMatch('No responses yet.');
-  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: LOAD_WAIT });
   expect(screen.queryByText('Gathering responses…')).toBeNull();
 });
 
 test('a vote whose rows did not load says so on the console, with the stage\'s retry', async () => {
   answersFail = true;
   const { container } = render(<GameHostPage />);
-  await screen.findByText('The responses did not load.', {}, { timeout: 5000 });
+  await screen.findByText('The responses did not load.', {}, { timeout: LOAD_WAIT });
   expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]')).toHaveLength(0);
   const reads = () => global.fetch.mock.calls.filter(([u]) => String(u).includes(`games/${GAME}/host-state`)).length;
   const before = reads();
   answersFail = false;
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Try again' })); });
   await waitFor(() => expect(reads()).toBeGreaterThan(before));
-  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: 5000 });
+  await waitFor(() => expect(container.querySelectorAll('.hc-main [data-testid="hc-resp"]').length).toBe(3), { timeout: LOAD_WAIT });
 });
