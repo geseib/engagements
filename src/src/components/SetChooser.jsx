@@ -240,6 +240,10 @@ export default function SetChooser({
   for (const t of tagsChosen) chips.push({ key: `tag:${t}`, text: `Tag: ${t}`, clear: () => toggleTag(t) });
   if (state.updated !== 'any') chips.push({ key: 'updated', text: UPDATED_WINDOWS.find((w) => w.value === state.updated).label });
   const team = teamName ? <> in <b>{teamName}</b></> : null;
+  // ONLY THE OWNERS THESE SETS HAVE (a browser showed "Team 0" for a host in a
+  // personal space, a choice that can never match): Quick start's rule too.
+  // The owner in force stays offered, so it can always be seen and let go.
+  const ownersPresent = OWNER_OPTIONS.filter((o) => o.value === state.owner || sets.some((set) => setOwnerTag(set) === o.value));
 
   return (
     <div ref={rootRef} className={`schs schs--open${wide ? ' schs--wide' : ''}`} data-testid="set-chooser" data-value={value} data-theme={theme}>
@@ -274,7 +278,7 @@ export default function SetChooser({
       {searchBox(`Search ${sets.length} ${fmt}sets: name, description or tag`)}
       <div className="schs-filters">
         <div className="schs-seg" role="radiogroup" aria-label="Whose sets">
-          {[{ value: ALL, label: 'All' }, ...OWNER_OPTIONS].map((o) => {
+          {[{ value: ALL, label: 'All' }, ...ownersPresent].map((o) => {
             const on = state.owner === o.value;
             return (
               <button key={o.value} type="button" role="radio" aria-checked={on} className={on ? 'is-on' : ''} onClick={() => patch({ owner: o.value })}>

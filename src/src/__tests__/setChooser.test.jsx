@@ -266,3 +266,13 @@ describe('a narrow window (a browser at 820px, 26 Oct 2026)', () => {
     } finally { window.matchMedia = before; }
   });
 });
+
+describe('whose sets offers only owners the list has', () => {
+  // rejects: "Team 0" for a host in a personal space, a choice that never matches.
+  test('a personal space (all org sets are mine): no Team button', () => {
+    mount({ teamName: '', sets: SETS.map((s) => (s.scope === 'org' ? { ...s, mine: true } : s)) });
+    open();
+    const whose = screen.getByRole('radiogroup', { name: 'Whose sets' });
+    expect(within(whose).getAllByRole('radio').map((b) => b.textContent)).toEqual(['All5', 'Yours3', 'Engage1', 'Public1']);
+  });
+});
