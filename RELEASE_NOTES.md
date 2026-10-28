@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 28 Oct 2026 (Build Room, simpler: the right column)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `fa69abd8`. Everything below this entry is already on test; this push adds only what is here.
 
 The owner's call on 28 Oct: "go on the right column, and fold Decided". The Host screen's right column, and the right side of the two-screen console, had seven folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History. Four were parts of History, the brief was there twice, and Decided opened by itself. It is now three sections, each answering one question, the same on one screen and on two. Nothing was taken away: every action the old folds had is still there.
 
