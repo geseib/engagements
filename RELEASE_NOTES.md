@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 28 Oct 2026 (Build Room, simpler: asking and finishing)
 
-**Test:** merge of dev `aad7aad2`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `d855ccf9`. The **26 Oct (later: poll reads)** entry and everything below it are already on test. This push brings this entry and the three Build Room entries directly below it (the first view; the opening and between asks; the right column), plus the set chooser fixes listed under Fixed here.
 
 Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items 14, 15 and 16), started on the owner's word on 28 Oct: "then start phase 3". It covers the Ask the room form, finishing a session, and the report, on one screen and on two. Nothing was taken away: what moved under More options is still in the form, and every capability is still reachable.
 
@@ -45,6 +45,7 @@ Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items
 - **The console said "No main move now" after the wrap-up was saved**, and both layouts repeated Report and End session in a bar above everything. The bar is gone: the moves are where the next move always is.
 - **The report printed the Start building prompt**, "…post the plan with post_update (kind "milestone")…" and the whole brief under it. It now reads "Start building: Claude got the brief". The other prompts Engage writes for Claude read the same way: Back to the opening, Ask Claude to draft the brief, Preview the work, mockups for an ask, and Ask Claude to wrap up.
 - **The report had no brief**, though the brief is what the room framed first.
+- **Set chooser in New engagement** (another session): on a 1280×720 laptop the open list started below the fold; it now scrolls into view and fits above the footer. The filters fit on one line from 1024px wide, Used / updated no longer collapses at 820px, and the dialog's title is readable on the dark card. The New engagement card widens while the list is open. **Whose sets** offers only owners some set has, so a personal space no longer shows "Team 0".
 
 ### What to look at
 
@@ -58,6 +59,7 @@ Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items
 8. Use two screens and repeat 7 on the console: Your part now reads "Wrap-up saved. Check the report, then end the session.", with **Check the report** as its main button and **End session** beside it. "No main move now" does not appear.
 9. In the report: **Build brief** comes before What we built, with the headline, the opening's answers and Keep in mind. In Timeline, Start building reads "Start building: Claude got the brief", with no post_update and no brief text under it. A decision settled by the wheel says "Settled by the wheel".
 10. Open help (?): Writing your own ask describes the four kinds and More options; Wrapping up a Build Room describes Ask Claude to wrap up, the form filled in from the session, the two link boxes, and Check the report then End session on both layouts.
+11. Set chooser: on a 1280×720 window, **Create engagement** › Call & Answer, open the question set list. It sits fully on screen above the footer, the filters are on one line, and the card is wider while it is open. In a personal space (no team), **Whose sets** has no "Team 0".
 
 ### Known gaps
 
@@ -70,7 +72,7 @@ Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items
 
 ## 28 Oct 2026 (Build Room, simpler: the right column)
 
-**Test:** merge of dev `fa69abd8`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** dev `fa69abd8`; arrives on test with the 28 Oct (asking and finishing) push above.
 
 The owner's call on 28 Oct: "go on the right column, and fold Decided". The Host screen's right column, and the right side of the two-screen console, had seven folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History. Four were parts of History, the brief was there twice, and Decided opened by itself. It is now three sections, each answering one question, the same on one screen and on two. Nothing was taken away: every action the old folds had is still there.
 
@@ -124,7 +126,7 @@ The owner's call on 28 Oct: "go on the right column, and fold Decided". The Host
 
 ## 26 Oct 2026 (Build Room, simpler: the opening and between asks)
 
-**Test:** merge of dev `ba581c68`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** dev `ba581c68`; arrives on test with the 28 Oct (asking and finishing) push above.
 
 Phase 2 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`): review item 12 (smaller) and the second half of item 18, on one screen and on two. No mode switch. Nothing was taken away: every capability is still reachable once it applies, and Later and Points keep a door while they are empty.
 
@@ -179,7 +181,7 @@ Phase 2 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`): revi
 
 ## 26 Oct 2026 (Build Room, simpler: the first view)
 
-**Test:** merge of dev `6f19e1d3`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** dev `6f19e1d3`; arrives on test with the 28 Oct (asking and finishing) push above.
 
 Phase 1 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`): review items 10 (smaller), 13 and the first half of 18. Nothing was taken away: every Build Room capability is still reachable once it applies, on one screen and on two.
 
