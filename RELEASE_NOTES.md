@@ -9,6 +9,30 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 28 Oct 2026 (two fixes behind the scenes: the generation-prompts script and a slow test)
+
+**Test:** merge of dev `2003c14a`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new on screen. This push is two fixes to tooling.
+
+### Fixed
+
+- **`scripts/apply-generation-prompts.js` reported every row it wrote as MISMATCH.** On prod (28 Oct) it said "0 written and verified, 22 mismatched" for 22 rows that were identical to the repo: DynamoDB hands a map's keys back in its own order, and the check compared them as text. It now compares maps whatever order their keys arrive in; a real difference is still reported, and a list in another order still counts as a change.
+- **A host console test timed out on the build machine**, failing the dev deploy of the fix above. `hostConsoleSpotlightKeys.test.jsx` waited 5 seconds for the host page to load its round; the test takes 291ms on an idle machine but ran past 5s in CodeBuild under the full suite. Its load waits are 15 seconds now, inside Jest's 30-second limit.
+
+### What to look at
+
+1. Nothing on engage.test changes. The deploy itself is the check: it builds and passes the full suite.
+2. Optional, for whoever runs the script next: `node scripts/apply-generation-prompts.js --tier test` (a dry run) lists every row as matching or with its real difference.
+
+### Known gaps
+
+- None from this change.
+
+---
+
 ## 28 Oct 2026 (Build Room, simpler: asking and finishing)
 
 **Test:** merge of dev `d855ccf9`. The **26 Oct (later: poll reads)** entry and everything below it are already on test. This push brings this entry and the three Build Room entries directly below it (the first view; the opening and between asks; the right column), plus the set chooser fixes listed under Fixed here.
