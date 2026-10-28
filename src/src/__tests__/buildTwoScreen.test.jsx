@@ -182,19 +182,25 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     expect(titles).toEqual(['Waiting for you', 'People', 'Later', 'Session']);
   });
 
-  test('the side column holds Now, then the folds in their order, each drawn once it has something (simplify PLAN item 18)', async () => {
+  // THE RIGHT COLUMN (owner, 28 Oct 2026: "go on the right column, and fold Decided"): the
+  // console's side is the one-screen column: Claude now, then The brief and History.
+  test('the side column holds Claude now, then The brief and History, each drawn once it has something; Decided is a chip', async () => {
     await openRoom(MOMENTS['a · between asks']());
-    expect(within(side()).getByText('Now')).toBeInTheDocument();
-    expect(side().textContent).toMatch('Last decided, ask 2: Who is it for: busy volunteers, often on an old phone.');
+    const col = side().querySelector('[data-capability="whats-next"]');
+    expect(col.firstElementChild).toHaveAccessibleName('Claude now');
+    // The Now card's last decision is History's, on All.
+    expect(within(side()).queryByText('Now')).toBeNull();
+    expect(side().textContent).toMatch('Who is it for: busy volunteers, often on an old phone');
     const heads = [...side().querySelectorAll('.brm-stackhead')];
     const folds = heads.map((b) => b.textContent.replace(/ · .*/, ''));
-    const ORDER = ['Decided', 'Timeline', 'Asks', 'Screenshots', 'Room brief', 'History'];
-    expect(folds).toEqual(ORDER.filter((f) => folds.includes(f)));
-    expect(folds).toEqual(expect.arrayContaining(['Decided', 'Asks', 'History']));
-    // None empty: an empty fold is not drawn.
-    heads.forEach((b) => expect(b.textContent).not.toMatch(/ · 0\b/));
+    expect(folds).toEqual(['The brief', 'History'].filter((f) => folds.includes(f)));
     // History last: a Sent to Claude mark on the console opens it at its entry (Consider, 19 Oct).
     expect(folds[folds.length - 1]).toBe('History');
+    heads.forEach((b) => expect(b.textContent).not.toMatch(/ · 0\b/));
+    // History opens on All; Decided is a chip, folded until pressed.
+    const chips = within(side()).getByRole('group', { name: 'Show in History' });
+    expect(within(chips).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(chips).getByRole('button', { name: /^Decided/ })).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('a · between asks: "Your part now" at the top of the centre, no main button, the slot held and named (b)', async () => {

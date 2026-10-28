@@ -221,6 +221,9 @@ it cost to build and keep consistent; and could something smaller get most of it
 - **Removes,** with nothing moved behind a switch:
   - empty folds (Decided, Timeline, Asks, Screenshots, Room brief, History) are not drawn
     until they have something in them (`HistoryStack` already skips an empty Decided);
+    *28 Oct 2026, owner: "go on the right column, and fold Decided": the folds are now three
+    sections, Claude now, The brief and History (chips All, Decided, Asks, Screenshots,
+    Claude), and Decided no longer opens by itself (it did under host-flow H1);*
   - empty queue filters are not drawn, and with one source there are no filters at all;
   - Later appears with its first item, and Points when Claude posts one;
   - the composer is one line, **Tell Claude…** with **Ask the room** beside it, and opens

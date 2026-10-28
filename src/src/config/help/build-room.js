@@ -60,6 +60,11 @@
   everywhere (words.js LOOP); the composer is one line until clicked; empty
   folds, empty queue filters and Open the build are not drawn until they
   have something.
+
+  The right column (owner, 28 Oct 2026: "go on the right column, and fold
+  Decided"): Claude now, The brief and History (chips All, Decided, Asks,
+  Screenshots, Claude) on both layouts, in place of the seven folds; Decided
+  opens only when pressed. BuildRoomPage.jsx ClaudeNow, columnFolds.
 */
 
 /* ------------------------------------------------------------ setting up */
@@ -188,7 +193,11 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'On one screen the Host screen has three columns. On the left, Now: the open ask or the opening, What\'s next between asks, and one line, **Tell Claude…** with **Ask the room**, that opens into the composer when you click it. In the middle, Waiting for you: Claude\'s questions, the room\'s ideas and Claude\'s held posts, with chips to filter by who sent them once more than one has something waiting, and Later and Points below once either has something in it. On the right, folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History, each drawn once it has something in it. On two screens the laptop shows the console instead; see Build Room on two screens.',
+          text: 'On one screen the Host screen has three columns. On the left, Now: the open ask or the opening, What\'s next between asks, and one line, **Tell Claude…** with **Ask the room**, that opens into the composer when you click it. In the middle, Waiting for you: Claude\'s questions, the room\'s ideas and Claude\'s held posts, with chips to filter by who sent them once more than one has something waiting, and Later and Points below once either has something in it.',
+        },
+        {
+          t: 'p',
+          text: 'On the right, three sections: **Claude now** on top, always, saying what Claude is doing, or that Claude Code is not connected yet; **The brief**, what Claude is working towards (the opening\'s steps while the room frames the build, then its answers, Who it is for and Keep in mind); and **History**, everything that happened, newest first. One of the brief and History is open at a time and scrolls inside itself; History opens once building starts. On two screens the laptop shows the console instead; see Build Room on two screens.',
         },
         {
           t: 'keys',
@@ -218,7 +227,7 @@ const running = {
           t: 'list',
           items: [
             'For each step, **Ask the room**, **Answer it yourself**, or **Skip this step**. On the first, **Ask the room to pick** from a list (**Edit the list** to change it), **Spin the wheel**, or **Pick for the room**. Tools and style is yours to answer.',
-            'Click a line in The opening, on the right, to work on that step; **More framing questions** opens the other four. Claude reads each answer as it lands.',
+            'Click a line in The brief, on the right, to work on that step; **More framing questions** opens the other four. Claude reads each answer as it lands.',
             'After the fifth, the card says the core is framed: start building, or ask one of the four.',
             '**Ask Claude to draft the brief** has Claude write a headline and a short summary in the room\'s words. Edit it, then **Use this draft**.',
             'A button beside Start building shows the brief to the room.',
@@ -399,7 +408,7 @@ const running = {
             'Under **Ask the room**: **Put to a vote with other ideas**, **Add to the open Ideas ask** while one is open, or else **Ask the room for ideas about this**, which opens a new Ideas ask with the idea in its question for you to edit.',
             'The menu\'s last choice fills the Stage with the idea, without a name, for a short while.',
             'Reply to the person who sent it (Reply to Joe, under More): only you and they see it, not the room and not Claude. **Got it, thanks** is one press. Their phone says The host replied, and they can answer; the card then says Joe answered. Ask the room for ideas about this uses their latest answer. An answer to an idea you acknowledged puts it back on your list.',
-            '**Save for later**, **Acknowledge** and **Dismiss** take it off the list. Each fate, and **Restore**, adds a line to your Timeline saying whose idea it was and what became of it. Only you see those lines; Claude and the room do not.',
+            '**Save for later**, **Acknowledge** and **Dismiss** take it off the list. Each fate, and **Restore**, adds a line to History, under **Claude**, saying whose idea it was and what became of it. Only you see those lines; Claude and the room do not.',
           ],
         },
       ],
@@ -427,7 +436,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, in Asks and in Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Click a mark to open History at that entry.',
+          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, and in History\'s Asks and Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Click a mark to open History at that entry, on All.',
         },
         {
           t: 'p',
@@ -444,7 +453,7 @@ const running = {
           t: 'list',
           items: [
             { title: 'What\'s next', text: 'With no ask open, the likely moves, most likely first; Space presses the first. Among them: **Connect Claude Code**, open Claude\'s question, put new ideas to a vote, **Ask the room**, Tell Claude, and **Ask Claude for points** while there are none. Under it, **Preview the work** until Claude has shown a build (then **Open the build** is in the header), and **Copy the Continue prompt** while Claude is away. **Build** in the header, or 3, shows the room the build.' },
-            { title: 'Combine', text: 'Tick decided asks in Decided, then press **Combine** in What\'s next (or **Add to the prompt**): their answers go into one prompt in the composer, which opens for it, yours to edit before you send it.' },
+            { title: 'Combine', text: 'Press **Decided** in History, tick decided asks, then press **Combine** in What\'s next (or **Add to the prompt**): their answers go into one prompt in the composer, which opens for it, yours to edit before you send it.' },
             { title: 'Tell Claude…', text: 'One line until you click it. Then type an idea, a note or what the room said. **Send to Claude** (its arrow picks Do now, Keep in mind or Ask Claude), **Save for later**, or log it as Room said, a host note that is never shown, or a milestone, with Also tell Claude if Claude should hear it, then **Log it**. Its **More** asks Claude for **Research…**, **Ideas…**, **Mockups…** or a **Walkthrough**, or to **Preview the work**.' },
             { title: 'Claude\'s status', text: 'The chip in the header says what Claude is doing. When Claude Code has stopped it reads last seen, and a click copies the continue command.' },
           ],
@@ -509,19 +518,40 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the stage or the room\'s window at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. Your Timeline marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
+          text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the stage or the room\'s window at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. History, under **Claude**, marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
         },
         { t: 'p', text: 'To let posts straight through, switch it off in the Session panel, Settings, Claude.' },
       ],
     },
     {
       id: 'room-brief',
-      title: 'The room brief',
+      title: 'The brief',
       icon: 'Note',
       blocks: [
         {
           t: 'p',
-          text: 'Room brief, on the right, holds Who it is for and a Keep in mind list. Directions sent as Keep in mind land there, and you can add or remove lines yourself. Claude rereads the brief when it changes.',
+          text: 'The brief, on the right under Claude now, is what Claude is working towards. While the room frames the build it holds the opening\'s steps; after that, their answers. Below them, Who it is for and a Keep in mind list: directions sent as Keep in mind land there, and you can add or remove lines yourself. Claude rereads the brief when it changes.',
+        },
+      ],
+    },
+    {
+      id: 'history-section',
+      title: 'History, on the right',
+      icon: 'Clock',
+      blocks: [
+        {
+          t: 'p',
+          text: 'History holds everything that happened, newest first. Its chips show one part at a time, each once it has something in it:',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'All', text: 'The story: what Claude showed, what was decided and how, and the ideas that went to Claude. Click a decision to open its ask.' },
+            { title: 'Decided', text: 'Every decided ask, with a tick. Tick some and press **Add to the prompt** (or Combine in What\'s next) to send them as one prompt. It opens only when you press it.' },
+            { title: 'Asks', text: 'Every ask, with **Open**, **Close** or **Reopen** on its row.' },
+            { title: 'Screenshots', text: 'Every picture, with **Remove**.' },
+            { title: 'Claude', text: 'The timeline: what Claude posted and what it was told, with **Edit** and **Delete**. While Claude Code has stopped, a direction says Waiting for Claude and the command that starts it again.' },
+          ],
         },
       ],
     },
@@ -700,7 +730,7 @@ const twoScreens = {
           items: [
             { title: 'Left', text: 'Waiting for you (open it in the middle for more room), People (who has answered, by name, while the room answers or votes, never what they chose), Later, with Points inside once Claude has posted one or you asked (What\'s next\'s **Ask Claude for points** opens it in the middle), and Session.' },
             { title: 'Session', text: 'Connect Claude, Claude\'s plugin, **Copy the Continue prompt** while Claude is away, the crew, Build and History to look at privately, the Session panel, **Back to the opening**, **Wrap up**, **Report** and **End session**.' },
-            { title: 'Right', text: 'Now, once something is decided or shown, then Decided, Timeline, Asks, Screenshots, Room brief and History, each once it has something in it.' },
+            { title: 'Right', text: 'As on one screen: **Claude now** on top, which is also where Claude\'s status is on the console, then **The brief** and **History** with its chips, each once it has something in it.' },
           ],
         },
       ],

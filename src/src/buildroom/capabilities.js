@@ -34,8 +34,10 @@ export const CAPABILITIES = Object.freeze([
     twoScreens: "Main area, under the moment's work",
   },
   {
-    id: 'whats-next', name: "What's next, Decided, Timeline, Asks, Screenshots, Room brief", oneScreen: 'Host screen',
-    twoScreens: "What's next in the main area between asks; the other five as folds in the side column",
+    // The right column (owner, 28 Oct 2026): Claude now, The brief, History; Decided, Asks,
+    // Screenshots and the timeline (Claude) are History's chips, each with its old fold's actions.
+    id: 'whats-next', name: "What's next; the right column: Claude now, The brief (the room brief's edits), History's Decided (tick to combine), Asks, Screenshots and Claude (the timeline)", oneScreen: 'Host screen',
+    twoScreens: "What's next in the main area between asks; Claude now, The brief and History in the side column, as on one screen",
   },
   {
     id: 'queue', name: "The queue: Claude's asks and the room's ideas", oneScreen: 'Host screen, Waiting for you',
@@ -51,7 +53,7 @@ export const CAPABILITIES = Object.freeze([
   },
   {
     id: 'opening', name: 'The opening: the brief, its steps, Start building', oneScreen: 'Host screen; Session, Back to the opening',
-    twoScreens: 'Main-area panel while the room frames the build, and its fold; Session slot: Back to the opening',
+    twoScreens: 'Main-area panel while the room frames the build, and The brief in the side column; Session slot: Back to the opening',
   },
   {
     id: 'crew', name: 'The crew: builders, early looks, run crew code', oneScreen: 'Host screen and Session',
@@ -63,7 +65,7 @@ export const CAPABILITIES = Object.freeze([
   },
   {
     id: 'claude-status', name: "Claude's status, the doing line, the plugin's update dot, Continue, Connect Claude", oneScreen: 'Header chip, Session',
-    twoScreens: "Claude's status line at the top of the main area; Connect Claude, the plugin and Continue in the Session slot",
+    twoScreens: "Claude now at the top of the side column; Connect Claude, the plugin and Continue in the Session slot",
   },
   {
     id: 'host-alert', name: 'The Host alert (what waits, Mark all seen)', oneScreen: 'Header tab on Build and History; HOST on the Stage, one press home',

@@ -94,11 +94,11 @@ import useStageMoves from './useStageMoves';
 import BuildSetup from './BuildSetup';
 import { buildControls } from './buildControls';
 import BuildConsole, {
-  PeopleList, SessionSlot, ClaudeLine, NowCard, ConsolePoint,
+  PeopleList, SessionSlot, ConsolePoint,
 } from './BuildConsole';
 import BuildConsoleAsk from './BuildConsoleAsk';
 import {
-  BCW, consoleMoment, consoleStrip, consolePart, nextOnWall, peopleRows, nowCard,
+  BCW, consoleMoment, consoleStrip, consolePart, nextOnWall, peopleRows,
 } from './buildConsole';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLookDialog, StageTabs,
@@ -1048,6 +1048,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     setTicked(new Set());
     setComposeFocus((n) => n + 1);
   };
+  // THE RIGHT COLUMN'S FOLDS (owner, 28 Oct 2026): The brief and History, the same on both layouts.
+  const folds = columnFolds({
+    room, now, host, busy, ended, run, api, asks, decided: decidedNow, ticked: tickedNow, setTicked, used, onCombine: combine,
+    openFocus, setOpenFocus, historyFocus, onOpenAsk: setDetailAskId,
+  });
+  const foldLead = room.opening && room.opening.phase === 'opening' ? 'opening' : 'building';
   // Ticks for items that have since left Later (sent, removed, voted) no longer count.
   const laterLive = new Set(laterItems(room).map((x) => x.key));
   const laterTickedNow = laterTicked.filter((k) => laterLive.has(k)).length;
@@ -1378,30 +1384,16 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           },
         }}
         side={(
-          <>
-            {!nowCard(room).empty && <NowCard card={nowCard(room)} />}
-            <div data-capability="whats-next" className="bc-folds">
-              <HistoryStack
-                openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
-                items={[
-                  ...(room.opening && room.opening.phase === 'opening' ? [{
-                    key: 'opening', label: 'The opening', capability: 'opening', keep: true,
-                    count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
-                    body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
-                  }] : []),
-                  { key: 'decided', label: 'Decided', count: decidedNow.length, skip: !decidedNow.length, hint: ended ? '' : 'Tick to combine', body: <DecidedList asks={asks} ticked={tickedNow} setTicked={setTicked} used={used} onCombine={combine} ended={ended} /> },
-                  { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
-                  { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
-                    ? <AskList asks={asks} host busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-                    : <div className="brm-empty">No asks yet.</div> },
-                  { key: 'shots', label: 'Screenshots', count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
-                  { key: 'brief', label: 'Room brief', count: briefCount(room.brief), body: <BriefPanel brief={room.brief} busy={busy} ended={ended} run={run} api={api} /> },
-                  // HISTORY (Consider, frame 4): a sent mark on the console opens this, at its entry.
-                  { key: 'history', label: W.historySection, count: storyCount(room), capability: 'history', body: <HistorySection room={room} now={now} focus={historyFocus && historyFocus.on === 'section' ? historyFocus : null} onOpenAsk={setDetailAskId} /> },
-                ]}
-              />
-            </div>
-          </>
+          // THE RIGHT COLUMN (owner, 28 Oct 2026): Claude now, The brief, History, as on one screen.
+          // Claude now is the console's status line too, and the Now card's last decision is History's.
+          <div data-capability="whats-next" className="bc-folds">
+            {!ended && <ClaudeNow room={room} now={now} />}
+            <HistoryStack
+              openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
+              lead={foldLead}
+              items={folds}
+            />
+          </div>
         )}
       >
         <PendingInvites variant="bar" stay />
@@ -1436,9 +1428,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           </div>
         )}
         {setupNode}
-        {/* On the first view the card's Connect row says what this line would; once anything
-            has been asked the line is back, to say Queued for Claude (host review F1). */}
-        {!ended && !(setupNode && connectLeads) && <ClaudeLine state={claudeState(room, now, { host: true })} />}
+        {/* Claude's status is Claude now, at the top of the side column, as on one screen
+            (owner, 28 Oct 2026): the main area no longer says it a second time. */}
         {crew && centre === null && <StageTabs stage={stage} onStage={setStage} crew={crew} host={host} />}
         {centre === 'queue' ? inMain(BCW.queueInMain, <>{waitingTop}{queueNode}</>) : null}
         {centre === 'later' ? inMain(BCW.laterInMain, laterNode) : null}
@@ -1746,30 +1737,16 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           )}
         </section>
 
-        {/* WHAT HAPPENED (owner, 2026-10-05): the timeline, the asks and the
-            screenshots, one open at a time; the open one fills the column and
-            scrolls inside itself, so the page never scrolls. */}
+        {/* THE RIGHT COLUMN (owner, 28 Oct 2026: "go on the right column, and fold
+            Decided"): Claude now on top, in every moment; then The brief and History,
+            one open at a time. The open one fills the column and scrolls inside
+            itself, so the page never scrolls (owner, 2026-10-05). */}
         <aside className="brm-hostcol brm-hostcol--stack" data-capability="whats-next">
-          {current && !ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
+          {!ended && <ClaudeNow room={room} now={now} />}
           <HistoryStack
             openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
-            items={[
-              ...(room.opening && room.opening.phase === 'opening' ? [{
-                key: 'opening', label: 'The opening', capability: 'opening', keep: true,
-                count: (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length,
-                body: <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />,
-              }] : []),
-              // DECIDED (P1): every decided ask with a tick, to combine into one prompt.
-              { key: 'decided', label: 'Decided', count: decidedNow.length, skip: !decidedNow.length, hint: ended ? '' : 'Tick to combine', body: <DecidedList asks={asks} ticked={tickedNow} setTicked={setTicked} used={used} onCombine={combine} ended={ended} /> },
-              { key: 'timeline', label: 'Timeline', count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
-              { key: 'asks', label: 'Asks', count: asks.length, body: asks.length
-                ? <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} />
-                : <div className="brm-empty">No asks yet.</div> },
-              { key: 'shots', label: 'Screenshots', count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
-              { key: 'brief', label: 'Room brief', count: briefCount(room.brief), body: <BriefPanel brief={room.brief} busy={busy} ended={ended} run={run} api={api} /> },
-              // HISTORY (Consider, frame 4): a sent mark anywhere opens this, at its entry.
-              { key: 'history', label: W.historySection, count: storyCount(room), capability: 'history', body: <HistorySection room={room} now={now} focus={historyFocus && historyFocus.on === 'section' ? historyFocus : null} onOpenAsk={setDetailAskId} /> },
-            ]}
+            lead={foldLead}
+            items={folds}
           />
         </aside>
       </div>
@@ -1973,44 +1950,66 @@ function StepsFold({ items, now }) {
   );
 }
 
-export function ClaudeActivity({ activity, agent, now, full, doing = null }) {
-  const items = (activity || []).slice().reverse();
+/**
+ * CLAUDE NOW (owner, 28 Oct 2026: "go on the right column"): the right
+ * column's first section, on one screen and on two, in every moment, not only
+ * while an ask is open. What Claude is doing leads (the doing line, D1); with
+ * no line, Claude's one state as claudeState says it (Claude is ready,
+ * Sent to Claude with the words that went, Queued for Claude, Waiting for
+ * Claude Code when it has never connected), then the newest commands. It is
+ * the console's status line too: the main area no longer repeats it.
+ */
+export function ClaudeNow({ room, now }) {
+  const activity = room.activity || [];
+  const agent = room.agent;
+  const items = activity.slice().reverse();
   const latest = items[0];
   const fresh = latest && now - Date.parse(latest.at) < ACTIVITY_FRESH_MS;
-  // The line leads (docs/design/build-room-doing D1); without one, today's panel.
-  const dl = claudeState({ agent, activity, doing }, now, { host: true }).doing || null;
-  const helperLine = dl ? '' : claudeState({ agent, activity, doing }, now, { host: true }).helperLine || '';
-  if (!latest && !dl && !helperLine && !(agent && agent.connected)) return null;
+  const st = claudeState(room, now, { host: true });
+  // The line leads (docs/design/build-room-doing D1); without one, the state and the commands.
+  const dl = st.doing || null;
+  // Never connected says so plainly, in the chip's own words; a line that is the newest command is said once.
+  const line = st.key === 'none' ? W.chipNever : latest && st.line === latest.text ? '' : st.line;
   if (dl) {
     const src = dl.stale
       ? (agent && agent.lastSeenAt ? W.lastSeen(agoText(agent.lastSeenAt, now)) : '')
       : dl.source === 'todo' ? W.doingFromTodo : dl.source === 'claude' ? W.doingFromClaude(clockTime(dl.startedAt)) : '';
     return (
-      <section className={`brm-panel brm-activity${dl.stale ? '' : ' is-live'}`} aria-labelledby="brm-activity-h" aria-live="polite">
-        <h2 className="brm-h5" id="brm-activity-h">Claude Code</h2>
+      <section className={`brm-panel brm-activity${dl.stale ? '' : ' is-live'}`} aria-labelledby="brm-activity-h" aria-live="polite" data-claude-now={st.key}>
+        <h2 className="brm-h5" id="brm-activity-h">{W.claudeNow}</h2>
         <div className="brm-doing" data-testid="brm-doing" data-stale={dl.stale ? 'true' : 'false'}>
           <p className="brm-doing-t"><b>{dl.headline}</b>{!dl.stale && <span className="brm-muted">{` · ${dl.dur}`}</span>}</p>
           {src && <p className="brm-doing-src brm-muted brm-small">{src}</p>}
           {dl.helperLine && <p className="brm-doing-helper">{dl.helperLine}</p>}
         </div>
-        {full && items.length > 0 && <StepsFold items={activity || []} now={now} />}
+        {items.length > 0 && <StepsFold items={activity} now={now} />}
       </section>
     );
   }
   return (
-    <section className={`brm-panel brm-activity${fresh ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite">
-      <h2 className="brm-h5" id="brm-activity-h">{fresh ? 'Claude Code is working' : 'Claude Code'}</h2>
-      {helperLine && <p className="brm-doing-helper">{helperLine}</p>}
-      {latest ? (
+    <section className={`brm-panel brm-activity${fresh || st.key === 'building' ? ' is-live' : ''}`} aria-labelledby="brm-activity-h" aria-live="polite" data-claude-now={st.key}>
+      <h2 className="brm-h5" id="brm-activity-h">{W.claudeNow}</h2>
+      <p className="brm-claudenow-t">
+        <span className={`brm-cdot brm-cdot--${st.key}`} aria-hidden="true" />
+        <b>{st.headline}</b>
+        {line && <span className="brm-muted">{` · ${line}`}</span>}
+      </p>
+      {/* What went, word for word: the host's own screen (as the console's status line said it). */}
+      {st.key === 'sent' && st.sent && st.sent.text && (
+        <p className="brm-claudenow-sent" data-testid="brm-claudenow-sent">
+          {`“${st.sent.text}”`}
+          {st.sent.hidden && <span className="brm-muted brm-notshown">{` · ${W.notShownMark}`}</span>}
+        </p>
+      )}
+      {st.helperLine && <p className="brm-doing-helper">{st.helperLine}</p>}
+      {latest && (
         <p className="brm-activity-now" data-testid="brm-activity-now">
           <Icon name={ACTIVITY_ICON[latest.kind] || 'Gear'} size={18} />
           <span>{latest.text}</span>
           <span className="brm-muted brm-small">{agoText(latest.at, now) || 'just now'}</span>
         </p>
-      ) : (
-        <p className="brm-hint">{W.nothingYet}</p>
       )}
-      {full && items.length > 1 && (
+      {items.length > 1 && (
         <ul className="brm-activity-list">
           {items.slice(1, 8).map((a) => (
             <li key={`${a.at}:${a.text}`}>
@@ -2420,12 +2419,84 @@ function RoomHeader({
 }
 
 /**
+ * THE RIGHT COLUMN (owner, 28 Oct 2026: "go on the right column, and fold
+ * Decided"): three sections, each answering one question, on one screen and
+ * on two. CLAUDE NOW (what is Claude doing?) always on top; THE BRIEF (what
+ * is Claude working towards?): the opening's answers and the room brief in
+ * one place, open while the opening writes it; HISTORY (what happened?): one
+ * list with a chip per slice, open once building starts. The seven folds it
+ * replaces (The opening, Decided, Timeline, Asks, Screenshots, Room brief,
+ * History) were slices of one story, the brief twice, and Decided opened by
+ * itself; it is a chip now and opens when pressed.
+ *
  * ONE OPEN AT A TIME (owner, 2026-10-05): "when you open one the other close.
  * but you never scroll the browser window, just the active open box." The
  * open section takes the column's height and scrolls inside itself; the
- * closed ones are a row each. One is always open: Timeline to start.
+ * closed one is a row. Claude now sits above both and never folds.
  */
-const briefCount = (b) => (b ? (b.forWhom ? 1 : 0) + (b.keep || []).length : 0);
+const BRIEF_LINES = [['Making', 'kind'], ['The problem', 'problem'], ['Good looks like', 'good'], ['We will know', 'proof'], ['First build', 'firstBuild'], ['Tools and style', 'tools'], ['Look and feel', 'look']];
+const briefLines = (b) => BRIEF_LINES.map(([k, f]) => [k, ((b && b.lines) || {})[f]]).filter(([, v]) => v);
+/** Who it is for and Keep in mind: the room brief's own rows (BriefPanel). */
+const roomBriefCount = (b) => (b ? (b.forWhom ? 1 : 0) + (b.keep || []).length : 0);
+const briefCount = (b) => roomBriefCount(b) + briefLines(b).length;
+
+/**
+ * THE OPENING'S ANSWERS, ONCE BUILDING (owner, 28 Oct 2026): what the room
+ * framed, read back as the wall's brief has it (WallBrief, the host's line
+ * labels). For and Never are the room brief's own rows below, and edit there.
+ */
+function BriefLines({ brief }) {
+  const b = brief || {};
+  const rows = briefLines(b);
+  if (!rows.length && !b.headline) return null;
+  return (
+    <div className="brm-brieflines">
+      {b.headline && <p className="brm-brieflines-h"><b>{b.headline}</b>{b.summary ? ` ${b.summary}` : ''}</p>}
+      {rows.length > 0 && (
+        <dl className="brm-brieflines-dl">
+          {rows.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}
+        </dl>
+      )}
+    </div>
+  );
+}
+
+/** The brief and History, the two folds under Claude now; the same on one screen and on two. */
+function columnFolds({
+  room, now, host, busy, ended, run, api, asks, decided, ticked, setTicked, used, onCombine, openFocus, setOpenFocus, historyFocus, onOpenAsk,
+}) {
+  const opening = Boolean(room.opening && room.opening.phase === 'opening');
+  const brief = room.brief || null;
+  const focus = historyFocus && historyFocus.on === 'section' ? historyFocus : null;
+  const story = storyCount(room);
+  // Every old fold's actions, each on its chip: tick and combine, the asks' row actions,
+  // Remove a screenshot, edit and delete a timeline entry (with Waiting for Claude while it has stopped).
+  const chips = [
+    { key: 'all', label: W.histAll, count: story, body: <HistorySection room={room} now={now} focus={focus} onOpenAsk={onOpenAsk} /> },
+    { key: 'decided', label: W.decided, count: decided.length, body: <DecidedList asks={asks} ticked={ticked} setTicked={setTicked} used={used} onCombine={onCombine} ended={ended} newestFirst hint={ended ? '' : W.decidedTick} /> },
+    { key: 'asks', label: W.histAsks, count: asks.length, body: <AskList asks={asks} host={host} busy={busy} ended={ended} run={run} api={api} currentAskId={room.currentAskId} /> },
+    { key: 'shots', label: W.histShots, count: (room.images || []).length, body: <ShotsPanel images={room.images || []} busy={busy} run={run} api={api} deleteAs={room.deleteAs} /> },
+    { key: 'claude', label: W.histClaude, count: (room.log || []).length, body: <Timeline log={room.log || []} host={host} stopped={agentStopped(room.agent)} busy={busy} ended={ended} run={run} api={api} deleteAs={room.deleteAs} /> },
+  ];
+  return [
+    {
+      // Open while the opening writes it (`keep`: its lines are the steps to come); after that
+      // it waits for something in it, and History opens first (`skip`).
+      key: 'brief', label: W.briefSection, capability: opening ? 'opening' : undefined, keep: opening, skip: !opening,
+      count: opening ? (room.opening.steps || []).filter((x) => ['done', 'skipped'].includes(x.status)).length : briefCount(brief),
+      body: (
+        <div className="brm-brieffold">
+          {opening
+            ? <BriefPath room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} />
+            : <BriefLines brief={brief} />}
+          {(!opening || roomBriefCount(brief) > 0) && <BriefPanel brief={brief} busy={busy} ended={ended} run={run} api={api} />}
+        </div>
+      ),
+    },
+    // HISTORY (Consider, frame 4): a sent mark anywhere opens this, at its entry, on All.
+    { key: 'history', label: W.historySection, count: story || null, keep: chips.some((c) => c.count > 0), capability: 'history', body: <HistoryChips chips={chips} focus={focus} /> },
+  ];
+}
 
 /**
  * THE ROOM BRIEF (step 7c, C14): who it is for and what Claude keeps in mind.
@@ -2483,20 +2554,23 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
   );
 }
 
-function HistoryStack({ items: all, openKey = null }) {
+function HistoryStack({ items: all, openKey = null, lead = '' }) {
   // NOT DRAWN UNTIL IT HAS SOMETHING (simplify PLAN item 18, phase 1; owner,
   // 26 Oct 2026): a fold with nothing in it is left out (`keep` holds one that
-  // means something empty: The opening, whose lines are the steps to come).
-  // The column stays where it is, with one quiet line when nothing is in it.
+  // means something empty: The brief in the opening, whose lines are the
+  // steps to come). The column stays where it is, with one quiet line when
+  // nothing is in it.
   const items = all.filter((it) => it.keep || it.count > 0);
-  // The first item opens, unless it has nothing in it yet (`skip`: an empty
-  // Decided); an item that has gone (The opening, once building starts) opens
-  // the first one again. `openKey` ({key, n}) opens one from outside: a sent
-  // mark opening History (Consider), each press once.
+  // The first item opens, unless it waits its turn (`skip`: The brief once
+  // building, so History opens). `lead` changing (the opening ending) opens the
+  // first one again. `openKey` ({key, n}) opens one from outside: a sent mark
+  // opening History (Consider), each press once.
   const first = () => ((items.find((it) => !it.skip) || items[0]) || {}).key;
   const [chosen, setOpen] = useState(first);
   const asked = openKey ? `${openKey.key}:${openKey.n}` : '';
   useEffect(() => { if (openKey) setOpen(openKey.key); }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const led = useRef(lead);
+  useEffect(() => { if (led.current !== lead) { led.current = lead; setOpen(first()); } }, [lead]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = items.some((it) => it.key === chosen) ? chosen : first();
   if (!items.length) return <p className="brm-quiet">{W.sideEmpty}</p>;
   // One fold alone has nothing to fold against: its head is a heading, not a button.
@@ -2507,8 +2581,7 @@ function HistoryStack({ items: all, openKey = null }) {
         <div className="brm-stackitem is-open" data-capability={it.capability}>
           <h2 className="brm-stackhead brm-stackhead--only">
             {it.label}
-            <span className="brm-muted">{` · ${it.count}`}</span>
-            {it.hint && <span className="brm-muted brm-stackhint">{` · ${it.hint}`}</span>}
+            {it.count !== null && <span className="brm-muted">{` · ${it.count}`}</span>}
           </h2>
           <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>
         </div>
@@ -2530,8 +2603,7 @@ function HistoryStack({ items: all, openKey = null }) {
             >
               <Icon name={isOpen ? 'CaretDown' : 'CaretRight'} size={14} />
               {it.label}
-              <span className="brm-muted">{` · ${it.count}`}</span>
-              {it.hint && <span className="brm-muted brm-stackhint">{` · ${it.hint}`}</span>}
+              {it.count !== null && <span className="brm-muted">{` · ${it.count}`}</span>}
             </button>
             {isOpen && <div className="brm-stackbody" id={`brm-stack-${it.key}`}>{it.body}</div>}
           </div>
@@ -2544,6 +2616,37 @@ function HistoryStack({ items: all, openKey = null }) {
 /** How many entries the History section holds: the story the History screen tells. */
 function storyCount(room) {
   return roomStory({ log: room.log || [], asks: room.asks || [], images: room.images || [], gave: contributionsOf(room), ended: room.state === 'ENDED' }).length;
+}
+
+/**
+ * HISTORY'S CHIPS (owner, 28 Oct 2026): All · Decided · Asks · Screenshots ·
+ * Claude, each a slice of the one story, newest first, with the old fold's
+ * own actions on it. A chip with nothing in it is not drawn, and with only
+ * All there is no row. All starts, unless it is empty and another is not. A
+ * sent mark (`focus`) shows All, which holds its entry ("showing the entry").
+ */
+function HistoryChips({ chips, focus = null }) {
+  const shown = chips.filter((c) => c.key === 'all' || c.count > 0);
+  const first = () => ((shown.find((c) => c.count > 0) || shown[0]) || {}).key;
+  const [chosen, setChosen] = useState(first);
+  const asked = focus ? focus.n : 0;
+  useEffect(() => { if (focus) setChosen('all'); }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
+  const on = shown.some((c) => c.key === chosen) ? chosen : first();
+  const cur = shown.find((c) => c.key === on);
+  return (
+    <>
+      {shown.length > 1 && (
+        <div className="brm-qfilters brm-histchips" role="group" aria-label={W.historyShow}>
+          {shown.map((c) => (
+            <button key={c.key} type="button" className={`brm-qchip${on === c.key ? ' is-on' : ''}`} aria-pressed={on === c.key} onClick={() => setChosen(c.key)}>
+              {c.label}{c.key !== 'all' && <span className="brm-qchip-n">{` ${c.count}`}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {cur && cur.body}
+    </>
+  );
 }
 
 /**
@@ -3152,7 +3255,8 @@ const SHARE_REPO_CARD = PROMPT_CARDS.find((c) => c.name === 'share-repo');
  * things the host does with the build: show it to the room (the Build
  * screen) or ask Claude to run it and send a screenshot. When Claude has
  * gone quiet, the Continue prompt is one click away. The latest decision is
- * in the right column's Decided now, with every other one.
+ * in the right column's History, with every other one (its Decided chip), and
+ * what Claude is doing is Claude now above it.
  */
 export const STARTER_PROMPT = 'What should we build?';
 
@@ -3199,7 +3303,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = nul
       {whatsNext
         ? <WhatsNext room={room} now={now} ticked={ticked || new Set()} laterTicked={laterTicked} onMove={onMove} continueOn={quiet && Boolean(CONTINUE_PROMPT)} outline={leadOutline} />
         : <p className="brm-nowline">{line}</p>}
-      {!ended && <ClaudeActivity activity={room.activity || []} agent={room.agent} now={now} doing={room.doing} full />}
+      {/* What Claude is doing is Claude now, at the top of the right column (owner, 28 Oct 2026). */}
       {/* SHOW THE BUILD is the header's Build (3), and on two screens The room sees: Build; the
           Now card no longer repeats it (simplify PLAN item 18, phase 2). PREVIEW THE WORK (owner,
           2026-10-04: one click, Claude builds, serves and screenshots a preview) is here until

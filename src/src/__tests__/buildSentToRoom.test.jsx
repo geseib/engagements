@@ -14,8 +14,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import BuildStageScreen from '../buildroom/screens/BuildStageScreen';
 import { Timeline } from '../buildroom/screens/Timeline';
-import { ClaudeLine } from '../buildroom/BuildConsole';
-import { DecidePanel } from '../buildroom/BuildRoomPage';
+import { DecidePanel, ClaudeNow } from '../buildroom/BuildRoomPage';
 import BuildPlayer, { phoneSentCard } from '../buildroom/BuildPlayer';
 import {
   SendOptionsProvider, SendExtras, useMirror,
@@ -25,7 +24,7 @@ import {
 } from '../buildroom/typingMirror';
 import { useHostTyping } from '../present/buildwall/BuildWall';
 import {
-  sentCard, sentOf, claudeState, roomStory, decideBody,
+  sentCard, sentOf, roomStory, decideBody,
 } from '../buildroom/buildScreens';
 import { wallRoom } from '../present/buildwall/wallRoom';
 import { W } from '../buildroom/words';
@@ -216,11 +215,13 @@ describe('History', () => {
 
 // ── The host's own screens ─────────────────────────────────────────────────
 
-describe('the host\'s Claude line (Host screen, console)', () => {
+// Claude now, the right column's first section on both layouts (owner, 28 Oct 2026), carries
+// what the console's status line said.
+describe('the host\'s Claude now (Host screen, console)', () => {
   it('shows the full words with a small "not shown to the room" mark', () => {
     const room = { sent: { verb: 'told', text: SECRET, hidden: true, at: ago(5) }, agent: { connected: true }, log: [] };
-    render(<ClaudeLine state={claudeState(room, now, { host: true })} />);
-    const line = screen.getByTestId('bc-sent');
+    render(<ClaudeNow room={room} now={now} />);
+    const line = screen.getByTestId('brm-claudenow-sent');
     expect(line.textContent).toBe(`“${SECRET}” · ${W.notShownMark}`);
   });
 });

@@ -884,7 +884,6 @@
 .brm .brm-nowcard { display: grid; gap: 10px; }
 .brm .brm-nowcard .brm-h5 { margin: 0; }
 .brm .brm-nowline { margin: 0; font-size: var(--brm-t-title); font-weight: 800; line-height: 1.2; }
-.brm .brm-nowcard .brm-activity { background: transparent; border: 0; padding: 0; }
 .brm .brm-composer .brm-ta { min-height: 72px; }
 .brm .brm-composer .brm-label { margin: 0 4px 0 0; }
 .brm .brm-fold { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; }
@@ -910,7 +909,8 @@
 
 /* THE HOST SCREEN NEVER SCROLLS THE WINDOW (owner, 2026-10-05). On a laptop
    the screen is the window's height; each column scrolls inside itself, and
-   in the right column only the one open section does (HistoryStack). On a
+   in the right column only the one open section does (HistoryStack: The
+   brief or History, under Claude now; owner, 28 Oct 2026). On a
    small screen, where three columns cannot fit, the page scrolls as before. */
 .brm .brm-stack { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .brm .brm-stackitem { background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px; min-height: 0; }
@@ -932,6 +932,21 @@
 }
 .brm .brm-stackbody > .brm-empty { margin: 12px; }
 
+/* THE RIGHT COLUMN (owner, 28 Oct 2026): Claude now's state line, The brief's
+   body, and History's chips, which stay at the top while the list scrolls. */
+.brm .brm-claudenow-t { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: var(--brm-t-body); }
+.brm .brm-claudenow-t .brm-cdot { align-self: center; }
+.brm .brm-claudenow-t .brm-muted { font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-claudenow-sent { margin: 0; font-size: var(--brm-t-label); overflow-wrap: anywhere; }
+.brm .brm-brieffold { display: grid; gap: 12px; padding: 10px 12px 12px; }
+.brm .brm-brieflines { display: grid; gap: 6px; }
+.brm .brm-brieflines-h { margin: 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }
+.brm .brm-brieflines-dl { margin: 0; display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 4px 8px; font-size: var(--brm-t-label); }
+.brm .brm-brieflines-dl dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--brm-t-floor); padding-top: 2px; }
+.brm .brm-brieflines-dl dd { margin: 0; overflow-wrap: anywhere; }
+.brm .brm-histchips { position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 10px; background: var(--surface); border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-decided-hint { margin: 0; }
+
 @media (min-width: 1201px) {
   /* position: relative + overflow: hidden: nothing absolute inside the Host
      page can stretch the document below the viewport (QA 2026-10-18 B2). */
@@ -943,7 +958,10 @@
   .brm.brm-room--host > .brm-host { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
   .brm.brm-room--host .brm-hostcol { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .brm.brm-room--host .brm-hostcol--stack { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; }
+  /* Claude now never folds and never takes the column: past 40% it scrolls itself. */
+  .brm.brm-room--host .brm-hostcol--stack > .brm-activity { flex: none; max-height: 40%; overflow-y: auto; }
+  /* What's next's own Claude line is Claude now's, beside it: said once (as on the console). */
+  .brm.brm-room--host .brm-wnext > .brm-claudeline { display: none; }
   .brm.brm-room--host .brm-stack { flex: 1; }
   .brm.brm-room--host .brm-stackitem { flex: none; }
   .brm.brm-room--host .brm-stackitem.is-open { flex: 1; display: flex; flex-direction: column; }
@@ -1430,7 +1448,6 @@
 .brm .brm-dec .brm-qtick { margin: 2px 0 0; }
 .brm .brm-dec.is-ticked { border-color: var(--primary); }
 .brm .brm-dec.is-pick { cursor: pointer; }
-.brm .brm-stackhint { font-size: var(--brm-t-floor); font-weight: 400; }
 .brm .brm-dec-t { grid-column: 2; min-width: 0; }
 .brm .brm-dec-q { margin: 0; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
 .brm .brm-dec-a { margin: 2px 0 0; font-size: var(--brm-t-body); overflow-wrap: anywhere; }

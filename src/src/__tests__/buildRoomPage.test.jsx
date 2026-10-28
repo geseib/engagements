@@ -144,6 +144,11 @@ const openComposer = () => {
 };
 const composeBox = () => { openComposer(); return screen.getByLabelText('Tell Claude, or log what the room said'); };
 const composerPanel = () => { openComposer(); return screen.getByRole('region', { name: 'Tell Claude' }); };
+// THE RIGHT COLUMN (owner, 28 Oct 2026): the old folds are History's chips. With one slice there is no row.
+const historyChip = (name) => {
+  const chips = screen.queryByRole('group', { name: 'Show in History' });
+  if (chips) fireEvent.click(within(chips).getByRole('button', { name: new RegExp(`^${name}`) }));
+};
 const openStep = (name) => fireEvent.click(within(screen.getByRole('list', { name: 'This ask' })).getByRole('button', { name }));
 
 async function openRoom(state) {
@@ -494,8 +499,8 @@ describe('each ask status', () => {
         { Kind: 'showing', Text: 'Header B is live', By: 'agent', Link: 'http://localhost:5173/' },
       ],
     }));
-    // The Host screen's Decided carries the latest decision (host-flow H1; it was the Now card's)...
-    expect(within(screen.getByRole('button', { name: /^Decided · 1/ }).closest('.brm-stackitem')).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
+    // The Host screen's History carries the latest decision, on All (owner, 28 Oct 2026; it was Decided's, and the Now card's)...
+    expect(within(screen.getByRole('list', { name: 'History' })).getByText('Go with B, keep A\'s logo')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Now' })).queryByText('Go with B, keep A\'s logo')).toBeNull();
     // ...and the room sees one headline, from the one rule, on the Stage screen.
     fireEvent.keyDown(window, { key: '2' });
@@ -602,6 +607,7 @@ describe('the host side panel', () => {
 
   test('a timeline entry can be edited and deleted', async () => {
     await openRoom(hostState({ logs: [{ Kind: 'verbal', Text: 'Most of us use phones', By: 'host' }] }));
+    historyChip('Claude');
     fireEvent.click(screen.getByRole('button', { name: 'Edit "Most of us use phones"' }));
     fireEvent.change(screen.getByLabelText('Edit entry'), { target: { value: 'Nearly all of us use phones' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -934,6 +940,7 @@ describe('the Stage screen (was Present mode)', () => {
 
   test('hides every host-only control, the inbox, notes, names, hidden suggestions and proposed asks', async () => {
     await openRoom(busyRoom());
+    historyChip('Claude');
     expect(screen.getByText('Ask Dee about parking later')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stage' }));
 
@@ -1550,6 +1557,7 @@ describe('the Host screen: Now, Waiting for you, what happened (C1)', () => {
     const waiting = screen.getByRole('region', { name: 'Waiting for you · 2' });
     expect(within(waiting).getByRole('region', { name: 'Proposed ask 3' })).toBeInTheDocument();
     expect(within(waiting).getByText('A map link for parking')).toBeInTheDocument();
+    historyChip('Claude');
     expect(within(screen.getByRole('region', { name: 'Timeline' })).getByText('Shift list renders')).toBeInTheDocument();
     // One place to type: the composer. The timeline has no form of its own.
     openComposer();
@@ -1589,32 +1597,52 @@ describe('the review card leads with what the room would see (C2)', () => {
   });
 });
 
-describe('timeline, asks and screenshots: one open at a time (owner, 2026-10-05)', () => {
-  test('Decided starts open while building (host-flow H1); opening Asks closes it; one is always open', async () => {
+describe('the right column: Claude now, The brief, History (owner, 2026-10-05; 28 Oct 2026)', () => {
+  // FOLD DECIDED (owner, 28 Oct 2026: "go on the right column, and fold Decided"). Decided used to
+  // open by itself while building (host-flow H1); it is a chip in History now, pressed to open.
+  test('History opens on All while building, Decided folded; one chip at a time; an empty slice has no chip', async () => {
     await openRoom(hostState({
       asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'Go with B.' }, DecidedAt: ago(60) }],
       logs: [{ Kind: 'progress', Text: 'Shift list renders', By: 'agent' }],
     }));
-    const head = (name) => screen.getByRole('button', { name: new RegExp(`^${name} · `) });
-    expect(head('Decided')).toHaveAttribute('aria-expanded', 'true');
-    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(head('Timeline'));
-    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'true');
-    expect(head('Decided')).toHaveAttribute('aria-expanded', 'false');
-    expect(head('Asks')).toHaveAttribute('aria-expanded', 'false');
-    // No screenshots yet: that fold is not drawn (simplify PLAN item 18).
-    expect(screen.queryByRole('button', { name: /^Screenshots · / })).toBeNull();
+    const col = document.querySelector('.brm-hostcol--stack');
+    expect(col.firstElementChild).toHaveAccessibleName('Claude now');
+    const chips = screen.getByRole('group', { name: 'Show in History' });
+    const chip = (name) => within(chips).getByRole('button', { name: new RegExp(`^${name}`) });
+    expect(chip('All')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('Decided')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('checkbox', { name: /Which header/ })).toBeNull();
+    // No screenshots yet: that chip is not drawn (simplify PLAN item 18).
+    expect(within(chips).queryByRole('button', { name: /^Screenshots/ })).toBeNull();
+
+    fireEvent.click(chip('Claude'));
+    expect(chip('Claude')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('All')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
 
-    fireEvent.click(head('Asks'));
-    expect(head('Asks')).toHaveAttribute('aria-expanded', 'true');
-    expect(head('Timeline')).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(chip('Asks'));
     expect(screen.queryByRole('region', { name: 'Timeline' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Asks' })).toBeInTheDocument();
 
-    // Clicking the open one keeps it open: there is always one to read.
-    fireEvent.click(head('Asks'));
-    expect(head('Asks')).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(chip('Decided'));
+    expect(screen.getByRole('checkbox', { name: /Which header/ })).toBeInTheDocument();
+  });
+
+  test('Claude now is on top in every moment, and says plainly when Claude Code has never connected', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    const now = screen.getByRole('region', { name: 'Claude now' });
+    expect(now).toHaveTextContent('Waiting for Claude Code');
+    expect(now).toHaveTextContent('Not connected. Open Session to connect.');
+  });
+
+  test('during the opening The brief is open with the path; History waits its turn', async () => {
+    await openRoom(hostState({ st: { Phase: undefined }, logs: [{ Kind: 'progress', Text: 'Set up the project', By: 'agent' }] }));
+    const brief = screen.getByRole('button', { name: /^The brief/ });
+    expect(brief).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('region', { name: 'The opening: the build brief' })).toBeInTheDocument();
+    const col = document.querySelector('.brm-hostcol--stack');
+    fireEvent.click(within(col).getByRole('button', { name: /^History/ }));
+    expect(screen.queryByRole('region', { name: 'The opening: the build brief' })).toBeNull();
   });
 });
 
@@ -1649,7 +1677,7 @@ describe('Claude Code has stopped: the chip copies /engage:continue (owner, 2026
 describe('a direction Claude has not heard while Claude Code has stopped (owner, 2026-10-06)', () => {
   const SENT = [{ Kind: 'direction', Text: 'Board size: mega board', By: 'host', ForAgent: true }];
   // The only fold with something in it is open already, its head a heading (simplify PLAN item 18).
-  const openTimeline = () => { const b = screen.queryByRole('button', { name: /^Timeline/ }); if (b) fireEvent.click(b); };
+  const openTimeline = () => historyChip('Claude');
 
   test('stopped: the column says so, the copy button copies the command, the timeline does not claim delivery', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: ago(3600) }, logs: SENT }));
@@ -2285,12 +2313,12 @@ describe('what Claude gets: four kinds and the room brief (step 7c, C14)', () =>
     keep: [{ id: 'k1', text: 'No account needed', from: 'ask 1' }],
     later: [{ id: 'l1', text: 'Car park map', from: 'you' }, { id: 'l2', text: 'Sign up as a pair', from: 'the room' }],
   };
-  const openBrief = () => { const b = screen.queryByRole('button', { name: /^Room brief/ }); if (b) fireEvent.click(b); };
+  const openBrief = () => { const b = screen.queryByRole('button', { name: /^The brief/ }); if (b) fireEvent.click(b); };
 
   test('the brief shows who it is for and Keep in mind (Later has its own list); add edits it', async () => {
     await openRoom(hostState({ st: { Brief: BRIEF } }));
     // The one fold with something in it: open, its head a heading.
-    expect(screen.getByRole('heading', { name: /^Room brief · 2/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^The brief · 2/ })).toBeInTheDocument();
     openBrief();
     const brief = screen.getByRole('region', { name: 'The room brief' });
     expect(within(brief).getByLabelText('Who it is for').value).toBe('Busy volunteers');
@@ -3012,7 +3040,12 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
   // Option A runs on the laptop, so the Share demo nudge would take the orange: answered here.
   const answered = (view) => ({ ...view, lan: { ...view.lan, offerDismissed: true } });
   const decidedRoom = () => answered(hostState({ asks: [WHO, BUILT] }));
-  const decidedSection = () => screen.getByRole('button', { name: /^Decided/ }).closest('.brm-stackitem');
+  // Decided is History's chip (owner, 28 Oct 2026): pressed once, then its list.
+  const decidedChip = () => within(screen.getByRole('group', { name: 'Show in History' })).getByRole('button', { name: /^Decided/ });
+  const decidedSection = () => {
+    if (decidedChip().getAttribute('aria-pressed') !== 'true') fireEvent.click(decidedChip());
+    return document.querySelector('.brm-stackbody .brm-decided');
+  };
   const composer = () => composeBox();
 
   test('the Share demo nudge takes the one orange from What\'s next while it shows (owner, 2026-10-11)', async () => {
@@ -3037,8 +3070,9 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
 
   test('tick both in Decided, Add to the prompt, and the Composer holds the combined lines', async () => {
     await openRoom(decidedRoom());
+    // Folded until pressed (owner, 28 Oct 2026; it opened by itself under host-flow H1).
+    expect(decidedChip()).toHaveAttribute('aria-pressed', 'false');
     const dec = decidedSection();
-    expect(dec.querySelector('[aria-expanded="true"]')).not.toBeNull();
     fireEvent.click(within(dec).getByRole('checkbox', { name: /What are we building/ }));
     fireEvent.click(within(dec).getByRole('checkbox', { name: /Who is it for/ }));
     fireEvent.click(within(dec).getByRole('button', { name: 'Add to the prompt' }));
@@ -3369,7 +3403,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     DoingB: { text: 'Mocking up 3 graph options', past: 'Mocked up 3 graph options', source: 'claude', startedAt: ago(250), at: ago(10) },
     ...over,
   });
-  const panel = () => screen.getByRole('region', { name: /^Claude Code/ });
+  const panel = () => screen.getByRole('region', { name: 'Claude now' });
   beforeEach(() => { try { window.localStorage.clear(); } catch (e) { /* none */ } });
 
   test('D1: the header chip is the line and how long, and the panel leads with it', async () => {
@@ -3501,7 +3535,7 @@ describe('a helper alone, and what a step holds (docs/design/build-room-doing)',
   test('the panel, chip and Stage keep today\'s words and show the helper', async () => {
     await openRoom({ ...hostState({ activity: ACTS }), doing: helperOnly() });
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
-    const panel = screen.getByRole('region', { name: /^Claude Code/ });
+    const panel = screen.getByRole('region', { name: 'Claude now' });
     expect(within(panel).getByText('A helper is researching contrast rules')).toBeInTheDocument();
     expect(within(panel).getByTestId('brm-activity-now')).toHaveTextContent('Ran npm test');
     fireEvent.keyDown(window, { key: '2' });

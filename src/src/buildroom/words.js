@@ -857,7 +857,18 @@ export const W = Object.freeze({
   composeClose: 'Close',
   // Waiting for you with nothing in it: one quiet line, so the column keeps its place.
   waitingEmpty: "Nothing yet. Claude's questions and the room's ideas land here.",
-  sideEmpty: 'Decisions, the timeline and screenshots land here.',
+  sideEmpty: 'The brief and what happened land here.',
+  // THE RIGHT COLUMN, THREE SECTIONS (owner, 28 Oct 2026: "go on the right column, and
+  // fold Decided"): Claude now, The brief, History. History is one list with a chip per
+  // slice; the chip names are the old folds' (Decided, Asks, Screenshots) and Claude for
+  // the timeline. "The opening", "Room brief" and "Timeline" are no longer fold names.
+  briefSection: 'The brief',
+  historyShow: 'Show in History',
+  histAll: 'All',
+  histAsks: 'Asks',
+  histShots: 'Screenshots',
+  histClaude: 'Claude',
+  decidedTick: 'Tick answers to put them in one prompt.',
   // THE FIVE-STEP CORE (PLAN item 12, smaller; owner, 26 Oct 2026: "go to phase 2"):
   // Making, For, The problem, Good looks like, First build. The other four are one
   // press away, under More framing questions, and still fill the brief.
@@ -968,4 +979,9 @@ export const RETIRED = Object.freeze([
   // Phase 2 (26 Oct 2026): the Now card no longer repeats the header's Build; the opening counts its core.
   { word: 'Show the build', enforced: true, task: 'simplify-2' },
   { word: 'Every step is answered or skipped. Show the brief on the wall, then start building.', enforced: true, task: 'simplify-2' },
+  // The right column (owner, 28 Oct 2026): The brief replaces the Room brief fold, and Decided
+  // is a chip in History with no hint of its own. "Timeline" stays: the report and the room's
+  // History screen still use it; "The opening" stays as the console strip's moment.
+  { word: 'Room brief', enforced: true, task: 'right-column' },
+  { word: 'Tick to combine', enforced: true, task: 'right-column' },
 ]);

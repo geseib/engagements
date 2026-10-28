@@ -17,7 +17,9 @@
  *              decide panel inline: answer (a)), the main button in it, an
  *              empty held slot between asks (answer (b)); Claude's one status
  *              line; then the moment's work, the page's own panels
- *   side       Now, then the folds: Decided, Timeline, Asks, Screenshots, Room brief
+ *   side       the right column as on one screen (owner, 28 Oct 2026): Claude
+ *              now, then The brief and History (ClaudeNow, columnFolds in the
+ *              page); Claude now is the console's status line too
  *
  * Data and nodes only: the page owns the session and builds every panel it
  * already had; this file places them and draws the rail's own lists.
@@ -138,37 +140,6 @@ export function BuildConsoleRail({ moment, slots }) {
         );
       })}
     </aside>
-  );
-}
-
-/** "Claude is ready · Done: added the calendar grid." on top of the main area, in every moment. */
-export function ClaudeLine({ state }) {
-  if (!state || !state.headline) return null;
-  return (
-    <div className="bc-claude" role="status" aria-label={BCW.claudeNow} data-capability="claude-status" data-claude-status={state.key || ''}>
-      <span className={`bc-dot bc-dot--${state.key || 'none'}`} aria-hidden="true" />
-      <b>{state.headline}</b>
-      {state.line ? <span className="hc-muted">{state.line}</span> : null}
-      {state.helperLine ? <span className="hc-muted">{state.helperLine}</span> : null}
-      {/* What went, word for word: this is the host's own screen. A send kept from the room says so. */}
-      {state.key === 'sent' && state.sent && state.sent.text ? (
-        <span className="bc-sent" data-testid="bc-sent">
-          {`\u201c${state.sent.text}\u201d`}
-          {state.sent.hidden ? <span className="hc-muted brm-notshown">{` \u00b7 ${W.notShownMark}`}</span> : null}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-/** The side column's first card: what was last decided, and the screenshots so far. */
-export function NowCard({ card }) {
-  return (
-    <section className="hc-card bc-now" aria-label={BCW.now}>
-      <p className="hc-card-h">{BCW.now}</p>
-      <p className="bc-nowline">{card.line}</p>
-      <p className="hc-muted">{card.shots}</p>
-    </section>
   );
 }
 

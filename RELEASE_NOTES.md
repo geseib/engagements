@@ -9,6 +9,60 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 28 Oct 2026 (Build Room, simpler: the right column)
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+The owner's call on 28 Oct: "go on the right column, and fold Decided". The Host screen's right column, and the right side of the two-screen console, had seven folds: The opening, Decided, Timeline, Asks, Screenshots, Room brief and History. Four were parts of History, the brief was there twice, and Decided opened by itself. It is now three sections, each answering one question, the same on one screen and on two. Nothing was taken away: every action the old folds had is still there.
+
+### New
+
+- **Claude now**, at the top of the right column, always: what Claude is doing (the doing line and its steps), or its state when there is no line: Claude is ready, Sent to Claude with the words that went, Queued for Claude, or "Waiting for Claude Code · Not connected. Open Session to connect." It no longer appears only while an ask is open, and it no longer sits in the Now card between asks. On the console it replaces the status line at the top of the main area.
+- **The brief**: what Claude is working towards, in one place. While the room frames the build it holds the opening's steps (click a line to work on it, More framing questions as before) and opens by itself. Once building starts it holds the opening's answers (Making, The problem, Good looks like and the rest), then Who it is for and Keep in mind, which you edit there as before.
+- **History**: one list, newest first, with chips **All · Decided · Asks · Screenshots · Claude**. A chip appears once it has something in it. All is the story (click a decision to open its ask). **Decided** has the ticks and **Add to the prompt**. **Asks** has Open, Close and Reopen on each row. **Screenshots** has Remove. **Claude** is the timeline, with Edit and Delete, and "Waiting for Claude · run /engage:continue" while Claude Code has stopped. History opens once building starts.
+- **Decided is folded.** It is a chip and opens only when pressed. History opens on All.
+- A **Sent to Claude** mark still opens History at its entry, highlighted, on All.
+
+| Measured (the count test's own fixtures) | Before | Now |
+|---|---|---|
+| First view, one screen | 29 | 29 |
+| First view, console | 33 | 33 |
+| Between asks, three ideas, one screen | 40 | 38 |
+| Between asks, three ideas, console | 46 | 44 |
+| Folds in the right column | 7 | 2, under Claude now |
+
+### Fixed
+
+- **Decided opened by itself** between asks and pushed the rest of the column down.
+- **The opening and the room brief were two folds** holding parts of the same brief.
+- **Timeline, Asks and Screenshots were separate folds** beside History, which already told the same story.
+- **What Claude was doing moved** between the right column (an ask open) and the Now card (between asks). It now stays in one place.
+- **The console said Claude's status twice**: in the main area's line and in the Now card's activity. It says it once, in Claude now. The console's Now card (last decided, screenshots so far) went too: History has both.
+
+### What to look at
+
+1. On engage.test, create a Build Room and do not connect Claude Code. The right column starts with **Claude now**: "Waiting for Claude Code · Not connected. Open Session to connect." Under it, **The brief** with the five opening steps and More framing questions. There is no "The opening" or "Room brief" fold. The first view is still 29 controls.
+2. Click a line in The brief: that step opens on the Now card, as before. Answer **For** yourself: The brief now also shows Who it is for and Keep in mind, with their inputs.
+3. Send something from **Tell Claude…** before Claude connects: Claude now says **Queued for Claude** with the words, and "Connect it and it gets this first."
+4. Connect Claude Code and press **Start building**. **History** opens below The brief, on **All**. Claude now says what Claude is doing; with a doing line, its commands fold to one Steps row.
+5. Run two Choose asks to a decision. Between asks, the Now card has What's next but no Claude panel. History's chips read All, Decided 2, Asks 2 and Claude. **Decided** is not pressed and nothing is ticked.
+6. Press **Decided**, tick both, press **Add to the prompt**: the composer holds both lines, as before.
+7. Press **Asks**: each row has Reopen. Press **Claude**: the timeline, with Edit and Delete on each entry. Have Claude share a screenshot, then press **Screenshots**: it has Remove.
+8. Click a **Sent to Claude** mark on a decided ask or an idea: History opens on All, scrolled to the entry, highlighted, "showing the entry".
+9. Press **The brief**: History folds and The brief opens, with the opening's answers and Who it is for and Keep in mind. Add a Keep in mind line.
+10. Make the browser window short: the page never scrolls. Claude now stays on top; the open section scrolls inside itself, and at its end the wheel carries on.
+11. Use two screens and repeat 4 to 9 on the console: the right side is Claude now, The brief and History. There is no status line at the top of the main area and no Now card. Between asks it is 44 controls (was 46).
+12. Open help (?): Finding your way, The brief and History, on the right describe the three sections; Build Room on two screens says the same for the console's right side.
+
+### Known gaps
+
+- **Phase 3 of the simplicity plan is not done:** the Ask the room form's Yes/No tab and More options (item 14), Ask Claude to wrap up with a prefilled wrap-up and Report and End as What's next moves on both layouts (15), and the report's brief section, plain Start building line and wheel marks (16).
+- **The chips show slices side by side, not one filtered list.** All is the story (History's own entries); Decided, Asks, Screenshots and Claude are the old folds' lists, each with its own actions, under one heading. A decided ask therefore shows both in All and in Decided.
+- **What's next still says Claude's line** below 1200 px wide, where the right column moves under the other two; above that it is hidden, since Claude now says it beside it.
+- The first view is 10 words longer on either layout (Claude now's line), 227 and 270, still under the 250 and 280 limits.
+
+---
+
 ## 26 Oct 2026 (Build Room, simpler: the opening and between asks)
 
 **Test:** merge of dev `ba581c68`. Everything below this entry is already on test; this push adds only what is here.

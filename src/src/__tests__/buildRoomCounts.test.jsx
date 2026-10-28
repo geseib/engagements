@@ -11,6 +11,10 @@
  * no more than 40 on one screen (76 in the plan, 58 after phase 1); three
  * routes on an idea's card instead of eight; five steps on the default path.
  *
+ * THE RIGHT COLUMN (owner, 28 Oct 2026: "go on the right column, and fold
+ * Decided"): Claude now, The brief and History in place of seven folds. The
+ * first views hold where they were; between asks lost two (40 to 38, 46 to 44).
+ *
  * The plan's method, reproduced: the real BuildRoomPage in jsdom, the state
  * built by the real server's pure half (build-store.js roomFromRows +
  * hostView), as buildCapabilities.test.jsx builds its fixtures. A control is a
@@ -202,16 +206,17 @@ test('a connected first view: one press, the orange one, puts the first opening 
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Ask the room to pick']);
 });
 
-test('between asks with three ideas, one screen: no more than 40 controls (76 in the plan, 58 after phase 1)', async () => {
+test('between asks with three ideas, one screen: no more than 38 controls (76 in the plan, 58 after phase 1, 40 after phase 2)', async () => {
   const { controls } = await open({ state: betweenAsks });
-  expect(controls).toBeLessThanOrEqual(40);
+  // The right column (owner, 28 Oct 2026): History's chips in place of the folds, Decided folded.
+  expect(controls).toBeLessThanOrEqual(38);
 });
 
-test('between asks with three ideas, two screens: the console takes the same cuts (62 after phase 1)', async () => {
+test('between asks with three ideas, two screens: the console takes the same cuts (62 after phase 1, 46 after phase 2)', async () => {
   // The console's top line and rail are Call & Answer's and were left as they are (phase 1 did
   // the same); its own panels take every phase 2 cut. Held where it landed, so it cannot drift.
   const { controls } = await open({ two: true, state: betweenAsks });
-  expect(controls).toBeLessThanOrEqual(46);
+  expect(controls).toBeLessThanOrEqual(44);
 });
 
 test("an idea's card carries three routes and its tick (eight and the tick before); its words open Consider", async () => {

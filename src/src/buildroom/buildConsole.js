@@ -66,10 +66,6 @@ export const BCW = Object.freeze({
   wrapUp: 'Wrap up',
   report: 'Report',
   endSession: 'End session',
-  now: 'Now',
-  lastDecided: (n, what) => `Last decided, ask ${n}: ${what}.`,
-  nothingDecided: 'Nothing decided yet.',
-  shotsSoFar: (n) => (n === 1 ? '1 screenshot so far.' : `${n} screenshots so far.`),
   forYou: 'For you · note for Claude',
   claudeAsked: 'Claude asked this.',
   askAnswerForRoom: 'Answer for the room',
@@ -83,7 +79,6 @@ export const BCW = Object.freeze({
   ideasJoinWaiting: 'Each idea joins Waiting for you. Taking the point down offers to put them to a vote.',
   theSource: 'For you · the source',
   sourceNever: 'The room sees the point, never the source line.',
-  claudeNow: 'Claude now',
 });
 
 // ── The moment ──────────────────────────────────────────────────────────────
@@ -251,22 +246,4 @@ export function peopleRows(room, current) {
   const here = (room && room.playerCount) || names.length;
   const summary = open ? `${n} of ${here} ${verb}` : `${here} here`;
   return { rows, summary, verb, open };
-}
-
-// ── The side column's Now card ─────────────────────────────────────────────
-
-/** "Last decided, ask 2: a week calendar." and the screenshots so far. */
-export function nowCard(room) {
-  const decided = ((room && room.asks) || []).filter((a) => a.status === 'decided')
-    .sort((a, b) => String(a.decidedAt || '').localeCompare(String(b.decidedAt || '')));
-  const last = decided[decided.length - 1] || null;
-  let line = BCW.nothingDecided;
-  if (last) {
-    const d = String((last.decision && last.decision.direction) || last.prompt || '').trim();
-    const short = d.length > 90 ? `${d.slice(0, 90).trimEnd()}…` : d.replace(/[.!?]+$/, '');
-    line = BCW.lastDecided(askNumber(last.askId), short);
-  }
-  const shots = ((room && room.images) || []).length;
-  // Nothing decided and nothing shown yet: the card is not drawn (simplify PLAN item 18).
-  return { line, shots: BCW.shotsSoFar(shots), empty: !last && !shots };
 }
