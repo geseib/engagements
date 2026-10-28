@@ -81,7 +81,7 @@ import {
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
   rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts, roomStory, contributionsOf, doingLine,
-  wheelPossible,
+  wheelPossible, WRAP_UP_TEXT, wrapPrefill, wrapAsked, briefRows,
 } from './buildScreens';
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
@@ -98,7 +98,7 @@ import BuildConsole, {
 } from './BuildConsole';
 import BuildConsoleAsk from './BuildConsoleAsk';
 import {
-  BCW, consoleMoment, consoleStrip, consolePart, nextOnWall, peopleRows,
+  BCW, consoleMoment, consoleStrip, consolePart, nextOnWall, peopleRows, finishControls,
 } from './buildConsole';
 import {
   CrewBoard, CrewDialog, CrewIncoming, CrewTasks, EarlyLookDialog, StageTabs,
@@ -183,7 +183,8 @@ export const PROMPT_CARDS = [
   {
     name: 'wrap-up',
     title: 'Wrap up',
-    text: 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary for the room, what you built, the running demo link first, and next steps. Post a final milestone thanking the room, then call wait_for_direction.',
+    // What's next's Ask Claude to wrap up posts the same words (PLAN item 15).
+    text: WRAP_UP_TEXT,
   },
 ];
 export const slashCommand = (name) => `/mcp__engage__${name}`;
@@ -1073,6 +1074,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     }
     else if (key === 'ask-room') setDialog({ compose: 'suggest' });
     else if (key === 'connect') setDialog('connect');
+    // WRAP UP, THEN THE REPORT, THEN END (PLAN item 15).
+    else if (key === 'wrap-claude') run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true }));
+    else if (key === 'wrap-write') setDialog('wrap');
+    else if (key === 'report') goView('report');
+    else if (key === 'end') setDialog('end');
     else if (key === 'open-proposed') {
       const ask = moveAsk(key);
       if (ask) run(() => api.askAction(ask.askId, { action: 'open' }));
@@ -1193,11 +1199,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   if (consoleOn) {
     const pickNow = pick && current && pick.askId === current.askId ? pick.id : null;
     const moment = consoleMoment(room, current, { crewOn: onCrew });
-    const bar = buildControls(room, current, now, {
+    // Once wrapped, the card's main move is Check the report, then End session (finishControls).
+    const bar = finishControls(room, current, buildControls(room, current, now, {
       crewOn: onCrew, draft: current ? drafts[current.askId] || null : null, turning: cTurning,
       highlight: current ? highlights[current.askId] : undefined, busy,
       decideInline: true, pickId: pickNow, answering,
-    });
+    }));
     consoleHandlers.current = {
       run,
       onSent: (out) => { if (current) setDrafts(({ [current.askId]: _gone, ...rest }) => rest); onSent(out); },
@@ -1218,6 +1225,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         s.decide();
         return;
       }
+      if (c.action === 'report') { goView('report'); return; }
+      if (c.action === 'end') { setDialog('end'); return; }
       consoleMove(c);
     };
     const overlay = Boolean(panel || confirmPick || joinZoom || takeDown || detailAskId || viewer || dialog || voteIdeas || pointVote || (runConfirm && listRunning));
@@ -1414,13 +1423,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           </div>
         )}
         {ended && <div className="brm-notice brm-row brm-gap" data-testid="brm-endedbar"><span>{W.endedEdit}</span></div>}
-        {!ended && room.outcome && (
-          <div className="brm-notice brm-row brm-gap" data-testid="brm-wrappedbar">
-            <span>{room.outcome.by === 'agent' ? W.wrappedUp : W.wrapUpSaved}</span>
-            <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
-          </div>
-        )}
+        {/* Wrapped: "Your part now" leads with Check the report, then End session (PLAN item 15), so no bar repeats them. */}
         {windowBlocked && (
           <div className="brm-notice brm-row brm-gap" role="alert">
             <span>{SCREEN_WORDS.quickBlocked}</span>
@@ -1601,14 +1604,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         </div>
       )}
       {!host && ended && <div className="brm-notice brm-notice--bar">{W.endedEdit}</div>}
-      {/* WRAPPED, NOT YET ENDED (owner, 2026-10-06): the next steps in one place. */}
-      {host && !ended && room.outcome && (
-        <div className="brm-notice brm-notice--bar brm-row brm-gap" data-testid="brm-wrappedbar">
-          <span>{room.outcome.by === 'agent' ? W.wrappedUp : W.wrapUpSaved}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => goView('report')}>Report</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={() => setDialog('end')}>End session</button>
-        </div>
-      )}
+      {/* WRAPPED, NOT YET ENDED (owner, 2026-10-06): the next steps in one place. Since PLAN item 15
+          they are What's next's two moves on the Now card, Check the report, then End session. */}
 
       {screen === 'build' && <BuildBuildScreen room={roomView} now={now} controls={{ ended, busy, run, api }} />}
       {screen === 'history' && <BuildHistoryScreen room={roomView} now={now} controls={{ onOpenAsk: setDetailAskId }} focus={historyFocus && historyFocus.on === 'screen' ? historyFocus : null} />}
@@ -1783,7 +1780,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <ConnectPanel room={room} gameId={gameId} api={api} run={run} busy={busy} atInstall={dialog === 'connect-install'} onClose={() => setDialog(null)} />
       )}
       {host && dialog === 'wrap' && (
-        <WrapUpPanel outcome={room.outcome} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
+        <WrapUpPanel outcome={room.outcome} room={room} connected={Boolean(room.agent && (room.agent.connected || room.agent.listening))} api={api} run={run} busy={busy} onClose={() => setDialog(null)} />
       )}
       {host && dialog === 'crew' && (
         <CrewDialog crew={room.crew} gameId={gameId} busy={busy} run={run} api={api} shareCard={SHARE_REPO_CARD} onClose={() => setDialog(null)} />
@@ -2434,8 +2431,8 @@ function RoomHeader({
  * open section takes the column's height and scrolls inside itself; the
  * closed one is a row. Claude now sits above both and never folds.
  */
-const BRIEF_LINES = [['Making', 'kind'], ['The problem', 'problem'], ['Good looks like', 'good'], ['We will know', 'proof'], ['First build', 'firstBuild'], ['Tools and style', 'tools'], ['Look and feel', 'look']];
-const briefLines = (b) => BRIEF_LINES.map(([k, f]) => [k, ((b && b.lines) || {})[f]]).filter(([, v]) => v);
+// The brief's lines, as the wall and the report label them (buildScreens BRIEF_ROWS).
+const briefLines = briefRows;
 /** Who it is for and Keep in mind: the room brief's own rows (BriefPanel). */
 const roomBriefCount = (b) => (b ? (b.forWhom ? 1 : 0) + (b.keep || []).length : 0);
 const briefCount = (b) => roomBriefCount(b) + briefLines(b).length;
@@ -3262,7 +3259,22 @@ export const STARTER_PROMPT = 'What should we build?';
 
 function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = null, laterTicked = 0, onMove = null, leadOutline = false }) {
   const [sent, setSent] = useState(false);
-  if (room.outcome && room.outcome.summary) return <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} />;
+  if (room.outcome && room.outcome.summary) {
+    // WRAPPED, NOT YET ENDED (PLAN item 15; the mockup's frame 5): Check the report leads, then
+    // End session, as What's next moves (Space presses the first), with what was built under them.
+    const stage = <WrappedStage outcome={room.outcome} agent={room.agent} images={room.images || []} plainLinks={!ended} />;
+    if (ended || !onMove) return stage;
+    return (
+      <>
+        <section className="brm-panel brm-nowcard brm-nowcard--wrapped" aria-labelledby="brm-now-h" data-testid="brm-wrappednow">
+          <h2 className="brm-h5" id="brm-now-h">Now</h2>
+          <p className="brm-nowline" role="status">{room.outcome.by === 'agent' ? W.wrappedUp : W.wrapUpSaved}</p>
+          <WhatsNext room={room} now={now} ticked={new Set()} onMove={onMove} outline={leadOutline} />
+        </section>
+        {stage}
+      </>
+    );
+  }
   const agent = room.agent || {};
   const quiet = !(agent.listening || agent.connected);
   const built = Boolean(latestBuild(room).link);
@@ -4368,17 +4380,31 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
 
 const lines = (s) => String(s || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
-export function WrapUpPanel({ outcome, api, run, busy, onClose }) {
-  const o = outcome || {};
+/**
+ * WRAP UP (PLAN item 15). An existing wrap-up opens as it was saved. With none
+ * yet, the form opens filled in from the session (wrapPrefill: the brief's
+ * headline, the decisions Claude got, the newest build link), each field
+ * saying where its words came from; with Claude connected, Ask Claude to wrap
+ * up is one press away at the top. A link is two boxes, label and address,
+ * instead of the old `label | https://…` line.
+ */
+const LINK_MAX = 10;
+export function WrapUpPanel({ outcome, room = null, connected = false, api, run, busy, onClose }) {
+  const o = outcome && outcome.summary ? outcome : null;
+  const fill = useMemo(() => (o ? null : wrapPrefill(room)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const src = o || fill || {};
   const initial = useMemo(() => ({
-    summary: o.summary || '',
-    built: (o.built || []).join('\n'),
-    links: (o.links || []).map((l) => (l.label ? `${l.label} | ${l.url}` : l.url)).join('\n'),
-    nextSteps: (o.nextSteps || []).join('\n'),
+    summary: src.summary || '',
+    built: (src.built || []).join('\n'),
+    links: (src.links || []).length ? src.links.map((l) => ({ label: l.label || '', url: l.url || '' })) : [{ label: '', url: '' }],
+    nextSteps: (src.nextSteps || []).join('\n'),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [form, setForm] = useState(initial);
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setLink = (i, k) => (e) => setForm((f) => ({ ...f, links: f.links.map((l, j) => (j === i ? { ...l, [k]: e.target.value } : l)) }));
+  const addLink = () => setForm((f) => ({ ...f, links: [...f.links, { label: '', url: '' }] }));
+  const removeLink = (i) => setForm((f) => ({ ...f, links: f.links.filter((_, j) => j !== i) }));
   const requestClose = () => {
     if (dirty && !window.confirm('Discard your changes to the wrap-up?')) return;
     onClose();
@@ -4387,22 +4413,50 @@ export function WrapUpPanel({ outcome, api, run, busy, onClose }) {
     const body = {
       summary: form.summary.trim(),
       built: lines(form.built),
-      links: lines(form.links).map((l) => {
-        const [a, b] = l.split('|').map((x) => x.trim());
-        return b ? { label: a, url: b } : { label: '', url: a };
-      }),
+      links: form.links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.url),
       nextSteps: lines(form.nextSteps),
     };
     const ok = await run(() => api.saveOutcome(body));
     if (ok !== undefined) onClose();
   };
+  const askClaude = async () => {
+    const ok = await run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true }));
+    if (ok !== undefined) onClose();
+  };
+  const filled = Boolean(fill && (fill.from.summary || fill.from.built || fill.from.link));
+  const from = (on, words) => (fill && on ? <span className="brm-hint brm-block">{words}</span> : null);
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-wrap-title">
       <DialogHead id="brm-wrap-title" title="Wrap up" onClose={requestClose} />
-      <p className="brm-sub">{o.by === 'agent' ? W.wrapLeadAgent : W.wrapLeadRoom}</p>
-      <label className="brm-field"><span className="brm-lbl">Summary</span><textarea className="brm-input brm-ta" value={form.summary} maxLength={4000} onChange={set('summary')} /></label>
-      <label className="brm-field"><span className="brm-lbl">What we built (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.built} onChange={set('built')} /></label>
-      <label className="brm-field"><span className="brm-lbl">Links (one per line: label | https://…)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.links} onChange={set('links')} /></label>
+      <p className="brm-sub">{o && o.by === 'agent' ? W.wrapLeadAgent : W.wrapLeadRoom}{filled ? <span className="brm-chip brm-wrap-filled">{W.wrapFilled}</span> : null}</p>
+      {!o && connected && !(room && wrapAsked(room)) && (
+        <div className="brm-notice brm-row brm-gap">
+          <span>{W.wrapOrClaude}</span>
+          <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} data-capability="report" onClick={askClaude}>{W.wrapClaudeBtn}</button>
+        </div>
+      )}
+      <div className="brm-field">
+        <label className="brm-block"><span className="brm-lbl">Summary</span><textarea className="brm-input brm-ta" value={form.summary} maxLength={4000} onChange={set('summary')} /></label>
+        {from(fill && fill.from.summary, W.wrapFromHeadline)}
+      </div>
+      <div className="brm-field">
+        <label className="brm-block"><span className="brm-lbl">What we built (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.built} onChange={set('built')} /></label>
+        {from(fill && fill.from.built, W.wrapFromDecisions(fill && fill.from.built))}
+      </div>
+      <div className="brm-field" role="group" aria-labelledby="brm-wrap-links">
+        <span className="brm-lbl" id="brm-wrap-links">{W.wrapLinks}</span>
+        {form.links.map((l, i) => (
+          <div className="brm-wraplink" key={i}>
+            <input className="brm-input brm-input--sm" aria-label={W.wrapLinkLabel(i + 1)} placeholder={W.wrapLinkLabelPh} value={l.label} maxLength={120} onChange={setLink(i, 'label')} />
+            <input className="brm-input brm-input--sm" aria-label={W.wrapLinkUrl(i + 1)} placeholder="https://…" value={l.url} maxLength={500} onChange={setLink(i, 'url')} />
+            {form.links.length > 1
+              ? <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={W.wrapRemoveLink(i + 1)} onClick={() => removeLink(i)}><Icon name="X" size={14} /></button>
+              : <span />}
+          </div>
+        ))}
+        {from(fill && fill.from.link, W.wrapFromBuild)}
+        {form.links.length < LINK_MAX && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-selfstart" onClick={addLink}><Icon name="Plus" size={14} /> {W.wrapAddLink}</button>}
+      </div>
       <label className="brm-field"><span className="brm-lbl">Next steps (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.nextSteps} onChange={set('nextSteps')} /></label>
       <div className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
@@ -4643,6 +4697,22 @@ function ReadyLibrary({
   );
 }
 
+/**
+ * ASK THE ROOM (PLAN item 14; owner, 28 Oct 2026: "then start phase 3"). Four
+ * kinds on one row of equal tabs: Ideas, Choose, Yes/No, Rate. Yes/No is its
+ * own kind (owner, 24 Oct: "some are yes no. we need to store that info"): its
+ * two answers start as Yes and No and can be renamed, and it is asked as the
+ * server already keeps one, a choice of its two answers with one pick, as a
+ * ready Yes/No is (readyQuestions buildAskFromQuestion). What Claude gets, the
+ * private note, a Choose's preview links and Save as a draft are under More
+ * options: Send asks what Claude gets again beside every send (owner, 23 Oct),
+ * so writing an ask is two decisions, the kind and Ask the room. The default is
+ * the ready question's own (its set's), else none, which the server reads as
+ * Do now (an opening step is Keep in mind there: build-room.js decide).
+ */
+const ASK_KINDS = Object.freeze(['suggest', 'choice', 'yesno', 'rating']);
+const ASK_KIND_LABEL = Object.freeze({ ...KIND_LABEL, yesno: W.yesNoKind });
+const YES_NO = Object.freeze({ yes: 'Yes', no: 'No' });
 export function AskComposer({
   kind: initialKind, prompt: initialPrompt = '', detail: initialDetail = '', asks = [], buildKind = '', claudeSets = [], requests = [], gameId = '', api, run, busy, onClose,
 }) {
@@ -4653,6 +4723,7 @@ export function AskComposer({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [detail, setDetail] = useState(initialDetail);
   const [options, setOptions] = useState([{ title: '', url: '' }, { title: '', url: '' }]);
+  const [yesNo, setYesNo] = useState(YES_NO);
   const [draft, setDraft] = useState(false);
   // WHAT CLAUDE GETS (step 7c), and where the question came from (step 7b).
   const [claudeGets, setClaudeGets] = useState('do-now');
@@ -4665,10 +4736,12 @@ export function AskComposer({
   };
   const pickReady = (it) => {
     const a = it.ask;
-    setKind(a.kind);
+    const yn = typeOfItem(it) === 'yesno' && a.kind === 'choice' && (a.options || []).length === 2;
+    setKind(yn ? 'yesno' : a.kind);
     setPrompt(a.prompt);
     setDetail(a.detail || '');
-    if (a.kind === 'choice') setOptions(a.options.map((o) => ({ title: o.title, url: '' })));
+    if (yn) setYesNo({ yes: a.options[0].title, no: a.options[1].title });
+    else if (a.kind === 'choice') setOptions(a.options.map((o) => ({ title: o.title, url: '' })));
     setClaudeGets(a.claudeGets || 'do-now');
     setClaudeNote(a.claudeNote || '');
     setFrom(it);
@@ -4678,11 +4751,13 @@ export function AskComposer({
   const submit = async (e) => {
     e.preventDefault();
     if (!ready) return;
+    const yn = [yesNo.yes.trim() || YES_NO.yes, yesNo.no.trim() || YES_NO.no];
     const body = {
-      kind,
+      kind: kind === 'yesno' ? 'choice' : kind,
       prompt: prompt.trim(),
       detail: detail.trim(),
       ...(kind === 'choice' ? { options: filled.map((o) => ({ title: o.title.trim(), url: o.url.trim() })) } : {}),
+      ...(kind === 'yesno' ? { options: yn.map((title) => ({ title, url: '' })), maxPicks: 1 } : {}),
       ...(kind === 'choice' && from && from.ask.maxPicks > 1 ? { maxPicks: from.ask.maxPicks } : {}),
       ...(from || claudeGets !== 'do-now' ? { claudeGets } : {}),
       ...(claudeNote.trim() ? { claudeNote: claudeNote.trim() } : {}),
@@ -4693,20 +4768,21 @@ export function AskComposer({
     if (ok !== undefined) onClose();
   };
   const setOpt = (i, k, v) => setOptions((l) => l.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  const letter = (i) => String.fromCharCode(65 + i);
+  const getsLabel = claudeKindLabel(claudeGets);
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--lib" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brm-compose-title">
       <DialogHead id="brm-compose-title" title="Ask the room" onClose={requestClose} />
       <div className="brm-libgrid">
         <ReadyLibrary api={api} asks={asks} buildKind={buildKind} claudeSets={claudeSets} requests={requests} run={run} busy={busy} gameId={gameId} selectedKey={from ? from.key : ''} onPick={pickReady} />
         <form onSubmit={submit}>
-          <div className="brm-row brm-gap">
-            <div className="brm-seg" role="radiogroup" aria-label="Kind of ask">
-              {['suggest', 'choice', 'rating'].map((k) => (
-                <button key={k} type="button" role="radio" aria-checked={kind === k} className={`brm-segbtn${kind === k ? ' is-on' : ''}`} onClick={() => setKind(k)}>{KIND_LABEL[k]}</button>
-              ))}
-            </div>
-            {from && <span className="brm-hint brm-push">from {from.setName} · {from.category}</span>}
+          {/* Four tabs of equal width on their own row, so none is cramped beside the source line. */}
+          <div className="brm-seg brm-seg--askkinds" role="radiogroup" aria-label={W.kindOfAsk}>
+            {ASK_KINDS.map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={kind === k} className={`brm-segbtn${kind === k ? ' is-on' : ''}`} onClick={() => setKind(k)}>{ASK_KIND_LABEL[k]}</button>
+            ))}
           </div>
+          {from && <p className="brm-hint">from {from.setName} · {from.category}</p>}
           {from && from.askedIn && (
             <p className="brm-notice" role="status">{W.askedInAsk(askNumber(from.askedIn))}</p>
           )}
@@ -4717,35 +4793,56 @@ export function AskComposer({
               <span className="brm-lbl">Options</span>
               {options.map((o, i) => (
                 <div className="brm-optedit" key={i}>
-                  <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{String.fromCharCode(65 + i)}</span>
-                  <div className="brm-optfields">
-                    <input className="brm-input" aria-label={`Option ${String.fromCharCode(65 + i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
-                    <input className="brm-input brm-input--sm" aria-label={`Option ${String.fromCharCode(65 + i)} preview URL`} placeholder="Preview URL (optional)" value={o.url} onChange={(e) => setOpt(i, 'url', e.target.value)} />
-                  </div>
+                  <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
+                  <input className="brm-input" aria-label={`Option ${letter(i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
                   {i === options.length - 1 && options.length > 2 ? (
                     <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label="Remove option" onClick={() => setOptions((l) => l.slice(0, -1))}><Icon name="X" size={14} /></button>
                   ) : <span />}
                 </div>
               ))}
-              {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
+              {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-selfstart" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
+            </div>
+          )}
+          {kind === 'yesno' && (
+            <div className="brm-field">
+              <span className="brm-lbl">Answers</span>
+              {[['yes', W.yesAnswer], ['no', W.noAnswer]].map(([k, label], i) => (
+                <div className="brm-optedit" key={k}>
+                  <span className={`brm-letter brm-letter--${i}`} aria-hidden="true">{letter(i)}</span>
+                  <input className="brm-input" aria-label={label} placeholder={YES_NO[k]} value={yesNo[k]} maxLength={120} onChange={(e) => setYesNo((y) => ({ ...y, [k]: e.target.value }))} />
+                  <span />
+                </div>
+              ))}
+              <span className="brm-hint">{W.yesNoRename}</span>
             </div>
           )}
           {kind === 'rating' && <p className="brm-hint">{W.ratingScale}</p>}
-          <div className="brm-field">
-            <span className="brm-lbl">{W.claudeGetsAs}</span>
-            <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">
-              {/* Later is not a kind to choose (owner, 2026-10-08): Save for later is the one way in. A ready question preset to later keeps it. */}
-              {CLAUDE_KINDS.filter((k) => k.key !== 'later').map((k) => (
-                <button key={k.key} type="button" role="radio" aria-checked={claudeGets === k.key} className={`brm-segbtn${claudeGets === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setClaudeGets(k.key)}>{k.label}</button>
-              ))}
+          <details className="brm-verfold brm-askmore">
+            <summary>{W.askMoreOptions}<span className="brm-hint">{` · ${kind === 'choice' ? W.askMoreSummaryChoice(getsLabel) : W.askMoreSummary(getsLabel)}`}</span></summary>
+            <div className="brm-field">
+              <span className="brm-lbl">{W.claudeGetsAs}</span>
+              <div className="brm-seg brm-seg--kinds" role="radiogroup" aria-label="Claude gets it as">
+                {/* Later is not a kind to choose (owner, 2026-10-08): Save for later is the one way in. A ready question preset to later keeps it. */}
+                {CLAUDE_KINDS.filter((k) => k.key !== 'later').map((k) => (
+                  <button key={k.key} type="button" role="radio" aria-checked={claudeGets === k.key} className={`brm-segbtn${claudeGets === k.key ? ' is-on' : ''}`} title={k.hint} onClick={() => setClaudeGets(k.key)}>{k.label}</button>
+                ))}
+              </div>
+              <span className="brm-hint">{CLAUDE_KINDS.find((k) => k.key === claudeGets).hint} {W.askClaudeGetsHint}</span>
             </div>
-            <span className="brm-hint">{CLAUDE_KINDS.find((k) => k.key === claudeGets).hint}</span>
-          </div>
-          <label className="brm-field">
-            <span className="brm-lbl">{W.noteForClaudePrivate}</span>
-            <textarea className="brm-input brm-ta brm-ta--sm" value={claudeNote} maxLength={1000} onChange={(e) => setClaudeNote(e.target.value)} placeholder="How Claude should use the answer" />
-          </label>
-          <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> {W.saveDraft}</label>
+            {kind === 'choice' && (
+              <div className="brm-field">
+                <span className="brm-lbl">{W.previewLinks}</span>
+                {options.map((o, i) => (
+                  <input key={i} className="brm-input brm-input--sm" aria-label={W.optionPreview(letter(i))} placeholder={`${letter(i)}: https://…`} value={o.url} onChange={(e) => setOpt(i, 'url', e.target.value)} />
+                ))}
+              </div>
+            )}
+            <label className="brm-field">
+              <span className="brm-lbl">{W.noteForClaudePrivate}</span>
+              <textarea className="brm-input brm-ta brm-ta--sm" value={claudeNote} maxLength={1000} onChange={(e) => setClaudeNote(e.target.value)} placeholder="How Claude should use the answer" />
+            </label>
+            <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> {W.saveDraft}</label>
+          </details>
           <div className="brm-row brm-gap">
             <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
             <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</button>

@@ -92,6 +92,11 @@
 .brr .brr-small { font-size: var(--brr-t-label); }
 .brr .brr-block { display: block; margin-top: 10px; }
 .brr .brr-twocol { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 28px; margin-top: 10px; }
+/* The build brief (simplify PLAN item 16): label, then the room's words. */
+.brr .brr-brief { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; margin: 8px 0 0; font-size: var(--brr-t-body); }
+.brr .brr-brief dt { font-weight: 700; font-size: var(--brr-t-label); color: var(--muted); }
+.brr .brr-brief dd { margin: 0; overflow-wrap: anywhere; }
+.brr .brr-wheel { margin-top: 4px; }
 
 .brr .brr-dec { border: 1px solid var(--brr-rule); border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; break-inside: avoid; }
 .brr .brr-dh { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }

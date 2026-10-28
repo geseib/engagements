@@ -275,3 +275,56 @@ describe('what never reached Claude says so (host review, 25 Oct 2026, F1 and F5
     expect(within(section('Unprompted ideas')).getByText('Saved for later, not sent')).toBeInTheDocument();
   });
 });
+
+// ── Phase 3 of the simplify plan (owner, 28 Oct 2026: "then start phase 3"), item 16 ──
+describe('the brief, plain lines for what Engage told Claude, and the wheel (simplify PLAN item 16)', () => {
+  const view = (rows) => S.hostView({ gameId: '4821', meta: { Title: 'Brief room' }, sessionState: 'ENDED', room: S.roomFromRows(rows), players: [], now: T(59) });
+  const BRIEF = {
+    headline: 'Pick a shift in under a minute', summary: 'One page, no login.', forWhom: 'Volunteers on an old phone',
+    lines: { kind: 'A website', problem: 'The spreadsheet is a mess', good: 'Volunteers sign up alone', firstBuild: 'The shift list' },
+    keep: [{ id: 'k1', text: 'Never ask for a password' }],
+  };
+
+  test('a Build brief section of its own: the headline, the opening\'s answers, who it is for and Keep in mind, before What we built', () => {
+    render(<BuildReport state={view([{ SK: 'BUILD#STATE', Rev: 1, Brief: BRIEF }])} />);
+    const s = section('Build brief');
+    expect(within(s).getByText('Pick a shift in under a minute')).toBeInTheDocument();
+    expect(within(s).getByText('One page, no login.')).toBeInTheDocument();
+    expect([...s.querySelectorAll('dt')].map((d) => d.textContent)).toEqual(['Making', 'Who it is for', 'The problem', 'Good looks like', 'First build']);
+    expect(within(s).getByText('Volunteers on an old phone')).toBeInTheDocument();
+    expect(within(s).getByText('Never ask for a password')).toBeInTheDocument();
+    const order = [...document.querySelectorAll('h2')].map((h) => h.textContent);
+    expect(order.indexOf('Build brief')).toBeLessThan(order.indexOf('What we built'));
+  });
+
+  test('no brief, no section', () => {
+    render(<BuildReport state={view([{ SK: 'BUILD#STATE', Rev: 1 }])} />);
+    expect(screen.queryByRole('heading', { name: 'Build brief' })).toBeNull();
+  });
+
+  test('Start building reads "Start building: Claude got the brief", never the prompt Claude was given', () => {
+    const start = `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.\n\n${S.briefText(S.briefView({ Brief: BRIEF }))}`;
+    render(<BuildReport state={view([
+      { SK: 'BUILD#STATE', Rev: 1, Brief: BRIEF },
+      { SK: 'BUILD#LOG#1#a', LogId: '1-a', Kind: 'direction', Text: start, By: 'host', ForAgent: true, CreatedAt: T(5) },
+      { SK: 'BUILD#LOG#2#b', LogId: '2-b', Kind: 'direction', Text: 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary.', By: 'host', ForAgent: true, CreatedAt: T(50) },
+      { SK: 'BUILD#LOG#3#c', LogId: '3-c', Kind: 'direction', Text: 'Use the blue header', By: 'host', ForAgent: true, CreatedAt: T(51) },
+    ])} />);
+    const s = section('Timeline');
+    expect(within(s).getByText('Start building: Claude got the brief')).toBeInTheDocument();
+    expect(within(s).getByText('Asked Claude to wrap up')).toBeInTheDocument();
+    expect(within(s).getByText('Use the blue header')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/post_update|wrap_up|room_status|THE ROOM BRIEF/);
+  });
+
+  test('a decision the wheel settled says so; one the room voted does not', () => {
+    const ask = (id, decision) => ({
+      SK: `BUILD#ASK#${id}`, AskId: id, Kind: 'choice', Prompt: `Ask ${id}?`, Status: 'decided', Source: 'host',
+      Options: [{ label: 'A', title: 'One' }, { label: 'B', title: 'Two' }], DecidedAt: T(20), Decision: { chosen: ['A'], note: '', direction: `Ask ${id}: One`, ...decision },
+    });
+    render(<BuildReport state={view([{ SK: 'BUILD#STATE', Rev: 1 }, ask('001', { method: 'wheel' }), ask('002', {})])} />);
+    const s = section('Decisions');
+    expect(within(s).getAllByText('Settled by the wheel')).toHaveLength(1);
+    expect(within(s).getByText('Settled by the wheel').closest('.brr-dec').textContent).toMatch('Ask 001?');
+  });
+});

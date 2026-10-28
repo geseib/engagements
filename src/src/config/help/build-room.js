@@ -260,11 +260,22 @@ const running = {
         {
           t: 'list',
           items: [
-            { title: 'Three kinds', text: '**Ideas**: people suggest, then vote. **Choose**: two to six lettered options, each with an optional preview link. **Rate**: 1 needs work, 5 great. With Choose and Rate, people can add why.' },
             { title: 'Ready questions', text: 'On the left: the questions of every set you can use that is tagged build-room, with how many have been asked here. They are there whenever you ask, from the opening to the wrap-up; you never pick a set when you create the room. Pick one to fill in the form.' },
             { title: 'Ready questions for each kind of build', text: 'Tag a set for-game, for-training, for-document, for-dashboard, for-website, for-app, for-tool or for-explore as well, and once the room has said what it is making (the opening\'s first step) that set comes first, then sets with no for- tag; sets for other kinds fold under **Other sets**. Before the room decides, every set shows. Claude gets the matching set\'s questions too and asks from them first, still through you.' },
-            { title: 'Claude gets it as', text: '**Do now** (Claude stops and does it), **Keep in mind** (a standing rule; Claude keeps going), or **Ask Claude** (Claude answers and keeps building). **Note for Claude (private)** goes with the answer.' },
-            { title: 'Save as a draft', text: 'Keeps it in Waiting for you instead of opening it.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'writing-an-ask',
+      title: 'Writing your own ask',
+      icon: 'NotePencil',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Four kinds', text: 'The tabs along the top: **Ideas**: people suggest, then vote. **Choose**: two to six lettered options. **Yes/No**: two answers that start as Yes and No; rename them if the question needs other words (Approve and Decline). **Rate**: 1 needs work, 5 great. With Choose, Yes/No and Rate, people can add why. Pick the kind, write the question, press **Ask the room**.' },
+            { title: 'More options', text: 'Folded under the form, with what it is set to: **Claude gets it as** **Do now** (Claude stops and does it), **Keep in mind** (a standing rule; Claude keeps going) or **Ask Claude** (Claude answers and keeps building); you are asked again beside Send, so it can wait until then. It starts as the ready question\'s own, otherwise Do now; an opening step is Keep in mind. Also there: a Choose\'s **preview links** (one per option), **Note for Claude (private)**, which goes with the answer, and **Save as a draft**, which keeps it in Waiting for you instead of opening it.' },
           ],
         },
       ],
@@ -274,7 +285,7 @@ const running = {
       title: 'Ready questions by type',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: 'Each ready question shows how the room is asked it: **Ideas**, **Choose** (its options under it), **Yes/No** or **Rate**. A Yes/No opens as a Choose of its two answers, in the set\'s own words when it renamed them.' },
+        { t: 'p', text: 'Each ready question shows how the room is asked it: **Ideas**, **Choose** (its options under it), **Yes/No** or **Rate**. A Yes/No opens on the Yes/No tab with its two answers, in the set\'s own words when it renamed them; the room is asked it as a choice of the two.' },
         { t: 'p', text: 'Above the list, **All** and one chip per type, each with how many questions are that type. Press one to see only that type; it stays as you move between sets. **All** brings them all back.' },
       ],
     },
@@ -452,7 +463,7 @@ const running = {
         {
           t: 'list',
           items: [
-            { title: 'What\'s next', text: 'With no ask open, the likely moves, most likely first; Space presses the first. Among them: **Connect Claude Code**, open Claude\'s question, put new ideas to a vote, **Ask the room**, Tell Claude, and **Ask Claude for points** while there are none. Under it, **Preview the work** until Claude has shown a build (then **Open the build** is in the header), and **Copy the Continue prompt** while Claude is away. **Build** in the header, or 3, shows the room the build.' },
+            { title: 'What\'s next', text: 'With no ask open, the likely moves, most likely first; Space presses the first. Among them: **Connect Claude Code**, open Claude\'s question, put new ideas to a vote, **Ask the room**, Tell Claude, **Ask Claude for points** while there are none, and last **Wrap up** once something is decided or built (see Wrapping up a Build Room). Under it, **Preview the work** until Claude has shown a build (then **Open the build** is in the header), and **Copy the Continue prompt** while Claude is away. **Build** in the header, or 3, shows the room the build.' },
             { title: 'Combine', text: 'Press **Decided** in History, tick decided asks, then press **Combine** in What\'s next (or **Add to the prompt**): their answers go into one prompt in the composer, which opens for it, yours to edit before you send it.' },
             { title: 'Tell Claude…', text: 'One line until you click it. Then type an idea, a note or what the room said. **Send to Claude** (its arrow picks Do now, Keep in mind or Ask Claude), **Save for later**, or log it as Room said, a host note that is never shown, or a milestone, with Also tell Claude if Claude should hear it, then **Log it**. Its **More** asks Claude for **Research…**, **Ideas…**, **Mockups…** or a **Walkthrough**, or to **Preview the work**.' },
             { title: 'Claude\'s status', text: 'The chip in the header says what Claude is doing. When Claude Code has stopped it reads last seen, and a click copies the continue command.' },
@@ -714,7 +725,7 @@ const twoScreens = {
           items: [
             { title: 'The top line', text: '← **Main menu** (the start screen; the session keeps running), the title, Join (shows the join code to the room; press it again, J or Esc takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
             { title: 'The strip', text: 'Where the ask is: Opening, then Ask, Collect, Settle, Send to Claude, then Wrap up. Between asks it stays, dimmed, and says what is happening instead (Between asks, or the run list with how many are done).' },
-            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now**, and What\'s next below has the moves. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
+            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now** (What\'s next below has the moves); wrapped up, **Check the report**. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
             { title: 'Mockups ready', text: 'When Claude\'s mockups are all in, a card under Your part now shows them, with **Put to the room now** and **Next, after this ask**. It never replaces the main button.' },
           ],
         },
@@ -753,7 +764,11 @@ const wrapUp = {
       blocks: [
         {
           t: 'p',
-          text: 'The wrap-up leads the report and the phones\' last screen: a summary, what was built, links and next steps. Claude writes it when you run its wrap-up command (see Connecting Claude Code), or you write it yourself: **Wrap up** in the Session panel, then **Save wrap-up**. Either way you can edit it.',
+          text: 'The wrap-up leads the report and the phones\' last screen: a summary, what was built, links and next steps. Once something is decided or Claude has shown a build, What\'s next ends with **Wrap up**. With Claude connected, **Ask Claude to wrap up** is one press: Claude writes it (its wrap-up command, as Do now, not shown to the room). Either way you can edit it.',
+        },
+        {
+          t: 'p',
+          text: 'Without Claude, or to write it yourself, **Write it myself** (or **Wrap up** in the Session panel) opens the form filled in from the session: the brief\'s headline as the summary, the decisions Claude got as What we built, and the latest build as the demo link. Each link is two boxes, a label and the address; **Add a link** adds a row. Check it, then **Save wrap-up**.',
         },
         {
           t: 'p',
@@ -768,7 +783,7 @@ const wrapUp = {
       blocks: [
         {
           t: 'p',
-          text: 'Once the wrap-up is saved the Host screen says: check the report, then end the session. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out.',
+          text: 'Once the wrap-up is saved, What\'s next on the Host screen has two moves: **Check the report** (Report, the one Space presses), then **End the session**. On two screens, Your part now has the same two: **Check the report** as its main button and **End session** beside it. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out.',
         },
         {
           t: 'p',
@@ -781,13 +796,13 @@ const wrapUp = {
       title: 'The report',
       icon: 'FileText',
       blocks: [
-        { t: 'p', text: '**Report** (in the Session panel, or beside the wrap-up notice) opens it. **Back to room** returns.' },
+        { t: 'p', text: '**Report** (in the Session panel, or Check the report once the wrap-up is saved) opens it. **Back to room** returns.' },
         {
           t: 'list',
           items: [
-            'What we built, then Decisions: each ask, how the room answered, and the direction Claude got.',
+            'Build brief: the headline, the opening\'s answers, who it is for and Keep in mind. Then What we built, then Decisions: each ask, how the room answered, and the direction Claude got. A decision the wheel settled says **Settled by the wheel**; one saved for later or recorded only says it was not sent to Claude.',
             'Screenshots along the way, and Version history: each commit Claude made on your laptop.',
-            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what.',
+            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what. What Engage itself told Claude reads as a plain line, such as **Start building: Claude got the brief**, never the prompt Claude was given.',
             'Host notes are left out, because a report gets handed round.',
             '**Save report** keeps it as a PDF, listed in Reports, as for any session: see The session report › Saving and sharing a report.',
           ],

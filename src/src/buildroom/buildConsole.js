@@ -21,7 +21,7 @@
  */
 import { askPathStep, runOf, runDoneCount, whatsNextMoves } from './buildScreens';
 import { KIND_LABEL, askNumber } from './screens/common';
-import { LOOP, SESSION_LOOP } from './words';
+import { LOOP, SESSION_LOOP, W } from './words';
 
 /** The console's own words (sentence case, plain; the rest are words.js's). */
 export const BCW = Object.freeze({
@@ -163,6 +163,23 @@ export function consoleStrip(room, current, { pickId = null, answering = false, 
 
 // ── "Your part now" (answer (b)) ───────────────────────────────────────────
 
+/**
+ * WRAPPED, NOT YET ENDED (PLAN item 15). Between asks the card's slot is held
+ * empty ("No main move now"); once a wrap-up is saved there is one: Check the
+ * report, then End session, the same two moves What's next leads with on one
+ * screen. The page presses them (`report`, `end`). Any other moment keeps the
+ * bar's own moves, and the Stage dock never gets these.
+ */
+export function finishControls(room, current, controls) {
+  const wrapped = Boolean(room && room.outcome && room.outcome.summary);
+  if (!wrapped || current || (room && room.state === 'ENDED') || (controls && controls.primary)) return controls;
+  return {
+    ...controls,
+    primary: { action: 'report', label: W.checkReport, id: 'p:report', icon: 'FileText', disabled: false, capability: 'report' },
+    secondary: { action: 'end', label: W.endSessionBtn, id: 's:end', icon: 'FlagCheckered', disabled: false, capability: 'report' },
+  };
+}
+
 const part = (before, action = '', after = '') => ({ before, action, after });
 
 /**
@@ -195,6 +212,7 @@ export function consolePart(moment, controls, room, current, { answering = false
     return part('When Claude finishes the item, ', p.label, '.');
   }
   if (moment === 'point' && p) return part('The room talks it over. Then ', p.label, '.');
+  if (p && p.action === 'report') return part(`${room && room.outcome && room.outcome.by === 'agent' ? 'Claude has wrapped up' : 'Wrap-up saved'}. `, p.label, ', then end the session.');
   if (p) return part('', p.label, '.');
   // No main move: the likely one, in words, never as a button (answer (b)).
   const moves = room ? whatsNextMoves(room) : [];

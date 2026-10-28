@@ -136,7 +136,8 @@ room; such a set is never offered by Create engagement, Quick start or an agenda
 question is asked as one of four types, read from the Poll question's kind
 (`buildroom/readyQuestions.js`): open answer → **Ideas**, choice of 2–6 → **Choose**, yes/no →
 **Yes/No** (asked as a choice of its two answers), 1–5 rating → **Rate**; a Call & Answer
-question is Ideas. The library filters by type. Engage's starter sets, one Poll set per kind
+question is Ideas. The library filters by type, and the Ask the room form has the same four
+tabs: a Yes/No the host writes is stored as a ready one is, a choice of its two answers. Engage's starter sets, one Poll set per kind
 (training site, game, document, dashboard: `sets/build-room-<kind>.csv`), are installed per tier
 with `scripts/install-build-room-kind-sets.sh <table> --apply`, which also switches off the two
 sets per kind it replaces (`scripts/retire-question-sets.js`); run it without `--apply` first.

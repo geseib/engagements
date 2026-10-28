@@ -15,6 +15,15 @@
  * Decided"): Claude now, The brief and History in place of seven folds. The
  * first views hold where they were; between asks lost two (40 to 38, 46 to 44).
  *
+ * PHASE 3 (owner, 28 Oct 2026: "then start phase 3"): the Ask the room form
+ * for a Choose, no more than 12 controls (17 before), with what Claude gets
+ * under More options so writing an ask is two decisions (the kind, Ask the
+ * room); and a wrap-up saved, where both layouts lead with Check the report,
+ * then End session, and the console never says "No main move now". Between
+ * asks gains What's next's Wrap up, its last move once something was decided
+ * (PLAN item 15): 38 to 39 on one screen (the plan's phase 2 target was 40),
+ * 44 to 45 on the console.
+ *
  * The plan's method, reproduced: the real BuildRoomPage in jsdom, the state
  * built by the real server's pure half (build-store.js roomFromRows +
  * hostView), as buildCapabilities.test.jsx builds its fixtures. A control is a
@@ -25,7 +34,7 @@
  * people joined, and (on one screen) a browser that has not chosen screens.
  */
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import BuildRoomPage from '../buildroom/BuildRoomPage';
 import { SURFACES_KEY } from '../config/surfaces';
@@ -90,6 +99,12 @@ function betweenAsks() {
   return {
     ...view, wallKey: 'K'.repeat(43), wall: { screen: 'stage', codes: 'none', profile: 'room', rev: 1 }, presenting: 0, presentDetail: null,
   };
+}
+
+/** Between asks, then the host saved the wrap-up: the mockup's frame 5. */
+function wrappedUp() {
+  const v = betweenAsks();
+  return { ...v, outcome: { summary: 'A one-page sign-up for volunteers.', built: ['The shift list'], links: [], nextSteps: [], by: 'host', updatedAt: ago(20) } };
 }
 
 /** The first view once Claude Code has called in: the setup card is one line, the opening leads. */
@@ -206,17 +221,18 @@ test('a connected first view: one press, the orange one, puts the first opening 
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Ask the room to pick']);
 });
 
-test('between asks with three ideas, one screen: no more than 38 controls (76 in the plan, 58 after phase 1, 40 after phase 2)', async () => {
+test('between asks with three ideas, one screen: no more than 39 controls (76 in the plan, 58 after phase 1, 40 after phase 2)', async () => {
   const { controls } = await open({ state: betweenAsks });
-  // The right column (owner, 28 Oct 2026): History's chips in place of the folds, Decided folded.
-  expect(controls).toBeLessThanOrEqual(38);
+  // The right column (owner, 28 Oct 2026): History's chips in place of the folds, Decided folded (38);
+  // phase 3 adds What's next's Wrap up, its last move (39).
+  expect(controls).toBeLessThanOrEqual(39);
 });
 
 test('between asks with three ideas, two screens: the console takes the same cuts (62 after phase 1, 46 after phase 2)', async () => {
   // The console's top line and rail are Call & Answer's and were left as they are (phase 1 did
   // the same); its own panels take every phase 2 cut. Held where it landed, so it cannot drift.
   const { controls } = await open({ two: true, state: betweenAsks });
-  expect(controls).toBeLessThanOrEqual(44);
+  expect(controls).toBeLessThanOrEqual(45);
 });
 
 test("an idea's card carries three routes and its tick (eight and the tick before); its words open Consider", async () => {
@@ -236,4 +252,63 @@ test("an idea's card carries three routes and its tick (eight and the tick befor
     cleanup();
     window.localStorage.clear();
   }
+});
+
+// ── Phase 3: asking and finishing ─────────────────────────────────────────────
+
+/** The Ask the room form, as the host meets it: opened from the composer's line, then Choose. */
+async function askForm(kind = 'Choose') {
+  await open();
+  fireEvent.click(within(screen.getByRole('region', { name: 'Tell Claude' })).getByRole('button', { name: 'Ask the room' }));
+  const dialog = screen.getByRole('dialog', { name: 'Ask the room' });
+  fireEvent.click(within(within(dialog).getByRole('radiogroup', { name: 'Kind of ask' })).getByRole('radio', { name: kind }));
+  return dialog.querySelector('form');
+}
+
+test('the Ask the room form for a Choose: no more than 12 controls (17 before), four kinds on one row', async () => {
+  const form = await askForm();
+  expect(countControls(form)).toBeLessThanOrEqual(12);
+  const kinds = within(within(form).getByRole('radiogroup', { name: 'Kind of ask' })).getAllByRole('radio');
+  expect(kinds.map((k) => k.textContent)).toEqual(['Ideas', 'Choose', 'Yes/No', 'Rate']);
+});
+
+test('writing your own ask is two decisions: the kind, then Ask the room (what Claude gets is under More options)', async () => {
+  const form = await askForm();
+  const fold = form.querySelector('details.brm-askmore');
+  expect(fold.open).toBe(false);
+  // Claude gets it as, the note, the preview links and Save as a draft wait in the closed fold.
+  const gets = within(form).getByRole('radiogroup', { name: 'Claude gets it as' });
+  expect(fold.contains(gets)).toBe(true);
+  expect(fold.querySelector('summary').textContent).toMatch('Claude gets it as Do now');
+  // Outside the fold: the kind and the one orange, Ask the room; everything else is typing.
+  const choices = [...form.querySelectorAll('[role="radiogroup"]')].filter((g) => !g.closest('details:not([open])'));
+  expect(choices.map((g) => g.getAttribute('aria-label'))).toEqual(['Kind of ask']);
+  expect([...form.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent)).toEqual(['Ask the room']);
+});
+
+test('a Yes/No form is smaller still: its two answers start as Yes and No', async () => {
+  const form = await askForm('Yes/No');
+  expect(countControls(form)).toBeLessThanOrEqual(11);
+  expect(within(form).getByLabelText('The yes answer')).toHaveValue('Yes');
+  expect(within(form).getByLabelText('The no answer')).toHaveValue('No');
+});
+
+test('wrap-up saved, one screen: the lead move is Check the report, then End session', async () => {
+  const { root } = await open({ state: wrappedUp });
+  const now = screen.getByTestId('brm-wrappednow');
+  const moves = [...now.querySelectorAll('.brm-wn')].map((li) => li.querySelector('b').textContent);
+  expect(moves).toEqual(['Check the report', 'End the session']);
+  expect([...root.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent.trim())).toEqual(['Report']);
+  expect(now.querySelector('[data-next-primary]').textContent).toBe('Report');
+});
+
+test('wrap-up saved, two screens: Your part now leads with Check the report, then End session, never "No main move now"', async () => {
+  const { root } = await open({ two: true, state: wrappedUp });
+  expect(root.textContent).not.toMatch('No main move now');
+  expect(root.querySelector('[data-empty-slot]')).toBeNull();
+  const card = screen.getByRole('region', { name: 'Your part now' });
+  // The main button (Space) is Check the report; its second is End session.
+  expect(card.querySelector('.host-action-bar__primary').textContent).toMatch('Check the report');
+  expect(card.querySelector('.host-action-bar__secondary').textContent).toMatch('End session');
+  expect(card.textContent).toMatch('Wrap-up saved. Check the report, then end the session.');
 });

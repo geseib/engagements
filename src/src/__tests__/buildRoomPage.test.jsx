@@ -682,12 +682,50 @@ describe('the host side panel', () => {
     const dialog = screen.getByRole('dialog', { name: 'Wrap up' });
     fireEvent.change(within(dialog).getByLabelText('Summary'), { target: { value: 'A sign-up site.' } });
     fireEvent.change(within(dialog).getByLabelText(/What we built/), { target: { value: 'Shift list\nForm' } });
-    fireEvent.change(within(dialog).getByLabelText(/Links/), { target: { value: 'Repo | https://github.com/x/y' } });
+    // A link is two boxes, label and address (PLAN item 15), not "label | https://…".
+    fireEvent.change(within(dialog).getByLabelText('Link 1 label'), { target: { value: 'Repo' } });
+    fireEvent.change(within(dialog).getByLabelText('Link 1 address'), { target: { value: 'https://github.com/x/y' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Add a link/ }));
+    fireEvent.change(within(dialog).getByLabelText('Link 2 address'), { target: { value: 'http://localhost:5173/' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save wrap-up' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/outcome`));
     expect(lastPost().body).toEqual({
-      summary: 'A sign-up site.', built: ['Shift list', 'Form'], links: [{ label: 'Repo', url: 'https://github.com/x/y' }], nextSteps: [],
+      summary: 'A sign-up site.', built: ['Shift list', 'Form'], links: [{ label: 'Repo', url: 'https://github.com/x/y' }, { label: '', url: 'http://localhost:5173/' }], nextSteps: [],
     });
+  });
+
+  // PLAN item 15: with no wrap-up yet the form opens filled in from the session.
+  const decidedRoom = () => hostState({
+    st: { Brief: { headline: 'Pick a shift in under a minute', summary: 'One page, no login.', lines: { kind: 'A website' } } },
+    asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Which header should volunteers see first? B', chosen: ['B'], note: '' } }],
+    logs: [{ Kind: 'showing', Text: 'The site is up', Link: 'http://localhost:5173/', By: 'agent' }],
+  });
+
+  test('Write it myself: the wrap-up is filled in from the brief, the decisions and the latest build', async () => {
+    await openRoom({ ...decidedRoom(), agent: { connected: false, listening: false } });
+    const wn = screen.getByRole('list', { name: "What's next" });
+    const wrap = within(wn).getAllByRole('listitem').pop();
+    expect(wrap.textContent).toMatch('Wrap up');
+    expect(wrap.textContent).toMatch('Filled in from the decision and the brief');
+    fireEvent.click(within(wrap).getByRole('button', { name: 'Write it myself' }));
+    const dialog = screen.getByRole('dialog', { name: 'Wrap up' });
+    expect(dialog.textContent).toMatch('Filled in from the session');
+    expect(within(dialog).getByLabelText('Summary')).toHaveValue('Pick a shift in under a minute. One page, no login.');
+    expect(within(dialog).getByLabelText(/What we built/).value).toMatch('Which header should volunteers see first?');
+    expect(within(dialog).getByLabelText('Link 1 address')).toHaveValue('http://localhost:5173/');
+    expect(within(dialog).getByLabelText('Link 1 label')).toHaveValue('The demo');
+    // Nothing typed yet: Cancel closes without asking.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Wrap up' })).toBeNull();
+  });
+
+  test('Ask Claude to wrap up: one press, as Do now, hidden from the room', async () => {
+    await openRoom(decidedRoom());
+    const wn = screen.getByRole('list', { name: "What's next" });
+    fireEvent.click(within(wn).getByRole('button', { name: 'Ask Claude to wrap up' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    // Do now is the default kind, so it is not named; the room never sees the prompt.
+    expect(lastPost().body).toEqual({ text: expect.stringMatching(/^We are wrapping up\. Call room_status, then write the outcome with wrap_up/), hideFromRoom: true });
   });
 });
 
@@ -2548,13 +2586,15 @@ describe('Ask the room: ready questions (step 7b, C13)', () => {
     const listed = within(lib).getAllByRole('button', { name: /\?$|Keep in mind$|Do now$/ }).filter((b) => b.classList.contains('brm-lib-q'));
     expect(listed.map((b) => b.querySelector('.brm-lib-t').textContent)).toEqual(['Should there be a timer?', 'Can a new player start without rules?']);
     expect(listed.every((b) => b.querySelector('.brm-chip').textContent === 'Yes/No')).toBe(true);
-    // Picked, a Yes/No asks as a choice of its own two answers.
+    // Picked, a Yes/No opens on the Yes/No tab with its own two answers (PLAN item 14), and is
+    // asked as the server keeps one: a choice of the two, one pick.
     fireEvent.click(listed[1]);
-    expect(within(dialog).getByLabelText('Option A')).toHaveValue('Yes, at once');
-    expect(within(dialog).getByLabelText('Option B')).toHaveValue('Not yet');
+    expect(within(within(dialog).getByRole('radiogroup', { name: 'Kind of ask' })).getByRole('radio', { name: 'Yes/No' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(dialog).getByLabelText('The yes answer')).toHaveValue('Yes, at once');
+    expect(within(dialog).getByLabelText('The no answer')).toHaveValue('Not yet');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ask the room' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/asks`));
-    expect(lastPost().body).toMatchObject({ kind: 'choice', prompt: 'Can a new player start without rules?', options: [{ title: 'Yes, at once', url: '' }, { title: 'Not yet', url: '' }], fromQuestion: 'platform:br-game:c002#001' });
+    expect(lastPost().body).toMatchObject({ kind: 'choice', prompt: 'Can a new player start without rules?', options: [{ title: 'Yes, at once', url: '' }, { title: 'Not yet', url: '' }], maxPicks: 1, fromQuestion: 'platform:br-game:c002#001' });
   });
 
   test('type chips are buttons in the tab order, and All brings every type back', async () => {
@@ -2775,23 +2815,24 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     }
   });
 
-  test('wrapped up: a bar with the report and End session; the main menu is in the header only', async () => {
+  // The two moves are What's next's on the Now card (PLAN item 15); no bar repeats them.
+  test('wrapped up: the Now card leads with the report, then End session; the main menu is in the header only', async () => {
     await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'agent', updatedAt: ago(30) } } }));
-    const bar = screen.getByTestId('brm-wrappedbar');
-    expect(bar.textContent).toMatch('Claude has wrapped up.');
-    expect(within(bar).getByRole('button', { name: 'Report' })).toBeInTheDocument();
-    expect(within(bar).queryByRole('link', { name: /Main menu/ })).toBeNull();
+    expect(screen.queryByTestId('brm-wrappedbar')).toBeNull();
+    const card = screen.getByTestId('brm-wrappednow');
+    expect(card.textContent).toMatch('Claude has wrapped up. Check the report, then end the session.');
+    expect(within(card).getByRole('button', { name: 'Report' })).toHaveAttribute('data-next-primary');
+    expect(within(card).queryByRole('link', { name: /Main menu/ })).toBeNull();
     expect(within(header()).getByRole('link', { name: /Main menu/ })).toHaveAttribute('href', '/');
-    fireEvent.click(within(bar).getByRole('button', { name: 'End session' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'End session' }));
     expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument();
   });
 
   // Revy review (2026-10-10): the host saved the wrap-up and the bar said Claude had.
   test('a wrap-up the host saved says so, not that Claude wrapped up', async () => {
     await openRoom(hostState({ st: { Outcome: { summary: 'A connect four game.', built: [], links: [], nextSteps: [], by: 'host', updatedAt: ago(30) } } }));
-    const bar = screen.getByTestId('brm-wrappedbar');
-    expect(bar.textContent).toMatch('Wrap-up saved. Check the report, then end the session.');
-    expect(bar.textContent).not.toMatch('Claude');
+    const line = screen.getByTestId('brm-wrappednow').querySelector('.brm-nowline');
+    expect(line.textContent).toBe('Wrap-up saved. Check the report, then end the session.');
   });
 
   test('ended: the bar no longer carries it; the header still does', async () => {

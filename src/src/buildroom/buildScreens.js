@@ -1493,8 +1493,81 @@ export function askPathSummaries(ask, { pickId = null, playerCount = 0 } = {}) {
 /** The most ideas one vote takes. */
 export const VOTE_IDEAS_MAX = 6;
 
+/**
+ * THE WRAP-UP PROMPT (PLAN item 15): the `wrap-up` prompt card's words, which
+ * Ask Claude to wrap up posts as Do now, as Ask Claude to draft the brief does
+ * in the opening. Kept here so What's next can tell it was asked.
+ */
+export const WRAP_UP_TEXT = 'We are wrapping up. Call room_status, then write the outcome with wrap_up: a short summary for the room, what you built, the running demo link first, and next steps. Post a final milestone thanking the room, then call wait_for_direction.';
+
+/**
+ * WHAT ENGAGE ITSELF TOLD CLAUDE, IN PLAIN WORDS (PLAN item 16). Start
+ * building, Back to the opening and the one-press asks post a prompt written
+ * for Claude, tool names and all; the report and anywhere else a person reads
+ * the record show this line instead. '' for anything a person wrote.
+ */
+const ENGINE_PROMPTS = Object.freeze([
+  { re: /^The room has framed the build\. Plan /, line: () => 'Start building: Claude got the brief' },
+  { re: /^The host has gone back to the opening /, line: () => 'Back to the opening: Claude was asked to pause' },
+  { re: /^Draft the one-page build brief now /, line: () => 'Asked Claude to draft the brief' },
+  { re: /^Show the room the work so far, running\./, line: () => 'Asked Claude to preview the work' },
+  { re: /^We are wrapping up\. Call room_status/, line: () => 'Asked Claude to wrap up' },
+  { re: /^Before ask (\d+) opens to the room: make a quick mockup/, line: (m) => `Asked Claude for mockups for ask ${Number(m[1])}` },
+]);
+export function plainPromptLine(text) {
+  const t = String(text || '');
+  for (const p of ENGINE_PROMPTS) {
+    const m = p.re.exec(t);
+    if (m) return p.line(m);
+  }
+  return '';
+}
+
+/** The brief's lines as the host reads them (the wall's labels), in the brief's order; only the answered ones. */
+export const BRIEF_ROWS = Object.freeze([['Making', 'kind'], ['The problem', 'problem'], ['Good looks like', 'good'], ['We will know', 'proof'], ['First build', 'firstBuild'], ['Tools and style', 'tools'], ['Look and feel', 'look']]);
+export const briefRows = (b) => BRIEF_ROWS.map(([k, f]) => [k, ((b && b.lines) || {})[f]]).filter(([, v]) => v);
+
+/** The decided asks of the building, not the opening's steps, that went to Claude (held and record-only left out). */
+export function builtDecisions(room) {
+  return ((room && room.asks) || []).filter((a) => a.status === 'decided' && a.decision && !a.openingStep)
+    .filter((a) => { const o = askOutcome(a, room); return !o || !['later', 'not-sent'].includes(o.mark); });
+}
+
+/**
+ * WRITE IT MYSELF, FILLED IN (PLAN item 15): the wrap-up from what the session
+ * already holds, for the host to check. The summary is the brief's headline
+ * (and its short summary), What we built is the decisions that went to Claude
+ * (combineText), and the newest build link is the demo. `from` says where each
+ * came from, so the form can say so under it. Next steps stay the host's.
+ */
+export function wrapPrefill(room) {
+  const b = (room && room.brief) || {};
+  const head = String(b.headline || '').trim();
+  const more = String(b.summary || '').trim();
+  const summary = head && more ? `${head}${/[.!?]$/.test(head) ? '' : '.'} ${more}` : head || more;
+  const decided = builtDecisions(room);
+  const built = decided.length ? combineText(decided).split('\n').filter(Boolean) : [];
+  const link = latestBuild(room).link;
+  return {
+    summary, built, links: link ? [{ label: W.wrapDemoLabel, url: link }] : [], nextSteps: [],
+    from: { summary: Boolean(summary), built: decided.length, link: Boolean(link) },
+  };
+}
+
+/** Claude was asked to wrap up and has not yet: the prompt is in the log, the outcome is not. */
+export const wrapAsked = (room) => !(room && room.outcome && room.outcome.summary)
+  && ((room && room.log) || []).some((l) => l.kind === 'direction' && String(l.text || '').startsWith(WRAP_UP_TEXT.slice(0, 40)));
+
 export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');
+  // WRAPPED, NOT ENDED (PLAN item 15): the report, then End session, lead; nothing else is next.
+  if (room && room.outcome && room.outcome.summary) {
+    const shots = ((room.images || []).filter((i) => i.kind !== 'mockup')).length;
+    return [
+      { key: 'report', count: 1, title: W.checkReport, hint: W.checkReportHint(builtDecisions(room).length, shots), button: W.reportBtn, capability: 'report' },
+      { key: 'end', count: 2, title: W.endTheSession, hint: W.endHint, button: W.endSessionBtn, capability: 'report' },
+    ];
+  }
   const moves = [];
   // MOCKUPS TO LOOK AT (host-flow S4): the Stage says the vote is ready to open,
   // so this leads with the same move (not while the opening frames the build).
@@ -1534,6 +1607,16 @@ export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   const pts = room && room.points;
   if (pts && !framing && !(room.outcome && room.outcome.summary) && !(pts.items || []).length && !(pts.requests || []).length) {
     moves.push({ key: 'ask-points', title: W.askForPoints, hint: W.askForPointsHint, button: W.askForPointsBtn, capability: 'points' });
+  }
+  // WRAP UP (PLAN item 15): the last move, once there is something to wrap up (a decision
+  // Claude got, or a build it showed). With Claude connected, one press asks Claude to write
+  // it; without, or once asked, Write it myself opens the form filled in from the session.
+  if (room && !framing && room.state !== 'ENDED' && (builtDecisions(room).length || latestBuild(room).link)) {
+    const agent = room.agent || {};
+    const asked = wrapAsked(room);
+    moves.push((agent.connected || agent.listening) && !asked
+      ? { key: 'wrap-claude', title: W.wrapMove, hint: W.wrapClaudeHint, button: W.wrapClaudeBtn, capability: 'report' }
+      : { key: 'wrap-write', title: W.wrapMove, hint: asked ? W.wrapAskedHint : W.wrapWriteHint(builtDecisions(room).length), button: W.wrapWriteBtn, capability: 'report' });
   }
   // Nothing runs without Claude: until it has called in, that is the first move (a key minted is not a connection).
   if (room && room.agent && !claudeEverConnected(room.agent) && !framing) {

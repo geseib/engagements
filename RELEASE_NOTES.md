@@ -9,6 +9,65 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 28 Oct 2026 (Build Room, simpler: asking and finishing)
+
+**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+
+Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items 14, 15 and 16), started on the owner's word on 28 Oct: "then start phase 3". It covers the Ask the room form, finishing a session, and the report, on one screen and on two. Nothing was taken away: what moved under More options is still in the form, and every capability is still reachable.
+
+### New
+
+- **Yes/No is its own kind in Ask the room.** The form's tabs are **Ideas · Choose · Yes/No · Rate**, four of equal width on a row of their own. A Yes/No has two answers that start as Yes and No, which you can rename (Approve and Decline). It is asked the way a ready Yes/No already was: a choice of its two answers, one pick. A ready Yes/No now opens on the Yes/No tab.
+- **More options** in the form, folded, says what it is set to ("Claude gets it as Do now, …"). Inside: **Claude gets it as** (asked again at Send, as before), a Choose's **preview links**, **Note for Claude (private)** and **Save as a draft**. A ready question still brings its own Claude gets it as and note. Otherwise it is Do now, as the server already decided; an opening step is still Keep in mind.
+- **Wrap up in What's next.** Once something is decided or Claude has shown a build, What's next ends with **Wrap up**. With Claude connected, **Ask Claude to wrap up** is one press: Claude gets its wrap-up prompt as Do now, not shown to the room. Without Claude, or once Claude has been asked, **Write it myself** opens the wrap-up filled in from the session: the brief's headline as the summary, the decisions Claude got as What we built (held-for-later and record-only ones left out), and the latest build as a link called The demo. Each field says where its words came from. The Session panel's Wrap up opens the same form, with Ask Claude to wrap up at its top while Claude is connected.
+- **Links are two boxes**, a label and the address, with **Add a link**, in place of typing `label | https://…`.
+- **After the wrap-up, the report then End session lead, on both layouts.** On one screen the Now card says "Wrap-up saved. Check the report, then end the session." with two moves, **Check the report** (Report, the one Space presses) and **End the session**, and what was built under them. On two screens, Your part now's main button is **Check the report**, with **End session** beside it.
+- **The report has a Build brief section**, before What we built: the brief's headline and summary, the opening's answers (Making, Who it is for, The problem, Good looks like and the rest) and Keep in mind.
+- **A decision the wheel settled says "Settled by the wheel"** in the report. Decisions saved for later or recorded only were already marked (25 Oct), and still are.
+
+| Measured (the count test's own fixtures) | Before | Now |
+|---|---|---|
+| Controls in the Ask the room form, a Choose | 17 | 12 |
+| Controls in the form, a Yes/No | (no such kind) | 11 |
+| Decisions to write your own ask | 3 (kind, Claude gets it as, Ask) | 2 (kind, Ask) |
+| Blank wrap-up fields with Claude connected | 4 | 0 (one press) |
+| Console states that say "No main move now" after the wrap-up | 1 | 0 |
+| Lines of internal prompt text in the report | 1 (Start building) | 0 |
+| Between asks, three ideas, one screen | 38 | 39 (Wrap up added) |
+| Between asks, three ideas, console | 44 | 45 (Wrap up added) |
+
+### Fixed
+
+- **A Yes/No you wrote yourself was a two-option Choose** you had to type Yes and No into, and a ready Yes/No opened on the Choose tab.
+- **The form's kind tabs were cramped** beside the "from a set" line. They have a row of their own now.
+- **The form asked what Claude gets twice**, here and again at Send. Here it is under More options, with a default.
+- **The wrap-up started from four blank fields** and the `label | https://…` syntax.
+- **The console said "No main move now" after the wrap-up was saved**, and both layouts repeated Report and End session in a bar above everything. The bar is gone: the moves are where the next move always is.
+- **The report printed the Start building prompt**, "…post the plan with post_update (kind "milestone")…" and the whole brief under it. It now reads "Start building: Claude got the brief". The other prompts Engage writes for Claude read the same way: Back to the opening, Ask Claude to draft the brief, Preview the work, mockups for an ask, and Ask Claude to wrap up.
+- **The report had no brief**, though the brief is what the room framed first.
+
+### What to look at
+
+1. On engage.test, open a Build Room and press **Ask the room**. The tabs read **Ideas · Choose · Yes/No · Rate**, all the same width, on their own row. Press **Choose**: Question, Context, Option A, Option B, Add option, **More options**, Cancel and Ask the room. That is 12 controls (it was 17).
+2. Open **More options**: Claude gets it as (Do now is on), Preview links for A and B, Note for Claude (private), Save as a draft. Close it: the line beside More options says "Claude gets it as Do now".
+3. Press **Yes/No**: two answers, Yes and No. Rename them Approve and Decline and ask it. Phones show Approve and Decline. On the result, Send still offers Do now, Keep in mind and Ask Claude.
+4. Pick a ready Yes/No from the library on the left: the form opens on the **Yes/No** tab with the set's own two answers, and More options shows the set's Claude gets it as.
+5. Connect Claude Code, start building, and decide one ask. What's next ends with **Wrap up · Ask Claude to wrap up**. Press it: Claude writes the wrap-up (the room's screens show nothing of the prompt). What's next then shows **Check the report**, then **End the session**.
+6. In a second room without Claude connected, decide an ask and let What's next show **Wrap up · Write it myself**. Press it: the form says "Filled in from the session". The summary is the brief's headline, What we built has the decision, and Links has The demo with its address if a build was shown. Add a second link with **Add a link**, then **Save wrap-up**.
+7. After saving, on one screen: the Now card says "Wrap-up saved. Check the report, then end the session." and **Report** is the one orange button. Press Space: the report opens.
+8. Use two screens and repeat 7 on the console: Your part now reads "Wrap-up saved. Check the report, then end the session.", with **Check the report** as its main button and **End session** beside it. "No main move now" does not appear.
+9. In the report: **Build brief** comes before What we built, with the headline, the opening's answers and Keep in mind. In Timeline, Start building reads "Start building: Claude got the brief", with no post_update and no brief text under it. A decision settled by the wheel says "Settled by the wheel".
+10. Open help (?): Writing your own ask describes the four kinds and More options; Wrapping up a Build Room describes Ask Claude to wrap up, the form filled in from the session, the two link boxes, and Check the report then End session on both layouts.
+
+### Known gaps
+
+- **Between asks is one control more on either layout** (39 and 45): What's next's Wrap up, which the plan asked for as its last move. The one-screen page is still under the plan's phase 2 target of 40.
+- **A Yes/No is stored as a choice of its two answers**, as a ready one always was; there is no separate yes/no kind on the server. So History, the report and Claude read it as a choice. Engage tells a Yes/No apart only by its Yes and No answers, so one with renamed answers counts as an ordinary choice, as it always did.
+- **Ask Claude to wrap up has no Cancel.** Once pressed, What's next switches to Write it myself until Claude's wrap-up lands.
+- **The ? key list** the plan said could come with phase 3 is not built.
+
+---
+
 ## 28 Oct 2026 (Build Room, simpler: the right column)
 
 **Test:** merge of dev `fa69abd8`. Everything below this entry is already on test; this push adds only what is here.

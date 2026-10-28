@@ -10,6 +10,14 @@
  * the host's direction, because the two often differ and the difference is the
  * useful part.
  *
+ * THE BRIEF, IN ITS OWN SECTION (simplify PLAN item 16; owner, 28 Oct 2026:
+ * "then start phase 3"): what the room framed (the opening's answers, the
+ * headline Claude drafted) and the room brief (who it is for, Keep in mind),
+ * before what we built. What Engage itself told Claude (Start building and the
+ * one-press asks) reads as a plain line, never as the prompt Claude was given
+ * (buildScreens plainPromptLine). A decision the wheel settled says so; one
+ * held back or recorded only already said so (host review, 25 Oct 2026).
+ *
  * CREW MODE adds "Who built what" (docs/design/build-room-crew/FLOWS.md F10,
  * storyboard frame 10): builders are named, because their work is theirs; the
  * room stays a count. It reads `state.crew`, which GET build/state carries as
@@ -35,7 +43,7 @@ import ReportSavedDialog from '../components/ReportSavedDialog';
 import { saveReportPdf } from '../utils/saveReport';
 import { unexpectedSaveMessage } from '../config/reportPdf';
 import { safeHref, apiBase } from './buildHostApi';
-import { askOutcome, claudeEverConnected } from './buildScreens';
+import { askOutcome, claudeEverConnected, plainPromptLine, briefRows } from './buildScreens';
 import './BuildReport.css';
 
 const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
@@ -43,6 +51,7 @@ const IDEA_STATUS = { new: 'New', promoted: 'Used', acknowledged: 'Acknowledged'
 // HELD BACK, SAID SO (host review, 25 Oct 2026): what never reached Claude reads that way in the record.
 const HELD_LINE = 'Saved for later, not sent to Claude';
 const RECORD_LINE = 'Recorded only, not sent to Claude';
+const WHEEL_LINE = 'Settled by the wheel';
 
 function when(iso, opts) {
   const t = Date.parse(iso || '');
@@ -222,6 +231,7 @@ function Decision({ ask, log = [] }) {
           {ask.decision.chosen && ask.decision.chosen.length > 0 && ask.kind === 'choice' && (
             <span className="brr-dim"> · chosen {ask.decision.chosen.join(', ')}</span>
           )}
+          {ask.decision.method === 'wheel' && <div className="brr-dim brr-small brr-wheel">{WHEEL_LINE}</div>}
           {ask.decision.note && <div className="brr-note"><b>The room also said:</b> {ask.decision.note}</div>}
         </div>
       )}
@@ -234,6 +244,31 @@ function heldMark(ask, log) {
   const o = askOutcome(ask, { log });
   if (!o) return '';
   return o.mark === 'later' ? HELD_LINE : o.mark === 'not-sent' ? RECORD_LINE : '';
+}
+
+/** The brief as the room framed it: the headline, the opening's lines, who it is for, Keep in mind. Null when empty. */
+function BriefSection({ brief }) {
+  const b = brief || {};
+  const rows = briefRows(b);
+  const keep = (b.keep || []).filter((i) => i && i.text);
+  if (!b.headline && !b.summary && !rows.length && !b.forWhom && !keep.length) return null;
+  // Who it is for sits after Making, as the brief Claude reads has it (build-store.js briefText).
+  const lines = [...rows.filter(([k]) => k === 'Making'), ...(b.forWhom ? [['Who it is for', b.forWhom]] : []), ...rows.filter(([k]) => k !== 'Making')];
+  return (
+    <section aria-labelledby="brr-brief">
+      <h2 id="brr-brief">Build brief</h2>
+      {b.headline && <p className="brr-summary">{b.headline}</p>}
+      {b.summary && <p>{b.summary}</p>}
+      {lines.length > 0 && (
+        <dl className="brr-brief">
+          {lines.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}
+        </dl>
+      )}
+      {keep.length > 0 && (
+        <><b className="brr-small brr-block">Keep in mind</b><ul>{keep.map((i) => <li key={i.id || i.text}>{i.text}</li>)}</ul></>
+      )}
+    </section>
+  );
 }
 
 export default function BuildReport({ state, onBack }) {
@@ -333,6 +368,8 @@ export default function BuildReport({ state, onBack }) {
         </div>
         {s.goal && <div className="brr-goal"><span className="brr-lbl">Goal</span>{s.goal}</div>}
 
+        <BriefSection brief={s.brief} />
+
         <section aria-labelledby="brr-built">
           <h2 id="brr-built">What we built</h2>
           {outcome ? (
@@ -406,19 +443,23 @@ export default function BuildReport({ state, onBack }) {
             <table className="brr-tbl">
               <thead><tr><th className="brr-col-t">Time</th><th className="brr-col-who">Who</th><th className="brr-col-kind">Kind</th><th>What happened</th></tr></thead>
               <tbody>
-                {log.map((l) => (
+                {log.map((l) => {
+                  // Engage's own prompt to Claude reads as one plain line, its detail with it.
+                  const plain = plainPromptLine(l.text);
+                  return (
                   <tr key={l.logId}>
                     <td>{hhmm(l.createdAt)}</td>
                     <td>{whoLabel(l)}</td>
                     <td>{l.kind}</td>
                     <td>
-                      {l.text}
-                      {l.detail && l.kind !== 'image' && <span className="brr-block brr-dim">{l.detail}</span>}
+                      {plain || l.text}
+                      {!plain && l.detail && l.kind !== 'image' && <span className="brr-block brr-dim">{l.detail}</span>}
                       {l.held && !l.sentAs && <span className="brr-block brr-dim">{HELD_LINE}</span>}
                       {safeHref(l.link) && <span className="brr-block"><Link href={l.link} /></span>}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           ) : <p className="brr-dim">Nothing on the timeline yet.</p>}

@@ -894,6 +894,47 @@ export const W = Object.freeze({
   askForPointsBtn: 'Ask Claude',
   composeMore: 'More',
   composeMoreHead: 'Ask Claude for',
+  // THE ASK THE ROOM FORM (PLAN item 14; owner, 28 Oct 2026: "then start phase 3"). Yes/No is
+  // its own kind (owner, 24 Oct: "some are yes no. we need to store that info"); what Claude
+  // gets is asked again at Send, so here it is under More options with a default.
+  kindOfAsk: 'Kind of ask',
+  yesNoKind: 'Yes/No',
+  yesAnswer: 'The yes answer',
+  noAnswer: 'The no answer',
+  yesNoRename: 'Rename them if the question needs other words, such as Approve and Decline.',
+  askMoreOptions: 'More options',
+  askMoreSummary: (kind) => `Claude gets it as ${kind}, a private note, save as a draft`,
+  askMoreSummaryChoice: (kind) => `Claude gets it as ${kind}, preview links, a private note, save as a draft`,
+  askClaudeGetsHint: 'Asked again when you send the result.',
+  previewLinks: 'Preview links (optional)',
+  optionPreview: (l) => `Option ${l} preview URL`,
+  // WRAP UP AND END (PLAN item 15): one press when Claude is connected, the form filled in from
+  // the session when it is not; once saved, the report and then End session lead, on both layouts.
+  wrapMove: 'Wrap up',
+  wrapClaudeHint: 'Claude writes what was built and the next steps; you check it',
+  wrapClaudeBtn: 'Ask Claude to wrap up',
+  wrapWriteHint: (n) => (n ? `Filled in from the ${n === 1 ? 'decision' : `${n} decisions`} and the brief` : 'Filled in from the brief and the latest build'),
+  wrapAskedHint: 'Claude is writing it. Or write it yourself',
+  wrapWriteBtn: 'Write it myself',
+  wrapAsked: 'Asked Claude to wrap up. Its wrap-up appears here when it is written.',
+  wrapOrClaude: 'Claude can write this for you.',
+  wrapFilled: 'Filled in from the session',
+  wrapFromHeadline: "From the brief's headline",
+  wrapFromDecisions: (n) => `From the ${n === 1 ? 'decision' : `${n} decisions`}`,
+  wrapFromBuild: 'From the latest build',
+  wrapLinks: 'Links',
+  wrapLinkLabel: (i) => `Link ${i} label`,
+  wrapLinkUrl: (i) => `Link ${i} address`,
+  wrapLinkLabelPh: 'The demo',
+  wrapAddLink: 'Add a link',
+  wrapRemoveLink: (i) => `Remove link ${i}`,
+  wrapDemoLabel: 'The demo',
+  checkReport: 'Check the report',
+  checkReportHint: (decisions, shots) => `The brief, ${decisions} ${decisions === 1 ? 'decision' : 'decisions'}, ${shots} ${shots === 1 ? 'screenshot' : 'screenshots'}`,
+  reportBtn: 'Report',
+  endTheSession: 'End the session',
+  endHint: 'Phones show what we built',
+  endSessionBtn: 'End session',
 });
 
 /**
@@ -984,4 +1025,6 @@ export const RETIRED = Object.freeze([
   // History screen still use it; "The opening" stays as the console strip's moment.
   { word: 'Room brief', enforced: true, task: 'right-column' },
   { word: 'Tick to combine', enforced: true, task: 'right-column' },
+  // Phase 3 (28 Oct 2026): a link is two boxes, label and address, never the pipe syntax.
+  { word: 'Links (one per line: label | https://…)', enforced: true, task: 'simplify-3' },
 ]);

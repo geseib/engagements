@@ -1119,6 +1119,21 @@
 /* A Choose question's options under its words; a type chip's count (owner, 24 Oct). */
 .brm .brm-lib-opts { display: block; color: var(--muted); font-size: var(--brm-t-floor); }
 .brm .brm-qchip-n { margin-left: 2px; font-variant-numeric: tabular-nums; }
+/* The form's kinds (PLAN item 14): four equal tabs on a row of their own, never squeezed by the source line. */
+.brm .brm-seg--askkinds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.brm .brm-seg--askkinds .brm-segbtn { padding: 0 8px; white-space: nowrap; }
+.brm .brm-askmore { margin: 4px 0 12px; }
+.brm .brm-askmore > summary .brm-hint { font-weight: 400; }
+.brm .brm-askmore > .brm-field:first-of-type { margin-top: 6px; }
+.brm .brm-selfstart { align-self: flex-start; justify-self: start; }
+/* Wrap up's links (PLAN item 15): label and address, two boxes a row. */
+.brm .brm-wraplink { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.brm .brm-wrap-filled { margin-left: 8px; }
+@media (max-width: 480px) {
+  .brm .brm-seg--askkinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brm .brm-wraplink { grid-template-columns: minmax(0, 1fr) 36px; }
+  .brm .brm-wraplink > input:first-child { grid-column: 1 / -1; }
+}
 @media (max-width: 860px) {
   .brm .brm-libgrid { grid-template-columns: 1fr; }
   .brm .brm-lib { max-height: 40vh; }
