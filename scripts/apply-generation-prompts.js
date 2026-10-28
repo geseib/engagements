@@ -42,7 +42,20 @@ const TEXT = ['name', 'description', 'basePrompt', 'contextTemplate', 'audienceT
 const SETTINGS = ['defaultSettings', 'tags', 'status'];
 const CONTENT = [...TEXT, ...SETTINGS];
 
-const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+/*
+  EQUAL WHATEVER ORDER A MAP'S KEYS COME BACK IN. DynamoDB does not keep the
+  key order of a map attribute, so `defaultSettings` read back from the table
+  can list its keys differently from the repo's object. Comparing raw
+  JSON.stringify output called every freshly written row a MISMATCH: prod,
+  2026-10-28, "0 written and verified, 22 mismatched" for 22 rows that were
+  identical. Map keys are sorted before comparing; array order still counts.
+*/
+const canonical = (v) => {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
+  return v === undefined ? null : v;
+};
+const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 
 /** The rows the repo describes, keyed by promptId, shaped as the seeder writes them. */
 function repoRows(generationPrompts, normalizeGameType) {
@@ -82,7 +95,7 @@ function itemFor(entry, now) {
   };
 }
 
-module.exports = { repoRows, plan, itemFor, CONTENT, TEXT, SETTINGS };
+module.exports = { repoRows, plan, itemFor, same, CONTENT, TEXT, SETTINGS };
 
 async function main() {
   const args = process.argv.slice(2);
