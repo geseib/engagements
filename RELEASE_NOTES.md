@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 28 Oct 2026 (Build Room, simpler: asking and finishing)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `aad7aad2`. Everything below this entry is already on test; this push adds only what is here.
 
 Phase 3 of the simplicity plan (`docs/design/build-room-simplify/PLAN.md`, items 14, 15 and 16), started on the owner's word on 28 Oct: "then start phase 3". It covers the Ask the room form, finishing a session, and the report, on one screen and on two. Nothing was taken away: what moved under More options is still in the form, and every capability is still reachable.
 
