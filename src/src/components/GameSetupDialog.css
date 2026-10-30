@@ -116,7 +116,12 @@
   border-radius: 14px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
-.gsd.new-game-dialog.gsd--compact { width: min(880px, calc(100vw - 48px)); }
+.gsd.new-game-dialog.gsd--compact { width: min(1060px, calc(100vw - 48px)); }
+/* THE FORMAT GUIDE TAKES THE WIDTH, whichever view opened it (README round
+   2, decision 6), and the card returns to that view's width on Back. */
+@media (min-width: 601px) {
+  .gsd.new-game-dialog.gsd--guide { width: min(1760px, calc(100vw - 48px)); }
+}
 
 /* THE PHONE (frames 10, 10b): the whole screen, edge to edge. The overlay
    pads 20px (styles.css); the negative margin gives it back. */
@@ -217,9 +222,10 @@
 
 .gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
 
-/* The `?` beside the X (Help Phase 3), in the head's action group. In
-   compact mode "Show preview" joins them, so the head pads further. */
-.gsd.gsd--compact .gsd-head { padding-right: 260px; }
+/* The `?` beside the X (Help Phase 3), in the head's action group, with the
+   Guided | Quick switch before them, so the head pads for all three. */
+.gsd .gsd-head { padding-right: 320px; }
+.gsd.gsd--edit .gsd-head { padding-right: 132px; }
 @media (max-width: 600px) {
   .gsd .gsd-head,
   .gsd.gsd--compact .gsd-head { padding: 14px 112px 12px 16px; }
@@ -1751,52 +1757,6 @@
   .gsd .gsd-fp * { animation: none !important; } /* beats the 0,5,0 `.is-play` rules (devtest M2) */
 }
 
-/* ================================================================== COMPARE
-   FormatCompare.jsx (frames 2, 12b): the head row with each Use button
-   sticks while the rows scroll. */
-.gsd .gsd-compare { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.gsd .gsd-compare-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-.gsd .gsd-compare-t { margin: 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); }
-.gsd .gsd-compare-sub { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
-.gsd .gsd-compare-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; }
-.gsd .gsd-compare-tbl { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-.gsd .gsd-compare-rowhead { width: 110px; }
-.gsd .gsd-compare-tbl thead th,
-.gsd .gsd-compare-tbl thead td { position: sticky; z-index: 2; background: var(--gsd-card); }
-.gsd .gsd-compare-groups th {
-  padding: 0 8px 8px;
-  text-align: left;
-  font-size: var(--gsd-t-floor);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--gsd-muted);
-}
-.gsd .gsd-compare-formats th { padding: 0 8px 12px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--gsd-rule); }
-.gsd .gsd-compare-formats .gsd-fp { height: 64px; margin-bottom: 8px; }
-.gsd .gsd-compare-name { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: var(--gsd-t-body); font-weight: 800; color: var(--gsd-text); }
-.gsd .gsd-compare-sugg { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-primary); }
-.gsd .gsd-compare-use { font-size: var(--gsd-t-label); padding: 6px 12px; }
-.gsd .gsd-compare-tbl tbody th {
-  padding: 10px 8px;
-  vertical-align: top;
-  text-align: left;
-  font-size: var(--gsd-t-label);
-  font-weight: 700;
-  color: var(--gsd-muted);
-  border-bottom: 1px solid var(--gsd-rule);
-}
-.gsd .gsd-compare-tbl tbody td {
-  padding: 10px 8px;
-  vertical-align: top;
-  font-size: var(--gsd-t-label);
-  line-height: 1.45;
-  color: var(--gsd-text);
-  border-bottom: 1px solid var(--gsd-rule);
-}
-.gsd .gsd-compare-tbl .is-suggested { background: var(--gsd-field); }
-.gsd .gsd-compare-tbl .gsd-compare-own { border-left: 1px solid var(--gsd-rule-strong); }
-
 /* ================================================================ HAND-OFF
    OtherFormatHandoff.jsx (frames 7, 8): ticks and arrows, never numbers. */
 .gsd .gsd-handoff {
@@ -1925,27 +1885,6 @@
   .gsd .gsd-side-pin { flex: none; }
 }
 
-/* A disabled preview tab never looks pressed (devtest M7, B11). */
-.gsd .gsd-side-tabs .gsd-btn[aria-pressed="true"]:disabled,
-.gsd .gsd-side-tabs .gsd-btn:disabled {
-  border: 1px dashed var(--gsd-rule-strong);
-  padding: 7px 12px;
-  color: var(--gsd-muted);
-}
-
-/* COMPARE (devtest M6, B10): the body is the table's own scroller, so the
-   head row holds still, opaque, flush to the top; the chosen format's Use is
-   outlined with a tick, never a second filled primary. */
-.gsd .gsd-main.is-compare { display: flex; flex-direction: column; overflow: hidden; }
-.gsd .gsd-main.is-compare .gsd-compare { flex: 1 1 auto; }
-.gsd .gsd-compare-tbl thead .gsd-compare-groups th,
-.gsd .gsd-compare-tbl thead .gsd-compare-groups td { position: static; }
-.gsd .gsd-compare-tbl thead .gsd-compare-formats th,
-.gsd .gsd-compare-tbl thead .gsd-compare-formats td { position: sticky; top: 0; z-index: 2; background: var(--gsd-card); padding-top: 8px; }
-.gsd .gsd-compare-tbl thead .gsd-compare-formats th.is-suggested { background: var(--gsd-field); }
-.gsd .gsd-compare-use.is-on { border: 2px solid var(--gsd-primary); color: var(--gsd-primary); padding: 5px 11px; }
-.gsd .gsd-compare-t:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
-
 /* THE PHONE (frames 10, 10b; devtest B2, H2, V1): a one-line head, the
    formats folded, the note on its own row and Cancel + Create sharing the
    next, each 44px — Create readable, never squeezed. */
@@ -2000,26 +1939,6 @@
 .gsd .gsd-fp--card .gsd-fp-slot { gap: 6px; }
 .gsd .gsd-fp--card .gsd-fp-ans { gap: 6px; }
 
-/* COMPACT'S PREVIEW IS A DRAWER INSIDE THE 880px CARD (devtest 5 N3). */
-/* It PUSHES, it does not overlay (devtest 8 R3-1): laid over the form it hid
-   the Survey / Build Room / Event chips and the right-hand topics, still
-   focusable but unclickable. The form takes the column left beside it and
-   its chip rows wrap; the card itself stays 880px. */
-.gsd .gsd-body.has-drawer { grid-template-columns: minmax(0, 1fr) 340px; }
-.gsd .gsd-side.gsd-side--drawer {
-  position: static;
-  min-width: 0;
-  border-left: 1px solid var(--gsd-rule-strong);
-  overflow-y: auto;
-}
-@media (max-width: 900px) {
-  .gsd .gsd-body.has-drawer { grid-template-columns: minmax(0, 1fr); }
-}
-.gsd .gsd-side--drawer .gsd-side-pv { flex: none; overflow: visible; }
-
-/* The caption sits above the picture now; spacing for that order. */
-.gsd .gsd-side-cap { margin: 4px 0 10px; }
-
 /* SHORT WINDOWS (1280×720, frame 12a): the pane scrolls, but the checklist
    and next steps STAY PINNED at its foot (devtest 6 M5). */
 @media (max-height: 800px) {
@@ -2033,14 +1952,11 @@
 }
 
 /* SHORT LAPTOPS (1366×768, 1280×720; devtest 7 R3): the gallery cards drop
-   their small picture, so step 3 shows on first open. No words go; the side
-   pane beside the gallery plays the same picture larger. */
+   their small picture, so step 3 shows on first open. No words go; the
+   walkthrough beside the gallery draws each step larger. */
 @media (max-height: 800px) {
   .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
 }
-
-/* "Always open with the full guide", inside the guide (devtest 5 N2). */
-.gsd .gsd-compare-always { margin: 8px 0 0; font-size: var(--gsd-t-label); }
 
 /* STEP 3 ON THE FIRST SCREEN AT 1440×900 (README §3.2; devtest 6 M4): the
    head and the steps a step tighter — the cards keep their words. */
@@ -2060,3 +1976,336 @@
 .gsd.gsd--compact .gsd-cats { margin-bottom: 4px; }
 .gsd.gsd--compact .gsd-adv { margin-top: 4px; }
 .gsd.gsd--compact .gsd-namesline { margin: 4px 0 6px; }
+
+/* ============================================================ ROUND 2, OWNER
+   docs/design/new-engagement README "Round 2 — owner feedback": the
+   Guided | Quick switch, the walkthrough, the two-row Format guide. */
+
+/* GUIDED | QUICK (decision 1). The chosen one: a tick and a 2px border, so
+   the state is never colour alone. */
+.gsd .gsd-vsw {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 10px;
+}
+.gsd .gsd-vsw-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--gsd-muted);
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.gsd .gsd-vsw-opt:hover { color: var(--gsd-text); }
+.gsd .gsd-vsw-opt.is-on { border-color: var(--gsd-primary); background: var(--gsd-wash); color: var(--gsd-primary); }
+.gsd .gsd-vsw-opt:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+
+/* THE WALKTHROUGH (decision 4; components/FormatWalkthrough.jsx). */
+.gsd .gsd-wt { display: flex; flex-direction: column; gap: 12px; }
+.gsd .gsd-wt-head { display: flex; align-items: center; gap: 10px; }
+.gsd .gsd-wt-h { margin: 0 auto 0 0; font-size: var(--gsd-t-body); font-weight: 700; color: var(--gsd-text); }
+.gsd .gsd-wt-status { font-size: var(--gsd-t-label); color: var(--gsd-muted); white-space: nowrap; }
+.gsd .gsd-wt-play { padding: 5px 10px; }
+.gsd .gsd-wt-empty { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* The picture: the room screen, and a phone over its right edge. Boxes and
+   a few words; aria-hidden, the rows below say it. */
+.gsd .gsd-wt-pic { position: relative; display: block; min-height: 226px; padding-right: 64px; }
+.gsd .gsd-wt-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 200px;
+  padding: 12px 14px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 12px;
+  background: var(--gsd-card);
+  overflow: hidden;
+}
+.gsd .gsd-wt-pic.is-report { padding-right: 0; }
+.gsd .gsd-wt-pic.is-report .gsd-wt-stage { background: var(--gsd-text); border-color: var(--gsd-text); }
+.gsd .gsd-wt-stage i,
+.gsd .gsd-wt-stage em,
+.gsd .gsd-wt-phone i,
+.gsd .gsd-wt-phone em { font-style: normal; }
+.gsd .gsd-wt-stage small,
+.gsd .gsd-wt-phone small { font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-line { display: block; height: 5px; border-radius: 3px; background: var(--gsd-rule-strong); text-decoration: none; }
+.gsd .gsd-wt-top { display: flex; justify-content: space-between; gap: 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-chip { padding: 0 8px; border-radius: 99px; background: var(--gsd-field); color: var(--gsd-text); font-weight: 700; white-space: nowrap; }
+.gsd .gsd-wt-title { font-family: var(--font-display, inherit); font-size: var(--gsd-t-body); font-weight: 800; line-height: 1.25; color: var(--gsd-text); }
+.gsd .gsd-wt-count { display: flex; align-items: baseline; gap: 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-count em { font-family: var(--font-display, inherit); font-size: 30px; font-weight: 800; color: var(--gsd-primary); line-height: 1; }
+.gsd .gsd-wt-count.is-big em { font-size: 40px; }
+.gsd .gsd-wt-dots { display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px; }
+.gsd .gsd-wt-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--gsd-rule-strong); }
+.gsd .gsd-wt-dots i.is-on { background: var(--gsd-secondary); }
+.gsd .gsd-wt-vote { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; max-width: 250px; }
+.gsd .gsd-wt-item { display: flex; gap: 5px; min-width: 0; padding: 3px 6px; border-radius: 5px; background: var(--gsd-field); font-size: var(--gsd-t-floor); color: var(--gsd-text); }
+.gsd .gsd-wt-item em { color: var(--gsd-primary); font-weight: 800; }
+.gsd .gsd-wt-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsd .gsd-wt-res { display: flex; flex-direction: column; gap: 5px; max-width: 250px; }
+.gsd .gsd-wt-k { display: block; font-size: var(--gsd-t-floor); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gsd-muted); }
+.gsd .gsd-wt-row { display: flex; flex-direction: column; padding: 3px 7px; border-left: 3px solid var(--gsd-rule-strong); border-radius: 4px; background: var(--gsd-field); font-size: var(--gsd-t-floor); color: var(--gsd-text); }
+.gsd .gsd-wt-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsd .gsd-wt-row.is-win { border-left-color: var(--gsd-primary); }
+.gsd .gsd-wt-read { display: block; padding: 5px 7px; border-radius: 5px; background: var(--gsd-side); font-size: var(--gsd-t-floor); line-height: 1.35; color: var(--gsd-text); }
+.gsd .gsd-wt-quote { max-width: 240px; padding: 6px 8px; border-left: 3px solid var(--gsd-primary); border-radius: 4px; background: var(--gsd-field); font-size: var(--gsd-t-floor); line-height: 1.35; color: var(--gsd-text); }
+.gsd .gsd-wt-report { display: flex; flex-direction: column; gap: 10px; color: var(--gsd-card); font-size: var(--gsd-t-floor); }
+.gsd .gsd-wt-report b { font-size: var(--gsd-t-label); }
+.gsd .gsd-wt-report > span { display: flex; flex-direction: column; gap: 4px; font-weight: 700; }
+.gsd .gsd-wt-report .gsd-wt-line { background: var(--gsd-muted); }
+.gsd .gsd-wt-report .gsd-wt-line + .gsd-wt-line { width: 70%; }
+.gsd .gsd-wt-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-width: 250px; }
+.gsd .gsd-wt-opt { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--gsd-rule-strong); border-radius: 6px; background: var(--gsd-field); font-size: var(--gsd-t-floor); font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-wt-opt.is-right { border-color: var(--gsd-success); background: var(--gsd-success); color: var(--gsd-card); }
+.gsd .gsd-wt-opt.is-dim { border-style: dashed; background: none; color: var(--gsd-muted); }
+.gsd .gsd-wt-scores { display: flex; flex-direction: column; gap: 6px; max-width: 250px; }
+.gsd .gsd-wt-scores > span { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: var(--gsd-field); font-size: var(--gsd-t-label); color: var(--gsd-text); }
+.gsd .gsd-wt-scores em { font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-wt-bars { display: flex; flex-direction: column; gap: 6px; max-width: 250px; }
+.gsd .gsd-wt-bar { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-bar i { display: block; height: 10px; border-radius: 5px; background: var(--gsd-field); }
+.gsd .gsd-wt-bar b { display: block; width: var(--w, 50%); height: 100%; border-radius: 5px; background: var(--gsd-secondary); }
+.gsd .gsd-wt-bars.is-done .gsd-wt-bar:first-child b { background: var(--gsd-primary); }
+.gsd .gsd-wt-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; max-width: 220px; }
+.gsd .gsd-wt-boxes i { height: 14px; border-radius: 4px; background: var(--gsd-field); }
+.gsd .gsd-wt-cloud,
+.gsd .gsd-wt-shared { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: auto 0; max-width: 260px; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-wt-cloud .is-big { font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-wt-cloud em { font-size: var(--gsd-t-floor); }
+.gsd .gsd-wt-shared span { padding: 2px 10px; border-radius: 99px; background: var(--gsd-wash); color: var(--gsd-primary); font-weight: 800; }
+.gsd .gsd-wt-qr { display: flex; align-items: center; gap: 14px; margin: auto 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-wt-qr b { display: block; font-size: var(--gsd-t-title); color: var(--gsd-primary); }
+.gsd .gsd-wt-qrbox {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(45deg, var(--gsd-text) 0 5px, var(--gsd-card) 5px 10px);
+}
+.gsd .gsd-wt-prog { display: flex; flex-direction: column; gap: 8px; margin: auto 0; max-width: 260px; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-wt-prog i { display: block; height: 10px; border-radius: 5px; background: var(--gsd-field); }
+.gsd .gsd-wt-prog b { display: block; width: var(--w, 50%); height: 100%; border-radius: 5px; background: var(--gsd-success); }
+.gsd .gsd-wt-prog.is-warn span { color: var(--gsd-primary); font-weight: 700; }
+.gsd .gsd-wt-ok { display: inline-flex; align-items: center; gap: 5px; font-size: var(--gsd-t-floor); color: var(--gsd-success-text); }
+.gsd .gsd-wt-mocks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 250px; }
+.gsd .gsd-wt-mocks i { height: 54px; padding: 3px 6px; border: 2px solid var(--gsd-rule-strong); border-radius: 6px; background: var(--gsd-text); color: var(--gsd-card); font-size: var(--gsd-t-floor); font-weight: 800; }
+.gsd .gsd-wt-mocks i.is-pick { border-color: var(--gsd-primary); }
+.gsd .gsd-wt-cap { font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-dir { display: flex; flex-direction: column; gap: 6px; margin: auto 0; max-width: 260px; padding: 10px 12px; border-radius: 8px; background: var(--gsd-field); color: var(--gsd-text); font-size: var(--gsd-t-label); }
+.gsd .gsd-wt-agenda { display: flex; flex-direction: column; gap: 5px; max-width: 250px; font-size: var(--gsd-t-floor); color: var(--gsd-text); }
+.gsd .gsd-wt-agenda > span { display: flex; gap: 10px; padding: 3px 8px; border: 1px solid transparent; border-radius: 5px; }
+.gsd .gsd-wt-agenda em { color: var(--gsd-muted); }
+.gsd .gsd-wt-agenda .is-done { color: var(--gsd-muted); }
+.gsd .gsd-wt-agenda .is-now { border-color: var(--gsd-primary); background: var(--gsd-wash); }
+
+/* The phone, over the room screen's right edge. */
+.gsd .gsd-wt-phone {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 130px;
+  height: 180px;
+  overflow: hidden;
+  padding: 16px 9px 10px;
+  border: 3px solid var(--gsd-rule-strong);
+  border-radius: 18px;
+  background: var(--gsd-side);
+  font-size: var(--gsd-t-floor);
+  color: var(--gsd-text);
+}
+.gsd .gsd-wt-notch { position: absolute; top: 6px; left: 50%; width: 28px; height: 4px; margin-left: -14px; border-radius: 2px; background: var(--gsd-rule-strong); }
+.gsd .gsd-wt-phone b { line-height: 1.25; }
+.gsd .gsd-wt-field { display: block; min-height: 34px; padding: 3px 5px; border-radius: 5px; background: var(--gsd-field); color: var(--gsd-text); overflow: hidden; }
+.gsd .gsd-wt-field.is-sm { min-height: 16px; padding: 0 5px; }
+.gsd .gsd-wt-send { display: block; padding: 2px 0; border-radius: 5px; background: var(--gsd-primary); color: var(--gsd-card); text-align: center; font-weight: 800; }
+.gsd .gsd-wt-rank { display: flex; align-items: center; gap: 5px; padding: 0 5px; border-radius: 5px; background: var(--gsd-field); }
+.gsd .gsd-wt-rank em { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid var(--gsd-muted); border-radius: 50%; font-weight: 800; flex: none; }
+.gsd .gsd-wt-rank.is-on em { border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
+.gsd .gsd-wt-rank .gsd-wt-line { flex: 1; }
+.gsd .gsd-wt-pts { font-family: var(--font-display, inherit); font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-wt-abcd { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.gsd .gsd-wt-abcd i { padding: 8px 0; border-radius: 6px; background: var(--gsd-field); text-align: center; font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-wt-abcd i.is-on { box-shadow: inset 0 0 0 2px var(--gsd-primary); }
+.gsd .gsd-wt-right { display: inline-flex; align-items: center; gap: 4px; color: var(--gsd-success-text); font-weight: 700; }
+
+/* The step: number, title, then You / Phones / Room screen. */
+.gsd .gsd-wt-t { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: var(--gsd-t-body); font-weight: 700; line-height: 1.35; color: var(--gsd-text); }
+.gsd .gsd-wt-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gsd-primary);
+  color: var(--gsd-card);
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+}
+.gsd .gsd-wt-n.is-get { background: var(--gsd-success); }
+.gsd .gsd-wt-rows { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; }
+.gsd .gsd-wt-row-l { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; font-size: var(--gsd-t-label); line-height: 1.45; }
+.gsd .gsd-wt-row-l dt { display: flex; align-items: flex-start; gap: 6px; color: var(--gsd-muted); }
+.gsd .gsd-wt-row-l dt svg { margin-top: 3px; color: var(--gsd-secondary); }
+.gsd .gsd-wt-row-l dd { margin: 0; color: var(--gsd-text); }
+.gsd .gsd-wt-get { margin: 8px 0 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
+.gsd .gsd-wt-sum { margin: 0; font-size: var(--gsd-t-body); line-height: 1.45; color: var(--gsd-text); }
+
+/* Back · dots · Next. */
+.gsd .gsd-wt-ctl { display: flex; align-items: center; gap: 10px; }
+.gsd .gsd-wt-dots-nav { display: inline-flex; align-items: center; gap: 4px; margin: 0 auto; }
+.gsd .gsd-wt--guide .gsd-wt-dots-nav { margin: 0; }
+.gsd .gsd-wt-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid var(--gsd-muted);
+  border-radius: 99px;
+  background: none;
+  color: var(--gsd-success-text);
+  cursor: pointer;
+}
+.gsd .gsd-wt-dot.is-get { border-color: var(--gsd-success-text); }
+.gsd .gsd-wt-dot.is-on { width: 26px; border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
+.gsd .gsd-wt-dot.is-get.is-on { border-color: var(--gsd-success); background: var(--gsd-success); }
+.gsd .gsd-wt-dot:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-wt-next { border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
+.gsd .gsd-wt-next:hover { border-color: var(--gsd-primary); }
+.gsd .gsd-wt-back[aria-disabled="true"],
+.gsd .gsd-wt-next[aria-disabled="true"] { border: 1px dashed var(--gsd-rule-strong); background: none; color: var(--gsd-muted); cursor: default; }
+
+/* The pane: the walkthrough scrolls, the status line stays at the foot. */
+.gsd .gsd-side .gsd-side-pv { padding-top: 16px; }
+.gsd .gsd-stat { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 12px 0 0; list-style: none; font-size: var(--gsd-t-label); color: var(--gsd-text); }
+.gsd .gsd-stat li { display: inline-flex; align-items: center; gap: 5px; }
+.gsd .gsd-stat-mark { display: inline-grid; place-items: center; width: 14px; color: var(--gsd-muted); font-weight: 800; }
+.gsd .gsd-stat li.is-done .gsd-stat-mark { color: var(--gsd-success-text); }
+.gsd .gsd-stat-not { color: var(--gsd-muted); }
+
+/* THE FORMAT GUIDE (decision 6; components/FormatCompare.jsx). */
+.gsd .gsd-main.is-compare { display: flex; flex-direction: column; }
+.gsd .gsd-guide { display: flex; flex-direction: column; gap: 14px; }
+.gsd .gsd-guide-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.gsd .gsd-guide-t { margin: 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); }
+.gsd .gsd-guide-t:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-guide-sub { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-guide-top { padding: 14px 16px; border: 1px solid var(--gsd-rule-strong); border-radius: 12px; background: var(--gsd-side); }
+.gsd .gsd-wt-grid { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr) 240px; gap: 20px; align-items: start; }
+.gsd .gsd-wt--guide .gsd-wt-pic { min-height: 200px; }
+.gsd .gsd-wt-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.gsd .gsd-guide-name { display: flex; align-items: center; gap: 12px; }
+.gsd .gsd-guide-name h4 { display: flex; align-items: center; gap: 8px; margin: 0 auto 0 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); white-space: nowrap; }
+.gsd .gsd-guide-use { white-space: nowrap; }
+.gsd .gsd-wt-rail { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 0 16px; border-left: 1px solid var(--gsd-rule); list-style: none; }
+.gsd .gsd-wt-railbtn { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 4px 0; border: 0; background: none; color: var(--gsd-muted); font: inherit; font-size: var(--gsd-t-label); line-height: 1.4; text-align: left; cursor: pointer; }
+.gsd .gsd-wt-railbtn .gsd-wt-n { background: none; border: 1px solid var(--gsd-muted); color: var(--gsd-muted); }
+.gsd .gsd-wt-railbtn .gsd-wt-n.is-get { border-color: var(--gsd-success-text); color: var(--gsd-success-text); }
+.gsd .gsd-wt-rail li.is-on .gsd-wt-railbtn { color: var(--gsd-text); font-weight: 700; }
+.gsd .gsd-wt-rail li.is-on .gsd-wt-n { border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
+@media (max-width: 1400px) {
+  .gsd .gsd-wt-grid { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+  .gsd .gsd-wt-rail { display: none; }
+}
+
+/* Seven cards, as tabs, with their group labels above them. */
+.gsd .gsd-guide-cards {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+.gsd .gsd-guide-group {
+  grid-column: span var(--live, 5);
+  margin: 0;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-guide-group.is-own { grid-column: span var(--own, 2); padding-left: 10px; border-left: 2px solid var(--gsd-rule-strong); }
+.gsd .gsd-guide-tabs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.gsd .gsd-guide-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 10px 12px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 10px;
+  background: var(--gsd-card);
+  color: var(--gsd-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gsd .gsd-guide-card:hover { border-color: var(--gsd-secondary); }
+.gsd .gsd-guide-card.is-on { border: 2px solid var(--gsd-primary); padding: 9px 9px 11px; background: var(--gsd-wash); }
+.gsd .gsd-guide-card:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-guide-cardname { display: flex; align-items: center; gap: 6px; font-size: var(--gsd-t-body); font-weight: 800; white-space: nowrap; }
+.gsd .gsd-guide-cardname svg { flex: none; color: var(--gsd-secondary); }
+.gsd .gsd-guide-carddesc { display: flex; flex-direction: column; gap: 4px; font-size: var(--gsd-t-label); line-height: 1.4; }
+.gsd .gsd-guide-fact { color: var(--gsd-text); }
+.gsd .gsd-guide-fact b { display: block; font-weight: 600; color: var(--gsd-muted); }
+.gsd .gsd-guide-mark { display: inline-flex; align-items: center; gap: 4px; margin-top: auto; font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-primary); }
+/* Short laptops: Good for steps aside, so a card is whole at 1280×720 (frame 2-07). */
+@media (max-height: 800px) {
+  .gsd .gsd-guide-fact--good { display: none; }
+  .gsd .gsd-guide { gap: 10px; }
+  .gsd .gsd-guide-top { padding: 10px 14px; }
+  .gsd .gsd-wt--guide .gsd-wt-sum { font-size: var(--gsd-t-label); }
+  .gsd .gsd-wt--guide .gsd-wt-stage { min-height: 150px; }
+  .gsd .gsd-wt--guide .gsd-wt-main { gap: 6px; }
+  .gsd .gsd-wt--guide .gsd-wt-rows { gap: 2px; margin-top: 4px; }
+  .gsd .gsd-guide-card { gap: 4px; padding: 8px 10px 10px; }
+  .gsd .gsd-guide-card.is-on { padding: 7px 9px 9px; }
+  .gsd .gsd-wt--pane .gsd-wt-stage { min-height: 160px; }
+  .gsd .gsd-wt--pane .gsd-wt-pic { min-height: 196px; }
+  .gsd .gsd-wt--pane .gsd-wt-phone { top: 16px; }
+  .gsd .gsd-wt--pane { gap: 8px; }
+  .gsd .gsd-guide-fact b { display: inline; margin-right: 4px; }
+  .gsd .gsd-wt--guide .gsd-wt-pic { min-height: 0; }
+}
+
+/* THE PHONE GUIDE (decision 7; frame 2-09): one format at a time. */
+.gsd .gsd-guide--phone { gap: 12px; padding-bottom: 72px; }
+.gsd .gsd-guide-pager { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; }
+.gsd .gsd-guide-arrow { justify-content: center; width: 44px; height: 44px; padding: 0; }
+.gsd .gsd-guide-pagename { display: flex; flex-direction: column; align-items: center; font-size: var(--gsd-t-body); color: var(--gsd-text); }
+.gsd .gsd-guide-pagename b { display: inline-flex; align-items: center; gap: 6px; }
+.gsd .gsd-guide-pagename small { font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-guide-facts { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: var(--gsd-t-label); }
+.gsd .gsd-guide-facts > div { display: flex; gap: 8px; }
+.gsd .gsd-guide-facts dt { color: var(--gsd-muted); }
+.gsd .gsd-guide-facts dd { margin: 0; color: var(--gsd-text); }
+.gsd .gsd-guide-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--gsd-rule);
+  background: var(--gsd-card);
+}
+.gsd .gsd-guide-foot .btn-secondary,
+.gsd .gsd-guide-foot .btn-primary { flex: 1 1 0; min-height: 44px; justify-content: center; }
+.gsd.gsd--guide.gsd--phone .dialog-actions { display: none; }
+.gsd .gsd-wt--phone .gsd-wt-row-l { grid-template-columns: 70px minmax(0, 1fr); }
+.gsd .gsd-wt--phone .gsd-wt-back,
+.gsd .gsd-wt--phone .gsd-wt-next { justify-content: center; width: 44px; height: 44px; padding: 0; }

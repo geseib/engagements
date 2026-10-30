@@ -1,20 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Icon from './Icon';
-import FormatPreview, { previewCaption } from './FormatPreview';
+import FormatWalkthrough from './FormatWalkthrough';
 
 /**
- * THE SIDE PANE (docs/design/new-engagement README §3.5, frames 1, 4, 7, 9, 13).
+ * THE SIDE PANE (docs/design/new-engagement README §3.5; round 2, frames
+ * 2-01, 2-03, 2-10).
  *
- * The preview on top, then — pinned to the bottom so they stay visible at
- * 1280×720 while the preview scrolls behind them — a status-only checklist
- * and "What happens next". The checklist never restates the form: required
- * rows tick or read "Not yet"; optional rows carry a dash and "that's fine"
- * (the first-time review: empty circles read as unfinished work).
+ * In Guided, the walkthrough of the chosen format on top and — pinned to the
+ * bottom so it stays visible at 1280×720 — one status line: Title, Format,
+ * Questions, ticked or "not yet". The one-picture preview, the long
+ * checklist and "What happens next" are retired: the walkthrough's steps say
+ * what happens next, in more detail. Editing a session keeps its checklist.
  *
  *   notice    a refusal or plan-limit notice: the top of the pane (frame 13)
- *   rows      [{ label, value, done, optional }]
- *   next      { heading, steps: [{ b, text }] }  — ordered list
- *   handoff   rows are "When you continue" and there is no numbered list
+ *   rows      [{ label, value, done }] — the first three make the status line
  */
 export function SummaryRows({ heading, rows = [] }) {
   return (
@@ -37,70 +36,45 @@ export function SummaryRows({ heading, rows = [] }) {
   );
 }
 
-export default function CreateSummary({
-  format = '', anonymous = true, setName = '', notice = null,
-  rowsHeading = 'Three decisions', rows = [], next = null, edit = false,
-  /** Compact's preview drawer: the preview only, inside the 880px card. */
-  drawer = false,
-}) {
-  const [view, setView] = useState('room');
-  const [play, setPlay] = useState(1);
-  const choose = (v) => { setView(v); setPlay((n) => n + 1); };
+/**
+ * THE STATUS LINE under the walkthrough (frames 2-01, 2-03): the three
+ * decisions as ticks, never restating the form.
+ */
+export function StatusLine({ rows = [] }) {
   return (
-    <aside className={`gsd-side${drawer ? " gsd-side--drawer" : ""}`} aria-label={edit ? "This session" : (drawer ? "Preview" : "Preview and summary")}>
+    <ul className="gsd-stat" aria-label="Your decisions">
+      {rows.map((r) => (
+        <li key={r.label} className={r.done ? 'is-done' : ''}>
+          <span className="gsd-stat-mark" aria-hidden="true">{r.done ? <Icon name="Check" size={12} weight="bold" /> : '–'}</span>
+          {r.label}{r.done ? '' : <span className="gsd-stat-not"> {String(r.value || 'not yet').toLowerCase()}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function CreateSummary({
+  format = '', label = '', notice = null,
+  rowsHeading = 'Three decisions', rows = [], edit = false,
+}) {
+  return (
+    <aside className="gsd-side" aria-label={edit ? 'This session' : 'How it runs'}>
       {notice && <div className="gsd-side-notice">{notice}</div>}
-      {!edit && (
-        <section className="gsd-side-pv" aria-labelledby="gsd-pv-h">
-          <div className="gsd-side-pvhead">
-            <h3 className="gsd-side-h" id="gsd-pv-h">Preview</h3>
-            <span className="gsd-side-tabs">
-              <button type="button" className="gsd-btn" aria-pressed={view === 'room'} onClick={() => choose('room')} disabled={!format}>
-                <Icon name="Monitor" size={14} /> Room screen
-              </button>
-              <button type="button" className="gsd-btn" aria-pressed={view === 'phone'} onClick={() => choose('phone')} disabled={!format}>
-                <Icon name="DeviceMobile" size={14} /> Phones
-              </button>
-              <button type="button" className="gsd-btn" aria-label="Replay the preview" title="Replay the preview" onClick={() => setPlay((n) => n + 1)} disabled={!format}>
-                <Icon name="ArrowCounterClockwise" size={14} />
-              </button>
-            </span>
+      {edit ? (
+        <div className="gsd-side-pin">
+          <SummaryRows heading={rowsHeading} rows={rows} />
+        </div>
+      ) : (
+        <>
+          {/* THE WALKTHROUGH (README round 2, decision 4): how the chosen
+              format runs, a step at a time. A new format starts at step 1. */}
+          <div className="gsd-side-pv">
+            <FormatWalkthrough key={format || 'none'} format={format} label={label} layout="pane" />
           </div>
-          {format && (
-            <p className="gsd-side-example">
-              <Icon name="Info" size={14} />
-              <span>
-                {setName
-                  ? `An example of the format. The room will see the questions from “${setName}”.`
-                  : 'Example from a ready-made set. Yours will show your own questions.'}
-              </span>
-            </p>
-          )}
-          {/* The caption ABOVE the picture, so a short pane cuts the picture's
-              foot, never the words (live dev tests V6, M5). */}
-          <p className="gsd-side-cap">{previewCaption(format, { view, anonymous })}</p>
-          <div className={`gsd-stage gsd-stage--${view}`}>
-            {/* Plays once when the format is chosen or the view changes, and on Replay. */}
-            <FormatPreview key={format} format={format} play={format ? play : 0} size={view === 'phone' ? 'phone' : 'pane'} />
+          <div className="gsd-side-pin">
+            <StatusLine rows={rows.slice(0, 3)} />
           </div>
-        </section>
-      )}
-      {!drawer && (
-      <div className="gsd-side-pin">
-        <SummaryRows heading={rowsHeading} rows={rows} />
-        {next && (
-          <section className="gsd-next" aria-labelledby="gsd-next-h">
-            <h3 className="gsd-side-h" id="gsd-next-h">{next.heading}</h3>
-            <ol>
-              {next.steps.map((s, i) => (
-                <li key={s.b}>
-                  <span className="gsd-next-n" aria-hidden="true">{i + 1}</span>
-                  <span><b>{s.b}</b> {s.text}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-      </div>
+        </>
       )}
     </aside>
   );

@@ -91,6 +91,9 @@ function PageHarness({ initialKey = '', lists = {}, onCreate, onRetry, holdLoads
 }
 
 const radio = (name) => screen.getByRole('radio', { name });
+/* Quick, as a host who chose it would have it: the switch's stored choice. */
+const quick = () => window.localStorage.setItem('engage.newEngagement.view', 'quick');
+afterEach(() => { try { window.localStorage.clear(); } catch (e) { /* blocked in one test */ } });
 const createButton = () => screen.getByRole('button', { name: /create engagement|loading topics/i });
 
 /* ── README §2: the bug ────────────────────────────────────────────────── */
@@ -181,8 +184,8 @@ describe('a first-time host', () => {
     expect(screen.getByText(/Choose a format first/)).toBeInTheDocument();
     expect(createButton()).toBeDisabled();
     expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
-    // The gallery says what each format is good for, and which continue elsewhere.
-    expect(screen.getByText('Good for: Retros, brainstorms.')).toBeInTheDocument();
+    // The gallery card says it in one plain sentence (frame 2-03); Good for lives in the guide.
+    expect(screen.getByText('Everyone answers, reads all the answers and votes for their favourites.')).toBeInTheDocument();
     expect(screen.queryAllByText('Continues on its own page').length).toBe(0); // no onChooseOther here
   });
 
@@ -205,45 +208,90 @@ describe('a first-time host', () => {
     expect(screen.getByText(/what went well, what should change/)).toBeInTheDocument();
   });
 
-  test('Compare shows every format side by side; "Use Trivia" returns to the form with Trivia', () => {
-    render(<GameSetupDialog {...base()} />);
-    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
-    const table = within(screen.getByTestId('gsd-compare')).getByRole('table');
-    expect(within(table).getByRole('rowheader', { name: 'Pace' })).toBeInTheDocument();
-    expect(within(table).getByText(/Opens to answers the moment you create it/)).toBeInTheDocument();
+  test('the Format guide: seven format cards as tabs, one Use button, and Use returns with that format', () => {
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} eventsAccess={{ enabled: true, canCreate: true }} />);
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--guide');
+    const guide = screen.getByTestId('gsd-compare');
+    const tabs = within(guide).getAllByRole('tab');
+    expect(tabs).toHaveLength(7);
+    // Each card's name is one text node (CSS keeps it on one line: gameSetupPalette.test.js).
+    tabs.forEach((t) => {
+      const name = document.getElementById(t.getAttribute('aria-labelledby'));
+      expect(name.childNodes).toHaveLength(1);
+      expect(name.childNodes[0].nodeType).toBe(3);
+    });
+    expect(within(guide).queryByRole('table')).toBeNull();
+    expect(within(guide).getAllByRole('button', { name: /^Use / })).toHaveLength(1);
+    fireEvent.click(within(guide).getByRole('tab', { name: 'Trivia' }));
+    expect(within(guide).getByRole('tab', { name: 'Trivia' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(guide).getByRole('tabpanel')).toHaveTextContent('Ask a question with one right answer');
     fireEvent.click(screen.getByRole('button', { name: 'Use Trivia' }));
     expect(screen.queryByTestId('gsd-compare')).toBeNull();
+    expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--guide');
     expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
   });
 
-  test('"I know these" switches to compact and remembers it in this browser', () => {
-    window.localStorage.clear();
-    render(<GameSetupDialog {...base()} />);
-    fireEvent.click(screen.getByRole('button', { name: /I know these/ }));
-    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
-    expect(window.localStorage.getItem('engage.newEngagement.layout')).toBe('compact');
-    window.localStorage.clear();
+  test('the guide\'s cards answer the arrow keys like tabs: they move and show', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
+    const first = screen.getByRole('tab', { name: 'Call & Answer' });
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(first, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Trivia' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Trivia' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Use Trivia' })).toBeInTheDocument();
   });
 
-  test('blocked storage changes nothing: the dialog still opens and switches', () => {
+  test('Guided is the default for everyone, and the Guided | Quick switch is remembered in this browser', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
+    const view = screen.getByRole('radiogroup', { name: 'View' });
+    expect(within(view).getByRole('radio', { name: /Guided/ })).toHaveAttribute('aria-checked', 'true');
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
+    fireEvent.click(within(view).getByRole('radio', { name: /Quick/ }));
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
+    expect(window.localStorage.getItem('engage.newEngagement.view')).toBe('quick');
+    expect(screen.queryByText(/I know these/)).toBeNull();
+  });
+
+  test('the switch opens on the stored choice, and the arrow keys move it', () => {
+    quick();
+    render(<GameSetupDialog {...base()} />);
+    const view = screen.getByRole('radiogroup', { name: 'View' });
+    const q = within(view).getByRole('radio', { name: /Quick/ });
+    expect(q).toHaveAttribute('aria-checked', 'true');
+    fireEvent.keyDown(q, { key: 'ArrowLeft' });
+    expect(within(view).getByRole('radio', { name: /Guided/ })).toHaveAttribute('aria-checked', 'true');
+    expect(within(view).getByRole('radio', { name: /Guided/ })).toHaveFocus();
+  });
+
+  test('blocked storage changes nothing: the dialog still opens Guided and switches', () => {
     const spy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const spySet = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     try {
       render(<GameSetupDialog {...base()} />);
-      fireEvent.click(screen.getByRole('button', { name: /I know these/ }));
+      expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
+      fireEvent.click(screen.getByRole('radio', { name: /Quick/ }));
       expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
     } finally { spy.mockRestore(); spySet.mockRestore(); }
+  });
+
+  test('an edit has no switch', () => {
+    render(<GameSetupDialog {...base()} mode="edit" initialValues={{ gameType: 'trivia', title: 'Quiz', questionSetId: 'space' }} />);
+    expect(screen.queryByRole('radiogroup', { name: 'View' })).toBeNull();
   });
 });
 
 describe('a host with history', () => {
-  test('opens compact with the last format chosen and marked, and no side pane', () => {
+  test('opens Guided with chips (no gallery), the last format chosen and marked, and its walkthrough', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
-    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
+    expect(document.querySelector('.gsd-fmt--gallery')).toBeNull();
     expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
     expect(radio('Trivia').closest('button').textContent).toMatch('last used');
-    expect(screen.queryByRole('complementary')).toBeNull();
-    expect(screen.queryByText(/Three decisions\. Everything else/)).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'How it runs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
+    expect(screen.queryByText(/Planning a/)).toBeNull();
     // ⌘ on a Mac, Ctrl elsewhere — jsdom is not a Mac.
     expect(screen.getByRole('button', { name: /create engagement/i })).toHaveAttribute('aria-keyshortcuts', 'Meta+Enter Control+Enter');
   });
@@ -320,7 +368,8 @@ describe('the hand-offs and the survey', () => {
     render(<GameSetupDialog {...base()} lastFormat="survey" />);
     expect(screen.getByText(/People can answer as soon as you open it\. There is no separate Start\./)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open the survey' })).toBeInTheDocument();
-    expect(screen.getByText('Collect')).toBeInTheDocument();
+    // The walkthrough's first step says so too.
+    expect(screen.getByRole('heading', { name: /Open it/ })).toBeInTheDocument();
   });
 
   test('Event on the Free plan replaces the price line with the plan, and Continue is disabled', () => {
@@ -405,25 +454,26 @@ describe('live dev test fixes', () => {
     expect(screen.queryByText(/moved to Continue/)).toBeNull();
   });
 
-  test('B4: "Use Trivia" in Compare lets go of the Retro chip and its line', () => {
+  test('B4: "Use Trivia" in the Format guide lets go of the Retro chip and its line', () => {
     render(<GameSetupDialog {...base()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Retro' }));
-    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Trivia' }));
     fireEvent.click(screen.getByRole('button', { name: 'Use Trivia' }));
     expect(screen.getByRole('button', { name: 'Retro' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByText(/For a retro/)).toBeNull();
     expect(radio('Trivia')).toHaveFocus();
   });
 
-  test('H4: Compare takes the focus to its heading, and Back returns it to the link', () => {
+  test('H4: the Format guide takes the focus to its heading, and Back returns it to the link', () => {
     render(<GameSetupDialog {...base()} />);
-    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
-    expect(screen.getByRole('heading', { name: 'Compare the formats' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
+    expect(screen.getByRole('heading', { name: 'Format guide' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: /back to the form/i }));
-    expect(screen.getByRole('button', { name: /compare side by side/i })).toHaveFocus();
-    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
+    expect(screen.getByRole('button', { name: /format guide/i })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.getByRole('button', { name: /compare side by side/i })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /format guide/i })).toHaveFocus();
   });
 
   test('B5: Esc in the empty set search does not ask to discard; the discard bar goes when the host goes back to the form', () => {
@@ -458,51 +508,57 @@ describe('live dev test fixes', () => {
     expect(screen.getByText('Architecture').closest('button')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('E8: compact "Show preview" adds only the side pane, not the beginner guide', () => {
+  test('Quick never shows the walkthrough, nor any "Show preview" or "Always…" control', () => {
+    quick();
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
-    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
-    expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
-    expect(screen.queryByText(/Planning a/)).toBeNull();
-    expect(screen.queryByText(/Three decisions\. Everything else/)).toBeNull();
-    expect(screen.getByRole('button', { name: /hide preview/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(document.querySelector('.gsd-wt')).toBeNull();
+    expect(screen.queryByRole('button', { name: /show preview/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /always/i })).toBeNull();
   });
 
-  /* Round 2 (devtest 5 N1, N2): in compact the next Tab stop after the
-     format chips is the set search — Format guide lives in the head and
-     "Always show the guide" only inside the guide. Round 1's E4 (title →
-     Tab reaches the formats first) still holds. */
-  test('O3/E4/N1/N2: compact has no blurb; title → formats → search, nothing between', () => {
+  /* Round 2 (devtest 5 N1): the next Tab stop after the format chips is the
+     set search. Format guide now sits top right of the step, BEFORE the
+     chips in the Tab order (owner round 2 frames), never between. */
+  test('O3/E4/N1: Quick has no blurb; title → Format guide → formats → search, nothing between the chips and the search', () => {
+    quick();
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
-    expect(screen.queryByText(/Open responses, then the room votes/)).toBeNull();
+    expect(document.querySelector('.gsd-blurb')).toBeNull();
     const all = Array.from(document.querySelectorAll('button, input, [tabindex]'))
       .filter((el) => el.tabIndex >= 0 && !el.disabled);
     const title = all.indexOf(screen.getByLabelText(/name it/i));
+    const guide = all.indexOf(screen.getByRole('button', { name: /format guide/i }));
     const fmt = all.indexOf(radio('Call & Answer'));
     const search = all.indexOf(screen.getByRole('combobox', { name: /choose a question set/i }));
-    expect(fmt).toBe(title + 1);
+    expect(guide).toBe(title + 1);
+    expect(fmt).toBe(guide + 1);
     expect(search).toBe(fmt + 1);
-    expect(screen.queryByRole('button', { name: /always/i })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
-    expect(screen.getByRole('button', { name: /always open with the full guide/i })).toBeInTheDocument();
+  });
+
+  test('the keyboard path in Quick: title → Enter → Enter → Ctrl+Enter creates', async () => {
+    quick();
+    const onCreate = jest.fn();
+    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer"
+      recentSetUses={new Map([[KEY_B, Date.now()]])} />);
+    const title = screen.getByLabelText(/name it/i);
+    title.focus();
+    fireEvent.keyDown(title, { key: 'Enter' });
+    const box = screen.getByRole('combobox', { name: /choose a question set/i });
+    expect(box).toHaveFocus();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.keyDown(document.activeElement, { key: 'Enter', ctrlKey: true });
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
   test('N1: Enter on a format chip chooses it and moves on to the set search', async () => {
+    quick();
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
     fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
     fireEvent.keyDown(radio('Trivia'), { key: 'Enter' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: /choose a question set/i })).toHaveFocus());
   });
 
-  test('N3: compact Show preview is a drawer in the 880 card — no checklist, no next steps', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
-    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
-    const pane = screen.getByRole('complementary', { name: 'Preview' });
-    expect(pane).toHaveClass('gsd-side--drawer');
-    expect(screen.queryByText('What happens next')).toBeNull();
-    expect(document.querySelector('.gsd-body')).not.toHaveClass('has-side');
-    expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--peek');
-  });
 
   test('V4: Background for Workie is one closed line until opened', () => {
     render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
@@ -680,10 +736,9 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
     expect(block).toMatch(/onCancel=\{\(\) => \{[^}]*setEventTitle\(''\)/);
   });
 
-  test('R3-1: with the compact preview open every format chip is in the form column and can be chosen', () => {
+  test('R3-1: with the walkthrough beside the form every format chip is in the form column and can be chosen', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" onChooseOther={jest.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
-    const pane = screen.getByRole('complementary', { name: 'Preview' });
+    const pane = screen.getByRole('complementary', { name: 'How it runs' });
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
     expect(radios.length).toBeGreaterThanOrEqual(6);
     radios.forEach((r) => {
@@ -691,11 +746,8 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
       fireEvent.click(r);
       expect(r).toHaveAttribute('aria-checked', 'true');
     });
-    // The drawer is a grid column beside the form, never laid over it.
-    const css = readCss('GameSetupDialog.css');
-    expect(css).toMatch(/\.gsd \.gsd-body\.has-drawer \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) \d+px/);
-    const drawer = css.slice(css.lastIndexOf('.gsd .gsd-side.gsd-side--drawer {'));
-    expect(drawer.slice(0, drawer.indexOf('}'))).not.toMatch(/position:\s*absolute/);
+    // The pane is a grid column beside the form, never laid over it.
+    expect(document.querySelector('.gsd-body')).toHaveClass('has-side');
   });
 
   /* devtest 8 R3-3: the start screen can draw its Sessions button after the

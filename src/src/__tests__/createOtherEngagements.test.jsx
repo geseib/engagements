@@ -62,7 +62,7 @@ describe('the create dialog offers Event and Build Room', () => {
     fireEvent.click(pill('Build Room'));
     expect(pill('Build Room')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText(/question set/i)).toBeNull();
-    expect(screen.getByText(/Build something with your Claude Code/)).toBeInTheDocument();
+    expect(screen.getByText(/Build something with your Claude Code while the room suggests and votes/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Set up the Build Room' }));
     expect(props.onChooseOther).toHaveBeenCalledWith('build', { title: 'Q4 Kickoff' });
     expect(props.onCreate).not.toHaveBeenCalled();

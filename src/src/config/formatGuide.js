@@ -14,32 +14,40 @@
  * estimate may only come from the host's own history (README §6) — which
  * GET /games cannot give today, because the list carries no start time.
  *
- * `good`    the card's "Good for" line
- * `short`   the card's one plain line
- * `room`    Compare: what the room does
- * `get`     Compare: what the host gets
- * `pace`    Compare: who sets the pace
- * `size`    Compare: group size
- * `questions` Compare: where the questions come from
- * `starts`  Compare: how it starts
+ * PLAIN WORDS (owner, 30 Oct 2026: "the explaination of each type is not
+ * super clear"; feedback/owner-2026-10-30.md). Three lengths per format:
+ *
+ * `short`   the plain summary: the guide's line, the gallery card in Guided
+ *           and the line under the chips (README round 2, decision 8)
+ * `col`     the guide card's one sentence
+ * `get`     what you get (the walkthrough's last dot says it at length)
+ * `good` / `group` / `startsShort`  the guide card's Good for, Group, Starts
+ * `room`, `pace`, `size`, `questions`, `starts`  the retired Compare table's
+ *           rows, kept for the help's account of each format
  */
 import { BUILD_KIND, EVENT_KIND } from './engagementKinds';
 
 export const FORMAT_GUIDE = Object.freeze({
   'call-and-answer': {
-    short: 'Everyone answers, then votes for the best answers.',
+    short: 'Ask the room a question. Everyone answers on their phone, reads all the answers and votes for their favourites.',
+    col: 'Everyone answers, reads all the answers and votes for their favourites.',
     good: 'Retros, brainstorms.',
-    room: 'Answers an open question on their phones, then votes for the answers that matter.',
-    get: 'The room’s answers, ranked by votes, and a short summary from Workie after each round.',
+    group: 'Any size',
+    startsShort: 'When you press Start',
+    room: 'Answers your question on their phones, reads everyone’s answers (no names while voting), votes for their favourites, and can comment on what Workie says.',
+    get: 'Every answer ranked by the room’s votes, Workie’s read of what the room said, and the comments, all in the report.',
     pace: 'One round is one question: answers, then the vote. You move on when you’re ready.',
     size: 'Any size',
     questions: 'Ready-made, or write your own',
     starts: 'Waits in your Sessions list until you press Start.',
   },
   trivia: {
-    short: 'Multiple choice, one right answer, a scoreboard.',
+    short: 'Ask a question with one right answer. Everyone picks A, B, C or D; you reveal the answer and a scoreboard keeps count.',
+    col: 'Everyone picks A, B, C or D. You reveal the right one; a scoreboard keeps count.',
     good: 'Socials, warm-ups.',
-    room: 'Picks A, B, C or D. One answer is right, and every answer is explained.',
+    group: 'Any size',
+    startsShort: 'When you press Start',
+    room: 'Picks an answer on their phones. You reveal the right one, and points go on the scoreboard.',
     get: 'A live scoreboard, and which questions the room knew or missed.',
     pace: 'One question at a time; you reveal the answer and move on.',
     size: 'Any size',
@@ -47,9 +55,12 @@ export const FORMAT_GUIDE = Object.freeze({
     starts: 'Waits in your Sessions list until you press Start.',
   },
   poll: {
-    short: 'Quick questions with live results.',
+    short: 'Ask a quick question: pick one, rate it, yes or no, or a few words. The results fill in live on the big screen.',
+    col: 'A quick question. The results fill in live on the big screen. No right answer, no names.',
     good: 'Quick decisions.',
-    room: 'Answers one quick question: pick, rate, yes/no or a few words.',
+    group: 'Any size',
+    startsShort: 'When you press Start',
+    room: 'Answers one quick question at a time and watches the result fill in. No right answer, no vote, no names.',
     get: 'Each result filling in live on the main screen.',
     pace: 'Quick: each result shows the moment people answer.',
     size: 'Any size',
@@ -57,9 +68,12 @@ export const FORMAT_GUIDE = Object.freeze({
     starts: 'Waits in your Sessions list until you press Start.',
   },
   wavelength: {
-    short: 'One word each; see where the room thinks alike.',
+    short: 'Give the room a subject. Everyone writes the words it brings to mind; a word counts when everyone wrote it.',
+    col: 'Everyone writes words for a subject. The words everyone shared light up. No scores.',
     good: 'Small teams, 10 or fewer.',
-    room: 'Says one word for a subject. The words most people share come out on top.',
+    group: '10 or fewer',
+    startsShort: 'When you press Start',
+    room: 'Writes the words a subject brings to mind. The screen shows the words everyone shared, so you see how alike the team thinks.',
     get: 'Where the room already thinks alike, and where it doesn’t.',
     pace: 'One subject at a time; you move on when everyone has answered.',
     size: 'Best with 10 or fewer',
@@ -67,18 +81,24 @@ export const FORMAT_GUIDE = Object.freeze({
     starts: 'Waits in your Sessions list until you press Start.',
   },
   survey: {
-    short: 'A short form, answered in people’s own time.',
+    short: 'Send a short form people fill in on their phones, in their own time. You see the answers added up.',
+    col: 'A short form people fill in on their phones, in their own time.',
     good: 'Feedback by form, not live.',
+    group: 'Any size',
+    startsShort: 'As soon as you create it',
     room: 'Fills in a short form on their phones, whenever suits them.',
-    get: 'Answers reported in aggregate. Anonymous unless you choose otherwise.',
+    get: 'The answers added up, with names only if you chose that.',
     pace: 'Stays open as long as you like; you close it.',
     size: 'Any size',
     questions: 'Ready-made, or write your own',
     starts: 'Opens to answers the moment you create it. No Start step.',
   },
   [BUILD_KIND]: {
-    short: 'Build with your Claude Code while the room votes.',
+    short: 'Build something with your Claude Code while the room steers: people suggest ideas, pick between options and rate what Claude makes.',
+    col: 'Your Claude Code builds; the room suggests ideas, picks options and rates.',
     good: 'Software teams.',
+    group: 'Any size',
+    startsShort: 'On its own page',
     room: 'Suggests ideas, picks between mockups and rates while your Claude Code builds.',
     get: 'Something built, every decision the room made, and a report.',
     pace: 'As long as the build takes; you decide each step.',
@@ -87,8 +107,11 @@ export const FORMAT_GUIDE = Object.freeze({
     starts: 'Continues on its own page.',
   },
   [EVENT_KIND]: {
-    short: 'A whole agenda behind one join code.',
+    short: 'Run a whole day behind one join code: an agenda of quizzes, polls, talks and breaks, each with its own report.',
+    col: 'A whole day behind one join code: quizzes, polls, talks and breaks.',
     good: 'Offsites, workshops.',
+    group: 'Any size',
+    startsShort: 'On its own page',
     room: 'Follows your agenda behind one join code: quizzes, polls, talks and breaks.',
     get: 'Each item’s report, gathered under the event.',
     pace: 'Your agenda’s times.',
@@ -101,7 +124,7 @@ export const FORMAT_GUIDE = Object.freeze({
 /** The guide entry for a format id, or an empty one. Never undefined. */
 export function formatGuide(id) {
   return FORMAT_GUIDE[id] || {
-    short: '', good: '', room: '', get: '', pace: '', size: '', questions: '', starts: '',
+    short: '', col: '', good: '', group: '', startsShort: '', room: '', get: '', pace: '', size: '', questions: '', starts: '',
   };
 }
 
@@ -120,7 +143,7 @@ export const MEETING_TYPES = Object.freeze([
   { id: 'brainstorm', label: 'Brainstorm', format: 'call-and-answer', reason: 'Everyone puts ideas in at once, then the room votes the best ones to the top.' },
   { id: 'kickoff', label: 'Kick-off', format: 'poll', reason: 'Quick questions with the result live on the screen get everyone talking from the first minute.' },
   { id: 'checkin', label: 'Team check-in', format: 'poll', reason: 'One quick question at a time — rate it, pick one, yes or no — with the result live.' },
-  { id: 'quiz', label: 'Quiz', format: 'trivia', reason: 'Multiple choice with one right answer, every answer explained, and a scoreboard.' },
+  { id: 'quiz', label: 'Quiz', format: 'trivia', reason: 'One right answer per question: everyone picks, you reveal it, and a scoreboard keeps count.' },
   { id: 'feedback', label: 'Feedback form', format: 'survey', reason: 'A short form people answer in their own time; you get the answers in aggregate.' },
   { id: 'offsite', label: 'Offsite day', format: EVENT_KIND, reason: 'A whole agenda — quizzes, polls, talks and breaks — behind one join code.' },
 ]);
@@ -150,14 +173,14 @@ export function historyFacts(games = [], offered = []) {
 }
 
 /*
-  A CACHE OF THOSE TWO VALUES, so the first paint picks the right layout before
-  the request returns, and the explicit "I know these" override. Both are
+  A CACHE OF THOSE TWO VALUES, so the first paint picks gallery or chips
+  before the request returns, and the Guided | Quick choice. Both are
   per-viewer conveniences whose loss costs one click (README §6), so both live
   in localStorage, wrapped: a private window or blocked storage throws on
   access, and the dialog must work exactly the same without it.
 */
 const HISTORY_KEY = 'engage.newEngagement.history';
-const LAYOUT_KEY = 'engage.newEngagement.layout';
+const VIEW_KEY = 'engage.newEngagement.view';
 
 function storage() {
   try {
@@ -187,21 +210,27 @@ export function writeHistoryCache(facts) {
   } catch (e) { /* a convenience: nothing depends on it */ }
 }
 
-/** 'compact' | 'full' | '' (no override). */
-export function readLayoutOverride() {
+/*
+  GUIDED BY DEFAULT, FOR EVERYONE (README round 2, decision 1; the owner: "it
+  seems to default to the simple mode with no way to switch back"). Round 1's
+  "derive compact from history" is retired: nothing stored means Guided.
+*/
+export const VIEW_MODES = Object.freeze(['guided', 'quick']);
+
+/** 'guided' | 'quick' — 'guided' when nothing (or nothing readable) is stored. */
+export function readViewMode() {
   try {
-    const v = storage() && storage().getItem(LAYOUT_KEY);
-    return v === 'compact' || v === 'full' ? v : '';
+    const v = storage() && storage().getItem(VIEW_KEY);
+    return v === 'quick' ? 'quick' : 'guided';
   } catch (e) {
-    return '';
+    return 'guided';
   }
 }
 
-export function writeLayoutOverride(value) {
+export function writeViewMode(value) {
   try {
     const s = storage();
-    if (!s) return;
-    if (value) s.setItem(LAYOUT_KEY, value); else s.removeItem(LAYOUT_KEY);
+    if (s) s.setItem(VIEW_KEY, value === 'quick' ? 'quick' : 'guided');
   } catch (e) { /* a convenience: nothing depends on it */ }
 }
 
