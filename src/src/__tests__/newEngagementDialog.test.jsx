@@ -10,6 +10,7 @@
 import React, { useState } from 'react';
 import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
+import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import { pickSet, chosenSet, chooser } from '../testUtils/setChooser';
 import { setRefKey } from '../utils/setRef';
 
@@ -348,6 +349,17 @@ describe('names and Workie, said plainly', () => {
   test('no invented durations: no minutes anywhere on the form', () => {
     render(<GameSetupDialog {...base()} />);
     expect(screen.queryByText(/\b\d+\s*min/)).toBeNull();
+  });
+});
+
+describe('the routes open straight into their builder (HostQuestionSetsDialog initialRoute)', () => {
+  test('template and manual open the New question set panel; no route opens the shelf', async () => {
+    const { unmount } = render(<HostQuestionSetsDialog engagementType="trivia" initialRoute="template" onClose={jest.fn()} />);
+    expect(await screen.findByText('New question set', { selector: 'h3, h4, h2, legend, span, div' })).toBeInTheDocument();
+    unmount();
+    render(<HostQuestionSetsDialog engagementType="trivia" onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /New question set/ })).toBeInTheDocument());
+    expect(screen.queryByText('How do you want to make it?')).toBeNull();
   });
 });
 
