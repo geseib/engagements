@@ -254,7 +254,7 @@ const gameSetup = {
             { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required. The cursor starts here; Enter takes you to the next step you have not done.' },
             { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room, one plain line and what it is good for. The arrow keys move between them and choose. See Choosing a format.' },
             { title: 'Build Room and Event', text: 'They continue on their own page. Pick one and the third step says what that page asks for; the button becomes **Set up the Build Room** or **Continue to the event**, and takes your title with it. Event is offered when your plan includes events; otherwise it says which plan does.' },
-            { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press the down arrow and Enter. Type to search, or press **Browse all** (see Finding a question set). Once picked it is one line with **Change**. Switch format and back, and the set you had comes back. **Your question sets** opens your sets; **Make a new set** starts one.' },
+            { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. Switch format and back, and the set you had comes back with its topics. **Your question sets** opens your sets; **Make a new set** opens the new-set panel straight away.' },
           ],
         },
         {
@@ -283,7 +283,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away. Ctrl+Enter (⌘+Enter on a Mac) creates once the three steps are done; on Build Room or Event it moves to the button instead, and Enter there goes on.',
+          text: 'The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away. Ctrl+Enter (⌘+Enter on a Mac) creates once the three steps are done; pressed while the topics are loading, the button reads **Waiting for topics…** and it creates as soon as they arrive; on Build Room or Event it moves to the button instead, and Enter there goes on. Afterwards Your sessions says what was created, with its code, and offers **Start it now**.',
         },
       ],
     },
@@ -310,7 +310,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'Once you have created a session the dialog opens compact, on the last format you used, with **Show preview** for the panel. **I know these — show compact** gives you compact sooner; **Always show the guide** brings the full layout back. That choice is kept in this browser.',
+          text: 'Once you have created a session the dialog opens compact, on the last format you used, with **Show preview** to put the preview panel beside it. **I know these — show compact** gives you compact sooner; **Always show the guide** brings the full layout back. That choice is kept in this browser.',
         },
       ],
     },
