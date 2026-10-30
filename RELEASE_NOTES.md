@@ -9,6 +9,39 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 30 Oct 2026 (later: New engagement after the owner's first look)
+
+**Test:** merge of dev `cc0f239d`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Guided and Quick views.** The dialog opens in the Guided view for everyone, with a **Guided | Quick** switch in its header that is remembered in this browser. Quick is the short form for people who know the formats.
+- **A step-by-step walkthrough of each format** beside the form: what you do, what the phones show and what the room screen shows at each step, ending with what you get. Back, Next and the dots move through it; Play steps through on its own (off by default, and not offered to people who ask for reduced motion).
+- **The Format guide opens wide** whatever view you are in: the chosen format's walkthrough on top with one Use button, and all seven formats below as cards. On a phone it shows one format at a time.
+
+### Fixed
+
+- **The dialog defaulted to the short view with no way back to the preview.** Guided is now the default and the switch is always in the header.
+- **The format descriptions said little about what happens.** Each one now says it plainly, e.g. Call & Answer: "Ask the room a question. Everyone answers on their phone, reads all the answers and votes for their favourites."
+- **The Format guide cut off Build Room and Event** and clipped its buttons at laptop widths. It is a wide two-part layout now, with nothing clipped from 1280px up.
+- **Quick was cramped:** it is 1060px wide, so the format chips fit on one line.
+
+### What to look at
+
+1. On engage.test press **Create engagement**. It opens in **Guided**, with the walkthrough on the right. Step through Call & Answer with Next, then press Play.
+2. Pick Trivia, then Poll: the walkthrough starts again at step 1 for each, with its own steps.
+3. Press **Quick** in the header: the short form, at a comfortable width. Close the dialog and open it again: it remembers Quick. Switch back to **Guided**.
+4. Press **Format guide**: all seven formats show as cards below the walkthrough, and nothing is cut off, at your normal window size and in a narrower one.
+5. Read each format's description on its card: it should say plainly what the room does.
+
+### Known gaps
+
+- The walkthrough uses a ready-made example question, not the set you picked.
+- It shows the default where names are hidden while voting; if you turn names on, it does not change to match.
+- Guided or Quick is remembered per browser, not per account.
+
+---
+
 ## 30 Oct 2026 (the New engagement dialog, redesigned)
 
 **Test:** merge of dev `9770a02c`. Everything below this entry is already on test; this push adds only what is here.
