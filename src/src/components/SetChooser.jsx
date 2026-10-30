@@ -130,6 +130,8 @@ export default function SetChooser({
   /** Bump to fold an open chooser from outside, keeping the set it had
       (the New engagement dialog's folded "Edit" line, frame 5a). */
   closeSignal = 0,
+  /** A phone: "Search 15 sets", which fits (live dev test 1 C9). */
+  shortPlaceholder = false,
   now: nowProp = 0,
 }) {
   const [now] = useState(() => nowProp || Date.now());
@@ -144,9 +146,29 @@ export default function SetChooser({
   const windowRoomy = useRoomy(WIDE_COLUMNS_MIN);
   const rootRef = useRef(null);
   const roomy = useContainerRoomy(rootRef, WIDE_COLUMNS_MIN - 60, windowRoomy);
+  /* A MIDDLE WIDTH (the 880px compact dialog, live dev test 2 §7): Tags fit
+     where Topic and Tags together do not. */
+  const tagsRoomy = useContainerRoomy(rootRef, 700, windowRoomy);
   const wideCols = wide && roomy;
+  const tagCol = wide && (roomy || tagsRoomy);
   const opened = useRef(false);
   const searchRef = useRef(null);
+  const changeRef = useRef(null);
+  /* FOCUS NEVER FALLS TO <body> (live dev tests: E1, H4). A pick or a fold
+     unmounts the search the focus was in; this puts it on the folded line's
+     Change (or back in the search when nothing is picked), so the keyboard
+     — and ⌘/Ctrl+Enter — carries on inside the dialog. */
+  const refocus = useRef(false);
+  const quietFocus = useRef(false);
+  useEffect(() => {
+    if (open || !refocus.current) return;
+    refocus.current = false;
+    const target = changeRef.current || searchRef.current;
+    // Focusing the folded search would re-open it (its onFocus): not this time.
+    quietFocus.current = true;
+    if (target && target.focus) target.focus();
+    quietFocus.current = false;
+  });
   useEffect(() => {
     // Opened by the host (not mounted open): bring the chooser to the top of
     // the dialog, so the list is in view rather than below the fold, and put
@@ -188,7 +210,7 @@ export default function SetChooser({
   // USED BY YOU LATELY (S0, S1): the newest three, while nothing narrows the list.
   const recentSets = [...sets].filter((s) => recent.get(keyOf(s)) && pickable(s))
     .sort((a, b) => recent.get(keyOf(b)) - recent.get(keyOf(a))).slice(0, 3);
-  const cols = wideCols ? 6 : 4;
+  const cols = 4 + (wideCols ? 1 : 0) + (tagCol ? 1 : 0);
   const grouped = !filtered && state.sort === 'recent' && recentSets.length > 0;
   const rows = grouped
     ? [...recentSets, ...shown.filter((s) => !recentSets.includes(s))]
@@ -197,6 +219,12 @@ export default function SetChooser({
   const pick = (set) => {
     if (!set || !pickable(set) || disabled) return;
     onChange?.(keyOf(set), set);
+    refocus.current = true;
+    setOpen(false);
+    setTagMenu(false);
+  };
+  const fold = () => {
+    refocus.current = true;
     setOpen(false);
     setTagMenu(false);
   };
@@ -216,12 +244,16 @@ export default function SetChooser({
         return;
       }
       if (e.key === 'ArrowUp') { e.preventDefault(); setRecentCursor((c) => Math.max(c - 1, -1)); return; }
+      // Enter picks the highlighted recent, or the FIRST one when nothing is
+      // highlighted (README §5's four keys; live dev test 2 E3).
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (recentCursor >= 0) pick(recentSets[recentCursor]); else openUp();
+        if (recentSets.length) pick(recentSets[Math.max(recentCursor, 0)]); else openUp();
         return;
       }
-      if (e.key === 'Escape' && recentCursor >= 0) { e.preventDefault(); e.stopPropagation(); setRecentCursor(-1); return; }
+      // Esc in the search is the search's, never the dialog's "Discard?"
+      // (live dev tests B5, E3): it lets go of the highlight, and that is all.
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setRecentCursor(-1); return; }
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setCursor((c) => Math.min(c + 1, Math.max(rows.length - 1, 0))); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
@@ -229,7 +261,20 @@ export default function SetChooser({
     else if (e.key === 'Escape') {
       if (state.search) { e.preventDefault(); e.stopPropagation(); patch({ search: '' }); }
       // A list that never folds leaves Esc to the dialog around it.
-      else if (open && !stayOpen) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+      else if (open && !stayOpen) { e.preventDefault(); e.stopPropagation(); fold(); }
+    }
+  };
+  /* A ROW'S RADIO IS FOR THE POINTER AND THE NAME, NOT THE ARROWS (live dev
+     test 3 H3): native radios commit on arrow keys, which picked the next set
+     and closed the list. Arrows on a row go back to the search's highlight. */
+  const rowKey = (e, i) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setCursor(Math.min(Math.max(i + (e.key === 'ArrowDown' ? 1 : -1), 0), Math.max(rows.length - 1, 0)));
+      if (searchRef.current) searchRef.current.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pick(rows[i]);
     }
   };
 
@@ -243,8 +288,9 @@ export default function SetChooser({
   let activeDescendant;
   if (showRecentsList && recentCursor >= 0) activeDescendant = recentId(recentCursor);
   else if (open && rows.length > 0 && rows[cursor]) activeDescendant = optionId(cursor);
+  // Only ever an id that is in the DOM (live dev test 3 L1).
   let controls;
-  if (open) controls = listId;
+  if (open && rows.length > 0) controls = listId;
   else if (showRecentsList && recentSets.length) controls = recentsId;
   const searchBox = (placeholder, keys = null) => (
     <label className="schs-search">
@@ -255,13 +301,17 @@ export default function SetChooser({
         value={state.search}
         placeholder={placeholder}
         aria-label={placeholder}
+        // A COMBOBOX (README §8; live dev test 3 H3): the focus stays here and
+        // the highlighted row is its active descendant; Enter or a click commits.
+        role="combobox"
+        aria-expanded={Boolean(controls)}
         aria-controls={controls}
         aria-activedescendant={activeDescendant}
         aria-autocomplete="list"
         disabled={disabled}
         // A Tab into the search must not throw the full chooser when the
         // recents list is what this state offers (experienced-host review).
-        onFocus={() => { if (!chosen && !recentsFirst) openUp(); }}
+        onFocus={() => { if (!chosen && !recentsFirst && !quietFocus.current) openUp(); }}
         onChange={(e) => { patch({ search: e.target.value }); setOpen(true); }}
         onKeyDown={onKey}
       />
@@ -301,8 +351,9 @@ export default function SetChooser({
             <b className="schs-picked-name" title={chosen ? label(chosen) : pinnedLabel}>{chosen ? label(chosen) : pinnedLabel}</b>
             {chosen && <span className="schs-dim">{chosen.totalQuestions || chosen.questionCount || 0} questions</span>}
             {chosen && <span className={`schs-own${setOwnerIsOurs(chosen) ? '' : ' schs-own--off'}`} title={setOwnerTitle(chosen)}>{ownerChip(chosen)}</span>}
-            {chosen && !compact && <span className="schs-dim">{setTopicLabel(chosen.topic)}</span>}
-            {!disabled && <button type="button" className="schs-btn schs-push" onClick={() => { setOpen(true); }}>Change</button>}
+            {/* "Unfiled" reads as something forgotten (live dev test 1 C1): say nothing instead. */}
+            {chosen && !compact && chosen.topic && <span className="schs-dim">{setTopicLabel(chosen.topic)}</span>}
+            {!disabled && <button type="button" ref={changeRef} className="schs-btn schs-push" onClick={() => { setOpen(true); }}>Change</button>}
           </div>
         </div>
       );
@@ -311,8 +362,10 @@ export default function SetChooser({
       return (
         <div ref={rootRef} className="schs schs--recents" data-testid="set-chooser" data-value={value} data-theme={theme}>
           {searchBox(
-            sets.length ? `Choose a question set: type to search ${sets.length} ${fmt}sets` : `No ${fmt}sets yet`,
-            recentSets.length ? '↓ Enter' : '',
+            sets.length
+              ? (shortPlaceholder ? `Search ${sets.length} sets` : `Choose a question set: type to search ${sets.length} ${fmt}sets`)
+              : `No ${fmt}sets yet`,
+            recentSets.length ? 'Enter picks' : '',
           )}
           {sets.length > 0 && (
             <div className="schs-recents">
@@ -430,7 +483,7 @@ export default function SetChooser({
           when the host decides not to change after all. Esc does the same. */}
       <div className="schs-searchrow">
         {searchBox(`Search ${sets.length} ${fmt}sets: name, description or tag`)}
-        {!stayOpen && <button type="button" className="schs-btn schs-keep" onClick={() => { setOpen(false); setTagMenu(false); }}>{chosen ? 'Keep the set I had' : 'Close'}</button>}
+        {!stayOpen && <button type="button" className="schs-btn schs-keep" onClick={fold}>{chosen ? 'Keep the set I had' : 'Close'}</button>}
       </div>
       <div className="schs-filters">
         <div className="schs-seg" role="radiogroup" aria-label="Whose sets">
@@ -500,7 +553,9 @@ export default function SetChooser({
         </div>
       ) : rows.length === 0 ? (
         <div className="schs-empty" data-testid="set-chooser-empty">
-          <h3>No {fmt}sets match{chips.length ? ` ${chips.map((c) => c.text).join(' · ')}` : ''}</h3>
+          {/* The search reads as the words searched, not as the chip's label
+              ("match Search “zzz”", live dev tests C8, L4). */}
+          <h3>No {fmt}sets match{chips.length ? ` ${chips.map((c) => (c.key === 'search' ? `“${state.search.trim()}”` : c.text)).join(' · ')}` : ''}</h3>
           {(drops.length > 0 || elsewhere.length > 0) && <p>Each way out says what it would find:</p>}
           <div className="schs-exits">
             {drops.map((d) => (
@@ -511,7 +566,8 @@ export default function SetChooser({
             ))}
           </div>
           {routesBlock}
-          {onMakeSet && (
+          {/* The routes above already are the ways to make one. */}
+          {onMakeSet && !routesBlock && (
             <div className="schs-row"><span className="schs-dim">Not there at all?</span><button type="button" className="schs-btn" onClick={onMakeSet}>{makeSetLabel}</button></div>
           )}
         </div>
@@ -520,12 +576,14 @@ export default function SetChooser({
           <table className="schs-tbl" id={listId} aria-label={`${fmt}question sets`}>
             <colgroup>
               <col className="schs-c-name" /><col className="schs-c-qs" /><col className="schs-c-own" />
-              {wideCols && <><col className="schs-c-topic" /><col className="schs-c-tags" /></>}
+              {wideCols && <col className="schs-c-topic" />}
+              {tagCol && <col className="schs-c-tags" />}
               <col className="schs-c-when" />
             </colgroup>
             <thead><tr>
               <th>Name</th><th>Questions</th><th>Owner</th>
-              {wideCols && <><th className="schs-col-topic">Topic</th><th className="schs-col-tags">Tags</th></>}
+              {wideCols && <th className="schs-col-topic">Topic</th>}
+              {tagCol && <th className="schs-col-tags">Tags</th>}
               <th>{state.updated === 'used' || grouped ? 'Used / updated' : 'Updated'}</th>
             </tr></thead>
             <tbody>
@@ -546,7 +604,10 @@ export default function SetChooser({
                       title={ok ? undefined : unreadableReason}
                     >
                       <td title={label(set)}>
-                        <input type="radio" id={optionId(i)} name={`${idPrefix}-set`} data-set-key={k} checked={k === value} disabled={!ok} onChange={() => pick(set)} aria-label={label(set)} />
+                        {/* Out of the Tab order and never committed by an arrow
+                            key (H3): the row's click commits, as does Enter in
+                            the search on the highlighted row. */}
+                        <input type="radio" id={optionId(i)} name={`${idPrefix}-set`} data-set-key={k} checked={k === value} disabled={!ok} tabIndex={-1} onChange={() => {}} onKeyDown={(e) => rowKey(e, i)} aria-label={label(set)} />
                         {label(set)}{imageMarkerSuffix(set.hasImages)}
                         {/* The current set in words, not only the wash (visual review). */}
                         {k === value && <span className="schs-current"><Icon name="Check" size={12} /> current</span>}
@@ -555,14 +616,12 @@ export default function SetChooser({
                       </td>
                       <td>{set.totalQuestions || set.questionCount || 0}</td>
                       <td><span className={`schs-own${setOwnerIsOurs(set) ? '' : ' schs-own--off'}`} title={setOwnerTitle(set)}>{ownerChip(set)}</span></td>
-                      {wideCols && (
-                        <>
-                          <td className="schs-col-topic schs-dim">{setTopicLabel(set.topic)}</td>
-                          <td className="schs-col-tags" title={(set.tags || []).join(', ')}>
-                            {(set.tags || []).slice(0, 3).map((t) => <span key={t} className="schs-tag">{t}</span>)}
-                            {(set.tags || []).length > 3 && <span className="schs-dim">+{set.tags.length - 3}</span>}
-                          </td>
-                        </>
+                      {wideCols && <td className="schs-col-topic schs-dim">{setTopicLabel(set.topic)}</td>}
+                      {tagCol && (
+                        <td className="schs-col-tags" title={(set.tags || []).join(', ')}>
+                          {(set.tags || []).slice(0, 3).map((t) => <span key={t} className="schs-tag">{t}</span>)}
+                          {(set.tags || []).length > 3 && <span className="schs-dim">+{set.tags.length - 3}</span>}
+                        </td>
                       )}
                       <td className="schs-dim">{whenWords(set, recent.get(k), now)}</td>
                     </tr>

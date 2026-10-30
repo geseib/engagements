@@ -392,6 +392,16 @@
 .schs .schs-route span { font-size: var(--schs-t-label); line-height: 1.45; color: var(--schs-muted); }
 .schs .schs-route:hover { border-color: var(--schs-link); }
 
+/* Live dev tests 30 Oct: the exit buttons wrapped to "Clear the search /
+   “zzz”" with "15 / sets" stacked (L4); text links were 21px tall (L3). */
+.schs .schs-exit { white-space: nowrap; }
+.schs .schs-exit b { white-space: nowrap; }
+.schs .schs-link { padding-block: 4px; }
+/* The hint never covers the placeholder on a narrow search (devtest 2 §10). */
+@media (max-width: 600px) {
+  .schs .schs-keys { display: none; }
+}
+
 @media (max-width: 480px) {
   .schs .schs-searchrow { flex-wrap: wrap; }
   .schs .schs-recent-opt, .schs .schs-browse { min-height: 44px; }

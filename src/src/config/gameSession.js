@@ -37,7 +37,9 @@
  *     redesign's own (docs/design/new-engagement, 30 Oct 2026): layoutOverride
  *     and peek (full or compact, and "Show preview"), setsDialog (which route
  *     the sets side task opened on), chooserClose, view (the form or Compare),
- *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote.
+ *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote,
+ *     pendingCreate (a ⌘↵ queued while topics load) and narrow (useNarrow:
+ *     whether the window is a phone's).
  *     All of it is the form's furniture and dies with the dialog.
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a

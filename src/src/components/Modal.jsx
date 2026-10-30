@@ -164,6 +164,28 @@ export default function Modal({
     // Where focus came from, so it can go back. Without this a keyboard user
     // who closes a dialog is dropped at the top of the document.
     const opener = document.activeElement;
+    /*
+      THE OPENER MAY BE GONE AND BACK. A page that early-returns a dialog (the
+      host page's New engagement) unmounts the button that opened it and
+      mounts a fresh one on close, so the element we held is detached (live
+      dev test 3 H4: focus fell to <body>). Its description finds the new one.
+    */
+    const describe = (el) => (el && el !== document.body && el.tagName ? {
+      tag: el.tagName,
+      className: typeof el.className === 'string' ? el.className : '',
+      label: el.getAttribute ? (el.getAttribute('aria-label') || '') : '',
+      text: (el.textContent || '').trim(),
+    } : null);
+    const openerIs = describe(opener);
+    const findAgain = () => {
+      if (!openerIs) return null;
+      const same = Array.from(document.getElementsByTagName(openerIs.tag)).filter((el) => (
+        (typeof el.className === 'string' ? el.className : '') === openerIs.className
+        && ((el.getAttribute && el.getAttribute('aria-label')) || '') === openerIs.label
+        && (el.textContent || '').trim() === openerIs.text
+      ));
+      return same.length === 1 ? same[0] : null;
+    };
 
     return () => {
       const index = mounted.indexOf(entry);
@@ -172,7 +194,15 @@ export default function Modal({
       unlockScroll();
       if (opener && typeof opener.focus === 'function' && document.contains(opener)) {
         opener.focus();
+        return;
       }
+      const again = findAgain();
+      if (again && typeof again.focus === 'function') { again.focus(); return; }
+      // The page may draw the opener a beat later.
+      setTimeout(() => {
+        const late = findAgain();
+        if (late && typeof late.focus === 'function' && document.activeElement === document.body) late.focus();
+      }, 0);
     };
   }, []);
 

@@ -28,7 +28,7 @@ function mount(props = {}) {
   );
   return { onChange, ...utils };
 }
-const open = () => fireEvent.focus(screen.getByRole('textbox', { name: /Choose a question set/ }));
+const open = () => fireEvent.focus(screen.getByRole('combobox', { name: /Choose a question set/ }));
 const rowNames = () => screen.getAllByTestId('set-chooser-row').map((r) => within(r).getByRole('radio').getAttribute('aria-label'));
 
 describe('the rules (config/setFinder.js)', () => {
@@ -75,7 +75,7 @@ describe('the rules (config/setFinder.js)', () => {
 describe('folded (S0, S1b)', () => {
   test('nothing picked: a search line and the sets used lately, one click each', () => {
     const { onChange } = mount();
-    expect(screen.getByRole('textbox', { name: 'Choose a question set: type to search 5 Poll sets' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Choose a question set: type to search 5 Poll sets' })).toBeInTheDocument();
     expect(screen.queryByTestId('set-chooser-row')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Team health check · TeamG/ }));
     expect(onChange).toHaveBeenCalledWith(setRefKey(SETS[0]), SETS[0]);
@@ -112,7 +112,7 @@ describe('open (S1, S2)', () => {
   test('typing narrows the list and the counts; each filter is a chip that comes off', () => {
     mount();
     open();
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'retro' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 5 Poll sets/ }), { target: { value: 'retro' } });
     expect(rowNames().sort()).toEqual(['Sprint retro: what went well', 'Team health check']);
     expect(screen.getByRole('status').textContent).toMatch('2 of 5 sets in TeamG');
     const whose = screen.getByRole('radiogroup', { name: 'Whose sets' });
@@ -143,7 +143,7 @@ describe('open (S1, S2)', () => {
   test('the keyboard: arrows move, Enter picks, Esc clears the search, then closes', () => {
     const { onChange } = mount();
     open();
-    const box = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    const box = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
     fireEvent.keyDown(box, { key: 'ArrowDown' });
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledWith(setRefKey(SETS[1]), SETS[1]);
@@ -152,7 +152,7 @@ describe('open (S1, S2)', () => {
   test('Esc clears the search first, then folds the chooser', () => {
     mount();
     open();
-    const box = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    const box = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
     fireEvent.change(box, { target: { value: 'zzz' } });
     fireEvent.keyDown(box, { key: 'Escape' });
     expect(box).toHaveValue('');
@@ -194,9 +194,9 @@ describe('nothing matches (S3)', () => {
     mount({ onMakeSet, otherFormats: [{ label: 'Call & Answer', sets: [{ id: 'off', scope: 'org', mine: true, name: 'Offsite ideas' }], onPick }] });
     open();
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Whose sets' })).getByRole('radio', { name: /Yours/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'offsite' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 5 Poll sets/ }), { target: { value: 'offsite' } });
     const empty = screen.getByTestId('set-chooser-empty');
-    expect(empty.textContent).toMatch('No Poll sets match Search “offsite” · Yours');
+    expect(empty.textContent).toMatch('No Poll sets match “offsite” · Yours'); // the words searched, not the chip label (devtest L4)
     expect(within(empty).getByRole('button', { name: /Other formats: Call & Answer/ }).textContent).toMatch('1 set');
     fireEvent.click(within(empty).getByRole('button', { name: /Other formats/ }));
     expect(onPick).toHaveBeenCalled();
@@ -208,7 +208,7 @@ describe('nothing matches (S3)', () => {
     mount();
     open();
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Whose sets' })).getByRole('radio', { name: /Public/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'nothing-anywhere' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 5 Poll sets/ }), { target: { value: 'nothing-anywhere' } });
     const empty = screen.getByTestId('set-chooser-empty');
     // Every owner's sets still match nothing for that word: no such exit.
     expect(within(empty).queryByRole('button', { name: /every owner/ })).toBeNull();
@@ -219,7 +219,7 @@ describe('nothing matches (S3)', () => {
     mount();
     open();
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Whose sets' })).getByRole('radio', { name: /Public/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'pulse' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 5 Poll sets/ }), { target: { value: 'pulse' } });
     const exit = within(screen.getByTestId('set-chooser-empty')).getByRole('button', { name: /every owner/ });
     expect(exit.textContent).toMatch('1 set');
     fireEvent.click(exit);
@@ -283,7 +283,7 @@ describe('whose sets offers only owners the list has', () => {
   "Draw the picker before a pick, recents one click away").
 */
 describe('recents first (the New engagement dialog)', () => {
-  const box = () => screen.getByRole('textbox', { name: /Choose a question set/ });
+  const box = () => screen.getByRole('combobox', { name: /Choose a question set/ });
 
   test('focus with nothing picked shows the recents listbox, not the full chooser', () => {
     mount({ recentsFirst: true });
@@ -332,11 +332,58 @@ describe('recents first (the New engagement dialog)', () => {
   });
 });
 
+/* LIVE DEV TESTS, 30 Oct 2026 (reviews/devtest-2 E1/E3, devtest-3 H3/H4/B5). */
+describe('the keyboard model the live test asked for', () => {
+  test('Enter in the empty search picks the first recent, and focus lands on Change', () => {
+    const { onChange, rerender } = mount({ recentsFirst: true });
+    const box = screen.getByRole('combobox', { name: /Choose a question set/ });
+    box.focus();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith(setRefKey(SETS[0]), SETS[0]);
+    rerender(<SetChooser sets={SETS} value={setRefKey(SETS[0])} onChange={onChange} recent={RECENT} formatLabel="Poll" teamName="TeamG" now={NOW} recentsFirst />);
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus();
+  });
+
+  test('Esc in the search (recents showing) never reaches the dialog', () => {
+    const outer = jest.fn();
+    render(<div onKeyDown={outer}><SetChooser sets={SETS} value="" onChange={jest.fn()} recent={RECENT} now={NOW} recentsFirst /></div>);
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
+    expect(outer).not.toHaveBeenCalled();
+  });
+
+  test('an arrow key on a row radio moves the highlight; it does not pick', () => {
+    const { onChange } = mount();
+    open();
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Team health check' }), { key: 'ArrowDown' });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('set-chooser-row').length).toBe(5);
+    const search = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
+    expect(search).toHaveFocus();
+    expect(document.getElementById(search.getAttribute('aria-activedescendant'))).toHaveAttribute('aria-label', 'Quarterly planning priorities');
+  });
+
+  test('the row radios are out of the Tab order, and aria-controls names only what is rendered', () => {
+    mount();
+    open();
+    expect(screen.getAllByRole('radio', { name: /Team health|Quarterly/ }).every((r) => r.tabIndex === -1)).toBe(true);
+    const search = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
+    fireEvent.change(search, { target: { value: 'nothing-anywhere' } });
+    expect(search.getAttribute('aria-controls')).toBeNull();
+  });
+
+  test('Keep the set I had puts the focus on Change, never on <body>', () => {
+    mount({ value: setRefKey(SETS[0]) });
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep the set I had' }));
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus();
+  });
+});
+
 describe('the open chooser (frame 5a)', () => {
   test('rows are reachable with ↑↓: the highlighted row is the search\'s active descendant', () => {
     mount();
     open();
-    const search = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    const search = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     const id = search.getAttribute('aria-activedescendant');
     expect(document.getElementById(id)).toHaveAttribute('aria-label', 'Quarterly planning priorities');
@@ -345,7 +392,7 @@ describe('the open chooser (frame 5a)', () => {
   test('Change focuses the search; the current set says so in words; Esc twice keeps the set', () => {
     const { onChange } = mount({ value: setRefKey(SETS[0]) });
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));
-    const search = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    const search = screen.getByRole('combobox', { name: /Search 5 Poll sets/ });
     expect(search).toHaveFocus();
     const current = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
     expect(current).toHaveAttribute('aria-current', 'true');
@@ -369,7 +416,7 @@ describe('the open chooser (frame 5a)', () => {
       ],
     });
     open();
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'nothing-anywhere' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 5 Poll sets/ }), { target: { value: 'nothing-anywhere' } });
     const empty = screen.getByTestId('set-chooser-empty');
     expect(within(empty).getByRole('button', { name: /Clear the search/ })).toBeInTheDocument();
     const routes = within(empty).getByTestId('set-chooser-routes');

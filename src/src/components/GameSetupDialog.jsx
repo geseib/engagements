@@ -74,7 +74,7 @@ import SetChooser from './SetChooser';
 import FormatPicker from './FormatPicker';
 import FormatCompare from './FormatCompare';
 import MeetingTypeChips from './MeetingTypeChips';
-import CreateSummary, { SummaryRows } from './CreateSummary';
+import CreateSummary from './CreateSummary';
 import OtherFormatHandoff from './OtherFormatHandoff';
 import './GameSetupDialog.css';
 
@@ -90,6 +90,23 @@ const OTHER_LABELS = Object.freeze({
   [BUILD_KIND]: 'Set up the Build Room',
   [EVENT_KIND]: 'Continue to the event',
 });
+
+/** True while the window is at most `px` wide (false where there is no window). */
+function useNarrow(px) {
+  const query = `(max-width: ${px}px)`;
+  const get = () => {
+    try { return typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false; } catch (e) { return false; }
+  };
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else if (mq.removeListener) mq.removeListener(on); };
+  }, [query]);
+  return narrow;
+}
 
 /** The fold that the names line's "Change" opens, and the control it focuses. */
 function openAdvancedAt(root, selector) {
@@ -168,15 +185,19 @@ export default function GameSetupDialog({
   // localStorage (wrapped; it may throw or come back empty). No preferences
   // API exists yet; README §7 Q1 asks whether to build one.
   const [layoutOverride, setLayoutOverride] = useState(() => (isEdit ? '' : readLayoutOverride()));
-  const compactByDefault = !isEdit && (layoutOverride ? layoutOverride === 'compact' : hasCreated);
-  // "Show preview" in compact: the side pane for this open only.
+  const compact = !isEdit && (layoutOverride ? layoutOverride === 'compact' : hasCreated);
+  /* "Show preview" in compact: ONLY the side pane beside the compact form,
+     for this open (live dev test 2 E8: it used to bring back the whole
+     beginner guide). */
   const [peek, setPeek] = useState(false);
-  const compact = compactByDefault && !peek;
   const chooseLayout = (value) => {
     setLayoutOverride(value);
     writeLayoutOverride(value);
     setPeek(false);
   };
+  /* A PHONE (frames 10, 10b): formats folded behind "More", no meeting chips,
+     a one-line head and a full-width Create (live dev tests B2, V1). */
+  const phone = useNarrow(600);
 
   // Seeded once, not controlled. A novice opens with NO format chosen (README
   // §3.1: a novice never asked to choose never learns a choice exists); a
@@ -241,6 +262,12 @@ export default function GameSetupDialog({
   const [announce, setAnnounce] = useState('');
   /** "Your earlier topic picks were for the other set." */
   const [clearedNote, setClearedNote] = useState('');
+  /* ⌘/Ctrl+Enter pressed while the chosen set's topics were still loading:
+     the create is QUEUED and happens the moment they arrive (live dev test 2
+     E2 — it used to be swallowed silently). */
+  const [pendingCreate, setPendingCreate] = useState(false);
+  /* Where focus goes back to when Compare closes (live dev test 3 H4). */
+  const compareReturn = useRef(null);
 
   const [localTitle, setLocalTitle] = useState(isEdit ? (seed.title || '') : '');
   // EDIT OWNS ITS OWN CATEGORY SELECTION: the session edited is not on stage.
@@ -307,6 +334,9 @@ export default function GameSetupDialog({
       && !(isCallAndAnswer && briefingWorking) && !goalProblem && !categoriesLoading;
 
   const chosenSetPromptId = chosenSet ? (chosenSet.promptId || '') : '';
+  /* Everything but the topics is ready: the one case a create may wait for. */
+  const readyButTopics = !isOther && hasFormat && Boolean(newGameSetId) && title.trim().length > 0
+    && !(isCallAndAnswer && briefingWorking) && !goalProblem && categoriesLoading;
 
   // The page reloads the voices that suit this format.
   useEffect(() => {
@@ -319,10 +349,37 @@ export default function GameSetupDialog({
     onQuestionSetChange?.(ref.id, ref.scope);
   };
 
+  /*
+    THE TOPIC PICKS COME BACK WITH THE SET (live dev tests B8, E5-adjacent):
+    arrowing C&A → Trivia → C&A restored the set but turned every topic on
+    again. The picks are remembered per format beside the set, and re-applied
+    through the page's own toggle once that set's list has arrived.
+  */
+  const picksByFormat = useRef({});
+  const pendingPicks = useRef(null);
+  useEffect(() => {
+    const want = pendingPicks.current;
+    if (!want || want.key !== newGameSetKey || !catsForChosen || categoriesLoading || categories.length === 0) return;
+    pendingPicks.current = null;
+    for (const c of categories) {
+      if (want.picks.has(c.name) !== activeCategoryIds.has(c.name)) onToggleCategory?.(c.name);
+    }
+  });
+
   const chooseFormat = (typeId) => {
     if (typeId === engagementType) return;
     formatTouched.current = true;
-    if (engagementType) setByFormat.current[engagementType] = newGameSetKey;
+    setPendingCreate(false);
+    if (engagementType) {
+      setByFormat.current[engagementType] = newGameSetKey;
+      // Only a real choice is worth restoring: some topics off, the list in.
+      picksByFormat.current[engagementType] = !isEdit && newGameSetKey && catsForChosen && !categoriesLoading
+        && categories.length > 0 && activeCategoryIds.size > 0 && activeCategoryIds.size < categories.length
+        ? { key: newGameSetKey, picks: new Set(activeCategoryIds) } : null;
+    }
+    const savedPicks = picksByFormat.current[typeId];
+    const restoreKey = isHandoffFormat(typeId) ? '' : (setByFormat.current[typeId] || '');
+    pendingPicks.current = savedPicks && savedPicks.key === restoreKey ? savedPicks : null;
     setEngagementType(typeId);
     // A hand-off format has no set to pick: fold the gallery to chips so its
     // "Next:" panel is in view (frames 7, 8).
@@ -341,6 +398,7 @@ export default function GameSetupDialog({
   };
 
   const chooseSet = (key) => {
+    pendingPicks.current = null;
     const hadCustomPicks = !isEdit && Boolean(newGameSetKey) && key !== newGameSetKey
       && categories.length > 0 && activeCategoryIds.size > 0 && activeCategoryIds.size < categories.length;
     setNewGameSetKey(key);
@@ -451,14 +509,22 @@ export default function GameSetupDialog({
   const cancelRef = useRef(null);
   const primaryRef = useRef(null);
   const confirmShown = useRef(false);
+  /* Dismissed by going back to the form: the focus stays where the host put it. */
+  const quietDismiss = useRef(false);
   useEffect(() => {
     if (confirmingClose) {
       confirmShown.current = true;
       keepEditingRef.current?.focus();
-    } else if (confirmShown.current) {
+    } else if (confirmShown.current && !quietDismiss.current) {
       cancelRef.current?.focus();
     }
+    quietDismiss.current = false;
   }, [confirmingClose]);
+  const dismissDiscard = () => {
+    if (!confirmingClose) return;
+    quietDismiss.current = true;
+    setConfirmingClose(false);
+  };
 
   const requestClose = () => {
     // Read now, not from the render: the history read can re-baseline the form
@@ -469,12 +535,23 @@ export default function GameSetupDialog({
   /** Escape — the Modal's one close path. While the foot asks, it is Keep editing. */
   const escape = () => {
     if (confirmingClose) setConfirmingClose(false);
-    else if (view === 'compare') setView('form');
+    else if (view === 'compare') { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }
     else requestClose();
   };
 
   /* ── the title moves on, and ⌘/Ctrl+Enter creates ─────────────────────── */
   const bodyRef = useRef(null);
+  /* FOCUS FOLLOWS THE BODY SWAP (live dev test 3 H4): opening Compare puts it
+     on Compare's heading; leaving puts it back on the link (or on the format
+     "Use …" chose). Never dropped to <body>. */
+  const focusAfter = useRef(null);
+  useEffect(() => {
+    const sel = focusAfter.current;
+    if (!sel) return;
+    focusAfter.current = null;
+    const el = bodyRef.current && bodyRef.current.querySelector(sel);
+    if (el && el.focus) el.focus();
+  }, [view]);
   const titleRef = useRef(null);
   const focusFormat = () => {
     const stop = bodyRef.current && bodyRef.current.querySelector('.gsd-fmt[tabindex="0"]');
@@ -505,28 +582,50 @@ export default function GameSetupDialog({
   const mac = useMemo(() => isMacPlatform(), []);
   const shortcut = createShortcutLabel(mac);
   const latest = useRef({});
-  latest.current = { canCreate, busy, isOther, confirmingClose, submit };
+  latest.current = {
+    canCreate, busy, isOther, confirmingClose, submit, readyButTopics, eventBlocked,
+    planName: (eventsAccess && eventsAccess.offerPlanName) || 'paid plan',
+  };
   useEffect(() => {
     const onKey = (event) => {
       if (!isCreateShortcut(event)) return;
       const root = bodyRef.current && bodyRef.current.closest('[role="dialog"]');
-      if (!root || !root.contains(event.target)) return;
+      if (!root) return;
+      // Inside the dialog, or on <body> while it is open: a pick that
+      // unmounted the focused control must not cost the shortcut (devtest E1).
+      const target = event.target;
+      const onBody = !target || target === document.body || target === document.documentElement;
+      if (!onBody && !root.contains(target)) return;
       const now = latest.current;
       if (now.confirmingClose) return;
       event.preventDefault();
       // NEVER LEAVES on the shortcut (README §6): a hand-off format moves the
       // focus to its own labelled Continue and says so; only Enter or a click
-      // there navigates.
+      // there navigates. A disabled Continue takes no focus, so it says why.
       if (now.isOther) {
+        if (now.eventBlocked) {
+          setAnnounce(`Events come with the ${now.planName}, so there is nothing to continue to.`);
+          return;
+        }
         primaryRef.current?.focus();
         setAnnounce(`${shortcut} moved to Continue. Press Enter there to go.`);
         return;
       }
-      if (now.canCreate && !now.busy) now.submit();
+      if (now.canCreate && !now.busy) { now.submit(); return; }
+      if (now.readyButTopics) {
+        setPendingCreate(true);
+        setAnnounce('Waiting for this set’s topics. It will be created as soon as they arrive.');
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [shortcut]);
+  // The queued create goes the moment it can; a failed load cancels it.
+  useEffect(() => {
+    if (!pendingCreate) return;
+    if (canCreate && !busy) { setPendingCreate(false); latest.current.submit(); return; }
+    if (!readyButTopics) setPendingCreate(false);
+  }, [pendingCreate, canCreate, busy, readyButTopics]);
 
   /* ── the format options ───────────────────────────────────────────────── */
   const formatOptions = offeredIds.map((id) => {
@@ -547,6 +646,14 @@ export default function GameSetupDialog({
     setMeeting(m.id);
     chooseFormat(m.format);
   };
+  /* Any other way of choosing a format lets go of a meeting chip that no
+     longer describes the choice (live dev test 1 B4: "Use Trivia" from
+     Compare left "For a retro: Call & Answer" on screen). */
+  const chooseFormatDirect = (id) => {
+    const m = meeting ? MEETING_TYPES.find((x) => x.id === meeting) : null;
+    if (!m || m.format !== id) setMeeting('');
+    chooseFormat(id);
+  };
   const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
   const showGallery = !compact && !isEdit && !galleryDone;
 
@@ -563,8 +670,11 @@ export default function GameSetupDialog({
   if (busy) primaryLabel = isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…');
   else if (isEdit) primaryLabel = 'Save changes';
   else if (OTHER_LABELS[engagementType]) primaryLabel = OTHER_LABELS[engagementType];
+  else if (pendingCreate) primaryLabel = 'Waiting for topics…';
   else if (categoriesLoading) primaryLabel = 'Loading topics…';
-  else primaryLabel = isSurvey ? 'Open the survey' : 'Create engagement';
+  else if (isSurvey) primaryLabel = 'Open the survey';
+  // Frame 10: one word where the foot is a phone's width.
+  else primaryLabel = phone ? 'Create' : 'Create engagement';
   let primaryTitle;
   if (isCallAndAnswer && briefingWorking) primaryTitle = 'Waiting for Workie to finish the briefing';
   else if (goalProblem) primaryTitle = goalProblem;
@@ -630,7 +740,7 @@ export default function GameSetupDialog({
     </div>
   ) : null;
 
-  const showSide = !compact && !chooserOpen && view === 'form';
+  const showSide = (!compact || peek) && !chooserOpen && view === 'form';
   const stepMark = (n, done) => (
     <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
       {done ? <Icon name="Check" size={13} weight="bold" /> : n}
@@ -640,10 +750,12 @@ export default function GameSetupDialog({
 
   /* ── the make-your-own routes (frame 5c) ──────────────────────────────── */
   const makeRoutes = isEdit || !hasFormat || isOther ? [] : [
-    { id: 'manual', icon: 'PencilSimple', label: 'Write your own questions', desc: 'Opens your question sets with a new set started, where you can write them yourself or use a template.', onPick: () => openSets('manual') },
+    { id: 'manual', icon: 'PencilSimple', label: 'Write your own questions', desc: 'Opens a new set of this format for you to write.', onPick: () => openSets('manual') },
     { id: 'ai', icon: 'Sparkle', label: 'Make a set with Workie', desc: 'Describe your meeting and Workie, Engage’s AI assistant, drafts questions for you to review.', onPick: () => openSets('ai') },
     { id: 'template', icon: 'FileText', label: 'Fill in a spreadsheet', desc: 'Download the template, add your questions, upload it.', onPick: () => openSets('template') },
   ];
+  // ONE SENTENCE FOR ALL THREE (live dev test 1 C8: the note and the cards disagreed).
+  const routesNote = 'Whichever way you make it, the new set is picked for this engagement once it is saved and switched on. A set Workie drafts waits for your review first.';
 
   /* ── the Questions step (step 3) ──────────────────────────────────────── */
   const questionsStep = !hasFormat ? (
@@ -686,16 +798,18 @@ export default function GameSetupDialog({
         unreadableReason={UNREADABLE_REASON}
         disabled={isEdit}
         pinnedLabel={newGameSetId}
-        onMakeSet={isEdit ? null : () => openSets('')}
+        // "Make a new set" lands on the new-set panel, never the library above it (devtest 1 B3).
+        onMakeSet={isEdit ? null : () => openSets('template')}
         otherFormats={isEdit ? [] : PICKER_GAME_TYPES
           .filter((type) => type.id !== engagementType)
           .map((type) => ({
             label: type.label,
             sets: sessionSets.filter((set) => set.engagementType === type.id),
-            onPick: () => chooseFormat(type.id),
+            onPick: () => chooseFormatDirect(type.id),
           }))}
         makeRoutes={makeRoutes}
-        makeRoutesNote="A set you upload is picked for this engagement as soon as it is saved, and stays in Your question sets. A set Workie drafts waits for your review first."
+        makeRoutesNote={routesNote}
+        shortPlaceholder={phone}
         recentsFirst={!isEdit}
         closeSignal={chooserClose}
         idPrefix="gsd-set"
@@ -739,6 +853,7 @@ export default function GameSetupDialog({
         selected={selectedCats}
         editing={isEdit}
         label="Topics in this set"
+        bareCount
         noun="topics"
         hint={compact ? '' : 'Switch off any you want to skip.'}
         loading={categoriesLoading}
@@ -836,28 +951,33 @@ export default function GameSetupDialog({
   ) : null;
 
   /* ── the format step (step 2) ─────────────────────────────────────────── */
+  const openCompare = () => {
+    compareReturn.current = '.gsd-compare-link';
+    focusAfter.current = '#gsd-compare-t';
+    setView('compare');
+  };
+  /* The links beside the step's heading. In the chip row they come AFTER the
+     radio group in the Tab order, so Title → Tab reaches the formats first
+     (live dev test 2 E4); the grid still draws them top right. A novice's
+     gallery keeps "Compare side by side" before the cards (frame 1). */
+  const formatActs = !isEdit && (
+    <span className="gsd-step-acts">
+      <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+        <Icon name="ListBullets" size={14} /> {showGallery ? (phone ? 'Compare' : 'Compare side by side') : 'Format guide'}
+      </button>
+      {!compact && !phone && (
+        <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('compact')}>I know these — show compact</button>
+      )}
+      {compact && !phone && (
+        <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('full')}>Always show the guide</button>
+      )}
+    </span>
+  );
   const formatStep = (
-    <section className="gsd-step">
-      <div className="gsd-step-row">
-        <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
-        {!isEdit && (
-          <span className="gsd-step-acts">
-            <button type="button" className="gsd-btn gsd-btn--link" onClick={() => setView('compare')}>
-              <Icon name="ListBullets" size={14} /> {showGallery ? 'Compare side by side' : 'Format guide'}
-            </button>
-            {!compact && !compactByDefault && (
-              <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('compact')}>I know these — show compact</button>
-            )}
-            {!compact && compactByDefault && (
-              <>
-                <button type="button" className="gsd-btn gsd-btn--link" onClick={() => setPeek(false)}>Back to compact</button>
-                <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('full')}>Always show the guide</button>
-              </>
-            )}
-          </span>
-        )}
-      </div>
-      {showGallery && (
+    <section className="gsd-step gsd-step--format">
+      <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
+      {showGallery && formatActs}
+      {showGallery && !phone && (
         <MeetingTypeChips types={meetingTypes} value={meeting} onPick={pickMeeting} />
       )}
       {showGallery && meetingReason && (
@@ -868,13 +988,16 @@ export default function GameSetupDialog({
       <FormatPicker
         options={formatOptions}
         value={engagementType}
-        onChange={(id) => { setMeeting(''); chooseFormat(id); }}
+        onChange={chooseFormatDirect}
         skin={showGallery ? 'gallery' : 'chips'}
         disabled={isEdit}
         labelledBy="gsd-format-label"
+        collapseAfter={phone && !isEdit ? 3 : 0}
       />
-      {/* `blurb` from config/gameTypes.js — the chip row's one line. */}
-      {!showGallery && hasFormat && (
+      {!showGallery && formatActs}
+      {/* `blurb` from config/gameTypes.js — the chip row's one line, in full
+          mode only: compact knows the formats (live dev test 2 O3). */}
+      {!showGallery && !compact && hasFormat && (
         <p className="gsd-blurb">{isOther ? formatGuide(engagementType).short : gameTypeMeta(engagementType).blurb}</p>
       )}
       {isEdit && (
@@ -937,7 +1060,7 @@ export default function GameSetupDialog({
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${isEdit ? ' gsd--edit' : ''}`}
+      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${compact && peek ? ' gsd--peek' : ''}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
       /* THE BACKDROP STAYS INERT: there is nothing behind the overlay to go
@@ -959,9 +1082,9 @@ export default function GameSetupDialog({
         <h2 id="gsd-heading">{headingText}</h2>
         {!compact && !isEdit && <p className="gsd-sub">Three decisions. Everything else has a sensible default.</p>}
         <span className="gsd-head-acts">
-          {compact && (
-            <button type="button" className="gsd-btn" onClick={() => setPeek(true)}>
-              <Icon name="Monitor" size={14} /> Show preview
+          {compact && !phone && (
+            <button type="button" className="gsd-btn" aria-pressed={peek} onClick={() => setPeek((p) => !p)}>
+              <Icon name="Monitor" size={14} /> {peek ? 'Hide preview' : 'Show preview'}
             </button>
           )}
           <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
@@ -978,22 +1101,29 @@ export default function GameSetupDialog({
         </span>
       </div>
 
-      <div className={`gsd-body${showSide ? ' has-side' : ''}`} ref={bodyRef}>
-        <div className="dialog-content gsd-main">
+      <div
+        className={`gsd-body${showSide ? ' has-side' : ''}`}
+        ref={bodyRef}
+        /* THE DISCARD QUESTION NEVER HIDES CREATE FOR LONG (live dev test 1
+           B5): going back to the form is "keep editing". */
+        onPointerDownCapture={dismissDiscard}
+        onFocusCapture={dismissDiscard}
+      >
+        <div className={`dialog-content gsd-main${view === 'compare' ? ' is-compare' : ''}`}>
           {view === 'compare' ? (
             <>
-              {!isEdit && <MeetingTypeChips types={meetingTypes} value={meeting} onPick={(m) => setMeeting(m.id)} idPrefix="gsd-meet-cmp" />}
+              {!isEdit && !phone && <MeetingTypeChips types={meetingTypes} value={meeting} onPick={(m) => setMeeting(m.id)} idPrefix="gsd-meet-cmp" />}
               <FormatCompare
                 options={formatOptions}
                 value={engagementType}
                 suggested={meetingReason ? meetingReason.format : ''}
                 suggestedFor={meetingReason ? meetingReason.label : ''}
                 onUse={(id) => {
-                  chooseFormat(id);
+                  chooseFormatDirect(id);
+                  focusAfter.current = `.gsd-fmt[data-format="${id}"]`;
                   setView('form');
-                  setTimeout(focusFormat, 0);
                 }}
-                onBack={() => { setView('form'); setTimeout(focusFormat, 0); }}
+                onBack={() => { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }}
               />
             </>
           ) : form}
@@ -1024,9 +1154,9 @@ export default function GameSetupDialog({
 
       {/* Compact (and the open chooser) has no side pane: a refusal sits above the foot. */}
       {!showSide && refusalNode}
-      {compact && !isOther && view === 'form' && !chooserOpen && hasFormat && chosenSet && (
-        <div className="gsd-compact-sum"><SummaryRows heading="Ready" rows={[{ label: 'Questions', value: topicWords(), done: true }]} /></div>
-      )}
+      {/* (The pinned "Questions" row compact used to draw here covered the
+          topics at 1280×720 — live dev tests B7, E7. Compact has no checklist,
+          as frame 3b draws.) */}
 
       <p className="gsd-sr" aria-live="polite">{announce}</p>
 

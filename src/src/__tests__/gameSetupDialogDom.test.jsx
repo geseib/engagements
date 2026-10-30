@@ -17,6 +17,9 @@
  * on each, the names line, "Background for Workie". The diff of this
  * snapshot is that change; the shared SessionOptions fold is otherwise as it
  * was. `lastFormat` opens it on Call & Answer, as a returning host sees it.
+ * Re-recorded again the same day after the live dev tests (reviews/devtest-*):
+ * bare topic counts ("Architecture 2"), the step's links after the chips in
+ * the Tab order, and the set search as a combobox.
  *
  * rejects: the extraction changing one attribute, id, class, word or order in
  * the create or edit form, for any format.

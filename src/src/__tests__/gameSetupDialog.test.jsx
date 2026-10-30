@@ -118,10 +118,12 @@ describe('the format picker', () => {
 
   // rejects: leaving `blurb` as the dead data it is today — it exists on all
   // five types and is rendered nowhere in src/src.
-  // The blurb is the chip row's line now; full mode shows the gallery (whose
-  // cards carry their own line) until a set is picked, so this reads compact.
+  // The blurb is the full mode chip row's line now: the gallery cards carry
+  // their own line until a set is picked, and compact drops it (live dev test
+  // 2 O3), so this picks a set first.
   test('prints the chosen format\'s blurb, and changes it with the format', () => {
-    setup({ hasCreated: true });
+    setup();
+    pickSet('platform:pricing');
     expect(screen.getByText(GAME_TYPES['call-and-answer'].blurb)).toBeInTheDocument();
     fireEvent.click(pill('Wavelength'));
     expect(screen.getByText(GAME_TYPES.wavelength.blurb)).toBeInTheDocument();

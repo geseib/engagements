@@ -88,6 +88,8 @@ export function SessionCategories({
       onAllOn  () => void, offered when some are off ("Turn all on")
   */
   label = 'Categories', noun = 'categories', hint = '', loading = false, error = '', onRetry = null, onAllOn = null,
+  /** The count bare after the name ("Architecture 2", frame 4), not in brackets. */
+  bareCount = false,
 }) {
   const labelId = `${idPrefix}-categories-label`;
   const picked = categories.filter((c) => selected.has(c.name));
@@ -139,7 +141,7 @@ export function SessionCategories({
                 {/* A tick as well as the wash: selection never rests on colour. */}
                 <span className="category-mark" aria-hidden="true">{on ? '✓' : '–'}</span>
                 <span className="category-name">{category.name}</span>
-                <span className="category-count">({category.questionCount})</span>
+                <span className="category-count">{bareCount ? category.questionCount : `(${category.questionCount})`}</span>
               </button>
             );
           })}

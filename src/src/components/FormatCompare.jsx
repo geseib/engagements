@@ -36,7 +36,7 @@ export default function FormatCompare({
         <button type="button" className="gsd-btn gsd-btn--link" onClick={onBack}>
           <Icon name="ArrowLeft" size={14} /> Back to the form
         </button>
-        <h3 className="gsd-compare-t" id="gsd-compare-t">Compare the formats</h3>
+        <h3 className="gsd-compare-t" id="gsd-compare-t" tabIndex={-1}>Compare the formats</h3>
         <span className="gsd-compare-sub">Your title is kept. “Use …” returns you to the form with that format chosen.</span>
       </div>
       <div className="gsd-compare-scroll">
@@ -69,7 +69,7 @@ export default function FormatCompare({
                     {on && !isSuggested && <span className="gsd-compare-sugg"><Icon name="Check" size={12} weight="bold" /> Chosen</span>}
                     <button
                       type="button"
-                      className={isSuggested || on ? 'btn-primary gsd-compare-use' : 'gsd-btn gsd-compare-use'}
+                      className={`gsd-btn gsd-compare-use${isSuggested || on ? " is-on" : ""}`}
                       onClick={() => onUse?.(o.id)}
                     >
                       Use {o.label}
