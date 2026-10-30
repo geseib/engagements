@@ -9,6 +9,28 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 30 Oct 2026 (fix: the dialog went white after the walkthrough)
+
+**Test:** merge of dev `b63ad973`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new to use.
+
+### Fixed
+
+- **The whole page went white** when you stepped through Call & Answer's walkthrough to its last page and then picked another format. The walkthrough now starts again at step 1 for the new format.
+
+### What to look at
+
+1. On engage.test open **Create engagement**, step through Call & Answer's walkthrough to **What you get**, then pick Trivia, Poll, Wavelength and Survey in turn: each shows its own step 1 and nothing goes white. Do the same inside **Format guide**.
+
+### Known gaps
+
+- Guided vs Quick is being rethought; this push does not change it.
+
+---
+
 ## 30 Oct 2026 (later still: walkthrough picture)
 
 **Test:** merge of dev `310fe65f`. Everything below this entry is already on test; this push adds only what is here.
