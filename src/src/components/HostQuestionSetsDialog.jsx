@@ -102,13 +102,23 @@ export default function HostQuestionSetsDialog({
    * page reload.
    */
   onSetsChanged,
+  /*
+    WHERE TO OPEN (docs/design/new-engagement frame 5c): the create screen's
+    no-match state offers three ways to make a set, and each lands straight in
+    its builder rather than on the shelf.
+      'ai'       the AI builder for `engagementType` (Make a set with Workie)
+      'template' the New question set panel: template, then upload
+      'manual'   the same panel, whose routes include writing them by hand
+      ''         the shelf, as before
+  */
+  initialRoute = '',
 }) {
   const [sets, setSets] = useState([]);
   const [setAllowance, setSetAllowance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);       // { text, tone }
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(initialRoute === 'template' || initialRoute === 'manual');
   const [newSetType, setNewSetType] = useState(engagementType);
   const [editing, setEditing] = useState(null);     // { id, name, description, busy }
   const [deleting, setDeleting] = useState(null);   // a set
@@ -157,7 +167,11 @@ export default function HostQuestionSetsDialog({
     the console owns them, this dialog is the host's way to the same thing, and
     a host copy of four large components would be four places to fix.
   */
-  const [builder, setBuilder] = useState(null);   // 'scenario' | 'trivia' | 'poll' | 'survey'
+  const [builder, setBuilder] = useState(() => {   // 'scenario' | 'trivia' | 'poll' | 'survey'
+    if (initialRoute !== 'ai') return null;
+    if (engagementType === 'trivia' || engagementType === 'poll' || engagementType === 'survey') return engagementType;
+    return 'scenario';
+  });
   /*
     GENERATIONS THE PERSON STARTED — now read from the SERVER (GET
     /admin/generation-drafts/list), not from this browser's memory: every run

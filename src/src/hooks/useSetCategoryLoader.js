@@ -52,10 +52,9 @@ export default function useSetCategoryLoader({ fetcher, apiBase, setCategories, 
 
   const load = useCallback(async (setId, scope) => {
     const ticket = claim();
-    const { setCategories: setCats, setActiveCategoryIds: setActive } = latest.current;
     // CLEAR BEFORE THE AWAIT: set A's names must not sit under set B's.
-    setCats([]);
-    setActive(new Set());
+    latest.current.setCategories([]);
+    latest.current.setActiveCategoryIds(new Set());
     if (!setId) {
       setStatus(IDLE);
       return;
