@@ -366,3 +366,131 @@ Every point the coordinator listed as "must address", and what was done. The rev
   Check) are illustrative.
 - The PNG files are captured after the single-play animations finish, so they show end states.
 - The helper scripts that generate `index.html` and the PNG files are kept outside the repo.
+
+## Round 2 — owner feedback
+
+*30 Oct 2026. The owner reviewed the dialog on test (commit `7fc7e30b1`); their notes are in
+`feedback/owner-2026-10-30.md`. The mockups are in `index-2.html`, and each PNG is prefixed
+`2-`. Rounds 1 and 2 above still stand except where this section says otherwise.*
+
+### Frames
+
+| # | File | What it shows |
+|---|---|---|
+| 2-01 | `2-01-guided-expert-1440.png` | Guided view, which is now the default for everyone. An experienced host sees format **chips** (no gallery) next to the walkthrough pane, on step 3 of 5, using their own set's question. The **Guided / Quick** switch is in the header. |
+| 2-02 | `2-02-quick-1440.png` | Quick view at **1060px** (was 880). The seven chips sit on one line and the topics have room. Same switch, same place. |
+| 2-03 | `2-03-guided-first-1440.png` | Guided view for a first-time host. The gallery stays, with the plain descriptions on the cards. The walkthrough starts at step 1. |
+| 2-04 | `2-04-storyboard-call-and-answer.png` | The full Call & Answer walkthrough: five steps plus "What you get", drawn at the pane's real size. |
+| 2-05 | `2-05-step-lists.png` | Trivia, Poll, Wavelength, Survey, Build Room and Event: the step list for each, one picture per step, ending with "What you get". |
+| 2-06 / 2-07 / 2-08 | `2-06-guide-1440x900.png`, `2-07-guide-1280x720.png`, `2-08-guide-1850x1000.png` | The Format guide at three window sizes. All seven formats are visible at each size with nothing clipped. |
+| 2-09 | `2-09-guide-phone-390.png` | The Format guide on a phone: one format at a time, with ‹ › to move between formats. |
+| 2-10 / 2-11 | `2-10-guided-1280x720.png`, `2-11-quick-1280x720.png` | Guided and Quick on a 1280×720 laptop. |
+
+### Decisions
+
+1. **Guided by default, and the switch is always visible.** A segmented **Guided | Quick**
+   control sits in the header next to Help and the X, in every view including the Format guide.
+   - The radiogroup shows its state with a tick and a border, not by colour alone.
+   - It replaces both "I know these — show compact" and the "Always open with the full guide"
+     link that was buried inside the guide.
+   - The choice is remembered per browser in `localStorage`, wrapped in try/catch. It is a
+     convenience, and losing it costs one click. A per-account copy waits on the
+     `/me/preferences` row proposed in round 1, §6.
+   - With nothing stored, the dialog opens in Guided view. Round 1's "derive compact from
+     history" rule is retired. Round 1's history-based time estimate (frame 3b, §6) is also
+     dropped: `formatGuide.js` notes that `GET /games` carries no start time.
+2. **Inside Guided, a returning host gets chips instead of the gallery.** The gallery is for
+   someone who has never created a session. A host who has, still gets the walkthrough pane.
+3. **Quick is 1060px.** At 880px the chips wrapped and the topics felt cramped. At 1060px both
+   fit at 1280 and 1440, and the dialog still reads as the smaller, faster one.
+4. **The preview becomes a walkthrough.**
+   - The visual style stays the same. Each step pairs **You** (what the host does), **Phones**
+     and **Room screen**, with a picture of both screens.
+   - Controls are ‹ Back, step dots (the last dot is "What you get"), and Next ›.
+   - **▶ Play** is off by default. When on, it advances every 8 seconds, pauses while the
+     pointer or focus is inside the pane, and stops at the last step. It is not offered under
+     reduced motion. Changing the format resets to step 1.
+   - Pictures are built from boxes as today, with no images. Each step's picture is its end
+     state, so nothing depends on animation.
+5. **Call & Answer's steps are written in the owner's words and checked against the help.**
+   1. You ask a question.
+   2. Everyone answers on their phone.
+   3. Everyone reads all the answers and votes. Phones say "Rank your top three"; there are no
+      names on the stage or the phones while voting (`player.js` Voting).
+   4. The results, ranked, and Workie's read. "The room's pick" comes first, and names go up
+      with the results (`host-running.js`).
+   5. Comments, then the next question. Comments are asked for after Workie's read, either with
+      **Open comments** or **Request feedback**, and they carry the writer's name
+      (`host-reports.js`).
+
+   Then **What you get**: the report.
+
+   The owner's draft said "votes for their favourites". The steps say "votes" and spell out the
+   top three, because that is what the phone asks. The draft's "a word scores when everyone
+   wrote it" (Wavelength) became "counts", because the help says Wavelength has no winners and
+   nobody scores.
+6. **The Format guide is two rows, not a seven-column table.**
+   - **Top row:** the walkthrough of the format being shown. It has a picture, a plain one-line
+     summary, the current step with You / Phones / Room screen, the controls, a rail listing
+     all the steps (dropped below about 1400px), and the single **Use [format]** button.
+   - **Bottom row:** seven short cards, one per format, acting as tabs (arrow keys move between
+     them). Each card has the name on one line, a one-sentence plain description, Good for,
+     Group and Starts. Group labels sit above their cards.
+   - **Why:** the owner's complaint was that the table "doesn't shed light on what happens".
+     Six rows × seven columns of prose was the least readable way to answer that, and it is
+     what clipped. The cards keep the at-a-glance comparison, short enough to scan in one
+     sweep. The walkthrough answers "what happens".
+   - **No per-card Use buttons**, so nothing can clip. Picking a card shows it above, and the
+     button is there.
+   - **Width:** the guide always uses `min(1760px, window − 48px)`, whichever view opened it,
+     and returns to that view's width on Back. Measured: nothing clipped at 1280×720, 1440×900
+     or 1850×1000; every format name fits on one line.
+7. **The phone guide shows one format at a time.** ‹ › and swipe move between the seven
+   formats (with "1 of 7"). The walkthrough has its own ‹ › and dots, and **Use [format]** is
+   full width in the foot.
+8. **Plain descriptions** come from the lead's draft (`feedback/copy-draft.diff`), with three
+   fixes:
+   - Wavelength: "counts", not "scores".
+   - Survey: "with names only if you chose that".
+   - Trivia: "you reveal the answer". I could not confirm that every set's explanation is shown
+     on the stage, so the copy does not promise it.
+
+   Each format has three lengths: the card line, the guide's summary, and "What you get".
+
+### For the builder
+
+- **`GameSetupDialog.jsx`**
+  - Add `view` (`'guided' | 'quick'`), defaulting to guided and stored in `localStorage`.
+  - Add the header switch.
+  - In guided view, show the gallery only when `!hasCreated`; otherwise show chips.
+  - Remove the "Always open with the full guide" link and "I know these".
+  - Set the Quick width to 1060px in `GameSetupDialog.css` (`.gsd--compact`).
+- **New `FormatWalkthrough.jsx`**, which replaces `FormatPreview` in the pane:
+  - Steps come from a new `config/formatWalkthrough.js`, as `{ title, you, phones, room, art }`
+    per step plus `get`.
+  - Back / Next / dots and an optional Play: an interval paused on `pointerenter` and
+    `focusin`, and never started when `matchMedia('(prefers-reduced-motion: reduce)')` matches.
+  - Reset to step 1 when the format changes. The pane announces "Step n of m" politely.
+- **`FormatCompare.jsx`:** rewrite it as the two-row guide. It renders full-width regardless of
+  layout (a `gsd--guide` class on the card, `width: min(1760px, calc(100vw - 48px))`). Cards are
+  `role="tab"`; the top row is the `tabpanel`. On a phone it becomes the one-at-a-time view.
+- **`config/formatGuide.js`:** apply the plain copy, adding `col` (card line) and `get` per
+  format.
+- **Tests:**
+  - The view switch defaults to Guided and persists.
+  - Quick never shows the walkthrough.
+  - Play never starts under reduced motion, and pauses on focus.
+  - Changing format resets to step 1.
+  - The guide's card count is seven, each card name is a single text node with
+    `white-space: nowrap`, and there is exactly one Use button.
+  - Re-record `gameSetupDialogDom.test.jsx` on purpose.
+- **Help:** update `host-setup.js` for the switch, the walkthrough and the new guide. Run
+  `node scripts/help-drift.js`.
+
+### Open questions
+
+1. Should Play exist at all, or are Back and Next enough? It is off by default here.
+2. The "Guided" view is remembered per browser. Should it follow the account once
+   `/me/preferences` exists?
+3. Should the walkthrough's pictures use the chosen set's real questions on every step (one read
+   per pick), or a ready-made example until a set is picked, as now?
