@@ -95,6 +95,21 @@ describe('moving through it', () => {
     expect(screen.getByRole('heading', { name: /You ask/ })).toBeInTheDocument();
   });
 
+  // rejects: the owner's white screen (2026-10-30). On Call & Answer's last
+  // page ("What you get", index 5) a shorter format has no step 5, and the
+  // first render with it read `.art` of undefined and took the page down.
+  test('from the last page of the longest walkthrough, every other format still renders', () => {
+    const others = Object.keys(FORMAT_WALKTHROUGH).filter((f) => f !== 'call-and-answer');
+    for (const other of others) {
+      const { rerender, unmount } = render(<FormatWalkthrough format="call-and-answer" label="Call & Answer" />);
+      for (let i = 0; i < 6; i += 1) fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+      expect(screen.getAllByText('What you get').length).toBeGreaterThan(0);
+      expect(() => rerender(<FormatWalkthrough format={other} label={other} />)).not.toThrow();
+      expect(screen.getByText(/^Step 1 of \d$/)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   test('a format is first shown at step 1', () => {
     render(<FormatWalkthrough format="wavelength" label="Wavelength" />);
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();

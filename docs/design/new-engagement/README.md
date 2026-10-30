@@ -494,3 +494,71 @@ Every point the coordinator listed as "must address", and what was done. The rev
    `/me/preferences` exists?
 3. Should the walkthrough's pictures use the chosen set's real questions on every step (one read
    per pick), or a ready-made example until a set is picked, as now?
+
+## Round 3 — one view, not two
+
+*30 Oct 2026. The owner, on the round-2 build: "think through the experience again because the
+guided vs quick is not intuitive." The mockups are in `index-3.html`, and each PNG is prefixed
+`3-`. The walkthrough content and the visual style from round 2 are kept.*
+
+### What is wrong with Guided | Quick
+
+1. **Two abstract names for one dialog.** Neither word says what is on screen. "Quick" doesn't
+   say what it removes, and "Guided" doesn't say what it adds.
+2. **You can't tell what the switch does until you press it.** The whole layout changes at once:
+   the width, the pane, the gallery and the helper copy.
+3. **A returning host doesn't know why the screen looks different.** The choice is remembered
+   per browser, so the dialog can open in a shape the host doesn't remember choosing, with
+   nothing on screen explaining why.
+4. **The useful thing is tied to a mode.** The walkthrough is what the owner asked for. Putting
+   it behind a mode makes the host choose a mode in order to see an explanation.
+
+### The options
+
+| | A — one layout; "How it runs" beside the form, hideable | B — the form alone; "How it runs" opens inline | C — a one-line step strip; the pictures live in the guide |
+|---|---|---|---|
+| Frames | `3-A1-one-layout-open-1440.png`, `3-A2-one-layout-hidden-1440.png` | `3-B-inline-1440.png` | `3-C-stepline-1440.png` |
+| What changes the layout | One button, **Hide**, on the walkthrough itself. Hidden, the pane becomes a rail that reads "Show how Call & Answer runs". | A "How it runs ▾" link at the end of the format's plain line. | Nothing. |
+| **Dana** (first time) | Sees what happens before committing, in pictures, with nothing to learn first. ✓ | Must notice a small link to find the most useful thing. When it opens, Questions is pushed down while she reads. ✗ | Gets the order of events in words, but not the phone and room-screen pictures that made round 2 work. ~ |
+| **Sam** (keyboard, zero teaching) | Hides it once and never sees it again. The rail is out of the tab order's way (one stop), and the 4-key path is unchanged. ✓ | Nothing appears unless asked. ✓ | One line to ignore. ✓ |
+| **Owner's words** ("I don't see the preview right away"; "not intuitive") | The walkthrough is on screen from the first open, and there is no mode to explain. ✓ | The walkthrough is hidden by default, which is the round-2 complaint again. ✗ | The visual walkthrough is reduced to text on the main screen. ~ |
+| Layout stability | Fixed dialog size; hiding only gives the form more width. ✓ | The form grows and shrinks inside itself. ✗ | Stable. ✓ |
+
+### Recommendation: A
+
+- There is **one layout**: the form on the left, "How [format] runs" on the right, open by
+  default.
+- The **only control is Hide**, which sits on the thing it hides. Hidden, the pane folds to a
+  56px rail labelled with what it holds ("Show how Call & Answer runs"), so a host who hid it
+  can see what is there and how to get it back. The format name on the rail follows the chips.
+- **Shown or hidden is remembered per browser.** If it is lost, the pane simply shows, which is
+  the safe default.
+- **Gallery or chips depends only on whether the host has created before.** That is no longer a
+  mode, just the right picker for what they know.
+- **The Format guide stays as the explorer**, opened from "Compare formats".
+- **The Guided | Quick switch is removed**, and so is the separate 1060px Quick width. Hiding
+  the pane gives the form that width inside the same fixed dialog.
+- **At 1280×720** (`3-A1-recommended-1280x720.png`) the pane fits with Back and Next above the
+  fold.
+- **On a phone** (`3-A-recommended-390.png`) there is no room beside the form, so "How it runs"
+  is a fold directly under Format. It follows the same remembered choice, and is open on a first
+  create.
+
+### For the builder
+
+- **Remove** the `view` state, the header switch and the `gsd--compact` width.
+- **Keep** `hasCreated` → gallery or chips.
+- **Add** a `howItRunsHidden` boolean, kept in `localStorage` and wrapped in try/catch. The pane
+  has a **Hide** button (`aria-expanded`, `aria-controls`). The rail is one button, named "Show
+  how [format] runs".
+- **Keyboard:** focus moves to the rail button when the pane is hidden, and back to Hide when
+  it is shown.
+- **Move** the keycaps on Create to every host, because there is no longer a "quick" host to
+  reserve them for. They are `aria-hidden`, and the shortcut lives in `aria-keyshortcuts`.
+- **Tests:**
+  - No view switch is rendered.
+  - Hide collapses the pane to a rail whose name includes the format.
+  - The hidden state persists, and survives `localStorage` throwing.
+  - A first-time host gets the gallery and a returning host gets chips, in both states.
+- **Help:** replace the Guided/Quick paragraph in `host-setup.js` with one line about Hide and
+  the rail.

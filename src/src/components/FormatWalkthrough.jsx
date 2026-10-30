@@ -295,8 +295,18 @@ export default function FormatWalkthrough({
   const dotsRef = useRef([]);
   const reduced = prefersReducedMotion();
 
-  /* A NEW FORMAT STARTS AT STEP 1, and stops playing (README decision 4). */
-  useEffect(() => { setStep(0); setPlaying(false); }, [format]);
+  /* A NEW FORMAT STARTS AT STEP 1, and stops playing (README decision 4).
+     Reset DURING the render that brings the new format, not in an effect
+     after it: that first render used to keep the old format's step number,
+     and on Call & Answer's last step (index 5) a shorter format has no step
+     5, so `current.art` threw and the whole page went white (owner,
+     2026-10-30). The clamp below is the second guard. */
+  const [stepFormat, setStepFormat] = useState(format);
+  if (stepFormat !== format) {
+    setStepFormat(format);
+    setStep(0);
+    setPlaying(false);
+  }
 
   /* PLAY: one step every 8s while nothing of the host's is inside the pane. */
   useEffect(() => {
@@ -320,10 +330,11 @@ export default function FormatWalkthrough({
     );
   }
 
-  const atGet = step === total - 1;
-  const current = atGet ? null : walk.steps[step];
+  const shown = stepFormat === format ? Math.min(Math.max(step, 0), total - 1) : 0;
+  const atGet = shown === total - 1;
+  const current = atGet ? null : walk.steps[shown];
   const art = atGet ? walk.get.art : current.art;
-  const status = atGet ? 'What you get' : `Step ${step + 1} of ${total - 1}`;
+  const status = atGet ? 'What you get' : `Step ${shown + 1} of ${total - 1}`;
   const go = (n) => setStep(Math.max(0, Math.min(total - 1, n)));
   const stepName = (i) => (i === total - 1 ? 'What you get' : `Step ${i + 1} of ${total - 1}: ${walk.steps[i].title}`);
 
@@ -365,7 +376,7 @@ export default function FormatWalkthrough({
 
   const controls = (
     <div className="gsd-wt-ctl">
-      <button type="button" className="gsd-btn gsd-wt-back" aria-disabled={step === 0 || undefined} onClick={() => go(step - 1)}>
+      <button type="button" className="gsd-btn gsd-wt-back" aria-disabled={shown === 0 || undefined} onClick={() => go(shown - 1)}>
         <Icon name="CaretLeft" size={13} weight="bold" />{layout === 'phone' ? <span className="gsd-sr">Back</span> : ' Back'}
       </button>
       <span className="gsd-wt-dots-nav" role="group" aria-label={`Steps of ${label}`}>
@@ -374,10 +385,10 @@ export default function FormatWalkthrough({
             key={i}
             ref={(el) => { dotsRef.current[i] = el; }}
             type="button"
-            className={`gsd-wt-dot${i === step ? ' is-on' : ''}${i === total - 1 ? ' is-get' : ''}`}
+            className={`gsd-wt-dot${i === shown ? ' is-on' : ''}${i === total - 1 ? ' is-get' : ''}`}
             aria-label={stepName(i)}
-            aria-current={i === step ? 'step' : undefined}
-            tabIndex={i === step ? 0 : -1}
+            aria-current={i === shown ? 'step' : undefined}
+            tabIndex={i === shown ? 0 : -1}
             onClick={() => go(i)}
             onKeyDown={(event) => dotKey(event, i)}
           >
@@ -385,7 +396,7 @@ export default function FormatWalkthrough({
           </button>
         ))}
       </span>
-      <button type="button" className="gsd-btn gsd-wt-next" aria-disabled={atGet || undefined} onClick={() => go(step + 1)}>
+      <button type="button" className="gsd-btn gsd-wt-next" aria-disabled={atGet || undefined} onClick={() => go(shown + 1)}>
         {layout === 'phone' ? <span className="gsd-sr">Next</span> : 'Next '}<Icon name="CaretRight" size={13} weight="bold" />
       </button>
       {layout === 'guide' && play}
@@ -396,7 +407,7 @@ export default function FormatWalkthrough({
     <div className="gsd-wt-step">
       <h4 className="gsd-wt-t">
         <span className={`gsd-wt-n${atGet ? ' is-get' : ''}`} aria-hidden="true">
-          {atGet ? <Icon name="Check" size={12} weight="bold" /> : step + 1}
+          {atGet ? <Icon name="Check" size={12} weight="bold" /> : shown + 1}
         </span>
         {atGet ? 'What you get' : current.title}
       </h4>
@@ -450,8 +461,8 @@ export default function FormatWalkthrough({
           </div>
           <ol className="gsd-wt-rail" aria-label={`All the steps of ${label}`}>
             {Array.from({ length: total }, (_, i) => (
-              <li key={i} className={i === step ? 'is-on' : ''}>
-                <button type="button" className="gsd-wt-railbtn" aria-current={i === step ? 'step' : undefined} onClick={() => go(i)}>
+              <li key={i} className={i === shown ? 'is-on' : ''}>
+                <button type="button" className="gsd-wt-railbtn" aria-current={i === shown ? 'step' : undefined} onClick={() => go(i)}>
                   <span className={`gsd-wt-n${i === total - 1 ? ' is-get' : ''}`} aria-hidden="true">
                     {i === total - 1 ? <Icon name="Check" size={11} weight="bold" /> : i + 1}
                   </span>
