@@ -8,14 +8,18 @@
  * Create: Name it → Format → Questions, on one page; everything else sits
  * under "Optional — every one has a safe default".
  *
- *   FULL     (a host with no sessions yet) min(1240px, 100vw−48px), a form on
- *            the left and a 420px side pane: the preview, a status-only
- *            checklist and "What happens next" (components/CreateSummary).
- *            The formats are a gallery of cards with "Planning a…" meeting
- *            chips and a Compare view until a set is picked, then a chip row.
- *   COMPACT  (a host with history) a fixed 880px single column: format chips
- *            with the last-used one chosen, the recents list, a one-line
- *            briefing, no helper copy and no side pane unless asked for.
+ *   GUIDED   (the default for everyone since the owner's round 2) min(1240px,
+ *            100vw−48px), a form on the left and a 420px side pane walking
+ *            through how the chosen format runs (components/FormatWalkthrough)
+ *            over a one-line status. A first-time host gets a gallery of cards
+ *            with "Planning a…" meeting chips; a host with history gets chips.
+ *   QUICK    a fixed 1060px single column: format chips with the last-used
+ *            one chosen, the recents list, a one-line briefing, no helper copy
+ *            and no side pane. The Guided | Quick switch in the head moves
+ *            between them and is remembered in this browser.
+ *   GUIDE    "Format guide" from either view: the card widens to min(1760px,
+ *            100vw−48px) for the walkthrough and seven format cards
+ *            (components/FormatCompare), and narrows back on leaving.
  *
  *   NEITHER CHANGES SIZE WHILE OPEN. The card used to widen from 680 to
  *   1120px while the set list was open and narrow again on a pick, so the
@@ -68,7 +72,7 @@ import { BUILD_KIND, EVENT_KIND, kindLabel, kindIcon } from '../config/engagemen
 import { offeredForSessions } from '../config/setFinder';
 import {
   formatGuide, isHandoffFormat, MEETING_TYPES,
-  readLayoutOverride, writeLayoutOverride, isMacPlatform, createShortcutLabel, isCreateShortcut,
+  readViewMode, writeViewMode, isMacPlatform, createShortcutLabel, isCreateShortcut,
 } from '../config/formatGuide';
 import SetChooser from './SetChooser';
 import { ENGAGE } from '../utils/setOwnerTag';
@@ -117,6 +121,44 @@ function openAdvancedAt(root, selector) {
   const target = fold.querySelector(selector);
   if (target && target.focus) target.focus();
   if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center' });
+}
+
+/**
+ * GUIDED | QUICK (README round 2, decision 1; frames 2-01, 2-02). One radio
+ * group: the arrow keys move and choose, the chosen one has a tick and a 2px
+ * border so the state is never colour alone.
+ */
+function ViewSwitch({ value, onChange }) {
+  const refs = useRef({});
+  const items = [['guided', 'Guided'], ['quick', 'Quick']];
+  const key = (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = value === 'guided' ? 'quick' : 'guided';
+    const to = event.key === 'Home' ? 'guided' : (event.key === 'End' ? 'quick' : next);
+    onChange(to);
+    if (refs.current[to]) refs.current[to].focus();
+  };
+  return (
+    <span className="gsd-vsw" role="radiogroup" aria-label="View">
+      {items.map(([id, word]) => (
+        <button
+          key={id}
+          ref={(el) => { refs.current[id] = el; }}
+          type="button"
+          role="radio"
+          aria-checked={value === id}
+          tabIndex={value === id ? 0 : -1}
+          className={`gsd-vsw-opt${value === id ? ' is-on' : ''}`}
+          onClick={() => onChange(id)}
+          onKeyDown={key}
+        >
+          {value === id && <Icon name="Check" size={12} weight="bold" />}
+          {word}
+        </button>
+      ))}
+    </span>
+  );
 }
 
 export default function GameSetupDialog({
@@ -181,20 +223,17 @@ export default function GameSetupDialog({
   ];
   const offeredIds = [...PICKER_GAME_TYPES.map((t) => t.id), ...otherFormats];
 
-  /* ── layout: full or compact (README §6) ───────────────────────────────── */
-  // "I know these" / "Always show the guide" — a per-viewer convenience in
-  // localStorage (wrapped; it may throw or come back empty). No preferences
-  // API exists yet; README §7 Q1 asks whether to build one.
-  const [layoutOverride, setLayoutOverride] = useState(() => (isEdit ? '' : readLayoutOverride()));
-  const compact = !isEdit && (layoutOverride ? layoutOverride === 'compact' : hasCreated);
-  /* "Show preview" in compact: ONLY the side pane beside the compact form,
-     for this open (live dev test 2 E8: it used to bring back the whole
-     beginner guide). */
-  const [peek, setPeek] = useState(false);
-  const chooseLayout = (value) => {
-    setLayoutOverride(value);
-    writeLayoutOverride(value);
-    setPeek(false);
+  /* ── the view: Guided or Quick (README round 2, decision 1) ──────────────
+     GUIDED IS THE DEFAULT FOR EVERYONE (the owner: "it seems to default to
+     the simple mode with no way to switch back"). The Guided | Quick switch
+     in the head is always there and remembered in this browser (wrapped
+     localStorage; a lost choice costs one click). Quick is the compact form;
+     an edit is neither. */
+  const [viewMode, setViewMode] = useState(() => (isEdit ? 'guided' : readViewMode()));
+  const compact = !isEdit && viewMode === 'quick';
+  const chooseView = (value) => {
+    setViewMode(value);
+    writeViewMode(value);
   };
   /* A PHONE (frames 10, 10b): formats folded behind "More", no meeting chips,
      a one-line head and a full-width Create (live dev tests B2, V1). */
@@ -636,8 +675,8 @@ export default function GameSetupDialog({
       id,
       label: handoff ? kindLabel(id) : gameTypeMeta(id).label,
       icon: handoff ? kindIcon(id) : gameTypeMeta(id).icon,
-      short: guide.short,
-      good: guide.good,
+      // The card's one sentence (frame 2-03); "Good for" lives in the guide.
+      short: guide.col,
       handoff,
       lastUsed: !isEdit && hasCreated && id === lastFormat,
     };
@@ -656,7 +695,9 @@ export default function GameSetupDialog({
     chooseFormat(id);
   };
   const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
-  const showGallery = !compact && !isEdit && !galleryDone;
+  /* The gallery is for someone who has never created a session (README
+     round 2, decision 2); a host who has gets chips, in either view. */
+  const showGallery = !compact && !isEdit && !galleryDone && !hasCreated;
 
   /* ── the foot ─────────────────────────────────────────────────────────── */
   let footNote = null;
@@ -664,7 +705,7 @@ export default function GameSetupDialog({
   if (isEdit) footNote = 'This session has not started, so nobody can join it yet.';
   else if (isSurvey) { footNote = 'People can answer as soon as you open it. There is no separate Start.'; footIcon = 'Warning'; }
   else if (isOther) { footNote = `Nothing is created yet. ${shortcut} moves to Continue; press Enter there to go.`; footIcon = 'Info'; }
-  else if (view === 'compare') { footNote = 'Comparing formats. Choose one to go back to the form.'; footIcon = 'Info'; }
+  else if (view === 'compare') { footNote = 'Choosing a format. Use one, or go back to the form.'; footIcon = 'Info'; }
   else footNote = 'Nobody can join until you start it.';
 
   let primaryLabel;
@@ -706,22 +747,6 @@ export default function GameSetupDialog({
     ...(isCallAndAnswer ? [{ label: 'Background for Workie', value: briefing && briefing.text ? 'Added' : 'Not added — that’s fine' }] : []),
     ...(hasFormat ? [{ label: 'Advanced', value: advancedChanged ? 'Changed — see the Advanced line' : 'Defaults' }] : []),
   ];
-  const allDone = !isOther && title.trim() && hasFormat && chosenSet;
-  let nextSteps = null;
-  if (isSurvey) {
-    nextSteps = { heading: 'What happens next', steps: [
-      { b: 'Open', text: 'the join code and QR go up, and people can answer straight away.' },
-      { b: 'Collect', text: 'answers arrive in their own time; you watch the totals.' },
-      { b: 'Close', text: 'when you have enough; the results freeze for the report.' },
-    ] };
-  } else if (!isOther) {
-    nextSteps = { heading: 'What happens next', steps: [
-      { b: 'Create', text: 'waits in your Sessions list. Nobody can join; you can still edit it.' },
-      { b: 'Start', text: 'the join code and QR go up; people join on their phones.' },
-      { b: 'Run', text: 'you move the room on; every phone follows.' },
-    ] };
-  }
-
   const editChanged = [];
   if (isEdit) {
     if (title !== (seed.title || '')) editChanged.push('title');
@@ -741,7 +766,7 @@ export default function GameSetupDialog({
     </div>
   ) : null;
 
-  const showSide = (!compact || peek) && !chooserOpen && view === 'form';
+  const showSide = !compact && !chooserOpen && view === 'form';
   const stepMark = (n, done) => (
     <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
       {done ? <Icon name="Check" size={13} weight="bold" /> : n}
@@ -810,7 +835,7 @@ export default function GameSetupDialog({
           }))}
         makeRoutes={makeRoutes}
         makeRoutesNote={routesNote}
-        shortPlaceholder={phone || (compact && showSide)}
+        shortPlaceholder={phone}
         recentsFirst={!isEdit}
         ownerLabels={{ [ENGAGE]: 'Ready-made' }}
         ownerHeading="Whose"
@@ -963,18 +988,16 @@ export default function GameSetupDialog({
     focusAfter.current = '#gsd-compare-t';
     setView('compare');
   };
-  /* The links beside the step's heading. In the chip row they come AFTER the
-     radio group in the Tab order, so Title → Tab reaches the formats first
-     (live dev test 2 E4); the grid still draws them top right. A novice's
-     gallery keeps "Compare side by side" before the cards (frame 1). */
+  /* "Format guide", top right of the step in every view (frames 2-01,
+     2-02, 2-03). It sits BEFORE the radio group, so the Tab path from the
+     formats to the set search has nothing between them (live dev test 5 N1).
+     "I know these" and "Always open with the full guide" are gone: the
+     Guided | Quick switch in the head replaces both. */
   const formatActs = !isEdit && (
     <span className="gsd-step-acts">
       <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
-        <Icon name="ListBullets" size={14} /> {showGallery ? (phone ? 'Compare' : 'Compare side by side') : 'Format guide'}
+        <Icon name="ListBullets" size={14} /> Format guide
       </button>
-      {!compact && !phone && (
-        <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('compact')}>I know these — show compact</button>
-      )}
     </span>
   );
   /* Enter on a format goes on to the questions, as Enter in the title does
@@ -989,7 +1012,7 @@ export default function GameSetupDialog({
   const formatStep = (
     <section className="gsd-step gsd-step--format">
       <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
-      {showGallery && formatActs}
+      {formatActs}
       {showGallery && !phone && (
         <MeetingTypeChips types={meetingTypes} value={meeting} onPick={pickMeeting} />
       )}
@@ -1008,11 +1031,8 @@ export default function GameSetupDialog({
         collapseAfter={phone && !isEdit ? 3 : 0}
         onEnter={afterFormatEnter}
       />
-      {/* Compact keeps its Format guide in the head, out of the path from
-          the chips to the search (live dev test 5 N1, N2). */}
-      {!showGallery && !compact && formatActs}
-      {/* `blurb` from config/gameTypes.js — the chip row's one line, in full
-          mode only: compact knows the formats (live dev test 2 O3). */}
+      {/* `blurb` from config/gameTypes.js — the chip row's plain line, in
+          Guided only: Quick knows the formats (live dev test 2 O3). */}
       {!showGallery && !compact && hasFormat && (
         <p className="gsd-blurb">{isOther ? formatGuide(engagementType).short : gameTypeMeta(engagementType).blurb}</p>
       )}
@@ -1076,7 +1096,7 @@ export default function GameSetupDialog({
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
+      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${view === 'compare' ? ' gsd--guide' : ''}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
       /* THE BACKDROP STAYS INERT: there is nothing behind the overlay to go
@@ -1095,21 +1115,12 @@ export default function GameSetupDialog({
     >
       {/* THE HEAD STAYS, so the X is always on screen. */}
       <div className="gsd-head">
-        <h2 id="gsd-heading">{headingText}</h2>
-        {!compact && !isEdit && <p className="gsd-sub">Three decisions. Everything else has a sensible default.</p>}
+        <h2 id="gsd-heading">{phone && view === 'compare' ? 'Format guide' : headingText}</h2>
         <span className="gsd-head-acts">
-          {/* COMPACT'S OWN LINKS, IN THE HEAD (live dev test 5 N1): out of the
-              Tab path from the format chips to the set search. */}
-          {compact && !isEdit && (
-            <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
-              <Icon name="ListBullets" size={14} /> Format guide
-            </button>
-          )}
-          {compact && !phone && (
-            <button type="button" className="gsd-btn" aria-pressed={peek} onClick={() => setPeek((p) => !p)}>
-              <Icon name="Monitor" size={14} /> {peek ? 'Hide preview' : 'Show preview'}
-            </button>
-          )}
+          {/* GUIDED | QUICK, on every screen but an edit and a phone (README
+              round 2, decision 1; frame 2-09 has no switch). A radiogroup:
+              the chosen one carries a tick and a border, not colour alone. */}
+          {!isEdit && !phone && <ViewSwitch value={viewMode} onChange={chooseView} />}
           <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
           {/* THE X goes through requestClose(), exactly like Cancel and Escape. */}
           <button
@@ -1125,7 +1136,7 @@ export default function GameSetupDialog({
       </div>
 
       <div
-        className={`gsd-body${showSide && !compact ? ' has-side' : ''}${showSide && compact ? ' has-drawer' : ''}`}
+        className={`gsd-body${showSide ? ' has-side' : ''}`}
         ref={bodyRef}
         /* THE DISCARD QUESTION NEVER HIDES CREATE FOR LONG (live dev test 1
            B5): going back to the form is "keep editing". */
@@ -1135,7 +1146,6 @@ export default function GameSetupDialog({
         <div className={`dialog-content gsd-main${view === 'compare' ? ' is-compare' : ''}`}>
           {view === 'compare' ? (
             <>
-              {!isEdit && !phone && <MeetingTypeChips types={meetingTypes} value={meeting} onPick={(m) => setMeeting(m.id)} idPrefix="gsd-meet-cmp" />}
               <FormatCompare
                 options={formatOptions}
                 value={engagementType}
@@ -1147,36 +1157,22 @@ export default function GameSetupDialog({
                   setView('form');
                 }}
                 onBack={() => { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }}
-                shortUse={phone}
+                phone={phone}
               />
-              {/* "Always show the guide" lives INSIDE the guide in compact
-                  (live dev test 5 N2), not as a permanent link. */}
-              {compact && !isEdit && (
-                <p className="gsd-compare-always">
-                  <button type="button" className="gsd-btn gsd-btn--link" onClick={() => { chooseLayout('full'); setView('form'); }}>
-                    Always open with the full guide
-                  </button>
-                </p>
-              )}
             </>
           ) : form}
         </div>
         {showSide && (
           <CreateSummary
-            /* Compact's "Show preview": the preview only, as a drawer inside
-               the 880px card (live dev test 5 N3: no widening, no checklist). */
-            drawer={compact}
             edit={isEdit}
             format={engagementType}
-            anonymous={anonymousResponses}
-            setName={chosenSet ? chosenSet.name : ''}
+            label={formatLabel}
             notice={refusalNode}
-            rowsHeading={isEdit ? 'Editing this session' : (isOther ? 'When you continue' : (allDone ? 'Your choices' : 'Three decisions'))}
+            rowsHeading="Editing this session"
             rows={isEdit ? [
               { label: 'Status', value: 'Created, not started: nobody can join', done: true },
               { label: 'Changed', value: editChanged.length ? editChanged.join(', ') : 'Nothing yet', done: editChanged.length > 0 },
             ] : createRows}
-            next={isEdit ? null : nextSteps}
           />
         )}
       </div>

@@ -113,7 +113,7 @@ const quickStart = {
           items: [
             'Choose **Create engagement** on the start screen.',
             'Under **Name it**, type the session\'s name. The room sees it, so make it the name of the meeting.',
-            'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Compare side by side**.',
+            'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Format guide** to see how each one runs.',
             'Every topic in the set starts on. Switch off any you want to skip.',
             'Press **Create engagement**.',
           ],
@@ -218,18 +218,17 @@ const gameSetup = {
   sections: [
     /*
       GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
-      heading "New engagement" | "Start a new engagement"; full layout (no
-      sessions yet: "Three decisions. Everything else has a sensible default.",
-      side pane with Preview / Room screen / Phones / Replay, "Three decisions"
-      or "Your choices", "What happens next") or compact (a host with
-      history: last format chosen, "last used", **Show preview**, keycaps).
-      "I know these — show compact" / "Back to compact" / "Always open with
-      the full guide" (inside the compact Format guide; localStorage). Compact
-      Show preview is a column inside the card, the form narrowing beside it; Enter on a format chip focuses
-      the set search. Steps: "Name it" (autofocus; Enter goes to the
-      next empty step), "Pick a format" gallery with "Planning a…" chips
-      (config/formatGuide.js MEETING_TYPES) and "Compare side by side", then
-      "Format" chips with "Format guide"; one radio group (arrows choose).
+      heading "New engagement" | "Start a new engagement"; the Guided | Quick
+      switch in the head (owner round 2: Guided by default for everyone,
+      remembered in localStorage, formatGuide.js readViewMode; no switch on
+      an edit or a phone). Guided: the side pane walks through the format
+      (FormatWalkthrough.jsx, config/formatWalkthrough.js) over a status line;
+      a first-time host gets the gallery, a host with history chips. Quick:
+      the 1060px form, no pane, keycaps. Enter on a format chip focuses the
+      set search. Steps: "Name it" (autofocus; Enter goes to the next empty
+      step), "Pick a format" gallery with "Planning a…" chips
+      (config/formatGuide.js MEETING_TYPES), or "Format" chips; "Format
+      guide" top right of the step; one radio group (arrows choose).
       "Question set": the recents list ("Used by you lately", "Browse all"),
       "Your question sets · Make a new set"; the set is remembered per format
       while open. "Topics in this set" (all on, "Switch off any you want to
@@ -254,7 +253,7 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required. The cursor starts here; Enter takes you to the next step you have not done.' },
-            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room, one plain line and what it is good for. The arrow keys move between them and choose. See Choosing a format.' },
+            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room and one plain sentence; later, a row of chips. Arrow keys choose; Enter moves on. See Choosing a format.' },
             { title: 'Build Room and Event', text: 'They continue on their own page. Pick one and the third step says what that page asks for; the button becomes **Set up the Build Room** or **Continue to the event**, and takes your title with it. Event is offered when your plan includes events; otherwise it says which plan does.' },
             { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. Switch format and back, and the set you had comes back with its topics. **Your question sets** opens your sets; **Make a new set** opens the new-set panel straight away.' },
           ],
@@ -292,10 +291,12 @@ const gameSetup = {
     /*
       FormatPicker.jsx (gallery / chips, one radio group), MeetingTypeChips.jsx
       ("Planning a…", config/formatGuide.js MEETING_TYPES), FormatCompare.jsx
-      (Pace, Questions, Starts; Use …), CreateSummary.jsx (Preview, Room
-      screen / Phones, Replay, the checklist, What happens next). Compact for
-      a host with history (formatGuide.js historyFacts); the override in
-      localStorage (readLayoutOverride).
+      (the Format guide: the walkthrough over seven format cards acting as
+      tabs, one "Use …" button; one format at a time on a phone),
+      FormatWalkthrough.jsx (How … runs, Step n of m, You / Phones / Room
+      screen, Back / Next / the dots, Play: every 8 seconds, paused while the
+      pointer or focus is in the pane, not offered under reduced motion; the
+      last dot What you get). The view: readViewMode / writeViewMode.
     */
     {
       id: 'choosing-a-format',
@@ -306,13 +307,13 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Planning a…', text: 'Press the kind of meeting (Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day) and it picks a format and says why. You can still pick any other.' },
-            { title: 'Compare side by side', text: 'One table: what the room does, what you get, who sets the pace, group size, where the questions come from and how it starts. Each format\'s **Use** button returns you to the form with it chosen. Once a set is picked the same table is **Format guide**.' },
-            { title: 'The panel on the right', text: 'The first time, it shows the room screen and the phones for the format (**Replay** plays it again), what you have decided so far, and what happens next.' },
+            { title: 'How it runs', text: 'In Guided view the panel on the right walks through the chosen format a step at a time: what you do, what phones show and what the room screen shows, ending with what you get. **Back**, **Next** and the dots move through it; **Play** steps on every 8 seconds and pauses while your pointer or focus is in the panel.' },
+            { title: 'Format guide', text: 'Opens wide from either view: the walkthrough on top and a short card for every format below. Pick a card to see how it runs, then press the Use button beside its name to go back to the form with it chosen. Your title and choices are kept.' },
           ],
         },
         {
           t: 'p',
-          text: 'Once you have created a session the dialog opens compact, on the last format you used. Its top line has **Format guide** and **Show preview**, which opens the preview beside the form. Enter on a format moves you to the question set. **I know these — show compact** gives you compact sooner; in the Format guide, **Always open with the full guide** brings the full layout back. That choice is kept in this browser.',
+          text: 'The dialog opens in **Guided** view, with the walkthrough. **Quick**, at the top of the dialog, is the same form on its own, narrower and without the walkthrough, for a host who knows the formats. Whichever you pick is kept in this browser. Once you have created a session, the last format you used is chosen for you.',
         },
       ],
     },

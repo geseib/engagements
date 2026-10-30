@@ -142,7 +142,6 @@ export default function FormatPicker({
                 {gallery && (
                   <span className="gsd-fmt-desc" id={descId}>
                     <span>{option.short}</span>
-                    {option.good && <span className="gsd-fmt-good">Good for: {option.good}</span>}
                     {option.handoff && <span className="gsd-fmt-own">Continues on its own page</span>}
                     {option.lastUsed && <span className="gsd-fmt-good">You used it last.</span>}
                   </span>

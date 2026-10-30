@@ -382,10 +382,14 @@ describe('the card never moves, and nothing animates for ever', () => {
     expect(body).toMatch(/\.gsd \.gsd-side-pv\s*\{[^}]*overflow-y:\s*auto/);
   });
 
-  test('the two layouts are fixed sizes: full, compact, and the phone', () => {
+  test('the layouts are fixed sizes: Guided, Quick at 1060 (owner round 2), and the guide wide', () => {
     expect(body).toMatch(/\.gsd\.new-game-dialog\s*\{[^}]*width:\s*min\(1240px, calc\(100vw - 48px\)\)/);
-    expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--compact\s*\{[^}]*width:\s*min\(880px/);
+    expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--compact\s*\{[^}]*width:\s*min\(1060px/);
     expect(body).toMatch(/--gsd-side-w:\s*420px/);
+    // The Format guide uses the window whichever view opened it (README round 2, decision 6).
+    expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--guide\s*\{[^}]*width:\s*min\(1760px, calc\(100vw - 48px\)\)/);
+    // Each guide card's name stays on one line.
+    expect(body).toMatch(/\.gsd \.gsd-guide-cardname\s*\{[^}]*white-space:\s*nowrap/);
   });
 });
 

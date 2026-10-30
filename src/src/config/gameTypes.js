@@ -17,7 +17,7 @@ export const GAME_TYPES = {
     accent: 'var(--secondary)',
     // free-text responses, then the room votes on them
     phases: ['ASK', 'VOTE', 'RESULTS'],
-    blurb: 'Open responses, then the room votes on the best ones.',
+    blurb: 'Ask the room a question. Everyone answers on their phone, reads all the answers and votes for their favourites.',
     answerType: 'text',
     // What one unit of play is called on screen. See resolveRoundNoun() in
     // config/instructions.js — art rounds override this by carrying an image.
@@ -30,7 +30,7 @@ export const GAME_TYPES = {
     icon: 'Brain',
     accent: 'var(--primary)',
     phases: ['ASK', 'RESULTS'],
-    blurb: 'Multiple choice with one correct answer and a scoreboard.',
+    blurb: 'Ask a question with one right answer. Everyone picks A, B, C or D; you reveal the answer and a scoreboard keeps count.',
     answerType: 'trivia',
     roundNoun: 'Question',
   },
@@ -44,7 +44,7 @@ export const GAME_TYPES = {
     // 27 Sep 2026): pick, rate, yes/no or an open answer, counted live on the
     // wall. No vote — that was call-and-answer under another name.
     phases: ['ASK', 'RESULTS'],
-    blurb: 'One quick question at a time — pick, rate, yes/no or a short answer — with the result live on the main screen.',
+    blurb: 'Ask a quick question: pick one, rate it, yes or no, or a few words. The results fill in live on the big screen.',
     answerType: 'poll',
     roundNoun: 'Poll',
   },
@@ -61,7 +61,7 @@ export const GAME_TYPES = {
     // The group-size caveat is the spec's whole answer to large rooms: no
     // team-splitting mechanic is built; the guidance is copy, stated where the
     // type is chosen (2026-08-09 wavelength convergence spec §2.2).
-    blurb: 'Word association — a word counts when everyone says it. Works best with groups of ten or less.',
+    blurb: 'Give the room a subject. Everyone writes the words it brings to mind; a word counts when everyone wrote it. Best with ten or fewer.',
     answerType: 'wavelength',
     roundNoun: 'Subject',
   },
@@ -78,7 +78,7 @@ export const GAME_TYPES = {
     // STATE SURVEY#OPEN → SURVEY#CLOSED, host phases COLLECTING → CLOSED
     // (config/hostControls.js), and no vote, so hasVotePhase() is false.
     phases: ['COLLECTING', 'CLOSED'],
-    blurb: 'Structured multi-question feedback, reported in aggregate.',
+    blurb: 'Send a short form people fill in on their phones, in their own time. You see the answers added up.',
     answerType: 'text',
     roundNoun: 'Question',
   },
