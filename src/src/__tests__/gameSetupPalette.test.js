@@ -140,7 +140,7 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     const rule = CSS.match(/\.gsd \.btn-primary:disabled\s*\{([^}]*)\}/)[1];
     expect(rule).toMatch(/background:\s*transparent/);
     expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
-    expect(rule).not.toMatch(/opacity/);
+    expect(rule).toMatch(/opacity:\s*1\b/); // answers styles.css's 0.6 (devtest M1)
   });
 
   test('the selected category chip: body text on the same tint', () => {
@@ -371,7 +371,7 @@ describe('the card never moves, and nothing animates for ever', () => {
   test('no opacity on a text-bearing selector (disabled text is never dimmed)', () => {
     // The one exception is the briefing's sweep bar, a 4px rule with no text.
     const rules = [...body.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-      .filter(([, , decls]) => /(^|;)\s*opacity\s*:/.test(decls))
+      .filter(([, , decls]) => /(^|;)\s*opacity\s*:(?!\s*1\s*(;|$))/.test(decls))
       .map(([, sel]) => sel.trim())
       .filter((sel) => !/gsd-sweep i/.test(sel) && !/^(from|to|\d+%)$/.test(sel));
     expect(rules).toEqual([]);

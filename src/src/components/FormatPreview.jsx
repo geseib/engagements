@@ -96,12 +96,23 @@ function Art({ slug }) {
   }
 }
 
+/** Reduced motion: never add `is-play` at all (and the CSS stops it too). */
+function prefersReducedMotion() {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) {
+    return false;
+  }
+}
+
 export default function FormatPreview({ format = '', play = 0, size = 'card' }) {
   const slug = SLUG[format] || 'none';
+  const animate = play > 0 && !prefersReducedMotion();
   return (
     <span
       key={play}
-      className={`gsd-fp gsd-fp--${slug} gsd-fp--${size}${play > 0 ? ' is-play' : ''}`}
+      className={`gsd-fp gsd-fp--${slug} gsd-fp--${size}${animate ? ' is-play' : ''}`}
       aria-hidden="true"
       data-format={format || 'none'}
     >

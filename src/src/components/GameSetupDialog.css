@@ -180,7 +180,7 @@
   flex: none;
   background: var(--gsd-card);
   border-bottom: 1px solid var(--gsd-rule);
-  padding: 20px 132px 14px 28px;
+  padding: 14px 132px 12px 28px;
 }
 
 /* The one sentence the first-time review called the most reassuring on the
@@ -291,8 +291,9 @@
 .gsd .dialog-input:focus,
 .gsd .dialog-select:focus,
 .gsd .dialog-textarea:focus {
-  outline: none;
-  border-color: var(--gsd-primary);
+  outline: 2px solid var(--gsd-focus);
+  outline-offset: 2px;
+  border-color: var(--gsd-focus);
 }
 
 /* Disabled text is never dimmed with opacity (README §3.8): muted, at AA. */
@@ -447,9 +448,8 @@
 .gsd .gsd-fmt--gallery .gsd-fmt-top { padding: 0 6px; font-size: var(--gsd-t-body); color: var(--gsd-text); }
 .gsd .gsd-fmt-art { position: relative; display: block; }
 .gsd .gsd-fmt-chosen {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+  /* In the name row, never over the preview (live dev test 1 V8). */
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -626,34 +626,59 @@
    never colour alone. */
 .gsd .category-selection { margin-top: 2px; }
 
+/* EVERY GLOBAL PROPERTY ANSWERED (live dev test H5, V3; gameSetupLeakPalette
+   .test.js). styles.css styles `.category-*` four times over for paper
+   screens — a 200px grid, stretching `flex: 1` chips, a #f0f4ff hover, a pill
+   behind the count — and each property the dialog did not answer leaked in:
+   an off topic turned white under the pointer (1.06:1) and every chip
+   stretched to fill its row. Each one is answered here, for every state. */
 .gsd .category-button-grid {
   display: flex;
   flex-wrap: wrap;
+  grid-template-columns: none;
   gap: 8px;
+  margin-bottom: 0;
 }
 
 .gsd .category-button {
   display: inline-flex;
-  align-items: baseline;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  align-items: center;
   gap: 6px;
+  min-height: 36px;
   font: inherit;
   font-size: var(--gsd-t-label);
   font-weight: 600;
-  padding: 8px 12px;
+  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid var(--gsd-rule-strong);
   background: transparent;
   color: var(--gsd-text);
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: none;
 }
 
-.gsd .category-button:hover { border-color: var(--gsd-primary); }
+.gsd .category-button:hover {
+  border-color: var(--gsd-primary);
+  background: transparent;
+  transform: none;
+  box-shadow: none;
+}
 
 .gsd .category-button.selected {
   border: 2px solid var(--gsd-primary);
-  padding: 7px 11px;
+  border-color: var(--gsd-primary);
+  padding: 0 11px;
   background: rgba(246, 169, 76, 0.12);
+  color: var(--gsd-text);
+}
+
+.gsd .category-button:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  color: var(--gsd-muted);
+  border-style: dashed;
 }
 
 /* The tick (on) or dash (off): selection is never colour alone (README §3.8). */
@@ -664,17 +689,34 @@
 }
 .gsd .category-button.selected .category-mark { color: var(--gsd-primary); }
 
-/* FOUND BY RENDERING THE TWO SHEETS TOGETHER: styles.css colours
-   .category-name #333 directly, which beats the colour the chip hands down —
-   an UNSELECTED name read 1.15:1 on the card. Selected names were white by
-   another styles.css rule, which is why the selected chip looked fine. */
+/* styles.css colours `.category-name` #333 (1.15:1 on the card) and gives it
+   `flex: 1`, which is what pushed the count to the far end of a stretched chip. */
+.gsd .category-name {
+  font-size: inherit;
+  font-weight: 600;
+  color: inherit;
+  flex: 0 1 auto;
+  flex-grow: 0;
+  text-align: left;
+}
 .gsd .category-button .category-name { color: inherit; }
 
-.gsd .category-button .category-count {
+/* The count inline after the name ("Architecture 2", frame 4), not a pill. */
+.gsd .category-count {
   font-size: var(--gsd-t-floor);
   font-weight: 700;
   color: var(--gsd-muted);
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  min-width: 0;
+  margin-left: 0;
+  text-align: left;
 }
+.gsd .category-button .category-count { color: var(--gsd-muted); }
+.gsd .category-button.selected .category-name { color: var(--gsd-text); font-weight: 600; }
+.gsd .category-button.selected .category-count { color: var(--gsd-muted); font-weight: 700; }
+
 
 /* ------------------------------------------------------------- option cards */
 
@@ -898,7 +940,7 @@
 .gsd-three-opt:hover { border-color: var(--gsd-primary); }
 
 .gsd-three-opt:focus-visible {
-  outline: 2px solid var(--gsd-primary);
+  outline: 2px solid var(--gsd-focus);
   outline-offset: 2px;
 }
 
@@ -1035,7 +1077,7 @@
 .gsd .gsd-btn:hover { border-color: var(--gsd-primary); }
 
 .gsd .gsd-btn:focus-visible {
-  outline: 2px solid var(--gsd-primary);
+  outline: 2px solid var(--gsd-focus);
   outline-offset: 2px;
 }
 
@@ -1243,7 +1285,7 @@
 .gsd .gsd-adv > summary::-webkit-details-marker { display: none; }
 
 .gsd .gsd-adv > summary:focus-visible {
-  outline: 2px solid var(--gsd-primary);
+  outline: 2px solid var(--gsd-focus);
   outline-offset: 3px;
 }
 
@@ -1400,23 +1442,36 @@
   cursor: pointer;
 }
 
-/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme. */
+/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme.
+   `transition: none` answers styles.css's `transition: all .3s`, which faded
+   "Loading topics…" from amber for 300ms (live dev test M1, B12). */
 .gsd .btn-primary {
   border: 1px solid var(--gsd-primary);
   background: var(--gsd-primary);
   color: #1B2942;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  cursor: pointer;
+  transition: none;
 }
 
 .gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+/* styles.css lifts a primary 2px with a shadow on hover; not here. */
+.gsd .btn-primary:hover { transform: none; box-shadow: none; }
 
 /* NOT YET: OUTLINED, NOT DIMMED (README §9, visual review: a dimmed amber
    block was under AA and read as broken). A dashed amber outline with the
-   muted label, 7.0:1 on the card. */
+   muted label, 7.0:1 on the card. `opacity: 1` answers styles.css's 0.6,
+   which had brought the label down to 3.5:1 (live dev test M1). */
 .gsd .btn-primary:disabled {
   border: 1px dashed var(--gsd-primary);
   background: transparent;
   color: var(--gsd-muted);
   cursor: not-allowed;
+  opacity: 1;
+  transform: none;
 }
 
 .gsd .btn-primary {
@@ -1439,9 +1494,48 @@
   border: 1px solid var(--gsd-rule-strong);
   background: transparent;
   color: var(--gsd-text);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  cursor: pointer;
+  transition: none;
 }
 
-.gsd .btn-secondary:hover { border-color: var(--gsd-muted); }
+.gsd .btn-secondary:hover { border-color: var(--gsd-muted); background: transparent; color: var(--gsd-text); }
+
+/* THE HELP "?" (live dev test H6): HelpButton.css's quiet re-tint reads the
+   page roles, which resolve to PAPER here (this card has no dusk ancestor),
+   so the icon was 2.37:1 and its focus ring the card's own colour. */
+.gsd .help-button.help-button-quiet {
+  color: var(--gsd-muted);
+  border-color: var(--gsd-rule-strong);
+  background: transparent;
+}
+.gsd .help-button.help-button-quiet:hover { color: var(--gsd-text); }
+.gsd .help-button.help-button-quiet:focus-visible {
+  outline: 2px solid var(--gsd-focus);
+  outline-offset: 2px;
+}
+
+/* THE STATUS NOTE ("Topics refreshed…", live dev test H1/B1). styles.css
+   paints `.status-message` #f0f0f0 for paper screens; under dusk text that
+   measured 1.02:1. Every property it sets is answered here. */
+.gsd .status-message {
+  margin-top: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: var(--gsd-wash-info);
+  border: 1px solid var(--gsd-rule-strong);
+  color: var(--gsd-text);
+}
+.gsd .status-message.success,
+.gsd .status-message.error {
+  background: var(--gsd-wash-info);
+  color: var(--gsd-text);
+  border: 1px solid var(--gsd-rule-strong);
+}
 
 /* THE REFUSAL, in the dialog instead of a browser alert. A limit is the
    amber rule (it is a plan fact, not a fault); any other failure is the
@@ -1521,7 +1615,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 190px;
+  min-height: 0;
   padding: 16px;
   border: 1px solid var(--gsd-rule-strong);
   border-radius: 12px;
@@ -1583,7 +1677,7 @@
   justify-content: center;
   gap: 6px;
   width: 100%;
-  height: 92px;
+  height: 58px;
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--gsd-field);
@@ -1654,7 +1748,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .gsd .gsd-fp,
-  .gsd .gsd-fp * { animation: none; }
+  .gsd .gsd-fp * { animation: none !important; } /* beats the 0,5,0 `.is-play` rules (devtest M2) */
 }
 
 /* ================================================================== COMPARE
@@ -1664,15 +1758,11 @@
 .gsd .gsd-compare-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
 .gsd .gsd-compare-t { margin: 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); }
 .gsd .gsd-compare-sub { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
-.gsd .gsd-compare-scroll { overflow-x: auto; }
+.gsd .gsd-compare-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; }
 .gsd .gsd-compare-tbl { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .gsd .gsd-compare-rowhead { width: 110px; }
 .gsd .gsd-compare-tbl thead th,
 .gsd .gsd-compare-tbl thead td { position: sticky; z-index: 2; background: var(--gsd-card); }
-.gsd .gsd-compare-groups th,
-.gsd .gsd-compare-groups td { top: -18px; }
-.gsd .gsd-compare-formats th,
-.gsd .gsd-compare-formats td { top: 10px; }
 .gsd .gsd-compare-groups th {
   padding: 0 8px 8px;
   text-align: left;
@@ -1754,8 +1844,149 @@
   .gsd .gsd-fmt-group--gallery { grid-template-columns: 1fr; }
   .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
   .gsd .gsd-step-acts { margin-left: 0; }
-  .gsd .gsd-compact-sum { padding: 0 16px; }
-  /* Cancel and Create share one row; the note takes the row above. */
-  .gsd .dialog-actions .btn-secondary { flex: 0 1 auto; width: auto; }
-  .gsd .dialog-actions .btn-primary { flex: 1 1 0; width: auto; justify-content: center; }
 }
+
+/* ======================================================== LIVE DEV TEST FIXES
+   30 Oct 2026, reviews/devtest-1/2/3. Last in the sheet, so equal-weight
+   rules above cannot undo them (the phone foot was undone exactly that way:
+   `.gsd .gsd-foot-note { flex: 1 1 180px }` sat after its own media rule). */
+
+/* "Show preview" in compact: the 420px pane beside the compact form. */
+.gsd.new-game-dialog.gsd--compact.gsd--peek { width: min(1300px, calc(100vw - 48px)); }
+
+/* Step 2 as a grid, so its links sit top right whatever their Tab order. */
+.gsd .gsd-step.gsd-step--format {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+}
+.gsd .gsd-step--format > * { grid-column: 1 / -1; }
+.gsd .gsd-step--format > .gsd-step-h { grid-column: 1; grid-row: 1; }
+.gsd .gsd-step--format > .gsd-step-acts { grid-column: 2; grid-row: 1; margin-left: 0; justify-content: flex-end; }
+
+/* Seven chips on one row at 762px (frames 3, 4; devtest V2, O4, M4). */
+.gsd .gsd-fmt--chips { padding: 0 10px; }
+.gsd .gsd-fmt--chips[aria-checked="true"] { padding: 0 9px; }
+.gsd .gsd-fmt-top { gap: 5px; }
+.gsd .gsd-fmt-group { gap: 5px; }
+.gsd .gsd-fmt-last { padding-left: 6px; }
+/* Seven meeting chips on one row with their label (frame 1). */
+.gsd .gsd-meet { gap: 6px; }
+.gsd .gsd-meet-chip { padding: 0 10px; }
+.gsd .gsd-meet-chip[aria-pressed="true"] { padding: 0 9px; }
+/* The gallery cards a step shorter, so step 3 shows at 1440×900 (README §3.2). */
+.gsd .gsd-fmt--gallery { gap: 6px; padding: 6px 6px 10px; }
+.gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 5px 5px 9px; }
+.gsd .gsd-fmt-group--gallery { gap: 10px; }
+.gsd .gsd-fmt-art .gsd-fp { gap: 4px; padding: 6px 10px; }
+.gsd .gsd-fmt-art .gsd-fp-ans,
+.gsd .gsd-fmt-art .gsd-fp-slot { padding-top: 0; padding-bottom: 0; }
+.gsd .gsd-fmt-art .gsd-fp-mock { height: 38px; }
+.gsd .gsd-fmt-art .gsd-fp-word.is-big { font-size: var(--gsd-t-body); }
+.gsd .gsd-step { padding: 10px 0 12px; gap: 8px; }
+
+/* "More" on a phone (frames 10, 10b): not one of the options. */
+.gsd .gsd-fmt-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.gsd .gsd-fmt-more--gallery { display: flex; width: 100%; border-radius: 12px; }
+.gsd .gsd-fmt-wrap--chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.gsd .gsd-fmt-wrap--chips .gsd-fmt-more { margin-top: 0; }
+
+/* Text links get a real target (devtest 3 L3). */
+.gsd .gsd-btn--link,
+.gsd .gsd-setlink,
+.gsd .gsd-handoff-note a { padding-block: 4px; }
+
+/* Set-row metadata in the dialog's own muted (devtest 3 L6: 4.64:1 on the wash). */
+.gsd .schs { --schs-muted: var(--gsd-muted); }
+
+/* THE SIDE PREVIEW SCALES, IT IS NOT CROPPED (devtest M5, B9, V6). */
+.gsd .gsd-fp--pane { height: 120px; }
+.gsd .gsd-side-pv { flex: 1 1 auto; min-height: 120px; }
+@media (max-height: 800px) {
+  /* Short windows: the whole pane scrolls, preview first, nothing squeezed to 0. */
+  .gsd .gsd-side { overflow-y: auto; }
+  .gsd .gsd-side-pv { flex: none; overflow: visible; min-height: 0; }
+  .gsd .gsd-side-pin { flex: none; }
+}
+
+/* A disabled preview tab never looks pressed (devtest M7, B11). */
+.gsd .gsd-side-tabs .gsd-btn[aria-pressed="true"]:disabled,
+.gsd .gsd-side-tabs .gsd-btn:disabled {
+  border: 1px dashed var(--gsd-rule-strong);
+  padding: 7px 12px;
+  color: var(--gsd-muted);
+}
+
+/* COMPARE (devtest M6, B10): the body is the table's own scroller, so the
+   head row holds still, opaque, flush to the top; the chosen format's Use is
+   outlined with a tick, never a second filled primary. */
+.gsd .gsd-main.is-compare { display: flex; flex-direction: column; overflow: hidden; }
+.gsd .gsd-main.is-compare .gsd-compare { flex: 1 1 auto; }
+.gsd .gsd-compare-tbl thead .gsd-compare-groups th,
+.gsd .gsd-compare-tbl thead .gsd-compare-groups td { position: static; }
+.gsd .gsd-compare-tbl thead .gsd-compare-formats th,
+.gsd .gsd-compare-tbl thead .gsd-compare-formats td { position: sticky; top: 0; z-index: 2; background: var(--gsd-card); padding-top: 8px; }
+.gsd .gsd-compare-tbl thead .gsd-compare-formats th.is-suggested { background: var(--gsd-field); }
+.gsd .gsd-compare-use.is-on { border: 2px solid var(--gsd-primary); color: var(--gsd-primary); padding: 5px 11px; }
+.gsd .gsd-compare-t:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+
+/* THE PHONE (frames 10, 10b; devtest B2, H2, V1): a one-line head, the
+   formats folded, the note on its own row and Cancel + Create sharing the
+   next, each 44px — Create readable, never squeezed. */
+@media (max-width: 600px) {
+  .gsd.new-game-dialog h2,
+  .gsd h2 { font-size: var(--gsd-t-head); white-space: nowrap; }
+  .gsd .gsd-sub { display: none; }
+  .gsd .gsd-head,
+  .gsd.gsd--compact .gsd-head { padding: 12px 104px 10px 16px; }
+  .gsd .gsd-head-acts { top: 6px; }
+  .gsd .gsd-meet { display: none; }
+  .gsd .dialog-actions { flex-wrap: wrap; padding: 10px 16px 12px; gap: 8px; }
+  .gsd .dialog-actions .gsd-foot-note { flex: 1 0 100%; margin: 0; }
+  .gsd .dialog-actions .btn-secondary,
+  .gsd .dialog-actions .btn-primary,
+  .gsd .dialog-actions .gsd-discard {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    width: auto;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .gsd .dialog-actions .gsd-confirm-t { flex: 1 0 100%; }
+  .gsd .gsd-fmt--chips { min-height: 44px; }
+  /* Three chips and More on one row (frame 10b): the format icons go. */
+  .gsd .gsd-fmt--chips .gsd-fmt-top > svg { display: none; }
+  .gsd .gsd-kbd { display: none; }
+  /* The recents as frame 10b draws them: the name and when. */
+  .gsd .schs-recent-opt .schs-own,
+  .gsd .schs-recent-opt > .schs-dim:not(.schs-push) { display: none; }
+}
+
+/* Gallery text a step smaller, art a little taller, so a card is whole and
+   the second row ends nearer the fold (devtest M4). */
+.gsd .gsd-fmt-art .gsd-fp { height: 64px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-desc { font-size: var(--gsd-t-floor); line-height: 1.35; gap: 2px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-top { font-size: var(--gsd-t-label); flex-wrap: wrap; row-gap: 4px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-name { white-space: nowrap; }
+.gsd .gsd-fmt-art .gsd-fp-ans b,
+.gsd .gsd-fmt-art .gsd-fp-row s,
+.gsd .gsd-fmt-art .gsd-fp-slot s { height: 4px; }
+.gsd .gsd-fmt-art .gsd-fp-opt { padding: 1px 6px; }
+.gsd .gsd-fmt-art .gsd-fp-tick { width: 11px; height: 11px; }
