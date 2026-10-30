@@ -270,7 +270,7 @@ function Phone({ art }) {
 
 export function WalkthroughPicture({ art, report = false }) {
   return (
-    <span className={`gsd-wt-pic${report ? ' is-report' : ''}`} aria-hidden="true">
+    <span className={`gsd-wt-pic${report ? ' is-report' : ''}${art && art.phone ? ' has-phone' : ''}`} aria-hidden="true">
       <span className="gsd-wt-stage"><Stage art={art && art.stage} /></span>
       {art && art.phone && <Phone art={art.phone} />}
     </span>

@@ -95,6 +95,22 @@ describe('moving through it', () => {
     expect(screen.getByRole('heading', { name: /You ask/ })).toBeInTheDocument();
   });
 
+  test('a format is first shown at step 1', () => {
+    render(<FormatWalkthrough format="wavelength" label="Wavelength" />);
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Steps of Wavelength' })).getAllByRole('button')[0]).toHaveAttribute('aria-current', 'step');
+  });
+
+  test('the room card keeps its words clear of the phone (dev check: the title ran under it)', () => {
+    const { container } = render(<FormatWalkthrough format="call-and-answer" label="Call & Answer" />);
+    expect(container.querySelector('.gsd-wt-pic')).toHaveClass('has-phone');
+    const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'GameSetupDialog.css'), 'utf8');
+    const overlap = Number(css.match(/\.gsd \.gsd-wt-phone \{[^}]*width:\s*(\d+)px/)[1])
+      - Number(css.match(/\.gsd \.gsd-wt-pic \{[^}]*padding-right:\s*(\d+)px/)[1]);
+    const clear = Number(css.match(/\.gsd \.gsd-wt-pic\.has-phone \.gsd-wt-stage \{[^}]*padding-right:\s*(\d+)px/)[1]);
+    expect(clear).toBeGreaterThan(overlap);
+  });
+
   test('a blank Phones or Room row is left out, not invented', () => {
     render(<FormatWalkthrough format="build" label="Build Room" />);
     expect(screen.getByText('You')).toBeInTheDocument();
