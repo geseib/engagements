@@ -287,3 +287,111 @@
   .schs .schs-tbl th:nth-child(4), .schs .schs-tbl td:nth-child(4) { display: none; }
   .schs .schs-sel select { max-width: 140px; }
 }
+
+/* ── New engagement (docs/design/new-engagement, 30 Oct 2026) ─────────────
+   ONE FOCUS RING (README §3.8): 2px of the link colour at a 2px offset, on
+   every control here. The search draws it on its wrapper, since the input
+   itself is borderless inside it (the old `outline: none` with only a
+   border-colour change was the visual review's "invisible focus"). */
+.schs .schs-search:focus-within { outline: 2px solid var(--schs-link); outline-offset: 2px; }
+.schs button:focus-visible,
+.schs select:focus-visible,
+.schs input[type="checkbox"]:focus-visible,
+.schs input[type="radio"]:focus-visible,
+.schs .schs-find:focus-visible { outline: 2px solid var(--schs-link); outline-offset: 2px; }
+/* The highlighted row (aria-activedescendant) is drawn with the same ring. */
+.schs .schs-tbl tr.is-cursor td { box-shadow: inset 0 2px 0 var(--schs-link), inset 0 -2px 0 var(--schs-link); }
+.schs .schs-tbl tr.is-cursor td:first-child { box-shadow: inset 2px 2px 0 var(--schs-link), inset 0 -2px 0 var(--schs-link); }
+.schs .schs-tbl tr.is-cursor td:last-child { box-shadow: inset -2px 2px 0 var(--schs-link), inset 0 -2px 0 var(--schs-link); }
+
+/* "Keep the set I had" beside the search. */
+.schs .schs-searchrow { display: flex; align-items: stretch; gap: 10px; }
+.schs .schs-searchrow .schs-search { flex: 1; min-width: 0; }
+.schs .schs-keep { flex: none; min-height: 44px; font-weight: 700; }
+
+/* The current set, in words. */
+.schs .schs-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-size: var(--schs-t-floor);
+  font-weight: 700;
+  color: var(--schs-text);
+}
+
+/* RECENTS FIRST (frame 3): the "Used by you lately" listbox under the search. */
+.schs .schs-recents {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--schs-rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.schs .schs-recents-h {
+  padding: 10px 14px 4px;
+  font-size: var(--schs-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--schs-muted);
+}
+.schs .schs-recents-list { margin: 0; padding: 0 4px 4px; list-style: none; }
+.schs .schs-recent-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.schs .schs-recent-opt b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schs .schs-recent-opt:hover { background: var(--schs-sel); }
+.schs .schs-recent-opt.is-cursor { outline: 2px solid var(--schs-link); outline-offset: -2px; background: var(--schs-sel); }
+.schs .schs-browse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--schs-rule-soft);
+  background: transparent;
+  color: var(--schs-link);
+  font: inherit;
+  font-size: var(--schs-t-label);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.schs .schs-browse:focus-visible { outline-offset: -2px; }
+
+/* MAKE YOUR OWN (frame 5c): three routes after the exits. */
+.schs .schs-routes-wrap { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.schs .schs-routes-h { margin: 0; font-size: var(--schs-t-body); font-weight: 700; color: var(--schs-text); }
+.schs .schs-routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.schs .schs-route {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 44px;
+  padding: 14px 16px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 10px;
+  background: var(--schs-field);
+  color: var(--schs-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.schs .schs-route svg { color: var(--schs-link); }
+.schs .schs-route b { font-size: var(--schs-t-body); }
+.schs .schs-route span { font-size: var(--schs-t-label); line-height: 1.45; color: var(--schs-muted); }
+.schs .schs-route:hover { border-color: var(--schs-link); }
+
+@media (max-width: 480px) {
+  .schs .schs-searchrow { flex-wrap: wrap; }
+  .schs .schs-recent-opt, .schs .schs-browse { min-height: 44px; }
+}

@@ -17,6 +17,10 @@ export function openChooser() {
   const change = within(c).queryByRole('button', { name: 'Change' });
   if (change) fireEvent.click(change);
   else fireEvent.focus(c.querySelector('input'));
+  // RECENTS FIRST (the New engagement dialog): focus shows the recents list,
+  // not the full chooser, so a host goes through "Browse all".
+  const browse = within(chooser()).queryByRole('button', { name: /^Browse all/ });
+  if (!chooser().querySelector('[data-set-key]') && browse) fireEvent.click(browse);
   return chooser();
 }
 

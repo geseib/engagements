@@ -234,7 +234,7 @@ describe('wide (owner, 26 Oct 2026: the narrow modal hid what a host needs)', ()
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
     open();
     expect(onOpenChange).toHaveBeenLastCalledWith(true);
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Topic', 'Tags', 'Used / updated']);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Questions', 'Owner', 'Topic', 'Tags', 'Used / updated'] /* 'Qs' spelled out: New engagement README §9, "QS" → "Questions" */);
     const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
     expect(row.textContent).toMatch('How the team is doing');
     expect(row.textContent).toMatch('Business & Work');
@@ -259,7 +259,7 @@ describe('a narrow window (a browser at 820px, 26 Oct 2026)', () => {
     try {
       mount({ wide: true });
       open();
-      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Qs', 'Owner', 'Used / updated']);
+      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Name', 'Questions', 'Owner', 'Used / updated'] /* 'Qs' spelled out (README §9) */);
       const row = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
       expect(row.querySelectorAll('td').length).toBe(4);
       expect(row.textContent).toMatch('How the team is doing');
@@ -274,5 +274,108 @@ describe('whose sets offers only owners the list has', () => {
     open();
     const whose = screen.getByRole('radiogroup', { name: 'Whose sets' });
     expect(within(whose).getAllByRole('radio').map((b) => b.textContent)).toEqual(['All5', 'Yours3', 'Engage1', 'Public1']);
+  });
+});
+
+/*
+  RECENTS FIRST (docs/design/new-engagement frame 3, README §8 and the
+  experienced-host review: "Tab into search must not throw the full chooser";
+  "Draw the picker before a pick, recents one click away").
+*/
+describe('recents first (the New engagement dialog)', () => {
+  const box = () => screen.getByRole('textbox', { name: /Choose a question set/ });
+
+  test('focus with nothing picked shows the recents listbox, not the full chooser', () => {
+    mount({ recentsFirst: true });
+    fireEvent.focus(box());
+    expect(screen.queryByTestId('set-chooser-row')).toBeNull();
+    const list = screen.getByRole('listbox', { name: 'Used by you lately' });
+    expect(within(list).getAllByRole('option').map((o) => o.querySelector('b').textContent))
+      .toEqual(['Team health check', 'Quarterly planning priorities']);
+    expect(screen.getByRole('button', { name: /Browse all 5 sets/ })).toBeInTheDocument();
+  });
+
+  test('one click on a recent picks it', () => {
+    const { onChange } = mount({ recentsFirst: true });
+    fireEvent.click(screen.getAllByRole('option')[1]);
+    expect(onChange).toHaveBeenCalledWith(setRefKey(SETS[1]), SETS[1]);
+  });
+
+  test('↓ highlights a recent (announced through aria-activedescendant) and Enter picks it', () => {
+    const { onChange } = mount({ recentsFirst: true });
+    fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    const first = screen.getAllByRole('option')[0];
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(box()).toHaveAttribute('aria-activedescendant', first.id);
+    fireEvent.keyDown(box(), { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith(setRefKey(SETS[0]), SETS[0]);
+  });
+
+  test('↓ past the recents opens the full chooser', () => {
+    mount({ recentsFirst: true });
+    fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    expect(screen.getAllByTestId('set-chooser-row').length).toBe(5);
+  });
+
+  test('typing opens the full chooser', () => {
+    mount({ recentsFirst: true });
+    fireEvent.change(box(), { target: { value: 'retro' } });
+    expect(rowNames().sort()).toEqual(['Sprint retro: what went well', 'Team health check']);
+  });
+
+  test('Browse all opens the full chooser', () => {
+    mount({ recentsFirst: true });
+    fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
+    expect(screen.getAllByTestId('set-chooser-row').length).toBe(5);
+  });
+});
+
+describe('the open chooser (frame 5a)', () => {
+  test('rows are reachable with ↑↓: the highlighted row is the search\'s active descendant', () => {
+    mount();
+    open();
+    const search = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    const id = search.getAttribute('aria-activedescendant');
+    expect(document.getElementById(id)).toHaveAttribute('aria-label', 'Quarterly planning priorities');
+  });
+
+  test('Change focuses the search; the current set says so in words; Esc twice keeps the set', () => {
+    const { onChange } = mount({ value: setRefKey(SETS[0]) });
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    const search = screen.getByRole('textbox', { name: /Search 5 Poll sets/ });
+    expect(search).toHaveFocus();
+    const current = screen.getByRole('radio', { name: 'Team health check' }).closest('tr');
+    expect(current).toHaveAttribute('aria-current', 'true');
+    expect(current.textContent).toMatch('current');
+    expect(screen.getByRole('button', { name: 'Keep the set I had' })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'zz' } });
+    fireEvent.keyDown(search, { key: 'Escape' });
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.queryByTestId('set-chooser-row')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Question set' }).textContent).toMatch('Team health check');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('the no-match state lists the make-your-own routes after the exits', () => {
+    const picks = { manual: jest.fn(), ai: jest.fn(), template: jest.fn() };
+    mount({
+      makeRoutes: [
+        { id: 'manual', label: 'Write your own questions', onPick: picks.manual },
+        { id: 'ai', label: 'Make a set with Workie', onPick: picks.ai },
+        { id: 'template', label: 'Fill in a spreadsheet', onPick: picks.template },
+      ],
+    });
+    open();
+    fireEvent.change(screen.getByRole('textbox', { name: /Search 5 Poll sets/ }), { target: { value: 'nothing-anywhere' } });
+    const empty = screen.getByTestId('set-chooser-empty');
+    expect(within(empty).getByRole('button', { name: /Clear the search/ })).toBeInTheDocument();
+    const routes = within(empty).getByTestId('set-chooser-routes');
+    expect(within(routes).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Write your own questions', 'Make a set with Workie', 'Fill in a spreadsheet']);
+    fireEvent.click(within(routes).getByRole('button', { name: 'Make a set with Workie' }));
+    expect(picks.ai).toHaveBeenCalled();
   });
 });
