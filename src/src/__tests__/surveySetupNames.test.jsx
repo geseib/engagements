@@ -32,6 +32,8 @@ const SETS = [
 function setup(overrides = {}) {
   const props = {
     isFirstEngagement: true,
+    // A novice opens with no format (README §3.1); these tests start from Call & Answer.
+    lastFormat: 'call-and-answer',
     eventTitle: 'Q3 All-Hands',
     onEventTitleChange: jest.fn(),
     questionSets: SETS,
@@ -49,7 +51,7 @@ function setup(overrides = {}) {
 }
 
 const chooseSurvey = (setKey = 'platform:q3-feedback') => {
-  fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Survey' })); // formats are one radio group (README §3.8)
   pickSet(setKey);
 };
 const names = () => screen.getByRole('radiogroup', { name: 'Names' });
@@ -58,12 +60,12 @@ const radio = (label) => within(names()).getByRole('radio', { name: new RegExp(`
 describe('Survey is a format the host can start', () => {
   test('it is in the type pills', () => {
     setup();
-    expect(screen.getByRole('button', { name: 'Survey' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Survey' })).toBeInTheDocument();
   });
 
   test('the survey sets are the ones offered under it', () => {
     setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Survey' })); // formats are one radio group (README §3.8)
     const options = listedSets();
     expect(options.some((t) => t.startsWith('Q3 All-Hands feedback'))).toBe(true);
     expect(options.some((t) => t.startsWith('Strategic Pricing Plays'))).toBe(false);

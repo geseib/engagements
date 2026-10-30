@@ -57,9 +57,9 @@ export const FORMAT_GUIDE = Object.freeze({
     starts: 'Waits in your Sessions list until you press Start.',
   },
   wavelength: {
-    short: 'A word counts when everyone says it.',
+    short: 'One word each; see where the room thinks alike.',
     good: 'Small teams, 10 or fewer.',
-    room: 'Says one word for a subject. A word scores when the whole room says it.',
+    room: 'Says one word for a subject. The words most people share come out on top.',
     get: 'Where the room already thinks alike, and where it doesn’t.',
     pace: 'One subject at a time; you move on when everyone has answered.',
     size: 'Best with 10 or fewer',

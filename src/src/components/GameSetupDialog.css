@@ -73,6 +73,19 @@
   /* The discard question's ground (session-setup-redesign ss-dialog.css): a
      step warmer and darker than the card, so the foot visibly changes mode. */
   --gsd-confirm: #2A2E42;
+  /* THE NEW ENGAGEMENT REDESIGN (docs/design/new-engagement, 30 Oct 2026).
+     The side pane's ground: a step darker than the card, so the form and the
+     summary read as two places. muted on it 7.6:1, text 13.6:1. */
+  --gsd-side: #16223A;
+  --gsd-side-w: 420px;
+  /* ONE FOCUS RING (README §3.8): 2px of the periwinkle at a 2px offset,
+     5.9:1 on the card. Every control in the scope uses it. */
+  --gsd-focus: var(--info);
+  /* The chosen format, chip and topic wash (amber over the card): the
+     primary label on it 6.0:1, text 10.0:1 — composited in the palette test. */
+  --gsd-wash: rgb(var(--accent-rgb) / 0.12);
+  /* The meeting chip's pressed wash (periwinkle). */
+  --gsd-wash-info: rgb(var(--info-rgb) / 0.14);
   --gsd-t-floor: 12px;
   --gsd-t-label: 13px;
   --gsd-t-body: 15px;
@@ -80,22 +93,57 @@
   --gsd-t-title: 24px;
 }
 
-/* The card. Wider than the old 500px — the format pills, the two-column rows
-   and the category grid were designed for room the original card never gave
-   them, which is why everything in it felt crowded. */
+/* THE CARD NEVER CHANGES SIZE WHILE IT IS OPEN (docs/design/new-engagement
+   README §3.4). It used to be 680px, widen to 1120px over 0.2s while the set
+   list was open (`gsd--wide`) and narrow again on a pick — the "alignment is
+   all wrong" half of the owner's report. Now:
+     full     min(1240px, 100vw − 48px), full height: form + 420px side pane
+     compact  880px, one column, for a host with history
+   Only the body swaps (Compare, the open chooser). The card is a flex column:
+   the head and foot hold still and the body scrolls inside. */
 .gsd.new-game-dialog {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, calc(100vw - 48px));
+  max-width: none;
+  height: min(900px, calc(100vh - 40px));
+  max-height: none;
+  overflow: hidden;
   background: var(--gsd-card);
   color: var(--gsd-text);
   border: 1px solid var(--gsd-rule);
   border-radius: 14px;
-  max-width: 680px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
-/* Wide while the set list is open (GameSetupDialog's chooserOpen). */
-.gsd.new-game-dialog.gsd--wide { max-width: min(1120px, calc(100vw - 48px)); }
-@media (prefers-reduced-motion: no-preference) {
-  .gsd.new-game-dialog { transition: max-width 0.2s ease-out; }
+.gsd.new-game-dialog.gsd--compact { width: min(880px, calc(100vw - 48px)); }
+
+/* THE PHONE (frames 10, 10b): the whole screen, edge to edge. The overlay
+   pads 20px (styles.css); the negative margin gives it back. */
+@media (max-width: 600px) {
+  .gsd.new-game-dialog,
+  .gsd.new-game-dialog.gsd--compact {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    margin: -20px;
+    border-radius: 0;
+    border: 0;
+  }
+}
+
+/* The body: the form, and the side pane beside it in full mode. */
+.gsd .gsd-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.gsd .gsd-body.has-side { grid-template-columns: minmax(0, 1fr) var(--gsd-side-w); }
+.gsd .gsd-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 900px) {
+  .gsd .gsd-body.has-side { grid-template-columns: minmax(0, 1fr); }
+  .gsd .gsd-body .gsd-side { display: none; }
 }
 
 /* `.gsd.new-game-dialog h2`, not `.gsd h2`: styles.css's paper-era
@@ -105,7 +153,7 @@
 .gsd.new-game-dialog h2,
 .gsd h2 {
   margin: 0;
-  padding: 22px 64px 0 26px;
+  padding: 0;
   font-family: var(--font-display, inherit);
   font-size: var(--gsd-t-title);
   font-weight: 800;
@@ -116,7 +164,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 14px 26px 22px;
+  padding: 18px 28px 24px;
 }
 
 /* ----------------------------------------------------------- the head + X
@@ -129,15 +177,30 @@
   position: sticky;
   top: 0;
   z-index: 3;
+  flex: none;
   background: var(--gsd-card);
   border-bottom: 1px solid var(--gsd-rule);
-  padding-bottom: 12px;
+  padding: 20px 132px 14px 28px;
+}
+
+/* The one sentence the first-time review called the most reassuring on the
+   screen. Full mode only; compact drops it. */
+.gsd .gsd-sub {
+  margin: 4px 0 0;
+  font-size: var(--gsd-t-label);
+  color: var(--gsd-muted);
+}
+
+.gsd .gsd-head-acts {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .gsd-close {
-  position: absolute;
-  top: 14px;
-  right: 12px;
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -154,16 +217,14 @@
 
 .gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
 
-/* The `?` beside the X (Help Phase 3): the create section of the setup
-   guide. Positioned against the sticky head like the X, so it stays on
-   screen; the title's right padding makes room for both. */
-.gsd .gsd-head .help-menu-anchor,
-.gsd .gsd-head > .help-button {
-  position: absolute;
-  top: 13px;
-  right: 54px;
+/* The `?` beside the X (Help Phase 3), in the head's action group. In
+   compact mode "Show preview" joins them, so the head pads further. */
+.gsd.gsd--compact .gsd-head { padding-right: 260px; }
+@media (max-width: 600px) {
+  .gsd .gsd-head,
+  .gsd.gsd--compact .gsd-head { padding: 14px 112px 12px 16px; }
+  .gsd .gsd-head-acts .gsd-btn { display: none; }
 }
-.gsd .gsd-head h2 { padding-right: 112px; }
 
 /* The Advanced fold's own `?`, at the head of the open fold. */
 .gsd .gsd-adv-help {
@@ -172,8 +233,16 @@
   margin-bottom: -4px;
 }
 
+/* ONE FOCUS RING, EVERYWHERE IN THE SCOPE (README §3.8; the visual review
+   found controls with none). */
+.gsd button:focus-visible,
+.gsd a:focus-visible,
+.gsd summary:focus-visible,
+.gsd input:focus-visible,
+.gsd select:focus-visible,
+.gsd textarea:focus-visible,
 .gsd-close:focus-visible {
-  outline: 2px solid var(--gsd-primary);
+  outline: 2px solid var(--gsd-focus);
   outline-offset: 2px;
 }
 
@@ -192,19 +261,11 @@
   color: var(--gsd-muted);
 }
 
-/* Question set and categories share a row on a wide dialog and stack on a
-   narrow one — flex-basis, not a media query, because the dialog's own width
-   is what matters and it is not the viewport's. */
-.gsd .gsd-row {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.gsd .gsd-row > .form-group {
-  flex: 1 1 220px;
-  min-width: 0;
-}
+/* THE SET AND ITS TOPICS NO LONGER SHARE A ROW (README §2a). `.gsd-row` put
+   the chooser and the old set's categories side by side, each from a 220px
+   basis on a card that was still widening — the broken alignment. The
+   topics now sit under the set, full width, and are not rendered at all
+   while the chooser is open. */
 
 /* ---------------------------------------------------------------- the fields
    One rule for all three controls: the old sheet styled the textarea in the
@@ -234,9 +295,11 @@
   border-color: var(--gsd-primary);
 }
 
+/* Disabled text is never dimmed with opacity (README §3.8): muted, at AA. */
 .gsd .dialog-input:disabled,
 .gsd .dialog-select:disabled {
-  opacity: 0.55;
+  color: var(--gsd-muted);
+  border-style: dashed;
   cursor: not-allowed;
 }
 
@@ -272,42 +335,251 @@
    dusk (sessionOptionsPalette.test.js measures it on the card). */
 .gsd .dialog-help-text.gsd-goal-problem { color: var(--danger-text); }
 
-/* ------------------------------------------------------------- format pills */
-
-.gsd-types {
+/* ----------------------------------------------------------- the three steps
+   Name it → Format → Questions (README §3.1), numbered, ticking as each is
+   done. Step 3 is visible from the first frame, in muted text — never
+   dimmed with opacity (visual review: "dimmed step 3" was under AA). */
+.gsd .gsd-step { display: flex; flex-direction: column; gap: 10px; padding: 14px 0 16px; border-bottom: 1px solid var(--gsd-rule); }
+.gsd .gsd-step:last-child { border-bottom: 0; }
+.gsd .gsd-step-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.gsd .gsd-step-acts { display: inline-flex; flex-wrap: wrap; gap: 6px 16px; margin-left: auto; }
+.gsd .gsd-step-h {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.gsd-pill {
-  font: inherit;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: var(--gsd-t-body);
   font-weight: 700;
-  font-size: var(--gsd-t-label);
-  padding: 9px 14px;
+  color: var(--gsd-text);
+}
+.gsd .gsd-step-h label { margin: 0; font: inherit; color: inherit; }
+.gsd .gsd-step-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--gsd-primary);
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+  color: var(--gsd-primary);
+}
+/* Done: the success fill with the card's navy tick — a shape as well as a colour. */
+.gsd .gsd-step-n.is-done { border-color: var(--gsd-success); background: var(--gsd-success); color: var(--gsd-card); }
+.gsd .gsd-step.is-later .gsd-step-n { border-color: var(--gsd-rule-strong); color: var(--gsd-muted); }
+.gsd .gsd-later { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-req {
+  padding: 1px 8px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 99px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 600;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-fixed { margin: 0; display: flex; align-items: center; gap: 6px; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* While the chooser is open, name and format fold to one line (frame 5a). */
+.gsd .gsd-folded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid var(--gsd-rule);
+  font-size: var(--gsd-t-body);
+  color: var(--gsd-text);
+}
+.gsd .gsd-folded svg { color: var(--gsd-success-text); }
+
+/* ------------------------------------------------- the format, one radio group
+   Two skins of ONE widget (FormatPicker.jsx). The chosen option carries a
+   tick and a 2px amber border — never colour alone — and the gallery card
+   says "Chosen". */
+.gsd .gsd-fmt-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.gsd .gsd-fmt-group--gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 12px;
+}
+.gsd .gsd-fmt-sep { align-self: stretch; width: 1px; margin: 4px 2px; background: var(--gsd-rule-strong); }
+.gsd .gsd-fmt {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--gsd-rule-strong);
   border-radius: 99px;
   background: transparent;
-  border: 1px solid var(--gsd-rule-strong);
-  color: var(--gsd-muted);
+  color: var(--gsd-text);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
+.gsd .gsd-fmt--chips { min-height: 36px; padding: 0 14px; justify-content: center; }
+.gsd .gsd-fmt-top { display: inline-flex; align-items: center; gap: 7px; font-size: var(--gsd-t-label); font-weight: 700; }
+.gsd .gsd-fmt-mark { display: inline-flex; }
+.gsd .gsd-fmt-mark:empty { display: none; }
+.gsd .gsd-fmt-last {
+  padding-left: 8px;
+  border-left: 1px solid var(--gsd-rule-strong);
+  font-size: var(--gsd-t-floor);
+  font-weight: 600;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-fmt:hover:not(:disabled) { border-color: var(--gsd-primary); }
+.gsd .gsd-fmt[aria-checked="true"] {
+  border: 2px solid var(--gsd-primary);
+  background: var(--gsd-wash);
+  color: var(--gsd-primary);
+}
+.gsd .gsd-fmt--chips[aria-checked="true"] { padding: 0 13px; }
+/* Fixed, in an edit: muted words, a dashed border — no opacity. */
+.gsd .gsd-fmt:disabled { cursor: not-allowed; border-style: dashed; color: var(--gsd-muted); }
+.gsd .gsd-fmt:disabled[aria-checked="true"] { border-style: solid; color: var(--gsd-primary); }
 
-.gsd-pill:hover:not(:disabled) {
-  border-color: var(--gsd-primary);
+/* The gallery card (frame 1): a still preview, the name, one plain line, "Good for". */
+.gsd .gsd-fmt--gallery { border-radius: 12px; padding: 8px 8px 12px; gap: 8px; }
+.gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 7px 7px 11px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-top { padding: 0 6px; font-size: var(--gsd-t-body); color: var(--gsd-text); }
+.gsd .gsd-fmt-art { position: relative; display: block; }
+.gsd .gsd-fmt-chosen {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--gsd-primary);
+  color: var(--gsd-card);
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+}
+.gsd .gsd-fmt-desc { display: flex; flex-direction: column; gap: 4px; padding: 0 6px; font-size: var(--gsd-t-label); line-height: 1.4; color: var(--gsd-text); }
+.gsd .gsd-fmt-good { color: var(--gsd-muted); }
+.gsd .gsd-fmt-own {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 6px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 600;
   color: var(--gsd-text);
 }
 
-/* On dusk, --primary carries text at 7.4:1 — the paper block's detour through
-   --primary-deep existed because #F6A94C is 1.9:1 on white, and it is exactly
-   the kind of compensation that stops being needed when the surface converts. */
-.gsd-pill.on {
-  border-color: var(--gsd-primary);
-  color: var(--gsd-primary);
-  background: rgba(246, 169, 76, 0.12);
+/* "Planning a…" — meeting chips (MeetingTypeChips.jsx). Solid borders:
+   dashed means only "placeholder or annotation" (visual review). */
+.gsd .gsd-meet { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gsd .gsd-meet-label { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-meet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.gsd .gsd-meet-chip:hover { border-color: var(--gsd-secondary); }
+.gsd .gsd-meet-chip[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); padding: 0 11px; background: var(--gsd-wash-info); }
+.gsd .gsd-reason {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--gsd-secondary);
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-text);
 }
 
-.gsd-pill:disabled { opacity: 0.55; cursor: not-allowed; }
+/* The names, plainly, where the decision is made (frame 4). */
+.gsd .gsd-namesline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 4px 0 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 12px;
+  font-size: var(--gsd-t-label);
+  line-height: 1.5;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-namesline > svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
+.gsd .gsd-namesline > div { flex: 1; min-width: 0; }
+.gsd .gsd-namesline b { display: block; font-size: var(--gsd-t-body); color: var(--gsd-text); }
+.gsd .gsd-namesline.is-compact { align-items: center; padding: 10px 14px; }
+.gsd .gsd-namesline.is-compact b { display: inline; }
+
+.gsd .gsd-optional-h {
+  margin: 10px 0 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--gsd-rule);
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-brief-intro { margin: -4px 0 10px; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
+
+/* Compact: the briefing as one line until opened (frame 3b). */
+.gsd .gsd-brief-fold { border-top: 1px solid var(--gsd-rule); }
+.gsd .gsd-brief-fold > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  padding: 14px 0 8px;
+}
+.gsd .gsd-brief-fold > summary::-webkit-details-marker { display: none; }
+.gsd .gsd-brief-fold[open] .gsd-chev { transform: rotate(45deg); }
+
+/* Topics: a heading line with its hint, the chips, the live total. */
+.gsd .gsd-cats { margin: 4px 0 10px; }
+.gsd .gsd-cats-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 6px; }
+.gsd .gsd-cats-head .gsd-label { margin: 0; }
+.gsd .gsd-cats-hint { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-cats-all { margin-left: auto; }
+/* Still placeholders while a set's topics load: the same height as a row of
+   chips, so nothing below jumps (README §2, frame 5b). No shimmer. */
+.gsd .gsd-cat-skel { min-height: 36px; }
+.gsd .gsd-cat-skel span {
+  display: inline-block;
+  width: 108px;
+  height: 36px;
+  border: 1px dashed var(--gsd-rule-strong);
+  border-radius: 8px;
+}
+.gsd .gsd-cat-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-height: 36px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger-text);
+  border-radius: 6px;
+  font-size: var(--gsd-t-label);
+  color: var(--gsd-text);
+}
+.gsd .gsd-cleared { margin: 0 0 8px; font-size: var(--gsd-t-label); color: var(--gsd-text); }
+
+/* The links beside the picker: Your question sets · Make a new set. */
+.gsd .gsd-setlinks { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
 
 /* THE WAY IN TO A HOST'S OWN QUESTION SETS, beside the picker that needs one.
    A link rather than a button: it opens a side task, and a second filled
@@ -315,7 +587,6 @@
    screen exists for. */
 .gsd-setlink {
   align-self: flex-start;
-  margin-top: 8px;
   padding: 0;
   border: 0;
   background: none;
@@ -380,9 +651,18 @@
 .gsd .category-button:hover { border-color: var(--gsd-primary); }
 
 .gsd .category-button.selected {
-  border-color: var(--gsd-primary);
+  border: 2px solid var(--gsd-primary);
+  padding: 7px 11px;
   background: rgba(246, 169, 76, 0.12);
 }
+
+/* The tick (on) or dash (off): selection is never colour alone (README §3.8). */
+.gsd .category-button .category-mark {
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+  color: var(--gsd-muted);
+}
+.gsd .category-button.selected .category-mark { color: var(--gsd-primary); }
 
 /* FOUND BY RENDERING THE TWO SHEETS TOGETHER: styles.css colours
    .category-name #333 directly, which beats the colour the chip hands down —
@@ -822,7 +1102,7 @@
   color: var(--gsd-text);
 }
 
-.gsd .gsd-src .sep { opacity: 0.5; }
+.gsd .gsd-src .sep { color: var(--gsd-muted); }
 
 .gsd .gsd-row-between {
   display: flex;
@@ -911,18 +1191,24 @@
   background: rgba(155, 168, 190, 0.18);
 }
 
+/* NO INFINITE ANIMATION UNDER .gsd (README §9, visual review: motion over five
+   seconds needs a pause control). The sweep runs three passes and comes to
+   rest as a full, quieter bar — which is also its BASE state, so reduced
+   motion shows the same thing. "Writing" stays honest: the step list beside
+   it says what is happening and the expected time. */
 .gsd .gsd-sweep i {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -30%;
-  width: 30%;
+  left: 0;
+  width: 100%;
   border-radius: 99px;
   background: var(--gsd-primary);
-  animation: gsd-sweep 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  opacity: 0.45;
+  animation: gsd-sweep 1.6s cubic-bezier(0.45, 0, 0.55, 1) 3;
 }
 
-@keyframes gsd-sweep { to { left: 100%; } }
+@keyframes gsd-sweep { from { left: -30%; width: 30%; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .gsd .gsd-sweep i { animation: none; left: 0; width: 100%; opacity: 0.45; }
@@ -1033,8 +1319,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  flex: none;
   margin-top: 0;
-  padding: 14px 26px 18px;
+  padding: 14px 28px 18px;
   border-top: 1px solid var(--gsd-rule);
 }
 
@@ -1046,6 +1333,7 @@
   .gsd .dialog-actions .btn-secondary,
   .gsd .dialog-actions .btn-primary,
   .gsd .dialog-actions .gsd-discard { min-width: 0; flex: 1 1 auto; }
+  .gsd .gsd-foot-note { flex-basis: 100%; }
 }
 
 /* Who can get in, stated at the moment the host commits. A flex BASIS, not
@@ -1121,7 +1409,31 @@
 
 .gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
 
-.gsd .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* NOT YET: OUTLINED, NOT DIMMED (README §9, visual review: a dimmed amber
+   block was under AA and read as broken). A dashed amber outline with the
+   muted label, 7.0:1 on the card. */
+.gsd .btn-primary:disabled {
+  border: 1px dashed var(--gsd-primary);
+  background: transparent;
+  color: var(--gsd-muted);
+  cursor: not-allowed;
+}
+
+.gsd .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The shortcut, at full opacity, inheriting the button's colour (compact only). */
+.gsd .gsd-kbd {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+}
 
 .gsd .btn-secondary {
   border: 1px solid var(--gsd-rule-strong);
@@ -1157,4 +1469,290 @@
   color: var(--gsd-text);
   font-size: 14px;
   line-height: 1.5;
+}
+.gsd > .gsd-refusal,
+.gsd > .gsd-blocked-reason { flex: none; margin-top: 12px; }
+
+/* Announcements for assistive tech only. */
+.gsd .gsd-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================== THE SIDE PANE
+   CreateSummary.jsx (README §3.5): the preview on top, then the checklist and
+   "What happens next" PINNED to the bottom, so at 1280×720 they stay on
+   screen while the preview scrolls behind them (frame 12a). */
+.gsd .gsd-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--gsd-side);
+  border-left: 1px solid var(--gsd-rule);
+}
+.gsd .gsd-side-notice { flex: none; padding: 16px 22px 0; }
+.gsd .gsd-side-notice .gsd-refusal { margin: 0; }
+.gsd .gsd-side-pv { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 22px 12px; }
+.gsd .gsd-side-pin { flex: none; padding: 4px 22px 18px; border-top: 1px solid var(--gsd-rule); }
+.gsd .gsd-side-h {
+  margin: 14px 0 8px;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-side-pvhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gsd .gsd-side-pvhead .gsd-side-h { margin: 0 auto 0 0; }
+.gsd .gsd-side-tabs { display: inline-flex; gap: 6px; }
+.gsd .gsd-side-tabs .gsd-btn[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); padding: 6px 11px; }
+.gsd .gsd-btn:disabled { cursor: not-allowed; color: var(--gsd-muted); border-style: dashed; }
+.gsd .gsd-side-example { display: flex; gap: 8px; margin: 12px 0 10px; font-size: var(--gsd-t-label); line-height: 1.45; color: var(--gsd-text); }
+.gsd .gsd-side-example svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
+.gsd .gsd-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 190px;
+  padding: 16px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 12px;
+  background: var(--gsd-card);
+}
+.gsd .gsd-side-cap { margin: 10px 0 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
+
+.gsd .gsd-sum-rows { margin: 0; }
+.gsd .gsd-sum-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--gsd-rule);
+  font-size: var(--gsd-t-label);
+}
+.gsd .gsd-sum-row dt { display: flex; align-items: center; gap: 8px; color: var(--gsd-muted); }
+.gsd .gsd-sum-row dd { margin: 0; color: var(--gsd-text); font-weight: 600; }
+.gsd .gsd-sum-mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--gsd-muted);
+  font-weight: 800;
+}
+.gsd .gsd-sum-row.is-done .gsd-sum-mark { background: var(--gsd-success); color: var(--gsd-card); }
+.gsd .gsd-next ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.gsd .gsd-next li { display: flex; gap: 10px; font-size: var(--gsd-t-label); line-height: 1.45; color: var(--gsd-muted); }
+.gsd .gsd-next li b { color: var(--gsd-text); }
+.gsd .gsd-next-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 50%;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  color: var(--gsd-text);
+}
+/* Compact, ready: one line where the side pane would be (frame 3b). */
+.gsd .gsd-compact-sum { flex: none; padding: 0 28px; }
+.gsd .gsd-compact-sum .gsd-side-h { display: none; }
+
+/* ============================================================ THE PREVIEWS
+   FormatPreview.jsx. PLAY ONCE, AND THE BASE RULE IS THE END STATE (README
+   §3.3): every rule below draws the finished picture; `.is-play` runs a
+   keyframe FROM a start state, once, back to it. Reduced motion removes the
+   animation and leaves the end state by construction. No keyframe has a
+   `to` that differs from its base rule, and none is infinite
+   (gameSetupPalette.test.js). */
+.gsd .gsd-fp {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 92px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--gsd-field);
+  overflow: hidden;
+}
+.gsd .gsd-fp--pane { height: 160px; max-width: 300px; gap: 10px; padding: 16px; }
+.gsd .gsd-fp--phone { width: 150px; height: 190px; padding: 18px 14px; border: 3px solid var(--gsd-rule-strong); border-radius: 20px; }
+.gsd .gsd-fp i { display: block; font-style: normal; }
+.gsd .gsd-fp em { font-style: normal; font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-text); }
+
+/* Call & Answer: three answers; the winner amber with its votes. */
+.gsd .gsd-fp-ans { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-left: 3px solid var(--gsd-rule-strong); border-radius: 4px; background: var(--gsd-card); }
+.gsd .gsd-fp-ans b { flex: 1; height: 6px; border-radius: 3px; background: var(--gsd-rule-strong); }
+.gsd .gsd-fp-ans.is-win { border-left-color: var(--gsd-primary); }
+.gsd .gsd-fp-ans.is-win em { color: var(--gsd-primary); }
+.gsd .gsd-fp.is-play .gsd-fp-ans { animation: gsd-fp-rise 0.5s ease-out 1 backwards; }
+.gsd .gsd-fp.is-play .gsd-fp-ans:nth-child(2) { animation-delay: 0.15s; }
+.gsd .gsd-fp.is-play .gsd-fp-ans:nth-child(3) { animation-delay: 0.3s; }
+.gsd .gsd-fp.is-play .gsd-fp-ans.is-win { animation: gsd-fp-win 1.4s ease-out 1 backwards; }
+
+/* Trivia: A–D, C right. */
+.gsd .gsd-fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.gsd .gsd-fp-opt { padding: 4px 8px; border: 1px solid var(--gsd-rule-strong); border-radius: 5px; font-size: var(--gsd-t-floor); font-weight: 800; color: var(--gsd-text); background: var(--gsd-card); }
+.gsd .gsd-fp-opt.is-right { border-color: var(--gsd-success); background: var(--gsd-success); color: var(--gsd-card); }
+.gsd .gsd-fp.is-play .gsd-fp-opt.is-right { animation: gsd-fp-right 1.6s ease-out 1 backwards; }
+
+/* Poll: three bars at their final widths. */
+.gsd .gsd-fp-bar { height: 12px; border-radius: 6px; background: var(--gsd-card); }
+.gsd .gsd-fp-bar b { display: block; width: var(--w, 50%); height: 100%; border-radius: 6px; background: var(--gsd-secondary); }
+.gsd .gsd-fp-bar:first-child b { background: var(--gsd-primary); }
+.gsd .gsd-fp.is-play .gsd-fp-bar b { animation: gsd-fp-grow 1.2s ease-out 1 backwards; }
+
+/* Wavelength: the shared word, big. */
+.gsd .gsd-fp-cloud { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; }
+.gsd .gsd-fp-word { font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-fp-word.is-big { flex-basis: 100%; text-align: center; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-primary); }
+.gsd .gsd-fp.is-play .gsd-fp-word.is-big { animation: gsd-fp-pop 0.9s ease-out 1 backwards; }
+
+/* Survey: three answered rows, ticked. */
+.gsd .gsd-fp-row { display: flex; align-items: center; gap: 8px; }
+.gsd .gsd-fp-row s { flex: 1; height: 6px; border-radius: 3px; background: var(--gsd-rule-strong); }
+.gsd .gsd-fp-tick { width: 14px; height: 14px; border-radius: 4px; background: var(--gsd-success); }
+.gsd .gsd-fp.is-play .gsd-fp-row { animation: gsd-fp-rise 0.5s ease-out 1 backwards; }
+.gsd .gsd-fp.is-play .gsd-fp-row:nth-child(2) { animation-delay: 0.25s; }
+.gsd .gsd-fp.is-play .gsd-fp-row:nth-child(3) { animation-delay: 0.5s; }
+
+/* Build Room: two mockups, A picked. */
+.gsd .gsd-fp-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gsd .gsd-fp-mock { height: 54px; padding: 4px 6px; border: 2px solid var(--gsd-rule-strong); border-radius: 6px; background: var(--gsd-text); color: var(--gsd-card); font-size: var(--gsd-t-floor); font-weight: 800; }
+.gsd .gsd-fp-mock.is-pick { border-color: var(--gsd-primary); }
+.gsd .gsd-fp.is-play .gsd-fp-mock.is-pick { animation: gsd-fp-win 1.4s ease-out 1 backwards; }
+
+/* Event: the agenda, the current item marked. */
+.gsd .gsd-fp-slot { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border: 1px solid transparent; border-radius: 5px; }
+.gsd .gsd-fp-slot s { flex: 1; height: 6px; border-radius: 3px; background: var(--gsd-rule-strong); }
+.gsd .gsd-fp-slot.is-now { border-color: var(--gsd-primary); background: var(--gsd-wash); }
+.gsd .gsd-fp.is-play .gsd-fp-slot.is-now { animation: gsd-fp-win 1.4s ease-out 1 backwards; }
+
+/* No format yet: two still placeholders. */
+.gsd .gsd-fp-blank { height: 10px; border: 1px dashed var(--gsd-rule-strong); border-radius: 5px; }
+
+/* Each keyframe names only its START; the end is the base rule above. */
+@keyframes gsd-fp-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes gsd-fp-grow { from { width: 0; } }
+@keyframes gsd-fp-pop { from { opacity: 0; transform: scale(0.6); } }
+@keyframes gsd-fp-win { from { border-color: var(--gsd-rule-strong); } }
+@keyframes gsd-fp-right { from { background: var(--gsd-card); color: var(--gsd-text); border-color: var(--gsd-rule-strong); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gsd .gsd-fp,
+  .gsd .gsd-fp * { animation: none; }
+}
+
+/* ================================================================== COMPARE
+   FormatCompare.jsx (frames 2, 12b): the head row with each Use button
+   sticks while the rows scroll. */
+.gsd .gsd-compare { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.gsd .gsd-compare-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.gsd .gsd-compare-t { margin: 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); }
+.gsd .gsd-compare-sub { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+.gsd .gsd-compare-scroll { overflow-x: auto; }
+.gsd .gsd-compare-tbl { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.gsd .gsd-compare-rowhead { width: 110px; }
+.gsd .gsd-compare-tbl thead th,
+.gsd .gsd-compare-tbl thead td { position: sticky; z-index: 2; background: var(--gsd-card); }
+.gsd .gsd-compare-groups th,
+.gsd .gsd-compare-groups td { top: -18px; }
+.gsd .gsd-compare-formats th,
+.gsd .gsd-compare-formats td { top: 10px; }
+.gsd .gsd-compare-groups th {
+  padding: 0 8px 8px;
+  text-align: left;
+  font-size: var(--gsd-t-floor);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-compare-formats th { padding: 0 8px 12px; vertical-align: top; text-align: left; border-bottom: 1px solid var(--gsd-rule); }
+.gsd .gsd-compare-formats .gsd-fp { height: 64px; margin-bottom: 8px; }
+.gsd .gsd-compare-name { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: var(--gsd-t-body); font-weight: 800; color: var(--gsd-text); }
+.gsd .gsd-compare-sugg { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-primary); }
+.gsd .gsd-compare-use { font-size: var(--gsd-t-label); padding: 6px 12px; }
+.gsd .gsd-compare-tbl tbody th {
+  padding: 10px 8px;
+  vertical-align: top;
+  text-align: left;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  color: var(--gsd-muted);
+  border-bottom: 1px solid var(--gsd-rule);
+}
+.gsd .gsd-compare-tbl tbody td {
+  padding: 10px 8px;
+  vertical-align: top;
+  font-size: var(--gsd-t-label);
+  line-height: 1.45;
+  color: var(--gsd-text);
+  border-bottom: 1px solid var(--gsd-rule);
+}
+.gsd .gsd-compare-tbl .is-suggested { background: var(--gsd-field); }
+.gsd .gsd-compare-tbl .gsd-compare-own { border-left: 1px solid var(--gsd-rule-strong); }
+
+/* ================================================================ HAND-OFF
+   OtherFormatHandoff.jsx (frames 7, 8): ticks and arrows, never numbers. */
+.gsd .gsd-handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 12px;
+  background: var(--gsd-field);
+}
+.gsd .gsd-handoff-t { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--gsd-t-body); color: var(--gsd-text); }
+.gsd .gsd-handoff-t svg { color: var(--gsd-secondary); }
+.gsd .gsd-handoff-d { margin: 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
+.gsd .gsd-handoff-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.gsd .gsd-handoff-tiles li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--gsd-rule);
+  border-radius: 10px;
+  background: var(--gsd-card);
+  font-size: var(--gsd-t-label);
+  line-height: 1.4;
+  color: var(--gsd-muted);
+}
+.gsd .gsd-handoff-tiles li svg { color: var(--gsd-muted); }
+.gsd .gsd-handoff-tiles li.is-done svg { color: var(--gsd-success-text); }
+.gsd .gsd-handoff-tiles b { color: var(--gsd-text); }
+.gsd .gsd-handoff-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
+.gsd .gsd-handoff-note svg { flex: none; margin-top: 3px; color: var(--gsd-secondary); }
+.gsd .gsd-handoff-note a { color: var(--gsd-secondary); }
+
+/* ================================================================== PHONE
+   44px targets throughout (frame 10). */
+@media (max-width: 600px) {
+  .gsd .dialog-content { padding: 12px 16px 20px; }
+  .gsd .gsd-fmt--chips,
+  .gsd .gsd-meet-chip,
+  .gsd .category-button,
+  .gsd .gsd-btn,
+  .gsd .btn-primary,
+  .gsd .btn-secondary { min-height: 44px; }
+  .gsd .gsd-fmt-group--gallery { grid-template-columns: 1fr; }
+  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
+  .gsd .gsd-step-acts { margin-left: 0; }
+  .gsd .gsd-compact-sum { padding: 0 16px; }
 }

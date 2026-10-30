@@ -27,7 +27,7 @@ jest.mock('../auth/authFetch', () => ({
   authFetch: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ prompts: PROMPTS }) })),
 }));
 import { GAME_TYPE_LIST, GAME_TYPES, PICKER_GAME_TYPES, UNPLAYABLE_GAME_TYPES } from '../config/gameTypes';
-import { pickSet, chosenSet, listedSets, chooser } from '../testUtils/setChooser';
+import { pickSet, chosenSet, listedSets, chooser, foldChooser } from '../testUtils/setChooser';
 
 const SETS = [
   { id: 'pricing', name: 'Strategic Pricing Plays', totalQuestions: 47, engagementType: 'call-and-answer', hasImages: false },
@@ -43,6 +43,11 @@ const CATEGORIES = [
 function setup(overrides = {}) {
   const props = {
     isFirstEngagement: true,
+    /* THE REDESIGN OPENS A NOVICE WITH NO FORMAT CHOSEN (README §3.1). Most
+       of this suite is about Call & Answer's form, which it used to get by
+       default; it now gets it the way a returning host does — as the last
+       format. The no-format novice has its own describe at the end. */
+    lastFormat: 'call-and-answer',
     eventTitle: '',
     onEventTitleChange: jest.fn(),
     questionSets: SETS,
@@ -59,7 +64,10 @@ function setup(overrides = {}) {
   return { ...utils, props };
 }
 
-const pill = (label) => screen.getByRole('button', { name: label });
+// The formats are ONE radio group now (docs/design/new-engagement README §3.8):
+// role="radio" with aria-checked, where the old pills were buttons with
+// aria-pressed. The assertions below changed only that spelling.
+const pill = (label) => screen.getByRole('radio', { name: label });
 
 /*
   THE PICKER'S VALUE IS `scope:id`, NOT `id`. A <select> can only carry a
@@ -101,8 +109,8 @@ describe('the format picker', () => {
 
     fireEvent.click(pill('Trivia'));
 
-    expect(pill('Trivia')).toHaveAttribute('aria-pressed', 'true');
-    expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'false');
+    expect(pill('Trivia')).toHaveAttribute('aria-checked', 'true');
+    expect(pill('Call & Answer')).toHaveAttribute('aria-checked', 'false');
     expect(chosenSet()).toBe('');
     // and the page is told, so it can drop the old set's categories/instruction
     expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('', 'platform');
@@ -110,8 +118,10 @@ describe('the format picker', () => {
 
   // rejects: leaving `blurb` as the dead data it is today — it exists on all
   // five types and is rendered nowhere in src/src.
+  // The blurb is the chip row's line now; full mode shows the gallery (whose
+  // cards carry their own line) until a set is picked, so this reads compact.
   test('prints the chosen format\'s blurb, and changes it with the format', () => {
-    setup();
+    setup({ hasCreated: true });
     expect(screen.getByText(GAME_TYPES['call-and-answer'].blurb)).toBeInTheDocument();
     fireEvent.click(pill('Wavelength'));
     expect(screen.getByText(GAME_TYPES.wavelength.blurb)).toBeInTheDocument();
@@ -127,16 +137,23 @@ describe('the format picker', () => {
   });
 });
 
-describe('the card widens while the set list is open (owner, 26 Oct 2026)', () => {
-  // rejects: a 680px card holding a six-column table, which the owner found
-  // too narrow to see what a set is.
-  test('wide while the list is open, back to the form width once a set is picked', () => {
+/*
+  SUPERSEDED ON PURPOSE: "the card widens while the set list is open" (owner,
+  26 Oct 2026). The widening — 680px to 1120px and back on a pick — was half of
+  the owner's later report that "the modal alignment is all wrong"
+  (docs/design/new-engagement README §2a). The card is wide from the start
+  and never changes size; only the body swaps.
+*/
+describe('the card never changes size while it is open', () => {
+  test('the same layout class with the list closed, open, and after a pick', () => {
     setup();
     const card = () => document.querySelector('.new-game-dialog');
-    expect(card()).not.toHaveClass('gsd--wide');
+    const before = card().className;
+    expect(before).toMatch(/gsd--full/);
     listedSets();
-    expect(card()).toHaveClass('gsd--wide');
+    expect(card().className).toBe(before);
     pickSet('platform:pricing');
+    expect(card().className).toBe(before);
     expect(card()).not.toHaveClass('gsd--wide');
   });
 });
@@ -149,6 +166,7 @@ describe('the question set', () => {
     expect(listedSets()).toEqual(['Strategic Pricing Plays']);
     expect(chooser().textContent).toMatch('47');
 
+    foldChooser(); // the open list folds name and format to one line (frame 5a)
     fireEvent.click(pill('Poll'));
     expect(listedSets()).toEqual(['Room Mood']);
   });
@@ -162,6 +180,7 @@ describe('the question set', () => {
       { id: 'br-old', name: 'Build Room: Game questions', totalQuestions: 14, engagementType: 'call-and-answer', tags: ['Build-Room'] },
     ] });
     expect(listedSets()).toEqual(['Strategic Pricing Plays']);
+    foldChooser();
     fireEvent.click(pill('Poll'));
     expect(listedSets()).toEqual(['Room Mood']);
   });
@@ -398,12 +417,12 @@ describe('edit mode', () => {
   // wipe every field they did not retype.
   test('seeds every editable field from the session being edited', () => {
     setupEdit();
-    expect(screen.getByLabelText(/event title/i).value).toBe('Pricing Workshop');
+    expect(screen.getByLabelText(/name it/i).value).toBe('Pricing Workshop');
     expect(screen.getByLabelText(/event details/i).value).toBe('Pricing day.');
     expect(screen.getByLabelText(/instructions for workie/i).value).toBe('Mid-market SaaS.');
     expect(screen.getByLabelText(/workie's voice/i).value).toBe('coach');
     expect(chosenSet()).toBe('platform:pricing');
-    expect(pill('Call & Answer')).toHaveAttribute('aria-pressed', 'true');
+    expect(pill('Call & Answer')).toHaveAttribute('aria-checked', 'true');
     // anonymousUntilReveal: false must arrive as an UNCHECKED box — seeding
     // the default instead would flip the session anonymous on the first save.
     expect(screen.getByRole('checkbox', { name: /anonymous responses/i })).not.toBeChecked();
@@ -493,7 +512,7 @@ describe('edit mode', () => {
     const { props } = setupEdit();
     fireEvent.click(screen.getByText('Leadership').closest('button'));
     fireEvent.click(screen.getByText('Ops').closest('button'));
-    expect(screen.getByText(/select at least one category/i)).toBeInTheDocument();
+    expect(screen.getByText(/select at least one topic/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     expect(props.onCreate).not.toHaveBeenCalled();
   });
@@ -526,7 +545,7 @@ describe('edit mode', () => {
   */
   test('editing the title stays local — the page\'s eventTitle is untouched', () => {
     const { props } = setupEdit();
-    const input = screen.getByLabelText(/event title/i);
+    const input = screen.getByLabelText(/name it/i);
     fireEvent.change(input, { target: { value: 'Renamed Workshop' } });
     expect(input.value).toBe('Renamed Workshop');
     expect(props.onEventTitleChange).not.toHaveBeenCalled();
@@ -536,7 +555,7 @@ describe('edit mode', () => {
   // triviaTimer defect's shape, at the edit surface.
   test('Save changes raises the full edited payload', () => {
     const { props } = setupEdit();
-    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: 'Renamed Workshop' } });
+    fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: 'Renamed Workshop' } });
     fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'Now two days.' } });
     fireEvent.change(screen.getByLabelText(/workie's voice/i), { target: { value: '' } });
     fireEvent.click(screen.getByRole('checkbox', { name: /anonymous responses/i }));
@@ -558,7 +577,7 @@ describe('edit mode', () => {
 
   test('a title blanked out disables Save rather than saving a nameless session', () => {
     const { props } = setupEdit();
-    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: '   ' } });
+    fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: '   ' } });
     expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     expect(props.onCreate).not.toHaveBeenCalled();
@@ -579,7 +598,7 @@ describe('the title', () => {
   // reading a title nobody wrote.
   test('is the page\'s value, and edits go back to the page', () => {
     const { props } = setup({ eventTitle: 'Existing' });
-    const input = screen.getByLabelText(/event title/i);
+    const input = screen.getByLabelText(/name it/i);
     expect(input.value).toBe('Existing');
     fireEvent.change(input, { target: { value: 'Renamed' } });
     expect(props.onEventTitleChange).toHaveBeenCalledWith('Renamed');
@@ -616,7 +635,7 @@ describe('the Advanced section', () => {
     setup();
     pickSet('platform:pricing');
     for (const el of [
-      screen.getByLabelText(/event title/i),
+      screen.getByLabelText(/name it/i),
       pill('Call & Answer'),
       chooser(),
       screen.getByText('Leadership').closest('button'),
@@ -812,7 +831,7 @@ describe('closing the dialog', () => {
       mode: 'edit',
       initialValues: { title: 'Pricing Workshop', gameType: 'call-and-answer', questionSetId: 'pricing' },
     });
-    fireEvent.change(screen.getByLabelText(/event title/i), { target: { value: 'Renamed' } });
+    fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: 'Renamed' } });
     fireEvent.click(screen.getByRole('button', { name: /close without saving/i }));
     expect(props.onCancel).not.toHaveBeenCalled();
     expect(screen.getByRole('alertdialog').textContent).toMatch(/stays as it was/i);
@@ -850,7 +869,7 @@ describe('the category helper counts questions', () => {
   test('some picked: how many of how many, and their questions', () => {
     setup({ activeCategoryIds: new Set(['Leadership']) });
     pickSet('platform:pricing');
-    expect(screen.getByText('1 of 2 categories · 20 questions')).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 topics · 20 questions' /* "Categories" → "Topics" (README §9) */)).toBeInTheDocument();
   });
 });
 
@@ -1050,7 +1069,7 @@ describe("Workie's briefing", () => {
     setup();
     const invite = screen.getByText(/Brief Workie from a document/);
     expect(advanced().contains(invite)).toBe(false);
-    expect(screen.getByRole('heading', { name: /Workie.s briefing/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Background for Workie/i }) /* renamed, README §9 */).toBeInTheDocument();
   });
 
   test.each(['Trivia', 'Poll', 'Wavelength', 'Survey'])('is not offered for %s', (label) => {

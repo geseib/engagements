@@ -127,6 +127,9 @@ export default function SetChooser({
   makeRoutes = [],
   /** One line under the routes saying what happens to the set they make. */
   makeRoutesNote = '',
+  /** Bump to fold an open chooser from outside, keeping the set it had
+      (the New engagement dialog's folded "Edit" line, frame 5a). */
+  closeSignal = 0,
   now: nowProp = 0,
 }) {
   const [now] = useState(() => nowProp || Date.now());
@@ -156,6 +159,9 @@ export default function SetChooser({
     }
     opened.current = true;
   }, [open, stayOpen]);
+  useEffect(() => {
+    if (closeSignal) setOpen(false);
+  }, [closeSignal]);
   const tellOpen = useRef(onOpenChange);
   tellOpen.current = onOpenChange;
   useEffect(() => { if (tellOpen.current) tellOpen.current(open); }, [open]);

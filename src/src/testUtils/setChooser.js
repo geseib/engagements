@@ -24,6 +24,12 @@ export function openChooser() {
   return chooser();
 }
 
+/** Fold an open chooser without picking (its Close / Keep the set I had). */
+export function foldChooser() {
+  const button = within(chooser()).queryByRole('button', { name: /^(Close|Keep the set I had)$/ });
+  if (button) fireEvent.click(button);
+}
+
 /** Pick the set with this key. */
 export function pickSet(key) {
   const c = openChooser();

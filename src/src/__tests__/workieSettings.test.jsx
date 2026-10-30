@@ -439,6 +439,9 @@ function renderDialog(overrides = {}) {
   return render(
     <GameSetupDialog
       isFirstEngagement
+      // A novice opens with no format (new-engagement README §3.1); these
+      // tests are about Call & Answer's plan line.
+      lastFormat="call-and-answer"
       eventTitle=""
       onEventTitleChange={jest.fn()}
       questionSets={SETS}

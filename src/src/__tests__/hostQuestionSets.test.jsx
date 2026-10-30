@@ -910,6 +910,9 @@ describe('the entry point is the create-engagement screen', () => {
       questionSets={SETS}
       categories={[]}
       onCreate={jest.fn()}
+      // A novice opens with no format chosen (new-engagement README §3.1), and
+      // the set links belong to a format; these tests start from Call & Answer.
+      lastFormat="call-and-answer"
       {...props}
     />
   );
