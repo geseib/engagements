@@ -74,28 +74,79 @@ const questionsIn = (list) => {
  */
 export function SessionCategories({
   idPrefix = 'gsd', categories = [], selected = new Set(), editing = false, onToggle,
+  /*
+    THE NEW ENGAGEMENT DIALOG'S WORDS AND STATES (docs/design/new-engagement
+    README §8). Defaults keep the event item dialog exactly as it was.
+      label    the heading ("Topics in this set" there)
+      noun     what the helper line counts ("topics" there)
+      hint     one line beside the heading ("Switch off any you want to skip.")
+      loading  the chosen set's list is on its way: still placeholder chips
+               (no shimmer) at a stable height, never the previous set's
+      error    the list could not be read: a sentence and Retry, never the
+               previous set's chips
+      onRetry  () => void
+      onAllOn  () => void, offered when some are off ("Turn all on")
+  */
+  label = 'Categories', noun = 'categories', hint = '', loading = false, error = '', onRetry = null, onAllOn = null,
+  /** The count bare after the name ("Architecture 2", frame 4), not in brackets. */
+  bareCount = false,
 }) {
   const labelId = `${idPrefix}-categories-label`;
   const picked = categories.filter((c) => selected.has(c.name));
+  const one = noun.replace(/ies$/, 'y').replace(/s$/, '');
+  if (loading || error) {
+    return (
+      <div className="form-group gsd-cats" data-state={loading ? 'loading' : 'error'}>
+        <span className="gsd-label" id={labelId}>{label}</span>
+        {loading ? (
+          <div className="category-selection">
+            {/* Still placeholders — the visual review asked for no shimmer. */}
+            <div className="category-button-grid gsd-cat-skel" aria-hidden="true">
+              <span /><span /><span /><span />
+            </div>
+            <small className="dialog-help-text" role="status">Loading this set’s {noun}…</small>
+          </div>
+        ) : (
+          <div className="gsd-cat-error" role="alert">
+            <span>{error} Nothing from the previous set is kept.</span>
+            {onRetry && <button type="button" className="gsd-btn" onClick={onRetry}>Retry</button>}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
-    <div className="form-group">
-      <span className="gsd-label" id={labelId}>Categories</span>
+    <div className="form-group gsd-cats">
+      <div className="gsd-cats-head">
+        <span className="gsd-label" id={labelId}>{label}</span>
+        {hint && <span className="gsd-cats-hint">{hint}</span>}
+        {onAllOn && categories.length > 0 && picked.length < categories.length && selected.size > 0 && (
+          <button type="button" className="gsd-btn gsd-btn--link gsd-cats-all" onClick={onAllOn}>Turn all on</button>
+        )}
+      </div>
       <div className="category-selection">
         <div className="category-button-grid" role="group" aria-labelledby={labelId}>
-          {categories.map((category) => (
-            <button
-              key={category.name}
-              type="button"
-              className={`category-button ${selected.has(category.name) ? 'selected' : ''}`}
-              aria-pressed={selected.has(category.name)}
-              onClick={() => onToggle?.(category.name)}
-            >
-              <span className="category-name">{category.name}</span>
-              <span className="category-count">({category.questionCount})</span>
-            </button>
-          ))}
+          {categories.map((category) => {
+            const on = selected.has(category.name);
+            const n = Number(category.questionCount) || 0;
+            return (
+              <button
+                key={category.name}
+                type="button"
+                className={`category-button ${on ? 'selected' : ''}`}
+                aria-pressed={on}
+                aria-label={`${category.name}, ${n} question${n === 1 ? '' : 's'}`}
+                onClick={() => onToggle?.(category.name)}
+              >
+                {/* A tick as well as the wash: selection never rests on colour. */}
+                <span className="category-mark" aria-hidden="true">{on ? '✓' : '–'}</span>
+                <span className="category-name">{category.name}</span>
+                <span className="category-count">{bareCount ? category.questionCount : `(${category.questionCount})`}</span>
+              </button>
+            );
+          })}
         </div>
-        <small className="dialog-help-text">
+        <small className="dialog-help-text" aria-live="polite">
           {/*
             Edit and create disagree about what an empty selection MEANS,
             and the copy has to carry the difference. Create's empty set
@@ -106,11 +157,11 @@ export function SessionCategories({
           */}
           {editing
             ? (selected.size === 0
-              ? 'Select at least one category — a session with none has no questions to ask.'
-              : `${selected.size} of ${categories.length} categories enabled`)
+              ? `Select at least one ${one} — a session with none has no questions to ask.`
+              : `${selected.size} of ${categories.length} ${noun} enabled`)
             : (selected.size === 0
               ? `None picked, so all ${categories.length} are in · ${questionsIn(categories)}`
-              : `${picked.length} of ${categories.length} categories · ${questionsIn(picked)}`)}
+              : `${picked.length} of ${categories.length} ${noun} · ${questionsIn(picked)}`)}
         </small>
       </div>
     </div>
@@ -122,12 +173,28 @@ export function SessionCategories({
  * 01, 03). The one Workie input that changes what Workie KNOWS; under
  * Advanced it would never be found. BriefingField owns every state.
  */
-export function SessionBriefing({ value = null, onChange, onWorkingChange }) {
+export function SessionBriefing({
+  value = null, onChange, onWorkingChange,
+  /*
+    THE NEW ENGAGEMENT DIALOG'S HEADING (README §9, first-time review:
+    "Introduce Workie in one plain line"): "Background for Workie", optional,
+    with Workie introduced as Engage's AI assistant. Defaults keep the event
+    item dialog's heading.
+  */
+  heading = null, intro = null,
+}) {
   return (
     <>
-      <h3 className="gsd-section">
-        Workie’s briefing<span className="gsd-tag">Call &amp; Answer only</span>
-      </h3>
+      {heading ? (
+        <h3 className="gsd-section gsd-brief-h">
+          {heading}<span className="gsd-tag">optional</span>
+        </h3>
+      ) : (
+        <h3 className="gsd-section">
+          Workie’s briefing<span className="gsd-tag">Call &amp; Answer only</span>
+        </h3>
+      )}
+      {intro && <p className="gsd-brief-intro">{intro}</p>}
       <BriefingField
         value={value}
         onChange={onChange}

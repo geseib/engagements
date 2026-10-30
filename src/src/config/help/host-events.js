@@ -176,7 +176,7 @@ const eventAgenda = {
           items: [
             { title: 'Pick the set', text: 'The form lists your question sets of that kind, with each one\'s version and question count. Search to narrow it. A set already on this agenda says **On this agenda**.' },
             { title: 'Name it', text: '**Title on the agenda** starts as the set\'s name. It is also the session\'s name on the stage. **Facilitator** is optional.' },
-            { title: 'Set its options', text: 'Categories, Workie\'s briefing (Call & Answer) and the Advanced choices are the same as when you create a session: see Setting a session up.' },
+            { title: 'Set its options', text: 'Categories, Workie\'s briefing (Call & Answer) and the Advanced choices are the same as when you create a session (where they are called Topics in this set and Background for Workie): see Setting a session up.' },
             { title: 'Add it', text: 'Press **Add to agenda**.' },
           ],
         },

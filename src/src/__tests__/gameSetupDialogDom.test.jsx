@@ -11,6 +11,16 @@
  *
  * React's generated ids (`useId`) are replaced by `:id:`; nothing else is.
  *
+ * RE-RECORDED ON PURPOSE, 30 Oct 2026: the New engagement redesign
+ * (docs/design/new-engagement) changed the form throughout: three numbered
+ * steps, the format as one radio group, the topics under the set with a tick
+ * on each, the names line, "Background for Workie". The diff of this
+ * snapshot is that change; the shared SessionOptions fold is otherwise as it
+ * was. `lastFormat` opens it on Call & Answer, as a returning host sees it.
+ * Re-recorded again the same day after the live dev tests (reviews/devtest-*):
+ * bare topic counts ("Architecture 2"), the step's links after the chips in
+ * the Tab order, and the set search as a combobox.
+ *
  * rejects: the extraction changing one attribute, id, class, word or order in
  * the create or edit form, for any format.
  */
@@ -44,6 +54,7 @@ const CATEGORIES = [
 const dialog = (props = {}) => render(
   <GameSetupDialog
     isFirstEngagement
+    lastFormat="call-and-answer"
     eventTitle="Q3 Offsite"
     onEventTitleChange={jest.fn()}
     questionSets={SETS}
@@ -70,7 +81,7 @@ test.each([
 ])('create, %s, with a set picked', async (_type, pill, key) => {
   dialog();
   await settle();
-  fireEvent.click(screen.getByRole('button', { name: pill }));
+  fireEvent.click(screen.getByRole('radio', { name: pill }));
   pickSet(key);
   await settle();
   expect(form()).toMatchSnapshot();

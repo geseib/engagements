@@ -44,7 +44,7 @@ const setup = (overrides = {}) => {
   return props;
 };
 const pickTrivia = () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Trivia' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Trivia' })); // formats are one radio group (README §3.8)
   pickSet('platform:space');
 };
 const create = () => screen.getByRole('button', { name: 'Create engagement' });
@@ -129,7 +129,7 @@ describe('a goal at create', () => {
   test('a survey has no goal to set, and sends none', async () => {
     const props = setup();
     await settle();
-    fireEvent.click(screen.getByRole('button', { name: 'Survey' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Survey' })); // formats are one radio group (README §3.8)
     pickSet('platform:pulse');
     expect(screen.queryByLabelText('Goal')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open the survey' }));

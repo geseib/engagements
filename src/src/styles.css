@@ -3179,7 +3179,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px;
+  /* No padding: the dusk `.shist` panel fills the card and pads itself, so
+     no white frame of the paper card shows round it (live dev test B6). */
+  padding: 0;
 }
 
 .games-list {

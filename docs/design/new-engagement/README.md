@@ -1,0 +1,368 @@
+# New engagement: redesign of the create modal
+
+*30 Oct 2026, revision 2 (after the three reviews in `reviews/`). These are mockups and notes
+only. No application code has changed. Open `index.html` in a browser. Each frame is drawn at
+1440×900, 1280×720 (frame 12) or 390×844 for the phone, and the PNG files beside it are renders
+of those frames. What changed after review is in §9.*
+
+## The brief
+
+The owner, verbatim:
+
+> "There is a lot that needs to be worked through on the new engagement modal. I need to have
+> agent act as an expert UX designer focus on usability and crisp clean design. there could be a
+> flashy way to show the difference and explain what call and answer/ trivia/ poll build, event
+> are. you could make better use of screen and window and right now if the users decides to
+> change the question set during setup the catagories of the old question set stay up and the
+> modal alignment is all wrong. think through this experience and then come up with a set of
+> mockups ... the /goal of a great user experience creating a new engagement when the user has
+> very little experience with the site. also a user with lots of experience, doesn't feel like
+> its too overbearing with things they know already, they can quickly navigate and create
+> sessions like they need to."
+
+## 1. What is wrong today
+
+The screenshots of today's modal on dev are in the session scratchpad
+(`ux/baseline/01-modal-1440.png`, `-1280`, `-390`, with the text in `modal-text.txt`). Here is
+what they show.
+
+1. **The formats are seven same-weight pills with one grey line under them.** The 1440
+   screenshot shows Call & Answer, Trivia, Poll, Wavelength, Survey, Build Room and Event as
+   identical pills. Under them is one 13px sentence: the `blurb` of whichever pill is selected
+   (`GameSetupDialog.jsx:583-600`). A new host cannot compare formats without clicking each pill
+   and reading the line again. Build Room and Event are not regular sessions: each has its own
+   setup screen, and Event costs money. Nothing shows this until the host clicks one of them.
+2. **Call & Answer is pre-selected for everyone** (`:203-205`). An expert who always runs Trivia
+   pays one click every time. A novice is never asked to choose, so they never learn that a
+   choice exists.
+3. **The modal does not use the window.** On a 1440 screen the card is 680px wide
+   (`GameSetupDialog.css:92`), about 47% of the width, and the rest is empty backdrop. Workie's
+   briefing already needs a scroll before the host reaches Advanced. The card only gets wider
+   while the set list is open (`:96`, `gsd--wide`). The whole dialog then changes width when the
+   host clicks Change and again when they pick a set, so everything moves.
+4. **Nothing tells the host what will be created or what happens next.** The only forward-looking
+   text is the foot note "Nobody can join until you start it". The host-setup help guide covers
+   the Create → Start → Run sequence (`config/help/host-setup.js:42-45`). The dialog never shows it.
+5. **Workie's briefing is a large dashed box with a pill saying "Call & Answer only".** In the
+   1440 screenshot it takes about 170px. That is the largest block on the form, and it is an
+   optional field.
+6. **At 390px the format pills take three rows.** The set search placeholder is cut off mid-word
+   ("type to se"), and the foot takes about 140px of an 844px screen.
+7. **The bug the owner reported.** The root cause is in §2.
+
+## 2. Root cause: changing the set leaves the old categories up and breaks the alignment
+
+There are two faults. They happen in the same click, so they look like one bug.
+
+### (a) Alignment: the old categories share a row with the opened chooser
+
+- `GameSetupDialog.jsx:622` puts the set chooser and the categories in one flex row,
+  `.gsd-row`. `GameSetupDialog.css:198-207` gives each child `flex: 1 1 220px`, so they sit side
+  by side on a wide card.
+- The categories render whenever a set is held: `newGameSetId && !isSurvey`
+  (`GameSetupDialog.jsx:688`).
+- Change opens the list without clearing the value (`SetChooser.jsx:198`). The design is
+  deliberate: "Keep the set I had" (`:276`) has to restore it. So while the list is open,
+  `newGameSetId` is still the old set, and **the old set's category grid stays rendered**.
+- The open list is a six-column table: fixed widths of 52, 120, 150, 200 and 128px plus the name
+  column (`SetChooser.css:187-191, 265-267`). In the same click, `onOpenChange` sets
+  `chooserOpen` (`GameSetupDialog.jsx:656`), and the card grows from 680px to 1120px
+  (`:517`, `.css:96`) over a 0.2s transition (`.css:97-99`).
+- The table and the old categories now share one row, each starting from a 220px basis on a card
+  that is still animating. The row either squeezes the table beside stale chips or wraps them
+  under it, depending on how wide the card is at that moment. That is the broken alignment.
+
+### (b) Stale categories: the page keeps the old set's list until the new fetch returns, and accepts any response
+
+`handleSetupSetChange` (`GameHostPage.jsx:4179-4186`) calls
+`fetchCategories(setId, false, scope)` (`:4111-4166`). That function:
+
+1. **Does not clear anything before it awaits.** It only empties `categories` and
+   `activeCategoryIds` when the id is empty (`:4112-4116`). For a new set it awaits
+   `authFetch` and only then calls `setCategories(fetched)` (`:4127-4130`). Until then the grid
+   shows set A's categories under set B's name.
+2. **Has no guard against stale responses.** Nothing checks that the response belongs to the set
+   that is now selected. Pick A, then B quickly: if A's response arrives second, A's categories
+   overwrite B's and stay up.
+3. **Leaves the old list in place on failure.** The `catch` (`:4164`) only logs, and `res.ok` is
+   never checked (`:4127-4128`). A 403 or 500 keeps set A's categories on screen indefinitely.
+4. **Lets Create send the wrong categories.** During that window, `activeCategoryIds` still holds
+   set A's names. A Create pressed then sends them as `categoryIds` for set B
+   (`GameSetupDialog.jsx:438`), and the masks are built against the wrong list.
+
+### The fix, for the builder
+
+- **Layout.** Never put the categories beside the set. Put them under it, full width. While the
+  chooser is open, do not render the categories, and show one line in their place (frame 5a). Name and format fold into one line while it is open.
+  Retire `gsd--wide` and the width transition. The new modal is wide from the start and never
+  changes size.
+- **Data.**
+  - In `handleSetupSetChange`, clear `categories` and `activeCategoryIds` before the await.
+  - Tag each request with the set ref it was made for, using a ref counter or an
+    `AbortController`. Drop any response whose ref is no longer the selected one.
+  - Treat `!res.ok` as an error, and on error leave the list empty with a sentence and a retry.
+  - In the dialog, disable Create while the categories are loading, as it already does while the
+    briefing is working.
+- **Tests to add.** These are behaviour tests, with no geometry (jsdom has no layout):
+  - Picking set B renders none of set A's category names, even before B's fetch resolves.
+  - A late response for set A after set B is selected is ignored.
+  - A failed fetch leaves zero categories plus an error line, not set A's.
+  - Opening Change unmounts `SessionCategories`, and "Keep the set I had" brings back the same
+    selection.
+  - Create is disabled while the categories are loading.
+
+
+## 3. Design principles
+
+1. **Three decisions, then Create.** The required path is title → format → questions.
+   Everything else sits under "Optional — every one has a safe default", and the Advanced line
+   keeps naming every default in force (`config/setupDefaults.js`, unchanged). Two things are
+   pulled out of Advanced because they decide what the room experiences: the **names rule**
+   (Call & Answer; Names for Survey) and, for a returning host, a **time estimate** from their
+   own history.
+2. **One page, not a wizard.** Numbered sections tick as they are completed, on one scrolling
+   page. Step 3 is visible from the first frame, greyed but readable.
+3. **Show, then tell, once.** Every format is named once, on its card, with what it is and what
+   it suits ("Good for: Retros, brainstorms"). Its preview plays **once, in under five seconds,
+   when the card is hovered, focused or chosen**; otherwise it stands still in its end state.
+   The side-pane preview plays once when it appears and has a Replay button. The CSS is written
+   so that the **base styles are the end state** and animations only run *from* the start, so
+   `prefers-reduced-motion` (which removes animation) shows the end state by construction.
+4. **The window is the canvas, and it never moves.** Full mode is `min(1240px, 100vw − 48px)` and
+   full height, with a form on the left and a 420px side pane on the right. Compact mode is a
+   fixed 880px single column. Neither changes size while it is open. Only the body swaps
+   (Compare, the chooser).
+5. **Say what happens next, but don't repeat the form.** The side pane shows the preview, then a
+   status-only checklist (required rows tick, optional rows carry a dash and "that's fine"; no
+   empty circles), then "What happens next". The checklist and next steps are pinned to the
+   bottom of the pane, so they stay visible at 1280×720 while the preview scrolls behind them.
+6. **Learn once, then step aside.** A host with any session in their history gets compact mode:
+   format chips, the recents list, a one-line briefing, no helper copy, no Required pills, no
+   side pane unless they ask for it.
+7. **The shipped language.** Dusk tokens, the laptop ladder 12 / 13 / 15 / 19 / 24 with nothing
+   below 12px outside the stage picture, inputs at 15px, one Modal, the X and Cancel both through
+   `requestClose()`, the discard question inline in the foot, and no modal opened from inside the
+   modal (the set builders open in the existing sibling layer, as `HostQuestionSetsDialog` does
+   today).
+8. **Accessible by construction.**
+   - One focus ring everywhere: 2px `--secondary` at a 2px offset (5.9:1 on the card).
+   - One widget model for the format choice: `role="radiogroup"` with a roving tabindex (one tab
+     stop, arrows move and choose). This applies to both the gallery and the chips.
+   - Selection is never shown by colour alone: a tick and a 2px border on chips, cards and
+     topics, plus the word "Chosen" on cards.
+   - Disabled text is never dimmed with `opacity`.
+
+## 4. Walkthrough of the frames
+
+| # | File | What it shows |
+|---|---|---|
+| 1 | `01-first-time.png` | **First-time host.** Focus is in the title. Nothing is chosen and no card is highlighted. "Planning a…" offers Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form and Offsite day. Seven cards are laid out 4 across, each with a still preview, its name, one plain line and a "Good for" line. Build Room and Event say "Continues on its own page". "Compare side by side" and "I know these — show compact" sit in the step header, before the grid in tab order. Step 3 is visible. The side pane shows a placeholder preview, "Three decisions" with dashes, and "What happens next". Create is outlined, not dimmed. |
+| 1b | `01b-retro.png` | **"Retro" points to the format.** The chip is pressed (with a tick). Call & Answer is chosen (tick, 2px border, "Chosen"). A live line explains why in one sentence. The preview is captioned "Example from a ready-made set. Yours will show your own questions." |
+| 2 | `02-compare.png` | **Compare.** The praised rows are kept, with three corrected: **Pace** replaces the guessed "Typical length"; **Questions** reads "15 ready-made, or write your own"; **Starts** says Survey opens the moment it is created, with no Start step. The header, with each Use button, is sticky. The column for the pressed meeting type is labelled in words ("Suggested for a retro"). The group heads are `th scope="colgroup"`, with a hidden caption. |
+| 3 | `03-expert-recents.png` | **Compact, before a pick.** The 880px card has no side pane ("Show preview" toggles it). The last-used format is pre-chosen and marked "last used". Focus in the search shows **Used by you lately** as a three-row listbox under it, with "Browse all 15 sets" beneath; the body does not switch to the full chooser. "Your question sets · Make a new set" sit beside the picker. Create shows ⌘↵ (Ctrl+↵ off Mac). |
+| 3b | `03b-expert-ready.png` | **Compact, ready.** A one-line names rule, a one-line briefing, the Advanced line. The topics line carries an estimate from the host's own past sessions ("your rounds run about 6 min, so about 70 min"). No checklist, no "What happens next". |
+| 4 | `04-call-and-answer.png` | **Call & Answer, full mode.** All topics start on ("Switch off any you want to skip"). A visible names card says "Names are hidden until the vote closes", in the shipped card's own terms, and the phone preview uses the same words. "Background for Workie" introduces Workie as Engage's AI assistant. "Your question sets · Make a new set" sits under the set. The checklist shows status only. |
+| 5a | `05a-change-set-open.png` | **Change set.** Name and format fold into one line. The search is focused. The chooser has all of today's power: Sort, Switch team, the team's real name (Northwind), Mine / Northwind / Ready-made counts, Topic, Tag, Updated, Your question sets, Make a new set, the Tags and Used / updated columns, and the **Used by you lately** group. The highlighted row is drawn with the focus ring (combobox + `aria-activedescendant`). "Keep the set I had" sits beside the search, and Esc does the same. The current set says "✓ current". |
+| 5b | `05b-change-set-done.png` | **Topics refresh.** The loading and loaded states are drawn side by side in dashed annotation boxes. While loading, the chips are still placeholders (no shimmer) and Create reads "Loading topics…". The cleared-picks note uses the status-message style. |
+| 5c | `05c-no-match.png` | **No set fits.** "No Call & Answer sets match 'retro'", with today's exits (Clear the search · Other formats: Survey 1 set), then three ways to make your own: **Write your own questions** (manual builder), **Make a set with Workie** (AI generator) and **Fill in a spreadsheet** (template). These are the routes `HostQuestionSetsDialog` already offers hosts, preset to this format. The new set comes back already picked. |
+| 6 | `06-trivia.png` | Trivia. No names line, because a trivia answer is a letter. The truncated set name carries its full text in `title`. |
+| 6b | `06b-survey.png` | **Survey.** A Names card. The foot changes to "People can answer as soon as you open it. There is no separate Start." The button reads "Open the survey", and "What happens next" is Open / Collect / Close. |
+| 7 | `07-build-room.png` | **Build Room hand-off.** The tiles carry ticks and arrows instead of numbers. ⌘↵ never leaves the dialog: it moves focus to Continue, and the foot says so. |
+| 8 | `08-event.png` | **Event hand-off.** The same pattern. The Free-plan variant *replaces* the price line; it is drawn as an annotation. |
+| 9 | `09-ready.png` | **Ready.** The checklist says "Done" instead of restating, and spells out only what the form does not show in full (the briefing's source, "stops after 8"). "Goal" is renamed **Stop after N questions**. No keycaps for the novice. |
+| 10 | `10-phone-390.png` | **Phone, first-time.** 44px targets throughout, "Chosen" on the format, and a fade where the topics meet the foot. |
+| 10b | `10b-phone-390-compact.png` | **Phone, compact.** The title, a segmented format row (last used first, "More ▾"), the search with the recents list, Your question sets · Make a new set, a one-line "Workie background", and Advanced. |
+| 11 | `11-light.png` | **Paper re-tint** of frame 4, as a `.gsd--onlight` token block. Amber text is `#9A5B18`, and the done tick fills `#1F7A52`. |
+| 12a/12b | `12a-laptop-1280x720.png`, `12b-compare-1280x720.png` | **1280×720.** The checklist and next steps stay pinned in the side pane, and the Compare header with its Use buttons stays stuck while the rows scroll. The foot is always visible. |
+| 13 | `13-edit.png` | **Edit mode.** "Edit session" has no gallery. Format and set are shown fixed, with the reason and a lock; topics and options stay live. The side pane says what changed. A refusal or plan-limit notice goes at the top of the side pane (above the foot in compact mode). |
+
+## 5. Novice and expert, step by step
+
+**Dana (first time, a retro).** She types "Team retro — October" and presses **Retro**. Call &
+Answer is chosen and one sentence says why. If she's unsure she opens Compare, which shows Survey
+is for answering in your own time. In step 3 she searches "retro" and finds nothing (5c). She
+presses **Write your own questions**, types three questions, saves, and the set is picked. All
+topics are on. The names card tells her nobody sees who wrote what until the vote closes. She
+skips Optional, reads "What happens next", and presses **Create engagement**.
+
+**Sam (60+ sessions, keyboard).** The compact card opens with focus in the title. They type the
+title and press Tab: format is already Call & Answer (last used). Tab again: the search shows
+three recent sets. Enter picks the first. ⌘↵ creates. That is **four keys after the title**. If
+they arrow to Trivia and back, the set they had for Call & Answer comes back.
+
+## 6. Decisions and reasons
+
+- **Compact and last format are per account, derived from session history. No new storage is
+  needed.** `GameHostPage` already fetches `GET /games` every time the dialog opens
+  (`GameHostPage.jsx:1019-1031`, for "Used by you lately"), and each row carries `byMe`,
+  `gameType` and `createdAt`. "Has created at least one session" and "the newest session's
+  format" fall out of the same response, on every device. `localStorage` holds only a cache of
+  those two values, so the first paint picks the right layout before the request returns.
+- **The explicit override is the exception.** "I know these" (novice → compact) and "Show the
+  format guide every time" (expert → full) need a stored per-account preference. There is no
+  user-preferences API today. Proposal: a `USER#<sub> / PREFS` row behind `GET` and `PUT
+  /me/preferences`. Until that exists, the override lives in `localStorage`, because it is a
+  per-viewer convenience whose loss costs one click.
+- **The set is remembered per format only while the dialog is open.** This keeps the owner's
+  rule ("should not remember or preselect that last picked question set",
+  `GameSetupDialog.jsx:162-170`). Arrowing C&A → Trivia → C&A restores the set instead of
+  clearing it.
+- **Hand-off formats never leave on the shortcut.** On Build Room or Event, ⌘/Ctrl+Enter
+  focuses Continue and announces it. Only Enter or a click on Continue navigates.
+- **⌘ on Mac, Ctrl elsewhere.** Detected from `navigator.userAgentData.platform` with a
+  `navigator.platform` fallback. The handler accepts either Meta or Control, and the button
+  carries `aria-keyshortcuts`. Keycaps show only in compact mode.
+- **Time: estimates from history, never guesses.** `GET /games` returns `roundsPlayed`, the start
+  and `lastPlayedAt` for each of the host's sessions. Their median minutes per round in this
+  format, times the questions that will be asked (after topics and "Stop after"), gives the
+  estimate in 3b. With no history the line says "you set the pace". The compare table's guessed
+  minutes are gone; the **Pace** row says who controls the pace instead.
+- **Meeting types instead of abstract goals.** People say "retro", not "ideas and priorities".
+  Each chip is a suggestion: it chooses a format and explains why, and any card can still be
+  picked.
+- **Names visible, in the shipped words.** The shipped card is explicit that names are revealed
+  when voting closes (`SessionOptions.jsx:313-323`), so the new line says "hidden until the vote
+  closes, then shown with the results" and the phone says "Your name is hidden until the vote
+  closes". "Always hidden" is not something the product can do today (open question 2).
+- **Keep the compare table, the Advanced line, "What happens next", the fixed-size body, and
+  set-change-clears-topics-with-stable-height.** All three reviews praised them.
+
+## 7. Open questions for the owner
+
+1. **Preferences API.** Should a small `/me/preferences` row be built for the compact override,
+   or is `localStorage` enough for an override the history-derived default rarely needs?
+2. **Names "hidden from everyone, always".** The first-time reviewer asked for it for retros. The
+   product reveals names when voting closes. Should a permanent-anonymity option exist?
+3. **One noun.** The dialog says "engagement" and the list says "Sessions". Should one word be
+   used everywhere?
+4. **Create and open the lobby** (Shift+⌘↵), for hosts who start right away?
+5. **"Create another like this"** from a session in history (same format, set, topics and
+   options, new title). The experienced reviewer called it the biggest weekly time-saver. It is
+   out of scope for this modal.
+6. **Paper.** Is this dialog ever shown on a paper surface? If not, drop frame 11 and its test.
+7. **Preview data.** Showing the chosen set's first question needs one read per pick. Is that
+   acceptable?
+
+## 8. Implementation map
+
+**Files that change**
+
+| File | Change |
+|---|---|
+| `src/src/components/GameSetupDialog.jsx` | Two layouts (full / compact) with fixed sizes, and three sections. Remove `chooserOpen` / `gsd--wide`. Topics under the set, never in `.gsd-row`, and not rendered while the chooser is open. Format `''` for a novice and `lastFormat` for an expert. `setByFormat` map (dialog-local) so format round-trips restore the set. `categoriesLoading` disables Create ("Loading topics…"). Title `autoFocus` in create mode, and Enter in the title moves to the next empty decision. ⌘/Ctrl+Enter submits when `canCreate`, or focuses Continue for Build Room or Event. A visible names line for Call & Answer that opens the existing anonymity card. A Survey foot with the warning line. Refusals at the top of the side pane. |
+| `src/src/components/GameSetupDialog.css` | The `.gsd-body` grid (form + 420px side, the side pinned by `.side-sum`), the compact 880px variant, a `--gsd-side` token, `--gsd-focus` and one `:focus-visible` ring, the gallery and chip radio styles with a tick and 2px border, the outlined disabled primary, `kbd` at full opacity, preview art whose base state is the end state, still skeletons, 44px targets under 480px, and a `.gsd--onlight` re-tint block if paper is confirmed. |
+| `src/src/GameHostPage.jsx` | `handleSetupSetChange` / `fetchCategories` (`:4111-4186`): clear before the await, drop stale responses, check `res.ok`, and expose `categoriesLoading` and `categoriesError`. From the existing `GET /games` effect (`:1019-1031`), derive `hasCreated`, `lastFormat` and `paceByFormat`, and pass them in. |
+| `src/src/components/SetChooser.jsx` | **Keep every feature.** Change: on focus with nothing picked, open a *recents* listbox instead of the full chooser (new prop `recentsFirst`); the full chooser opens on typing, on ↓ past the recents, or on "Browse all". Focus the search when Change opens. "Keep the set I had" goes beside the search. Rows become `role="option"` driven by `aria-activedescendant`, named, with `aria-current` on the current set. Replace the search's `outline:none` with `:focus-within`. Base `wideCols` on the container width, not `matchMedia`. In the no-match state, show the three make-your-own routes after the exits. |
+| `src/src/components/SessionOptions.jsx` | `SessionCategories`: label "Topics in this set", aria-labels "Architecture, 2 questions", a live total, still skeletons, an error with Retry, and the cleared-picks note through `StatusMessage`. `SessionBriefing`: a one-line variant ("Background for Workie · optional · Add a document · write key points") and the one-sentence Workie introduction in full mode. Goal copy renamed "Stop after N questions". |
+| `src/src/components/HostQuestionSetsDialog.jsx` | Accept an `initialRoute` (`manual` / `ai` / `template`) and a preset format, so the 5c routes open straight into the right builder. It already hands back the list it fetched (`onSetsChanged`); the dialog then picks the new set. |
+| `src/src/config/gameTypes.js`, `config/engagementKinds.js` | Add `short`, `good`, `room`, `get`, `pace` and `size` strings, plus a `MEETING_TYPES` list (meeting → format + reason). One source for the cards, compare, help and the phone list. |
+| `src/src/config/help/host-setup.js` | Rewrite "Create engagement, field by field" (`:230-244`) for the gallery, the meeting chips, Compare, compact mode, the recents list, the names line, the no-match routes and the shortcuts. Run `node scripts/help-drift.js`. |
+
+**New components:** `FormatPicker.jsx` (one radiogroup with two skins: gallery and chips),
+`FormatPreview.jsx`, `FormatCompare.jsx`, `MeetingTypeChips.jsx`, `CreateSummary.jsx` (checklist
+plus next steps) and `OtherFormatHandoff.jsx`.
+
+**Tests to add or change**
+
+- The behaviour tests in §2.
+- `gameSetupDialog.test.jsx`:
+  - A novice create has no format chosen, and Create is disabled.
+  - `hasCreated` gives compact mode with `lastFormat` chosen.
+  - The title has focus on open.
+  - The format radiogroup has exactly one tab stop, and arrows select.
+  - Arrowing C&A → Trivia → C&A restores the set.
+  - ⌘/Ctrl+Enter submits only when `canCreate`, and on Build Room or Event moves focus to
+    Continue without calling `onChooseOther`.
+  - Survey shows the warning foot and "Open the survey".
+  - The Free plan replaces the price line and disables Continue.
+- `setChooser.test.jsx`:
+  - Focus with nothing picked shows the recents listbox, not the full chooser.
+  - Typing opens the full chooser.
+  - Rows are reachable with ↑↓ and Enter.
+  - Esc twice keeps the set.
+  - The no-match state lists the three routes.
+- `gameSetupDialogDom.test.jsx`: re-record it on purpose, and note the change in its header.
+- `gameSetupPalette.test.js`, composited:
+  - `--gsd-side`, the chip and card washes, the focus ring, the step-later colour and paper
+    `#9A5B18` / `#1F7A52`.
+  - No `opacity` on a text-bearing selector under `.gsd`.
+  - Nothing under 12px.
+- CSS contract:
+  - `.gsd--wide` and the width transition are gone.
+  - Every `@keyframes` used by the previews has no `to`/`100%` that differs from the base rule
+    (end state = base).
+  - No `animation-iteration-count: infinite` under `.gsd`.
+- `helpContent.test.js` still passes after the help rewrite.
+
+## 9. Changes from review
+
+Every point the coordinator listed as "must address", and what was done. The reviews are in
+`reviews/`.
+
+### First-time host (Dana)
+
+| Point | What changed |
+|---|---|
+| A path when no set fits; designed empty search | Frame 5c: the no-match state keeps today's exits, then offers Write your own questions, Make a set with Workie and Fill in a spreadsheet, which are the routes hosts already have. The new set comes back picked. Step 3 also offers "Write your own questions" before any search (1b). |
+| "Retro" and common goals as chips | "Planning a…" chips: Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day. Each chooses a format and explains why in a live line (1b). The abstract goal chips are gone, and "Good for" moved onto the cards. |
+| Anonymity stated plainly, consistent room/phone wording | A visible names card under the questions for Call & Answer (4) and a one-line version elsewhere (3b, 5b, 9, 13). The room preview, caption and phone all say "hidden until the vote closes". Survey shows its Names card (6b). "Always hidden" is an open question, because the product reveals names after the vote. |
+| Compare-table contradictions | **Questions** is an offer ("15 ready-made, or write your own"). **Starts** for Survey reads "Opens to answers the moment you create it. No Start step." The Survey foot now matches (6b): a warning line instead of the lock line. |
+| Introduce Workie in one plain line | "Workie is Engage's AI assistant: after each round it sums up what the room said." This sits on "Background for Workie" (4), and Workie is named the same way in 5c. |
+| Session length from the set, or drop the guess | The guessed minutes are dropped everywhere (cards, compare, side pane). A real estimate appears only from the host's own history (3b); otherwise the line says "you set the pace". Compare's row became **Pace**. |
+| No empty circles that look unfinished | Optional rows show a dash and "Not added — that's fine" / "Defaults". Only required rows tick. |
+| Also taken from the review | Example banner on the pre-pick preview (1b). All topics start on, with "Switch off any you want to skip". Step 3 is visible in frame 1. The long "Seven formats" sentence is cut. "Own setup screen" → "Continues on its own page". "Engage" badge → "Ready-made". "QS" → "Questions". "Goal" → "Stop after N questions". Keycaps hidden for novices. "Categories" → "Topics". |
+
+### Experienced host (Sam)
+
+| Point | What changed |
+|---|---|
+| Compact must really be compact; draw it at phone width | Compact is a fixed 880px single column with no side pane, no checklist, no "What happens next", no helper copy, no Required pills, and a one-line briefing (3, 3b). The phone version is 10b. |
+| Keep the chooser power features | Frame 5a has all of them: Sort, Switch team, the team's real name, Make a new set, Your question sets, the Tags and Used / updated columns, the "Used by you lately" group, and Other formats in the no-match state (5c). "Your question sets · Make a new set" also sit beside the folded picker in every frame. |
+| Draw the picker before a pick, recents one click away | Frame 3 (and 10b): the recents listbox under the search. |
+| Title autofocus | Specified (§8) and drawn (frame 1 focus ring). Enter in the title moves to the next empty decision. |
+| Tab into search must not throw the full chooser | Focus shows the recents listbox only. The full chooser needs typing, ↓ past the recents, or "Browse all". |
+| Arrowing chips must not clear the set; ⌘↵ on Build Room/Event must not leave silently | Set memory per format, local to the dialog. On hand-off formats ⌘↵ focuses Continue, and the foot says so (7, 8). |
+| ⌘ on Mac | The keycaps read ⌘↵ in the mockups. Platform detection and the Meta-or-Control handler are specified (§6). |
+| Remember compact and last format per account | Both are derived from `GET /games`, which the dialog already fetches, so they are per account with no new API. The explicit override needs `/me/preferences` (proposed); until then it lives in `localStorage`, for the reason given in §6. |
+| Also taken from the review | Edit mode and refusal placement are drawn (13). Change focuses the search and folds name and format to one line (5a). Esc = "Keep the set I had". "Create and open the lobby" and "Create another like this" are listed as open questions. |
+
+### Visual and accessibility
+
+| Point | What changed |
+|---|---|
+| Pause control, or play once / on hover; correct reduced-motion end states; no infinite shimmer | Previews play once, in under 5s, only on hover, focus or chosen. The side pane has Replay. The base CSS *is* the end state (Trivia's C green, Survey ticked and full, Call & Answer's winner amber), so reduced motion shows it. Skeletons are still. No infinite animation remains (the caret no longer blinks). |
+| Visible focus everywhere; chooser rows reachable | One `:focus-visible` ring for every control. `.srch:focus-within` replaces `outline:none`. Chooser rows are combobox options with `aria-activedescendant`, drawn with the ring on the active row (3, 5a, 10b). |
+| Selection not by colour alone | A tick and a 2px border on chips, cards and topics. "Chosen" on cards. "Suggested for a retro" in words on the compare column. "✓ current" on the current set. |
+| Contrast ≥ 4.5:1, including dimmed step 3 and key hints | Step 3 uses `--muted` text (7.0:1) with no opacity. `kbd` is at full opacity and inherits the button colour. Disabled Create is outlined with a muted label (7.0:1) instead of a dimmed amber block. Paper uses `#9A5B18` and `#1F7A52`. |
+| One radio-group keyboard model | Gallery and chips are both `role="radiogroup"` with a roving tabindex. Each card's name is the format; its description is `aria-describedby`. |
+| Frame 1 density; no hover-state card; ≥12px; labels named | Formats are named once (cards only). The side pane no longer repeats them. No card is drawn hovered. The render script audits every UI text node and finds none under 12px (the stage picture is `aria-hidden`). The title uses `aria-labelledby` on "Name it". Topics are named "Architecture, 2 questions". Previews are `aria-hidden` with a caption. The phone dialog has `aria-modal` and a label. The compare table has a `colgroup` header and a caption. The preview tabs are `aria-pressed` buttons. |
+| 1280×720: checklist and Compare actions reachable | Frame 12. The checklist and next steps are pinned to the bottom of the side pane; the Compare header with its Use buttons is sticky. |
+| Also taken from the review | Dashed borders now mean only "placeholder or annotation" (meeting chips and the briefing line are solid). The hand-off tiles are unnumbered. The cleared-picks note uses the status-message style. The Free-plan line *replaces* the price. The unused `transform` transition is removed. 44px targets on the phone, plus a fade cue. |
+
+### Declined, and why
+
+- **Removing the subtitle "Three decisions. Everything else has a sensible default."** to save
+  30px at 720 (visual review). The first-time reviewer named it the most reassuring line on the
+  screen. It stays in full mode only; compact drops it.
+- **"Names: hidden from everyone (always)" as a setting** (Dana). The product cannot do it:
+  names are revealed when voting closes. The wording now says so plainly, and it is listed as an
+  open question.
+- **Pre-filtering step 3 by meeting type** (Dana: "Retro" filters to retro sets). Sets carry
+  tags, but no retro sets exist in the demo library and nothing guarantees a tag vocabulary. A
+  filter that usually empties the list would send novices to 5c every time. The chip chooses the
+  format and leaves the set search open.
+- **Renaming the product nouns** ("engagement" vs "session"). This is product-wide, not a modal
+  change; it is an open question.
+- **Dropping frame 11 now** (visual review D3). Kept as a re-tint block pending the owner's answer
+  on whether the dialog ever renders on paper.
+
+## 10. Notes on the mockups
+
+- The previews are illustrations of the room. Text inside the stage picture is below 12px because
+  it is a scaled picture of a projected screen. It is `aria-hidden`, and the caption beside it is
+  the accessible description.
+- Call & Answer and Trivia use the real demo sets. There are no Poll, Wavelength or Survey demo
+  sets, so frame 6b's survey set and 5a's extra sets (Incident Review Starters, Team Health
+  Check) are illustrative.
+- The PNG files are captured after the single-play animations finish, so they show end states.
+- The helper scripts that generate `index.html` and the PNG files are kept outside the repo.

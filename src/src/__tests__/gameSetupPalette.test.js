@@ -104,11 +104,43 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     expect(ratio(text(), field())).toBeGreaterThanOrEqual(AA);
   });
 
-  test('the active pill: primary text on its own tint, composited', () => {
-    // A tint is invisible in a token table (skill §5) — composite the 12%
-    // amber wash over the card before measuring the amber text on it.
-    const tinted = washOver(ruleWash('.gsd-pill.on'), card());
+  /*
+    THE CHOSEN FORMAT (the pills became one radio group, new-engagement
+    README §3.8): primary text on the amber wash token, composited over the
+    card — a tint is invisible in a token table (skill §5).
+  */
+  test('the chosen format: primary text on its wash, composited', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-fmt\[aria-checked="true"\]\s*\{[^}]*background:\s*var\(--gsd-wash\)/);
+    const tinted = washOver(rawTok('--gsd-wash', skin), card());
     expect(ratio(token('--gsd-primary'), tinted)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(text(), tinted)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the pressed meeting chip: text on the periwinkle wash', () => {
+    const tinted = washOver(rawTok('--gsd-wash-info', skin), card());
+    expect(ratio(text(), tinted)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the side pane: text and muted copy on its own ground', () => {
+    expect(ratio(text(), token('--gsd-side'))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(muted(), token('--gsd-side'))).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('the focus ring clears 3:1 on the card and the side pane (non-text contrast)', () => {
+    expect(ratio(token('--gsd-focus'), card())).toBeGreaterThanOrEqual(3);
+    expect(ratio(token('--gsd-focus'), token('--gsd-side'))).toBeGreaterThanOrEqual(3);
+  });
+
+  test('step 3 before a format is muted text, at AA — never dimmed', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-later\s*\{[^}]*color:\s*var\(--gsd-muted\)/);
+    expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('a disabled Create is outlined with the muted label, not a dimmed amber block', () => {
+    const rule = CSS.match(/\.gsd \.btn-primary:disabled\s*\{([^}]*)\}/)[1];
+    expect(rule).toMatch(/background:\s*transparent/);
+    expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
+    expect(rule).toMatch(/opacity:\s*1\b/); // answers styles.css's 0.6 (devtest M1)
   });
 
   test('the selected category chip: body text on the same tint', () => {
@@ -296,6 +328,64 @@ describe('the scope is whole, and it is the only scope', () => {
     // A stylesheet nobody imports styles nothing, and the dialog would render
     // as the bare white card the whole change exists to retire.
     expect(JSX).toMatch(/import '\.\/GameSetupDialog\.css'/);
+  });
+});
+
+/*
+  THE NEW ENGAGEMENT REDESIGN'S CSS CONTRACT (docs/design/new-engagement
+  README §8, "CSS contract"). jsdom has no layout, so these read the sheet.
+*/
+describe('the card never moves, and nothing animates for ever', () => {
+  const body = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  test('gsd--wide and the width transition are gone', () => {
+    expect(body).not.toMatch(/gsd--wide/);
+    expect(JSX.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/gsd--wide/);
+    expect(body).not.toMatch(/transition:\s*max-width/);
+    expect(body).not.toMatch(/transition:[^;]*\bwidth\b/);
+  });
+
+  test('no infinite animation anywhere under .gsd', () => {
+    expect(body).not.toMatch(/infinite/);
+    expect(body).not.toMatch(/animation-iteration-count:\s*infinite/);
+  });
+
+  /*
+    END STATE = BASE (README §3.3): every keyframe the previews use names only
+    a START (`from` / `0%`). A `to` or `100%` would be an end state the base
+    rule does not have — and reduced motion, which removes the animation,
+    would then show something other than the finished picture.
+  */
+  test('every keyframe names only its start, so the resting CSS is the end state', () => {
+    const frames = [...body.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?\})\s*\}/g)];
+    expect(frames.length).toBeGreaterThan(0);
+    for (const [, name, inner] of frames) {
+      expect([name, /(^|[\s}])(to|100%)\s*\{/.test(inner)]).toEqual([name, false]);
+    }
+  });
+
+  test('reduced motion removes the preview animations', () => {
+    expect(body).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.gsd \.gsd-fp \*[^}]*\{\s*animation:\s*none/);
+  });
+
+  test('no opacity on a text-bearing selector (disabled text is never dimmed)', () => {
+    // The one exception is the briefing's sweep bar, a 4px rule with no text.
+    const rules = [...body.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, , decls]) => /(^|;)\s*opacity\s*:(?!\s*1\s*(;|$))/.test(decls))
+      .map(([, sel]) => sel.trim())
+      .filter((sel) => !/gsd-sweep i/.test(sel) && !/^(from|to|\d+%)$/.test(sel));
+    expect(rules).toEqual([]);
+  });
+
+  test('the side pane is pinned: its checklist block does not scroll away', () => {
+    expect(body).toMatch(/\.gsd \.gsd-side-pin\s*\{[^}]*flex:\s*none/);
+    expect(body).toMatch(/\.gsd \.gsd-side-pv\s*\{[^}]*overflow-y:\s*auto/);
+  });
+
+  test('the two layouts are fixed sizes: full, compact, and the phone', () => {
+    expect(body).toMatch(/\.gsd\.new-game-dialog\s*\{[^}]*width:\s*min\(1240px, calc\(100vw - 48px\)\)/);
+    expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--compact\s*\{[^}]*width:\s*min\(880px/);
+    expect(body).toMatch(/--gsd-side-w:\s*420px/);
   });
 });
 

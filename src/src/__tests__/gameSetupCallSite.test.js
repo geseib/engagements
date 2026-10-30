@@ -132,7 +132,10 @@ describe('the host page carries the set\'s scope, not just its id', () => {
     expect(fn).not.toBeNull();
     const [, params, body] = fn;
     expect(params).toMatch(/scope/);
-    expect(body).toMatch(/fetchCategories\([^)]*scope/);
+    // The categories go through the latest-only loader now, not the unguarded
+    // fetchCategories (docs/design/new-engagement README §2b) — scope still
+    // travels.
+    expect(body).toMatch(/setCategoryLoader\.load\([^)]*scope/);
     expect(body).toMatch(/fetchQuestionSetInstruction\([^)]*scope/);
   });
 

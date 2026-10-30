@@ -1,89 +1,61 @@
 /**
  * The create-engagement screen.
  *
- * Built from `docs/design/host-redesign/20-setup.html`, with the four overrides
- * that design review argued for: the anonymity sentence (the mockup's is false
- * in the dangerous direction — see below), the category grid (the mockup's
- * single-value <select> cannot express a multi-select), the question-set
- * dropdown (the mockup's hardcoded option loses the type filter, the count and
- * the image marker) and the Create button's disabled guard. The mockup also
- * silently drops three fields that work — event details, AI context and
- * Workie's voice — and silence in a mockup is not an instruction to delete.
+ * ── THE 30 OCT 2026 REDESIGN (docs/design/new-engagement) ─────────────────
+ * The owner: "a great user experience creating a new engagement when the user
+ * has very little experience with the site. also a user with lots of
+ * experience, doesn't feel like its too overbearing". Three decisions, then
+ * Create: Name it → Format → Questions, on one page; everything else sits
+ * under "Optional — every one has a safe default".
  *
- * A COMPONENT, NOT A ROUTE. `App.jsx` is a `window.location.pathname` switch
- * with no history integration, so a route would mean a full page load — which
- * destroys the in-memory host session, the WebSocket connection and every
- * per-game value this screen exists to hand off. A route is the one shape that
- * cannot do the job.
+ *   FULL     (a host with no sessions yet) min(1240px, 100vw−48px), a form on
+ *            the left and a 420px side pane: the preview, a status-only
+ *            checklist and "What happens next" (components/CreateSummary).
+ *            The formats are a gallery of cards with "Planning a…" meeting
+ *            chips and a Compare view until a set is picked, then a chip row.
+ *   COMPACT  (a host with history) a fixed 880px single column: format chips
+ *            with the last-used one chosen, the recents list, a one-line
+ *            briefing, no helper copy and no side pane unless asked for.
  *
- * WHAT IT OWNS is the form and nothing else. `eventTitle`, `categories` and
- * `activeCategoryIds` are per-game keys the live host screen reads and
- * `resetGameSession()` clears (config/gameSession.js), so they stay on the page
- * and arrive as props. `gameSession.test.js` fails if that boundary moves.
+ *   NEITHER CHANGES SIZE WHILE OPEN. The card used to widen from 680 to
+ *   1120px while the set list was open and narrow again on a pick, so the
+ *   whole dialog moved twice. Now only the body swaps (Compare, the open
+ *   chooser), and `gsd--wide` is gone (gameSetupPalette.test.js holds it so).
  *
- * WHAT IT RAISES is one payload, carrying the selected category ids. That is
- * the point of the extraction: `handleStartNewGame` calls `leaveCurrentGame()`,
- * which clears `activeCategoryIds`, and then used to read them back out of the
- * pre-reset closure. It worked, invisibly, for a reason nothing at the call site
- * showed.
+ * THE BUG THE OWNER REPORTED ("the catagories of the old question set stay
+ * up and the modal alignment is all wrong", README §2): the topics now sit
+ * UNDER the set, full width, never in a shared row; they are not rendered at
+ * all while the chooser is open; and they show only when the page says they
+ * belong to the chosen set (`categoryStatus`, hooks/useSetCategoryLoader.js).
+ * Until then: still placeholders at a stable height, Create reads "Loading
+ * topics…", and a failure is a sentence with Retry. The payload's
+ * categoryIds are filtered to the chosen set's list, so Create can never send
+ * one set's categories for another.
  *
- * RESET BEHAVIOUR, DECIDED RATHER THAN INHERITED. The dialog is rendered by an
- * early return, so closing it unmounts it and every field below goes back to
- * its default on the next open. That includes `anonymousResponses`, which used
- * to be sticky across creates — accidentally, because the state lived on a page
- * that never unmounts. Non-sticky is the right answer: ON is the safe state and
- * the guarantee is spelled out in full on the card, whereas a sticky OFF
- * carries one room's decision silently into the next one.
- *
- * PURE PROPS. Every FORM field arrives as a prop and leaves in one payload,
- * and that stays. The options themselves — the category grid, Workie's
- * briefing and the Advanced fold — are components/SessionOptions.jsx, shared
- * with the event item dialog (events M1b), and the one fetch this file used
- * to make (the prompt library, the evidence behind the Advanced line's claim)
- * moved there with the block it serves.
- *
- * WHERE A HOST MAKES A QUESTION SET, per the owner: *"the interface for entry to
- * this is create engagements."* This screen is the only place in the product
- * where a host has already discovered that a set is the thing a session needs —
- * the picker below is where they find out they haven't got one. So the entry
- * sits beside the picker, and the "no sets yet" help text stops pointing at an
- * editor the host cannot reach. The surface itself is
- * <HostQuestionSetsDialog>, which owns its own fetching for the reason this
- * file's own header gives about routes: keeping the network out of here leaves
- * this component pure-props and testable.
- *
- * `localSets` is why a set can be picked the moment it is made. The page owns
- * `questionSets` and re-reads it on mount, not on demand, and this component
- * cannot ask it to — so the sets dialog hands back the list it already fetched
- * and they are merged by id for the picker. Merged, not replaced: the page's
- * copy carries what the public picker endpoint returns, and losing it would be
- * a regression for every set the host did not just touch.
- *
- * ADVANCED (docs/design/session-setup-redesign, PLAN Phase 1). The owner:
- * "anonymous and random all belong under advance, same goes for workie and
- * voice… this advance section should be an expanding click section." Title,
- * format, set and categories stay in view — they decide WHAT gets asked.
- * Everything with a safe default folds under a native <details>, closed on
- * open: responses, question order, Workie, and what people see on joining.
- * The line on the fold (config/setupDefaults.js) names every default in force
- * and any change first, in amber, so closing it never hides a decision; it
- * replaces the old green plan sentence.
- *
- * ONE WAY OUT, THREE DOORS. The X, Cancel and Escape all go through
- * `requestClose()`: an untouched form closes at once, and a form with work in
- * hand turns the foot into an inline "Discard?" — never a second modal. The
- * head and foot stick, so both exits stay on screen however far the host has
- * scrolled.
+ * Kept from before, unchanged in substance: A COMPONENT, NOT A ROUTE (App.jsx
+ * is a pathname switch with no history; a route would destroy the host
+ * session). WHAT IT OWNS is the form; `eventTitle`, `categories` and
+ * `activeCategoryIds` are per-game keys the page owns (config/gameSession.js).
+ * WHAT IT RAISES is one payload with the selected category ids. RESET is
+ * non-sticky (rendered by an early return, so each open mounts fresh — the
+ * set is remembered PER FORMAT only while the dialog is open, README §6, and
+ * the owner's "should not remember or preselect that last picked question
+ * set" still holds). ONE WAY OUT, THREE DOORS: the X, Cancel and Escape go
+ * through requestClose(); work in hand turns the foot into an inline
+ * "Discard?". WHERE A HOST MAKES A SET: beside the picker, through
+ * <HostQuestionSetsDialog> in the sibling layer (never a modal inside the
+ * modal); `localSets` merges what it hands back so a new set can be picked
+ * the moment it exists.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { NAMES_DEFAULT, namesMode } from '../config/surveyNames';
+import { anonymityApplies } from '../config/anonymity';
 import Icon from './Icon';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import {
   isUnreadableSet, unreadableSetName, UNREADABLE_REASON,
 } from '../utils/unreadableSet';
-import { imageMarkerSuffix } from './SetImageBadge';
 import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
@@ -91,200 +63,215 @@ import Modal from './Modal';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
-import { BUILD_KIND, EVENT_KIND, kindLabel } from '../config/engagementKinds';
+import StatusMessage from './StatusMessage';
+import { BUILD_KIND, EVENT_KIND, kindLabel, kindIcon } from '../config/engagementKinds';
 import { offeredForSessions } from '../config/setFinder';
-import pricing from '../../../lambda-functions/game/pricing';
+import {
+  formatGuide, isHandoffFormat, MEETING_TYPES,
+  readLayoutOverride, writeLayoutOverride, isMacPlatform, createShortcutLabel, isCreateShortcut,
+} from '../config/formatGuide';
 import SetChooser from './SetChooser';
+import { ENGAGE } from '../utils/setOwnerTag';
+import FormatPicker from './FormatPicker';
+import FormatCompare from './FormatCompare';
+import MeetingTypeChips from './MeetingTypeChips';
+import CreateSummary from './CreateSummary';
+import OtherFormatHandoff from './OtherFormatHandoff';
 import './GameSetupDialog.css';
 
 const EMPTY_USES = new Map();
 
 /*
-  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04). The owner: events
-  and Build Rooms "have connect to the current systems for creating and
-  editing those types of engagements". Each already has its own setup screen
-  — the new-event dialog and agenda builder, the Build Room setup page — so
-  picking one here does not rebuild it: the set, categories and options give
-  way to one sentence, and the primary button hands the title over to that
-  screen (`onChooseOther`). Create mode only; Event only while events are
-  switched on for the tier (`eventsAccess.enabled`), and on Free it says which
-  plan brings them instead of going on.
+  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04), each with its own
+  setup screen: picking one hands the title over (`onChooseOther`). Create
+  mode only; Event only while events are switched on for the tier
+  (`eventsAccess.enabled`), and on Free it says which plan brings them.
 */
-const OTHER_FORMATS = Object.freeze([BUILD_KIND, EVENT_KIND]);
 const OTHER_LABELS = Object.freeze({
   [BUILD_KIND]: 'Set up the Build Room',
   [EVENT_KIND]: 'Continue to the event',
 });
-const OTHER_BLURBS = Object.freeze({
-  [BUILD_KIND]: 'Build something with your Claude Code while the room suggests and votes. You decide. You set the goal on the next screen.',
-  [EVENT_KIND]: `A whole agenda behind one code: quizzes, polls, talks and breaks, in the order you run them. You set the day and place next, then build the agenda. ${pricing.formatCents(pricing.PER_EVENT_CENTS)} an event, counted when it first goes live.`,
-});
+
+/** True while the window is at most `px` wide (false where there is no window). */
+function useNarrow(px) {
+  const query = `(max-width: ${px}px)`;
+  const get = () => {
+    try { return typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false; } catch (e) { return false; }
+  };
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else if (mq.removeListener) mq.removeListener(on); };
+  }, [query]);
+  return narrow;
+}
+
+/** The fold that the names line's "Change" opens, and the control it focuses. */
+function openAdvancedAt(root, selector) {
+  const fold = root && root.querySelector('details.gsd-adv');
+  if (!fold) return;
+  fold.open = true;
+  const target = fold.querySelector(selector);
+  if (target && target.focus) target.focus();
+  if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center' });
+}
 
 export default function GameSetupDialog({
-  /*
-    'create' (default) | 'edit'. Edit is the same form pointed at an EXISTING
-    unstarted session: the page fetches `GET /games/{id}/host-details`, hands the
-    result in as `initialValues`, and this component seeds its state from it.
-    Still pure-props — no fetch enters this file — and in edit mode the fields
-    the backend's PUT whitelist refuses (format, question set, shuffle) are
-    shown disabled with a note, not hidden, so the host can see what the
-    session is without being able to break its pinned rows. The category
-    subset is live here: it is mask state, and the PUT rewrites it.
-  */
+  /* 'create' (default) | 'edit' — edit is the same form pointed at an
+     EXISTING unstarted session (`initialValues` from GET
+     /games/{id}/host-details); format, set and shuffle are shown fixed. */
   mode = 'create',
-  /**
-   * THE LAST REFUSAL, if the previous Create was turned away. `{ blocked,
-   * kind, used, included, message }` from utils/upgradeRequired.js, or a plain
-   * `{ message }` for any other failure. It used to be a browser alert() —
-   * "Failed to create game: …" — with nothing to click; a 402 that says
-   * "upgrade" and offers no way to is the gap the billing handoff opens with.
-   */
+  /** THE LAST REFUSAL, if the previous Create was turned away. */
   refusal = null,
-  /** Where the plan lives: the console's Billing section. */
   billingHref = '/admin?section=billing',
-  /** What GET /games/{id}/host-details returned — get-game.js's host door. */
   initialValues = null,
-  /**
-   * May this host make an event here? `{ enabled, canCreate, offerPlanName }`
-   * from utils/eventsAccess.js, or null while unknown. Event is offered only
-   * when `enabled`.
-   */
+  /** { enabled, canCreate, offerPlanName } from utils/eventsAccess.js, or null. */
   eventsAccess = null,
-  /**
-   * (kind, { title }) => void — Event or Build Room was chosen: the page
-   * opens that engagement's own setup screen with the title carried over.
-   * Absent, neither is offered.
-   */
+  /** (kind, { title }) => void — Event or Build Room chosen. Absent, neither is offered. */
   onChooseOther,
   isFirstEngagement = true,
   eventTitle = '',
   onEventTitleChange,
-  /*
-    THE SET THE HOST WAS JUST USING, so Switch game reopens on it.
-
-    NO CALLER PASSES THIS ANY MORE, ON PURPOSE. It existed so a create reopened
-    on the last-played set, and the owner retired that: "the create engagement
-    should not remember or preselect that last picked question set." The prop
-    survives (seeded once, never controlled) only as the seam a future caller
-    with a legitimate seed — a deep link, say — would use.
-  */
+  /* A seam for a caller with a legitimate seed (a deep link); no caller passes
+     it, on purpose — the owner retired remembering the last set. */
   initialSetId = '',
-  /* The other half of `initialSetId`, for the same hypothetical seeded caller.
-     Absent reads as platform — see utils/setRef.js. */
   initialSetScope = '',
   questionSets = [],
-  /** The host's own recent uses of sets (config/setFinder.js recentUses):
-   *  the chooser's "Used by you lately". */
+  /** The host's own recent uses of sets: the chooser's "Used by you lately". */
   recentSetUses = EMPTY_USES,
-  /** The team the sets are for: { name, others: [{ orgId, name }], onSwitch }
-   *  (hooks/useActiveOrgs.js), or null where there is no team to name. */
+  /**
+   * WHAT THE HOST'S HISTORY SAYS (README §6), derived by the page from the
+   * GET /games read it already makes: has this account created a session
+   * (compact layout) and the newest one's format (chosen on open). A novice
+   * gets no format chosen and the full layout.
+   */
+  hasCreated = false,
+  lastFormat = '',
   team = null,
   personas = [],
   categories = [],
   activeCategoryIds = new Set(),
+  /**
+   * WHOSE CATEGORIES `categories` ARE: { key, loading, error } from
+   * hooks/useSetCategoryLoader.js, `key` a set reference key. Absent (an
+   * older caller, the edit dialog), `categories` is taken as the chosen set's.
+   */
+  categoryStatus = undefined,
+  /** (setId, scope) => void — the topics failed to load; try again. */
+  onRetryCategories = null,
   onToggleCategory,
   onFormatChange,
   onQuestionSetChange,
   onCancel,
   onCreate,
-  /* THE PAGE IS STILL WORKING ON THIS PRESS. The dialog now stays up until
-     the page has the next screen ready (GameHostPage handleStartNewGame), so
-     the press has to look taken and cannot be pressed twice — a second press
-     was a second session. */
+  /* THE PAGE IS STILL WORKING ON THIS PRESS: the button looks taken and
+     cannot be pressed twice (a second press was a second session). */
   busy = false,
 }) {
   const isEdit = mode === 'edit';
   const seed = initialValues || {};
 
-  // Seeded once, not controlled — the dialog is rendered by an early return,
-  // so each open mounts fresh and the initializers run against that open's
-  // `initialValues`. Defaults match get-game.js's own default-ON rule: only an
-  // explicit false reads as off.
-  const [engagementType, setEngagementType] = useState(
-    isEdit ? (seed.gameType || 'call-and-answer') : 'call-and-answer'
-  );
-  /*
-    THE SELECTION IS A PAIR, held as the encoded key the <select> can carry.
-    `teamretro` names a different set in each of platform, org and public
-    (utils/setRef.js), so an id alone is not a selection — that is precisely
-    what let a session built from an org's set pin Engage's library instead.
+  /* ── which formats are offered ─────────────────────────────────────────── */
+  const otherFormats = isEdit || !onChooseOther ? [] : [
+    BUILD_KIND,
+    ...(eventsAccess && eventsAccess.enabled ? [EVENT_KIND] : []),
+  ];
+  const offeredIds = [...PICKER_GAME_TYPES.map((t) => t.id), ...otherFormats];
 
-    Seeded from whichever half the caller has: an edit carries the session's
-    pinned QuestionSetScope when it has one, and a pre-tenancy session has none,
-    which parseSetRefKey reads as platform.
+  /* ── layout: full or compact (README §6) ───────────────────────────────── */
+  // "I know these" / "Always show the guide" — a per-viewer convenience in
+  // localStorage (wrapped; it may throw or come back empty). No preferences
+  // API exists yet; README §7 Q1 asks whether to build one.
+  const [layoutOverride, setLayoutOverride] = useState(() => (isEdit ? '' : readLayoutOverride()));
+  const compact = !isEdit && (layoutOverride ? layoutOverride === 'compact' : hasCreated);
+  /* "Show preview" in compact: ONLY the side pane beside the compact form,
+     for this open (live dev test 2 E8: it used to bring back the whole
+     beginner guide). */
+  const [peek, setPeek] = useState(false);
+  const chooseLayout = (value) => {
+    setLayoutOverride(value);
+    writeLayoutOverride(value);
+    setPeek(false);
+  };
+  /* A PHONE (frames 10, 10b): formats folded behind "More", no meeting chips,
+     a one-line head and a full-width Create (live dev tests B2, V1). */
+  const phone = useNarrow(600);
+
+  // Seeded once, not controlled. A novice opens with NO format chosen (README
+  // §3.1: a novice never asked to choose never learns a choice exists); a
+  // host with history opens on their last one.
+  const [engagementType, setEngagementType] = useState(() => {
+    if (isEdit) return seed.gameType || 'call-and-answer';
+    return offeredIds.includes(lastFormat) ? lastFormat : '';
+  });
+  const formatTouched = useRef(false);
+  // The history read may land after the dialog opened: apply it then, unless
+  // the host has already chosen.
+  useEffect(() => {
+    if (isEdit || formatTouched.current || engagementType) return;
+    if (lastFormat && offeredIds.includes(lastFormat)) setEngagementType(lastFormat);
+  }, [lastFormat]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+    THE SELECTION IS A PAIR, held as the encoded key (utils/setRef.js):
+    `teamretro` names a different set in each of platform, org and public.
   */
   const [newGameSetKey, setNewGameSetKey] = useState(() => (isEdit
     ? setRefKey({ id: seed.questionSetId || '', scope: seed.questionSetScope })
     : setRefKey({ id: initialSetId || '', scope: initialSetScope })));
   const newGameSetRef = parseSetRefKey(newGameSetKey);
   const newGameSetId = newGameSetRef.id;
+  /* THE SET, PER FORMAT, WHILE THE DIALOG IS OPEN (README §6): arrowing
+     C&A → Trivia → C&A restores the C&A set instead of clearing it. */
+  const setByFormat = useRef({});
   const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
   const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
-  // The session's summary approach. '' means "what the set says, else the
-  // format standard" — the designed default, stated by the Advanced line.
   const [newGamePromptId, setNewGamePromptId] = useState(isEdit ? (seed.promptId || '') : '');
-  const [randomizeQuestions, setRandomizeQuestions] = useState(
-    isEdit ? seed.randomizeQuestions !== false : true
-  );
-  const [anonymousResponses, setAnonymousResponses] = useState(
-    isEdit ? seed.anonymousUntilReveal !== false : true
-  );
-  /*
-    A SURVEY'S NAMES — what the server records about people (config/
-    surveyNames.js; 07-start-survey). Seeded from the session on an edit, else
-    Anonymous, and then from the chosen set's own `namesDefault` when it carries
-    one — UNTIL the host picks, after which the next set they look at must not
-    quietly undo their choice. The ref, not state: whether they have touched it
-    changes nothing on screen.
-  */
-  const [namesChoice, setNamesChoice] = useState(
-    isEdit ? namesMode(seed.names).id : NAMES_DEFAULT
-  );
+  const [randomizeQuestions, setRandomizeQuestions] = useState(isEdit ? seed.randomizeQuestions !== false : true);
+  const [anonymousResponses, setAnonymousResponses] = useState(isEdit ? seed.anonymousUntilReveal !== false : true);
+  // A SURVEY'S NAMES: seeded from the session, else Anonymous, then from the
+  // chosen set's own default until the host picks.
+  const [namesChoice, setNamesChoice] = useState(isEdit ? namesMode(seed.names).id : NAMES_DEFAULT);
   const namesTouched = useRef(isEdit);
-  /*
-    WORKIE'S BRIEFING (session-setup-redesign Phase 3) — Call & Answer only.
-    The map BriefingField edits: { text, source, namesRemoved, draftedAt,
-    editedAt } or null. Seeded from the session on an edit (get-game.js's host
-    branch returns it decrypted). Kept while the dialog is open even if the
-    format moves away, so switching back restores it; it only travels in the
-    payload for Call & Answer. `briefingWorking` is true while a document is
-    being read or summarised — Create waits for it.
-  */
+  // WORKIE'S BRIEFING — Call & Answer only; kept while open even if the format
+  // moves away; Create waits while a document is being read.
   const [briefing, setBriefing] = useState(isEdit ? (seed.briefing || null) : null);
   const [briefingWorking, setBriefingWorking] = useState(false);
-  // THE GOAL (events M1b): how many questions the host plans to ask, or null.
-  // Seeded from the session on an edit (get-game.js host-details).
   const [target, setTarget] = useState(isEdit && Number.isInteger(seed.target) ? seed.target : null);
   const pickNames = (id) => {
     namesTouched.current = true;
     setNamesChoice(namesMode(id).id);
   };
-  const [showSetsDialog, setShowSetsDialog] = useState(false);
-  /* THE CARD WIDENS WHILE THE SET LIST IS OPEN (owner, 26 Oct 2026: "it is
-     difficult to see all the info you need because it is so narrow a modal").
-     680px suits the form; a table of sets with descriptions, owners, topics
-     and tags needs the width a laptop has. It narrows again once a set is
-     picked and the list folds to one line. */
-  const [chooserOpen, setChooserOpen] = useState(false);
+  /** The sets dialog, and the route it opens on ('' | 'manual' | 'ai' | 'template'). */
+  const [setsDialog, setSetsDialog] = useState(null);
   /** Sets seen by <HostQuestionSetsDialog>, including any just created. */
   const [localSets, setLocalSets] = useState(null);
+  /** The set chooser's full list is open: the body folds to the Questions step. */
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [chooserClose, setChooserClose] = useState(0);
+  /** 'form' | 'compare' — the body swap; the card stays the same size. */
+  const [view, setView] = useState('form');
+  /** The meeting chip pressed, and so the reason line. */
+  const [meeting, setMeeting] = useState('');
+  /** Full mode shows the gallery until the first set is picked, then chips. */
+  const [galleryDone, setGalleryDone] = useState(isEdit);
+  /** One polite announcement at a time (the ⌘↵ hand-off, a set picked for you). */
+  const [announce, setAnnounce] = useState('');
+  /** "Your earlier topic picks were for the other set." */
+  const [clearedNote, setClearedNote] = useState('');
+  /* ⌘/Ctrl+Enter pressed while the chosen set's topics were still loading:
+     the create is QUEUED and happens the moment they arrive (live dev test 2
+     E2 — it used to be swallowed silently). */
+  const [pendingCreate, setPendingCreate] = useState(false);
+  /* Where focus goes back to when Compare closes (live dev test 3 H4). */
+  const compareReturn = useRef(null);
 
-  /*
-    In edit mode the title is LOCAL, seeded from the session being edited. The
-    create flow's `eventTitle` stays on the page because the live host screen
-    reads it (see the header) — but an edit targets a session that is NOT the
-    one on stage, and typing here must not rename the page's current session.
-  */
   const [localTitle, setLocalTitle] = useState(isEdit ? (seed.title || '') : '');
-  /*
-    EDIT OWNS ITS OWN CATEGORY SELECTION. In create mode the PAGE owns
-    `activeCategoryIds` (the live host screen reads them); an edit is about a
-    session that is not on stage, so a local Set keeps the two from
-    contaminating each other. Seeded from `seed.selectedCategoryNames`, which
-    the page derives from the session's own HostMask bits
-    (convertBitmaskToCategories) — the same bits this save will rewrite.
-  */
+  // EDIT OWNS ITS OWN CATEGORY SELECTION: the session edited is not on stage.
   const [editCategoryNames, setEditCategoryNames] = useState(
     () => new Set(isEdit ? (seed.selectedCategoryNames || []) : [])
   );
@@ -302,88 +289,109 @@ export default function GameSetupDialog({
     else onEventTitleChange?.(value);
   };
 
+  const hasFormat = Boolean(engagementType);
   /** Event or Build Room: set up on its own screen, not by this form. */
-  const isOther = OTHER_FORMATS.includes(engagementType);
-  const otherFormats = isEdit || !onChooseOther ? [] : [
-    BUILD_KIND,
-    ...(eventsAccess && eventsAccess.enabled ? [EVENT_KIND] : []),
-  ];
+  const isOther = isHandoffFormat(engagementType);
   const eventBlocked = engagementType === EVENT_KIND && !(eventsAccess && eventsAccess.canCreate);
-  const isCallAndAnswer = !isOther && normalizeGameType(engagementType) === 'call-and-answer';
+  const isCallAndAnswer = hasFormat && !isOther && normalizeGameType(engagementType) === 'call-and-answer';
+  const isSurvey = hasFormat && !isOther && normalizeGameType(engagementType) === 'survey';
+  const formatLabel = hasFormat ? (isOther ? kindLabel(engagementType) : gameTypeMeta(engagementType).label) : '';
 
-  // Merged by id, page copy first. A set the host just made exists only in
-  // `localSets` until the page next re-reads; a set the page already knows about
-  // keeps the page's richer record.
+  // Merged by the PAIR, page copy first.
   const allSets = useMemo(() => {
     if (!localSets) return questionSets;
-    // KEYED BY THE PAIR. Keyed by id alone this merge silently DELETED one of
-    // two same-slug sets — an org's `teamretro` and Engage's collapse into
-    // whichever was written last, and the host can no longer pick the other.
     const byRef = new Map(localSets.map((set) => [setRefKey(set), set]));
     for (const set of questionSets) byRef.set(setRefKey(set), set);
     return Array.from(byRef.values());
   }, [questionSets, localSets]);
 
-  // A Build Room set is asked in a Build Room, never picked here (config/setFinder.js).
   const sessionSets = allSets.filter(offeredForSessions);
-  const setsForType = sessionSets.filter((set) => set.engagementType === engagementType);
-  /*
-    A SURVEY IS A SESSION WITH NO ROUNDS (surveys phase 2). Three cards on this
-    screen are about rounds and hide for it: the categories grid (a survey set
-    exposes none), the shuffle (a survey is a form, read in the order it was
-    written — createGameBody forces it off too), and the call-and-answer
-    "Anonymous responses" card, which `anonymityApplies` already hides because
-    a survey holds no vote. Names replaces it.
-  */
-  const isSurvey = !isOther && normalizeGameType(engagementType) === 'survey';
+  const setsForType = hasFormat ? sessionSets.filter((set) => set.engagementType === engagementType) : [];
   const chosenSet = allSets.find((s) => sameSetRef(s, newGameSetRef)) || null;
-  /*
-    THE GOAL is bounded by the chosen set's size — the version a create pins.
-    `chosenCount` is that set's CURRENT size, which a create is about to pin,
-    so it is the right bound there.
-  */
   const chosenCount = chosenSet ? Number(chosenSet.totalQuestions) || 0 : 0;
-  /*
-    AN EDIT IS DIFFERENT (final review Minor 1b, superseding the T4 park):
-    `chosenCount` here is the set's size RIGHT NOW, not necessarily the
-    version this session is pinned to. A set can shrink after a session is
-    created, and bounding Save by the live count can then refuse a save
-    `PUT /games/{id}` would accept — it checks the PINNED version through
-    `resolveSetPartition`, not this dialog's live read. So an edit checks only
-    the whole-number/ceiling rule (`goalBound` of 0 means "unknown size" to
-    `checkTarget`) and leaves the pinned-version bound to the server, whose
-    400 sentence reaches the host through `refusal` below. `chosenCount`
-    itself still reaches SessionOptions for its "of 47 questions" display —
-    only the GATE moves, via `boundBySize={!isEdit}`.
-  */
+  // An edit gates the goal by the whole-number rule only; the PUT checks the
+  // pinned version's size (final review Minor 1b).
   const goalBound = isEdit ? 0 : chosenCount;
-  const goalProblem = isSurvey ? '' : (goalRules.checkTarget(target, goalBound).error || '');
-  // A draft still being written would be lost by a Create pressed now, and a
-  // goal the set cannot meet would only be refused by the server.
+  const goalProblem = !hasFormat || isSurvey || isOther ? '' : (goalRules.checkTarget(target, goalBound).error || '');
+
+  /*
+    ── WHOSE CATEGORIES THESE ARE (README §2b) ───────────────────────────────
+    Only the chosen set's list is shown or sent. Anything else — the previous
+    set's list still in the page's state, a response on its way — reads as
+    loading, never as the old chips.
+  */
+  const tracked = !isEdit && categoryStatus !== undefined && categoryStatus !== null;
+  const catsForChosen = !tracked || categoryStatus.key === newGameSetKey;
+  const categoriesLoading = tracked && Boolean(newGameSetId) && (!catsForChosen || categoryStatus.loading);
+  const categoriesError = tracked && catsForChosen && !categoryStatus.loading ? (categoryStatus.error || '') : '';
+  const shownCategories = categoriesLoading || categoriesError ? [] : categories;
+
+  // A draft still being written would be lost by a Create pressed now; a goal
+  // the set cannot meet would only be refused; topics still loading would be
+  // the wrong set's.
   const canCreate = isOther
     ? !eventBlocked
-    : Boolean(newGameSetId) && title.trim().length > 0
-      && !(isCallAndAnswer && briefingWorking) && !goalProblem;
+    : hasFormat && Boolean(newGameSetId) && title.trim().length > 0
+      && !(isCallAndAnswer && briefingWorking) && !goalProblem && !categoriesLoading;
 
-  /** The chosen set's own summary prompt, for the Advanced line's claim —
-      SessionOptions checks it against the prompt library it reads. */
-  const chosenSetPromptId = allSets.find((s) => s.id === newGameSetId)?.promptId || '';
+  const chosenSetPromptId = chosenSet ? (chosenSet.promptId || '') : '';
+  /* Everything but the topics is ready: the one case a create may wait for. */
+  const readyButTopics = !isOther && hasFormat && Boolean(newGameSetId) && title.trim().length > 0
+    && !(isCallAndAnswer && briefingWorking) && !goalProblem && categoriesLoading;
 
-  // The page reloads the voices that suit this format. On mount too, so the
-  // default format's list is the one the picker below shows.
+  // The page reloads the voices that suit this format.
   useEffect(() => {
-    // Event and Build Room have no voices to load.
-    if (!OTHER_FORMATS.includes(engagementType)) onFormatChange?.(engagementType);
+    if (engagementType && !isHandoffFormat(engagementType)) onFormatChange?.(engagementType);
   }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tellPageSet = (key) => {
+    if (!key) { onQuestionSetChange?.('', DEFAULT_SCOPE); return; }
+    const ref = parseSetRefKey(key);
+    onQuestionSetChange?.(ref.id, ref.scope);
+  };
+
+  /*
+    THE TOPIC PICKS COME BACK WITH THE SET (live dev tests B8, E5-adjacent):
+    arrowing C&A → Trivia → C&A restored the set but turned every topic on
+    again. The picks are remembered per format beside the set, and re-applied
+    through the page's own toggle once that set's list has arrived.
+  */
+  const picksByFormat = useRef({});
+  const pendingPicks = useRef(null);
+  useEffect(() => {
+    const want = pendingPicks.current;
+    if (!want || want.key !== newGameSetKey || !catsForChosen || categoriesLoading || categories.length === 0) return;
+    pendingPicks.current = null;
+    for (const c of categories) {
+      if (want.picks.has(c.name) !== activeCategoryIds.has(c.name)) onToggleCategory?.(c.name);
+    }
+  });
 
   const chooseFormat = (typeId) => {
     if (typeId === engagementType) return;
+    formatTouched.current = true;
+    setPendingCreate(false);
+    if (engagementType) {
+      setByFormat.current[engagementType] = newGameSetKey;
+      // Only a real choice is worth restoring: some topics off, the list in.
+      picksByFormat.current[engagementType] = !isEdit && newGameSetKey && catsForChosen && !categoriesLoading
+        && categories.length > 0 && activeCategoryIds.size > 0 && activeCategoryIds.size < categories.length
+        ? { key: newGameSetKey, picks: new Set(activeCategoryIds) } : null;
+    }
+    const savedPicks = picksByFormat.current[typeId];
+    const restoreKey = isHandoffFormat(typeId) ? '' : (setByFormat.current[typeId] || '');
+    pendingPicks.current = savedPicks && savedPicks.key === restoreKey ? savedPicks : null;
     setEngagementType(typeId);
-    // A set belongs to exactly one format, so the previous choice cannot
-    // survive the switch. Telling the page too, so it drops that set's
-    // categories and custom instruction rather than leaving them stale.
-    setNewGameSetKey('');
-    onQuestionSetChange?.('', DEFAULT_SCOPE);
+    // A hand-off format has no set to pick: fold the gallery to chips so its
+    // "Next:" panel is in view (frames 7, 8).
+    if (isHandoffFormat(typeId)) setGalleryDone(true);
+    // A set belongs to exactly one format — so the previous choice cannot
+    // survive the switch — but the set this format had while the dialog has
+    // been open comes back (README §6).
+    const restored = isHandoffFormat(typeId) ? '' : (setByFormat.current[typeId] || '');
+    setNewGameSetKey(restored);
+    tellPageSet(restored);
+    setClearedNote('');
     // A voice picked for the old format may not exist for the new one, and an
     // approach is written for exactly one format.
     setNewGamePersonaId('');
@@ -391,17 +399,50 @@ export default function GameSetupDialog({
   };
 
   const chooseSet = (key) => {
+    pendingPicks.current = null;
+    const hadCustomPicks = !isEdit && Boolean(newGameSetKey) && key !== newGameSetKey
+      && categories.length > 0 && activeCategoryIds.size > 0 && activeCategoryIds.size < categories.length;
     setNewGameSetKey(key);
-    // BOTH HALVES go to the page. It loads the categories and the custom
-    // instruction from this, and both of those reads are per-partition too.
-    const ref = parseSetRefKey(key);
-    onQuestionSetChange?.(ref.id, ref.scope);
-    // A survey set may carry its own Names default (phase 2's optional
-    // set-level setting). It seeds the card only until the host has chosen.
-    if (isSurvey && !namesTouched.current) {
-      const set = allSets.find((s) => sameSetRef(s, ref));
-      setNamesChoice(namesMode(set && set.namesDefault).id);
+    setGalleryDone(true);
+    // BOTH HALVES go to the page: the categories and instruction reads are
+    // per-partition too.
+    tellPageSet(key);
+    const set = allSets.find((s) => sameSetRef(s, parseSetRefKey(key)));
+    setClearedNote(hadCustomPicks
+      ? `Topics refreshed for “${set ? set.name : 'the new set'}”. Your earlier picks were for the other set, so every topic is on again.`
+      : '');
+    if (isSurvey && !namesTouched.current) setNamesChoice(namesMode(set && set.namesDefault).id);
+  };
+
+  /*
+    A SET MADE THROUGH ONE OF THE ROUTES COMES BACK PICKED (frame 5c). The
+    sets dialog hands back its whole list whenever it changes; a set of this
+    format that was not there when the route opened is the one just made.
+    A set made by the AI builder is a draft, switched off until reviewed, so
+    it is not in that list yet — the route's note says so.
+  */
+  const knownWhenOpened = useRef(null);
+  const takeSets = (list) => {
+    setLocalSets(list);
+    // The FIRST list the sets dialog reports is its baseline: it is read in
+    // its own projection, so comparing it with the page's copy would mistake
+    // every set the host already had for a new one.
+    if (knownWhenOpened.current === 'baseline') {
+      knownWhenOpened.current = new Set((list || []).map(setRefKey));
+      return;
     }
+    if (!(knownWhenOpened.current instanceof Set) || !hasFormat || isOther) return;
+    const fresh = (list || []).find((s) => s.engagementType === engagementType
+      && !knownWhenOpened.current.has(setRefKey(s)) && !isUnreadableSet(s));
+    if (fresh) {
+      knownWhenOpened.current.add(setRefKey(fresh));
+      chooseSet(setRefKey(fresh));
+      setAnnounce(`“${fresh.name}” is picked for this engagement.`);
+    }
+  };
+  const openSets = (route = '') => {
+    knownWhenOpened.current = 'baseline';
+    setSetsDialog(route);
   };
 
   /** SessionOptions reports each change under the payload's own key. */
@@ -422,20 +463,19 @@ export default function GameSetupDialog({
       onChooseOther?.(engagementType, { title: title.trim() });
       return;
     }
-    // An edit that deselected every category is refused HERE, not sent and
-    // bounced: the backend would 400 it, but the host is mid-form and the
-    // helper line under the grid already says why.
+    // An edit that deselected every category is refused HERE.
     if (isEdit && categories.length > 0 && editCategoryNames.size === 0) return;
+    // NEVER ONE SET'S CATEGORIES FOR ANOTHER (README §2b.4): only names on
+    // the chosen set's own list travel.
+    const known = new Set(shownCategories.map((c) => c.name));
+    const ids = Array.from(selectedCats || []);
     onCreate?.({
       title,
       gameType: engagementType,
       setId: newGameSetId,
-      // WHICH LIBRARY that id is in. createGameBody sends it as
-      // questionSetScope and schema-compliant-manager pins it onto the session;
-      // without it the session pins `platform` and an org's set resolves to a
-      // partition holding nothing.
+      // WHICH LIBRARY that id is in (createGameBody sends questionSetScope).
       setScope: newGameSetRef.scope,
-      categoryIds: Array.from(selectedCats || []),
+      categoryIds: tracked ? ids.filter((name) => known.has(name)) : ids,
       eventDetails,
       aiContext: gameAiContext,
       personaId: newGamePersonaId,
@@ -443,329 +483,719 @@ export default function GameSetupDialog({
       // A survey is never shuffled, whatever the (hidden) card last said.
       randomizeQuestions: isSurvey ? false : randomizeQuestions,
       anonymousResponses,
-      // Only a survey carries Names; createGameBody drops it for anything else.
       ...(isSurvey ? { names: namesChoice } : {}),
-      // The goal, for every format but a survey; null is "no goal".
       ...(isSurvey ? {} : { target }),
-      // Only Call & Answer carries a briefing: null when there is none, so an
-      // edit clears one the host removed. createGameBody/updateGameBody drop
-      // it for any other format.
       ...(isCallAndAnswer
         ? { briefing: briefing && briefing.text && briefing.text.trim() ? briefing : null }
         : {}),
     });
   };
 
-  /*
-    ── WORK IN HAND ────────────────────────────────────────────────────────────
-    The form as a string, compared with the form as it opened. Categories count
-    only in edit mode, where this dialog owns them: in create mode the PAGE owns
-    the selection and can move it without the host touching anything, and the
-    grid only appears once a set is picked — which is already a change.
-  */
+  /* ── WORK IN HAND ─────────────────────────────────────────────────────── */
   const snapshot = JSON.stringify([
     title, engagementType, newGameSetKey, eventDetails, gameAiContext,
     newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice, target,
     isEdit ? Array.from(editCategoryNames).sort() : null,
-    // A briefing typed or drafted — or a document still being read — is work.
     briefing ? briefing.text : null, briefingWorking,
   ]);
   const openedAs = useRef(snapshot);
+  // The history read choosing the last format is not the host's work.
+  useEffect(() => {
+    if (!formatTouched.current && !isEdit) openedAs.current = snapshot;
+  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = snapshot !== openedAs.current;
 
   const [confirmingClose, setConfirmingClose] = useState(false);
   const keepEditingRef = useRef(null);
   const cancelRef = useRef(null);
+  const primaryRef = useRef(null);
   const confirmShown = useRef(false);
-  // The safe answer takes the focus when the question appears, and Cancel
-  // gets it back when the question goes — a keyboard user is never dropped at
-  // the top of the document by a foot that re-rendered under them.
+  /* Dismissed by going back to the form: the focus stays where the host put it. */
+  const quietDismiss = useRef(false);
   useEffect(() => {
     if (confirmingClose) {
       confirmShown.current = true;
       keepEditingRef.current?.focus();
-    } else if (confirmShown.current) {
+    } else if (confirmShown.current && !quietDismiss.current) {
       cancelRef.current?.focus();
     }
+    quietDismiss.current = false;
   }, [confirmingClose]);
+  const dismissDiscard = () => {
+    if (!confirmingClose) return;
+    quietDismiss.current = true;
+    setConfirmingClose(false);
+  };
 
-  /** The X and Cancel. Untouched: close. Work in hand: ask, in the foot. */
   const requestClose = () => {
-    if (!dirty) { onCancel?.(); return; }
+    // Read now, not from the render: the history read can re-baseline the form
+    // in an effect after this render was drawn.
+    if (snapshot === openedAs.current) { onCancel?.(); return; }
     setConfirmingClose(true);
   };
-  /** Escape — the Modal's one close path, since the backdrop is inert. While
-      the foot is asking, Escape is "Keep editing", not a second close. */
+  /** Escape — the Modal's one close path. While the foot asks, it is Keep editing. */
   const escape = () => {
     if (confirmingClose) setConfirmingClose(false);
+    else if (view === 'compare') { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }
     else requestClose();
   };
 
-  /*
-    THE FOOT SAYS WHO CAN GET IN, at the moment the host commits. True today:
-    a created session waits in history for Start, and every phone is refused
-    until it has started (game/session-gate.js). A survey is created AND opened
-    by this press, so the sentence would be false there and is not shown.
-  */
-  const footNote = isEdit
-    ? 'This session has not started, so nobody can join it yet.'
-    : (isSurvey || isOther ? null : 'Nobody can join until you start it.');
+  /* ── the title moves on, and ⌘/Ctrl+Enter creates ─────────────────────── */
+  const bodyRef = useRef(null);
+  /* FOCUS FOLLOWS THE BODY SWAP (live dev test 3 H4): opening Compare puts it
+     on Compare's heading; leaving puts it back on the link (or on the format
+     "Use …" chose). Never dropped to <body>. */
+  const focusAfter = useRef(null);
+  useEffect(() => {
+    const sel = focusAfter.current;
+    if (!sel) return;
+    focusAfter.current = null;
+    const el = bodyRef.current && bodyRef.current.querySelector(sel);
+    if (el && el.focus) el.focus();
+  }, [view]);
+  const titleRef = useRef(null);
+  const focusFormat = () => {
+    const stop = bodyRef.current && bodyRef.current.querySelector('.gsd-fmt[tabindex="0"]');
+    if (stop) stop.focus();
+  };
+  /** Enter in the title goes to the next empty decision (README §8). */
+  const titleKey = (event) => {
+    if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (!engagementType) { focusFormat(); return; }
+    if (isOther) { primaryRef.current?.focus(); return; }
+    if (!newGameSetId) {
+      const search = bodyRef.current && bodyRef.current.querySelector('#gsd-set-search');
+      if (search) search.focus();
+    }
+  };
+  // Title autofocus on a create (frame 1's focus ring). Not on an edit, where
+  // the host came to change something specific.
+  // A tick late, on purpose: the Modal records the element that opened it in
+  // its own mount effect, which runs after this child's, and must record the
+  // opener — not this input — to give focus back on close.
+  useEffect(() => {
+    if (isEdit) return undefined;
+    const t = setTimeout(() => { if (titleRef.current) titleRef.current.focus(); }, 0);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mac = useMemo(() => isMacPlatform(), []);
+  const shortcut = createShortcutLabel(mac);
+  const latest = useRef({});
+  latest.current = {
+    canCreate, busy, isOther, confirmingClose, submit, readyButTopics, eventBlocked,
+    planName: (eventsAccess && eventsAccess.offerPlanName) || 'paid plan',
+  };
+  useEffect(() => {
+    const onKey = (event) => {
+      if (!isCreateShortcut(event)) return;
+      const root = bodyRef.current && bodyRef.current.closest('[role="dialog"]');
+      if (!root) return;
+      // Inside the dialog, or on <body> while it is open: a pick that
+      // unmounted the focused control must not cost the shortcut (devtest E1).
+      const target = event.target;
+      const onBody = !target || target === document.body || target === document.documentElement;
+      if (!onBody && !root.contains(target)) return;
+      const now = latest.current;
+      if (now.confirmingClose) return;
+      event.preventDefault();
+      // NEVER LEAVES on the shortcut (README §6): a hand-off format moves the
+      // focus to its own labelled Continue and says so; only Enter or a click
+      // there navigates. A disabled Continue takes no focus, so it says why.
+      if (now.isOther) {
+        if (now.eventBlocked) {
+          setAnnounce(`Events come with the ${now.planName}, so there is nothing to continue to.`);
+          return;
+        }
+        primaryRef.current?.focus();
+        setAnnounce(`${shortcut} moved to Continue. Press Enter there to go.`);
+        return;
+      }
+      if (now.canCreate && !now.busy) { now.submit(); return; }
+      if (now.readyButTopics) {
+        setPendingCreate(true);
+        setAnnounce('Waiting for this set’s topics. It will be created as soon as they arrive.');
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [shortcut]);
+  // The queued create goes the moment it can; a failed load cancels it.
+  useEffect(() => {
+    if (!pendingCreate) return;
+    if (canCreate && !busy) { setPendingCreate(false); latest.current.submit(); return; }
+    if (!readyButTopics) setPendingCreate(false);
+  }, [pendingCreate, canCreate, busy, readyButTopics]);
+
+  /* ── the format options ───────────────────────────────────────────────── */
+  const formatOptions = offeredIds.map((id) => {
+    const handoff = isHandoffFormat(id);
+    const guide = formatGuide(id);
+    return {
+      id,
+      label: handoff ? kindLabel(id) : gameTypeMeta(id).label,
+      icon: handoff ? kindIcon(id) : gameTypeMeta(id).icon,
+      short: guide.short,
+      good: guide.good,
+      handoff,
+      lastUsed: !isEdit && hasCreated && id === lastFormat,
+    };
+  });
+  const meetingTypes = MEETING_TYPES.filter((m) => offeredIds.includes(m.format));
+  const pickMeeting = (m) => {
+    setMeeting(m.id);
+    chooseFormat(m.format);
+  };
+  /* Any other way of choosing a format lets go of a meeting chip that no
+     longer describes the choice (live dev test 1 B4: "Use Trivia" from
+     Compare left "For a retro: Call & Answer" on screen). */
+  const chooseFormatDirect = (id) => {
+    const m = meeting ? MEETING_TYPES.find((x) => x.id === meeting) : null;
+    if (!m || m.format !== id) setMeeting('');
+    chooseFormat(id);
+  };
+  const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
+  const showGallery = !compact && !isEdit && !galleryDone;
+
+  /* ── the foot ─────────────────────────────────────────────────────────── */
+  let footNote = null;
+  let footIcon = 'Lock';
+  if (isEdit) footNote = 'This session has not started, so nobody can join it yet.';
+  else if (isSurvey) { footNote = 'People can answer as soon as you open it. There is no separate Start.'; footIcon = 'Warning'; }
+  else if (isOther) { footNote = `Nothing is created yet. ${shortcut} moves to Continue; press Enter there to go.`; footIcon = 'Info'; }
+  else if (view === 'compare') { footNote = 'Comparing formats. Choose one to go back to the form.'; footIcon = 'Info'; }
+  else footNote = 'Nobody can join until you start it.';
+
+  let primaryLabel;
+  if (busy) primaryLabel = isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…');
+  else if (isEdit) primaryLabel = 'Save changes';
+  else if (OTHER_LABELS[engagementType]) primaryLabel = OTHER_LABELS[engagementType];
+  else if (pendingCreate) primaryLabel = 'Waiting for topics…';
+  else if (categoriesLoading) primaryLabel = 'Loading topics…';
+  else if (isSurvey) primaryLabel = 'Open the survey';
+  // Frame 10: one word where the foot is a phone's width.
+  else primaryLabel = phone ? 'Create' : 'Create engagement';
+  let primaryTitle;
+  if (isCallAndAnswer && briefingWorking) primaryTitle = 'Waiting for Workie to finish the briefing';
+  else if (goalProblem) primaryTitle = goalProblem;
+
+  /* ── the side pane's rows ─────────────────────────────────────────────── */
+  const topicCount = shownCategories.length;
+  const pickedTopics = shownCategories.filter((c) => selectedCats.has(c.name));
+  const topicWords = () => {
+    if (!chosenSet) return 'Not yet';
+    const qs = `${chosenCount} question${chosenCount === 1 ? '' : 's'}`;
+    if (isSurvey || topicCount === 0) return qs;
+    if (pickedTopics.length === 0 || pickedTopics.length === topicCount) return `${qs}, all ${topicCount} topics`;
+    return `${pickedTopics.length} of ${topicCount} topics`;
+  };
+  const advancedChanged = randomizeQuestions !== true || (anonymityApplies(engagementType) && !anonymousResponses)
+    || Boolean(newGamePersonaId || newGamePromptId || gameAiContext || eventDetails) || target !== null
+    || (isSurvey && namesChoice !== NAMES_DEFAULT);
+  const createRows = isOther ? [
+    { label: 'Title', value: title.trim() ? 'Goes with you' : 'On the next page', done: Boolean(title.trim()) },
+    { label: 'Format', value: formatLabel, done: true },
+    ...(engagementType === BUILD_KIND
+      ? [{ label: 'Goal', value: 'On the next page' }, { label: 'Claude Code', value: 'Connected on the next page' }]
+      : [{ label: 'Day and place', value: 'On the next page' }, { label: 'Agenda', value: 'On the next page' }]),
+  ] : [
+    { label: 'Title', value: title.trim() ? 'Done' : 'Not yet', done: Boolean(title.trim()) },
+    { label: 'Format', value: formatLabel || 'Not yet', done: hasFormat },
+    { label: 'Questions', value: topicWords(), done: Boolean(chosenSet) },
+    ...(isCallAndAnswer ? [{ label: 'Background for Workie', value: briefing && briefing.text ? 'Added' : 'Not added — that’s fine' }] : []),
+    ...(hasFormat ? [{ label: 'Advanced', value: advancedChanged ? 'Changed — see the Advanced line' : 'Defaults' }] : []),
+  ];
+  const allDone = !isOther && title.trim() && hasFormat && chosenSet;
+  let nextSteps = null;
+  if (isSurvey) {
+    nextSteps = { heading: 'What happens next', steps: [
+      { b: 'Open', text: 'the join code and QR go up, and people can answer straight away.' },
+      { b: 'Collect', text: 'answers arrive in their own time; you watch the totals.' },
+      { b: 'Close', text: 'when you have enough; the results freeze for the report.' },
+    ] };
+  } else if (!isOther) {
+    nextSteps = { heading: 'What happens next', steps: [
+      { b: 'Create', text: 'waits in your Sessions list. Nobody can join; you can still edit it.' },
+      { b: 'Start', text: 'the join code and QR go up; people join on their phones.' },
+      { b: 'Run', text: 'you move the room on; every phone follows.' },
+    ] };
+  }
+
+  const editChanged = [];
+  if (isEdit) {
+    if (title !== (seed.title || '')) editChanged.push('title');
+    const seededCats = new Set(seed.selectedCategoryNames || []);
+    const off = Array.from(seededCats).filter((n) => !editCategoryNames.has(n)).length;
+    const on = Array.from(editCategoryNames).filter((n) => !seededCats.has(n)).length;
+    if (off) editChanged.push(`${off} topic${off === 1 ? '' : 's'} switched off`);
+    if (on) editChanged.push(`${on} topic${on === 1 ? '' : 's'} switched on`);
+    if (dirty && editChanged.length === 0) editChanged.push('options');
+  }
+
+  const refusalNode = refusal && refusal.blocked ? (
+    <PlanLimitNotice refusal={refusal} outcome="Nothing was created." surface="dusk" billingHref={billingHref} />
+  ) : refusal ? (
+    <div className="gsd-refusal" role="alert" data-testid="gsd-refusal">
+      Could not create the session: {refusal.message || 'unknown error'}.
+    </div>
+  ) : null;
+
+  const showSide = (!compact || peek) && !chooserOpen && view === 'form';
+  const stepMark = (n, done) => (
+    <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
+      {done ? <Icon name="Check" size={13} weight="bold" /> : n}
+    </span>
+  );
+  const headingText = isEdit ? 'Edit session' : (isFirstEngagement ? 'New engagement' : 'Start a new engagement');
+
+  /* ── the make-your-own routes (frame 5c) ──────────────────────────────── */
+  const makeRoutes = isEdit || !hasFormat || isOther ? [] : [
+    { id: 'manual', icon: 'PencilSimple', label: 'Write your own questions', desc: 'Opens a new set of this format for you to write.', onPick: () => openSets('manual') },
+    { id: 'ai', icon: 'Sparkle', label: 'Make a set with Workie', desc: 'Describe your meeting and Workie, Engage’s AI assistant, drafts questions for you to review.', onPick: () => openSets('ai') },
+    { id: 'template', icon: 'FileText', label: 'Fill in a spreadsheet', desc: 'Download the template, add your questions, upload it.', onPick: () => openSets('template') },
+  ];
+  // ONE SENTENCE FOR ALL THREE (live dev test 1 C8: the note and the cards disagreed).
+  const routesNote = 'Whichever way you make it, the new set is picked for this engagement once it is saved and switched on. A set Workie drafts waits for your review first.';
+
+  /* ── the Questions step (step 3) ──────────────────────────────────────── */
+  const questionsStep = !hasFormat ? (
+    <section className="gsd-step is-later">
+      <h3 className="gsd-step-h" id="gsd-step3">{stepMark(3, false)}Questions</h3>
+      <p className="gsd-later">Choose a format first, then pick a ready-made set or make your own.</p>
+    </section>
+  ) : isOther ? (
+    <section className="gsd-step">
+      <h3 className="gsd-step-h" id="gsd-step3">{stepMark(3, false)}Next: {engagementType === BUILD_KIND ? 'the Build Room page' : 'the event page'}</h3>
+      <OtherFormatHandoff
+        kind={engagementType}
+        title={title}
+        blocked={eventBlocked}
+        planName={eventsAccess && eventsAccess.offerPlanName}
+        billingHref={billingHref}
+      />
+    </section>
+  ) : (
+    <section className="gsd-step">
+      <h3 className="gsd-step-h" id="gsd-set-label">
+        {stepMark(3, Boolean(chosenSet) || (isEdit && Boolean(newGameSetId)))}Question set
+        {chooserOpen && !compact && <span className="gsd-req">Required</span>}
+      </h3>
+      {/* THE SET CHOOSER (issue #41): pair keys, the refusal of an unreadable
+          set and the pinned set on an edit all carry over. */}
+      <SetChooser
+        key={engagementType}
+        sets={setsForType}
+        value={newGameSetKey}
+        onChange={(key) => chooseSet(key)}
+        keyOf={setRefKey}
+        recent={recentSetUses}
+        formatLabel={formatLabel}
+        teamName={(team && team.name) || ''}
+        otherTeams={(team && team.others) || []}
+        onSwitchTeam={team && team.onSwitch ? team.onSwitch : null}
+        isUnreadable={isUnreadableSet}
+        unreadableLabel={(set) => `${unreadableSetName(set)}: unreadable, cannot be used`}
+        unreadableReason={UNREADABLE_REASON}
+        disabled={isEdit}
+        pinnedLabel={newGameSetId}
+        // "Make a new set" lands on the new-set panel, never the library above it (devtest 1 B3).
+        onMakeSet={isEdit ? null : () => openSets('template')}
+        otherFormats={isEdit ? [] : PICKER_GAME_TYPES
+          .filter((type) => type.id !== engagementType)
+          .map((type) => ({
+            label: type.label,
+            sets: sessionSets.filter((set) => set.engagementType === type.id),
+            onPick: () => chooseFormatDirect(type.id),
+          }))}
+        makeRoutes={makeRoutes}
+        makeRoutesNote={routesNote}
+        shortPlaceholder={phone || (compact && showSide)}
+        recentsFirst={!isEdit}
+        ownerLabels={{ [ENGAGE]: 'Ready-made' }}
+        ownerHeading="Whose"
+        hideUnfiled
+        closeSignal={chooserClose}
+        idPrefix="gsd-set"
+        theme="dark"
+        wide
+        onOpenChange={setChooserOpen}
+      />
+      {/* THE ENTRY POINT, always offered in create mode — "fix the title on
+          the set I made last week" is as common as "I have none". */}
+      {/* While the chooser is open it carries its own Make a new set. */}
+      {!isEdit && !chooserOpen && (
+        <p className="gsd-setlinks">
+          <button type="button" className="gsd-setlink" onClick={() => openSets('')}>
+            {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
+          </button>
+          {setsForType.length > 0 && (
+            <>
+              <span aria-hidden="true"> · </span>
+              <button type="button" className="gsd-setlink" onClick={() => openSets('template')}>Make a new set</button>
+            </>
+          )}
+        </p>
+      )}
+      {!isEdit && setsForType.length === 0 && (
+        <small className="dialog-help-text">
+          No {formatLabel} sets yet. Make one now: write your own, ask Workie, or fill in a spreadsheet.
+        </small>
+      )}
+      {isEdit && (
+        <p className="gsd-fixed"><Icon name="Lock" size={13} /> Fixed once a session is created.</p>
+      )}
+    </section>
+  );
+
+  /* ── the topics, UNDER the set, never beside it (README §2a) ──────────── */
+  const topicsBlock = hasFormat && !isOther && !isSurvey && newGameSetId && !chooserOpen ? (
+    <>
+      {clearedNote && <StatusMessage message={clearedNote} tone="pending" className="status-message gsd-cleared" />}
+      <SessionCategories
+        categories={shownCategories}
+        selected={selectedCats}
+        editing={isEdit}
+        label="Topics in this set"
+        bareCount
+        noun="topics"
+        hint={compact ? '' : 'Switch off any you want to skip.'}
+        loading={categoriesLoading}
+        error={categoriesError}
+        onRetry={onRetryCategories ? () => onRetryCategories(newGameSetId, newGameSetRef.scope) : null}
+        onAllOn={isEdit
+          ? () => setEditCategoryNames(new Set(categories.map((c) => c.name)))
+          : null}
+        onToggle={(name) => (isEdit ? toggleEditCategory(name) : onToggleCategory?.(name))}
+      />
+    </>
+  ) : null;
+
+  /* ── the names, stated plainly where the decision is made (README §6) ─── */
+  const advRoot = () => bodyRef.current;
+  let namesBlock = null;
+  if (isCallAndAnswer && !chooserOpen) {
+    namesBlock = (
+      <div className={`gsd-namesline${compact ? ' is-compact' : ''}`} data-testid="gsd-namesline">
+        <Icon name={anonymousResponses ? 'EyeSlash' : 'Eye'} size={16} />
+        <div>
+          <b>{anonymousResponses ? 'Names are hidden until the vote closes' : 'Names are shown from the start'}</b>
+          {!compact && (
+            <span>
+              {anonymousResponses
+                ? ' While people answer and vote, nobody sees who wrote what, not even you. Names are shown with the results.'
+                : ' Every answer carries its author’s name from the moment voting opens.'}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="gsd-btn"
+          aria-label="Change how names are shown"
+          onClick={() => openAdvancedAt(advRoot(), '.gsd-opt-head input[type="checkbox"]')}
+        >
+          Change
+        </button>
+      </div>
+    );
+  } else if (isSurvey && !chooserOpen) {
+    namesBlock = (
+      <div className="gsd-namesline is-compact" data-testid="gsd-namesline">
+        <Icon name="EyeSlash" size={16} />
+        <div><b>Names: {namesMode(namesChoice).label}</b>{compact ? '' : ' · locked when it opens'}</div>
+        <button
+          type="button"
+          className="gsd-btn"
+          aria-label="Change the names rule"
+          onClick={() => openAdvancedAt(advRoot(), '.gsd-three-opt[aria-checked="true"]')}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  const workieIntro = 'Workie is Engage’s AI assistant: after each round it sums up what the room said. Background makes that summary speak to your situation.';
+  const optionalBlock = hasFormat && !isOther ? (
+    <div hidden={chooserOpen || undefined}>
+      {!compact && <h3 className="gsd-optional-h">Optional — every one has a safe default</h3>}
+      {/* ONE QUIET LINE until opened, in both layouts (frame 3b; live dev
+          tests V4: the large dashed box was the heaviest thing on the form
+          for an optional field). Open on its own when it holds a briefing. */}
+      {isCallAndAnswer && (
+        <details className="gsd-brief-fold" open={Boolean((briefing && briefing.text) || briefingWorking) || undefined}>
+          <summary>
+            <span className="gsd-adv-k"><i className="gsd-chev" aria-hidden="true" />Background for Workie</span>
+            <span className="gsd-adv-s">
+              {briefing && briefing.text ? 'added · Workie will use it' : 'optional · add a document or write key points'}
+            </span>
+          </summary>
+          <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} heading="Background for Workie" intro={workieIntro} />
+        </details>
+      )}
+      <SessionOptions
+        idPrefix="gsd"
+        gameType={engagementType}
+        value={{
+          anonymousResponses,
+          randomizeQuestions,
+          names: namesChoice,
+          target,
+          personaId: newGamePersonaId,
+          promptId: newGamePromptId,
+          aiContext: gameAiContext,
+          eventDetails,
+        }}
+        onChange={changeOptions}
+        personas={personas}
+        setPromptId={chosenSetPromptId}
+        namesDefault={chosenSet ? chosenSet.namesDefault : ''}
+        shuffleLocked={isEdit}
+        questionCount={chosenCount}
+        boundBySize={!isEdit}
+      />
+    </div>
+  ) : null;
+
+  /* ── the format step (step 2) ─────────────────────────────────────────── */
+  const openCompare = () => {
+    compareReturn.current = '.gsd-compare-link';
+    focusAfter.current = '#gsd-compare-t';
+    setView('compare');
+  };
+  /* The links beside the step's heading. In the chip row they come AFTER the
+     radio group in the Tab order, so Title → Tab reaches the formats first
+     (live dev test 2 E4); the grid still draws them top right. A novice's
+     gallery keeps "Compare side by side" before the cards (frame 1). */
+  const formatActs = !isEdit && (
+    <span className="gsd-step-acts">
+      <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+        <Icon name="ListBullets" size={14} /> {showGallery ? (phone ? 'Compare' : 'Compare side by side') : 'Format guide'}
+      </button>
+      {!compact && !phone && (
+        <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('compact')}>I know these — show compact</button>
+      )}
+    </span>
+  );
+  /* Enter on a format goes on to the questions, as Enter in the title does
+     (live dev test 5 N1: Tab · ← · Enter · Enter · ⌘↵ = 5 keys). */
+  const afterFormatEnter = () => {
+    setTimeout(() => {
+      const next = bodyRef.current && (bodyRef.current.querySelector('#gsd-set-search')
+        || bodyRef.current.querySelector('.schs-picked .schs-btn'));
+      if (next) next.focus(); else primaryRef.current?.focus();
+    }, 0);
+  };
+  const formatStep = (
+    <section className="gsd-step gsd-step--format">
+      <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
+      {showGallery && formatActs}
+      {showGallery && !phone && (
+        <MeetingTypeChips types={meetingTypes} value={meeting} onPick={pickMeeting} />
+      )}
+      {showGallery && meetingReason && (
+        <p className="gsd-reason" aria-live="polite">
+          For a {meetingReason.label.toLowerCase()}: <b>{kindLabel(meetingReason.format)}</b>. {meetingReason.reason}
+        </p>
+      )}
+      <FormatPicker
+        options={formatOptions}
+        value={engagementType}
+        onChange={chooseFormatDirect}
+        skin={showGallery ? 'gallery' : 'chips'}
+        disabled={isEdit}
+        labelledBy="gsd-format-label"
+        collapseAfter={phone && !isEdit ? 3 : 0}
+        onEnter={afterFormatEnter}
+      />
+      {/* Compact keeps its Format guide in the head, out of the path from
+          the chips to the search (live dev test 5 N1, N2). */}
+      {!showGallery && !compact && formatActs}
+      {/* `blurb` from config/gameTypes.js — the chip row's one line, in full
+          mode only: compact knows the formats (live dev test 2 O3). */}
+      {!showGallery && !compact && hasFormat && (
+        <p className="gsd-blurb">{isOther ? formatGuide(engagementType).short : gameTypeMeta(engagementType).blurb}</p>
+      )}
+      {isEdit && (
+        /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY: the format and set pin
+           derived rows at create time; the PUT whitelist refuses them. */
+        <small className="dialog-help-text">
+          The format and question set are fixed once a session is created — create a
+          new session to change either.
+        </small>
+      )}
+    </section>
+  );
+
+  const titleStep = (
+    <section className="gsd-step">
+      <h3 className="gsd-step-h">
+        {stepMark(1, Boolean(title.trim()))}
+        <label id="gsd-title-label" htmlFor="gsd-title">Name it</label>
+      </h3>
+      <input
+        ref={titleRef}
+        id="gsd-title"
+        type="text"
+        value={title}
+        onChange={(e) => changeTitle(e.target.value)}
+        onKeyDown={titleKey}
+        placeholder="e.g. Q3 Leadership Offsite — Pricing Strategy"
+        className="dialog-input"
+        aria-describedby={compact ? undefined : 'gsd-title-help'}
+      />
+      {!compact && <small className="dialog-help-text" id="gsd-title-help">The room sees this on the main screen and on their phones.</small>}
+    </section>
+  );
+
+  /* While the chooser is open, name and format fold to one line (frame 5a). */
+  const foldedLine = (
+    <p className="gsd-folded">
+      <Icon name="Check" size={14} />
+      <b>{title.trim() || 'Untitled'}</b>
+      <span aria-hidden="true">·</span>
+      <span>{formatLabel}</span>
+      <button type="button" className="gsd-btn gsd-btn--link" onClick={() => setChooserClose((n) => n + 1)}>Edit</button>
+    </p>
+  );
+
+  const form = (
+    <>
+      {chooserOpen ? foldedLine : null}
+      <div hidden={chooserOpen || undefined}>
+        {titleStep}
+        {formatStep}
+      </div>
+      {questionsStep}
+      {topicsBlock}
+      {namesBlock}
+      {optionalBlock}
+    </>
+  );
 
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName={`new-game-dialog gsd${chooserOpen ? ' gsd--wide' : ''}`}
+      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
-      /* THE BACKDROP STAYS INERT. This is not a dialog over a screen — the page
-         early-returns it, so there is nothing behind the overlay to go back to,
-         and a stray click on the margin would throw away a half-filled form
-         with no way to recover it. Escape is offered because it is deliberate
-         in a way a mis-aimed click is not — and it asks first, like the X. */
+      /* THE BACKDROP STAYS INERT: there is nothing behind the overlay to go
+         back to, and a stray click would throw away a half-filled form. */
       closeOnBackdrop={false}
-      afterContent={showSetsDialog ? (
-        /* A SIBLING OF THE DIALOG, INSIDE THE OVERLAY — not a child of it.
-           `.qsets-scrim--over` has to cover the create screen, and the light
-           theme reaches it through `.new-game-overlay`'s descendants. Nesting it
-           inside `.new-game-dialog` would clip it to the card. */
+      afterContent={setsDialog !== null ? (
+        /* A SIBLING OF THE DIALOG, INSIDE THE OVERLAY — not a child: the
+           scrim has to cover the create screen. */
         <HostQuestionSetsDialog
-          engagementType={engagementType}
-          onClose={() => setShowSetsDialog(false)}
-          onSetsChanged={setLocalSets}
+          engagementType={engagementType && !isOther ? engagementType : 'call-and-answer'}
+          initialRoute={setsDialog}
+          onClose={() => setSetsDialog(null)}
+          onSetsChanged={takeSets}
         />
       ) : null}
     >
-      {/* THE HEAD STICKS, so the X is on screen however far down the host is. */}
+      {/* THE HEAD STAYS, so the X is always on screen. */}
       <div className="gsd-head">
-        <h2 id="gsd-heading">
-          {isEdit
-            ? 'Edit session'
-            : (isFirstEngagement ? 'New engagement' : 'Start a new engagement')}
-        </h2>
-        {/* The create section of the setup guide (Help Phase 3), beside the X
-            and as quiet as it; the Advanced fold carries its own. */}
-        <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
-        {/*
-          THE X — reported missing: "when editing, there is no 'x' to close the
-          box without saving changes." It goes through requestClose(), exactly
-          like Cancel and Escape: one rule for all three, so none is a trap.
-        */}
-        <button
-          type="button"
-          className="gsd-close"
-          onClick={requestClose}
-          aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
-          title={isEdit ? 'Close without saving changes' : 'Close without creating'}
-        >
-          ×
-        </button>
+        <h2 id="gsd-heading">{headingText}</h2>
+        {!compact && !isEdit && <p className="gsd-sub">Three decisions. Everything else has a sensible default.</p>}
+        <span className="gsd-head-acts">
+          {/* COMPACT'S OWN LINKS, IN THE HEAD (live dev test 5 N1): out of the
+              Tab path from the format chips to the set search. */}
+          {compact && !isEdit && (
+            <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+              <Icon name="ListBullets" size={14} /> Format guide
+            </button>
+          )}
+          {compact && !phone && (
+            <button type="button" className="gsd-btn" aria-pressed={peek} onClick={() => setPeek((p) => !p)}>
+              <Icon name="Monitor" size={14} /> {peek ? 'Hide preview' : 'Show preview'}
+            </button>
+          )}
+          <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
+          {/* THE X goes through requestClose(), exactly like Cancel and Escape. */}
+          <button
+            type="button"
+            className="gsd-close"
+            onClick={requestClose}
+            aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
+            title={isEdit ? 'Close without saving changes' : 'Close without creating'}
+          >
+            ×
+          </button>
+        </span>
       </div>
 
-      <div className="dialog-content">
-        <div className="form-group">
-          <label htmlFor="gsd-title">Event title</label>
-          <input
-            id="gsd-title"
-            type="text"
-            value={title}
-            onChange={(e) => changeTitle(e.target.value)}
-            placeholder="e.g. Q3 Leadership Offsite — Pricing Strategy"
-            className="dialog-input"
+      <div
+        className={`gsd-body${showSide && !compact ? ' has-side' : ''}${showSide && compact ? ' has-drawer' : ''}`}
+        ref={bodyRef}
+        /* THE DISCARD QUESTION NEVER HIDES CREATE FOR LONG (live dev test 1
+           B5): going back to the form is "keep editing". */
+        onPointerDownCapture={dismissDiscard}
+        onFocusCapture={dismissDiscard}
+      >
+        <div className={`dialog-content gsd-main${view === 'compare' ? ' is-compare' : ''}`}>
+          {view === 'compare' ? (
+            <>
+              {!isEdit && !phone && <MeetingTypeChips types={meetingTypes} value={meeting} onPick={(m) => setMeeting(m.id)} idPrefix="gsd-meet-cmp" />}
+              <FormatCompare
+                options={formatOptions}
+                value={engagementType}
+                suggested={meetingReason ? meetingReason.format : ''}
+                suggestedFor={meetingReason ? meetingReason.label : ''}
+                onUse={(id) => {
+                  chooseFormatDirect(id);
+                  focusAfter.current = `.gsd-fmt[data-format="${id}"]`;
+                  setView('form');
+                }}
+                onBack={() => { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }}
+                shortUse={phone}
+              />
+              {/* "Always show the guide" lives INSIDE the guide in compact
+                  (live dev test 5 N2), not as a permanent link. */}
+              {compact && !isEdit && (
+                <p className="gsd-compare-always">
+                  <button type="button" className="gsd-btn gsd-btn--link" onClick={() => { chooseLayout('full'); setView('form'); }}>
+                    Always open with the full guide
+                  </button>
+                </p>
+              )}
+            </>
+          ) : form}
+        </div>
+        {showSide && (
+          <CreateSummary
+            /* Compact's "Show preview": the preview only, as a drawer inside
+               the 880px card (live dev test 5 N3: no widening, no checklist). */
+            drawer={compact}
+            edit={isEdit}
+            format={engagementType}
+            anonymous={anonymousResponses}
+            setName={chosenSet ? chosenSet.name : ''}
+            notice={refusalNode}
+            rowsHeading={isEdit ? 'Editing this session' : (isOther ? 'When you continue' : (allDone ? 'Your choices' : 'Three decisions'))}
+            rows={isEdit ? [
+              { label: 'Status', value: 'Created, not started: nobody can join', done: true },
+              { label: 'Changed', value: editChanged.length ? editChanged.join(', ') : 'Nothing yet', done: editChanged.length > 0 },
+            ] : createRows}
+            next={isEdit ? null : nextSteps}
           />
-        </div>
-
-        {/* PILLS, FROM THE TABLE. Every option visible at once and a bigger
-            target than a <select>, which is how poll went unnoticed for so
-            long. Rendered from PICKER_GAME_TYPES so it cannot drift again. */}
-        <div className="form-group">
-          <span className="gsd-label" id="gsd-format-label">Format</span>
-          <div className="gsd-types" role="group" aria-labelledby="gsd-format-label">
-            {[...PICKER_GAME_TYPES.map((type) => ({ id: type.id, label: type.label })),
-              ...otherFormats.map((id) => ({ id, label: kindLabel(id) }))].map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                className={`gsd-pill${type.id === engagementType ? ' on' : ''}`}
-                aria-pressed={type.id === engagementType}
-                disabled={isEdit}
-                onClick={() => chooseFormat(type.id)}
-              >
-                {type.label}
-              </button>
-            ))}
-          </div>
-          {/* `blurb` exists for every type and was rendered nowhere in the
-              app — dead data that answers "what is Wavelength?" for the price
-              of one line. */}
-          <p className="gsd-blurb">{isOther ? OTHER_BLURBS[engagementType] : gameTypeMeta(engagementType).blurb}</p>
-          {eventBlocked && (
-            <small className="dialog-help-text" data-testid="gsd-event-plan">
-              {`Events come with the ${(eventsAccess && eventsAccess.offerPlanName) || 'paid plan'}. `}
-              <a href={billingHref}>See plans</a>
-            </small>
-          )}
-          {isEdit && (
-            /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY. The format and set
-               pin derived rows at create time (question-set version, the
-               per-category order shuffles); the PUT whitelist refuses them, so
-               live controls here would be a form that lies about what saving
-               does. It used to say "and categories" too — above a category
-               grid that is live and saves. */
-            <small className="dialog-help-text">
-              The format and question set are fixed once a session is created — create a
-              new session to change either.
-            </small>
-          )}
-        </div>
-
-        {!isOther && (
-        <div className="gsd-row">
-          <div className="form-group">
-            {/* THE SET CHOOSER (issue #41; docs/design/set-chooser S0-S1b, owner
-                23 Oct 2026): the <select> could not be searched or filtered,
-                and "dozens of sets" was already the common case. The pair key,
-                the refusal of an unreadable set and the pinned set on an edit
-                all carry over (components/SetChooser.jsx). */}
-            <span className="gsd-label" id="gsd-set-label">Question set</span>
-            <SetChooser
-              sets={setsForType}
-              value={newGameSetKey}
-              onChange={(key) => chooseSet(key)}
-              keyOf={setRefKey}
-              recent={recentSetUses}
-              formatLabel={gameTypeMeta(engagementType).label}
-              teamName={(team && team.name) || ''}
-              otherTeams={(team && team.others) || []}
-              onSwitchTeam={team && team.onSwitch ? team.onSwitch : null}
-              isUnreadable={isUnreadableSet}
-              unreadableLabel={(set) => `${unreadableSetName(set)}: unreadable, cannot be used`}
-              unreadableReason={UNREADABLE_REASON}
-              disabled={isEdit}
-              pinnedLabel={newGameSetId}
-              onMakeSet={isEdit ? null : () => setShowSetsDialog(true)}
-              otherFormats={isEdit ? [] : PICKER_GAME_TYPES
-                .filter((type) => type.id !== engagementType)
-                .map((type) => ({
-                  label: type.label,
-                  sets: sessionSets.filter((set) => set.engagementType === type.id),
-                  onPick: () => chooseFormat(type.id),
-                }))}
-              idPrefix="gsd-set"
-              theme="dark"
-              wide
-              onOpenChange={setChooserOpen}
-            />
-            {/* THE ENTRY POINT. Always offered in create mode, not only when
-                the list is empty: "I need to fix the title on the set I made
-                last week" is as common as "I have none", and an affordance
-                that appears only in the failure state is one nobody finds in
-                the success state. Absent in edit mode, where the set cannot
-                be changed anyway. */}
-            {!isEdit && (
-              <button
-                type="button"
-                className="gsd-setlink"
-                onClick={() => setShowSetsDialog(true)}
-              >
-                {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
-              </button>
-            )}
-            {!isEdit && setsForType.length === 0 && (
-              /* The old copy sent the host to "the question set editor" —
-                 which is the admin console, a screen most hosts cannot open.
-                 It named a dead end for the exact person most likely to read
-                 it. */
-              <small className="dialog-help-text">
-                No {gameTypeMeta(engagementType).label} sets yet. Make one now — it takes a
-                template and a spreadsheet.
-              </small>
-            )}
-          </div>
-
-          {/* The app's multi-select grid, kept deliberately. A set carries
-              4-24 categories with wildly different counts; a single-value
-              <select> cannot say "these three, not those five". */}
-          {newGameSetId && !isSurvey && (
-            <SessionCategories
-              categories={categories}
-              selected={selectedCats}
-              editing={isEdit}
-              onToggle={(name) => (isEdit ? toggleEditCategory(name) : onToggleCategory?.(name))}
-            />
-          )}
-        </div>
-        )}
-
-        {/*
-          WORKIE'S BRIEFING — main view, Call & Answer only (mockups 01, 03).
-          The one Workie input that changes what Workie KNOWS; under Advanced
-          it would never be found. BriefingField owns every state.
-        */}
-        {isCallAndAnswer && (
-          <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} />
-        )}
-
-        {/*
-          ── ADVANCED ─────────────────────────────────────────────────────────
-          components/SessionOptions.jsx, shared with the event item dialog
-          (events M1b). Always rendered, so a value set and folded away is
-          still in the form.
-        */}
-        {!isOther && (
-        <SessionOptions
-          idPrefix="gsd"
-          gameType={engagementType}
-          value={{
-            anonymousResponses,
-            randomizeQuestions,
-            names: namesChoice,
-            target,
-            personaId: newGamePersonaId,
-            promptId: newGamePromptId,
-            aiContext: gameAiContext,
-            eventDetails,
-          }}
-          onChange={changeOptions}
-          personas={personas}
-          setPromptId={chosenSetPromptId}
-          namesDefault={chosenSet ? chosenSet.namesDefault : ''}
-          shuffleLocked={isEdit}
-          questionCount={chosenCount}
-          boundBySize={!isEdit}
-        />
         )}
       </div>
 
-      {/*
-        THE GOAL'S PROBLEM, REPEATED OUTSIDE THE FOLD (final review Minor 1a).
-        The Advanced fold is closed on open, so its own red help text — this
-        same sentence, from session-goal.js — is not what a host sees when
-        Create or Save just greyed out; a `title` tooltip is hover-only and
-        never reaches touch. This line is the visible, announced reason, and
-        the disabled button's `aria-describedby` points straight at it.
-      */}
+      {/* THE GOAL'S PROBLEM, REPEATED OUTSIDE THE FOLD (final review Minor 1a). */}
       {goalProblem && (
         <p className="gsd-blocked-reason" role="alert" id="gsd-blocked-reason">
           {goalProblem}
         </p>
       )}
 
-      {/* A PLAN LIMIT is the shared notice (22-plan-limit-notice.html): what
-          ran out, and what THIS person can do about it — the owner gets the
-          request, anyone else is told whom to ask. Anything else is a fault,
-          said plainly. */}
-      {refusal && refusal.blocked ? (
-        <PlanLimitNotice refusal={refusal} outcome="Nothing was created." surface="dusk" billingHref={billingHref} />
-      ) : refusal ? (
-        <div className="gsd-refusal" role="alert" data-testid="gsd-refusal">
-          Could not create the session: {refusal.message || 'unknown error'}.
-        </div>
-      ) : null}
+      {/* Compact (and the open chooser) has no side pane: a refusal sits above the foot. */}
+      {!showSide && refusalNode}
+      {/* (The pinned "Questions" row compact used to draw here covered the
+          topics at 1280×720 — live dev tests B7, E7. Compact has no checklist,
+          as frame 3b draws.) */}
 
-      {/*
-        THE FOOT STICKS, like the head. With work in hand, the X, Cancel and
-        Escape turn it into the question — inline, never a second modal.
-      */}
+      <p className="gsd-sr" aria-live="polite">{announce}</p>
+
       {confirmingClose ? (
         <div className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
           <p className="gsd-confirm-t" id="gsd-confirm-t">
@@ -773,15 +1203,17 @@ export default function GameSetupDialog({
               ? <><b>Discard your changes?</b> The session stays as it was.</>
               : <><b>Discard this engagement?</b> Nothing has been created yet, and what you filled in is lost.</>}
           </p>
-          <button
-            type="button"
-            className="btn-secondary"
-            ref={keepEditingRef}
-            onClick={() => setConfirmingClose(false)}
-          >
+          <button type="button" className="btn-secondary" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
             Keep editing
           </button>
-          <button type="button" className="gsd-discard" onClick={() => onCancel?.()}>
+          {/* DISCARD MEANS DISCARD (devtest 7 R1 / 8 R3-2): in create mode the
+              title is the page's, so it outlived the dialog and reopened
+              ticked done, with new typing appended to it. Empty it first. */}
+          <button
+            type="button"
+            className="gsd-discard"
+            onClick={() => { if (!isEdit) onEventTitleChange?.(''); onCancel?.(); }}
+          >
             Discard
           </button>
         </div>
@@ -789,30 +1221,31 @@ export default function GameSetupDialog({
         <div className="dialog-actions">
           {footNote && (
             <p className="gsd-foot-note">
-              <Icon name="Lock" weight="bold" size={14} color="currentColor" />
+              <Icon name={footIcon} weight="bold" size={14} color="currentColor" />
               <span>{footNote}</span>
             </p>
           )}
           <button type="button" className="btn-secondary" ref={cancelRef} onClick={requestClose}>
             Cancel
           </button>
-          {/* The guard the mockup drops. Without a set the game has no
-              questions; without a title the live screen has nothing to name. */}
-          {/* A survey is created AND opened by this press (the page posts
-              /start straight after the create), so the button says what it
-              does: phones can answer the moment it lands. */}
+          {/* The guard: no set, no questions; no title, nothing to name. A
+              survey is created AND opened by this press. */}
           <button
             type="button"
+            ref={primaryRef}
             className="btn-primary"
             onClick={submit}
             disabled={!canCreate || busy}
             aria-describedby={goalProblem ? 'gsd-blocked-reason' : undefined}
-            title={isCallAndAnswer && briefingWorking ? 'Waiting for Workie to finish the briefing' : (goalProblem || undefined)}
+            aria-keyshortcuts={isEdit || isOther ? undefined : 'Meta+Enter Control+Enter'}
+            title={primaryTitle}
           >
-            {busy
-              ? (isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…'))
-              : (isEdit ? 'Save changes' : (OTHER_LABELS[engagementType]
-                || (isSurvey ? 'Open the survey' : 'Create engagement')))}
+            {primaryLabel}
+            {isOther && !busy && <Icon name="ArrowRight" size={14} />}
+            {/* Keycaps for the host who uses them: compact only (README §6). */}
+            {compact && !isEdit && !isOther && !busy && (
+              <kbd className="gsd-kbd" aria-hidden="true">{shortcut}</kbd>
+            )}
           </button>
         </div>
       )}

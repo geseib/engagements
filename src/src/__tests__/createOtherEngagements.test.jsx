@@ -53,13 +53,14 @@ function dialog(overrides = {}) {
   render(<GameSetupDialog {...props} />);
   return props;
 }
-const pill = (name) => screen.getByRole('button', { name });
+// Formats are one radio group (docs/design/new-engagement README §3.8).
+const pill = (name) => screen.getByRole('radio', { name });
 
 describe('the create dialog offers Event and Build Room', () => {
   test('both are formats beside the five, and Build Room hands the title to its setup screen', () => {
     const props = dialog();
     fireEvent.click(pill('Build Room'));
-    expect(pill('Build Room')).toHaveAttribute('aria-pressed', 'true');
+    expect(pill('Build Room')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByLabelText(/question set/i)).toBeNull();
     expect(screen.getByText(/Build something with your Claude Code/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Set up the Build Room' }));
@@ -86,19 +87,19 @@ describe('the create dialog offers Event and Build Room', () => {
 
   test('switched off (or not yet known): no Event; Build Room is still offered', () => {
     dialog({ eventsAccess: { enabled: false, canCreate: false, offerPlanName: '' } });
-    expect(screen.queryByRole('button', { name: 'Event' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Event' })).toBeNull();
     expect(pill('Build Room')).toBeInTheDocument();
   });
 
   test('neither in edit mode, nor where no page handles them', () => {
     dialog({ mode: 'edit', initialValues: { title: 'x', gameType: 'trivia', questionSetId: 'space' } });
-    expect(screen.queryByRole('button', { name: 'Build Room' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Event' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Build Room' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Event' })).toBeNull();
   });
 
   test('the five formats still create a session the way they did', () => {
     const props = dialog({ onChooseOther: undefined });
-    expect(screen.queryByRole('button', { name: 'Build Room' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Build Room' })).toBeNull();
     fireEvent.click(pill('Trivia'));
     expect(screen.getByLabelText(/question set/i)).toBeInTheDocument();
     expect(props.onChooseOther).toBeUndefined();

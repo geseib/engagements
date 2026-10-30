@@ -9,6 +9,45 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 30 Oct 2026 (the New engagement dialog, redesigned)
+
+**Test:** merge of dev `9770a02c`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **A redesigned New engagement dialog**, built from a mockup set (`docs/design/new-engagement/`) that three user reviews shaped and three rounds of testing on dev checked.
+  - **For a first-time host:** the seven formats are cards, each with a short preview that plays once, what the room does and what you get. "Planning a… Retro / Brainstorm / Kick-off…" picks a format and says why. **Format guide** compares all seven side by side. A live preview on the right shows what the room will see, and a short checklist and "What happens next" say what is still to choose.
+  - **For an experienced host:** after your first session the dialog opens compact, on your last format, with the title focused and your recent sets one click away. Title, Enter, Enter, Ctrl/⌘+Enter creates a session. If topics are still loading, the button says "Waiting for topics…" and creates when they arrive. The full guide is one click away ("Always open with the full guide" brings it back for good).
+  - **When no set fits:** the set search offers Write your own questions, Make a set with Workie and Fill in a spreadsheet.
+  - **After Create:** Your sessions says "Created … Its code is NNNN" with **Start it now**.
+- **The dialog keeps one size** in every state (1240px with the preview, 880px compact, full screen on a phone), so nothing jumps when you change format or set.
+
+### Fixed
+
+- **Changing the question set left the old set's topics up**, and Create could save the old set's topics against the new one. The old topics now clear at once, a late answer for the old set is ignored, a failed load says so with Retry, and Create waits for the new set's topics.
+- **The set chooser by keyboard:** arrows move through the list and Enter picks; Enter in an empty search picks your most recent set; Esc closes the search instead of asking to discard the engagement.
+- **Focus and contrast:** focus stays in the dialog after every pick and returns to the button that opened it on close; one blue focus ring everywhere; text that the site's global styles had washed out (the "picks cleared" note, a switched-off topic under the pointer, a disabled Create) is readable; motion stops for people who ask for reduced motion.
+- **Your sessions** is a proper dialog (Esc closes it), shows stacked cards on a phone, names sets instead of raw ids, and no longer shows "host Host".
+
+### What to look at
+
+1. On engage.test, as a host with no sessions, press **Create engagement**. The title has focus, nothing is chosen, and the formats show as cards. Hover one: its preview plays once and the right side explains it.
+2. Press **Retro** under "Planning a…": Call & Answer is chosen with a reason. Open **Format guide**, press Use on Trivia, then go back to Call & Answer.
+3. Pick a set, then press **Change** and pick a different set. None of the first set's topics show, even briefly, and a note says your picks were cleared.
+4. Search "zzz": the three ways to make your own set appear.
+5. Create the session with Ctrl/⌘+Enter. Your sessions says it was created, with its code and **Start it now**.
+6. Open Create engagement again: it is compact, on the last format, with your recent sets under the search. Type a title, press Enter, Enter, Ctrl/⌘+Enter: a second session is created.
+7. Try it on a phone (or a 390px-wide window) and at 1280×720: Create stays visible and nothing scrolls sideways.
+
+### Known gaps
+
+- On short windows (800px tall or less) the format cards drop their small picture; the preview pane still shows it.
+- The preview is an illustration of each format, not the chosen set's own first question (that needs an extra read per pick).
+- The light theme of the dialog is not built; the site has no light page that opens it.
+- "Compact" and "last format" come from your past sessions; the "Always open with the full guide" choice is kept in this browser only.
+
+---
+
 ## 28 Oct 2026 (two fixes behind the scenes: the generation-prompts script and a slow test)
 
 **Test:** merge of dev `2003c14a`. Everything below this entry is already on test; this push adds only what is here.

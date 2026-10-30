@@ -102,13 +102,23 @@ export default function HostQuestionSetsDialog({
    * page reload.
    */
   onSetsChanged,
+  /*
+    WHERE TO OPEN (docs/design/new-engagement frame 5c): the create screen's
+    no-match state offers three ways to make a set, and each lands straight in
+    its builder rather than on the shelf.
+      'ai'       the AI builder for `engagementType` (Make a set with Workie)
+      'template' the New question set panel: template, then upload
+      'manual'   the same panel, whose routes include writing them by hand
+      ''         the shelf, as before
+  */
+  initialRoute = '',
 }) {
   const [sets, setSets] = useState([]);
   const [setAllowance, setSetAllowance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);       // { text, tone }
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(initialRoute === 'template' || initialRoute === 'manual');
   const [newSetType, setNewSetType] = useState(engagementType);
   const [editing, setEditing] = useState(null);     // { id, name, description, busy }
   const [deleting, setDeleting] = useState(null);   // a set
@@ -157,7 +167,11 @@ export default function HostQuestionSetsDialog({
     the console owns them, this dialog is the host's way to the same thing, and
     a host copy of four large components would be four places to fix.
   */
-  const [builder, setBuilder] = useState(null);   // 'scenario' | 'trivia' | 'poll' | 'survey'
+  const [builder, setBuilder] = useState(() => {   // 'scenario' | 'trivia' | 'poll' | 'survey'
+    if (initialRoute !== 'ai') return null;
+    if (engagementType === 'trivia' || engagementType === 'poll' || engagementType === 'survey') return engagementType;
+    return 'scenario';
+  });
   /*
     GENERATIONS THE PERSON STARTED — now read from the SERVER (GET
     /admin/generation-drafts/list), not from this browser's memory: every run
@@ -460,6 +474,42 @@ export default function HostQuestionSetsDialog({
     }
   };
 
+  /*
+    THE SHARED FORM, NOT A COPY. The CSV contract and its preflight are
+    identical for both audiences; what is switched off is the admin machinery
+    around it — the prompt library and the two instruction fields that belong
+    to library curation rather than to getting a room playing. An unset
+    promptId resolves a type-appropriate default at run time. The builders
+    are a host's now (auth/authorizer.js HOST_ADMIN_ROUTES).
+  */
+  const createPanel = creating ? (
+    <QuestionSetUploadPanel
+      // The dialog body is the scroller; bring the form into view.
+      scrollIntoViewOnMount
+      engagementType={newSetType}
+      onEngagementTypeChange={setNewSetType}
+      showAIBuilder
+      onOpenBuilder={openBuilder}
+      showManualBuilder
+      showSummaryPrompt={false}
+      showAdvancedFields={false}
+      heading="New question set"
+      intro={
+        <>
+          Pick the format first: it decides how your columns are read. Then fill in its
+          template yourself, or copy its prompt into your own chatbot, and upload the file
+          at the foot of this panel.
+        </>
+      }
+      onUploaded={(message) => {
+        setCreating(false);
+        load(message);
+      }}
+    />
+  ) : null;
+  /** Opened on a make-a-set route: the panel goes above the shelf. */
+  const newFirst = initialRoute === 'manual' || initialRoute === 'template';
+
   return (
     <Modal
       /* DUSK, LIKE THE TWO SCREENS THAT OPEN IT. This was `.qsets--onlight` — a
@@ -550,6 +600,11 @@ export default function HostQuestionSetsDialog({
           an assertive live region would interrupt a screen reader mid-row.
         */}
         <DraftsStrip drafts={drafts} onOpen={(d) => setReviewDraft({ draftId: d.draftId, libraryKey: '' })} />
+
+        {/* OPENED TO MAKE A SET (the create screen's "Make a new set" and its
+            routes): the new-set panel comes FIRST, not 1,900px below every
+            set in the library (live dev test 1 B3). */}
+        {newFirst && createPanel}
 
         {error && (
           <div className="qsets-alert qsets-alert--error" role="alert">
@@ -959,56 +1014,7 @@ export default function HostQuestionSetsDialog({
           </button>
         </div>
 
-        {creating && (
-          /*
-            THE SHARED FORM, NOT A COPY. The CSV contract and its preflight are
-            identical for both audiences; what is switched off is the admin
-            machinery around it — the AI builders (admins-only routes, modals
-            owned by AdminPage), the prompt library, /builder, and the two
-            instruction fields that belong to library curation rather than to
-            getting a room playing. An unset promptId resolves a
-            type-appropriate default at run time, so nothing is lost by not
-            asking.
-          */
-          <QuestionSetUploadPanel
-            /* Unconditional here: this only renders when `creating` is true,
-               which only a press can make it. The dialog body is the scroller
-               (`.qsets-modal` is `overflow: auto`, `max-height: 86vh`), and a
-               host with several sets plus the house shelf above them has the
-               same off-screen form the console had. */
-            scrollIntoViewOnMount
-            engagementType={newSetType}
-            onEngagementTypeChange={setNewSetType}
-            /* ── THE BUILDERS ARE A HOST'S NOW ────────────────────────────
-               These were off because the AI routes were admins-only, and those
-               were admins-only because Bedrock costs money and, before tenancy,
-               there was no way to say whose. A generation now happens inside an
-               organisation with a plan and a metering ledger behind it, so the
-               routes accept hosts (auth/authorizer.js, HOST_ADMIN_ROUTES) and
-               the panel can offer them.
-
-               The SUMMARY PROMPT picker stays off here: choosing one is a
-               property of the set that the console's fuller editor handles, and
-               this dialog is the quick "make me a set" path. */
-            showAIBuilder
-            onOpenBuilder={openBuilder}
-            showManualBuilder
-            showSummaryPrompt={false}
-            showAdvancedFields={false}
-            heading="New question set"
-            intro={
-              <>
-                Pick the format first: it decides how your columns are read. Then fill in its
-                template yourself, or copy its prompt into your own chatbot, and upload the file
-                at the foot of this panel.
-              </>
-            }
-            onUploaded={(message) => {
-              setCreating(false);
-              load(message);
-            }}
-          />
-        )}
+        {!newFirst && createPanel}
       </div>
 
       {/*

@@ -58,6 +58,7 @@ import useSessionPanelKey from './components/stage/useSessionPanelKey';
 import useFullscreenKey from './hooks/useFullscreenKey';
 import useScoreboardSync from './components/stage/scoreboard/useScoreboardSync';
 import useStageNotesSync from './hooks/useStageNotesSync';
+import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
 import { twoSurfacesHere, twoSurfacesFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
@@ -89,7 +90,8 @@ import goalRules from '../../lambda-functions/websocket/session-goal';
 import { goalOnStage } from './config/goalStage';
 import { fetchComments, featureComment, postRoomNote } from './utils/commentsClient';
 import { DEFAULT_SCOPE, setRefKey } from './utils/setRef';
-import { gameTypeMeta, gameTypeLabel, normalizeGameType } from './config/gameTypes';
+import { gameTypeMeta, gameTypeLabel, normalizeGameType, PICKER_GAME_TYPES } from './config/gameTypes';
+import { historyFacts, readHistoryCache, writeHistoryCache } from './config/formatGuide';
 import {
   hostControlsFor, notesReadyFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
@@ -142,7 +144,7 @@ import { classifyHostActionFailure, ENDED_AFTER_SIGN_IN } from './utils/hostActi
 import { getEvent, runEvent } from './utils/eventsApi';
 import { navigateTo } from './auth/navigate';
 import {
-  mergeSessions, eventJoinPath, eventAgendaPath, BUILD_KIND,
+  mergeSessions, eventJoinPath, eventAgendaPath, BUILD_KIND, EVENT_KIND,
 } from './config/engagementKinds';
 import { readEventsAccess } from './utils/eventsAccess';
 import useActiveOrgs from './hooks/useActiveOrgs';
@@ -919,8 +921,15 @@ function GameHostPage() {
   // words (utils/startRefusal.js). Shown on the list; cleared whenever the
   // list goes away, by whichever route, so it never greets the next opening.
   const [historyNotice, setHistoryNotice] = useState('');
+  /*
+    WHAT WAS JUST MADE, said on the list it lands on (live dev tests B6, C10:
+    "Did it work? What's 1224? Do I press Start now?"). { gameId, title,
+    verb: 'created' | 'saved' } — the list says so with the code and the next
+    step, and offers Start on that row. Cleared with the list.
+  */
+  const [historyDone, setHistoryDone] = useState(null);
   useEffect(() => {
-    if (!showReportsModal) setHistoryNotice('');
+    if (!showReportsModal) { setHistoryNotice(''); setHistoryDone(null); }
   }, [showReportsModal]);
   
   // `showFinalReport` used to live here. Nothing ever rendered it, and after
@@ -1015,6 +1024,15 @@ function GameHostPage() {
     "Used by you lately" then), and the team the sets are for.
   */
   const [recentSetUses, setRecentSetUses] = useState(() => new Map());
+  /*
+    WHAT THE SAME READ SAYS ABOUT THIS HOST (docs/design/new-engagement
+    README §6): has this account created a session, and in which format was
+    the newest. The dialog opens compact for a host with history, with their
+    last format chosen. Per account, on every device, and no new storage: the
+    rows already carry byMe, gameType and createdAt. localStorage keeps a copy
+    only so the first paint picks the right layout before the request returns.
+  */
+  const [hostHistory, setHostHistory] = useState(() => readHistoryCache());
   const { orgs: myOrgs, active: activeOrg, choose: chooseOrg } = useActiveOrgs();
   useEffect(() => {
     if (!showNewGameDialog) return undefined;
@@ -1024,7 +1042,12 @@ function GameHostPage() {
         const res = await authFetch(`${API_BASE}games`);
         if (!res || !res.ok) return;
         const data = await res.json();
-        if (live) setRecentSetUses(recentUses((data && data.games) || [], setRefKey));
+        if (!live) return;
+        const games = (data && data.games) || [];
+        setRecentSetUses(recentUses(games, setRefKey));
+        const facts = historyFacts(games, [...PICKER_GAME_TYPES.map((t) => t.id), BUILD_KIND, EVENT_KIND]);
+        setHostHistory(facts);
+        writeHistoryCache(facts);
       } catch (e) { /* no recent row, nothing else */ }
     })();
     return () => { live = false; };
@@ -1152,7 +1175,18 @@ function GameHostPage() {
   const [selectedSetScope, setSelectedSetScope] = useState(DEFAULT_SCOPE);
   const [categories, setCategories] = useState([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState(new Set());
-  
+  /*
+    THE CREATE DIALOG'S CATEGORY REQUESTS, latest-only (docs/design/
+    new-engagement README §2b). Clears before it awaits, drops a response for a
+    set that is no longer the chosen one, and treats a failure as a visible
+    error instead of leaving the previous set's list up. Its `status` names the
+    set the list belongs to, so the dialog never shows or sends set A's
+    categories under set B.
+  */
+  const setCategoryLoader = useSetCategoryLoader({
+    fetcher: authFetch, apiBase: API_BASE, setCategories, setActiveCategoryIds,
+  });
+
   // Dynamic Category Management (for active games)
   const [categoryCounts, setCategoryCounts] = useState(null);
   const [categoryBitmasks, setCategoryBitmasks] = useState(null);
@@ -4110,12 +4144,15 @@ Focus on actionable business strategy insights.`;
   };
 
   const fetchCategories = async (setId, restoreFromGame = false, scope = '') => {
+    // ONE TICKET LINE WITH THE CREATE DIALOG'S LOADER: whichever request was
+    // made last is the only one allowed to write the list (README §2b).
+    const ticket = setCategoryLoader.claim();
     if (!setId) {
       setCategories([]);
       setActiveCategoryIds(new Set());
       return;
     }
-    
+
     try {
       // authFetch: the question-set routes now carry the Cognito authorizer.
       // They were public, so any caller could read any set's content.
@@ -4125,7 +4162,11 @@ Focus on actionable business strategy insights.`;
       // when two libraries hold this slug.
       const scopeQuery = scope ? `?scope=${encodeURIComponent(scope)}` : '';
       const res = await authFetch(`${API_BASE}question-sets/${setId}/categories${scopeQuery}`);
+      // A refusal is not a list: the old code parsed a 403's body as "no
+      // categories" and wrote it over whatever was there.
+      if (!res || !res.ok) throw new Error(`HTTP ${res ? res.status : '?'}`);
       const json = await res.json();
+      if (!setCategoryLoader.isCurrent(ticket)) return; // a newer request owns the list
       const fetchedCategories = json.categories || [];
       setCategories(fetchedCategories);
       
@@ -4138,6 +4179,7 @@ Focus on actionable business strategy insights.`;
           const gameRes = await authFetch(`${API_BASE}games/${gameId}/host-details`);
           if (gameRes.ok) {
             const gameData = await gameRes.json();
+            if (!setCategoryLoader.isCurrent(ticket)) return;
             // The per-game anonymity flag (IMPORTANT 2): this is the one place
             // GameHostPage already consumes get-game.js's host response, so it
             // restores here rather than adding a second round-trip.
@@ -4178,7 +4220,9 @@ Focus on actionable business strategy insights.`;
    */
   const handleSetupSetChange = (setId, scope = DEFAULT_SCOPE) => {
     setSelectedSetScope(scope || DEFAULT_SCOPE);
-    fetchCategories(setId, false, scope);
+    // Not fetchCategories: the loader clears before it awaits, drops stale
+    // answers and reports which set the list belongs to (README §2b).
+    setCategoryLoader.load(setId, scope || DEFAULT_SCOPE);
     if (setId) {
       fetchQuestionSetInstruction(setId, scope);
     } else {
@@ -5773,6 +5817,7 @@ Focus on actionable business strategy insights.`;
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
       await fetchGamesList();
+      setHistoryDone({ gameId: targetId, title: form.title, verb: 'saved' });
     } catch (err) {
       console.error('❌ Error saving session edits:', err);
       alert(`Failed to save changes: ${err.message}`);
@@ -5897,6 +5942,7 @@ Focus on actionable business strategy insights.`;
           await fetchGamesList();
           setReportsModalMode('select');
           setShowReportsModal(true);
+          setHistoryDone({ gameId: newGameId, title: form.title, verb: 'created' });
         }
         setShowNewGameDialog(false);
 
@@ -6808,9 +6854,37 @@ Focus on actionable business strategy insights.`;
       `onOpen` here, for both states — Open for a session that has not started,
       Continue for one that has. Starting is now its own separate control.
     */
+    /* THROUGH THE SHARED MODAL (New engagement live test 6 N2): it was a bare
+       overlay — no role="dialog", focus left on <body>, Esc did nothing. The
+       Modal gives the role and name, the Tab trap, Escape, focus restore, and
+       here moves focus onto the list's heading as it opens. */
+    const closeHistory = () => {
+      setHistoryNotice('');
+      setShowReportsModal(false);
+      if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
+        setShowWelcomeScreen(true);
+      }
+    };
     return (
-      <div className="new-game-overlay">
-        <div className="new-game-dialog reports-modal">
+      <Modal
+        overlayClassName="new-game-overlay"
+        contentClassName="new-game-dialog reports-modal"
+        labelledBy="shist-title"
+        onClose={closeHistory}
+        closeOnBackdrop={false}
+        // An open invite answers Escape itself; the list waits its turn.
+        closeOnEscape={() => !inviteTarget}
+        initialFocus="#shist-title"
+        afterContent={(
+          /*
+            MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an
+            early `return`, so anything rendered in the main tree below is
+            unreachable from session history — a single mount there would
+            leave the history list's Invite button pressing nothing at all.
+          */
+          <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+        )}
+      >
           <SessionHistoryPanel
             sessions={gamesList}
             currentGameId={gameId}
@@ -6834,23 +6908,10 @@ Focus on actionable business strategy insights.`;
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
             notice={historyNotice}
-            onClose={() => {
-              setHistoryNotice('');
-              setShowReportsModal(false);
-              if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
-                setShowWelcomeScreen(true);
-              }
-            }}
+            done={historyDone}
+            onClose={closeHistory}
           />
-        </div>
-        {/*
-          MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an early
-          `return`, so anything rendered in the main tree below is unreachable
-          from session history — a single mount there would leave the history
-          list's Invite button pressing nothing at all.
-        */}
-        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
-      </div>
+      </Modal>
     );
   }
 
@@ -6881,6 +6942,10 @@ Focus on actionable business strategy insights.`;
         onEventTitleChange={setEventTitle}
         questionSets={questionSets}
         recentSetUses={recentSetUses}
+        hasCreated={Boolean(hostHistory && hostHistory.hasCreated)}
+        lastFormat={(hostHistory && hostHistory.lastFormat) || ''}
+        categoryStatus={setCategoryLoader.status}
+        onRetryCategories={handleSetupSetChange}
         team={chooserTeam}
         personas={personas}
         categories={categories}
@@ -6889,6 +6954,9 @@ Focus on actionable business strategy insights.`;
         onFormatChange={handleSetupFormatChange}
         onQuestionSetChange={handleSetupSetChange}
         onCancel={() => {
+          // Every close of New engagement leaves nothing behind: a clean close
+          // has nothing to keep, and Discard says what was filled in is lost.
+          setEventTitle('');
           setShowNewGameDialog(false);
           if (isLobbyState(gameState) && lessonNumber === 0) {
             setShowWelcomeScreen(true);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * ONE MODAL BEHAVIOUR, FOUR DIALOGS.
@@ -135,10 +135,24 @@ export default function Modal({
    * what every caller did before this prop existed.
    */
   theme,
+  /**
+   * A selector inside the dialog to focus as it opens, or omitted to leave
+   * focus where the dialog's own content puts it (most callers focus a field
+   * themselves). The sessions list uses its heading.
+   */
+  initialFocus,
 }) {
   const overlayRef = useRef(null);
   const contentRef = useRef(null);
   const entryRef = useRef({ overlay: null });
+  /*
+    THE OPENER, READ DURING THE FIRST RENDER. By the time this dialog's mount
+    effect runs, a page that swaps its whole tree for the dialog (the host
+    page's New engagement and sessions list) has already removed the button
+    that was pressed, and document.activeElement is <body>. During render it
+    is still the button (live dev test 6 H4).
+  */
+  const [renderOpener] = useState(() => (typeof document !== 'undefined' ? document.activeElement : null));
 
   // Read at event time, so the document listener below never re-subscribes and
   // never closes over a stale `busy` flag.
@@ -163,7 +177,35 @@ export default function Modal({
 
     // Where focus came from, so it can go back. Without this a keyboard user
     // who closes a dialog is dropped at the top of the document.
-    const opener = document.activeElement;
+    const live = document.activeElement;
+    const opener = live && live !== document.body && !(contentRef.current && contentRef.current.contains(live))
+      ? live : renderOpener;
+    if (initialFocus && contentRef.current) {
+      const first = contentRef.current.querySelector(initialFocus);
+      if (first && typeof first.focus === 'function') first.focus();
+    }
+    /*
+      THE OPENER MAY BE GONE AND BACK. A page that early-returns a dialog (the
+      host page's New engagement) unmounts the button that opened it and
+      mounts a fresh one on close, so the element we held is detached (live
+      dev test 3 H4: focus fell to <body>). Its description finds the new one.
+    */
+    const describe = (el) => (el && el !== document.body && el.tagName ? {
+      tag: el.tagName,
+      className: typeof el.className === 'string' ? el.className : '',
+      label: el.getAttribute ? (el.getAttribute('aria-label') || '') : '',
+      text: (el.textContent || '').trim(),
+    } : null);
+    const openerIs = describe(opener);
+    const findAgain = () => {
+      if (!openerIs) return null;
+      const same = Array.from(document.getElementsByTagName(openerIs.tag)).filter((el) => (
+        (typeof el.className === 'string' ? el.className : '') === openerIs.className
+        && ((el.getAttribute && el.getAttribute('aria-label')) || '') === openerIs.label
+        && (el.textContent || '').trim() === openerIs.text
+      ));
+      return same.length === 1 ? same[0] : null;
+    };
 
     return () => {
       const index = mounted.indexOf(entry);
@@ -172,9 +214,36 @@ export default function Modal({
       unlockScroll();
       if (opener && typeof opener.focus === 'function' && document.contains(opener)) {
         opener.focus();
+        return;
       }
+      const again = findAgain();
+      if (again && typeof again.focus === 'function') { again.focus(); return; }
+      /*
+        THE PAGE MAY DRAW THE OPENER LATER, and not one beat later: the start
+        screen re-renders its links as reads settle, so a single setTimeout(0)
+        sometimes missed the Sessions button and focus stayed on <body>
+        (devtest 8 R3-3). Watch the DOM for it for up to two seconds, and take
+        it only while nothing else has claimed focus.
+      */
+      const idle = () => !document.activeElement || document.activeElement === document.body;
+      const tryLate = () => {
+        if (!idle()) return true;
+        const late = findAgain();
+        if (late && typeof late.focus === 'function') { late.focus(); return true; }
+        return false;
+      };
+      if (!openerIs || typeof MutationObserver === 'undefined') return;
+      let stopTimer = null;
+      const watcher = new MutationObserver(() => {
+        if (tryLate()) { watcher.disconnect(); clearTimeout(stopTimer); }
+      });
+      watcher.observe(document.body, { childList: true, subtree: true });
+      stopTimer = setTimeout(() => watcher.disconnect(), 2000);
+      setTimeout(() => {
+        if (tryLate()) { watcher.disconnect(); clearTimeout(stopTimer); }
+      }, 0);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKeyDown = (event) => {
