@@ -1,0 +1,129 @@
+diff --git a/src/src/config/formatGuide.js b/src/src/config/formatGuide.js
+index 570b308dd..281c9dd43 100644
+--- a/src/src/config/formatGuide.js
++++ b/src/src/config/formatGuide.js
+@@ -27,19 +27,19 @@ import { BUILD_KIND, EVENT_KIND } from './engagementKinds';
+ 
+ export const FORMAT_GUIDE = Object.freeze({
+   'call-and-answer': {
+-    short: 'Everyone answers, then votes for the best answers.',
++    short: 'Ask the room a question. Everyone answers on their phone, reads all the answers and votes for their favourites.',
+     good: 'Retros, brainstorms.',
+-    room: 'Answers an open question on their phones, then votes for the answers that matter.',
+-    get: 'The room’s answers, ranked by votes, and a short summary from Workie after each round.',
++    room: 'Answers your question on their phones, reads everyone’s answers (no names while voting), votes for their favourites, and can comment on what Workie says.',
++    get: 'Every answer ranked by the room’s votes, Workie’s read of what the room said, and the comments, all in the report.',
+     pace: 'One round is one question: answers, then the vote. You move on when you’re ready.',
+     size: 'Any size',
+     questions: 'Ready-made, or write your own',
+     starts: 'Waits in your Sessions list until you press Start.',
+   },
+   trivia: {
+-    short: 'Multiple choice, one right answer, a scoreboard.',
++    short: 'Ask a question with one right answer. Everyone picks A, B, C or D; you reveal and explain the answer, and a scoreboard keeps count.',
+     good: 'Socials, warm-ups.',
+-    room: 'Picks A, B, C or D. One answer is right, and every answer is explained.',
++    room: 'Picks an answer on their phones. You reveal the right one and why, and points go on the scoreboard.',
+     get: 'A live scoreboard, and which questions the room knew or missed.',
+     pace: 'One question at a time; you reveal the answer and move on.',
+     size: 'Any size',
+@@ -47,9 +47,9 @@ export const FORMAT_GUIDE = Object.freeze({
+     starts: 'Waits in your Sessions list until you press Start.',
+   },
+   poll: {
+-    short: 'Quick questions with live results.',
++    short: 'Ask a quick question: pick one, rate it, yes or no, or a few words. The results fill in live on the big screen.',
+     good: 'Quick decisions.',
+-    room: 'Answers one quick question: pick, rate, yes/no or a few words.',
++    room: 'Answers one quick question at a time and watches the result fill in. No right answer, no vote, no names.',
+     get: 'Each result filling in live on the main screen.',
+     pace: 'Quick: each result shows the moment people answer.',
+     size: 'Any size',
+@@ -57,9 +57,9 @@ export const FORMAT_GUIDE = Object.freeze({
+     starts: 'Waits in your Sessions list until you press Start.',
+   },
+   wavelength: {
+-    short: 'One word each; see where the room thinks alike.',
++    short: 'Give the room a subject. Everyone writes the words it brings to mind; a word scores when everyone wrote it.',
+     good: 'Small teams, 10 or fewer.',
+-    room: 'Says one word for a subject. The words most people share come out on top.',
++    room: 'Writes the words a subject brings to mind. The screen shows the words everyone shared, so you see how alike the team thinks.',
+     get: 'Where the room already thinks alike, and where it doesn’t.',
+     pace: 'One subject at a time; you move on when everyone has answered.',
+     size: 'Best with 10 or fewer',
+@@ -67,7 +67,7 @@ export const FORMAT_GUIDE = Object.freeze({
+     starts: 'Waits in your Sessions list until you press Start.',
+   },
+   survey: {
+-    short: 'A short form, answered in people’s own time.',
++    short: 'Send a short form people fill in on their phones in their own time. You see the answers added up.',
+     good: 'Feedback by form, not live.',
+     room: 'Fills in a short form on their phones, whenever suits them.',
+     get: 'Answers reported in aggregate. Anonymous unless you choose otherwise.',
+@@ -77,7 +77,7 @@ export const FORMAT_GUIDE = Object.freeze({
+     starts: 'Opens to answers the moment you create it. No Start step.',
+   },
+   [BUILD_KIND]: {
+-    short: 'Build with your Claude Code while the room votes.',
++    short: 'Build something with your Claude Code while the room steers: people suggest ideas, pick between options and rate what Claude makes.',
+     good: 'Software teams.',
+     room: 'Suggests ideas, picks between mockups and rates while your Claude Code builds.',
+     get: 'Something built, every decision the room made, and a report.',
+@@ -87,7 +87,7 @@ export const FORMAT_GUIDE = Object.freeze({
+     starts: 'Continues on its own page.',
+   },
+   [EVENT_KIND]: {
+-    short: 'A whole agenda behind one join code.',
++    short: 'Run a whole day behind one join code: an agenda of quizzes, polls, talks and breaks, each with its own report.',
+     good: 'Offsites, workshops.',
+     room: 'Follows your agenda behind one join code: quizzes, polls, talks and breaks.',
+     get: 'Each item’s report, gathered under the event.',
+diff --git a/src/src/config/gameTypes.js b/src/src/config/gameTypes.js
+index 0ab264db4..53f63785f 100644
+--- a/src/src/config/gameTypes.js
++++ b/src/src/config/gameTypes.js
+@@ -17,7 +17,7 @@ export const GAME_TYPES = {
+     accent: 'var(--secondary)',
+     // free-text responses, then the room votes on them
+     phases: ['ASK', 'VOTE', 'RESULTS'],
+-    blurb: 'Open responses, then the room votes on the best ones.',
++    blurb: 'Ask the room a question. Everyone answers on their phone, reads all the answers and votes for their favourites. Comments on Workie’s read are kept.',
+     answerType: 'text',
+     // What one unit of play is called on screen. See resolveRoundNoun() in
+     // config/instructions.js — art rounds override this by carrying an image.
+@@ -30,7 +30,7 @@ export const GAME_TYPES = {
+     icon: 'Brain',
+     accent: 'var(--primary)',
+     phases: ['ASK', 'RESULTS'],
+-    blurb: 'Multiple choice with one correct answer and a scoreboard.',
++    blurb: 'Ask a question with one right answer. Everyone picks on their phone; you reveal and explain the answer, and a scoreboard keeps count.',
+     answerType: 'trivia',
+     roundNoun: 'Question',
+   },
+@@ -44,7 +44,7 @@ export const GAME_TYPES = {
+     // 27 Sep 2026): pick, rate, yes/no or an open answer, counted live on the
+     // wall. No vote — that was call-and-answer under another name.
+     phases: ['ASK', 'RESULTS'],
+-    blurb: 'One quick question at a time — pick, rate, yes/no or a short answer — with the result live on the main screen.',
++    blurb: 'Ask a quick question: pick one, rate it, yes or no, or a few words. The results fill in live on the big screen.',
+     answerType: 'poll',
+     roundNoun: 'Poll',
+   },
+@@ -61,7 +61,7 @@ export const GAME_TYPES = {
+     // The group-size caveat is the spec's whole answer to large rooms: no
+     // team-splitting mechanic is built; the guidance is copy, stated where the
+     // type is chosen (2026-08-09 wavelength convergence spec §2.2).
+-    blurb: 'Word association — a word counts when everyone says it. Works best with groups of ten or less.',
++    blurb: 'Give the room a subject. Everyone writes the words it brings to mind; a word scores when everyone wrote it. Best with ten or fewer.',
+     answerType: 'wavelength',
+     roundNoun: 'Subject',
+   },
+@@ -78,7 +78,7 @@ export const GAME_TYPES = {
+     // STATE SURVEY#OPEN → SURVEY#CLOSED, host phases COLLECTING → CLOSED
+     // (config/hostControls.js), and no vote, so hasVotePhase() is false.
+     phases: ['COLLECTING', 'CLOSED'],
+-    blurb: 'Structured multi-question feedback, reported in aggregate.',
++    blurb: 'Send a short form people fill in on their phones in their own time. You see the answers added up.',
+     answerType: 'text',
+     roundNoun: 'Question',
+   },
