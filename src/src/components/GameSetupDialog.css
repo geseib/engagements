@@ -2039,7 +2039,13 @@
 .gsd .gsd-wt-stage small,
 .gsd .gsd-wt-phone small { font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
 .gsd .gsd-wt-line { display: block; height: 5px; border-radius: 3px; background: var(--gsd-rule-strong); text-decoration: none; }
-.gsd .gsd-wt-top { display: flex; justify-content: space-between; gap: 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
+.gsd .gsd-wt-top > span { white-space: nowrap; }
+/* THE ROOM CARD'S WORDS STAY CLEAR OF THE PHONE (dev check, round 2): the
+   phone overlaps the card's right edge by 66px, so the card's content keeps
+   that much back and its title wraps instead of running under the phone. */
+.gsd .gsd-wt-pic.has-phone .gsd-wt-stage { padding-right: 84px; }
+.gsd .gsd-wt-pic.has-phone .gsd-wt-top { justify-content: flex-start; }
 .gsd .gsd-wt-chip { padding: 0 8px; border-radius: 99px; background: var(--gsd-field); color: var(--gsd-text); font-weight: 700; white-space: nowrap; }
 .gsd .gsd-wt-title { font-family: var(--font-display, inherit); font-size: var(--gsd-t-body); font-weight: 800; line-height: 1.25; color: var(--gsd-text); }
 .gsd .gsd-wt-count { display: flex; align-items: baseline; gap: 8px; font-size: var(--gsd-t-floor); color: var(--gsd-muted); }
