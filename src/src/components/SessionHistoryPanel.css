@@ -527,3 +527,21 @@
   .shist .shist__done { flex-wrap: wrap; }
   .shist .shist__done-start { min-height: 44px; }
 }
+
+/* ONE FOCUS RING IN THE LIST (devtest 7 R2): the help, ×, search and Type
+   select fell back to the browser's own ring while the row buttons drew an
+   amber one. Every control here draws the same 2px blue ring the New
+   engagement dialog uses. The heading takes focus only so the list opens on
+   it; the dialog's name already announces it, so it draws no box. */
+.shist button:focus-visible,
+.shist a:focus-visible,
+.shist input:focus-visible,
+.shist select:focus-visible,
+.shist summary:focus-visible,
+.shist .shist__btn:focus-visible,
+.shist .shist__done-start:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.shist .shist__title:focus { outline: none; box-shadow: none; }

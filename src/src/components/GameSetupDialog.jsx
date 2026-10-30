@@ -810,7 +810,7 @@ export default function GameSetupDialog({
           }))}
         makeRoutes={makeRoutes}
         makeRoutesNote={routesNote}
-        shortPlaceholder={phone}
+        shortPlaceholder={phone || (compact && showSide)}
         recentsFirst={!isEdit}
         ownerLabels={{ [ENGAGE]: 'Ready-made' }}
         ownerHeading="Whose"
@@ -1206,7 +1206,14 @@ export default function GameSetupDialog({
           <button type="button" className="btn-secondary" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
             Keep editing
           </button>
-          <button type="button" className="gsd-discard" onClick={() => onCancel?.()}>
+          {/* DISCARD MEANS DISCARD (devtest 7 R1 / 8 R3-2): in create mode the
+              title is the page's, so it outlived the dialog and reopened
+              ticked done, with new typing appended to it. Empty it first. */}
+          <button
+            type="button"
+            className="gsd-discard"
+            onClick={() => { if (!isEdit) onEventTitleChange?.(''); onCancel?.(); }}
+          >
             Discard
           </button>
         </div>

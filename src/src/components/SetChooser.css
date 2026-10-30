@@ -408,8 +408,13 @@
   .schs .schs-keys { display: none; }
   .schs .schs-tbl td:first-child { white-space: normal; overflow-wrap: anywhere; }
   .schs .schs-tbl .schs-desc { display: none; }
+  /* `.schs--wide` too: its 120px Owner column out-ranked the plain rule and
+     kept an empty strip on the right of the phone list (devtest 8 R3-4). */
   .schs .schs-tbl .schs-c-own,
-  .schs .schs-tbl .schs-c-when { width: 0; }
+  .schs .schs-tbl .schs-c-when,
+  .schs.schs--wide .schs-tbl .schs-c-own,
+  .schs.schs--wide .schs-tbl .schs-c-when { width: 0; }
+  .schs.schs--wide .schs-tbl .schs-c-qs { width: 84px; }
   .schs .schs-tbl th:nth-child(3), .schs .schs-tbl td:nth-child(3),
   .schs .schs-tbl th:last-child, .schs .schs-tbl td:last-child { display: none; }
   .schs .schs-tbl tr.schs-grp td { display: table-cell; }

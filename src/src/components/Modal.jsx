@@ -218,10 +218,29 @@ export default function Modal({
       }
       const again = findAgain();
       if (again && typeof again.focus === 'function') { again.focus(); return; }
-      // The page may draw the opener a beat later.
-      setTimeout(() => {
+      /*
+        THE PAGE MAY DRAW THE OPENER LATER, and not one beat later: the start
+        screen re-renders its links as reads settle, so a single setTimeout(0)
+        sometimes missed the Sessions button and focus stayed on <body>
+        (devtest 8 R3-3). Watch the DOM for it for up to two seconds, and take
+        it only while nothing else has claimed focus.
+      */
+      const idle = () => !document.activeElement || document.activeElement === document.body;
+      const tryLate = () => {
+        if (!idle()) return true;
         const late = findAgain();
-        if (late && typeof late.focus === 'function' && document.activeElement === document.body) late.focus();
+        if (late && typeof late.focus === 'function') { late.focus(); return true; }
+        return false;
+      };
+      if (!openerIs || typeof MutationObserver === 'undefined') return;
+      let stopTimer = null;
+      const watcher = new MutationObserver(() => {
+        if (tryLate()) { watcher.disconnect(); clearTimeout(stopTimer); }
+      });
+      watcher.observe(document.body, { childList: true, subtree: true });
+      stopTimer = setTimeout(() => watcher.disconnect(), 2000);
+      setTimeout(() => {
+        if (tryLate()) { watcher.disconnect(); clearTimeout(stopTimer); }
       }, 0);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

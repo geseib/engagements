@@ -631,6 +631,125 @@ describe('round 2: focus home, the sessions dialog, icons', () => {
   });
 });
 
+describe('round 3: discard means discard, the drawer pushes, focus home from the sessions list', () => {
+  const readCss = (file) => require('fs').readFileSync(require('path').join(__dirname, '..', 'components', file), 'utf8');
+
+  /* devtest 7 R1 / devtest 8 R3-2: the title is the page's in create mode.
+     The page here owns it exactly as GameHostPage does. */
+  function TitlePage() {
+    const [open, setOpen] = useState(false);
+    const [title, setTitle] = useState('');
+    if (!open) return <button type="button" className="wel-action is-primary" onClick={() => setOpen(true)}>Create engagement</button>;
+    return (
+      <GameSetupDialog
+        {...base({ onCancel: () => setOpen(false) })}
+        eventTitle={title}
+        onEventTitleChange={setTitle}
+        lastFormat=""
+      />
+    );
+  }
+
+  test('R1: × then Discard empties the title; reopening starts blank and new typing does not append', () => {
+    render(<TitlePage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Create engagement' }));
+    fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: 'probe — not saved' } });
+    fireEvent.click(screen.getByRole('button', { name: /close without creating/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create engagement' }));
+    expect(screen.getByLabelText(/name it/i)).toHaveValue('');
+    fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: 'Draft B' } });
+    expect(screen.getByLabelText(/name it/i)).toHaveValue('Draft B');
+  });
+
+  test('R1: Discard in create mode tells the page to empty the title before closing', () => {
+    const onEventTitleChange = jest.fn();
+    const onCancel = jest.fn();
+    const { rerender } = render(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: '' })} lastFormat="" />);
+    rerender(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: 'Draft A' })} lastFormat="" />);
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
+    expect(onEventTitleChange).toHaveBeenLastCalledWith('');
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  test('R1: the page empties its title on every close of New engagement', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    const at = src.indexOf('onEventTitleChange={setEventTitle}');
+    const block = src.slice(at, src.indexOf('onCreate={handleStartNewGame}', at));
+    expect(block).toMatch(/onCancel=\{\(\) => \{[^}]*setEventTitle\(''\)/);
+  });
+
+  test('R3-1: with the compact preview open every format chip is in the form column and can be chosen', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" onChooseOther={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
+    const pane = screen.getByRole('complementary', { name: 'Preview' });
+    const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
+    expect(radios.length).toBeGreaterThanOrEqual(6);
+    radios.forEach((r) => {
+      expect(pane.contains(r)).toBe(false);
+      fireEvent.click(r);
+      expect(r).toHaveAttribute('aria-checked', 'true');
+    });
+    // The drawer is a grid column beside the form, never laid over it.
+    const css = readCss('GameSetupDialog.css');
+    expect(css).toMatch(/\.gsd \.gsd-body\.has-drawer \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) \d+px/);
+    const drawer = css.slice(css.lastIndexOf('.gsd .gsd-side.gsd-side--drawer {'));
+    expect(drawer.slice(0, drawer.indexOf('}'))).not.toMatch(/position:\s*absolute/);
+  });
+
+  /* devtest 8 R3-3: the start screen can draw its Sessions button after the
+     list closes, not in the same commit. Focus must still find it. */
+  function SessionsPage() {
+    const [open, setOpen] = useState(false);
+    const [welcome, setWelcome] = useState(true);
+    if (open) {
+      return (
+        <Modal overlayClassName="new-game-overlay" contentClassName="new-game-dialog reports-modal"
+          labelledBy="shist-title" onClose={() => { setOpen(false); setTimeout(() => setWelcome(true), 30); }}
+          closeOnBackdrop={false} initialFocus="#shist-title">
+          <SessionHistoryPanel sessions={[]} questionSets={[]} mode="select" />
+        </Modal>
+      );
+    }
+    if (!welcome) return <p>Loading…</p>;
+    return (
+      <>
+        <button type="button" className="wel-btn wel-btn-line">Question sets</button>
+        <button type="button" className="wel-btn wel-btn-line" onClick={() => { setWelcome(false); setOpen(true); }}>Sessions</button>
+      </>
+    );
+  }
+
+  test('R3-3: Esc on Your sessions returns focus to the Sessions button, even when it is drawn late', async () => {
+    render(<SessionsPage />);
+    const opener = screen.getByRole('button', { name: 'Sessions' });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByRole('heading', { name: /Your sessions/ })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sessions' })).toHaveFocus());
+  });
+
+  test('R2: one blue focus ring in Your sessions, and none drawn round the heading', () => {
+    const css = readCss('SessionHistoryPanel.css');
+    const ring = css.slice(css.lastIndexOf('.shist button:focus-visible'));
+    expect(ring).toMatch(/^[^}]*\.shist input:focus-visible[^}]*\.shist select:focus-visible[^}]*outline:\s*2px solid var\(--info\)/);
+    expect(css).toMatch(/\.shist \.shist__title:focus \{[^}]*outline:\s*none/);
+  });
+
+  test('R3-4: on a phone the hidden Owner and Updated columns reserve no width, even in the wide list', () => {
+    const css = readCss('SetChooser.css');
+    const phone = css.slice(css.lastIndexOf('@media (max-width: 600px)'));
+    expect(phone).toMatch(/\.schs\.schs--wide \.schs-tbl \.schs-c-own,\s*\.schs\.schs--wide \.schs-tbl \.schs-c-when \{ width: 0; \}/);
+  });
+
+  test('R3 (1366/1280): on a short window the gallery cards drop only their picture', () => {
+    const css = readCss('GameSetupDialog.css');
+    expect(css).toMatch(/@media \(max-height: 800px\) \{\s*\.gsd \.gsd-fmt-group--gallery \.gsd-fmt-art \{ display: none; \}\s*\}/);
+  });
+});
+
 describe('after Create, the sessions list says what happened (live dev test B6/C10)', () => {
   const SESSION = {
     gameId: '1224', title: 'UX QA — Retro test', gameType: 'call-and-answer', questionSetId: 'seta',

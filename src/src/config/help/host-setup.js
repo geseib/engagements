@@ -225,7 +225,7 @@ const gameSetup = {
       history: last format chosen, "last used", **Show preview**, keycaps).
       "I know these — show compact" / "Back to compact" / "Always open with
       the full guide" (inside the compact Format guide; localStorage). Compact
-      Show preview is a drawer over the card; Enter on a format chip focuses
+      Show preview is a column inside the card, the form narrowing beside it; Enter on a format chip focuses
       the set search. Steps: "Name it" (autofocus; Enter goes to the
       next empty step), "Pick a format" gallery with "Planning a…" chips
       (config/formatGuide.js MEETING_TYPES) and "Compare side by side", then
@@ -312,7 +312,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'Once you have created a session the dialog opens compact, on the last format you used. Its top line has **Format guide** and **Show preview**, which slides the preview in over the right of the form. Enter on a format moves you to the question set. **I know these — show compact** gives you compact sooner; in the Format guide, **Always open with the full guide** brings the full layout back. That choice is kept in this browser.',
+          text: 'Once you have created a session the dialog opens compact, on the last format you used. Its top line has **Format guide** and **Show preview**, which opens the preview beside the form. Enter on a format moves you to the question set. **I know these — show compact** gives you compact sooner; in the Format guide, **Always open with the full guide** brings the full layout back. That choice is kept in this browser.',
         },
       ],
     },

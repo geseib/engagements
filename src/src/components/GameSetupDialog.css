@@ -2001,17 +2001,19 @@
 .gsd .gsd-fp--card .gsd-fp-ans { gap: 6px; }
 
 /* COMPACT'S PREVIEW IS A DRAWER INSIDE THE 880px CARD (devtest 5 N3). */
-.gsd .gsd-body.has-drawer { position: relative; }
+/* It PUSHES, it does not overlay (devtest 8 R3-1): laid over the form it hid
+   the Survey / Build Room / Event chips and the right-hand topics, still
+   focusable but unclickable. The form takes the column left beside it and
+   its chip rows wrap; the card itself stays 880px. */
+.gsd .gsd-body.has-drawer { grid-template-columns: minmax(0, 1fr) 340px; }
 .gsd .gsd-side.gsd-side--drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 4;
-  width: min(380px, 100%);
+  position: static;
+  min-width: 0;
   border-left: 1px solid var(--gsd-rule-strong);
-  box-shadow: -18px 0 40px rgb(var(--shade-rgb) / 0.35);
   overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .gsd .gsd-body.has-drawer { grid-template-columns: minmax(0, 1fr); }
 }
 .gsd .gsd-side--drawer .gsd-side-pv { flex: none; overflow: visible; }
 
@@ -2028,6 +2030,13 @@
     margin-top: auto;
     background: var(--gsd-side);
   }
+}
+
+/* SHORT LAPTOPS (1366×768, 1280×720; devtest 7 R3): the gallery cards drop
+   their small picture, so step 3 shows on first open. No words go; the side
+   pane beside the gallery plays the same picture larger. */
+@media (max-height: 800px) {
+  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
 }
 
 /* "Always open with the full guide", inside the guide (devtest 5 N2). */

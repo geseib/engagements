@@ -6954,6 +6954,9 @@ Focus on actionable business strategy insights.`;
         onFormatChange={handleSetupFormatChange}
         onQuestionSetChange={handleSetupSetChange}
         onCancel={() => {
+          // Every close of New engagement leaves nothing behind: a clean close
+          // has nothing to keep, and Discard says what was filled in is lost.
+          setEventTitle('');
           setShowNewGameDialog(false);
           if (isLobbyState(gameState) && lessonNumber === 0) {
             setShowWelcomeScreen(true);
