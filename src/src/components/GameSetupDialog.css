@@ -397,7 +397,7 @@
    Two skins of ONE widget (FormatPicker.jsx). The chosen option carries a
    tick and a 2px amber border — never colour alone — and the gallery card
    says "Chosen". */
-.gsd .gsd-fmt-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.gsd .gsd-fmt-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .gsd .gsd-fmt-group--gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
@@ -419,7 +419,7 @@
   text-align: left;
   cursor: pointer;
 }
-.gsd .gsd-fmt--chips { min-height: 36px; padding: 0 14px; justify-content: center; }
+.gsd .gsd-fmt--chips { min-height: 36px; padding: 0 12px; justify-content: center; }
 .gsd .gsd-fmt-top { display: inline-flex; align-items: center; gap: 7px; font-size: var(--gsd-t-label); font-weight: 700; }
 .gsd .gsd-fmt-mark { display: inline-flex; }
 .gsd .gsd-fmt-mark:empty { display: none; }
@@ -436,7 +436,7 @@
   background: var(--gsd-wash);
   color: var(--gsd-primary);
 }
-.gsd .gsd-fmt--chips[aria-checked="true"] { padding: 0 13px; }
+.gsd .gsd-fmt--chips[aria-checked="true"] { padding: 0 11px; }
 /* Fixed, in an edit: muted words, a dashed border — no opacity. */
 .gsd .gsd-fmt:disabled { cursor: not-allowed; border-style: dashed; color: var(--gsd-muted); }
 .gsd .gsd-fmt:disabled[aria-checked="true"] { border-style: solid; color: var(--gsd-primary); }
@@ -1589,13 +1589,13 @@
   background: var(--gsd-field);
   overflow: hidden;
 }
-.gsd .gsd-fp--pane { height: 160px; max-width: 300px; gap: 10px; padding: 16px; }
+.gsd .gsd-fp--pane { height: 136px; max-width: 300px; gap: 10px; padding: 16px; }
 .gsd .gsd-fp--phone { width: 150px; height: 190px; padding: 18px 14px; border: 3px solid var(--gsd-rule-strong); border-radius: 20px; }
-.gsd .gsd-fp i { display: block; font-style: normal; }
+.gsd .gsd-fp i { font-style: normal; }
 .gsd .gsd-fp em { font-style: normal; font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-text); }
 
 /* Call & Answer: three answers; the winner amber with its votes. */
-.gsd .gsd-fp-ans { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-left: 3px solid var(--gsd-rule-strong); border-radius: 4px; background: var(--gsd-card); }
+.gsd .gsd-fp-ans { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border-left: 3px solid var(--gsd-rule-strong); border-radius: 4px; background: var(--gsd-card); }
 .gsd .gsd-fp-ans b { flex: 1; height: 6px; border-radius: 3px; background: var(--gsd-rule-strong); }
 .gsd .gsd-fp-ans.is-win { border-left-color: var(--gsd-primary); }
 .gsd .gsd-fp-ans.is-win em { color: var(--gsd-primary); }
@@ -1625,7 +1625,7 @@
 /* Survey: three answered rows, ticked. */
 .gsd .gsd-fp-row { display: flex; align-items: center; gap: 8px; }
 .gsd .gsd-fp-row s { flex: 1; height: 6px; border-radius: 3px; background: var(--gsd-rule-strong); }
-.gsd .gsd-fp-tick { width: 14px; height: 14px; border-radius: 4px; background: var(--gsd-success); }
+.gsd .gsd-fp-tick { flex: none; width: 14px; height: 14px; border-radius: 4px; background: var(--gsd-success); }
 .gsd .gsd-fp.is-play .gsd-fp-row { animation: gsd-fp-rise 0.5s ease-out 1 backwards; }
 .gsd .gsd-fp.is-play .gsd-fp-row:nth-child(2) { animation-delay: 0.25s; }
 .gsd .gsd-fp.is-play .gsd-fp-row:nth-child(3) { animation-delay: 0.5s; }
@@ -1755,4 +1755,7 @@
   .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
   .gsd .gsd-step-acts { margin-left: 0; }
   .gsd .gsd-compact-sum { padding: 0 16px; }
+  /* Cancel and Create share one row; the note takes the row above. */
+  .gsd .dialog-actions .btn-secondary { flex: 0 1 auto; width: auto; }
+  .gsd .dialog-actions .btn-primary { flex: 1 1 0; width: auto; justify-content: center; }
 }

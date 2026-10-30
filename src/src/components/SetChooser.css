@@ -186,7 +186,7 @@
 .schs .schs-list { max-height: 360px; overflow: auto; border: 1px solid var(--schs-rule); border-radius: 10px; }
 .schs .schs-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--schs-t-body); }
 .schs .schs-tbl .schs-c-name { width: auto; }
-.schs .schs-tbl .schs-c-qs { width: 52px; }
+.schs .schs-tbl .schs-c-qs { width: 92px; }
 .schs .schs-tbl .schs-c-own { width: 112px; }
 .schs .schs-tbl .schs-c-when { width: 128px; }
 .schs .schs-tbl th {
@@ -263,6 +263,7 @@
 .schs.schs--wide { scroll-margin-top: 92px; }
 .schs.schs--wide .schs-tbl td { height: 52px; vertical-align: middle; }
 .schs.schs--wide .schs-tbl .schs-c-own { width: 120px; }
+.schs.schs--wide .schs-tbl .schs-c-qs { width: 96px; }
 .schs.schs--wide .schs-tbl .schs-c-topic { width: 150px; }
 .schs.schs--wide .schs-tbl .schs-c-tags { width: 200px; }
 .schs .schs-desc {

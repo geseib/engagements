@@ -324,6 +324,9 @@ export default function GameSetupDialog({
     formatTouched.current = true;
     if (engagementType) setByFormat.current[engagementType] = newGameSetKey;
     setEngagementType(typeId);
+    // A hand-off format has no set to pick: fold the gallery to chips so its
+    // "Next:" panel is in view (frames 7, 8).
+    if (isHandoffFormat(typeId)) setGalleryDone(true);
     // A set belongs to exactly one format — so the previous choice cannot
     // survive the switch — but the set this format had while the dialog has
     // been open comes back (README §6).
@@ -702,7 +705,8 @@ export default function GameSetupDialog({
       />
       {/* THE ENTRY POINT, always offered in create mode — "fix the title on
           the set I made last week" is as common as "I have none". */}
-      {!isEdit && (
+      {/* While the chooser is open it carries its own Make a new set. */}
+      {!isEdit && !chooserOpen && (
         <p className="gsd-setlinks">
           <button type="button" className="gsd-setlink" onClick={() => openSets('')}>
             {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
