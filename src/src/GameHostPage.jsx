@@ -6854,9 +6854,37 @@ Focus on actionable business strategy insights.`;
       `onOpen` here, for both states — Open for a session that has not started,
       Continue for one that has. Starting is now its own separate control.
     */
+    /* THROUGH THE SHARED MODAL (New engagement live test 6 N2): it was a bare
+       overlay — no role="dialog", focus left on <body>, Esc did nothing. The
+       Modal gives the role and name, the Tab trap, Escape, focus restore, and
+       here moves focus onto the list's heading as it opens. */
+    const closeHistory = () => {
+      setHistoryNotice('');
+      setShowReportsModal(false);
+      if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
+        setShowWelcomeScreen(true);
+      }
+    };
     return (
-      <div className="new-game-overlay">
-        <div className="new-game-dialog reports-modal">
+      <Modal
+        overlayClassName="new-game-overlay"
+        contentClassName="new-game-dialog reports-modal"
+        labelledBy="shist-title"
+        onClose={closeHistory}
+        closeOnBackdrop={false}
+        // An open invite answers Escape itself; the list waits its turn.
+        closeOnEscape={() => !inviteTarget}
+        initialFocus="#shist-title"
+        afterContent={(
+          /*
+            MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an
+            early `return`, so anything rendered in the main tree below is
+            unreachable from session history — a single mount there would
+            leave the history list's Invite button pressing nothing at all.
+          */
+          <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+        )}
+      >
           <SessionHistoryPanel
             sessions={gamesList}
             currentGameId={gameId}
@@ -6881,23 +6909,9 @@ Focus on actionable business strategy insights.`;
             onEdit={editGameFromHistory}
             notice={historyNotice}
             done={historyDone}
-            onClose={() => {
-              setHistoryNotice('');
-              setShowReportsModal(false);
-              if (reportsModalMode === 'select' && isLobbyState(gameState) && lessonNumber === 0) {
-                setShowWelcomeScreen(true);
-              }
-            }}
+            onClose={closeHistory}
           />
-        </div>
-        {/*
-          MOUNTED HERE TOO, AND THAT IS NOT A DUPLICATE. This branch is an early
-          `return`, so anything rendered in the main tree below is unreachable
-          from session history — a single mount there would leave the history
-          list's Invite button pressing nothing at all.
-        */}
-        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
-      </div>
+      </Modal>
     );
   }
 

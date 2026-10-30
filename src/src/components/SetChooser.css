@@ -397,9 +397,22 @@
 .schs .schs-exit { white-space: nowrap; }
 .schs .schs-exit b { white-space: nowrap; }
 .schs .schs-link { padding-block: 4px; }
-/* The hint never covers the placeholder on a narrow search (devtest 2 §10). */
+/* The exits size to their words: "15 sets" spilled past a 220px grid cell (devtest 4 N2). */
+.schs .schs-exits { display: flex; flex-wrap: wrap; }
+/* The scrolling list is a Tab stop in Chrome: the same ring as everything else (devtest 6 N4). */
+.schs .schs-list:focus-visible { outline: 2px solid var(--schs-link); outline-offset: 2px; }
+
+/* THE PHONE (devtest 5 N5, devtest 4 V1): the name gets the width — it wraps
+   to two lines, and the Owner and Updated columns step aside. */
 @media (max-width: 600px) {
   .schs .schs-keys { display: none; }
+  .schs .schs-tbl td:first-child { white-space: normal; overflow-wrap: anywhere; }
+  .schs .schs-tbl .schs-desc { display: none; }
+  .schs .schs-tbl .schs-c-own,
+  .schs .schs-tbl .schs-c-when { width: 0; }
+  .schs .schs-tbl th:nth-child(3), .schs .schs-tbl td:nth-child(3),
+  .schs .schs-tbl th:last-child, .schs .schs-tbl td:last-child { display: none; }
+  .schs .schs-tbl tr.schs-grp td { display: table-cell; }
 }
 
 @media (max-width: 480px) {

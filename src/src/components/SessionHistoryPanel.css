@@ -454,3 +454,76 @@
   .shist__tbl td:nth-child(7),
   .shist__tbl td:nth-child(8) { display: none; }
 }
+
+/* ── New engagement live tests, round 2 (reviews/devtest-6 N1–N3) ───────── */
+
+/* Read by assistive tech only (the actions column's heading). */
+.shist .shist__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The name wraps to two lines where it needs to, so "Latest" is never cut
+   off with it; the full title is in title=. */
+.shist .shist__nm {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* THE PHONE (devtest 6 N1: eight columns in 350px — codes "7", actions
+   "Edi", "Sta"): one card per session. Name and set across the top, code,
+   type and state on a line, and the actions as 44px buttons. The column
+   heads stay for assistive tech, out of sight. */
+@media (max-width: 600px) {
+  .shist { padding: 14px; }
+  .shist .shist__tbl,
+  .shist .shist__tbl tbody { display: block; width: 100%; }
+  .shist .shist__tbl colgroup { display: none; }
+  .shist .shist__tbl thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .shist .shist__tbl tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--shist-rule);
+  }
+  .shist .shist__tbl td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    overflow: visible;
+  }
+  .shist .shist__tbl td:first-child { flex: 1 0 100%; padding: 0; }
+  .shist .shist__tbl td:nth-child(5),
+  .shist .shist__tbl td:nth-child(6),
+  .shist .shist__tbl td:nth-child(7),
+  .shist .shist__tbl td:nth-child(8) { display: none; }
+  .shist .shist__tbl td:last-child { flex: 1 0 100%; padding: 4px 0 0; }
+  .shist .shist__tbl td[colspan] { flex: 1 0 100%; }
+  .shist .shist__sub2 { white-space: normal; }
+  .shist .shist__acts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .shist .shist__btn { min-height: 44px; }
+  .shist .shist__filters { flex-wrap: wrap; }
+  .shist .shist__srch { flex: 1 1 100%; }
+  .shist .shist__done { flex-wrap: wrap; }
+  .shist .shist__done-start { min-height: 44px; }
+}

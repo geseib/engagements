@@ -250,6 +250,11 @@ export default function Icon({
   ...rest
 }) {
   const C = ICONS[name] ?? Circle;
+  /* DECORATIVE UNLESS NAMED (New engagement live test L5: 13 unnamed images
+     in one empty state). An icon with no accessible name is hidden from
+     assistive tech; pass aria-label (or title, or a role) to make one speak. */
+  const named = rest['aria-label'] || rest['aria-labelledby'] || rest.title || rest.role;
+  if (!named && rest['aria-hidden'] === undefined) rest['aria-hidden'] = true;
   // Every icon carries `.ws-icon` so one CSS rule can optically centre it against
   // adjacent text and keep it from being squashed inside flex rows.
   return (

@@ -40,12 +40,14 @@ export function SummaryRows({ heading, rows = [] }) {
 export default function CreateSummary({
   format = '', anonymous = true, setName = '', notice = null,
   rowsHeading = 'Three decisions', rows = [], next = null, edit = false,
+  /** Compact's preview drawer: the preview only, inside the 880px card. */
+  drawer = false,
 }) {
   const [view, setView] = useState('room');
   const [play, setPlay] = useState(1);
   const choose = (v) => { setView(v); setPlay((n) => n + 1); };
   return (
-    <aside className="gsd-side" aria-label={edit ? 'This session' : 'Preview and summary'}>
+    <aside className={`gsd-side${drawer ? " gsd-side--drawer" : ""}`} aria-label={edit ? "This session" : (drawer ? "Preview" : "Preview and summary")}>
       {notice && <div className="gsd-side-notice">{notice}</div>}
       {!edit && (
         <section className="gsd-side-pv" aria-labelledby="gsd-pv-h">
@@ -73,13 +75,16 @@ export default function CreateSummary({
               </span>
             </p>
           )}
+          {/* The caption ABOVE the picture, so a short pane cuts the picture's
+              foot, never the words (live dev tests V6, M5). */}
+          <p className="gsd-side-cap">{previewCaption(format, { view, anonymous })}</p>
           <div className={`gsd-stage gsd-stage--${view}`}>
             {/* Plays once when the format is chosen or the view changes, and on Replay. */}
             <FormatPreview key={format} format={format} play={format ? play : 0} size={view === 'phone' ? 'phone' : 'pane'} />
           </div>
-          <p className="gsd-side-cap">{previewCaption(format, { view, anonymous })}</p>
         </section>
       )}
+      {!drawer && (
       <div className="gsd-side-pin">
         <SummaryRows heading={rowsHeading} rows={rows} />
         {next && (
@@ -96,6 +101,7 @@ export default function CreateSummary({
           </section>
         )}
       </div>
+      )}
     </aside>
   );
 }

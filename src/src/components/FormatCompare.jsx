@@ -27,6 +27,8 @@ const ROWS = [
 
 export default function FormatCompare({
   options = [], value = '', suggested = '', suggestedFor = '', onUse, onBack,
+  /** A phone: "Use this", which fits (the name is in the column head; live dev test 4 N1). */
+  shortUse = false,
 }) {
   const live = options.filter((o) => !o.handoff);
   const own = options.filter((o) => o.handoff);
@@ -71,8 +73,9 @@ export default function FormatCompare({
                       type="button"
                       className={`gsd-btn gsd-compare-use${isSuggested || on ? " is-on" : ""}`}
                       onClick={() => onUse?.(o.id)}
+                      aria-label={`Use ${o.label}`}
                     >
-                      Use {o.label}
+                      {shortUse ? 'Use this' : `Use ${o.label}`}
                     </button>
                   </th>
                 );

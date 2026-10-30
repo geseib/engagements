@@ -71,6 +71,7 @@ import {
   readLayoutOverride, writeLayoutOverride, isMacPlatform, createShortcutLabel, isCreateShortcut,
 } from '../config/formatGuide';
 import SetChooser from './SetChooser';
+import { ENGAGE } from '../utils/setOwnerTag';
 import FormatPicker from './FormatPicker';
 import FormatCompare from './FormatCompare';
 import MeetingTypeChips from './MeetingTypeChips';
@@ -811,6 +812,9 @@ export default function GameSetupDialog({
         makeRoutesNote={routesNote}
         shortPlaceholder={phone}
         recentsFirst={!isEdit}
+        ownerLabels={{ [ENGAGE]: 'Ready-made' }}
+        ownerHeading="Whose"
+        hideUnfiled
         closeSignal={chooserClose}
         idPrefix="gsd-set"
         theme="dark"
@@ -915,17 +919,20 @@ export default function GameSetupDialog({
   const optionalBlock = hasFormat && !isOther ? (
     <div hidden={chooserOpen || undefined}>
       {!compact && <h3 className="gsd-optional-h">Optional — every one has a safe default</h3>}
-      {isCallAndAnswer && (compact ? (
-        <details className="gsd-brief-fold">
+      {/* ONE QUIET LINE until opened, in both layouts (frame 3b; live dev
+          tests V4: the large dashed box was the heaviest thing on the form
+          for an optional field). Open on its own when it holds a briefing. */}
+      {isCallAndAnswer && (
+        <details className="gsd-brief-fold" open={Boolean((briefing && briefing.text) || briefingWorking) || undefined}>
           <summary>
             <span className="gsd-adv-k"><i className="gsd-chev" aria-hidden="true" />Background for Workie</span>
-            <span className="gsd-adv-s">optional · add a document or write key points</span>
+            <span className="gsd-adv-s">
+              {briefing && briefing.text ? 'added · Workie will use it' : 'optional · add a document or write key points'}
+            </span>
           </summary>
           <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} heading="Background for Workie" intro={workieIntro} />
         </details>
-      ) : (
-        <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} heading="Background for Workie" intro={workieIntro} />
-      ))}
+      )}
       <SessionOptions
         idPrefix="gsd"
         gameType={engagementType}
@@ -968,11 +975,17 @@ export default function GameSetupDialog({
       {!compact && !phone && (
         <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('compact')}>I know these — show compact</button>
       )}
-      {compact && !phone && (
-        <button type="button" className="gsd-btn gsd-btn--link" onClick={() => chooseLayout('full')}>Always show the guide</button>
-      )}
     </span>
   );
+  /* Enter on a format goes on to the questions, as Enter in the title does
+     (live dev test 5 N1: Tab · ← · Enter · Enter · ⌘↵ = 5 keys). */
+  const afterFormatEnter = () => {
+    setTimeout(() => {
+      const next = bodyRef.current && (bodyRef.current.querySelector('#gsd-set-search')
+        || bodyRef.current.querySelector('.schs-picked .schs-btn'));
+      if (next) next.focus(); else primaryRef.current?.focus();
+    }, 0);
+  };
   const formatStep = (
     <section className="gsd-step gsd-step--format">
       <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
@@ -993,8 +1006,11 @@ export default function GameSetupDialog({
         disabled={isEdit}
         labelledBy="gsd-format-label"
         collapseAfter={phone && !isEdit ? 3 : 0}
+        onEnter={afterFormatEnter}
       />
-      {!showGallery && formatActs}
+      {/* Compact keeps its Format guide in the head, out of the path from
+          the chips to the search (live dev test 5 N1, N2). */}
+      {!showGallery && !compact && formatActs}
       {/* `blurb` from config/gameTypes.js — the chip row's one line, in full
           mode only: compact knows the formats (live dev test 2 O3). */}
       {!showGallery && !compact && hasFormat && (
@@ -1060,7 +1076,7 @@ export default function GameSetupDialog({
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${compact && peek ? ' gsd--peek' : ''}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
+      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
       /* THE BACKDROP STAYS INERT: there is nothing behind the overlay to go
@@ -1082,6 +1098,13 @@ export default function GameSetupDialog({
         <h2 id="gsd-heading">{headingText}</h2>
         {!compact && !isEdit && <p className="gsd-sub">Three decisions. Everything else has a sensible default.</p>}
         <span className="gsd-head-acts">
+          {/* COMPACT'S OWN LINKS, IN THE HEAD (live dev test 5 N1): out of the
+              Tab path from the format chips to the set search. */}
+          {compact && !isEdit && (
+            <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+              <Icon name="ListBullets" size={14} /> Format guide
+            </button>
+          )}
           {compact && !phone && (
             <button type="button" className="gsd-btn" aria-pressed={peek} onClick={() => setPeek((p) => !p)}>
               <Icon name="Monitor" size={14} /> {peek ? 'Hide preview' : 'Show preview'}
@@ -1102,7 +1125,7 @@ export default function GameSetupDialog({
       </div>
 
       <div
-        className={`gsd-body${showSide ? ' has-side' : ''}`}
+        className={`gsd-body${showSide && !compact ? ' has-side' : ''}${showSide && compact ? ' has-drawer' : ''}`}
         ref={bodyRef}
         /* THE DISCARD QUESTION NEVER HIDES CREATE FOR LONG (live dev test 1
            B5): going back to the form is "keep editing". */
@@ -1124,12 +1147,25 @@ export default function GameSetupDialog({
                   setView('form');
                 }}
                 onBack={() => { focusAfter.current = compareReturn.current || '.gsd-compare-link'; setView('form'); }}
+                shortUse={phone}
               />
+              {/* "Always show the guide" lives INSIDE the guide in compact
+                  (live dev test 5 N2), not as a permanent link. */}
+              {compact && !isEdit && (
+                <p className="gsd-compare-always">
+                  <button type="button" className="gsd-btn gsd-btn--link" onClick={() => { chooseLayout('full'); setView('form'); }}>
+                    Always open with the full guide
+                  </button>
+                </p>
+              )}
             </>
           ) : form}
         </div>
         {showSide && (
           <CreateSummary
+            /* Compact's "Show preview": the preview only, as a drawer inside
+               the 880px card (live dev test 5 N3: no widening, no checklist). */
+            drawer={compact}
             edit={isEdit}
             format={engagementType}
             anonymous={anonymousResponses}

@@ -12,6 +12,8 @@ import { render, screen, fireEvent, within, waitFor, act } from '@testing-librar
 import GameSetupDialog from '../components/GameSetupDialog';
 import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
 import SessionHistoryPanel from '../components/SessionHistoryPanel';
+import Modal from '../components/Modal';
+import Icon from '../components/Icon';
 import { pickSet, chosenSet, chooser } from '../testUtils/setChooser';
 import { setRefKey } from '../utils/setRef';
 
@@ -466,15 +468,70 @@ describe('live dev test fixes', () => {
     expect(screen.getByRole('button', { name: /hide preview/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('O3/E4: compact has no blurb, and Tab from the title reaches the formats before Format guide', () => {
+  /* Round 2 (devtest 5 N1, N2): in compact the next Tab stop after the
+     format chips is the set search — Format guide lives in the head and
+     "Always show the guide" only inside the guide. Round 1's E4 (title →
+     Tab reaches the formats first) still holds. */
+  test('O3/E4/N1/N2: compact has no blurb; title → formats → search, nothing between', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
     expect(screen.queryByText(/Open responses, then the room votes/)).toBeNull();
     const all = Array.from(document.querySelectorAll('button, input, [tabindex]'))
       .filter((el) => el.tabIndex >= 0 && !el.disabled);
+    const title = all.indexOf(screen.getByLabelText(/name it/i));
     const fmt = all.indexOf(radio('Call & Answer'));
-    const guide = all.indexOf(screen.getByRole('button', { name: /format guide/i }));
-    expect(fmt).toBeGreaterThan(-1);
-    expect(fmt).toBeLessThan(guide);
+    const search = all.indexOf(screen.getByRole('combobox', { name: /choose a question set/i }));
+    expect(fmt).toBe(title + 1);
+    expect(search).toBe(fmt + 1);
+    expect(screen.queryByRole('button', { name: /always/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /format guide/i }));
+    expect(screen.getByRole('button', { name: /always open with the full guide/i })).toBeInTheDocument();
+  });
+
+  test('N1: Enter on a format chip chooses it and moves on to the set search', async () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
+    fireEvent.keyDown(radio('Trivia'), { key: 'Enter' });
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /choose a question set/i })).toHaveFocus());
+  });
+
+  test('N3: compact Show preview is a drawer in the 880 card — no checklist, no next steps', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
+    const pane = screen.getByRole('complementary', { name: 'Preview' });
+    expect(pane).toHaveClass('gsd-side--drawer');
+    expect(screen.queryByText('What happens next')).toBeNull();
+    expect(document.querySelector('.gsd-body')).not.toHaveClass('has-side');
+    expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--peek');
+  });
+
+  test('V4: Background for Workie is one closed line until opened', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    const fold = document.querySelector('details.gsd-brief-fold');
+    expect(fold).not.toBeNull();
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector('summary').textContent).toMatch(/Background for Workie/);
+  });
+
+  test('C1/N6: this chooser says Ready-made and Whose, never Unfiled; the shared label is untouched', () => {
+    const sets = [
+      { id: 'lib', scope: 'platform', name: 'Library set', totalQuestions: 4, engagementType: 'call-and-answer', topic: '' },
+      { id: 'mine', scope: 'org', mine: true, name: 'My set', totalQuestions: 4, engagementType: 'call-and-answer', topic: '' },
+    ];
+    render(<GameSetupDialog {...base()} questionSets={sets} lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
+    const list = chooser();
+    expect(within(list).getByRole('columnheader', { name: 'Whose' })).toBeInTheDocument();
+    expect(within(list).getAllByText('Ready-made').length).toBeGreaterThan(0);
+    expect(within(list).queryByText('Engage')).toBeNull();
+    expect(within(list).queryByText(/Unfiled/)).toBeNull();
+    // eslint-disable-next-line global-require
+    expect(require('../utils/setOwnerTag').setOwnerLabel(sets[0])).not.toBe('Ready-made');
+  });
+
+  test('N4: no Tags column when no set has a tag', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
+    expect(within(chooser()).queryByRole('columnheader', { name: 'Tags' })).toBeNull();
   });
 
   test('B3: "Make a new set" opens the sets dialog on the new-set panel, above the shelf', async () => {
@@ -495,6 +552,82 @@ describe('live dev test fixes', () => {
       expect(screen.getByRole('button', { name: /^Create$/ })).toBeInTheDocument();
       expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--phone');
     } finally { window.matchMedia = before; }
+  });
+});
+
+describe('round 2: focus home, the sessions dialog, icons', () => {
+  /* H4 remainder (devtest 6): the host page swaps its whole tree for the
+     dialog, so the button that opened it is unmounted — and a fresh one
+     mounted on close. Focus must land on that fresh button. */
+  function Page({ withWork = false }) {
+    const [open, setOpen] = useState(false);
+    if (!open) return <button type="button" className="wel-action is-primary" onClick={() => setOpen(true)}>Create engagement</button>;
+    return <GameSetupDialog {...base({ onCancel: () => setOpen(false) })} lastFormat={withWork ? 'call-and-answer' : ''} />;
+  }
+  test.each([
+    ['the X on a clean form', (s) => fireEvent.click(s.getByRole('button', { name: /close without creating/i }))],
+    ['Cancel on a clean form', (s) => fireEvent.click(s.getByRole('button', { name: /^cancel$/i }))],
+    ['Escape on a clean form', () => fireEvent.keyDown(document, { key: 'Escape' })],
+  ])('closing by %s returns focus to the button that opened it', (_, close) => {
+    render(<Page />);
+    const opener = screen.getByRole('button', { name: 'Create engagement' });
+    opener.focus();
+    fireEvent.click(opener);
+    close(screen);
+    expect(screen.getByRole('button', { name: 'Create engagement' })).toHaveFocus();
+  });
+
+  test('Discard, after work in hand, returns focus to the opener too', () => {
+    render(<Page withWork />);
+    const opener = screen.getByRole('button', { name: 'Create engagement' });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
+    expect(screen.getByRole('button', { name: 'Create engagement' })).toHaveFocus();
+  });
+
+  test('N2: "Your sessions" goes through the shared Modal, labelled by its heading, focus moved in', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    const at = src.indexOf('contentClassName="new-game-dialog reports-modal"');
+    expect(at).toBeGreaterThan(-1);
+    const block = src.slice(src.lastIndexOf('<Modal', at), at + 400);
+    expect(block).toMatch(/labelledBy="shist-title"/);
+    expect(block).toMatch(/initialFocus="#shist-title"/);
+    expect(block).toMatch(/onClose=\{closeHistory\}/);
+  });
+
+  test('N2: with Modal, the sessions list is a named dialog, its heading takes focus, Esc closes', () => {
+    const onClose = jest.fn();
+    render(
+      <Modal overlayClassName="new-game-overlay" contentClassName="new-game-dialog reports-modal"
+        labelledBy="shist-title" onClose={onClose} closeOnBackdrop={false} initialFocus="#shist-title">
+        <SessionHistoryPanel sessions={[]} questionSets={[]} mode="select" onClose={onClose} />
+      </Modal>,
+    );
+    expect(screen.getByRole('dialog', { name: /Your sessions/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Your sessions/ })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  test('N1/N3: on a phone the sessions list is cards; names wrap with their full text in title=', () => {
+    const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'SessionHistoryPanel.css'), 'utf8');
+    const phone = css.slice(css.lastIndexOf('@media (max-width: 600px)'));
+    expect(phone).toMatch(/\.shist \.shist__tbl tr \{[^}]*display:\s*flex/);
+    expect(phone).toMatch(/\.shist \.shist__btn \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.shist \.shist__nm \{[^}]*white-space:\s*normal/);
+    render(<SessionHistoryPanel sessions={[{ gameId: '7158', title: 'UX QA — Round 2 speed run', gameType: 'trivia', byMe: true, createdAt: '2026-10-30T09:00:00Z' }]} questionSets={[]} mode="select" />);
+    expect(screen.getByText('UX QA — Round 2 speed run').closest('.shist__nm')).toHaveAttribute('title', 'UX QA — Round 2 speed run');
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+  });
+
+  test('L5: a decorative icon is hidden from assistive tech; a named one is not', () => {
+    const { container } = render(<><Icon name="Check" /><Icon name="Info" aria-label="About" /></>);
+    const svgs = container.querySelectorAll('svg');
+    expect(svgs[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(svgs[1]).not.toHaveAttribute('aria-hidden');
   });
 });
 

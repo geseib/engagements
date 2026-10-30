@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * ONE MODAL BEHAVIOUR, FOUR DIALOGS.
@@ -135,10 +135,24 @@ export default function Modal({
    * what every caller did before this prop existed.
    */
   theme,
+  /**
+   * A selector inside the dialog to focus as it opens, or omitted to leave
+   * focus where the dialog's own content puts it (most callers focus a field
+   * themselves). The sessions list uses its heading.
+   */
+  initialFocus,
 }) {
   const overlayRef = useRef(null);
   const contentRef = useRef(null);
   const entryRef = useRef({ overlay: null });
+  /*
+    THE OPENER, READ DURING THE FIRST RENDER. By the time this dialog's mount
+    effect runs, a page that swaps its whole tree for the dialog (the host
+    page's New engagement and sessions list) has already removed the button
+    that was pressed, and document.activeElement is <body>. During render it
+    is still the button (live dev test 6 H4).
+  */
+  const [renderOpener] = useState(() => (typeof document !== 'undefined' ? document.activeElement : null));
 
   // Read at event time, so the document listener below never re-subscribes and
   // never closes over a stale `busy` flag.
@@ -163,7 +177,13 @@ export default function Modal({
 
     // Where focus came from, so it can go back. Without this a keyboard user
     // who closes a dialog is dropped at the top of the document.
-    const opener = document.activeElement;
+    const live = document.activeElement;
+    const opener = live && live !== document.body && !(contentRef.current && contentRef.current.contains(live))
+      ? live : renderOpener;
+    if (initialFocus && contentRef.current) {
+      const first = contentRef.current.querySelector(initialFocus);
+      if (first && typeof first.focus === 'function') first.focus();
+    }
     /*
       THE OPENER MAY BE GONE AND BACK. A page that early-returns a dialog (the
       host page's New engagement) unmounts the button that opened it and
@@ -204,7 +224,7 @@ export default function Modal({
         if (late && typeof late.focus === 'function' && document.activeElement === document.body) late.focus();
       }, 0);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKeyDown = (event) => {

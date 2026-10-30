@@ -33,6 +33,8 @@ export default function FormatPicker({
   labelledBy,
   idPrefix = 'gsd-fmt',
   collapseAfter = 0,
+  /** Enter on an option: after choosing, the caller moves on (the set search). */
+  onEnter = null,
 }) {
   const refs = useRef([]);
   const groupRef = useRef(null);
@@ -79,6 +81,7 @@ export default function FormatPicker({
     else if (event.key === ' ' || (event.key === 'Enter' && !event.metaKey && !event.ctrlKey)) {
       event.preventDefault();
       choose(index);
+      if (event.key === 'Enter') onEnter?.();
       return;
     }
     if (next === null) return;

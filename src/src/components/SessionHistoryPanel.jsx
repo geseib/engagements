@@ -218,7 +218,7 @@ export default function SessionHistoryPanel({
     <div className="shist" data-theme="dark">
       <div className="shist__head">
         <div>
-          <h2 className="shist__title">
+          <h2 className="shist__title" id="shist-title" tabIndex={-1}>
             <Icon
               name={mode === 'select' ? 'GameController' : 'ChartBar'}
               weight="duotone"
@@ -317,7 +317,7 @@ export default function SessionHistoryPanel({
               <th className="shist__c-num">Rounds</th>
               <th className="shist__c-when">Created</th>
               <th className="shist__c-when">Last played</th>
-              <th className="shist__c-acts" />
+              <th className="shist__c-acts"><span className="shist__sr">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -371,12 +371,14 @@ export default function SessionHistoryPanel({
                   ].filter(Boolean).join(' ') || undefined}
                 >
                   <td>
-                    <span className="shist__nm">
+                    {/* The full strings in title=, and the name wraps to two
+                        lines rather than hiding "Latest" (live dev test 6 N3). */}
+                    <span className="shist__nm" title={title}>
                       {title}
                       {isCurrent && <span className="shist__flag shist__flag--now">On stage</span>}
                       {isLatest && !isCurrent && <span className="shist__flag">Latest</span>}
                     </span>
-                    <span className="shist__sub2">
+                    <span className="shist__sub2" title={session.questionSetId ? `Set: ${(set && set.name) || session.questionSetId}` : undefined}>
                       {/* The set's NAME where the list knows it, not its raw id
                           ("Set: workplacescenariosfordisc…", live dev test B6). */}
                       {session.questionSetId ? `Set: ${(set && set.name) || session.questionSetId}` : 'Set: —'}
@@ -415,8 +417,8 @@ export default function SessionHistoryPanel({
                   */}
                   <td className="shist__num">{countOrDash(session.playerCount)}</td>
                   <td className="shist__num">{countOrDash(session.roundsPlayed)}</td>
-                  <td className="shist__when">{formatWhen(session.createdAt)}</td>
-                  <td className="shist__when">{formatWhen(session.lastPlayedAt)}</td>
+                  <td className="shist__when" title={formatWhen(session.createdAt)}>{formatWhen(session.createdAt)}</td>
+                  <td className="shist__when" title={formatWhen(session.lastPlayedAt)}>{formatWhen(session.lastPlayedAt)}</td>
                   <td>
                     {/*
                       A FIXED TWO-COLUMN GRID, deliberately: four buttons in a

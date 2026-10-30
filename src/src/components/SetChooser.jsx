@@ -132,6 +132,16 @@ export default function SetChooser({
   closeSignal = 0,
   /** A phone: "Search 15 sets", which fits (live dev test 1 C9). */
   shortPlaceholder = false,
+  /**
+   * WORDS FOR THIS CHOOSER ONLY (live dev tests C1/N6): { [ownerTag]: label },
+   * e.g. { engage: 'Ready-made' } in the New engagement dialog. The shared
+   * utils/setOwnerTag.js labels are untouched for every other screen.
+   */
+  ownerLabels = {},
+  /** Say nothing for a set with no topic, rather than "Unfiled". */
+  hideUnfiled = false,
+  /** The owner column's heading. */
+  ownerHeading = 'Owner',
   now: nowProp = 0,
 }) {
   const [now] = useState(() => nowProp || Date.now());
@@ -150,7 +160,10 @@ export default function SetChooser({
      where Topic and Tags together do not. */
   const tagsRoomy = useContainerRoomy(rootRef, 700, windowRoomy);
   const wideCols = wide && roomy;
-  const tagCol = wide && (roomy || tagsRoomy);
+  // Only when some set carries a tag: an empty 200px column truncated every
+  // name (live dev test 5 N4).
+  const anyTags = sets.some((s) => Array.isArray(s.tags) && s.tags.length > 0);
+  const tagCol = wide && anyTags && (roomy || tagsRoomy);
   const opened = useRef(false);
   const searchRef = useRef(null);
   const changeRef = useRef(null);
@@ -201,9 +214,16 @@ export default function SetChooser({
   const pickable = (set) => !isUnreadable(set);
   const label = (set) => (isUnreadable(set) ? unreadableLabel(set) : set.name);
   const fmt = formatLabel ? `${formatLabel} ` : '';
-  const ownerWord = (tag) => (tag === TEAM && teamName ? teamName : OWNER_OPTIONS.find((o) => o.value === tag).label);
+  const ownerWord = (tag) => (tag === TEAM && teamName ? teamName
+    : (ownerLabels[tag] || OWNER_OPTIONS.find((o) => o.value === tag).label));
   // The team's own name where the chip would say Team (one team at a time: the active one).
-  const ownerChip = (set) => (setOwnerTag(set) === TEAM && teamName ? teamName : setOwnerLabel(set));
+  const ownerChip = (set) => {
+    const tag = setOwnerTag(set);
+    if (tag === TEAM && teamName) return teamName;
+    return ownerLabels[tag] || setOwnerLabel(set);
+  };
+  /** A set's topic in words, or nothing for an unfiled one when asked. */
+  const topicWords = (set) => (hideUnfiled && !SET_TOPICS[set.topic] ? '' : setTopicLabel(set.topic));
   const countWith = (p) => sets.filter((set) => predicate(set, { ...state, ...p })).length;
   const filtered = state.search.trim() || state.owner !== ALL || state.topic !== ALL || state.tags || state.updated !== 'any';
 
@@ -352,7 +372,7 @@ export default function SetChooser({
             {chosen && <span className="schs-dim">{chosen.totalQuestions || chosen.questionCount || 0} questions</span>}
             {chosen && <span className={`schs-own${setOwnerIsOurs(chosen) ? '' : ' schs-own--off'}`} title={setOwnerTitle(chosen)}>{ownerChip(chosen)}</span>}
             {/* "Unfiled" reads as something forgotten (live dev test 1 C1): say nothing instead. */}
-            {chosen && !compact && chosen.topic && <span className="schs-dim">{setTopicLabel(chosen.topic)}</span>}
+            {chosen && !compact && chosen.topic && topicWords(chosen) && <span className="schs-dim">{topicWords(chosen)}</span>}
             {!disabled && <button type="button" ref={changeRef} className="schs-btn schs-push" onClick={() => { setOpen(true); }}>Change</button>}
           </div>
         </div>
@@ -482,7 +502,7 @@ export default function SetChooser({
       {/* "Keep the set I had" BESIDE THE SEARCH (frame 5a), where the eye is
           when the host decides not to change after all. Esc does the same. */}
       <div className="schs-searchrow">
-        {searchBox(`Search ${sets.length} ${fmt}sets: name, description or tag`)}
+        {searchBox(shortPlaceholder ? `Search ${sets.length} sets` : `Search ${sets.length} ${fmt}sets: name, description or tag`)}
         {!stayOpen && <button type="button" className="schs-btn schs-keep" onClick={fold}>{chosen ? 'Keep the set I had' : 'Close'}</button>}
       </div>
       <div className="schs-filters">
@@ -501,7 +521,7 @@ export default function SetChooser({
             <span>Topic</span>
             <select value={state.topic} onChange={(e) => patch({ topic: e.target.value })} aria-label="Topic">
               <option value={ALL}>Any</option>
-              {[...SET_TOPIC_IDS, UNFILED].map((id) => (
+              {[...SET_TOPIC_IDS, ...(hideUnfiled ? [] : [UNFILED])].map((id) => (
                 <option key={id || 'unfiled'} value={id}>{id === UNFILED ? UNFILED_LABEL : SET_TOPICS[id].label} ({topicCount(id)})</option>
               ))}
             </select>
@@ -581,7 +601,7 @@ export default function SetChooser({
               <col className="schs-c-when" />
             </colgroup>
             <thead><tr>
-              <th>Name</th><th>Questions</th><th>Owner</th>
+              <th>Name</th><th>Questions</th><th>{ownerHeading}</th>
               {wideCols && <th className="schs-col-topic">Topic</th>}
               {tagCol && <th className="schs-col-tags">Tags</th>}
               <th>{state.updated === 'used' || grouped ? 'Used / updated' : 'Updated'}</th>
@@ -616,7 +636,7 @@ export default function SetChooser({
                       </td>
                       <td>{set.totalQuestions || set.questionCount || 0}</td>
                       <td><span className={`schs-own${setOwnerIsOurs(set) ? '' : ' schs-own--off'}`} title={setOwnerTitle(set)}>{ownerChip(set)}</span></td>
-                      {wideCols && <td className="schs-col-topic schs-dim">{setTopicLabel(set.topic)}</td>}
+                      {wideCols && <td className="schs-col-topic schs-dim">{topicWords(set)}</td>}
                       {tagCol && (
                         <td className="schs-col-tags" title={(set.tags || []).join(', ')}>
                           {(set.tags || []).slice(0, 3).map((t) => <span key={t} className="schs-tag">{t}</span>)}

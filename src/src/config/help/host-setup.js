@@ -223,8 +223,10 @@ const gameSetup = {
       side pane with Preview / Room screen / Phones / Replay, "Three decisions"
       or "Your choices", "What happens next") or compact (a host with
       history: last format chosen, "last used", **Show preview**, keycaps).
-      "I know these — show compact" / "Back to compact" / "Always show the
-      guide" (localStorage). Steps: "Name it" (autofocus; Enter goes to the
+      "I know these — show compact" / "Back to compact" / "Always open with
+      the full guide" (inside the compact Format guide; localStorage). Compact
+      Show preview is a drawer over the card; Enter on a format chip focuses
+      the set search. Steps: "Name it" (autofocus; Enter goes to the
       next empty step), "Pick a format" gallery with "Planning a…" chips
       (config/formatGuide.js MEETING_TYPES) and "Compare side by side", then
       "Format" chips with "Format guide"; one radio group (arrows choose).
@@ -310,7 +312,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'Once you have created a session the dialog opens compact, on the last format you used, with **Show preview** to put the preview panel beside it. **I know these — show compact** gives you compact sooner; **Always show the guide** brings the full layout back. That choice is kept in this browser.',
+          text: 'Once you have created a session the dialog opens compact, on the last format you used. Its top line has **Format guide** and **Show preview**, which slides the preview in over the right of the form. Enter on a format moves you to the question set. **I know these — show compact** gives you compact sooner; in the Format guide, **Always open with the full guide** brings the full layout back. That choice is kept in this browser.',
         },
       ],
     },
@@ -337,7 +339,7 @@ const gameSetup = {
             { title: 'Nothing matches', text: 'Each way out says how many sets it would find, including the same search in another format, then the ways to make your own (see When no set fits).' },
           ],
         },
-        { t: 'p', text: 'In Create engagement the list takes the whole dialog while it is open; your title and format fold to one line with **Edit**, and **Keep the set I had** (or Esc) folds the list again. The same chooser picks an agenda item\'s set.' },
+        { t: 'p', text: 'In Create engagement the list takes the whole dialog while it is open; your title and format fold to one line with **Edit**, and **Keep the set I had** (or Esc) folds the list again. There Engage\'s sets read **Ready-made**. The same chooser picks an agenda item\'s set.' },
         { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions. They stay in your question sets, where you change them.' },
       ],
     },
@@ -382,7 +384,7 @@ const gameSetup = {
         {
           t: 'steps',
           items: [
-            'Under Background for Workie (one line in the compact layout: open it), press **Choose a document** (PDF, Word or text, up to 4 MB), or **or write the key points yourself**.',
+            'Under Background for Workie (one quiet line until you open it), press **Choose a document** (PDF, Word or text, up to 4 MB), or **or write the key points yourself**.',
             'Workie reads the document and writes a short briefing, usually in under 15 seconds. Keep filling in the rest meanwhile; **Create engagement** waits until it is done.',
             'Read the briefing under What Workie will know and edit it as you like, up to 1,500 characters. **Replace** or **Remove** it any time before you create.',
           ],

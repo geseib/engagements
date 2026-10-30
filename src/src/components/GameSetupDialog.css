@@ -1852,7 +1852,7 @@
    `.gsd .gsd-foot-note { flex: 1 1 180px }` sat after its own media rule). */
 
 /* "Show preview" in compact: the 420px pane beside the compact form. */
-.gsd.new-game-dialog.gsd--compact.gsd--peek { width: min(1300px, calc(100vw - 48px)); }
+/* (Compact "Show preview" no longer widens the card: the preview is a drawer inside it, devtest 5 N3.) */
 
 /* Step 2 as a grid, so its links sit top right whatever their Tab order. */
 .gsd .gsd-step.gsd-step--format {
@@ -1878,11 +1878,11 @@
 .gsd .gsd-fmt--gallery { gap: 6px; padding: 6px 6px 10px; }
 .gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 5px 5px 9px; }
 .gsd .gsd-fmt-group--gallery { gap: 10px; }
-.gsd .gsd-fmt-art .gsd-fp { gap: 4px; padding: 6px 10px; }
-.gsd .gsd-fmt-art .gsd-fp-ans,
-.gsd .gsd-fmt-art .gsd-fp-slot { padding-top: 0; padding-bottom: 0; }
-.gsd .gsd-fmt-art .gsd-fp-mock { height: 38px; }
-.gsd .gsd-fmt-art .gsd-fp-word.is-big { font-size: var(--gsd-t-body); }
+.gsd .gsd-fp.gsd-fp--card { gap: 4px; padding: 6px 10px; }
+.gsd .gsd-fp--card .gsd-fp-ans,
+.gsd .gsd-fp--card .gsd-fp-slot { padding-top: 0; padding-bottom: 0; }
+.gsd .gsd-fp--card .gsd-fp-mock { height: 38px; }
+.gsd .gsd-fp--card .gsd-fp-word.is-big { font-size: var(--gsd-t-body); }
 .gsd .gsd-step { padding: 10px 0 12px; gap: 8px; }
 
 /* "More" on a phone (frames 10, 10b): not one of the options. */
@@ -1981,12 +1981,73 @@
 
 /* Gallery text a step smaller, art a little taller, so a card is whole and
    the second row ends nearer the fold (devtest M4). */
-.gsd .gsd-fmt-art .gsd-fp { height: 64px; }
+.gsd .gsd-fp.gsd-fp--card { height: 64px; }
 .gsd .gsd-fmt--gallery .gsd-fmt-desc { font-size: var(--gsd-t-floor); line-height: 1.35; gap: 2px; }
 .gsd .gsd-fmt--gallery .gsd-fmt-top { font-size: var(--gsd-t-label); flex-wrap: wrap; row-gap: 4px; }
 .gsd .gsd-fmt--gallery .gsd-fmt-name { white-space: nowrap; }
-.gsd .gsd-fmt-art .gsd-fp-ans b,
-.gsd .gsd-fmt-art .gsd-fp-row s,
-.gsd .gsd-fmt-art .gsd-fp-slot s { height: 4px; }
-.gsd .gsd-fmt-art .gsd-fp-opt { padding: 1px 6px; }
-.gsd .gsd-fmt-art .gsd-fp-tick { width: 11px; height: 11px; }
+.gsd .gsd-fp--card .gsd-fp-ans b,
+.gsd .gsd-fp--card .gsd-fp-row s,
+.gsd .gsd-fp--card .gsd-fp-slot s { height: 4px; }
+.gsd .gsd-fp--card .gsd-fp-opt { padding: 1px 6px; }
+.gsd .gsd-fp--card .gsd-fp-tick { width: 11px; height: 11px; }
+
+/* ============================================================ ROUND 2 POLISH
+   Live dev tests 4–6 (reviews/devtest-*-round2.md). */
+
+/* The card art fits its tile (the Compare tiles cut C&A's and Event's top
+   and bottom rows, devtest 6 M6 residue). */
+.gsd .gsd-fp--card em { line-height: 1.1; }
+.gsd .gsd-fp--card .gsd-fp-slot { gap: 6px; }
+.gsd .gsd-fp--card .gsd-fp-ans { gap: 6px; }
+
+/* COMPACT'S PREVIEW IS A DRAWER INSIDE THE 880px CARD (devtest 5 N3). */
+.gsd .gsd-body.has-drawer { position: relative; }
+.gsd .gsd-side.gsd-side--drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  width: min(380px, 100%);
+  border-left: 1px solid var(--gsd-rule-strong);
+  box-shadow: -18px 0 40px rgb(var(--shade-rgb) / 0.35);
+  overflow-y: auto;
+}
+.gsd .gsd-side--drawer .gsd-side-pv { flex: none; overflow: visible; }
+
+/* The caption sits above the picture now; spacing for that order. */
+.gsd .gsd-side-cap { margin: 4px 0 10px; }
+
+/* SHORT WINDOWS (1280×720, frame 12a): the pane scrolls, but the checklist
+   and next steps STAY PINNED at its foot (devtest 6 M5). */
+@media (max-height: 800px) {
+  .gsd .gsd-side .gsd-side-pin {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: auto;
+    background: var(--gsd-side);
+  }
+}
+
+/* "Always open with the full guide", inside the guide (devtest 5 N2). */
+.gsd .gsd-compare-always { margin: 8px 0 0; font-size: var(--gsd-t-label); }
+
+/* STEP 3 ON THE FIRST SCREEN AT 1440×900 (README §3.2; devtest 6 M4): the
+   head and the steps a step tighter — the cards keep their words. */
+.gsd .gsd-head { padding-top: 12px; padding-bottom: 10px; }
+.gsd .gsd-sub { margin-top: 2px; }
+.gsd .dialog-content { padding-top: 10px; }
+.gsd .gsd-step { padding: 8px 0 10px; gap: 6px; }
+.gsd .gsd-step-h { min-height: 24px; }
+.gsd .gsd-fmt-group--gallery { gap: 8px; }
+.gsd .gsd-fmt--gallery { padding: 5px 5px 8px; gap: 5px; }
+.gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 4px 4px 7px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-own { margin-top: 0; padding: 0 6px; }
+.gsd .gsd-step.is-later { padding-bottom: 4px; }
+.gsd .gsd-step .dialog-help-text { margin-top: 0; }
+
+/* Compact: no dead band between the topics and Advanced (devtest 4 N4). */
+.gsd.gsd--compact .gsd-cats { margin-bottom: 4px; }
+.gsd.gsd--compact .gsd-adv { margin-top: 4px; }
+.gsd.gsd--compact .gsd-namesline { margin: 4px 0 6px; }
