@@ -9,6 +9,28 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 30 Oct 2026 (later still: walkthrough picture)
+
+**Test:** merge of dev `310fe65f`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- Nothing new to use.
+
+### Fixed
+
+- **In the walkthrough's picture, the room screen's title ran behind the phone** ("Not a Do…"), and at 1280px wide the join code wrapped. The title now wraps clear of the phone and the join code stays on one line, in the side pane and in the Format guide.
+
+### What to look at
+
+1. On engage.test, open **Create engagement** and look at the walkthrough's picture on the right, then open **Format guide**: the room screen's title reads in full beside the phone, at your normal window size and at about 1280px wide.
+
+### Known gaps
+
+- None beyond the entry below.
+
+---
+
 ## 30 Oct 2026 (later: New engagement after the owner's first look)
 
 **Test:** merge of dev `cc0f239d`. Everything below this entry is already on test; this push adds only what is here.
