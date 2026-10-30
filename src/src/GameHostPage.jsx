@@ -921,8 +921,15 @@ function GameHostPage() {
   // words (utils/startRefusal.js). Shown on the list; cleared whenever the
   // list goes away, by whichever route, so it never greets the next opening.
   const [historyNotice, setHistoryNotice] = useState('');
+  /*
+    WHAT WAS JUST MADE, said on the list it lands on (live dev tests B6, C10:
+    "Did it work? What's 1224? Do I press Start now?"). { gameId, title,
+    verb: 'created' | 'saved' } — the list says so with the code and the next
+    step, and offers Start on that row. Cleared with the list.
+  */
+  const [historyDone, setHistoryDone] = useState(null);
   useEffect(() => {
-    if (!showReportsModal) setHistoryNotice('');
+    if (!showReportsModal) { setHistoryNotice(''); setHistoryDone(null); }
   }, [showReportsModal]);
   
   // `showFinalReport` used to live here. Nothing ever rendered it, and after
@@ -5810,6 +5817,7 @@ Focus on actionable business strategy insights.`;
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
       await fetchGamesList();
+      setHistoryDone({ gameId: targetId, title: form.title, verb: 'saved' });
     } catch (err) {
       console.error('❌ Error saving session edits:', err);
       alert(`Failed to save changes: ${err.message}`);
@@ -5934,6 +5942,7 @@ Focus on actionable business strategy insights.`;
           await fetchGamesList();
           setReportsModalMode('select');
           setShowReportsModal(true);
+          setHistoryDone({ gameId: newGameId, title: form.title, verb: 'created' });
         }
         setShowNewGameDialog(false);
 
@@ -6871,6 +6880,7 @@ Focus on actionable business strategy insights.`;
             onStart={startGameFromHistory}
             onEdit={editGameFromHistory}
             notice={historyNotice}
+            done={historyDone}
             onClose={() => {
               setHistoryNotice('');
               setShowReportsModal(false);

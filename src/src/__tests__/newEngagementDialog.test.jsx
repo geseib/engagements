@@ -11,6 +11,7 @@ import React, { useState } from 'react';
 import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import GameSetupDialog from '../components/GameSetupDialog';
 import HostQuestionSetsDialog from '../components/HostQuestionSetsDialog';
+import SessionHistoryPanel from '../components/SessionHistoryPanel';
 import { pickSet, chosenSet, chooser } from '../testUtils/setChooser';
 import { setRefKey } from '../utils/setRef';
 
@@ -67,6 +68,11 @@ function PageHarness({ initialKey = '', lists = {}, onCreate, onRetry, holdLoads
       categories={state.categories}
       activeCategoryIds={state.active}
       categoryStatus={state.status}
+      onToggleCategory={(name) => setState((s) => {
+        const active = new Set(s.active);
+        if (active.has(name)) active.delete(name); else active.add(name);
+        return { ...s, active };
+      })}
       onQuestionSetChange={(id, scope) => {
         const key = id ? setRefKey({ id, scope }) : '';
         // The real loader clears at once and reports loading for the new key.
@@ -252,7 +258,7 @@ describe('a host with history', () => {
   test('the recents are one click away, and a Tab into the search does not open the full chooser', () => {
     const props = base();
     render(<GameSetupDialog {...props} hasCreated lastFormat="call-and-answer" recentSetUses={new Map([[KEY_B, Date.now()]])} />);
-    fireEvent.focus(screen.getByRole('textbox', { name: /choose a question set/i }));
+    fireEvent.focus(screen.getByRole('combobox', { name: /choose a question set/i }));
     expect(screen.queryByTestId('set-chooser-row')).toBeNull();
     fireEvent.click(within(screen.getByRole('listbox', { name: 'Used by you lately' })).getByRole('option'));
     expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('setb', 'platform');
@@ -352,6 +358,165 @@ describe('names and Workie, said plainly', () => {
   });
 });
 
+/* ── The live dev tests, 30 Oct 2026 (reviews/devtest-1/2/3) ─────────── */
+describe('live dev test fixes', () => {
+  test('E1: pick a recent with Enter, then Ctrl+Enter creates (focus stays in the dialog)', () => {
+    const onCreate = jest.fn();
+    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer"
+      recentSetUses={new Map([[KEY_B, Date.now()]])} />);
+    const box = screen.getByRole('combobox', { name: /choose a question set/i });
+    box.focus();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement, { key: 'Enter', ctrlKey: true });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test('E1: Ctrl+Enter on <body> while the dialog is open still creates', () => {
+    const onCreate = jest.fn();
+    render(<GameSetupDialog {...base({ onCreate })} lastFormat="call-and-answer" />);
+    pickSet(KEY_B);
+    document.activeElement.blur();
+    fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test('E2: Ctrl+Enter while topics load is queued, says so, and creates when they arrive', () => {
+    const onCreate = jest.fn();
+    render(<PageHarness onCreate={onCreate} />);
+    pickSet(KEY_B);
+    fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Waiting for topics…' })).toBeInTheDocument();
+    expect(screen.getByText(/created as soon as they arrive/)).toBeInTheDocument();
+    PageHarness.answer(KEY_B, B);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0][0].categoryIds).toEqual(['Pricing', 'Ops']);
+  });
+
+  test('E6: on a plan without events, Ctrl+Enter says why instead of claiming a move', () => {
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer"
+      eventsAccess={{ enabled: true, canCreate: false, offerPlanName: 'Standard plan' }} />);
+    fireEvent.click(radio('Event'));
+    fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
+    expect(screen.getByText(/Events come with the Standard plan, so there is nothing to continue to/)).toBeInTheDocument();
+    expect(screen.queryByText(/moved to Continue/)).toBeNull();
+  });
+
+  test('B4: "Use Trivia" in Compare lets go of the Retro chip and its line', () => {
+    render(<GameSetupDialog {...base()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Retro' }));
+    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Trivia' }));
+    expect(screen.getByRole('button', { name: 'Retro' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText(/For a retro/)).toBeNull();
+    expect(radio('Trivia')).toHaveFocus();
+  });
+
+  test('H4: Compare takes the focus to its heading, and Back returns it to the link', () => {
+    render(<GameSetupDialog {...base()} />);
+    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
+    expect(screen.getByRole('heading', { name: 'Compare the formats' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: /back to the form/i }));
+    expect(screen.getByRole('button', { name: /compare side by side/i })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: /compare side by side/i }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: /compare side by side/i })).toHaveFocus();
+  });
+
+  test('B5: Esc in the empty set search does not ask to discard; the discard bar goes when the host goes back to the form', () => {
+    const props = base();
+    render(<GameSetupDialog {...props} lastFormat="call-and-answer" />);
+    fireEvent.keyDown(screen.getByRole('combobox', { name: /choose a question set/i }), { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Browse all/ }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('button', { name: /create engagement/i })).toBeInTheDocument();
+  });
+
+  test('B7: compact draws no pinned summary row over the topics', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" categories={A}
+      activeCategoryIds={new Set(['Law'])} initialSetId="seta" />);
+    expect(document.querySelector('.gsd-compact-sum')).toBeNull();
+    expect(screen.queryByText(/all 2 topics/)).toBeNull();
+  });
+
+  test('B8: switched-off topics come back with the set after a format round trip', () => {
+    render(<PageHarness holdLoads={false} lists={{ [KEY_A]: A }} />);
+    pickSet(KEY_A);
+    fireEvent.click(screen.getByText('Law').closest('button'));
+    expect(screen.getByText('Law').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
+    fireEvent.keyDown(radio('Trivia'), { key: 'ArrowLeft' });
+    expect(chosenSet()).toBe(KEY_A);
+    expect(screen.getByText('Law').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Architecture').closest('button')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('E8: compact "Show preview" adds only the side pane, not the beginner guide', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: /show preview/i }));
+    expect(screen.getByRole('complementary')).toBeInTheDocument();
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--compact');
+    expect(screen.queryByText(/Planning a/)).toBeNull();
+    expect(screen.queryByText(/Three decisions\. Everything else/)).toBeNull();
+    expect(screen.getByRole('button', { name: /hide preview/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('O3/E4: compact has no blurb, and Tab from the title reaches the formats before Format guide', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    expect(screen.queryByText(/Open responses, then the room votes/)).toBeNull();
+    const all = Array.from(document.querySelectorAll('button, input, [tabindex]'))
+      .filter((el) => el.tabIndex >= 0 && !el.disabled);
+    const fmt = all.indexOf(radio('Call & Answer'));
+    const guide = all.indexOf(screen.getByRole('button', { name: /format guide/i }));
+    expect(fmt).toBeGreaterThan(-1);
+    expect(fmt).toBeLessThan(guide);
+  });
+
+  test('B3: "Make a new set" opens the sets dialog on the new-set panel, above the shelf', async () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Make a new set' }));
+    expect(await screen.findByText('How do you want to make it?')).toBeInTheDocument();
+  });
+
+  test('phone (frames 10/10b): formats folded behind More, Create says Create', () => {
+    const before = window.matchMedia;
+    window.matchMedia = (q) => ({ matches: /max-width: 600px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
+    try {
+      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+      const group = screen.getByRole('radiogroup', { name: /format/i });
+      expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Call & Answerlast used', 'Trivia', 'Poll']);
+      fireEvent.click(screen.getByRole('button', { name: /^More/ }));
+      expect(within(group).getAllByRole('radio').length).toBe(5);
+      expect(screen.getByRole('button', { name: /^Create$/ })).toBeInTheDocument();
+      expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--phone');
+    } finally { window.matchMedia = before; }
+  });
+});
+
+describe('after Create, the sessions list says what happened (live dev test B6/C10)', () => {
+  const SESSION = {
+    gameId: '1224', title: 'UX QA — Retro test', gameType: 'call-and-answer', questionSetId: 'seta',
+    hostName: 'Host', byMe: true, started: false, createdAt: '2026-10-30T09:00:00Z', state: 'CREATED',
+  };
+  test('a confirmation with the code and the next step, Start on that row, the set by name, no "host Host"', () => {
+    const onStart = jest.fn();
+    render(<SessionHistoryPanel sessions={[SESSION]} questionSets={SETS} mode="select" onStart={onStart}
+      done={{ gameId: '1224', title: 'UX QA — Retro test', verb: 'created' }} />);
+    const done = screen.getByTestId('shist-done');
+    expect(done).toHaveTextContent('Created “UX QA — Retro test”. Its code is 1224.');
+    expect(done).toHaveTextContent(/nobody can join until you press Start/);
+    fireEvent.click(within(done).getByRole('button', { name: /Start it now/ }));
+    expect(onStart).toHaveBeenCalledWith(SESSION);
+    expect(screen.getByText(/Set: Lessons from Different Schools/)).toBeInTheDocument();
+    expect(screen.queryByText(/host Host/)).toBeNull();
+  });
+});
+
 describe('the routes open straight into their builder (HostQuestionSetsDialog initialRoute)', () => {
   test('template and manual open the New question set panel; no route opens the shelf', async () => {
     const { unmount } = render(<HostQuestionSetsDialog engagementType="trivia" initialRoute="template" onClose={jest.fn()} />);
@@ -367,7 +532,7 @@ describe('no set fits', () => {
   test('the no-match state offers the three make-your-own routes after the exits', () => {
     render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
     fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: /Search 2 Call & Answer sets/ }), { target: { value: 'retro' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /Search 2 Call & Answer sets/ }), { target: { value: 'retro' } });
     const routes = screen.getByTestId('set-chooser-routes');
     expect(within(routes).getByRole('button', { name: /Write your own questions/ })).toBeInTheDocument();
     expect(within(routes).getByRole('button', { name: /Make a set with Workie/ })).toBeInTheDocument();

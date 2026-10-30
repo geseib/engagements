@@ -189,6 +189,13 @@ export default function SessionHistoryPanel({
    * in the server's own words. Shown as an alert under the header.
    */
   notice = '',
+  /**
+   * WHAT WAS JUST MADE OR SAVED: { gameId, title, verb: 'created' | 'saved' }
+   * from the page, or null. Said on the list it lands on, with the join code
+   * and the next step (live dev tests: "Did it work? What's 1224? Do I press
+   * Start now?").
+   */
+  done = null,
 }) {
   const [search, setSearch] = useState('');
   const [type, setType] = useState('all');
@@ -245,6 +252,26 @@ export default function SessionHistoryPanel({
       {notice && (
         <div className="shist__notice" role="alert">{notice}</div>
       )}
+
+      {done && done.gameId && (() => {
+        const row = (sessions || []).find((s) => String(s.gameId) === String(done.gameId)) || null;
+        return (
+          <div className="shist__done" role="status" data-testid="shist-done">
+            <Icon name="CheckCircle" weight="fill" size={18} color="currentColor" />
+            <p>
+              <b>{done.verb === 'saved' ? 'Saved' : 'Created'} “{done.title || (row && titleOf(row)) || 'your session'}”.</b>
+              {' '}Its code is <b className="shist__mono">{done.gameId}</b>.
+              {' '}It waits here, and nobody can join until you press <b>Start</b> when the room is ready
+              {' '}— today or on the day. You can still <b>Edit</b> it first.
+            </p>
+            {row && !row.started && (
+              <button type="button" className="shist__done-start" onClick={() => onStart(row)}>
+                <Icon name="Play" weight="fill" size={13} color="currentColor" /> Start it now
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* The search is what makes the second empty state below meaningful. With
           no way to filter, "nothing matches" can never happen and the only
@@ -336,7 +363,13 @@ export default function SessionHistoryPanel({
               const set = questionSets.find((s) => s.id === session.questionSetId);
 
               return (
-                <tr key={session.gameId} className={isCurrent ? 'shist__row--now' : undefined}>
+                <tr
+                  key={session.gameId}
+                  className={[
+                    isCurrent ? 'shist__row--now' : '',
+                    done && String(done.gameId) === String(session.gameId) ? 'shist__row--done' : '',
+                  ].filter(Boolean).join(' ') || undefined}
+                >
                   <td>
                     <span className="shist__nm">
                       {title}
@@ -344,8 +377,11 @@ export default function SessionHistoryPanel({
                       {isLatest && !isCurrent && <span className="shist__flag">Latest</span>}
                     </span>
                     <span className="shist__sub2">
-                      {session.questionSetId ? `Set: ${session.questionSetId}` : 'Set: —'}
-                      {session.hostName ? ` · host ${session.hostName}` : ''}
+                      {/* The set's NAME where the list knows it, not its raw id
+                          ("Set: workplacescenariosfordisc…", live dev test B6). */}
+                      {session.questionSetId ? `Set: ${(set && set.name) || session.questionSetId}` : 'Set: —'}
+                      {/* "Host" is the create payload's placeholder, not a person. */}
+                      {session.hostName && session.hostName !== 'Host' ? ` · host ${session.hostName}` : ''}
                       <SetImageBadge hasImages={set?.hasImages} />
                     </span>
                   </td>
