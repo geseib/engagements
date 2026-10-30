@@ -96,10 +96,12 @@ const quickStart = {
       ],
     },
     /*
-      GameSetupDialog.jsx: Event title (:409), Format pills from
-      PICKER_GAME_TYPES (:424), Question set filtered by format (:206),
-      Categories (SessionOptions.jsx SessionCategories). The gameTypes table is
-      derived from config/gameTypes.js and is pinned by helpSystem.test.jsx §7.
+      GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
+      three numbered steps — "Name it", "Pick a format" / "Format" (one radio
+      group, FormatPicker.jsx), "Question set" (SetChooser.jsx) — then "Topics
+      in this set" (SessionOptions.jsx SessionCategories, all on). The
+      gameTypes table is derived from config/gameTypes.js and is pinned by
+      helpSystem.test.jsx §7.
     */
     {
       id: 'step-1-create',
@@ -110,13 +112,13 @@ const quickStart = {
           t: 'steps',
           items: [
             'Choose **Create engagement** on the start screen.',
-            'Type an **Event title**. The room sees it, so make it the name of the meeting.',
-            'Pick a **Format**, then a **Question set** of that format.',
-            'Pick categories if you want only some of the questions. None picked means all of them.',
+            'Under **Name it**, type the session\'s name. The room sees it, so make it the name of the meeting.',
+            'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Compare side by side**.',
+            'Every topic in the set starts on. Switch off any you want to skip.',
             'Press **Create engagement**.',
           ],
         },
-        { t: 'p', text: 'Every field, Workie\'s briefing and the Advanced options are in Setting a session up.' },
+        { t: 'p', text: 'Every field, Background for Workie and the Advanced options are in Setting a session up.' },
         { t: 'h', text: 'The formats you can run' },
         { t: 'gameTypes' },
       ],
@@ -215,15 +217,27 @@ const gameSetup = {
   summary: 'Create engagement field by field, Advanced, Quick start, one or two screens, your question sets and your sessions list.',
   sections: [
     /*
-      GameSetupDialog.jsx: heading "New engagement" | "Start a new engagement"
-      (:389); Format pills incl. Build Room and Event (OTHER_FORMATS, :18-26,
-      Event only while events are on: "Events come with the …" + See plans);
-      the blurb under the pills; Question set select filtered by format,
-      "Your question sets" / "Make a question set" (:519); SessionCategories
-      ("None picked, so all N are in"); Create engagement / Open the survey /
-      Set up the Build Room / Continue to the event (:19-22, :663); the foot
-      note; requestClose -> "Discard this engagement?" Keep editing / Discard.
-      Unreadable sets are offered but disabled (:492).
+      GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
+      heading "New engagement" | "Start a new engagement"; full layout (no
+      sessions yet: "Three decisions. Everything else has a sensible default.",
+      side pane with Preview / Room screen / Phones / Replay, "Three decisions"
+      or "Your choices", "What happens next") or compact (a host with
+      history: last format chosen, "last used", **Show preview**, keycaps).
+      "I know these — show compact" / "Back to compact" / "Always show the
+      guide" (localStorage). Steps: "Name it" (autofocus; Enter goes to the
+      next empty step), "Pick a format" gallery with "Planning a…" chips
+      (config/formatGuide.js MEETING_TYPES) and "Compare side by side", then
+      "Format" chips with "Format guide"; one radio group (arrows choose).
+      "Question set": the recents list ("Used by you lately", "Browse all"),
+      "Your question sets · Make a new set"; the set is remembered per format
+      while open. "Topics in this set" (all on, "Switch off any you want to
+      skip.", "Loading this set's topics…", Retry). Names line "Names are
+      hidden until the vote closes" + Change (Call & Answer), "Names: …" for a
+      survey. "Optional — every one has a safe default": Background for Workie
+      and Advanced. Build Room / Event: "Next: the Build Room page" / "the
+      event page", Set up the Build Room / Continue to the event; ⌘/Ctrl+Enter
+      moves to that button. Foot notes; requestClose -> "Discard this
+      engagement?" Keep editing / Discard. Unreadable sets offered, disabled.
     */
     {
       id: 'create-engagement',
@@ -231,21 +245,72 @@ const gameSetup = {
       icon: 'Plus',
       blocks: [
         {
+          t: 'p',
+          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Everything else has a safe default and sits under **Optional**.',
+        },
+        {
           t: 'list',
           items: [
-            { title: 'Event title', text: 'What the room sees the session called. Required.' },
-            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey, with a line under the buttons saying what each is. Build Room and Event are here too: pick one and the button becomes **Set up the Build Room** or **Continue to the event**, which takes your title to that screen.' },
-            { title: 'Question set', text: 'A search box with the sets you used lately under it; click one, or type to search the sets of the chosen format (see Finding a question set). Once picked it is one line with **Change**. Changing the format clears the set. **Your question sets** opens your sets, to fix or make one without leaving; it says **Make a question set** when you have none of that format.' },
-            { title: 'Categories', text: 'Appears once a set is picked, with each category\'s question count. None picked means all of them; the line underneath says how many questions are in.' },
+            { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required. The cursor starts here; Enter takes you to the next step you have not done.' },
+            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room, one plain line and what it is good for. The arrow keys move between them and choose. See Choosing a format.' },
+            { title: 'Build Room and Event', text: 'They continue on their own page. Pick one and the third step says what that page asks for; the button becomes **Set up the Build Room** or **Continue to the event**, and takes your title with it. Event is offered when your plan includes events; otherwise it says which plan does.' },
+            { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press the down arrow and Enter. Type to search, or press **Browse all** (see Finding a question set). Once picked it is one line with **Change**. Switch format and back, and the set you had comes back. **Your question sets** opens your sets; **Make a new set** starts one.' },
           ],
         },
         {
           t: 'p',
-          text: 'Call & Answer also has Workie\'s briefing (below), and every format has **Advanced**. The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away.',
+          text: 'Close it with **Cancel**, the ×, or Esc. If you have filled anything in, it asks first: **Keep editing** or **Discard**.',
+        },
+      ],
+    },
+    /*
+      GameSetupDialog.jsx: SessionCategories under the set ("Topics in this
+      set", all on, "Loading this set's topics…", Retry); the names line; the
+      foot notes; ⌘/Ctrl+Enter (config/formatGuide.js isCreateShortcut).
+    */
+    {
+      id: 'create-topics-names',
+      title: 'Topics, names and creating',
+      icon: 'ListChecks',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Topics in this set', text: 'Appears once a set is picked, every topic on, each with its question count and a tick. Switch off any you want to skip; the line underneath says how many questions are in. Change the set and the topics are the new set\'s: while they load the button reads **Loading topics…**; if they cannot load, it says so and offers **Retry**.' },
+            { title: 'Names', text: 'For Call & Answer a line says **Names are hidden until the vote closes**, then shown with the results. **Change** opens the setting under Advanced. A survey shows its Names choice the same way.' },
+            { title: 'Optional', text: 'Call & Answer has Background for Workie (below), and every format has **Advanced**. Each has a safe default.' },
+          ],
         },
         {
           t: 'p',
-          text: 'Close it with **Cancel**, the ×, or Esc. If you have filled anything in, it asks first: **Keep editing** or **Discard**.',
+          text: 'The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away. Ctrl+Enter (⌘+Enter on a Mac) creates once the three steps are done; on Build Room or Event it moves to the button instead, and Enter there goes on.',
+        },
+      ],
+    },
+    /*
+      FormatPicker.jsx (gallery / chips, one radio group), MeetingTypeChips.jsx
+      ("Planning a…", config/formatGuide.js MEETING_TYPES), FormatCompare.jsx
+      (Pace, Questions, Starts; Use …), CreateSummary.jsx (Preview, Room
+      screen / Phones, Replay, the checklist, What happens next). Compact for
+      a host with history (formatGuide.js historyFacts); the override in
+      localStorage (readLayoutOverride).
+    */
+    {
+      id: 'choosing-a-format',
+      title: 'Choosing a format',
+      icon: 'ListBullets',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Planning a…', text: 'Press the kind of meeting (Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day) and it picks a format and says why. You can still pick any other.' },
+            { title: 'Compare side by side', text: 'One table: what the room does, what you get, who sets the pace, group size, where the questions come from and how it starts. Each format\'s **Use** button returns you to the form with it chosen. Once a set is picked the same table is **Format guide**.' },
+            { title: 'The panel on the right', text: 'The first time, it shows the room screen and the phones for the format (**Replay** plays it again), what you have decided so far, and what happens next.' },
+          ],
+        },
+        {
+          t: 'p',
+          text: 'Once you have created a session the dialog opens compact, on the last format you used, with **Show preview** for the panel. **I know these — show compact** gives you compact sooner; **Always show the guide** brings the full layout back. That choice is kept in this browser.',
         },
       ],
     },
@@ -269,11 +334,32 @@ const gameSetup = {
             { title: 'Search', text: 'Finds a word in a set\'s name, description or tags. The arrow keys move through the list and Enter picks; Esc clears the search, then closes the list.' },
             { title: 'Whose sets', text: 'All, Yours, your team (by its name), Engage and Public, each with how many match. You see one team at a time: the one you are working in. **Switch team** appears when you belong to more than one, and reloads the page in that team.' },
             { title: 'Topic, Tag, Updated, Sort', text: 'Tag takes several at once: a set with any of them. Updated narrows to the sets you used lately, ones changed this week or this month, or older ones. Each filter in use shows above the list with an × to take it off; **Clear all** takes them all off.' },
-            { title: 'Nothing matches', text: 'Each way out says how many sets it would find, including the same search in another format. **Make a new set** opens your question sets.' },
+            { title: 'Nothing matches', text: 'Each way out says how many sets it would find, including the same search in another format, then the ways to make your own (see When no set fits).' },
           ],
         },
-        { t: 'p', text: 'In Create engagement the dialog widens while the list is open, so each set shows its description, topic and tags; a narrow window leaves out topic and tags. The same chooser picks the set for an agenda item in an event.' },
-        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions, at any point in the room. They stay in your question sets, where you change them.' },
+        { t: 'p', text: 'In Create engagement the list takes the whole dialog while it is open; your title and format fold to one line with **Edit**, and **Keep the set I had** (or Esc) folds the list again. The same chooser picks an agenda item\'s set.' },
+        { t: 'p', text: 'Sets tagged build-room are not listed here, in Quick start or in an agenda item: a Build Room asks them from its own ready questions. They stay in your question sets, where you change them.' },
+      ],
+    },
+    /*
+      SetChooser.jsx makeRoutes, wired in GameSetupDialog.jsx to
+      HostQuestionSetsDialog initialRoute (manual / ai / template); a set the
+      sets dialog newly reports for this format is picked (takeSets).
+    */
+    {
+      id: 'no-set-fits',
+      title: 'When no set fits',
+      icon: 'PencilSimple',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Write your own questions', text: 'Opens your question sets with a new set started, for the format you are on.' },
+            { title: 'Make a set with Workie', text: 'Opens Workie\'s builder: describe the meeting and Workie drafts questions for you to review.' },
+            { title: 'Fill in a spreadsheet', text: 'Opens your question sets with the template ready to download, fill in and upload.' },
+          ],
+        },
+        { t: 'p', text: 'A set you upload is picked for the engagement as soon as it is saved. One Workie drafts waits for your review first, then appears in the list.' },
       ],
     },
     /*
@@ -291,12 +377,12 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Give Workie the background to a Call & Answer session, such as a report, a review or a plan, and it uses it when it writes What we heard. It is optional, and people who join never see it.',
+          text: 'Workie is Engage\'s AI assistant: after each round it sums up what the room said. Give it the background to a Call & Answer session, such as a report, a review or a plan, and it uses it when it writes What we heard. It is optional, and people who join never see it.',
         },
         {
           t: 'steps',
           items: [
-            'Under Workie\'s briefing, press **Choose a document** (PDF, Word or text, up to 4 MB), or **or write the key points yourself**.',
+            'Under Background for Workie (one line in the compact layout: open it), press **Choose a document** (PDF, Word or text, up to 4 MB), or **or write the key points yourself**.',
             'Workie reads the document and writes a short briefing, usually in under 15 seconds. Keep filling in the rest meanwhile; **Create engagement** waits until it is done.',
             'Read the briefing under What Workie will know and edit it as you like, up to 1,500 characters. **Replace** or **Remove** it any time before you create.',
           ],
