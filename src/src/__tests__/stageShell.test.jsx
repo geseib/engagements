@@ -90,6 +90,7 @@ import Rail from '../components/stage/Rail';
 import PhaseBar from '../components/stage/PhaseBar';
 import RoomMeter from '../components/stage/RoomMeter';
 import Dock from '../components/stage/Dock';
+import KeyCap from '../components/stage/KeyCap';
 
 describe('the stage grid', () => {
   test('the profile class lands on the document root, not on a wrapper', () => {
@@ -569,17 +570,18 @@ describe('the dock', () => {
     expect(container.querySelector('.hint').textContent).toBe('Space also advances');
   });
 
-  test('the SPACE affordance is the dock\'s own, not HostActionBar\'s', () => {
-    // HostActionBar renders a `.host-action-bar__kbd` and then hides it under
-    // `.big-screen-mode` — the mode the dock ALWAYS passes — so the hint was
-    // invisible in all four profiles. That is the state the `.dock .kbd` note
-    // in styles/stage.css exists to prevent, undone by composition. Every
-    // mockup dock carries this span.
-    const { container, rerender } = render(<Dock onSetup={() => {}}><button type="button">Go</button></Dock>);
-    expect(container.querySelector('.kbd')).toBeNull();
-    rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go</button></Dock>);
-    const kbd = container.querySelector('.kbd');
-    expect(kbd.textContent).toBe('or press Space');
+  test('the dock decides the SPACE cap, and the main button draws it', () => {
+    // The dock says whether Space presses its main button (`kbd`); the cap
+    // the button draws reads that (KeyCap via DockKeyContext). It used to be
+    // the dock's own span beside the button — and before that HostActionBar's,
+    // hidden under `.big-screen-mode` in all four profiles. Now it is on the
+    // button (owner, 31 Oct 2026), and shown in every profile.
+    const { container, rerender } = render(<Dock onSetup={() => {}}><button type="button">Go<KeyCap /></button></Dock>);
+    expect(container.querySelector('.keycap')).toBeNull();
+    rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go<KeyCap /></button></Dock>);
+    const kbd = container.querySelector('.keycap');
+    expect(kbd.textContent).toBe('Space');
+    expect(kbd.closest('button')).not.toBeNull();
     // A visual affordance for the operator, not a control the room's assistive
     // tech should announce between the button and its status.
     expect(kbd.getAttribute('aria-hidden')).toBe('true');

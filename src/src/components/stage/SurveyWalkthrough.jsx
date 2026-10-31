@@ -10,6 +10,7 @@ import RankResult from '../survey/results/RankResult';
 import TextResult from '../survey/results/TextResult';
 import { pageCount, pageSizeFor, pageSlice } from '../../config/stagePaging';
 import { surveyWalkthroughKeyIntent } from '../../config/surveyWalkthrough';
+import KeyCap from './KeyCap';
 import '../survey/results/SurveyResults.css';
 
 /**
@@ -259,8 +260,9 @@ export default function SurveyWalkthrough({
           <button type="button" className="btn ghost" onClick={goPrevious} disabled={atStart}>
             Previous
           </button>
-          <button type="button" className="btn primary" onClick={handleNextClick}>
+          <button type="button" className="btn primary" onClick={handleNextClick} aria-keyshortcuts={atEnd ? undefined : 'Space'}>
             {atEnd ? 'Done' : 'Next result'}
+            <KeyCap />
           </button>
         </Dock>
       )}

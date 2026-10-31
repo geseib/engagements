@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import Stage from '../stage/Stage';
 import Modal from '../Modal';
 import Icon from '../Icon';
+import KeyCap from '../stage/KeyCap';
 import HelpButton from '../HelpButton';
 import { helpFor } from '../../config/help/screens';
 import { getEvent, runEvent, readDeck, turnPage, sessionExists } from '../../utils/eventsApi';
@@ -25,8 +26,11 @@ import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
 const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
-// EXIT's "leave": the console's Events, where the event is opened again.
-const EVENTS_PATH = '/admin?section=events';
+// EXIT's "leave": the host's start screen, where a session's "All sessions"
+// goes too, and whose Events strip lists this event (Running, first) with a
+// button straight back to this stage (owner, 31 Oct 2026). The agenda page's
+// own way back uses the same address (HostEventAgenda.jsx).
+const START_PATH = '/host';
 
 /**
  * THE EVENT'S STAGE — /host/event/<code> (events M3, reworked 27 Sep 2026).
@@ -843,8 +847,21 @@ export default function EventStage({ code }) {
       {focused && isBreak(focused.type) && focused.state === 'live' && (
         <button type="button" className="btn ghost" disabled={busy} onClick={() => act('extend', focused)}>+5 min</button>
       )}
-      {plan && !ended && <span className="kbd" aria-hidden="true">SPACE</span>}
-      {plan && <button type="button" className="btn" disabled={busy} onClick={plan.run}>{plan.label}</button>}
+      {plan && (
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={plan.run}
+          title={ended ? undefined : 'Space also does this'}
+          aria-keyshortcuts={ended ? undefined : 'Space'}
+        >
+          {plan.label}
+          {/* The key, on the button (owner, 31 Oct 2026: not "SPACE"
+              dangling beside it). components/stage/KeyCap.jsx. */}
+          {!ended && <KeyCap on={!busy} />}
+        </button>
+      )}
       {/* Help (Help Phase 3): the event-day guide's board section, in the dock
           with the host's other controls, as on a session's stage (Dock.jsx). */}
       <HelpButton {...helpFor('event-stage')} variant="inline" size="small" tooltip="Help" className="dock-more dock-help" />
@@ -875,8 +892,8 @@ export default function EventStage({ code }) {
           <button
             type="button"
             className="dock-more"
-            onClick={() => (ended ? navigateTo(EVENTS_PATH) : setExitOpen(true))}
-            aria-label={ended ? 'Exit to the console' : 'Exit — leave the stage, or end the event'}
+            onClick={() => (ended ? navigateTo(START_PATH) : setExitOpen(true))}
+            aria-label={ended ? 'Exit to your start screen' : 'Exit — leave the stage, or end the event'}
           >
             <span className="dock-more-lbl">EXIT</span>
           </button>
@@ -1019,13 +1036,13 @@ export default function EventStage({ code }) {
           <h2>Leave the stage, or end the event?</h2>
           <div className="ag-exit-ways">
             <div className="ag-exit-way">
-              <button type="button" className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(EVENTS_PATH); }}>
+              <button type="button" className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(START_PATH); }}>
                 Leave — the event keeps going
               </button>
               <p>
                 {started
-                  ? 'Phones stay where they are and people can still join. Open the event again from Events in the console.'
-                  : 'Nothing has started. The event stays ready; open it again from Events in the console.'}
+                  ? 'Phones stay where they are and people can still join. Your start screen lists the event; open it from there to come back.'
+                  : 'Nothing has started. The event stays ready; open it again from your start screen.'}
               </p>
             </div>
             <div className="ag-exit-way">

@@ -60,7 +60,8 @@
                        arrived? Open" join block and "Coming up".
     breaks-on-the-day  EventStage break: Back at, countdown, +5 min, End the break.
     ending-the-event   EventStage EXIT ("Leave the stage, or end the event?":
-                       Leave — the event keeps going / End the event / Stay),
+                       Leave — the event keeps going (to /host, the start
+                       screen) / End the event / Stay),
                        "End the event?" (Keep going / End the event),
                        REOPEN ("Reopen the event?": Not now / Reopen the
                        event; run.js reopenEvent, refused past the ttl),
@@ -296,7 +297,7 @@ const eventDay = {
           items: [
             { title: 'The top line', text: 'Where the day is (**Starting soon**, **Live now**, **Between items**), the event\'s name, how many items are done, and **JOIN** with the address and the event code.' },
             { title: 'The rows', text: 'Each item with its time and its state (**Live**, **Paused**, **Done**), and the buttons that fit it: **Open**, **Go live**, **Resume**, **Pause**, **End**.' },
-            { title: 'The dock', text: 'The next step on its main button (Space presses it), **EDIT AGENDA**, **QR** (a large join code for the room) and **EXIT** (leave the stage, or end the event).' },
+            { title: 'The dock', text: 'The next step on its main button (the small **Space** on the button says that key presses it too), **EDIT AGENDA**, **QR** (a large join code for the room) and **EXIT** (leave the stage, or end the event).' },
           ],
         },
         {
@@ -442,7 +443,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join; open the event again from **Events** in the console. **Stay** closes the question.',
+          text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join. You land on your start screen, where the event is listed (**Running**) with a button back to its stage. **Stay** closes the question.',
         },
         {
           t: 'p',

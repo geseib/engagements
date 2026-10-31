@@ -355,14 +355,29 @@ body {
   text-align: right;
 }
 
-.host-action-bar__kbd {
-  /* A hint in words, never a box beside the main button (owner, 25 Oct). */
+/* THE KEY ON THE BUTTON (components/stage/KeyCap.jsx; owner, 31 Oct 2026:
+   "i dont like the word SPACE just dangling outside the button"). A small
+   cap at the button's trailing edge, drawn in the button's own text colour
+   so it keeps the button's contrast, quieter by size and weight. Sized in em,
+   so it scales with whatever button it sits in, on every display profile.
+   Off (the key does nothing right now) it keeps its width, invisible: the
+   button never changes size under the pointer. */
+.keycap {
+  display: inline-block;
+  margin-left: 0.6em;
+  padding: 0.08em 0.42em;
+  border: 1px solid currentColor;
+  border-radius: 0.3em;
   font-family: var(--font-ui);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  vertical-align: 0.12em;
+  opacity: 0.72;
   white-space: nowrap;
 }
+.keycap[data-off] { visibility: hidden; }
 
 /* The strip the bar occupies is reserved, never stolen: content can always be
    scrolled clear of it. */
@@ -377,7 +392,7 @@ body {
   }
   .host-action-bar__status,
   .host-action-bar__hint,
-  .host-action-bar__kbd { display: none; }
+  .host-action-bar .keycap { display: none; }
   .host-action-bar__actions { flex: 1 1 auto; justify-content: center; }
 }
 
@@ -400,9 +415,9 @@ body {
   justify-content: center;
 }
 
-/* The stage already prints its own "n of m answered" line inside the phase. */
+/* The stage already prints its own "n of m answered" line inside the phase.
+   The keycap stays: it is on the button, and the dock no longer draws one. */
 .host-action-bar.big-screen-mode .host-action-bar__status,
-.host-action-bar.big-screen-mode .host-action-bar__kbd,
 .host-action-bar.big-screen-mode .host-action-bar__hint { display: none; }
 
 .host-action-bar.big-screen-mode .host-action-bar__actions { gap: 18px; }

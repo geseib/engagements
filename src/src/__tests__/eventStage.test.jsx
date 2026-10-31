@@ -443,7 +443,7 @@ describe('asking before the room moves, and EXIT', () => {
   });
 
   // rejects: END EVENT as the only way off the stage.
-  test('EXIT asks: Leave goes to the console\'s Events and ends nothing', async () => {
+  test('EXIT asks: Leave goes to the start screen and ends nothing', async () => {
     api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, [{ ...DAY[0], state: 'done' }, ...DAY.slice(1)]));
     render(<EventStage code={CODE} />);
     await screen.findByText('Between items');
@@ -452,7 +452,7 @@ describe('asking before the room moves, and EXIT', () => {
     const ask = await screen.findByRole('dialog', { name: 'Leave the stage, or end the event?' });
     expect(ask).toHaveTextContent(/people can still join/);
     fireEvent.click(within(ask).getByRole('button', { name: /^Leave/ }));
-    expect(navigateTo).toHaveBeenCalledWith('/admin?section=events');
+    expect(navigateTo).toHaveBeenCalledWith('/host');
     expect(api.runEvent).not.toHaveBeenCalled();
   });
 
@@ -485,7 +485,7 @@ describe('asking before the room moves, and EXIT', () => {
     await screen.findByText('The day is over');
     fireEvent.click(screen.getByRole('button', { name: /^Exit/ }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(navigateTo).toHaveBeenCalledWith('/admin?section=events');
+    expect(navigateTo).toHaveBeenCalledWith('/host');
   });
 });
 
