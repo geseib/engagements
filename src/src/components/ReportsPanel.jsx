@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { authFetch } from '../auth/authFetch';
+import { useOptionalAuth } from '../auth/AuthContext';
 import { adminApiUrl } from '../utils/adminApi';
 import Icon from './Icon';
 import ListControls from './ListControls';
@@ -148,6 +149,9 @@ export function formatKeptUntil(iso) {
 
 export default function ReportsPanel({ heading = null }) {
   const [reports, setReports] = useState([]);
+  // The signed-in host, for the event summary's "Hosted by" on an older event.
+  const auth = useOptionalAuth();
+  const currentUser = auth && auth.currentUser;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -235,7 +239,7 @@ export default function ReportsPanel({ heading = null }) {
     setNotice(null);
     try {
       const { downloadEventSummary } = await import('../utils/eventSummary');
-      await downloadEventSummary(event.code);
+      await downloadEventSummary(event.code, { user: currentUser });
       if (aliveRef.current) setNotice(`The summary of “${event.title || event.code}” is downloaded. It is not kept here; make it again whenever you need it.`);
     } catch (err) {
       if (aliveRef.current) setError(`Could not make the summary of “${event.title || event.code}”: ${err.message}`);

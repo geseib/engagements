@@ -15,7 +15,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### New
 
-- **Event summary PDF**, short on purpose (one or two pages): the event's title, when and where, a strip with items, sessions run and reports ready, then the agenda as one list — time, item, who led it, format, status, and for each session whether its report is saved, auto-built, not yet made or expired, with where to find it in Reports. Nothing from inside the sessions. **Save event summary (PDF)** on the host agenda, and **Summary PDF** on the event's row in Reports. It downloads; it is not kept in Reports.
+- **Event summary PDF**, short on purpose (one or two pages): the event's title, when and where, who hosted it and for which team, a strip with items, sessions run and reports ready, then the agenda as one list — time, item, who led it, format, status, and for each session whether its report is saved, auto-built, not yet made or expired, with where to find it in Reports. Nothing from inside the sessions. **Save event summary (PDF)** on the host agenda, and **Summary PDF** on the event's row in Reports. It downloads; it is not kept in Reports.
 - **Trivia rounds in the report show how the room split**: each option with how many picked it, its share and a bar, the right answer marked **Correct**.
 - **"Why it's right"**: when the question set explains the answer, the report prints it under the right answer.
 
@@ -25,12 +25,12 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ### What to look at
 
-1. On engage.test, open an event's agenda and press **Save event summary (PDF)**: two pages at most, the agenda with each session's report status.
+1. On engage.test, open an event's agenda and press **Save event summary (PDF)**: two pages at most, "Hosted by" with your name (and the team's, in a team space), the agenda with each session's report status.
 2. Open a finished trivia session's report (or Save PDF): each question shows the options with counts and bars, **Correct** on the right one, and "Why it's right" where the set has an explanation.
 
 ### Known gaps
 
-- The event summary has no host or team name: the event stores only the creator's account id.
+- An event made before this release did not keep its host's name: its summary names the signed-in host when they made the event, and nobody otherwise.
 - The event summary is downloaded, not saved in Reports.
 
 ---
