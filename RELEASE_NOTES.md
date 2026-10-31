@@ -9,6 +9,36 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (New engagement: one view, and a storyboard you scroll)
+
+**Test:** merge of dev `048a221b`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **One view, no Guided/Quick switch.** The form is on the left and **How <format> runs** is open on the right. The only control is **Hide** on that pane; hidden, it folds to a slim strip, **Show how <format> runs**, and this browser remembers your choice. The dialog keeps one size.
+- **The walkthrough is a storyboard you scroll**, not Back and Next: each stage is a card with its picture and a plain description, ending with **What you get**. The small numbered row at the top jumps to a stage.
+- **A worked example for each format.** Call & Answer follows one question from start to report: "If we had unlimited people and resources, what should we build?", answered with a Rube Goldberg machine, a grass-seeding robot, an AI-enabled fax machine and a for-hire one-week enterprise tech-debt remover. The others have their own light-hearted examples.
+- **Compare formats** (was Format guide) shows the same cards in a row that scrolls sideways inside its panel.
+
+### Fixed
+
+- **Guided vs Quick was hard to understand:** one switch changed the width, the side pane and the cards at once. It is gone.
+
+### What to look at
+
+1. On engage.test press **Create engagement**: the form on the left and **How Call & Answer runs** on the right. Scroll the right pane from **The Ask** to **What you get**.
+2. Pick Trivia, Poll and Wavelength in turn: each storyboard has its own example and starts at the top.
+3. Press **Hide**: the pane folds to a strip and the form widens. Close and reopen the dialog: it stays hidden. Press the strip to bring it back.
+4. Press **Compare formats**: the storyboard runs across the top panel and all seven formats show below.
+5. On a phone, **How it runs** is a fold under Format.
+
+### Known gaps
+
+- On the phone in each stage picture, a long question is cut after three lines; the room screen beside it shows it whole.
+- Hidden or shown is remembered per browser, not per account.
+
+---
+
 ## 30 Oct 2026 (fix: the dialog went white after the walkthrough)
 
 **Test:** merge of dev `b63ad973`. Everything below this entry is already on test; this push adds only what is here.
