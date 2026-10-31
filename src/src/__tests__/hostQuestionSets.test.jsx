@@ -900,8 +900,12 @@ describe('create', () => {
 /* ------------------------------------------------- the way in, from create -- */
 
 describe('the entry point is the create-engagement screen', () => {
+  /* Round 4 (new-engagement README): "Your question sets" is offered to a
+     host who OWNS a set of the chosen format; a host who owns none gets one
+     link, "Make your own set", into the same dialog. So the host here owns
+     the set. */
   const SETS = [
-    { id: 'ivy-retro', name: 'Ivy Retro', totalQuestions: 12, engagementType: 'call-and-answer' },
+    { id: 'ivy-retro', scope: 'org', mine: true, name: 'Ivy Retro', totalQuestions: 12, engagementType: 'call-and-answer' },
   ];
 
   const mountSetup = (props = {}) => render(
@@ -930,7 +934,10 @@ describe('the entry point is the create-engagement screen', () => {
     // thing to click when you have none.
     mockApi();
     mountSetup({ questionSets: [] });
-    expect(screen.getByRole('button', { name: /make a question set/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /your question sets/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /make your own set/i }));
+    // …and it still opens the sets dialog over the create screen.
+    expect(await screen.findByRole('dialog', { name: /your question sets/i })).toBeTruthy();
   });
 
   test('the empty-set help no longer sends the host to the admin console', async () => {

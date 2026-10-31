@@ -65,6 +65,7 @@ describe('a goal at create', () => {
     await settle();
     pickTrivia();
     expect(create()).toBeEnabled();
+    expect(create()).not.toHaveAttribute('aria-disabled');
     fireEvent.click(create());
     expect(props.onCreate).toHaveBeenCalledWith(expect.objectContaining({ target: null }));
   });
@@ -78,7 +79,7 @@ describe('a goal at create', () => {
     await settle();
     pickTrivia();
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: '13' } });
-    expect(create()).toBeDisabled();
+    expect(create()).toHaveAttribute('aria-disabled', 'true'); // round 4: reachable, never `disabled`
     expect(screen.getAllByText('This set has 12 questions, so the goal can be 12 at most.')).toHaveLength(2);
     fireEvent.click(create());
     expect(props.onCreate).not.toHaveBeenCalled();
@@ -103,7 +104,7 @@ describe('a goal at create', () => {
     await settle();
     pickTrivia();
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: '1000' } });
-    expect(create()).toBeDisabled();
+    expect(create()).toHaveAttribute('aria-disabled', 'true'); // round 4: reachable, never `disabled`
     // The set only holds 12, so the set-size sentence speaks first — either
     // way, never "A goal is a whole number of questions, 1 or more.", which
     // would be false for 1000 (session-goal.js's check order).
@@ -188,7 +189,7 @@ describe('a goal on an edit', () => {
     const props = setup(EDIT);
     await settle();
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: '1000' } });
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('alert')).toHaveTextContent('A goal can be at most 999 questions.');
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(props.onCreate).not.toHaveBeenCalled();

@@ -368,6 +368,17 @@
 }
 .schs .schs-browse:focus-visible { outline-offset: -2px; }
 
+/* NOTHING USED LATELY (New engagement round 4): one line on what a set is,
+   and Browse all as a button beside the search, not under an empty list. */
+.schs .schs-intro { margin: 0 0 8px; font-size: var(--schs-t-label); line-height: 1.45; color: var(--schs-muted); }
+.schs.schs--fresh .schs-browse {
+  flex: none;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid var(--schs-rule);
+  border-radius: 10px;
+}
+
 /* MAKE YOUR OWN (frame 5c): three routes after the exits. */
 .schs .schs-routes-wrap { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .schs .schs-routes-h { margin: 0; font-size: var(--schs-t-body); font-weight: 700; color: var(--schs-text); }

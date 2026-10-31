@@ -339,9 +339,9 @@
 .gsd .dialog-help-text.gsd-goal-problem { color: var(--danger-text); }
 
 /* ----------------------------------------------------------- the three steps
-   Name it → Format → Questions (README §3.1), numbered, ticking as each is
-   done. Step 3 is visible from the first frame, in muted text — never
-   dimmed with opacity (visual review: "dimmed step 3" was under AA). */
+   Name it → Format → Question set (README §3.1). Round 4: no numbers and no
+   ticks — a finished section shows its answer, and that is the tick — and a
+   section appears only when the decision above it is made. */
 .gsd .gsd-step { display: flex; flex-direction: column; gap: 10px; padding: 14px 0 16px; border-bottom: 1px solid var(--gsd-rule); }
 .gsd .gsd-step:last-child { border-bottom: 0; }
 .gsd .gsd-step-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -356,22 +356,6 @@
   color: var(--gsd-text);
 }
 .gsd .gsd-step-h label { margin: 0; font: inherit; color: inherit; }
-.gsd .gsd-step-n {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--gsd-primary);
-  font-size: var(--gsd-t-floor);
-  font-weight: 800;
-  color: var(--gsd-primary);
-}
-/* Done: the success fill with the card's navy tick — a shape as well as a colour. */
-.gsd .gsd-step-n.is-done { border-color: var(--gsd-success); background: var(--gsd-success); color: var(--gsd-card); }
-.gsd .gsd-step.is-later .gsd-step-n { border-color: var(--gsd-rule-strong); color: var(--gsd-muted); }
-.gsd .gsd-later { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
 .gsd .gsd-req {
   padding: 1px 8px;
   border: 1px solid var(--gsd-rule-strong);
@@ -448,7 +432,6 @@
 .gsd .gsd-fmt--gallery { border-radius: 12px; padding: 8px 8px 12px; gap: 8px; }
 .gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 7px 7px 11px; }
 .gsd .gsd-fmt--gallery .gsd-fmt-top { padding: 0 6px; font-size: var(--gsd-t-body); color: var(--gsd-text); }
-.gsd .gsd-fmt-art { position: relative; display: block; }
 .gsd .gsd-fmt-chosen {
   /* In the name row, never over the preview (live dev test 1 V8). */
   margin-left: auto;
@@ -464,16 +447,6 @@
 }
 .gsd .gsd-fmt-desc { display: flex; flex-direction: column; gap: 4px; padding: 0 6px; font-size: var(--gsd-t-label); line-height: 1.4; color: var(--gsd-text); }
 .gsd .gsd-fmt-good { color: var(--gsd-muted); }
-.gsd .gsd-fmt-own {
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 1px 8px;
-  border: 1px solid var(--gsd-rule-strong);
-  border-radius: 6px;
-  font-size: var(--gsd-t-floor);
-  font-weight: 600;
-  color: var(--gsd-text);
-}
 
 /* "Planning a…" — meeting chips (MeetingTypeChips.jsx). Solid borders:
    dashed means only "placeholder or annotation" (visual review). */
@@ -524,16 +497,6 @@
 .gsd .gsd-namesline.is-compact { align-items: center; padding: 10px 14px; }
 .gsd .gsd-namesline.is-compact b { display: inline; }
 
-.gsd .gsd-optional-h {
-  margin: 10px 0 4px;
-  padding-top: 14px;
-  border-top: 1px solid var(--gsd-rule);
-  font-size: var(--gsd-t-floor);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gsd-muted);
-}
 .gsd .gsd-brief-intro { margin: -4px 0 10px; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
 
 /* Compact: the briefing as one line until opened (frame 3b). */
@@ -1797,7 +1760,6 @@
   .gsd .btn-primary,
   .gsd .btn-secondary { min-height: 44px; }
   .gsd .gsd-fmt-group--gallery { grid-template-columns: 1fr; }
-  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
   .gsd .gsd-step-acts { margin-left: 0; }
 }
 
@@ -1945,12 +1907,6 @@
   }
 }
 
-/* SHORT LAPTOPS (1366×768, 1280×720; devtest 7 R3): the gallery cards drop
-   their small picture, so step 3 shows on first open. No words go; the
-   walkthrough beside the gallery draws each step larger. */
-@media (max-height: 800px) {
-  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
-}
 
 /* STEP 3 ON THE FIRST SCREEN AT 1440×900 (README §3.2; devtest 6 M4): the
    head and the steps a step tighter — the cards keep their words. */
@@ -1962,8 +1918,6 @@
 .gsd .gsd-fmt-group--gallery { gap: 8px; }
 .gsd .gsd-fmt--gallery { padding: 5px 5px 8px; gap: 5px; }
 .gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 4px 4px 7px; }
-.gsd .gsd-fmt--gallery .gsd-fmt-own { margin-top: 0; padding: 0 6px; }
-.gsd .gsd-step.is-later { padding-bottom: 4px; }
 .gsd .gsd-step .dialog-help-text { margin-top: 0; }
 
 /* ============================================================ ROUND 2, OWNER
@@ -2128,11 +2082,6 @@
 
 /* The pane: the walkthrough scrolls, the status line stays at the foot. */
 .gsd .gsd-side .gsd-side-pv { padding-top: 16px; }
-.gsd .gsd-stat { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 12px 0 0; list-style: none; font-size: var(--gsd-t-label); color: var(--gsd-text); }
-.gsd .gsd-stat li { display: inline-flex; align-items: center; gap: 5px; }
-.gsd .gsd-stat-mark { display: inline-grid; place-items: center; width: 14px; color: var(--gsd-muted); font-weight: 800; }
-.gsd .gsd-stat li.is-done .gsd-stat-mark { color: var(--gsd-success-text); }
-.gsd .gsd-stat-not { color: var(--gsd-muted); }
 
 /* THE FORMAT GUIDE (decision 6; components/FormatCompare.jsx). */
 .gsd .gsd-main.is-compare { display: flex; flex-direction: column; }
@@ -2361,3 +2310,100 @@
 
 /* Nothing chosen yet: one plain line under the heading (live check, round 3). */
 .gsd .gsd-wt-note { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* ============================================================ ROUND 4, OWNER
+   README "Round 4 — show the next decision, not all of them". The owner: "i
+   wonder if it would be less daunting if we revealed the sections as
+   needed?". Last in the sheet, so the equal-weight rules above cannot undo it.
+
+   MEASURED (gameSetupPalette.test.js composites them):
+     "Still needed:" text on the card             12.5:1
+     the hand-off cell's 12px muted line, card     7.0:1
+     Create not ready: muted in a dashed outline   7.0:1 (the disabled style) */
+
+/* The title's help beside its label, which saves a line. */
+.gsd .gsd-title-row { flex-wrap: wrap; align-items: baseline; gap: 2px 16px; }
+.gsd .gsd-title-row .gsd-title-help { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* THE ENTRANCE (README round 4, "Motion"): the base style IS the end state;
+   the fade and 4px rise are declared only for a viewer who has not asked for
+   reduced motion. Nothing animates height or moves other content. */
+.gsd .gsd-slot { min-width: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .gsd .gsd-reveal { animation: gsd-reveal-in 180ms ease-out both; }
+}
+@keyframes gsd-reveal-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* THE GALLERY AS TEXT CARDS, THREE ACROSS (the pictures live, larger, in
+   the pane). Build Room and Event share the sixth cell as two quiet rows. */
+.gsd .gsd-fmt-group--gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gsd .gsd-fmt--gallery { gap: 3px; padding: 8px 12px 10px; }
+.gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 7px 11px 9px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-top { font-size: var(--gsd-t-body); flex-wrap: nowrap; }
+.gsd .gsd-fmt--gallery .gsd-fmt-desc { font-size: var(--gsd-t-label); line-height: 1.4; }
+.gsd .gsd-fmt-other {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+}
+.gsd .gsd-fmt-other-k { font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-muted); }
+.gsd .gsd-fmt--row {
+  gap: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.gsd .gsd-fmt--row:hover:not(:disabled) { border-color: var(--gsd-secondary); }
+.gsd .gsd-fmt--row[aria-checked="true"] { padding: 1px 5px; }
+.gsd .gsd-fmt--row .gsd-fmt-top { font-size: var(--gsd-t-label); color: var(--gsd-text); }
+.gsd .gsd-fmt--row .gsd-fmt-desc { display: block; padding-left: 21px; font-size: var(--gsd-t-floor); line-height: 1.3; color: var(--gsd-muted); }
+.gsd .gsd-fmt-other-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 0;
+  font-size: var(--gsd-t-floor);
+  color: var(--gsd-muted);
+}
+@media (max-width: 600px) {
+  .gsd .gsd-fmt-group--gallery { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* THE QUIET PANE (Fork 1 A): one sentence, one plain line, one labelled
+   example stage. */
+.gsd .gsd-wt-welcome { margin: 0; font-size: var(--gsd-t-body); line-height: 1.45; color: var(--gsd-text); }
+.gsd .gsd-wt-ex { display: flex; align-items: flex-start; gap: 6px; line-height: 1.45; }
+.gsd .gsd-wt-ex svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
+.gsd .gsd-wt-ex b { color: var(--gsd-text); }
+.gsd .gsd-wt-exlbl { font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-muted); }
+
+/* TWO QUIET FOLD LINES where the uppercase "Optional" header was. */
+.gsd .gsd-optional { margin-top: 4px; }
+.gsd .gsd-optional .gsd-adv { margin-top: 0; }
+.gsd .gsd-optional .gsd-adv,
+.gsd .gsd-optional .gsd-brief-fold { border-bottom: 1px solid var(--gsd-rule); }
+/* The two labels in plain words at body size, as frame 4d draws them — the
+   uppercase small caps went with the header they sat under. */
+.gsd .gsd-optional .gsd-adv-k { font-size: var(--gsd-t-body); letter-spacing: 0; text-transform: none; }
+.gsd .gsd-adv-full { margin: 0 0 8px; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
+.gsd .gsd-adv-full b { color: var(--gsd-primary); font-weight: 700; }
+
+/* STILL NEEDED: plain text beside Create (not a live region, review A5). */
+.gsd .gsd-foot-need { color: var(--gsd-text); }
+.gsd .gsd-foot-need b { font-weight: 700; }
+
+/* CREATE NOT READY: aria-disabled, so it stays reachable (review A1), drawn
+   with the outlined style the disabled button already measured at 7.0:1. */
+.gsd .btn-primary[aria-disabled="true"] {
+  border: 1px dashed var(--gsd-primary);
+  background: transparent;
+  color: var(--gsd-muted);
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+}
+.gsd .btn-primary[aria-disabled="true"]:hover { filter: none; }

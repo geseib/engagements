@@ -1,14 +1,16 @@
 import React, { useRef, useState } from 'react';
 import Icon from './Icon';
-import FormatPreview from './FormatPreview';
 
 /**
  * THE FORMAT CHOICE — ONE RADIO GROUP, TWO SKINS (docs/design/new-engagement
  * README §3.8, frames 1, 3, 4, 10, 10b).
  *
- *   gallery  cards with a still preview, the name, one plain line and "Good
- *            for", for a host choosing for the first time (on a phone the
- *            picture is dropped and the cards become rows, frame 10)
+ *   gallery  TEXT cards, three across — the name and one plain line — for a
+ *            host choosing for the first time (round 4: the mini pictures
+ *            are gone; the pane beside draws the same pictures larger and
+ *            follows the card under the pointer or focus). Build Room and
+ *            Event share the sixth cell as two quieter rows under "Bigger
+ *            than one session". On a phone the cards become rows (frame 10).
  *   chips    one row, for a host who knows the formats (and once a set is
  *            picked in full mode)
  *
@@ -42,9 +44,7 @@ export default function FormatPicker({
 }) {
   const refs = useRef([]);
   const groupRef = useRef(null);
-  const [plays, setPlays] = useState({});
   const [expanded, setExpanded] = useState(false);
-  const replay = (id) => setPlays((p) => ({ ...p, [id]: (p[id] || 0) + 1 }));
 
   const collapsed = collapseAfter > 0 && !expanded && options.length > collapseAfter + 1;
   const shown = collapsed
@@ -57,10 +57,7 @@ export default function FormatPicker({
   const choose = (index) => {
     const option = shown[index];
     if (!option || disabled) return;
-    if (option.id !== value) {
-      onChange?.(option.id);
-      replay(option.id);
-    }
+    if (option.id !== value) onChange?.(option.id);
   };
 
   /** Cards in one row of the gallery, read from the layout (1 where there is none). */
@@ -109,55 +106,71 @@ export default function FormatPicker({
         } : undefined}
         aria-disabled={disabled || undefined}
       >
-        {shown.map((option, i) => {
-          const on = option.id === value;
-          const nameId = `${idPrefix}-${option.id}-name`;
-          const descId = `${idPrefix}-${option.id}-desc`;
+        {(() => {
+          const renderOption = (option, i) => {
+            const on = option.id === value;
+            const nameId = `${idPrefix}-${option.id}-name`;
+            const descId = `${idPrefix}-${option.id}-desc`;
+            /* A hand-off row in the gallery: a quieter row inside the shared
+               cell, described by its line and the cell's shared note (A6). */
+            const row = gallery && option.handoff;
+            return (
+              <React.Fragment key={option.id}>
+                {/* Build Room and Event continue on their own page: a rule sets them apart in the chip row. */}
+                {!gallery && option.handoff && i > 0 && !shown[i - 1].handoff && <span className="gsd-fmt-sep" aria-hidden="true" />}
+                <button
+                  ref={(el) => { refs.current[i] = el; }}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-labelledby={nameId}
+                  aria-describedby={gallery ? (row ? `${descId} ${idPrefix}-own` : descId) : undefined}
+                  tabIndex={i === tabStop ? 0 : -1}
+                  disabled={disabled}
+                  className={`gsd-fmt gsd-fmt--${row ? 'row' : skin}${on ? ' is-on' : ''}`}
+                  data-format={option.id}
+                  onClick={() => choose(i)}
+                  onKeyDown={(event) => onKeyDown(event, i)}
+                  onMouseEnter={gallery ? () => onPreview?.(option.id) : undefined}
+                  onFocus={gallery ? () => onPreview?.(option.id) : undefined}
+                >
+                  <span className="gsd-fmt-top">
+                    {!gallery && <span className="gsd-fmt-mark" aria-hidden="true">{on ? <Icon name="Check" size={13} weight="bold" /> : null}</span>}
+                    {option.icon && <Icon name={option.icon} size={gallery && !row ? 18 : 14} />}
+                    <span className="gsd-fmt-name" id={nameId}>{option.label}</span>
+                    {/* "last used", shown as "last" so seven chips fit one row (devtest O4). */}
+                    {!gallery && option.lastUsed && <span className="gsd-fmt-last">last<span className="gsd-sr"> used</span></span>}
+                    {gallery && on && <span className="gsd-fmt-chosen"><Icon name="Check" size={12} weight="bold" /> Chosen</span>}
+                  </span>
+                  {gallery && (
+                    <span className="gsd-fmt-desc" id={descId}>
+                      <span>{row ? (option.tag || option.short) : option.short}</span>
+                      {option.lastUsed && <span className="gsd-fmt-good">You used it last.</span>}
+                    </span>
+                  )}
+                </button>
+              </React.Fragment>
+            );
+          };
+          if (!gallery) return shown.map(renderOption);
+          const handoffs = shown.map((o, i) => [o, i]).filter(([o]) => o.handoff);
           return (
-            <React.Fragment key={option.id}>
-              {/* Build Room and Event continue on their own page: a rule sets them apart in the chip row. */}
-              {!gallery && option.handoff && i > 0 && !shown[i - 1].handoff && <span className="gsd-fmt-sep" aria-hidden="true" />}
-              <button
-                ref={(el) => { refs.current[i] = el; }}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                aria-labelledby={nameId}
-                aria-describedby={gallery ? descId : undefined}
-                tabIndex={i === tabStop ? 0 : -1}
-                disabled={disabled}
-                className={`gsd-fmt gsd-fmt--${skin}${on ? ' is-on' : ''}`}
-                data-format={option.id}
-                onClick={() => choose(i)}
-                onKeyDown={(event) => onKeyDown(event, i)}
-                onMouseEnter={gallery ? () => { replay(option.id); onPreview?.(option.id); } : undefined}
-                onFocus={gallery ? () => { replay(option.id); onPreview?.(option.id); } : undefined}
-              >
-                {gallery && (
-                  <span className="gsd-fmt-art">
-                    <FormatPreview format={option.id} play={plays[option.id] || 0} />
+            <>
+              {shown.map((o, i) => (o.handoff ? null : renderOption(o, i)))}
+              {handoffs.length > 0 && (
+                /* One cell, two radios of the SAME group: the roving tabindex
+                   and the arrows reach them as before (review A6). */
+                <div className="gsd-fmt-other" role="presentation">
+                  <span className="gsd-fmt-other-k" aria-hidden="true">Bigger than one session</span>
+                  {handoffs.map(([o, i]) => renderOption(o, i))}
+                  <span className="gsd-fmt-other-note" id={`${idPrefix}-own`}>
+                    <Icon name="ArrowRight" size={12} /> each continues on its own page
                   </span>
-                )}
-                <span className="gsd-fmt-top">
-                  {!gallery && <span className="gsd-fmt-mark" aria-hidden="true">{on ? <Icon name="Check" size={13} weight="bold" /> : null}</span>}
-                  {option.icon && <Icon name={option.icon} size={gallery ? 18 : 14} />}
-                  <span className="gsd-fmt-name" id={nameId}>{option.label}</span>
-                  {/* "last used", shown as "last" so seven chips fit one row (devtest O4). */}
-                  {!gallery && option.lastUsed && <span className="gsd-fmt-last">last<span className="gsd-sr"> used</span></span>}
-                  {/* "Chosen" in the name row, never over the preview (devtest 1 V8). */}
-                  {gallery && on && <span className="gsd-fmt-chosen"><Icon name="Check" size={12} weight="bold" /> Chosen</span>}
-                </span>
-                {gallery && (
-                  <span className="gsd-fmt-desc" id={descId}>
-                    <span>{option.short}</span>
-                    {option.handoff && <span className="gsd-fmt-own">Continues on its own page</span>}
-                    {option.lastUsed && <span className="gsd-fmt-good">You used it last.</span>}
-                  </span>
-                )}
-              </button>
-            </React.Fragment>
+                </div>
+              )}
+            </>
           );
-        })}
+        })()}
       </div>
       {collapsed && (
         <button

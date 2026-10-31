@@ -20,6 +20,14 @@
  * Re-recorded again the same day after the live dev tests (reviews/devtest-*):
  * bare topic counts ("Architecture 2"), the step's links after the chips in
  * the Tab order, and the set search as a combobox.
+ * RE-RECORDED ON PURPOSE, 31 Oct 2026, for ROUND 4 (README "Round 4 — show
+ * the next decision, not all of them"): no step numbers or ticks, the title's
+ * help in its heading row, the Question set and the names/options blocks in
+ * their reveal slots (`gsd-slot`, the options one still carrying the
+ * `gsd-reveal` entrance at the moment of recording), no "Optional — every one
+ * has a safe default" header, "Background for Workie · Optional", the
+ * Advanced fold's short closed line with the full sentence moved inside it,
+ * and "Make your own set" for a host who owns no set of the format.
  *
  * rejects: the extraction changing one attribute, id, class, word or order in
  * the create or edit form, for any format.

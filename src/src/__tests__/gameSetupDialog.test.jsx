@@ -64,6 +64,18 @@ function setup(overrides = {}) {
   return { ...utils, props };
 }
 
+/*
+  ROUND 4 (docs/design/new-engagement README, "The reveal rules"): the names
+  card, Background for Workie and Advanced appear once a set has been picked
+  in the dialog, and stay while it is open. A test about those sections opens
+  with a set already picked; switching format afterwards keeps them.
+*/
+const setupPicked = (overrides = {}) => setup({ initialSetId: 'pricing', ...overrides });
+
+/* Create is aria-disabled, never `disabled`, until it is ready (review A1). */
+const notReady = (el) => expect(el).toHaveAttribute('aria-disabled', 'true');
+const isReady = (el) => { expect(el).toBeEnabled(); expect(el).not.toHaveAttribute('aria-disabled'); };
+
 // The formats are ONE radio group now (docs/design/new-engagement README §3.8):
 // role="radio" with aria-checked, where the old pills were buttons with
 // aria-pressed. The assertions below changed only that spelling.
@@ -213,7 +225,7 @@ describe('the question set', () => {
 });
 
 describe('the anonymity card', () => {
-  const openVotingFormat = () => setup();
+  const openVotingFormat = () => setupPicked();
 
   // THE assertion on this screen. get-results.js:207-217 sets AuthorsRevealed
   // UNCONDITIONALLY on entering RESULTS, so the host does not hold that switch.
@@ -248,7 +260,7 @@ describe('the anonymity card', () => {
   });
 
   test.each(['Call & Answer'])('is present for %s', (label) => {
-    setup();
+    setupPicked();
     fireEvent.click(pill(label));
     expect(screen.getByText(/nobody sees who wrote which answer/i)).toBeInTheDocument();
   });
@@ -262,7 +274,7 @@ describe('the fields the mockup drops', () => {
   // prompt does with it (personas.js: THE HOST'S INSTRUCTIONS, enforced in
   // every section of the summary).
   test('keeps event details, instructions for Workie and Workie\'s voice', () => {
-    setup();
+    setupPicked();
     expect(screen.getByLabelText(/event details/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/instructions for workie/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/workie's voice/i)).toBeInTheDocument();
@@ -293,20 +305,22 @@ describe('creating', () => {
   // rejects: the mockup's always-live Create button. join-time failure here is
   // a room that cannot start.
   test('is blocked until both a title and a set exist', () => {
-    setup();
+    const { props } = setup();
     const create = screen.getByRole('button', { name: /create engagement/i });
-    expect(create).toBeDisabled();               // no title, no set
+    notReady(create);                            // no title, no set
 
     pickSet('platform:pricing');
-    expect(create).toBeDisabled();               // set, still no title
+    notReady(create);                            // set, still no title
+    fireEvent.click(create);
+    expect(props.onCreate).not.toHaveBeenCalled();
 
     setup({ eventTitle: '   ' });                 // whitespace is not a title
-    expect(screen.getAllByRole('button', { name: /create engagement/i }).pop()).toBeDisabled();
+    notReady(screen.getAllByRole('button', { name: /create engagement/i }).pop());
   });
 
   test('is live once both exist', () => {
     ready();
-    expect(screen.getByRole('button', { name: /create engagement/i })).toBeEnabled();
+    isReady(screen.getByRole('button', { name: /create engagement/i }));
   });
 
   // The page keeps the dialog up until the next screen is ready, so a press in
@@ -580,7 +594,7 @@ describe('edit mode', () => {
   test('a title blanked out disables Save rather than saving a nameless session', () => {
     const { props } = setupEdit();
     fireEvent.change(screen.getByLabelText(/name it/i), { target: { value: '   ' } });
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+    notReady(screen.getByRole('button', { name: /save changes/i }));
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
     expect(props.onCreate).not.toHaveBeenCalled();
   });
@@ -615,19 +629,28 @@ describe('the title', () => {
   it never hides a decision. It replaces the old green plan sentence.
 */
 const advanced = () => document.querySelector('details.gsd-adv');
-const advLine = () => screen.getByTestId('gsd-adv-summary');
+/* Round 4: closed, the fold shows a short line (`brief`); the full sentence
+   these tests read moved to the top of the open body. */
+const advLine = () => screen.getByTestId('gsd-adv-full');
+const advBrief = () => screen.getByTestId('gsd-adv-summary');
 
 describe('the Advanced section', () => {
   test('is closed when the dialog opens, and the line names the defaults', () => {
-    setup();
+    setupPicked();
     expect(advanced()).not.toBeNull();
     expect(advanced().open).toBe(false);
+    // Closed: the defaults a host checks, not the names rule the card above states.
+    expect(advBrief().textContent).toBe('Defaults: questions shuffled, Workie’s standard summary');
+    // rejects: the names rule said twice on one screen (hard rule 5)
+    expect(advBrief().textContent).not.toMatch(/anonymous/);
+    // Open: the full sentence, at the top of the body.
+    expect(advanced().querySelector('.gsd-adv-body').firstElementChild).toBe(advLine());
     expect(advLine().textContent).toMatch(
       /Using the defaults — answers anonymous until voting closes, questions shuffled; Workie adapts its voice and gives the standard Call & Answer summary\./);
   });
 
   test('opens from its summary, like any disclosure', () => {
-    setup();
+    setupPicked();
     fireEvent.click(within(advanced()).getByText(/^Advanced$/));
     expect(advanced().open).toBe(true);
   });
@@ -647,7 +670,7 @@ describe('the Advanced section', () => {
   });
 
   test('anonymity, shuffle, voice, approach, instructions and details are folded under it', () => {
-    setup();
+    setupPicked();
     for (const el of [
       screen.getByRole('checkbox', { name: /anonymous responses/i }),
       screen.getByRole('checkbox', { name: /shuffle the question order/i }),
@@ -661,14 +684,14 @@ describe('the Advanced section', () => {
   });
 
   test('its four groups, in order: Responses, Questions, Workie, What people see', () => {
-    setup();
+    setupPicked();
     const heads = Array.from(advanced().querySelectorAll('.gsd-section')).map((h) => h.textContent);
     expect(heads).toEqual(['Responses', 'Questions', 'Workie', 'What people see when they join']);
   });
 
   // rejects: a "Responses" heading over nothing, which is what trivia showed.
   test.each(['Trivia', 'Wavelength'])('has no Responses group for %s', (label) => {
-    setup();
+    setupPicked();
     fireEvent.click(pill(label));
     const heads = Array.from(advanced().querySelectorAll('.gsd-section')).map((h) => h.textContent);
     expect(heads).toEqual(['Questions', 'Workie', 'What people see when they join']);
@@ -676,15 +699,18 @@ describe('the Advanced section', () => {
   });
 
   test('a changed voice is named first, in amber, and the rest are still the defaults', () => {
-    setup();
+    setupPicked();
     fireEvent.change(screen.getByLabelText(/workie's voice/i), { target: { value: 'coach' } });
     const lead = advLine().querySelector('b');
     expect(lead.textContent).toBe('Changed: Workie speaks as Coach.');
+    // Closed, the line is the change alone, still in amber.
+    expect(advBrief().querySelector('b').textContent).toBe('Changed: Workie speaks as Coach.');
+    expect(advBrief().textContent).toBe('Changed: Workie speaks as Coach.');
     expect(advLine().textContent).toMatch(/Otherwise the defaults — answers anonymous until voting closes, questions shuffled, the standard Call & Answer summary\./);
   });
 
   test('turning anonymity off is named as what it does', () => {
-    setup();
+    setupPicked();
     fireEvent.click(screen.getByRole('checkbox', { name: /anonymous responses/i }));
     expect(advLine().querySelector('b').textContent).toBe('Changed: answers named from the start.');
   });
@@ -727,7 +753,7 @@ describe('the Advanced section', () => {
 
   // A prompt belongs to one format: switching format drops the pick.
   test('switching format drops an approach picked for the old one', async () => {
-    const { props } = setup({ eventTitle: 'Quiz night' });
+    const { props } = setupPicked({ eventTitle: 'Quiz night' });
     fireEvent.click(pill('Trivia'));
     const picker = screen.getByLabelText(/summary approach/i);
     await waitFor(() => expect(within(picker).getByRole('option', { name: /Trivia — VJ/ })).toBeInTheDocument());
@@ -775,7 +801,7 @@ describe('closing the dialog', () => {
   const cancel = () => screen.getByRole('button', { name: /^cancel$/i });
   const escape = () => fireEvent.keyDown(document, { key: 'Escape' });
   const dirty = () => {
-    const r = setup();
+    const r = setupPicked();
     fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'Half a thought' } });
     return r;
   };
@@ -844,7 +870,7 @@ describe('the foot says who can get in', () => {
   // True today: a created session sits in history until Start, and every
   // phone is refused until it has started (session-gate.js).
   test('creating: nobody can join until it is started', () => {
-    setup();
+    setupPicked({ eventTitle: 'Q3' });
     expect(screen.getByText(/nobody can join until you start it/i)).toBeInTheDocument();
   });
 
@@ -1068,7 +1094,7 @@ describe("Workie's briefing", () => {
   const create = () => fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
 
   test('is in the main view for Call & Answer, above Advanced, not inside it', () => {
-    setup();
+    setupPicked();
     const invite = screen.getByText(/Brief Workie from a document/);
     expect(advanced().contains(invite)).toBe(false);
     expect(screen.getByRole('heading', { name: /Background for Workie/i }) /* renamed, README §9 */).toBeInTheDocument();
@@ -1098,7 +1124,7 @@ describe("Workie's briefing", () => {
   });
 
   test('switching format hides it and leaves it out; switching back brings it back', () => {
-    const { props } = setup({ eventTitle: 'Quiz' });
+    const { props } = setupPicked({ eventTitle: 'Quiz' });
     writeIt('Kept while the dialog is open.');
     fireEvent.click(pill('Trivia'));
     pickSet('platform:space');
@@ -1109,7 +1135,7 @@ describe("Workie's briefing", () => {
   });
 
   test('a briefing in hand is work in hand: closing asks first', () => {
-    const { props } = setup();
+    const { props } = setupPicked();
     writeIt('Half a brief');
     fireEvent.click(screen.getByRole('button', { name: /close without creating/i }));
     expect(props.onCancel).not.toHaveBeenCalled();
@@ -1120,13 +1146,13 @@ describe("Workie's briefing", () => {
     setup({ eventTitle: 'Q3 review' });
     pickSet('platform:pricing');
     const createButton = screen.getByRole('button', { name: /create engagement/i });
-    expect(createButton).toBeEnabled();
+    isReady(createButton);
     const input = document.querySelector('input[type="file"]');
     fireEvent.change(input, { target: { files: [new File(['Open issues are up 15%. '.repeat(20)], 'notes.txt')] } });
-    expect(createButton).toBeDisabled();
+    notReady(createButton);
     // The mocked API answers the draft with no briefing: the red state, and Create is free again.
     expect(await screen.findByText(/couldn.t write the briefing/i)).toBeInTheDocument();
-    expect(createButton).toBeEnabled();
+    isReady(createButton);
   });
 
   test('edit: seeded from the saved session, and Save carries it — or null once removed', () => {

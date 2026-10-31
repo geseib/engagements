@@ -41,7 +41,10 @@
  *     the sets side task opened on), chooserClose, view (the form or Compare),
  *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote,
  *     pendingCreate (a ⌘↵ queued while topics load) and narrow (useNarrow:
- *     whether the window is a phone's).
+ *     whether the window is a phone's), and round 4's (31 Oct 2026):
+ *     revealLatch (a set has been picked in this dialog, so the names card
+ *     and options show), foldOpen (the phone's "How it runs" fold) and
+ *     animate (a section's one-off entrance, in the dialog's Reveal).
  *     All of it is the form's furniture and dies with the dialog.
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a

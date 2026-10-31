@@ -89,7 +89,9 @@ describe('the create dialog offers Event and Build Room', () => {
     const props = dialog({ eventsAccess: { enabled: true, canCreate: false, offerPlanName: 'Standard plan' } });
     fireEvent.click(pill('Event'));
     expect(screen.getByTestId('gsd-event-plan')).toHaveTextContent('Events come with the Standard plan.');
-    expect(screen.getByRole('button', { name: 'Continue to the event' })).toBeDisabled();
+    // Round 4: aria-disabled, so it stays reachable and says why when pressed.
+    expect(screen.getByRole('button', { name: 'Continue to the event' })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to the event' }));
     expect(props.onChooseOther).not.toHaveBeenCalled();
   });
 
@@ -109,7 +111,8 @@ describe('the create dialog offers Event and Build Room', () => {
     const props = dialog({ onChooseOther: undefined });
     expect(screen.queryByRole('radio', { name: 'Build Room' })).toBeNull();
     fireEvent.click(pill('Trivia'));
-    expect(screen.getByLabelText(/question set/i)).toBeInTheDocument();
+    // The section is labelled by its heading now (round 4), so ask for the search itself.
+    expect(screen.getByRole('combobox', { name: /question set/i })).toBeInTheDocument();
     expect(props.onChooseOther).toBeUndefined();
   });
 });
