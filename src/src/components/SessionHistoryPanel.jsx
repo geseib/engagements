@@ -265,7 +265,11 @@ export default function SessionHistoryPanel({
               {' '}— today or on the day. You can still <b>Edit</b> it first.
             </p>
             {row && !row.started && (
-              <button type="button" className="shist__done-start" onClick={() => onStart(row)}>
+              /* onStart's contract is (gameId, title), as the row's own Start
+                 button calls it. This passed the whole row, and the page built
+                 POST /games/[object Object]/start from it — "Game not found"
+                 (issue #48 finding 1). */
+              <button type="button" className="shist__done-start" onClick={() => onStart(row.gameId, done.title || titleOf(row))}>
                 <Icon name="Play" weight="fill" size={13} color="currentColor" /> Start it now
               </button>
             )}
