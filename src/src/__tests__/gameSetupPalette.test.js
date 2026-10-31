@@ -131,8 +131,30 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     expect(ratio(token('--gsd-focus'), token('--gsd-side'))).toBeGreaterThanOrEqual(3);
   });
 
-  test('step 3 before a format is muted text, at AA — never dimmed', () => {
-    expect(CSS).toMatch(/\.gsd \.gsd-later\s*\{[^}]*color:\s*var\(--gsd-muted\)/);
+  /* (Round 4 retires "step 3 before a format is muted text": nothing waits on
+     screen now, so there is no .gsd-later — held absent below.) */
+
+  /* ROUND 4: the foot's "Still needed", the hand-off cell's 12px line and the
+     not-ready Create, each composited on the card they sit on. */
+  test('round 4: "Still needed" is body text on the card; the hand-off cell\'s line is muted on the card', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-foot-need\s*\{[^}]*color:\s*var\(--gsd-text\)/);
+    expect(ratio(text(), card())).toBeGreaterThanOrEqual(AA);
+    for (const sel of ['\\.gsd \\.gsd-fmt--row \\.gsd-fmt-desc', '\\.gsd \\.gsd-fmt-other-note', '\\.gsd \\.gsd-fmt-other-k']) {
+      const rule = CSS.match(new RegExp(`${sel}\\s*\\{([^}]*)\\}`))[1];
+      expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
+      expect(rule).toMatch(/font-size:\s*var\(--gsd-t-floor\)/);
+    }
+    // The cell has no fill of its own: the card is the ground.
+    expect(CSS.match(/\.gsd \.gsd-fmt-other\s*\{([^}]*)\}/)[1]).not.toMatch(/background/);
+    expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('round 4: a not-ready Create (aria-disabled) wears the measured outlined style, never dimmed', () => {
+    const rule = CSS.match(/\.gsd \.btn-primary\[aria-disabled="true"\]\s*\{([^}]*)\}/)[1];
+    expect(rule).toMatch(/border:\s*1px dashed var\(--gsd-primary\)/);
+    expect(rule).toMatch(/background:\s*transparent/);
+    expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
+    expect(rule).toMatch(/opacity:\s*1\b/);
     expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
   });
 
@@ -362,6 +384,43 @@ describe('the card never moves, and nothing animates for ever', () => {
     for (const [, name, inner] of frames) {
       expect([name, /(^|[\s}])(to|100%)\s*\{/.test(inner)]).toEqual([name, false]);
     }
+  });
+
+  /* ROUND 4, "Motion": the reveal's fade is declared ONLY for a viewer who has
+     not asked for reduced motion; the base rule is the end state; its keyframe
+     names only a start; nothing animates height. */
+  test('the reveal animates only under prefers-reduced-motion: no-preference, and ends at the base', () => {
+    const uses = [...body.matchAll(/([^{}]*\.gsd-reveal[^{}]*)\{([^{}]*)\}/g)];
+    expect(uses.length).toBeGreaterThan(0);
+    for (const [, , decls] of uses) expect(decls).toMatch(/animation:\s*gsd-reveal-in\b/);
+    // Every rule naming .gsd-reveal sits inside the no-preference block.
+    const blocks = [...body.matchAll(/@media \(prefers-reduced-motion: no-preference\)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)].map((m) => m[1]).join('\n');
+    const outside = body.replace(/@media \(prefers-reduced-motion: no-preference\)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g, '');
+    expect(blocks).toMatch(/\.gsd \.gsd-reveal\s*\{[^}]*animation:\s*gsd-reveal-in 180ms ease-out/);
+    expect(outside).not.toMatch(/\.gsd-reveal/);
+    // The keyframe: a start only (opacity and a 4px rise), never height.
+    const frame = body.match(/@keyframes gsd-reveal-in\s*\{([\s\S]*?\})\s*\}/)[1];
+    expect(frame).toMatch(/from\s*\{[^}]*opacity:\s*0;[^}]*transform:\s*translateY\(4px\)/);
+    expect(frame).not.toMatch(/(^|[\s}])(to|100%)\s*\{/);
+    expect(frame).not.toMatch(/height|margin|top:/);
+    // The slot's resting style moves nothing.
+    expect(body.match(/\.gsd \.gsd-slot\s*\{([^}]*)\}/)[1]).not.toMatch(/opacity|transform/);
+  });
+
+  test('round 4 retires the step numbers, the waiting step, the status line and the OPTIONAL header', () => {
+    for (const gone of ['.gsd-step-n', '.gsd-later', '.gsd-stat', '.gsd-optional-h', '.gsd-fmt-art']) {
+      expect([gone, body.includes(gone)]).toEqual([gone, false]);
+    }
+  });
+
+  test('round 4: the gallery is three text cards across, one column on a phone', () => {
+    const last = body.lastIndexOf('.gsd .gsd-fmt-group--gallery { grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(last).toBeGreaterThan(-1);
+    // Nothing after it re-points the desktop columns.
+    const after = body.slice(last + 10);
+    const phone = after.match(/@media \(max-width: 600px\)\s*\{\s*\.gsd \.gsd-fmt-group--gallery \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+    expect(phone).not.toBeNull();
+    expect(after.replace(phone[0], '')).not.toMatch(/gsd-fmt-group--gallery\s*\{[^}]*grid-template-columns/);
   });
 
   test('reduced motion removes the preview animations', () => {

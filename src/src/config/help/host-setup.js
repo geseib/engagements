@@ -220,25 +220,36 @@ const gameSetup = {
       GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
       heading "New engagement" | "Start a new engagement"; one layout (owner
       round 3, option A): the form, and "How <format> runs" beside it
-      (FormatWalkthrough.jsx, config/formatWalkthrough.js) over a status
-      line, open by default; its Hide folds it to a rail "Show how <format>
-      runs" (formatGuide.js readHowHidden, localStorage); on a phone a fold
-      under Format. A first-time host gets the gallery, a host with history
-      chips. Keycaps on Create. Enter on a format chip focuses the set
-      search. Steps: "Name it" (autofocus; Enter goes to the next empty
-      step), "Pick a format" gallery with "Planning a…" chips
-      (config/formatGuide.js MEETING_TYPES), or "Format" chips; "Compare
-      formats" top right of the step; one radio group (arrows choose).
-      "Question set": the recents list ("Used by you lately", "Browse all"),
-      "Your question sets · Make a new set"; the set is remembered per format
-      while open. "Topics in this set" (all on, "Switch off any you want to
-      skip.", "Loading this set's topics…", Retry). Names line "Names are
-      hidden until the vote closes" + Change (Call & Answer), "Names: …" for a
-      survey. "Optional — every one has a safe default": Background for Workie
-      and Advanced. Build Room / Event: "Next: the Build Room page" / "the
-      event page", Set up the Build Room / Continue to the event; ⌘/Ctrl+Enter
-      moves to that button. Foot notes; requestClose -> "Discard this
-      engagement?" Keep editing / Discard. Unreadable sets offered, disabled.
+      (FormatWalkthrough.jsx, config/formatWalkthrough.js), open by default;
+      before a format is chosen it is quiet: one sentence and one example
+      stage, "Example · Call & Answer, stage 1 of 6" (round 4, Fork 1 A). Its
+      Hide folds it to a rail "Show how <format> runs" (formatGuide.js
+      readHowHidden, localStorage); on a phone a fold under Format, closed
+      until opened. A first-time host gets the gallery (text cards, Build
+      Room and Event under "Bigger than one session"), a host with history
+      chips. ROUND 4: sections appear as each decision is made — Name it and
+      Format always; Question set once a format is chosen; the names line,
+      Background for Workie and Advanced once a set is picked; nothing goes
+      away again while the dialog is open. No step numbers. Keycaps on
+      Create. Enter on a format chip focuses the set search. "Name it"
+      (autofocus; Enter goes to the next empty decision), "Pick a format"
+      gallery with "Planning a…" chips (config/formatGuide.js
+      MEETING_TYPES), or "Format" chips; "Compare formats" top right; one
+      radio group (arrows choose). "Question set": the recents list ("Used
+      by you lately", "Browse all"), or for a host with none a line on what a
+      set is and "Browse all N sets" beside the search; "Your question sets ·
+      Make a new set" for a host who owns a set of the format, else "Make
+      your own set"; the set is remembered per format while open. "Topics in
+      this set" (all on, "Switch off any you want to skip.", "Loading this
+      set's topics…", Retry). Names line "Names are hidden until the vote
+      closes" + Change (Call & Answer), "Names: …" for a survey. "Background
+      for Workie · Optional" and "Advanced · Defaults: …". Build Room /
+      Event: "Next: the Build Room page" / "the event page" in the set's
+      place, Set up the Build Room / Continue to the event; ⌘/Ctrl+Enter
+      moves to that button. Foot: "Still needed: …" until ready; Create
+      pressed early (or ⌘/Ctrl+Enter) moves to the first gap. requestClose
+      -> "Discard this engagement?" Keep editing / Discard. Unreadable sets
+      offered, disabled.
     */
     {
       id: 'create-engagement',
@@ -247,15 +258,15 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Everything else has a safe default and sits under **Optional**.',
+          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Each part appears once the one above it is done, and stays while the dialog is open: a format brings up **Question set**; a set brings up the names line, **Background for Workie** and **Advanced**. Once you have created a session, your last format is already chosen.',
         },
         {
           t: 'list',
           items: [
-            { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required. The cursor starts here; Enter takes you to the next step you have not done.' },
-            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room and one plain sentence; later, a row of chips. Arrow keys choose; Enter moves on. See Choosing a format.' },
-            { title: 'Build Room and Event', text: 'They continue on their own page. Pick one and the third step says what that page asks for; the button becomes **Set up the Build Room** or **Continue to the event**, and takes your title with it. Event is offered when your plan includes events; otherwise it says which plan does.' },
-            { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. Switch format and back, and the set you had comes back with its topics. **Your question sets** opens your sets; **Make a new set** opens the new-set panel straight away.' },
+            { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required, but reveals nothing. Enter moves on.' },
+            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. A card each the first time, chips later. Arrow keys choose; Enter moves on.' },
+            { title: 'Build Room and Event', text: 'Under **Bigger than one session**: each continues on its own page. Where Question set would be, the dialog says what that page asks for, and the button becomes **Set up the Build Room** or **Continue to the event**, taking your title along. Event needs a plan with events.' },
+            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
           ],
         },
         {
@@ -277,14 +288,18 @@ const gameSetup = {
         {
           t: 'list',
           items: [
-            { title: 'Topics in this set', text: 'Appears once a set is picked, every topic on, each with its question count and a tick. Switch off any you want to skip; the line underneath says how many questions are in. Change the set and the topics are the new set\'s: while they load the button reads **Loading topics…**; if they cannot load, it says so and offers **Retry**.' },
+            { title: 'Topics in this set', text: 'Every topic on, each with its question count. Switch off any you want to skip; the line underneath says how many questions are in. Change the set and the topics are the new set\'s: while they load the button reads **Loading topics…**; if they cannot load, it says so and offers **Retry**.' },
             { title: 'Names', text: 'For Call & Answer a line says **Names are hidden until the vote closes**, then shown with the results. **Change** opens the setting under Advanced. A survey shows its Names choice the same way.' },
-            { title: 'Optional', text: 'Call & Answer has Background for Workie (below), and every format has **Advanced**. Each has a safe default.' },
+            { title: 'Background for Workie and Advanced', text: 'Two closed lines. Background for Workie (Call & Answer) is optional; Advanced names the defaults worth checking, or what you changed, in amber.' },
           ],
         },
         {
           t: 'p',
-          text: 'The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away. Ctrl+Enter (⌘+Enter on a Mac) creates once the three steps are done; pressed while the topics are loading, the button reads **Waiting for topics…** and it creates as soon as they arrive; on Build Room or Event it moves to the button instead, and Enter there goes on. Afterwards Your sessions says what was created, with its code, and offers **Start it now**.',
+          text: 'Until the three decisions are made the button is outlined and the foot says what is **Still needed**. Pressing it early, or Ctrl+Enter (⌘+Enter on a Mac), takes you to the first thing missing. Once ready the foot says **Nobody can join until you start it.**',
+        },
+        {
+          t: 'p',
+          text: 'The button is **Create engagement**, or **Open the survey**, which opens a survey to answers at once. Pressed while the topics load, it reads **Waiting for topics…** and creates when they arrive. On Build Room or Event, Ctrl+Enter moves to the button; Enter there goes on. Afterwards Your sessions shows the new session\'s code and **Start it now**.',
         },
       ],
     },
@@ -307,13 +322,13 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Planning a…', text: 'Press the kind of meeting (Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day) and it picks a format and says why. You can still pick any other.' },
-            { title: 'How it runs', text: 'Beside the form, the chosen format as a storyboard to scroll through: each stage a picture of the room screen and a phone with a plain description, from the first question to what you get at the end. The numbers at the top jump to a stage.' },
+            { title: 'How it runs', text: 'Beside the form, the chosen format as a storyboard to scroll through: each stage a picture of the room screen and a phone with a plain description, from the first question to what you get at the end. The numbers at the top jump to a stage. Before you choose, it shows one example stage, labelled as an example, and previews whichever card you point at or focus.' },
             { title: 'Compare formats', text: 'Opens the Format guide, wide: the storyboard on top and a short card for every format below. Pick a card to see how it runs, then press the Use button beside its name to go back to the form with it chosen. Your title and choices are kept.' },
           ],
         },
         {
           t: 'p',
-          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format. Once you have created a session, the last format you used is chosen for you.',
+          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format, closed until you open it. Once you have created a session, the last format you used is chosen for you.',
         },
       ],
     },
@@ -418,7 +433,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Advanced** is folded at the foot of the form. Its one line says what is in force, any change first, so you can leave it closed. Open it to change:',
+          text: '**Advanced** is folded at the foot of the form, once a question set is picked. Closed, its line names the defaults worth checking, or what you changed, in amber; open, it starts with every default in force. In an event agenda item the closed line lists them all. Open it to change:',
         },
         {
           t: 'list',

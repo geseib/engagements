@@ -142,6 +142,12 @@ export default function SetChooser({
   hideUnfiled = false,
   /** The owner column's heading. */
   ownerHeading = 'Owner',
+  /**
+   * ONE LINE SAYING WHAT A SET IS (New engagement round 4), shown above the
+   * search only while "Used by you lately" is empty — a host with history
+   * never sees it. With it, "Browse all" sits beside the search.
+   */
+  intro = '',
   now: nowProp = 0,
 }) {
   const [now] = useState(() => nowProp || Date.now());
@@ -379,6 +385,28 @@ export default function SetChooser({
       );
     }
     if (recentsFirst) {
+      const placeholder = sets.length
+        ? (shortPlaceholder ? `Search ${sets.length} sets` : `Choose a question set: type to search ${sets.length} ${fmt}sets`)
+        : `No ${fmt}sets yet`;
+      const browse = (
+        <button type="button" className="schs-browse" onClick={() => { setOpen(true); }}>
+          Browse all {sets.length} {sets.length === 1 ? 'set' : 'sets'}
+          <Icon name="CaretRight" size={14} />
+        </button>
+      );
+      /* NOTHING USED LATELY (a first-timer): what a set is, in one line, and
+         Browse all beside the search rather than under an empty list. */
+      if (intro && recentSets.length === 0 && sets.length > 0) {
+        return (
+          <div ref={rootRef} className="schs schs--recents schs--fresh" data-testid="set-chooser" data-value={value} data-theme={theme}>
+            <p className="schs-intro">{intro}</p>
+            <div className="schs-searchrow">
+              {searchBox(placeholder, '')}
+              {browse}
+            </div>
+          </div>
+        );
+      }
       return (
         <div ref={rootRef} className="schs schs--recents" data-testid="set-chooser" data-value={value} data-theme={theme}>
           {searchBox(
@@ -415,10 +443,7 @@ export default function SetChooser({
                   </ul>
                 </>
               )}
-              <button type="button" className="schs-browse" onClick={() => { setOpen(true); }}>
-                Browse all {sets.length} {sets.length === 1 ? 'set' : 'sets'}
-                <Icon name="CaretRight" size={14} />
-              </button>
+              {browse}
             </div>
           )}
           {sets.length === 0 && routesBlock}

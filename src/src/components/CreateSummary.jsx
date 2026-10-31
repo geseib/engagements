@@ -6,14 +6,13 @@ import FormatWalkthrough from './FormatWalkthrough';
  * THE SIDE PANE (docs/design/new-engagement README §3.5; round 2, frames
  * 2-01, 2-03, 2-10).
  *
- * In Guided, the walkthrough of the chosen format on top and — pinned to the
- * bottom so it stays visible at 1280×720 — one status line: Title, Format,
- * Questions, ticked or "not yet". The one-picture preview, the long
- * checklist and "What happens next" are retired: the walkthrough's steps say
- * what happens next, in more detail. Editing a session keeps its checklist.
+ * Creating: the walkthrough of the chosen format, and nothing under it. The
+ * status line it used to pin (Title · Format · Questions) is gone in round 4:
+ * the foot's "Still needed: …" says the same thing beside the button it is
+ * about. Editing a session keeps its checklist.
  *
  *   notice    a refusal or plan-limit notice: the top of the pane (frame 13)
- *   rows      [{ label, value, done }] — the first three make the status line
+ *   rows      [{ label, value, done }] — edit mode's summary rows
  */
 export function SummaryRows({ heading, rows = [] }) {
   return (
@@ -36,23 +35,6 @@ export function SummaryRows({ heading, rows = [] }) {
   );
 }
 
-/**
- * THE STATUS LINE under the walkthrough (frames 2-01, 2-03): the three
- * decisions as ticks, never restating the form.
- */
-export function StatusLine({ rows = [] }) {
-  return (
-    <ul className="gsd-stat" aria-label="Your decisions">
-      {rows.map((r) => (
-        <li key={r.label} className={r.done ? 'is-done' : ''}>
-          <span className="gsd-stat-mark" aria-hidden="true">{r.done ? <Icon name="Check" size={12} weight="bold" /> : '–'}</span>
-          {r.label}{r.done ? '' : <span className="gsd-stat-not"> {String(r.value || 'not yet').toLowerCase()}</span>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 export default function CreateSummary({
   format = '', label = '', notice = null,
   rowsHeading = 'Three decisions', rows = [], edit = false,
@@ -61,6 +43,8 @@ export default function CreateSummary({
   /* Nothing chosen yet: 'example' (Call & Answer, said to be one) or
      'hover' (the gallery card under the pointer or focus). */
   preview = '',
+  /* Round 4: nothing chosen and nothing pointed at — the quiet pane. */
+  exampleOnly = false,
 }) {
   if (!edit && hidden) {
     /* THE RAIL: one button, named for what it holds, so a host who hid the
@@ -98,6 +82,7 @@ export default function CreateSummary({
               format={format}
               label={label}
               preview={preview}
+              exampleOnly={exampleOnly}
               layout="pane"
               headActs={onToggleHidden ? (
                 <button
@@ -111,9 +96,6 @@ export default function CreateSummary({
                 </button>
               ) : null}
             />
-          </div>
-          <div className="gsd-side-pin">
-            <StatusLine rows={rows.slice(0, 3)} />
           </div>
         </>
       )}
