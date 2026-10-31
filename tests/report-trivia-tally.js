@@ -9,6 +9,7 @@
  *
  * Judge by exit code: node tests/report-trivia-tally.js
  */
+const suiteFinished = require('./helpers/finish-guard');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -81,5 +82,6 @@ check('create-report files the tally on trivia rounds, from the decrypted rows',
   assert.match(src, /const questionAnswers = answers\.filter/);
 });
 
+suiteFinished();
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
