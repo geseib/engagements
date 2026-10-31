@@ -255,6 +255,8 @@ const drafts = {
       invitations running out or expired, plan's sessions used up; invitations
       to you; staff: accounts waiting, plan requests, sets in Moderation.
       shared/generation-drafts.js notifyCreator: ready / "N of M" / failed.
+      game/report-sweep.js: 'report.auto' ("Your report for … is ready") and
+      'report.failed' (a day before the session expires), link section reports.
       notificationsApi destinationOf; HostNotificationsBell newTab on session pages.
     */
     {
@@ -272,6 +274,7 @@ const drafts = {
           rows: [
             ['Questions ready to review (or some of them, or a run that failed)', 'Whoever started the run', 'That draft\'s review'],
             ['Claude\'s question set is not saved (from a Build Room)', 'The Build Room\'s host', 'That Build Room'],
+            ['A report built for you is ready, or failed', 'The session\'s host', 'Reports'],
             ['An invitation to join a team', 'The person invited', 'Overview'],
             ['Sets sent back by the content check', 'Everyone in that team or space', 'Question sets'],
             ['People waiting to be approved to host; invitations running out', 'Team owners and admins', 'Members'],

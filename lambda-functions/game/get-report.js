@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { readReport } = require('./report-store');
 const { callerMayDriveSession } = require('./tenant');
+const { findReportIndexRow } = require('./report-access');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -55,8 +56,9 @@ exports.handler = async (event) => {
       read of the room. It is also the only place the owning org lives: the
       REPORT row does not carry `orgId` (create-report.js spreads `reportData`,
       which has none), and a blank org throws in tenant-crypto rather than
-      defaulting. A session whose METADATA has expired has no owner to check
-      against and answers not-found — the report is in Reports by then.
+      defaulting. A session whose METADATA has expired is checked against its
+      index row in Reports instead (below), so a saved or auto-built report
+      still opens for the team that owns it.
     */
     const authorizer = event?.requestContext?.authorizer;
     const identity = authorizer?.jwt?.claims || authorizer?.lambda;
@@ -67,11 +69,23 @@ exports.handler = async (event) => {
       Key: { PK: `GAME#${gameId}`, SK: 'METADATA' },
       ProjectionExpression: 'orgId'
     }));
-    if (!metaRes.Item || !callerMayDriveSession(event, metaRes.Item)) return NOT_FOUND;
+    /*
+      AFTER THE SESSION HAS EXPIRED (the automatic report sweep, 2026-10-31).
+      A saved or auto-built report's rows live 90 days; METADATA lives 7 from
+      the start. With METADATA gone, the session's index row in Reports is the
+      owner record instead (report-access.js): it carries the session's orgId,
+      and the same callerMayDriveSession question is asked of it. A session
+      that still exists is judged on METADATA alone, as before.
+    */
+    let owner = metaRes.Item || null;
+    if (!owner) {
+      owner = await findReportIndexRow(db, { table: process.env.TABLE_NAME, event, gameId });
+    }
+    if (!owner || !callerMayDriveSession(event, owner)) return NOT_FOUND;
 
     // Get the report
     // The head and its round rows, assembled (report-store.js).
-    const reportOrgId = typeof metaRes.Item?.orgId === 'string' ? metaRes.Item.orgId.trim() : '';
+    const reportOrgId = typeof owner.orgId === 'string' ? owner.orgId.trim() : '';
     const report = await readReport(db, { table: process.env.TABLE_NAME, gameId, orgId: reportOrgId });
     if (!report) return NOT_FOUND;
     console.log(`📊 Found report for game ${gameId}: ${report.gameStats?.totalQuestions || 0} questions`);
@@ -93,6 +107,13 @@ exports.handler = async (event) => {
         // not a spread, so a field create-report.js stores is invisible to the
         // host until it is named here.
         roundNoun: report.roundNoun || null,
+        // What the PDF prints on its front page and survey section. Named
+        // here so a report opened from Reports (ReportsPanel's "Make the
+        // PDF" on an auto-built report) draws the same document the host
+        // page draws from POST /report. Absent on older reports.
+        eventDetails: report.eventDetails || '',
+        surveyNames: report.surveyNames || null,
+        surveyResults: report.surveyResults || null,
         // Whether this report is everything the session produced, and what it
         // was assembled from. Named here for the reason the comment above
         // gives: this branch is a whitelist, so a field create-report.js stores

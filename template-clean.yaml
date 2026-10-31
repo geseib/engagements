@@ -2572,15 +2572,28 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref GameTable
+          # The automatic report sweep (game/report-sweep.js) rides this
+          # function's one schedule: each run invokes CreateReportFunction
+          # asynchronously with { __reportSweep: true }. No new function and
+          # no new rule — the stack is near the 500-resource ceiling.
+          REPORT_SWEEP_FUNCTION_NAME: !Sub '${StackName}-create-report'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-create-report'
       Events:
+        # EVERY 3 HOURS, still ONE rule. The usage job inside runs once a day
+        # (the first run of each UTC day claims it — usage-reconcile.js); the
+        # report sweep runs every time. Was cron(5 0 * * ? *).
         Nightly:
           Type: Schedule
           Properties:
-            Schedule: cron(5 0 * * ? *)
-            Description: Rebuild org usage counters from the ledger
+            Schedule: rate(3 hours)
+            Description: Daily usage reconcile, and the automatic report sweep every 3 hours
       Tags:
         Environment: !Ref Environment
         StackName: !Ref StackName
@@ -3368,6 +3381,16 @@ Resources:
       FunctionName: !Sub '${StackName}-create-report'
       CodeUri: lambda-functions/game/
       Handler: create-report.handler
+      # 300s, not the global 30: the automatic report sweep
+      # (game/report-sweep.js) runs here too, invoked asynchronously by
+      # UsageReconcileFunction's schedule. The HTTP route is still capped at
+      # API Gateway's 30s, so the route's behaviour does not change.
+      Timeout: 300
+      Environment:
+        Variables:
+          # The sweep retries a round's failed Workie read once, the way
+          # get-results.js starts one at close.
+          AI_SUMMARY_FUNCTION_NAME: !Sub '${StackName}-get-ai-summary'
       Events:
         CreateReportEvent:
           Type: HttpApi
@@ -3419,11 +3442,17 @@ Resources:
         # Tenant content is encrypted per organisation. This function reads or
         # writes some, so it needs to unwrap that org's data key — and ONLY with
         # an orgId encryption context, which the key policy makes mandatory.
+        # The sweep seals the same way (report, report rows, the index row and
+        # the bell entry), so it needs nothing more.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action: [ kms:Decrypt ]
               Resource: !GetAtt TenantKey.Arn
+            # The sweep's one Workie retry per round (report-sweep.js).
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StackName}-get-ai-summary'
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
       Tags:

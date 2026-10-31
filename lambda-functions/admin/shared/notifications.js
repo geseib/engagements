@@ -11,7 +11,8 @@
  *
  *   STORED   A row here, written by whatever produced it — the AI
  *            generation worker (a draft is ready, partly ready, or failed),
- *            and a Build Room when Claude sends it a question set (#45).
+ *            a Build Room when Claude sends it a question set (#45), and the
+ *            automatic report sweep (a report is ready, or could not be built).
  *            It has read/unread, a deep link and a ttl, and it is removed when
  *            the thing it points at is decided.
  *   LIVE     Computed on read from state that already exists elsewhere —
@@ -69,6 +70,11 @@ const KINDS = Object.freeze({
   DRAFT_PARTIAL: 'draft.partial',
   DRAFT_FAILED: 'draft.failed',
   CLAUDE_SET_UNSAVED: 'claudeset.unsaved',
+  // The automatic report sweep (game/report-sweep.js): a session's report was
+  // built for the host who never made one, or could not be, a day before the
+  // session expires. Both link to the console's Reports section.
+  REPORT_AUTO: 'report.auto',
+  REPORT_FAILED: 'report.failed',
 });
 
 /** Days before `expiresAt` an entry of this kind turns into a reminder; 0 = never. */

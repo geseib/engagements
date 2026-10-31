@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Icon from './Icon';
@@ -37,6 +37,17 @@ import './ReportsPanel.css';
  * Reads GET /reports (lambda-functions/game/get-reports.js). Downloads go
  * through GET /reports/download, which authorises on the caller's own index
  * row rather than the session's METADATA — the row that expires.
+ *
+ * AUTO-BUILT REPORTS (2026-10-31, lambda-functions/game/report-sweep.js). A
+ * session nobody made a report for gets one built after it finishes: its data
+ * is stored and listed here as "Auto-built — open to make the PDF", with no
+ * PDF, link or passkey yet. **Make the PDF** reads the stored report
+ * (GET /games/{id}/report — it still opens after the session has expired),
+ * draws it offscreen with the session report's own ReportDocument and keeps it
+ * through utils/saveReport.js, the one save every report uses. The save
+ * replaces the auto row, which then shares and downloads like any other.
+ * Both modules load on that click only, so the console does not carry the
+ * report renderer until it is needed.
  *
  * `.rp` is its own scope. It copies SessionsPanel's tokens rather than reusing
  * `.sp`, because the namespace tests hold each screen to one scope class.
@@ -82,6 +93,51 @@ const SHARE_FIELD = {
   note: 'rp-share-copynote',
 };
 
+/** "2 rounds done · 1 not run" — what an auto-built report holds. */
+export function coversText(covers) {
+  if (!covers) return '';
+  const done = Array.isArray(covers.completed) ? covers.completed.length : 0;
+  const notRun = Array.isArray(covers.notRun) ? covers.notRun.length : 0;
+  const parts = [`${done} round${done === 1 ? '' : 's'} done`];
+  if (notRun) parts.push(`${notRun} not run`);
+  return parts.join(' · ');
+}
+
+/**
+ * GET /games/{id}/report?role=host → the object ReportDocument draws. The same
+ * fields, the same way, as GameHostPage's generateReportForGame builds from
+ * POST /report — that object is rebuilt from scratch, so a field not named
+ * here is a field the PDF never prints.
+ */
+export function reportDocumentData(report, fallbackTitle = '') {
+  const questions = report.detailedQuestions || [];
+  return {
+    gameId: report.gameId,
+    eventTitle: report.gameTitle || fallbackTitle || 'Engagements Session',
+    gameType: report.gameType,
+    roundNoun: report.roundNoun,
+    reportCompleteness: report.reportCompleteness,
+    eventDetails: report.eventDetails || '',
+    questionSetData: report.questionSetData || null,
+    surveyNames: report.surveyNames || null,
+    surveyResults: report.surveyResults || null,
+    players: report.playerPerformance || [],
+    questions,
+    totalComments: (report.gameStats && report.gameStats.totalComments) || 0,
+    notReviewedLeftOut: report.notReviewedLeftOut || null,
+    allAnswers: questions.map((q) => ({ questionNumber: q.questionNumber, answers: q.answers || [] })),
+    allVotes: questions.map((q) => ({
+      questionNumber: q.questionNumber,
+      votes: (q.answers || []).map((answer, index) => ({
+        playerName: answer.playerName,
+        answerIndex: index,
+        totalScore: answer.totalScore,
+        votes: answer.voteBreakdown || `${answer.firstPlace} first, ${answer.secondPlace} second, ${answer.thirdPlace} third`,
+      })).filter((v) => v.totalScore > 0),
+    })),
+  };
+}
+
 /** "6 Aug 2027" — a date the page can be printed with. */
 export function formatKeptUntil(iso) {
   if (!iso) return '—';
@@ -96,6 +152,10 @@ export default function ReportsPanel({ heading = null }) {
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [sharingId, setSharingId] = useState(null);
+  const [notice, setNotice] = useState(null);
+  /** The auto-built report being drawn offscreen: { report, data, Doc, save }. */
+  const [making, setMaking] = useState(null);
+  const renderRef = useRef(null);
   /** The event rows whose agenda items are showing. */
   const [openEvents, setOpenEvents] = useState(() => new Set());
   const toggleEvent = (code) => setOpenEvents((prev) => {
@@ -144,6 +204,65 @@ export default function ReportsPanel({ heading = null }) {
     }
   };
 
+  /*
+    MAKE THE PDF of an auto-built report: read it, draw it, keep it. The
+    drawing and the save happen in the effect below, once ReportDocument has
+    rendered into the offscreen container.
+  */
+  const makePdf = async (report) => {
+    setBusyId(report.id);
+    setNotice(null);
+    try {
+      const response = await authFetch(adminApiUrl(`games/${encodeURIComponent(report.gameId)}/report?role=host`));
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      const [{ ReportDocument }, { saveReportPdf }] = await Promise.all([
+        import('./GameReport'),
+        import('../utils/saveReport'),
+      ]);
+      setMaking({
+        report, data: reportDocumentData(body, report.title), Doc: ReportDocument, save: saveReportPdf,
+      });
+    } catch (err) {
+      setError(`Could not open “${report.title || report.gameId}”: ${err.message}`);
+      setBusyId(null);
+    }
+  };
+
+  /*
+    Once per report: StrictMode runs an effect twice in development, and a
+    second save would draw and upload the PDF twice. `alive` stops state
+    updates after the panel has gone (the host closed the dialog mid-save).
+  */
+  const savingRef = useRef(null);
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+  useEffect(() => {
+    if (!making || savingRef.current === making) return;
+    savingRef.current = making;
+    (async () => {
+      const { report, data, save } = making;
+      try {
+        const box = renderRef.current;
+        const element = (box && box.querySelector('.report-doc')) || box;
+        await save({
+          element, gameId: report.gameId, title: data.eventTitle, permanent: false, apiBase: adminApiUrl(''),
+        });
+        if (!aliveRef.current) return;
+        setNotice(`The PDF of “${data.eventTitle}” is saved. Share and PDF are on its row now.`);
+        await load();
+        if (aliveRef.current) setSharingId(report.id);
+      } catch (err) {
+        if (aliveRef.current) setError((err && err.hostMessage) || `Could not save the PDF of “${data.eventTitle}”: ${err.message}`);
+      } finally {
+        if (aliveRef.current) { setMaking(null); setBusyId(null); }
+      }
+    })();
+  }, [making, load]);
+
   const {
     state: { search, type, keep, sort },
     set, shown, drops, activeFilterCount, clearOne, clearAll,
@@ -177,7 +296,13 @@ export default function ReportsPanel({ heading = null }) {
           <span className="rp-sub">
             Session <span className="rp-mono">{report.gameId}</span>
             {report.permanent && <> · <b>kept for a year</b></>}
+            {report.auto && report.covers && <> · {coversText(report.covers)}</>}
           </span>
+          {report.auto && (
+            <span className="rp-sub" data-testid="report-auto">
+              <b>Auto-built</b> — open to make the PDF
+            </span>
+          )}
         </td>
         <td>{kind ? <span className="rp-chip rp-chip--type">{kindLabel(kind)}</span> : '—'}</td>
         <td className="rp-when">{formatWhen(report.savedAt)}</td>
@@ -191,6 +316,20 @@ export default function ReportsPanel({ heading = null }) {
             : <span className="rp-chip rp-chip--on">Still open</span>}
         </td>
         <td>
+          {report.auto ? (
+            <div className="rp-rowact">
+              <button
+                type="button"
+                className="rp-btn rp-btn--sm"
+                disabled={busyId === report.id || Boolean(making)}
+                onClick={() => makePdf(report)}
+                aria-label={`Make the PDF of ${name || report.gameId}`}
+              >
+                <Icon name="FilePdf" weight="bold" size={13} color="currentColor" />
+                {busyId === report.id ? ' Making…' : ' Make the PDF'}
+              </button>
+            </div>
+          ) : (
           <div className="rp-rowact">
             <button
               type="button"
@@ -212,10 +351,11 @@ export default function ReportsPanel({ heading = null }) {
               <Icon name="DownloadSimple" weight="bold" size={13} color="currentColor" /> PDF
             </button>
           </div>
+          )}
         </td>
       </tr>,
     ];
-    if (sharing) {
+    if (sharing && !report.auto) {
       out.push(
         <tr key={`${report.id}-share`} className="rp-sharerow" data-testid="report-share-row">
           <td colSpan={6}>
@@ -266,6 +406,7 @@ export default function ReportsPanel({ heading = null }) {
     const open = openEvents.has(event.code);
     const itemsId = `rp-items-${event.code}`;
     const title = event.title || `Event ${event.code}`;
+    const autoCount = (event.items || []).filter((i) => i.report && i.report.auto).length;
     const rows = [
       <tr key={event.id} data-testid="event-row">
         <td>
@@ -282,6 +423,7 @@ export default function ReportsPanel({ heading = null }) {
           </button>
           <span className="rp-sub">
             {itemCountText(event.itemCount)} · {event.reportCount} report{event.reportCount === 1 ? '' : 's'} saved
+            {autoCount > 0 && <> · {autoCount} auto-built</>}
           </span>
         </td>
         <td><span className="rp-chip rp-chip--type">{kindLabel(EVENT_KIND)}</span></td>
@@ -330,6 +472,8 @@ export default function ReportsPanel({ heading = null }) {
         </div>
       )}
 
+      {notice && <p className="rp-note" role="status" data-testid="reports-notice">{notice}</p>}
+
       {loading && reports.length === 0 && <p className="rp-loading">Loading reports…</p>}
 
       {!loading && reports.length === 0 && !error && (
@@ -338,7 +482,8 @@ export default function ReportsPanel({ heading = null }) {
           <p>
             A report is saved from a session's report screen. Standard reports are kept 90 days from the
             day they are saved; one saved as <b>Keep for a year</b> is kept 365. They stay here after the
-            session itself has expired.
+            session itself has expired. A session that finishes without a saved report gets one built
+            automatically; it appears here, ready for you to make its PDF.
           </p>
         </div>
       )}
@@ -418,6 +563,12 @@ export default function ReportsPanel({ heading = null }) {
             </table>
           )}
         </>
+      )}
+
+      {making && (
+        <div className="rp-render" ref={renderRef} aria-hidden="true" data-testid="report-render">
+          <making.Doc reportData={making.data} />
+        </div>
       )}
     </div>
   );

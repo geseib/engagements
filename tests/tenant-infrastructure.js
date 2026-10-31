@@ -164,7 +164,9 @@ check('the table still emits both images, which the consumer needs', () =>
 check('the reconciler runs on a schedule', () => {
   const rec = resourceBlock('UsageReconcileFunction');
   assert.ok(/Type:\s*Schedule/.test(rec), 'the backstop never runs');
-  assert.ok(/Schedule:\s*cron\(/.test(rec), 'no cron expression');
+  // rate(3 hours) since the report sweep (2026-10-31); the usage job inside
+  // still runs once a day — tests/report-sweep-schedule.js drives that.
+  assert.ok(/Schedule:\s*(cron|rate)\(/.test(rec), 'no schedule expression');
 });
 
 // ---------- 5. The env var every crypto call site needs ----------

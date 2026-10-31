@@ -4,6 +4,7 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteComm
 const { encryptValue, encryptItem, decryptItems } = require('./tenant-crypto');
 const { reportsIndexPk, callerMayDriveSession } = require('./tenant');
 const { generatePasskey, hashPasskey, normalizePasskey } = require('./report-passkey');
+const { findReportIndexRow } = require('./report-access');
 
 const s3Client = new S3Client({});
 const dynamoClient = new DynamoDBClient({});
@@ -58,6 +59,23 @@ exports.handler = async (event) => {
     */
     const authorizer = event?.requestContext?.authorizer;
     const identity = authorizer?.jwt?.claims || authorizer?.lambda;
+    /*
+      AN AUTO-BUILT REPORT WHOSE SESSION HAS EXPIRED (report-sweep.js). Its
+      PDF is drawn from Reports after METADATA is gone, so the session's index
+      row stands in as the owner record (report-access.js): the same orgId,
+      type and event, asked the same callerMayDriveSession question. Without an
+      index row there is nothing to save against, as before.
+    */
+    if (!gameMetadata.Item && identity) {
+      const indexed = await findReportIndexRow(db, { table: process.env.TABLE_NAME, event, gameId });
+      if (indexed) {
+        gameMetadata.Item = {
+          ...(indexed.orgId ? { orgId: indexed.orgId } : {}),
+          GameType: indexed.GameType || null,
+          ...(indexed.EventRef ? { EventRef: indexed.EventRef, EventItem: indexed.EventItem || '' } : {}),
+        };
+      }
+    }
     if (!gameMetadata.Item || !identity || !callerMayDriveSession(event, gameMetadata.Item)) {
       return {
         statusCode: 404,
