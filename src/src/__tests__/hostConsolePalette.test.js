@@ -26,9 +26,11 @@ test('no colour literal', () => {
   expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/);
 });
 test('the reused action bar is pinned to the ladder inside the console', () => {
-  for (const cls of ['__hint', '__armed', '__primary', '__secondary', '__tertiary', '__kbd', '__keyhint']) {
+  for (const cls of ['__hint', '__armed', '__primary', '__secondary', '__tertiary', '__keyhint']) {
     expect(css).toMatch(new RegExp(`\\.hc-acts \\.host-action-bar${cls}[^{]*\\{[^}]*font-size:\\s*\\d+px`));
   }
+  // The Space cap on the main button (KeyCap.jsx; was the loose __kbd hint).
+  expect(css).toMatch(/\.hc-acts \.host-action-bar__primary \.keycap[^{]*\{[^}]*font-size:\s*12px/);
 });
 test('keyboard focus is visible on the console\'s own controls', () => {
   for (const sel of ['.hc-sec summary', '.hc-link', '.hc-code', '.hc-btn', '.hc-winstat']) {

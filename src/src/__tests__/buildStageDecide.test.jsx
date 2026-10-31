@@ -94,7 +94,7 @@ const overDock = () => { fireEvent.mouseEnter(document.querySelector('footer.doc
 const leaveDock = () => { fireEvent.mouseLeave(document.querySelector('footer.dock')); };
 /** The SPACE cap: 'on' when Space presses the main button, 'off' (kept, hidden) when it does nothing. */
 const spaceCap = () => {
-  const k = document.querySelector('.dock .kbd');
+  const k = document.querySelector('.dock .keycap');
   if (!k) return null;
   return k.hasAttribute('data-off') ? 'off' : k.textContent;
 };
@@ -109,9 +109,10 @@ describe('R3: the Stage at results', () => {
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     // Same order as the Host: the change is to the left of the main button.
-    const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
+    // The label without the main button's keycap (KeyCap, aria-hidden).
+    const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.replace(/Space$/, '').trim());
     expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('aria-keyshortcuts', 'Space ArrowRight');
     expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
   });
@@ -168,7 +169,7 @@ describe('R3: the Stage at results', () => {
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toHaveClass('host-action-bar__primary');
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
   });
 
   test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
@@ -258,7 +259,7 @@ describe('R3: the Stage at results', () => {
     // A wheel already still on arrival is settled.
     await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
   });
 
   test('a rating sends its average', async () => {

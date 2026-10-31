@@ -598,10 +598,8 @@ a.dock-more{text-decoration:none}
   border:0;background:var(--primary);color:#14203A;cursor:pointer;white-space:nowrap}
 .btn.ghost{background:transparent;color:var(--text);border:var(--hair) solid var(--rule)}
 .btn[disabled]{background:rgba(155,168,190,.18);color:var(--muted);cursor:not-allowed}
-.dock .kbd{font-size:var(--t-meta);color:var(--muted);opacity:.85;font-weight:500;white-space:nowrap}
-/* FIXED SLOTS (Dock.jsx; parity PLAN §2a). With Space off the cap keeps its
-   width, so the main button beside it never slides; it only goes invisible. */
-.dock .kbd[data-off]{visibility:hidden}
+/* The Space cap is on the main button now (.keycap, styles.css; KeyCap.jsx),
+   keeping its width when off, so the button never slides (parity PLAN §2a). */
 /* SESSION's count (someone asking to take a name) and its lit edge; a type
    may paint the edge in its own colour. Never the one orange. */
 .dock-more--lit{color:var(--text);border-color:var(--text)}
@@ -618,13 +616,13 @@ a.dock-more{text-decoration:none}
    1000, 1150, 1280, 1440 and 1920 wide on the FEEDBACK beat. */
 .dock .host-action-bar__keyhint{max-width:24ch}
 @media (max-width:1200px){.dock .host-action-bar__keyhint{display:none}}
-@media (max-width:1100px){.dock .kbd{display:none}}
+@media (max-width:1100px){.dock .keycap{display:none}}
 /* AN EVENT'S ITEM carries AGENDA beside SESSION (Dock.jsx), 94px more, so the
    hints go sooner: measured on a closed survey's feedback beat, the widest
    dock there is, the row ran 12-148px past the edge at every width from 1150
    to 1440. What still does not fit wraps (`.dock[data-crowded]`, below). */
 @media (max-width:1599px){.dock[data-agenda] .host-action-bar__keyhint{display:none}}
-@media (max-width:1279px){.dock[data-agenda] .kbd{display:none}}
+@media (max-width:1279px){.dock[data-agenda] .keycap{display:none}}
 /* A PORTRAIT TABLET. The measurements above stop at 1000 wide; at 768 the
    dock ran 200px past the right edge, so the primary and SESSION were not
    scrolled to but unreachable, and the lobby cut its session code to "482"
@@ -642,10 +640,10 @@ a.dock-more{text-decoration:none}
    useCrowded) — never a button past the edge. */
 .dock[data-crowded]{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
 .dock[data-crowded] .status{flex:1 1 100%;max-width:none}
-/* A crowded dock drops the SPACE hint before it wraps a button to a third
+/* A crowded dock drops the Space cap before it wraps a button to a third
    row (walk of dev 92f8b24d: TV at 1366x768, SESSION alone on a third row
-   took 60px from the stage). */
-.dock[data-crowded] .kbd{display:none}
+   took 60px from the stage). The cap is on the button now (.keycap). */
+.dock[data-crowded] .keycap{display:none}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter

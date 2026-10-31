@@ -51,7 +51,7 @@ const running = {
             { title: 'The top line', text: 'Where the session is (Lobby, Answering, Voting, Results), its title, the round ("Round 1 of 12"), and JOIN with the address and code. Point at the code to show the join QR; click it to keep the QR up.' },
             { title: 'The step strip', text: 'Setup, then the round\'s steps (Answer, Vote, What we heard, Ask), then Finish. The live step is marked. Point at a step to read what it is; on one screen the steps are not buttons.' },
             { title: 'The room meter', text: 'Top right: how many have answered or voted. Click the number, or press U, to list who is still to answer (unless the Names setting holds that back), and again to hide it.' },
-            { title: 'The dock', text: 'Along the bottom: a status line on the left, the main button with “or press Space” beside it (a reminder, not a button), sometimes a second button, and **SESSION** for the Session panel.' },
+            { title: 'The dock', text: 'Along the bottom: a status line on the left, the main button with a small **Space** on it (that key presses it too), sometimes a second button, and **SESSION** for the Session panel.' },
           ],
         },
       ],
