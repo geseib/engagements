@@ -101,6 +101,20 @@
   border-color: var(--primary-deep);
 }
 
+.hea .hea-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Why the event summary was not made (danger-text: the copy token; --danger never carries text). */
+.hea .hea-error {
+  margin: 0;
+  padding: 10px 24px;
+  font-size: var(--hea-t-body);
+  color: var(--danger-text);
+  border-bottom: 1px solid var(--hea-rule);
+}
+
 .hea .hea-btn:focus-visible {
   outline: 3px solid var(--primary);
   outline-offset: 2px;

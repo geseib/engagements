@@ -7,6 +7,7 @@ import { authFetch } from '../../auth/authFetch';
 import { adminApiUrl } from '../../utils/adminApi';
 import { navigateTo } from '../../auth/navigate';
 import useFullscreenKey from '../../hooks/useFullscreenKey';
+import { downloadEventSummary } from '../../utils/eventSummary';
 import './HostEventAgenda.css';
 
 /**
@@ -30,7 +31,20 @@ import './HostEventAgenda.css';
 export default function HostEventAgenda({ code }) {
   const [sets, setSets] = useState([]);
   const [title, setTitle] = useState('');
+  // The event summary PDF (utils/eventSummary.js): drawing, or why it failed.
+  const [summary, setSummary] = useState({ busy: false, error: '' });
   useFullscreenKey();
+
+  const saveSummary = async () => {
+    if (summary.busy) return;
+    setSummary({ busy: true, error: '' });
+    try {
+      await downloadEventSummary(code);
+      setSummary({ busy: false, error: '' });
+    } catch (err) {
+      setSummary({ busy: false, error: `The event summary was not made${err && err.message ? ` (${err.message})` : ''}. Please try again.` });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +74,11 @@ export default function HostEventAgenda({ code }) {
         {/* The agenda guide's page section (Help Phase 3); the item dialogs
             carry the adding-items one. */}
         <HelpButton {...helpFor('event-agenda')} variant="inline" size="small" tooltip="Help: the agenda" className="help-button-quiet" />
+        {/* A short PDF: the overview and the agenda, and which item reports
+            exist and where. Downloaded, not stored (utils/eventSummary.js). */}
+        <button type="button" className="hea-btn" onClick={saveSummary} disabled={summary.busy}>
+          <Icon name="FilePdf" size={16} color="currentColor" /> {summary.busy ? 'Making the summary…' : 'Save event summary (PDF)'}
+        </button>
         <button
           type="button"
           className="hea-btn hea-btn--primary"
@@ -68,6 +87,7 @@ export default function HostEventAgenda({ code }) {
           <Icon name="PlayCircle" size={16} color="currentColor" /> Open the stage
         </button>
       </header>
+      {summary.error && <p className="hea-error" role="alert">{summary.error}</p>}
       <main className="hea-body">
         <EventBuilder
           code={code}

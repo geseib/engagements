@@ -1114,5 +1114,5 @@ function ReportDocument({ reportData }) {
   );
 }
 
-export { ReportDocument };
+export { ReportDocument, MountainMark, Ridge, Kicker, SubHead };
 export default GameReport;

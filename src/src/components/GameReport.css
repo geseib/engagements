@@ -1034,6 +1034,78 @@
 
 .report-doc .rpt-end-mark { width: 1.4em; height: 1.4em; display: block; }
 
+/* ==========================================================================
+   THE EVENT SUMMARY (components/EventSummary.jsx) — the overview and the
+   agenda, one or two pages. The session report's pieces, a shorter top, and
+   the agenda as one ruled list. Status is always a word, never a colour.
+   ========================================================================== */
+.report-doc .rpt-ev-ridge { margin: 0 0 1.2em; height: 2.4em; }
+.report-doc.rpt-event > .rpt-end { margin-top: 3em; }
+
+.report-doc .rpt-ev-name {
+  margin: 0 0 0.5em;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-size: 2.6em;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  color: var(--rpt-ink);
+  overflow-wrap: anywhere;
+}
+
+.report-doc .rpt-ev-strip { margin-top: 1.2em; }
+.report-doc .rpt-ev-strip .rpt-strip-count { min-width: 8em; }
+
+.report-doc .rpt-ev-row {
+  display: grid;
+  grid-template-columns: 5em minmax(0, 1fr) 7.5em 5em 12em;
+  gap: 0 1em;
+  align-items: baseline;
+  padding: 0.6em 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft);
+  font-size: 0.95em;
+}
+
+.report-doc .rpt-ev-row--head {
+  padding: 0 0 0.5em;
+  border-bottom: var(--rpt-hair) solid var(--rpt-ink);
+}
+
+/* On the spans, not the row: the row's em sets the column widths. */
+.report-doc .rpt-ev-row--head > span {
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-ev-time { font-weight: 700; line-height: 1.3; }
+.report-doc .rpt-ev-until { font-weight: 400; font-size: max(var(--rpt-floor), 0.8em); color: var(--rpt-muted); }
+.report-doc .rpt-ev-item,
+.report-doc .rpt-ev-report { display: flex; flex-direction: column; min-width: 0; }
+.report-doc .rpt-ev-title { font-weight: 600; overflow-wrap: anywhere; }
+
+.report-doc .rpt-ev-led,
+.report-doc .rpt-ev-where,
+.report-doc .rpt-ev-none { font-size: max(var(--rpt-floor), 0.8em); color: var(--rpt-muted); overflow-wrap: anywhere; }
+
+.report-doc .rpt-ev-format,
+.report-doc .rpt-ev-status { font-size: max(var(--rpt-floor), 0.9em); }
+
+.report-doc .rpt-ev-rs {
+  font-size: max(var(--rpt-floor), 0.675em);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-ev-rs--ready { color: var(--rpt-accent-ink); }
+.report-doc .rpt-ev-rtitle { font-size: max(var(--rpt-floor), 0.9em); overflow-wrap: anywhere; }
+.report-doc .rpt-ev-note { margin-top: 1em; }
+
 /* The phone: stack what was side by side. */
 @media (max-width: 640px) {
   .report-container .report-doc { margin: 16px auto; padding: 28px 16px 40px; border-radius: 0; }

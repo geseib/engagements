@@ -229,6 +229,21 @@ export default function ReportsPanel({ heading = null }) {
     }
   };
 
+  /** The event summary PDF: drawn on the click, handed to the browser. */
+  const summaryPdf = async (event) => {
+    setBusyId(event.id);
+    setNotice(null);
+    try {
+      const { downloadEventSummary } = await import('../utils/eventSummary');
+      await downloadEventSummary(event.code);
+      if (aliveRef.current) setNotice(`The summary of “${event.title || event.code}” is downloaded. It is not kept here; make it again whenever you need it.`);
+    } catch (err) {
+      if (aliveRef.current) setError(`Could not make the summary of “${event.title || event.code}”: ${err.message}`);
+    } finally {
+      if (aliveRef.current) setBusyId(null);
+    }
+  };
+
   /*
     Once per report: StrictMode runs an effect twice in development, and a
     second save would draw and upload the PDF twice. `alive` stops state
@@ -430,7 +445,20 @@ export default function ReportsPanel({ heading = null }) {
         <td className="rp-when">{formatWhen(event.savedAt)}</td>
         <td className="rp-until">{event.expiresAt ? formatKeptUntil(event.expiresAt) : '—'}</td>
         <td><span className="rp-chip rp-chip--type">{eventStateLabel(event)}</span></td>
-        <td />
+        <td>
+          {/* The event summary: overview and agenda, which item reports exist
+              and where — downloaded, not stored (utils/eventSummary.js). */}
+          <button
+            type="button"
+            className="rp-btn rp-btn--sm"
+            disabled={busyId === event.id}
+            onClick={() => summaryPdf(event)}
+            aria-label={`Event summary PDF of ${title}`}
+          >
+            <Icon name="FilePdf" weight="bold" size={14} color="currentColor" />
+            {busyId === event.id ? 'Making…' : 'Summary PDF'}
+          </button>
+        </td>
       </tr>,
     ];
     if (!open) return rows;

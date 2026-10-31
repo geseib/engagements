@@ -238,7 +238,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'A saved report outlives its session. **Reports** on your start screen, and the Reports section of the console, list every saved report with when it was saved and how long it is kept. Search, filter and sort them; **Share** gives its link and passkey again, and **PDF** downloads it. Saving the same session again keeps the same passkey.',
+          text: 'A saved report outlives its session. **Reports** on your start screen, and the Reports section of the console, list every saved report with when it was saved and how long it is kept. Search, filter and sort them; **Share** gives its link and passkey again, and **PDF** downloads it. Saving the same session again keeps the same passkey. An event\'s row has **Summary PDF**: one or two pages with the event\'s overview and agenda, and which of its sessions\' reports exist and where. It is downloaded, not kept in the list.',
         },
       ],
     },
