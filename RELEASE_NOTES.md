@@ -9,6 +9,29 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (later still: the event summary names its host)
+
+**Test:** merge of dev `86ff1123`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **The event summary says who hosted it**: "Hosted by <name>", with the team underneath for a team event. A new event keeps its creator's name (from their sign-in) and its team's name, sealed like the event's title.
+
+### Fixed
+
+- **The event summary had no host or team name**, because the event stored only the creator's account id.
+
+### What to look at
+
+1. On engage.test, create a small event and press **Save event summary (PDF)** on its agenda: the overview reads "Hosted by" with your name, and the team's name in a team space.
+2. Save the summary of an event made before today: it names you if you made it.
+
+### Known gaps
+
+- An event made before this release did not keep its host's name: its summary names the signed-in host when they made the event, and nobody otherwise.
+
+---
+
 ## 31 Oct 2026 (later: event summary PDF; trivia explains its answers)
 
 **Test:** merge of dev `cec0f677`. Everything below this entry is already on test; this push adds only what is here.
