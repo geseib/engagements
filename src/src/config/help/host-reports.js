@@ -193,7 +193,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'It opens with a cover: the session\'s title, the day it was held, who hosted it, the format, and the result at a glance (how many people, rounds and responses, and the top-voted response). Then what the session was about, who was there, and each round: the question and the task, Workie\'s read (marked as AI analysis, not your words), every answer ranked with its points, the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores and a short guide to reading the report.',
+          text: 'It opens with a cover: the session\'s title, the day it was held, who hosted it, the format, and the result at a glance (how many people, rounds and responses, and the top-voted response). Then what the session was about, who was there, and each round: the question and the task, Workie\'s read (marked as AI analysis, not your words), every answer ranked with its points (for trivia, each choice with how many picked it, the right one ticked, and the question set\'s explanation of why it is right when it has one), the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores and a short guide to reading the report.',
         },
         {
           t: 'p',
@@ -238,7 +238,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'A saved report outlives its session. **Reports** on your start screen, and the Reports section of the console, list every saved report with when it was saved and how long it is kept. Search, filter and sort them; **Share** gives its link and passkey again, and **PDF** downloads it. Saving the same session again keeps the same passkey.',
+          text: 'A saved report outlives its session. **Reports** on your start screen, and the Reports section of the console, list every saved report with when it was saved and how long it is kept. Search, filter and sort them; **Share** gives its link and passkey again, and **PDF** downloads it. Saving the same session again keeps the same passkey. An event\'s row has **Summary PDF**: one or two pages with the event\'s overview and agenda, and which of its sessions\' reports exist and where. It is downloaded, not kept in the list.',
         },
       ],
     },

@@ -18,7 +18,8 @@
                        event" → GameHostPage newEventTitle → the same dialog.
                        Attendee reports are stored on the event; nothing yet
                        hands them to attendees, so the help names the choice only.
-    the-agenda-page    HostEventAgenda.jsx (Main screen, Open the stage);
+    the-agenda-page    HostEventAgenda.jsx (Main screen, Save event summary (PDF) —
+                       utils/eventSummary.js, download only, Open the stage);
                        EventBuilder.jsx facts, Edit details, Run the event /
                        Open the stage / The stage, "Times are the plan, not a
                        timer", the foot.
@@ -136,6 +137,7 @@ const eventAgenda = {
             { title: '**Edit details**', text: 'Change the name, date, time, place or the reports default.' },
             { title: '**Run the event**', text: 'Opens the event\'s stage in a new tab, so the agenda stays open here. Once the event is running it reads **Open the stage**. **Open the stage** at the top right goes there in this tab.' },
             { title: '**Add item**', text: 'Adds to the agenda; see the next section.' },
+            { title: '**Save event summary (PDF)**', text: 'Downloads a short PDF of the event: its date, place and agenda, who leads each item, each item\'s state, and for every session whether its report is saved, auto-built, not made yet or gone with its expired session, with the report\'s name and where it is filed (Reports, under the event). Nothing from inside the sessions. It is not kept in Reports; make it again whenever you need it.' },
             { title: '**Main screen**', text: 'Back to your start screen.' },
           ],
         },

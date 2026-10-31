@@ -430,3 +430,85 @@ describe('greyscale-safe, and amber never carries text', () => {
     expect(CSS).toMatch(/--rpt-accent-ink:\s*var\(--accent-text\)/);
   });
 });
+
+/*
+ * TRIVIA: WHY IT'S RIGHT, AND HOW THE ROOM ANSWERED (owner, 2026-10-31: "if
+ * there is info in the question set as to why it is right, that should be
+ * included"). `answerDetails` has always been in the payload and was never
+ * printed; `triviaTally` is new (create-report.js, tests/report-trivia-tally.js).
+ */
+describe('a trivia round: why it is right, and the room\'s counts', () => {
+  const tallied = {
+    ...trivia,
+    questions: [{
+      questionNumber: 1,
+      questionData: {
+        title: 'Context window?', optionA: 'Tokens out', optionB: 'One request', optionC: 'Memory',
+        correctAnswer: 'OptionB', answerDetails: 'It is everything the model reads at once.',
+        background: 'AUTHOR NOTES FOR WORKIE',
+      },
+      triviaTally: { answered: 10, correct: 7, options: [
+        { slot: 'A', letter: 'A', count: 2, correct: false },
+        { slot: 'B', letter: 'B', count: 7, correct: true },
+        { slot: 'C', letter: 'C', count: 1, correct: false },
+      ] },
+      aiSummary: null, answers: [],
+    }],
+  };
+
+  test('the set\'s explanation sits under the right answer, labelled', () => {
+    const { container } = render(<ReportDocument reportData={tallied} />);
+    const why = container.querySelectorAll('.rpt-why');
+    expect(why).toHaveLength(1);
+    expect(why[0].closest('.rpt-choice').classList.contains('rpt-choice--correct')).toBe(true);
+    expect(why[0].querySelector('.rpt-why-label').textContent).toBe('Why it’s right');
+    expect(why[0].textContent).toContain('It is everything the model reads at once.');
+  });
+
+  // The author's background is Workie's material, "never shown to players".
+  test('never the question\'s background', () => {
+    const { container } = render(<ReportDocument reportData={tallied} />);
+    expect(container.textContent).not.toContain('AUTHOR NOTES FOR WORKIE');
+  });
+
+  test('no explanation, no empty block', () => {
+    const bare = JSON.parse(JSON.stringify(tallied));
+    bare.questions[0].questionData.answerDetails = '   ';
+    const { container } = render(<ReportDocument reportData={bare} />);
+    expect(container.querySelector('.rpt-why')).toBeNull();
+  });
+
+  test('each option carries its count, share and a bar; the right one a tick and the word', () => {
+    const { container } = render(<ReportDocument reportData={tallied} />);
+    const rows = [...container.querySelectorAll('.rpt-choice')];
+    expect(rows.map((r) => r.querySelector('.rpt-choice-count').textContent)).toEqual(['2 picked20%', '7 picked70%', '1 picked10%']);
+    expect(rows.map((r) => r.querySelector('.rpt-choice-bar i').style.width)).toEqual(['20%', '70%', '10%']);
+    const right = container.querySelector('.rpt-choice--correct');
+    expect(right.querySelector('.rpt-tag--correct').textContent).toBe('Correct');
+    expect(right.querySelector('.rpt-tag--correct svg.rpt-tick path')).not.toBeNull();
+    expect(container.querySelector('.rpt-choices .rpt-sub-note').textContent).toBe('10 answered · 70% correct');
+  });
+
+  // The tally's correct flag and drawn letter are the scorer's; a question
+  // that skips a slot shows the letter the room saw.
+  test('the right answer and the letters follow the tally', () => {
+    const holey = JSON.parse(JSON.stringify(tallied));
+    holey.questions[0].questionData = { title: 'Q', optionA: 'One', optionC: 'Three', correctAnswer: 'OptionC' };
+    holey.questions[0].triviaTally = { answered: 3, correct: 2, options: [
+      { slot: 'A', letter: 'A', count: 1, correct: false }, { slot: 'C', letter: 'B', count: 2, correct: true }] };
+    const { container } = render(<ReportDocument reportData={holey} />);
+    expect([...container.querySelectorAll('.rpt-choice-letter')].map((n) => n.textContent)).toEqual(['A', 'B']);
+    expect(container.querySelector('.rpt-choice--correct').textContent).toContain('Three');
+  });
+
+  test('a report from before the counts still marks the right answer, with no count column', () => {
+    const { container } = render(<ReportDocument reportData={trivia} />);
+    expect(container.querySelector('.rpt-choice-count')).toBeNull();
+    expect(container.querySelector('.rpt-choice--correct').textContent).toContain('One request');
+  });
+
+  test('the choices are inside the opener\'s unit, so the question never strands without them', () => {
+    const { container } = render(<ReportDocument reportData={tallied} />);
+    expect(container.querySelector('.rpt-opener-unit .rpt-choices')).not.toBeNull();
+  });
+});
