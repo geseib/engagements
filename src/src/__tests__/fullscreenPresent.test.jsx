@@ -201,7 +201,9 @@ describe('where F is bound', () => {
     expect(call).toBeGreaterThan(0);
     expect(call).toBeLessThan(host.indexOf('if (showQuickstartMenu) {'));
     expect(read('components', 'event', 'HostEventAgenda.jsx')).toMatch(/useFullscreenKey\(\);/);
-    expect(read('components', 'event', 'EventStage.jsx')).toMatch(/useFullscreenKey\(\{ enabled: !confirmEndEvent && !confirmEnd && !qrOpen, target: \(\) => deckFrame\.current \}\)/);
+    // F waits while any of the stage's asks is open (the go-live ask and
+    // EXIT joined them, 31 Oct 2026).
+    expect(read('components', 'event', 'EventStage.jsx')).toMatch(/useFullscreenKey\(\{ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen, target: \(\) => deckFrame\.current \}\)/);
   });
 
   test('no phone page takes F: it is a letter there', () => {
@@ -334,8 +336,9 @@ describe('the event\'s stage: a talk presented full screen', () => {
     // A click on the slide is only a click again.
     fireEvent.click(document.querySelector('.ag-deck-slide canvas'));
     expect(at()).toBe('Slide 5 of 12');
+    // SPACE is the dock's step again: on this preview that step asks first.
     press(' ');
-    await waitFor(() => expect(api.runEvent).toHaveBeenCalled());
+    expect(await screen.findByRole('dialog', { name: /Start the event\?|Bring everyone here\?/ })).toBeInTheDocument();
   });
 
   test('from a page already full screen, F presents the slide, and F again steps back to the page', async () => {

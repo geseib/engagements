@@ -881,15 +881,16 @@
 
 /* THE GO-AHEAD in an ask that is not destructive — Start the event, Bring
    everyone here, Leave (owner, 31 Oct 2026: guard rails on starting and
-   ending). Amber with the dusk ground as its text: #0F1A2E on #F6A94C is
-   9.2:1. */
+   ending). The skin's ACTION role and its own ink (styles/roles.css), as
+   every other filled go-ahead: on Classic that is the amber with the dusk
+   ground as text, 9.2:1. */
 .ag-yes {
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid var(--primary);
+  border: 1px solid var(--action);
   border-radius: 10px;
-  background: var(--primary);
-  color: var(--bg);
+  background: var(--action);
+  color: var(--on-action);
   font-family: inherit;
   font-size: 15px;
   font-weight: 700;
