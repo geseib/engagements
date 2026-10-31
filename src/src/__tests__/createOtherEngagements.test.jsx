@@ -26,11 +26,19 @@ jest.mock('../auth/authFetch', () => ({
   __esModule: true,
   authFetch: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ prompts: [] }) })),
 }));
-jest.mock('html2pdf.js', () => () => ({
-  set() { return this; },
-  from() { return this; },
-  outputPdf: async () => 'data:application/pdf;base64,JVBERi0=',
-}));
+jest.mock('html2pdf.js', () => () => {
+  const pdf = {
+    internal: { getNumberOfPages: () => 1, pageSize: { getWidth: () => 8.5, getHeight: () => 11 } },
+    setPage() {}, setFillColor() {}, lines() {}, setFont() {}, setFontSize() {}, setTextColor() {},
+    text() {}, getTextWidth: () => 1, setDrawColor() {}, setLineWidth() {}, line() {}, addPage() {},
+  };
+  const worker = {
+    set: () => worker, from: () => worker, toContainer: () => worker, toCanvas: () => worker,
+    toPdf: () => worker, get: () => worker, then: (fn) => { fn(pdf); return worker; },
+    outputPdf: async () => 'data:application/pdf;base64,JVBERi0=',
+  };
+  return worker;
+});
 
 const SETS = [{ id: 'space', name: 'Space Trivia', totalQuestions: 12, engagementType: 'trivia', hasImages: false }];
 const ON = { enabled: true, canCreate: true, offerPlanName: 'Standard plan' };

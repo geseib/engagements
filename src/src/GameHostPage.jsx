@@ -6243,6 +6243,14 @@ Focus on actionable business strategy insights.`;
         // What "Include items not reviewed" left out, and the line saying so
         // (late items Task 5). Same rebuilt-from-scratch reason as above.
         notReviewedLeftOut: report.notReviewedLeftOut || null,
+        // The cover's "Held" and "Hosted by" (report refresh, 2026-10-31).
+        // create-report.js has always sent these; dropping them here is why
+        // the PDF printed the day it was BUILT as if it were the session's
+        // date. scoringConfig gives the appendix the real 3 / 2 / 1.
+        startedAt: report.startedAt || null,
+        createdAt: report.createdAt || null,
+        hostName: report.hostName || '',
+        scoringConfig: report.scoringConfig || null,
         allAnswers: [],
         allVotes: []
       };

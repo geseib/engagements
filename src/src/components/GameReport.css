@@ -1,59 +1,63 @@
-/* skin-allowance: colour=68 font=0 primary=16 */
+/* skin-allowance: colour=2 font=0 primary=0 */
 /* ==========================================================================
-   THE SESSION REPORT — screen sheet and print sheet.
+   THE SESSION REPORT — the screen shell, the document, the saved PDF and Print.
 
-   Two audiences, one document. On screen it is a page in the product; on paper
-   it is the thing a host hands a client. Before this file there was no
-   `@media print` rule anywhere in the codebase, so "print" meant "photograph
-   the app": the amber full-bleed field, the card shadows, the viewport-height
-   container and the auto-fit score grid all went to the printer verbatim,
-   which is exactly why the width was wrong and why paragraphs were cut in half
-   at the page foot.
+   One document, three ways out of the browser: on screen (a page in the
+   product), the saved PDF (utils/saveReport.js: html2pdf draws a clone of the
+   <article> and jsPDF stamps a head and foot on each page), and Print. The
+   design is docs/design/report-refresh/ (README, pages.html, shots/).
 
-   SCOPING. Every rule is under `.report-paper`, the class the component adds
-   beside `.report-container`. The old report rules in styles.css are all
-   single-class (0,1,0); these are (0,2,0) and win without !important and
-   without editing a 10,000-line stylesheet another agent is working in. The
-   `@media print` block is scoped the same way for the same reason — print
-   media does not raise specificity, so an unscoped `.report-question` in there
-   would lose to styles.css.
+   SCOPING — THE BUG THIS SHEET WAS REWRITTEN FOR (2026-10-31). html2pdf clones
+   `.report-doc` into its own `.html2pdf__container` on <body>, OUTSIDE
+   `.report-container.report-paper`. Every rule here used to be scoped under
+   `.report-paper`, so not one of them reached the PDF, and the old
+   single-class report rules in styles.css drew it instead (gradient cards,
+   emoji medals, labels run into their text). So, now:
+     - every DOCUMENT rule is rooted at `.report-doc`, the article itself, and
+       the article carries `report-paper` and `data-theme="light"`, so a clone
+       taken anywhere still has its scope and its paper tokens;
+     - the document's classes are its own (`rpt-*`); gameReport.test.jsx fails
+       on any class the article renders that styles.css also styles;
+     - `.report-doc.report-pdf` is the PDF mode, set on the clone by
+       saveReport.js: print sizes in pt, the cover one page tall. html2canvas
+       paints SCREEN media, so it never sees the @media print block below.
+   Only the shell (the container, the toolbar, the wait and failure states)
+   stays under `.report-container.report-paper`; none of it is ever in a PDF.
 
-   THEME. The component sets data-theme="light" on the container, so `--bg`,
-   `--surface`, `--text` and `--muted` resolve to Warm Summit's PAPER set. No
-   colour below is hardcoded except the two print-only tints, which are noted
-   where they appear.
+   COLOUR. Paper tokens from the theme (--text #1B2942, --muted #5E6167,
+   --surface, --rule-strong, --accent-text #9A5B18) plus the few this scope
+   declares in its own block. Amber #F6A94C NEVER carries text — it is 1.96:1
+   on white; it marks (the mountain, the kicker tick, the top-voted rule, the
+   strip's key rule). Words in amber use --accent-text, 5.41:1 on white.
+   Every distinction also survives greyscale through a rule, a numeral or a
+   word (Top-voted, Correct, Session champion, Shown to the room).
+
+   TYPE. Archivo expanded for display, Inter for text, the faces the site
+   already loads (public/index.html). Sizes are in em of the document's base:
+   15px on screen, 10pt in the PDF and on paper, so one set of rules draws
+   both. The print ladder: 7 / 7.5 / 9 / 10 / 11 / 15-17 / 20 / 34 pt.
+   Furniture never goes below --rpt-floor: 12px on screen (the laptop floor),
+   6.5pt on paper.
    ========================================================================== */
 
+/* ==========================================================================
+   THE SHELL — screen only, never in a PDF
+   ========================================================================== */
 .report-container.report-paper {
-  --report-measure: 44rem;      /* ~78 characters at 16px — a reading column */
-  --report-rule: 1px solid rgba(27, 41, 66, 0.14);
-  --report-rule-soft: 1px solid rgba(27, 41, 66, 0.08);
-  /* Caution amber, for the incomplete-record caveat only.
-     `--primary` (#F6A94C) is 1.96:1 on white and `--primary-deep` (#C77B4A) is
-     3.09:1 on this page's --bg, so neither can carry the label. #9A5B18 is the
-     deep amber-brown the rest of the product already settled on for paper
-     (components/QuestionSetsPanel.css:592, CategoryPicker.css:19): MEASURED
-     5.07:1 on --bg #FBF7F1 and 5.41:1 on --surface #FFFFFF. Not --danger: the
-     record being partial is a caveat on the document, not a failure. */
-  --report-caution: #9A5B18;
+  --report-measure: 52rem;
+  --report-rule: 1px solid var(--rule-strong);
 
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  /* No `overflow-y: auto`. The old rule made the report its own scroll
-     container, which buys nothing here and puts the sticky toolbar in a
-     scroller of its own; the page scrolls instead. `min-height: 100vh` keeps
-     the paper ground under the whole viewport, so <body>'s dusk background
-     never shows through under a short report. */
+  /* No `overflow-y: auto`: the page scrolls, and the sticky toolbar with it.
+     `min-height: 100vh` keeps the paper ground under a short report. */
   min-height: 100vh;
   padding: 0 0 96px;
 }
 
-/* --------------------------------------------------------------------------
-   TOOLBAR — screen furniture. Sticky, because a twelve-round report is long
-   and the way out should not require scrolling back to the top. The old
-   `.report-close` was `position: fixed` at top-left, floating over the title.
-   -------------------------------------------------------------------------- */
+/* TOOLBAR — sticky, because a twelve-round report is long and the way out
+   should not require scrolling back to the top. */
 .report-paper .report-toolbar {
   position: sticky;
   top: 0;
@@ -94,7 +98,6 @@
 
 .report-paper .report-tool:hover:not(:disabled) {
   background: var(--surface-2);
-  border-color: rgba(27, 41, 66, 0.28);
 }
 
 .report-paper .report-tool:disabled {
@@ -103,27 +106,22 @@
 }
 
 .report-paper .report-tool--primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #2A1B08;
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
 }
 
 .report-paper .report-tool--primary:hover:not(:disabled) {
-  background: var(--primary-deep);
-  border-color: var(--primary-deep);
-  color: #FFF;
+  background: var(--action-hover);
+  border-color: var(--action-hover);
 }
 
 .report-paper .report-tool:focus-visible {
-  outline: 3px solid var(--primary);
+  outline: 3px solid var(--action);
   outline-offset: 2px;
 }
 
-/* --------------------------------------------------------------------------
-   THE WAIT, AND THE FAILURE. `create-report` rebuilds the document on every
-   open; these two are what the host looks at meanwhile, instead of the screen
-   they just left.
-   -------------------------------------------------------------------------- */
+/* THE WAIT, AND THE FAILURE. */
 .report-paper .report-state {
   max-width: 34rem;
   margin: 18vh auto 0;
@@ -151,8 +149,8 @@
   height: 40px;
   margin: 0 auto;
   border-radius: 50%;
-  border: 3px solid rgba(27, 41, 66, 0.12);
-  border-top-color: var(--primary);
+  border: 3px solid var(--rule-strong);
+  border-top-color: var(--action);
   animation: report-spin 900ms linear infinite;
 }
 
@@ -170,783 +168,934 @@
   margin-top: 24px;
 }
 
-/* --------------------------------------------------------------------------
-   THE SHEET. One box, not thirty — the whole document sits on a single page of
-   stock. Everything inside is separated by rules and space, which is what a
-   printed report does and what the nested white-cards-on-amber never did.
-   -------------------------------------------------------------------------- */
-.report-paper .report-doc {
+/* The sheet on screen: one box of stock under the toolbar. In the PDF the
+   clone has no shell around it, so this is the only rule that knows there is
+   a screen; .report-pdf below takes all of it away again. */
+.report-container .report-doc {
   max-width: var(--report-measure);
   margin: 40px auto;
-  padding: 56px clamp(24px, 6vw, 64px) 64px;
-  background: var(--surface);
-  border: var(--report-rule-soft);
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(27, 41, 66, 0.05), 0 12px 40px rgba(27, 41, 66, 0.07);
-  font-size: 1rem;
-  line-height: 1.65;
-}
-
-/* ---- TITLE BLOCK ---- */
-.report-paper .report-titleblock {
-  border-bottom: 2px solid var(--text);
-  padding-bottom: 28px;
-  margin-bottom: 44px;
-}
-
-/* --------------------------------------------------------------------------
-   THE INCOMPLETE-RECORD CAVEAT.
-
-   A session outlives the rows it is made of — responses and ballots expire at
-   seven days, results and AI summaries at thirty, the session brief at ninety
-   — so a retro opened weeks later can be missing the answers it is about.
-   create-report.js recovers what it can from the stored snapshot and states
-   what it could not; this is where it is said.
-
-   IT PRINTS. The block carries no `report-noprint`, and the @media print rules
-   below restate it in ink rather than hiding it, because the document is what a
-   host hands a client and a caveat the client never sees is not a caveat. It is
-   rendered only when something is actually missing (GameReport.jsx) — a banner
-   on every report is noise, and noise is ignored.
-   -------------------------------------------------------------------------- */
-.report-paper .report-caveat {
-  max-width: var(--report-measure);
-  margin: 0 0 40px;
-  padding: 16px 20px;
-  background: var(--surface);
-  border: var(--report-rule);
-  border-left: 3px solid var(--report-caution);
+  padding: 56px clamp(20px, 6vw, 64px) 64px;
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
 }
 
-.report-paper .report-caveat-label {
-  margin: 0 0 6px;
-  font-size: 0.7rem;
+/* ==========================================================================
+   THE DOCUMENT — rooted at .report-doc, so it survives html2pdf's clone
+   ========================================================================== */
+.report-doc {
+  /* The scope's own tokens. Theme tokens resolve because the article itself
+     carries data-theme="light". */
+  --report-caution: #9A5B18;                 /* the caveat; MEASURED 5.41:1 on white, 5.07:1 on --bg */
+  --report-rule: 1px solid var(--rule-strong);
+  --report-rule-strong: var(--text);
+  --rpt-ink: var(--text);
+  --rpt-muted: var(--muted);
+  --rpt-accent-ink: var(--accent-text);      /* amber WORDS: #9A5B18, 5.41:1 on white */
+  --rpt-amber: #F6A94C;                      /* amber MARKS only, never text: 1.96:1 on white */
+  --rpt-rule: var(--rule-strong);
+  --rpt-rule-soft: rgb(var(--shade-rgb) / 0.1);
+  --rpt-dusk: rgb(var(--shade-rgb));
+  --rpt-tint: rgb(var(--glow-rgb) / 0.55);
+  --rpt-tint-rule: rgb(var(--shade-rgb) / 0.16);
+  --rpt-bar-2: rgb(var(--shade-rgb) / 0.42);
+  --rpt-floor: 12px;
+  --rpt-hair: 1px;
+
+  position: relative;
+  background: var(--surface);
+  color: var(--rpt-ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: left;
+  /* INHERITED LEAKS. html2pdf appends its clone to <body>, so whatever body
+     sets is inherited here — and stage.css gives body `tabular-nums`, which
+     widens Inter's punctuation in the DOM but not in html2canvas's
+     measureText, so every hyphen drew as "Half- day". Each inherited text
+     property the document depends on is reset at its root. */
+  font-variant-numeric: normal;
+  font-style: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-transform: none;
+  text-shadow: none;
+}
+
+.report-doc *,
+.report-doc *::before,
+.report-doc *::after { box-sizing: border-box; }
+
+.report-doc p { margin: 0; }
+
+/* Every top-level block after the cover is separated by air, not by boxes. */
+.report-doc > * + * { margin-top: 2.6em; }
+
+/* ---- THE KICKER: one label shape for every section ---------------------- */
+.report-doc .rpt-kick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  margin: 0 0 0.6em;
+  font-size: max(var(--rpt-floor), 0.75em);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--rpt-accent-ink);
+}
+
+.report-doc .rpt-kick::before {
+  content: "";
+  flex: none;
+  width: 1.9em;
+  height: 0.27em;
+  background: var(--rpt-amber);
+}
+
+.report-doc .rpt-kick-sep { color: var(--rpt-rule); }
+.report-doc .rpt-kick-quiet { color: var(--rpt-muted); }
+
+/* ---- SECTION HEADS ------------------------------------------------------ */
+.report-doc .rpt-h-part,
+.report-doc .rpt-h-section,
+.report-doc .rpt-opener-title,
+.report-doc .rpt-cover-title {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  color: var(--rpt-ink);
+  text-transform: none;
+  margin: 0;
+}
+
+.report-doc .rpt-h-part { font-size: 2em; font-weight: 800; line-height: 1.12; letter-spacing: -0.01em; margin-bottom: 0.5em; }
+.report-doc .rpt-h-section { font-size: 1.5em; font-weight: 700; line-height: 1.15; margin-bottom: 0.55em; }
+
+/* The label over a block inside a round. */
+.report-doc .rpt-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.2em;
+  flex-wrap: wrap;
+  margin: 1.8em 0 0.5em;
+  padding-bottom: 0.5em;
+  border-bottom: var(--rpt-hair) solid var(--rpt-ink);
+  font: inherit;
+}
+
+.report-doc .rpt-sub-title {
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.report-doc .rpt-sub-note {
+  font-size: max(var(--rpt-floor), 0.75em);
+  font-weight: 400;
+  color: var(--rpt-muted);
+  letter-spacing: 0.02em;
+}
+
+.report-doc .rpt-flag {
+  font-size: max(var(--rpt-floor), 0.675em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-accent-ink);
+}
+
+.report-doc .rpt-tag {
+  display: inline-block;
+  font-size: max(var(--rpt-floor), 0.65em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: var(--rpt-hair) solid var(--rpt-ink);
+  border-radius: 2px;
+  padding: 0 0.45em;
+  line-height: 1.5;
+}
+
+.report-doc .rpt-num { text-align: right; }
+
+.report-doc .rpt-mark { width: 1em; height: 1em; display: inline-block; vertical-align: middle; }
+
+/* ==========================================================================
+   COVER
+   ========================================================================== */
+.report-doc .rpt-cover {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-doc .rpt-cover-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  padding-bottom: 1em;
+  border-bottom: var(--rpt-hair) solid var(--rpt-ink);
+}
+
+.report-doc .rpt-brand { display: inline-flex; align-items: center; gap: 0.7em; }
+
+.report-doc .rpt-brand-tab {
+  width: 2.4em;
+  height: 2.4em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.4em;
+  background: var(--rpt-dusk);
+}
+
+.report-doc .rpt-brand-mark { width: 1.7em; height: 1.7em; display: block; }
+
+.report-doc .rpt-brand-word {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.1em;
+  letter-spacing: 0.02em;
+}
+
+.report-doc .rpt-cover-doc {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: max(var(--rpt-floor), 0.75em);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+  line-height: 1.5;
+}
+
+.report-doc .rpt-cover-doc b { color: var(--rpt-ink); font-weight: 700; }
+
+.report-doc .rpt-cover-ridge { margin: 3em 0 1.6em; height: 3.2em; }
+.report-doc .rpt-ridge { width: 100%; height: 100%; display: block; }
+
+.report-doc .rpt-cover .rpt-kick { margin-bottom: 1em; }
+
+.report-doc .rpt-cover-title {
+  font-size: 3.4em;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  margin-bottom: 0.4em;
+  max-width: 14em;
+  overflow-wrap: anywhere;
+}
+
+.report-doc .rpt-cover-dek {
+  font-size: 1.2em;
+  line-height: 1.45;
+  margin: 0 0 1.8em;
+  max-width: 35em;
+}
+
+.report-doc .rpt-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10em, 1fr));
+  margin: 0.6em 0 0;
+  border-top: var(--rpt-hair) solid var(--rpt-ink);
+}
+
+.report-doc .rpt-fact { padding: 0.8em 1.2em 0.8em 0; }
+.report-doc .rpt-fact + .rpt-fact { padding-left: 1.2em; border-left: var(--rpt-hair) solid var(--rpt-rule); }
+
+.report-doc .rpt-fact dt {
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+  margin: 0 0 0.2em;
+}
+
+.report-doc .rpt-fact dd { margin: 0; font-size: 1em; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.report-doc .rpt-fact-quiet { font-weight: 500; color: var(--rpt-muted); }
+
+.report-doc .rpt-cover-spacer { flex: 1 1 auto; min-height: 2.4em; }
+
+/* The result strip: three counts, then the key result behind an amber rule. */
+.report-doc .rpt-strip {
+  display: flex;
+  flex-wrap: wrap;
+  border: var(--rpt-hair) solid var(--rpt-ink);
+}
+
+.report-doc .rpt-strip > * { padding: 1em 1.2em; }
+.report-doc .rpt-strip > * + * { border-left: var(--rpt-hair) solid var(--rpt-rule); }
+
+.report-doc .rpt-strip-count { display: flex; flex-direction: column; flex: none; min-width: 6.2em; }
+
+.report-doc .rpt-strip-n {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 2.2em;
+  line-height: 1;
+}
+
+.report-doc .rpt-strip-l {
+  margin-top: 0.6em;
+  font-size: max(var(--rpt-floor), 0.675em);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-strip-key {
+  flex: 1 1 16em;
+  display: flex;
+  flex-direction: column;
+  border-left: 0.3em solid var(--rpt-amber) !important;
+}
+
+.report-doc .rpt-strip-key .rpt-strip-l { margin: 0 0 0.4em; color: var(--rpt-accent-ink); }
+.report-doc .rpt-strip-q { font-size: 1.1em; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.report-doc .rpt-strip-s { font-size: max(var(--rpt-floor), 0.775em); color: var(--rpt-muted); margin-top: 0.35em; }
+
+.report-doc .rpt-cover-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  margin-top: 1.2em;
+  font-size: max(var(--rpt-floor), 0.75em);
+  color: var(--rpt-muted);
+}
+
+/* ==========================================================================
+   FRONT MATTER — about, who was here, the caveat
+   ========================================================================== */
+.report-doc .rpt-about-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16em, 1fr));
+  gap: 0.6em 2.2em;
+}
+
+.report-doc .rpt-about-text { font-size: 1em; line-height: 1.55; overflow-wrap: anywhere; }
+.report-doc .rpt-source { margin-top: 0.5em; font-size: max(var(--rpt-floor), 0.8em); color: var(--rpt-muted); }
+
+.report-doc .rpt-roster-list {
+  columns: 2;
+  column-gap: 2.2em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-doc .report-roster-item {
+  padding: 0.2em 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft);
+  break-inside: avoid;
+  font-size: 0.95em;
+}
+
+.report-doc .report-caveat {
+  padding: 0.9em 1.2em;
+  border: var(--rpt-hair) solid var(--rpt-rule);
+  border-left: 0.25em solid var(--report-caution);
+}
+
+.report-doc .report-caveat-label {
+  margin: 0 0 0.35em;
+  font-size: max(var(--rpt-floor), 0.7em);
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--report-caution);
 }
 
-.report-paper .report-caveat-note {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.55;
-  color: var(--text);
+.report-doc .report-caveat-note { font-size: 0.95em; line-height: 1.55; color: var(--rpt-ink); }
+
+.report-doc .report-left-out { font-size: 0.9em; font-style: italic; color: var(--rpt-muted); }
+
+/* ==========================================================================
+   A ROUND — opener, lead, task, choices
+   ========================================================================== */
+.report-doc .rpt-opener {
+  display: grid;
+  grid-template-columns: 5.6em 1fr;
+  gap: 0 1.4em;
+  align-items: start;
+  margin: 0 0 1.2em;
 }
 
-.report-paper .report-eyebrow {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--primary-deep);
-  margin: 0 0 14px;
-}
-
-.report-paper .report-title {
+.report-doc .rpt-opener-num {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 5vw, 2.9rem);
+  font-stretch: 125%;
   font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.015em;
-  color: var(--text);
-  margin: 0 0 12px;
-  text-transform: none;   /* the old rule shouted it in caps */
+  font-size: 3.4em;
+  line-height: 0.9;
+  padding-top: 0.06em;
+  border-top: 0.09em solid var(--rpt-amber);
 }
 
-.report-paper .report-date {
-  font-size: 0.95rem;
-  color: var(--muted);
-  margin: 0 0 26px;
-  font-style: normal;
-}
-
-.report-paper .report-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: 0;
-}
-
-.report-paper .report-meta-item {
-  padding-right: 28px;
-  margin-right: 28px;
-  border-right: var(--report-rule);
-}
-
-.report-paper .report-meta-item:last-child {
-  border-right: 0;
-  margin-right: 0;
-  padding-right: 0;
-}
-
-.report-paper .report-meta dt {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 3px;
-}
-
-.report-paper .report-meta dd {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  font-feature-settings: "tnum" 1;
-}
-
-/* --------------------------------------------------------------------------
-   ABOUT THIS SESSION & WHO WAS HERE — Task 2's front matter.
-
-   Two short blocks under the title, before the caveat and the rounds. Both
-   reuse the SAME heading and body styling every round already has
-   (`.report-question-header`, `.report-lesson-heading`, `.report-lesson-
-   detail`, `.report-block`, `.report-block-heading`) rather than inventing a
-   second visual language — the only rules that are actually new here are
-   each section's own bottom margin (the title block and the caveat each set
-   their own; there is no `.report-doc > * + *` rule to inherit spacing from)
-   and the roster's own list.
-   -------------------------------------------------------------------------- */
-.report-paper .report-about,
-.report-paper .report-roster {
-  margin: 0 0 40px;
-}
-
-.report-paper .report-roster-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-}
-
-.report-paper .report-roster-item {
-  font-size: 1rem;
-  color: var(--text);
-}
-
-.report-paper .report-roster-item:not(:last-child)::after {
-  content: "\00b7";
-  margin: 0 10px;
-  color: var(--muted);
-}
-
-/* ---- SECTIONS ----
-   `.report-content` in styles.css is `max-width:1000px; margin:0 auto;
-   padding:20px` — a page-level layout container from when the report WAS the
-   page. Inside the sheet it is just a wrapper, and its 20px inset was showing
-   up on paper as body copy that started a quarter-inch right of the title
-   block's rule. Zeroed on both media. */
-.report-paper .report-content {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-
-.report-paper .report-content > * + * {
-  margin-top: 52px;
-}
-
-/* THE SECTION BREAK RIDES ON THE HEADING, not on the section box.
-   Same rule, same air, one difference that only shows on paper: when a section
-   starts a new page, a border on the SECTION prints as a hairline stranded at
-   the very top of the sheet with an inch of nothing under it. Hung on the
-   header — which is `break-inside: avoid` and `break-after: avoid` — the rule
-   can never be separated from the words it introduces. */
-.report-paper .report-content > *:not(:first-child) > .report-question-header {
-  border-top: var(--report-rule);
-  padding-top: 44px;
-}
-
-.report-paper .report-question,
-.report-paper .report-final-scores {
-  /* No card. No shadow. No radius. The rule above is the section break.
-     `padding: 0` in full — the old rules carry `padding: 40px`, and zeroing
-     only the sides left a 40px lid on top of every section. */
-  background: none;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 0;
-  margin: 0;
-}
-
-.report-paper .report-question-header {
-  display: block;
-  margin-bottom: 20px;
-}
-
-.report-paper .report-section-index {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 0 0 8px;
-}
-
-.report-paper .report-section-number {
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--primary-deep);
-}
-
-.report-paper .field-badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: none;
-  border: var(--report-rule);
-  border-radius: 999px;
-  padding: 2px 10px;
-}
-
-.report-paper .report-lesson-heading {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 800;
-  line-height: 1.18;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  margin: 0;
-  text-transform: none;
-}
-
-/* The lead paragraph. Was a grey box with an amber bar; now it is simply
-   set larger than body copy, which is how a document says "read this first". */
-/* the team's task (session 7924): what the room answered, above the answers */
-.report-paper .report-lesson-task {
-  margin: -16px 0 32px;
-  padding-left: 12px;
-  border-left: 3px solid var(--accent);
-  font-size: 1.05rem;
-  line-height: 1.5;
-  font-weight: 600;
-  color: var(--text);
-}
-.report-paper .report-lesson-task-label {
-  display: block;
-  font-size: .75rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-.report-paper .report-lesson-detail {
-  background: none;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  margin: 0 0 32px;
-  font-size: 1.1rem;
-  line-height: 1.6;
-  color: var(--text);
-}
-
-.report-paper .report-block {
-  margin: 32px 0;
-}
-
-.report-paper .report-block-heading,
-.report-paper .report-answers > h3 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 0 0 14px;
-  padding-bottom: 8px;
-  border-bottom: var(--report-rule-soft);
-}
-
-/* ---- TRIVIA CHOICES ---- */
-.report-paper .trivia-options-report {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: block;
-}
-
-.report-paper .trivia-option-report {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 9px 0;
-  background: none;
-  border: 0;
-  border-bottom: var(--report-rule-soft);
-  border-radius: 0;
-}
-
-.report-paper .trivia-option-report:last-child { border-bottom: 0; }
-
-.report-paper .trivia-option-report.correct-answer {
-  background: none;
-  border-bottom: var(--report-rule-soft);
-  box-shadow: inset 3px 0 0 var(--success);
-  padding-left: 14px;
-}
-
-.report-paper .trivia-option-report .option-letter {
-  flex: none;
-  width: 1.55em;
-  height: 1.55em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  border: var(--report-rule);
-  border-radius: 50%;
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--muted);
-  margin: 0;
+.report-doc .rpt-opener-head {
+  border-top: var(--rpt-hair) solid var(--rpt-ink);
+  padding-top: 0.6em;
   min-width: 0;
 }
 
-.report-paper .trivia-option-report.correct-answer .option-letter {
-  border-color: var(--success);
-  color: var(--success);
+.report-doc .rpt-opener-title {
+  font-size: 1.7em;
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
 }
 
-.report-paper .trivia-option-report .option-text {
-  flex: 1;
-  font-size: 1rem;
+.report-doc .rpt-lead { font-size: 1.1em; line-height: 1.5; margin: 0 0 1em; overflow-wrap: anywhere; }
+
+.report-doc .rpt-task {
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  padding: 0.7em 0;
+  border-top: var(--rpt-hair) solid var(--rpt-rule);
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule);
 }
 
-.report-paper .trivia-option-report .correct-indicator {
+.report-doc .rpt-task-label {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--success);
-  margin-left: auto;
-}
-
-/* ---- AI ANALYSIS ----
-   The one panel that keeps a fill, on screen and on paper both. It is a
-   different voice from the rest of the document — a machine's reading of the
-   room, not the host's — and merging it into the body copy would misattribute
-   it. Everything else in this report gave up its box. */
-.report-paper .report-ai-summary {
-  background: var(--surface-2);
-  border: 0;
-  border-left: 3px solid var(--primary);
-  border-radius: 0 4px 4px 0;
-  padding: 22px 26px;
-  margin: 32px 0;
-}
-
-.report-paper .report-ai-summary .report-block-heading {
-  border-bottom: 0;
-  padding-bottom: 0;
-  margin-bottom: 12px;
-  color: var(--primary-deep);
-}
-
-.report-paper .report-ai-content {
-  background: none;
-  border-radius: 0;
-  padding: 0;
-  font-size: 0.97rem;
-  line-height: 1.65;
-}
-
-.report-paper .report-ai-content h4 {
-  font-size: 0.7rem;
-  font-weight: 800;
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin: 18px 0 6px;
+  color: var(--rpt-muted);
 }
 
-.report-paper .report-ai-content > :first-child > h4:first-child { margin-top: 0; }
+.report-doc .rpt-task-text { font-size: 0.95em; font-weight: 600; overflow-wrap: anywhere; }
 
-.report-paper .report-ai-text { margin-bottom: 0; color: var(--text); }
-
-.report-paper .report-ai-discussion,
-.report-paper .report-ai-steps {
-  margin-top: 16px;
-  padding-top: 0;
-  border-top: 0;
+/* Trivia: the choices. The right one carries a rule, bold and the word. */
+.report-doc .rpt-choice {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  gap: 0 1em;
+  align-items: baseline;
+  padding: 0.6em 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft);
 }
 
-.report-paper .report-ai-discussion ul,
-.report-paper .report-ai-steps ul {
-  list-style: none;
-  padding-left: 0;
-  margin: 0;
+.report-doc .rpt-choice-letter {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  color: var(--rpt-muted);
 }
 
-.report-paper .report-ai-discussion li,
-.report-paper .report-ai-steps li {
+.report-doc .rpt-choice-text { overflow-wrap: anywhere; }
+
+.report-doc .rpt-choice--correct { border-left: 0.3em solid var(--rpt-amber); padding-left: 0.5em; }
+.report-doc .rpt-choice--correct .rpt-choice-letter { color: var(--rpt-ink); }
+.report-doc .rpt-choice--correct .rpt-choice-text { font-weight: 700; }
+
+/* ==========================================================================
+   WORKIE'S READ — a framed panel with a dusk bar. The tint is optional ink;
+   the frame, the bar and the label keep it distinct without it.
+   ========================================================================== */
+.report-doc .rpt-workie {
+  margin: 1.6em 0 0;
+  padding: 1.2em 1.4em 1em 1.6em;
+  background: var(--rpt-tint);
+  border: var(--rpt-hair) solid var(--rpt-tint-rule);
+  border-left: 0.3em solid var(--rpt-dusk);
+}
+
+.report-doc .rpt-workie-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6em; margin: 0 0 0.7em; }
+.report-doc .rpt-workie-mark { width: 1.1em; height: 1.1em; flex: none; display: block; }
+
+.report-doc .rpt-workie-title {
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.report-doc .rpt-workie-who {
+  margin-left: auto;
+  font-size: max(var(--rpt-floor), 0.7em);
+  color: var(--rpt-muted);
+  letter-spacing: 0.02em;
+}
+
+.report-doc .rpt-workie-body { font-size: 0.975em; line-height: 1.5; }
+
+/* MarkdownRenderer's classes are global, and styles.css paints them in its
+   own greys; inside the panel they are this document's. */
+.report-doc .rpt-md { line-height: 1.5; color: var(--rpt-ink); }
+.report-doc .rpt-md .markdown-p { margin: 0 0 0.7em; color: var(--rpt-ink); }
+
+.report-doc .rpt-md .markdown-h1,
+.report-doc .rpt-md .markdown-h2,
+.report-doc .rpt-md .markdown-h3,
+.report-doc .rpt-md .markdown-h4,
+.report-doc .rpt-md .markdown-h5,
+.report-doc .rpt-md .markdown-h6,
+.report-doc .rpt-workie-label {
+  margin: 0.9em 0 0.35em;
+  padding: 0;
+  border: 0;
+  font-family: var(--font-ui);
+  font-size: max(var(--rpt-floor), 0.72em);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-md > :first-child,
+.report-doc .rpt-workie-part:first-child .rpt-workie-label { margin-top: 0; }
+
+.report-doc .rpt-md .markdown-list,
+.report-doc .rpt-workie-list { margin: 0 0 0.4em; padding: 0; list-style: none; }
+
+.report-doc .rpt-md .markdown-li,
+.report-doc .rpt-workie-list li {
   position: relative;
-  padding-left: 20px;
-  margin-bottom: 7px;
-  font-size: 0.95rem;
-  line-height: 1.55;
+  margin: 0 0 0.3em;
+  padding-left: 1.4em;
+  font-size: 0.95em;
+  line-height: 1.45;
+  color: var(--rpt-ink);
 }
 
-.report-paper .report-ai-discussion li::before {
+.report-doc .rpt-md ul.markdown-list > .markdown-li::before,
+.report-doc .rpt-workie-list--steps li::before {
   content: "";
   position: absolute;
-  left: 2px;
-  top: 0.62em;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--primary);
+  left: 0.2em;
+  top: 0.6em;
+  width: 0.4em;
+  height: 0.4em;
+  background: var(--rpt-ink);
 }
 
-.report-paper .report-ai-steps li::before {
-  content: "\2192";
+.report-doc .rpt-md ol.markdown-list,
+.report-doc .rpt-workie-list--numbered { counter-reset: rpt-n; }
+
+.report-doc .rpt-md ol.markdown-list > .markdown-li,
+.report-doc .rpt-workie-list--numbered li { counter-increment: rpt-n; }
+
+.report-doc .rpt-md ol.markdown-list > .markdown-li::before,
+.report-doc .rpt-workie-list--numbered li::before {
+  content: counter(rpt-n);
   position: absolute;
   left: 0;
-  color: var(--primary-deep);
   font-weight: 700;
+  color: var(--rpt-accent-ink);
 }
 
-.report-paper .report-ai-markdown p { margin: 0 0 10px; }
-.report-paper .report-ai-markdown p:last-child { margin-bottom: 0; }
+.report-doc .rpt-md strong { font-weight: 700; color: var(--rpt-ink); }
+.report-doc .rpt-md em { font-style: italic; color: var(--rpt-ink); }
 
-/* ---- ANSWERS ---- */
-.report-paper .report-answer {
-  background: none;
-  border: 0;
-  border-radius: 0;
-  border-bottom: var(--report-rule-soft);
-  box-shadow: none;
-  padding: 16px 0;
-  margin: 0;
-  position: relative;
-  transition: none;
-}
-
-.report-paper .report-answer:last-child { border-bottom: 0; }
-
-/* ---- COMMENTS ----
-   What the room said ABOUT a round's report, in a feedback round.
-
-   This is the one surface where the two kinds of prose sit closest together,
-   and where the reader may be holding a printout with no way to ask which is
-   which — so the distinction is carried by SHAPE, not by colour alone. A
-   comment is indented behind a rule and carries the section it is about; a
-   response is flush and carries a rank. Both survive a monochrome printer,
-   which a colour-only difference would not. */
-.report-paper .report-comments {
-  margin-top: 20px;
-  padding-top: 4px;
-}
-
-.report-paper .report-comment {
-  /* The rule is on the LEFT and the block is indented behind it: on paper an
-     indent reads as "about the thing above" without needing a legend. */
-  box-shadow: inset 2px 0 0 var(--report-rule-strong, currentColor);
-  padding: 12px 0 12px 16px;
-  margin: 0 0 4px;
-}
-
-.report-paper .comment-on {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin: 0 0 4px;
-  /* Not truncated. Once the 7-day answer rows have expired this label is the
-     only surviving record of what the comment was about, and a reduction with
-     no recovery is a deletion. */
-  overflow-wrap: anywhere;
-}
-
-/*
-  THE EXCERPT — quoted material the comment is about, styled the same way
-  `.answer-text` above already quotes a response: `quotes` + generated
-  open/close marks, so a reader tells at a glance which prose is the room's
-  ORIGINAL material and which is commentary on it (`.comment-text` carries
-  neither quote marks nor `--muted`, on purpose — it is the primary content of
-  this block, not the quoted context for it).
-
-  Not truncated, and not `-webkit-line-clamp`'d the way the composer's own
-  `.fbr__on-excerpt` is: `excerptOf` (config/comments.js) already caps this at
-  140 characters with its own ellipsis before it is ever stored, so a second
-  cut here would reduce an already-short string with nothing left to recover
-  it — unlike the composer, where the full section is still on screen above.
-*/
-.report-paper .comment-excerpt {
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-  quotes: "\201C" "\201D";
-}
-
-.report-paper .comment-excerpt::before { content: open-quote; }
-.report-paper .comment-excerpt::after  { content: close-quote; }
-
-.report-paper .comment-text {
-  margin: 0 0 6px;
-  overflow-wrap: anywhere;
-}
-
-.report-paper .comment-meta {
-  font-size: 12px;
-}
-
-/* A ranked response gets an amber rule, not a gold gradient and a glow.
-   The rule survives a monochrome printer; the gradient becomes a smudge. */
-.report-paper .report-answer.winner {
-  background: none;
-  box-shadow: inset 3px 0 0 var(--primary);
-  padding-left: 16px;
-}
-
-.report-paper .answer-text {
-  margin: 0 0 8px;
-  padding: 0;
-  border: 0;
-  font-size: 1.05rem;
-  line-height: 1.55;
+.report-doc .rpt-md .markdown-quote {
+  margin: 0.6em 0;
+  padding: 0 0 0 0.9em;
+  border-left: var(--rpt-hair) solid var(--rpt-ink);
   font-style: normal;
-  color: var(--text);
-  quotes: "\201C" "\201D";
+  color: var(--rpt-ink);
 }
 
-.report-paper .answer-text::before { content: open-quote; }
-.report-paper .answer-text::after  { content: close-quote; }
+.report-doc .rpt-md .markdown-table { width: 100%; border-collapse: collapse; border: 0; margin: 0.6em 0; }
+.report-doc .rpt-md .markdown-th { background: none; padding: 0.3em 0.6em 0.3em 0; border-bottom: var(--rpt-hair) solid var(--rpt-ink); color: var(--rpt-ink); text-align: left; }
+.report-doc .rpt-md .markdown-td { padding: 0.3em 0.6em 0.3em 0; border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft); color: var(--rpt-ink); }
+.report-doc .rpt-md .markdown-hr { border: 0; border-top: var(--rpt-hair) solid var(--rpt-rule); margin: 0.8em 0; }
 
-.report-paper .answer-meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.report-paper .answer-meta > * + *::before {
-  content: "·";
-  margin-right: 14px;
-  color: rgba(27, 41, 66, 0.3);
-}
-
-.report-paper .winner-badge {
-  position: static;
+.report-doc .rpt-md .markdown-pre {
+  margin: 0.6em 0;
+  padding: 0.6em 0.8em;
   background: none;
-  box-shadow: none;
+  border: var(--rpt-hair) solid var(--rpt-rule);
   border-radius: 0;
-  padding: 0;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--primary-deep);
 }
 
-.report-paper .answer-author {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.report-paper .answer-points {
+.report-doc .rpt-md code,
+.report-doc .rpt-md .markdown-code-block {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--rpt-ink);
   background: none;
-  color: var(--muted);
+  border: 0;
   padding: 0;
-  border-radius: 0;
-  font-size: 0.8rem;
-  font-weight: 700;
-  font-feature-settings: "tnum" 1;
-}
-
-.report-paper .no-answers {
-  color: var(--muted);
-  font-size: 0.95rem;
-  padding: 12px 0;
-  margin: 0;
-}
-
-/* ---- SURVEY RESULTS (Task 4 of the 2026-09-26 feature sweep) ----
-   `.report-survey-results` is a plain `.report-question` (see SECTIONS
-   above): no card, no shadow, the same section-break rule every other block
-   in `.report-content` gets. The cards themselves are
-   components/survey/results/SurveyResults.css's `.svr-card` family, mounted
-   unchanged — that file is deliberately theme-agnostic (its own header says
-   so) and needs no rule here to read correctly under this document's
-   data-theme="light". This stylesheet only lays the cards out and marks
-   each one indivisible for print. */
-.report-paper .report-survey-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* ---- FINAL SCORES ----
-   A ranked list, set as a table. The auto-fit grid of coloured tiles was a
-   dashboard widget; on a page it produced a different number of columns at
-   every width, which is half of why the printed width looked wrong. */
-.report-paper .score-grid {
-  display: block;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  grid-template-columns: none;
-}
-
-.report-paper .score-item {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  background: none;
-  color: var(--text);
-  border-radius: 0;
-  border-bottom: var(--report-rule-soft);
-  padding: 12px 0;
-  text-align: left;
-  transition: none;
-}
-
-.report-paper .score-item:hover { transform: none; }
-.report-paper .score-item:last-child { border-bottom: 0; }
-
-.report-paper .score-item.champion {
-  background: none;
-  box-shadow: inset 3px 0 0 var(--primary);
-  color: var(--text);
-  padding: 12px 0 12px 16px;
-}
-
-.report-paper .score-rank {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 3.2em;
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--muted);
-  font-feature-settings: "tnum" 1;
-}
-
-.report-paper .score-item .player-name {
-  font-size: 1.05rem;
-  font-weight: 700;
-  margin: 0;
-  color: var(--text);
-}
-
-.report-paper .champion-badge {
-  position: static;
-  transform: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 0;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--primary-deep);
-}
-
-.report-paper .player-final-score {
-  margin-left: auto;
-  text-align: right;
-  min-width: 4.5em;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 800;
-  font-feature-settings: "tnum" 1;
-}
-
-.report-paper .player-final-score::after {
-  content: " pts";
-  font-family: var(--font-ui);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-/* Print-only furniture, invisible on screen. */
-.report-paper .report-colophon { display: none; }
-
-@media (max-width: 640px) {
-  .report-paper .report-doc {
-    margin: 16px auto;
-    padding: 32px 20px 40px;
-    border-radius: 0;
-  }
-  .report-paper .report-meta-item {
-    padding-right: 18px;
-    margin-right: 18px;
-  }
 }
 
 /* ==========================================================================
-   PRINT
-   ==========================================================================
-   The brief, in one line: a document a marketing team would hand a client, not
-   a screenshot of an application.
+   WHAT THE ROOM SAID — ranked, with a points bar
+   ========================================================================== */
+.report-doc .rpt-resp {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr) 5.4em;
+  gap: 0 1em;
+  align-items: baseline;
+  padding: 0.75em 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft);
+}
 
-   The two named faults and what actually fixes them:
+.report-doc .rpt-resp--unvoted { grid-template-columns: 2.2em minmax(0, 1fr); }
 
-   WIDTH — the screen measure is `max-width: 44rem` centred in a viewport, and
-   the container is `min-height: 100vh`. Neither means anything on paper. The
-   page box is declared with `@page` and the document is told to be `width:
-   auto` inside it, so the measure is the paper's, set by the margins.
+.report-doc .rpt-resp-rank {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.2em;
+  color: var(--rpt-muted);
+}
 
-   PAGE BREAKS MID-PARAGRAPH — three mechanisms, used for three different
-   jobs, and they are not interchangeable:
-     · `orphans` / `widows` are the ones that fix a badly split PARAGRAPH.
-       They are the least-used properties in CSS and the only ones that say
-       "you may break this text, but never leave fewer than N lines behind or
-       carry fewer than N over". Set to 3 here, which is the trade printers'
-       floor. `break-inside: avoid` on a paragraph is the WRONG tool — a long
-       AI summary would then be shoved whole onto the next page, leaving a
-       third of a page blank.
-     · `break-inside: avoid` is for the small indivisible UNITS: a quoted
-       answer with its attribution, one trivia option, one standings row. Only
-       ever on things that certainly fit on a page.
-     · `break-after: avoid` on every heading, so a section title can never
-       strand alone at the foot of a page with its content overleaf.
+.report-doc .rpt-resp--top .rpt-resp-rank {
+  color: var(--rpt-ink);
+  border-left: 0.25em solid var(--rpt-amber);
+  padding-left: 0.4em;
+  margin-left: -0.65em;
+}
+
+.report-doc .rpt-resp-main { min-width: 0; }
+
+.report-doc .rpt-resp-text {
+  margin: 0 0 0.3em;
+  padding: 0;
+  border: 0;
+  font-size: 1.05em;
+  line-height: 1.38;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--rpt-ink);
+  overflow-wrap: anywhere;
+}
+
+.report-doc .rpt-resp-text::before { content: "\201C"; }
+.report-doc .rpt-resp-text::after { content: "\201D"; }
+.report-doc .rpt-resp--top .rpt-resp-text { font-weight: 700; }
+
+.report-doc .rpt-resp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 0.9em;
+  font-size: max(var(--rpt-floor), 0.775em);
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-resp-author { font-weight: 600; color: var(--rpt-ink); }
+.report-doc .rpt-resp-author:empty { display: none; }
+
+.report-doc .rpt-resp-pts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.report-doc .rpt-resp-pts-n {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.3em;
+  line-height: 1.1;
+}
+
+.report-doc .rpt-resp-pts-l {
+  font-size: max(var(--rpt-floor), 0.65em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-resp-bar {
+  grid-column: 2 / 4;
+  position: relative;
+  display: block;
+  height: 0.3em;
+  margin-top: 0.5em;
+  background: var(--rpt-rule-soft);
+}
+
+.report-doc .rpt-resp-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--rpt-bar-2);
+}
+
+.report-doc .rpt-resp--top .rpt-resp-bar i { background: var(--rpt-ink); }
+
+.report-doc .rpt-empty { padding: 0.8em 0; color: var(--rpt-muted); font-size: 0.95em; }
+
+/* ==========================================================================
+   COMMENTS, QUESTIONS FOR THE ROOM, ARRIVED LATE — indented behind a rule:
+   on paper an indent reads as "about the thing above" without a legend.
+   ========================================================================== */
+.report-doc .report-comments,
+.report-doc .report-followups,
+.report-doc .report-late { margin-top: 0.4em; }
+
+.report-doc .report-comment,
+.report-doc .report-followup {
+  margin: 0.8em 0 0;
+  padding: 0.5em 0 0.5em 1.2em;
+  border-left: 0.15em solid var(--rpt-ink);
+}
+
+.report-doc .comment-on {
+  margin: 0 0 0.2em;
+  font-size: max(var(--rpt-floor), 0.675em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+  /* Not truncated: once the 7-day answer rows have expired this label is the
+     only record of what the comment was about. */
+  overflow-wrap: anywhere;
+}
+
+.report-doc .comment-excerpt {
+  margin: 0 0 0.3em;
+  font-size: max(var(--rpt-floor), 0.8em);
+  line-height: 1.45;
+  color: var(--rpt-muted);
+  overflow-wrap: anywhere;
+}
+
+.report-doc .comment-excerpt::before { content: "\201C"; }
+.report-doc .comment-excerpt::after { content: "\201D"; }
+
+.report-doc .comment-text {
+  margin: 0 0 0.3em;
+  padding: 0;
+  border: 0;
+  font-size: 1em;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
+.report-doc .comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.8em;
+  font-size: max(var(--rpt-floor), 0.775em);
+}
+
+.report-doc .comment-author { font-weight: 600; }
+
+.report-doc .comment-featured {
+  font-size: max(var(--rpt-floor), 0.65em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: var(--rpt-hair) solid var(--rpt-ink);
+  border-radius: 2px;
+  padding: 0 0.45em;
+}
+
+.report-doc .report-followup-q { margin: 0 0 0.4em; overflow-wrap: anywhere; }
+.report-doc .report-followup-list { margin: 0.3em 0; padding-left: 1.2em; }
+.report-doc .report-followup-note { margin: 0.3em 0 0; font-size: max(var(--rpt-floor), 0.85em); }
+.report-doc .report-late-when,
+.report-doc .report-late-label { margin-left: 0.5em; }
+.report-doc .report-late-label { font-weight: 600; }
+
+/* The shared furniture the sibling components render (ReportFollowUps,
+   ReportLate, TalkingPointsReport). styles.css styles these names as cards;
+   inside the document they take the document's shapes. */
+.report-doc .report-block-heading {
+  display: block;
+  margin: 1.8em 0 0.5em;
+  padding: 0 0 0.5em;
+  border: 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-ink);
+  font-family: var(--font-ui);
+  font-size: 0.9em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rpt-ink);
+}
+
+.report-doc .report-question {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.report-doc .report-question-header { display: block; margin: 0 0 1em; }
+.report-doc .report-section-index { display: flex; align-items: center; gap: 0.6em; margin: 0 0 0.5em; }
+
+.report-doc .report-section-number {
+  font-size: max(var(--rpt-floor), 0.75em);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--rpt-accent-ink);
+}
+
+.report-doc .report-lesson-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--rpt-ink);
+}
+
+/* ==========================================================================
+   SURVEY, STANDINGS, APPENDIX, END
+   ========================================================================== */
+.report-doc .report-survey-grid { display: flex; flex-direction: column; gap: 1.3em; }
+
+.report-doc .rpt-standing {
+  display: grid;
+  grid-template-columns: 3.4em minmax(0, 1fr) auto 5em;
+  gap: 0 1em;
+  align-items: baseline;
+  padding: 0.6em 0;
+  border-bottom: var(--rpt-hair) solid var(--rpt-rule-soft);
+}
+
+.report-doc .rpt-standing--head {
+  padding: 0 0 0.5em;
+  border-bottom: var(--rpt-hair) solid var(--rpt-ink);
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-standing-rank {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-standing-name { overflow-wrap: anywhere; }
+
+.report-doc .rpt-standing-pts {
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.1em;
+}
+
+.report-doc .rpt-standing--champion { font-weight: 700; }
+
+.report-doc .rpt-standing--champion .rpt-standing-rank {
+  color: var(--rpt-ink);
+  border-left: 0.3em solid var(--rpt-amber);
+  padding-left: 0.5em;
+}
+
+.report-doc .rpt-defs { margin: 0; }
+
+.report-doc .rpt-def {
+  display: grid;
+  grid-template-columns: 11em minmax(0, 1fr);
+  gap: 0 1.6em;
+  border-top: var(--rpt-hair) solid var(--rpt-rule);
+  padding: 0.65em 0;
+}
+
+.report-doc .rpt-def dt {
+  font-size: max(var(--rpt-floor), 0.75em);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-top: 0.1em;
+}
+
+.report-doc .rpt-def dd { margin: 0; font-size: 0.925em; }
+
+.report-doc .rpt-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8em;
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-end::before,
+.report-doc .rpt-end::after { content: ""; flex: 1; height: var(--rpt-hair); background: var(--rpt-rule); }
+
+.report-doc .rpt-end-mark { width: 1.4em; height: 1.4em; display: block; }
+
+/* The phone: stack what was side by side. */
+@media (max-width: 640px) {
+  .report-container .report-doc { margin: 16px auto; padding: 28px 16px 40px; border-radius: 0; }
+  .report-doc .rpt-cover-title { font-size: 2.4em; }
+  .report-doc .rpt-opener { grid-template-columns: 1fr; }
+  .report-doc .rpt-opener-num { font-size: 2.4em; justify-self: start; }
+  .report-doc .rpt-roster-list { columns: 1; }
+  .report-doc .rpt-def { grid-template-columns: 1fr; }
+  .report-doc .rpt-workie-who { margin-left: 0; flex-basis: 100%; }
+}
+
+/* ==========================================================================
+   THE PDF — .report-pdf on the clone utils/saveReport.js hands html2pdf.
+   The clone renders 7in wide (Letter less 0.75in sides) and html2canvas
+   paints screen media, so this mode carries everything Print would: the
+   print base size, the floor, no sheet chrome, the cover one page tall, and
+   the break rules html2pdf reads (`pagebreak.mode: 'css'` reads computed
+   break-inside / break-before / break-after; `avoid: ['.report-keep']`).
+   Every line of text is unbreakable, or html2pdf's slicer cuts glyphs in half.
+   ========================================================================== */
+.report-doc.report-pdf {
+  --rpt-floor: 6.5pt;
+  --rpt-hair: 0.5pt;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  font-size: 10pt;
+}
+
+/* Page inner height: 11in less the 0.75in head and 0.85in foot margins. A
+   hair under, so a cover exactly one page tall never spills a blank sliver. */
+.report-doc.report-pdf .rpt-cover { height: calc(9.4in - 3px); overflow: hidden; }
+.report-doc.report-pdf .rpt-cover-ridge { margin-top: 9em; }
+
+.report-doc.report-pdf .report-keep,
+.report-doc.report-pdf p,
+.report-doc.report-pdf li,
+.report-doc.report-pdf dt,
+.report-doc.report-pdf dd,
+.report-doc.report-pdf blockquote,
+.report-doc.report-pdf h1,
+.report-doc.report-pdf h2,
+.report-doc.report-pdf h3,
+.report-doc.report-pdf h4,
+.report-doc.report-pdf .rpt-workie-head { break-inside: avoid; }
+
+/* ==========================================================================
+   PRINT — window.print(). The same document in the same pt sizes as the PDF.
+   The browser's own header prints document.title (GameReport sets it) and
+   the page number in the margin, which is the running head Print can have.
    ========================================================================== */
 @media print {
-
-  /* Letter, with a generous asymmetric margin — more at the foot than the
-     head, which is what makes a page look typeset rather than filled. */
   @page {
     size: Letter portrait;
-    /* Asymmetric: a page with more air below than above reads as typeset
-       rather than filled, and the deeper foot leaves the browser's own print
-       footer (page number, and the document title this component sets) room
-       that is not shared with body copy. 0.85in of side margin gives a
-       measure of roughly 78 characters at 10.5pt, which is the band where a
-       serif-free text face stays comfortable. */
-    margin: 0.7in 0.85in 0.95in;
+    margin: 0.75in 0.75in 0.85in;
   }
 
   html, body {
-    background: #fff !important;
+    background: var(--surface) !important;
     margin: 0 !important;
     padding: 0 !important;
   }
@@ -960,399 +1109,94 @@
   .report-paper button,
   .expanded-qr-overlay { display: none !important; }
 
-  /* Kill the app chrome: the full-bleed field, the viewport height, the
-     scroll container, the drop shadow, the rounded card. */
   .report-container.report-paper {
-    background: #fff !important;
-    color: #000;
+    background: var(--surface) !important;
     min-height: 0;
     height: auto;
     overflow: visible;
     padding: 0;
     display: block;
-    /* The document-wide default. Everything inherits it; the few blocks that
-       must not break at all override with break-inside: avoid. */
-    orphans: 3;
-    widows: 3;
   }
 
-  .report-paper .report-doc {
+  .report-container .report-doc,
+  .report-doc {
+    --rpt-floor: 6.5pt;
+    --rpt-hair: 0.5pt;
     max-width: none;
     width: auto;
     margin: 0;
-    /* No padding at all. The measure and the position of the text block are
-       the @page margin's job on paper, and an element padding here would only
-       apply to the first page — which is exactly how the first draft ended up
-       with page 1 inset and pages 2+ running under the furniture. */
     padding: 0;
-    background: #fff;
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    font-size: 10.5pt;
-    line-height: 1.5;
-    color: #000;
-  }
-
-  .report-paper p,
-  .report-paper li,
-  .report-paper blockquote,
-  .report-paper .report-ai-markdown p {
+    font-size: 10pt;
+    /* The document-wide default: a paragraph may break, never leaving fewer
+       than three lines behind or carrying fewer than three over. */
     orphans: 3;
     widows: 3;
   }
 
-  /* ---- TITLE BLOCK ----
-     Page one opens on it, and it never splits. `break-after: avoid` keeps the
-     first round's heading from being orphaned onto page 2 on its own. */
-  .report-paper .report-titleblock {
-    break-inside: avoid;
-    break-after: avoid;
-    border-bottom: 1.5pt solid #000;
-    padding: 0 0 16pt;
-    margin: 6pt 0 26pt;
-  }
-
-  /* ---- THE CAVEAT, IN INK ----
-     Restated rather than hidden: the paper is the artefact the client keeps.
-     Black on white, because a colour-coded warning on a mono printer is no
-     warning at all, and never split across a page break. */
-  .report-paper .report-caveat {
-    break-inside: avoid;
-    background: none;
-    border: 0;
-    border-left: 2pt solid #000;
-    border-radius: 0;
-    padding: 0 0 0 12pt;
-    margin: 0 0 22pt;
-  }
-
-  .report-paper .report-caveat-label {
-    font-size: 8pt;
-    letter-spacing: 0.24em;
-    color: #000;
-    margin: 0 0 4pt;
-  }
-
-  .report-paper .report-caveat-note {
-    font-size: 9.5pt;
-    color: #000;
-  }
-
-  .report-paper .report-eyebrow {
-    font-size: 8pt;
-    letter-spacing: 0.24em;
-    color: #000;
-    margin-bottom: 10pt;
-  }
-
-  .report-paper .report-title {
-    font-size: 26pt;
-    line-height: 1.05;
-    color: #000;
-  }
-
-  .report-paper .report-date {
-    font-size: 9.5pt;
-    color: #444;
-    margin-bottom: 16pt;
-  }
-
-  .report-paper .report-meta dt { font-size: 6.8pt; color: #666; }
-  .report-paper .report-meta dd { font-size: 10.5pt; color: #000; }
-  .report-paper .report-meta-item {
-    border-right: 0.5pt solid #999;
-    padding-right: 16pt;
-    margin-right: 16pt;
-  }
-
-  /* ---- ABOUT THIS SESSION & WHO WAS HERE, IN INK ----
-     Same treatment as the caveat above: short front-matter, so it is never
-     split across a page break. Their headings already inherit break-after:
-     avoid from `.report-question-header` below. */
-  .report-paper .report-about,
-  .report-paper .report-roster {
-    break-inside: avoid;
-    margin: 0 0 22pt;
-  }
-
-  .report-paper .report-roster-item:not(:last-child)::after {
-    color: #666;
-  }
-
-  /* ---- SECTION BREAKS ----
-     A rule and 26pt of air. Not a card: cards on paper are the single loudest
-     tell that a page was screenshotted rather than typeset. */
-  .report-paper .report-content > * + * { margin-top: 24pt; }
-
-  .report-paper .report-content > *:not(:first-child) > .report-question-header {
-    border-top: 0.5pt solid #000;
-    padding-top: 20pt;
-  }
-
-  .report-paper .report-question,
-  .report-paper .report-final-scores {
-    background: none;
-    box-shadow: none;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  /* The header block of a section is small and indivisible, and its content
-     must follow it onto the same page. Both properties, deliberately:
-     `avoid` alone still permits the break to land immediately after. */
-  .report-paper .report-question-header {
-    break-inside: avoid;
-    break-after: avoid;
-    margin-bottom: 12pt;
-  }
-
-  .report-paper h1, .report-paper h2, .report-paper h3, .report-paper h4,
-  .report-paper .report-block-heading,
-  .report-paper .report-answers > h3 {
-    break-after: avoid;
-    break-inside: avoid;
-  }
-
-  .report-paper .report-section-number { font-size: 8pt; color: #000; }
-
-  .report-paper .field-badge {
-    font-size: 7pt;
-    color: #444;
-    border: 0.5pt solid #999;
-    background: none;
-  }
-
-  .report-paper .report-lesson-heading {
-    font-size: 15pt;
-    line-height: 1.15;
-    color: #000;
-  }
-
-  /* The lead paragraph MAY break — it can run long — but never badly. This is
-     precisely the orphans/widows case. */
-  .report-paper .report-lesson-task {
-    font-size: 11pt;
-    margin: -10pt 0 14pt;
-    break-inside: avoid;
-  }
-  .report-paper .report-lesson-task-label { font-size: 8pt; }
-  .report-paper .report-lesson-detail {
-    font-size: 11pt;
-    line-height: 1.5;
-    color: #000;
-    margin-bottom: 18pt;
+  .report-doc p,
+  .report-doc li,
+  .report-doc blockquote,
+  .report-doc .rpt-md .markdown-p {
     orphans: 3;
     widows: 3;
   }
 
-  .report-paper .report-block { margin: 18pt 0; }
-
-  .report-paper .report-block-heading,
-  .report-paper .report-answers > h3 {
-    font-size: 7.5pt;
-    letter-spacing: 0.2em;
-    color: #444;
-    border-bottom: 0.5pt solid #bbb;
-    padding-bottom: 5pt;
-    margin-bottom: 10pt;
-  }
-
-  /* ---- SURVEY RESULTS — one question's card is an indivisible unit ---- */
-  .report-paper .report-survey-card {
+  /* The cover is page one, and page one only. */
+  .report-doc .rpt-cover {
+    min-height: 9.3in;
+    break-after: page;
     break-inside: avoid;
   }
 
-  .report-paper .report-survey-grid {
-    gap: 14pt;
-  }
+  .report-doc .rpt-cover-ridge { margin-top: 9em; }
 
-  /* ---- TRIVIA CHOICES — one option is an indivisible unit ---- */
-  .report-paper .trivia-option-report {
+  /* The indivisible units: a response with its attribution, one choice, one
+     standings row, a comment, a heading with what it introduces. */
+  .report-doc .report-keep,
+  .report-doc .rpt-opener-unit,
+  .report-doc .rpt-keepnext,
+  .report-doc .rpt-resp,
+  .report-doc .rpt-choice,
+  .report-doc .rpt-standing,
+  .report-doc .report-comment,
+  .report-doc .report-caveat,
+  .report-doc .report-about,
+  .report-doc .report-roster,
+  .report-doc .report-survey-card { break-inside: avoid; }
+
+  /* No heading is ever left at the foot of a page. */
+  .report-doc h1, .report-doc h2, .report-doc h3, .report-doc h4,
+  .report-doc .rpt-kick,
+  .report-doc .rpt-sub,
+  .report-doc .rpt-opener,
+  .report-doc .report-block-heading {
+    break-after: avoid;
     break-inside: avoid;
-    padding: 5pt 0;
-    border-bottom: 0.5pt solid #ddd;
   }
 
-  .report-paper .trivia-option-report.correct-answer {
-    box-shadow: none;                       /* shadows do not print reliably */
-    border-left: 2pt solid #000;
-    padding-left: 8pt;
-  }
+  /* The standings take a fresh page: a closing table that begins under the
+     tail of the last round reads as a leftover. */
+  .report-doc .rpt-standings { break-before: page; margin-top: 0; }
 
-  .report-paper .trivia-option-report .option-letter {
-    border: 0.5pt solid #999;
-    color: #444;
-    font-size: 7.5pt;
-  }
-
-  .report-paper .trivia-option-report.correct-answer .option-letter {
-    border-color: #000;
-    color: #000;
-  }
-
-  .report-paper .trivia-option-report .option-text { font-size: 10.5pt; color: #000; }
-
-  /* The one piece of COLOUR kept in the body copy, deliberately. This mark is
-     the only thing on the page that says which answer was right; the row also
-     carries a rule and bold text so a monochrome printer still resolves it,
-     but where colour is available it should be used here. */
-  .report-paper .trivia-option-report .correct-indicator {
-    font-size: 7pt;
-    font-weight: 800;
-  }
-  .report-paper .correct-indicator .ws-icon {
+  /* The one fill kept on paper — without print-color-adjust Chrome drops it,
+     and with "background graphics" off the frame and bar still hold. */
+  .report-doc .rpt-workie {
+    background: var(--rpt-tint);
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* ---- AI ANALYSIS ----
-     The one fill kept on paper, and therefore the one place print-color-adjust
-     is needed: without it Chrome drops the background and the panel silently
-     becomes body copy, which misattributes a machine's words to the host. A
-     hairline box plus a 6% warm tint — light enough to photocopy, dark enough
-     to see. It may break across pages (these run long); the heading may not
-     be left behind, and neither may a single line. */
-  .report-paper .report-ai-summary {
-    background: #F3EFE7;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    border: 0.5pt solid #C9BFAE;
-    border-left: 2pt solid #000;
-    border-radius: 0;
-    padding: 12pt 14pt;
-    margin: 16pt 0;
-    orphans: 3;
-    widows: 3;
-  }
-
-  .report-paper .report-ai-summary .report-block-heading {
-    color: #000;
-    border-bottom: 0;
-    margin-bottom: 8pt;
-  }
-
-  .report-paper .report-ai-content { font-size: 10pt; line-height: 1.5; color: #000; }
-  .report-paper .report-ai-content h4 { font-size: 7.5pt; color: #444; margin: 12pt 0 4pt; }
-
-  .report-paper .report-ai-discussion li,
-  .report-paper .report-ai-steps li {
-    break-inside: avoid;
-    font-size: 9.5pt;
-    margin-bottom: 4pt;
-  }
-
-  .report-paper .report-ai-discussion li::before {
-    background: #000;
+  .report-doc .rpt-kick::before,
+  .report-doc .rpt-resp-bar,
+  .report-doc .rpt-resp-bar i,
+  .report-doc .rpt-brand-tab {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .report-paper .report-ai-steps li::before { color: #000; }
-
-  /* ---- ANSWERS — a quotation and its attribution are ONE unit ----
-     This is the owner's "page breaks in the middle of a paragraph" in its most
-     visible form: a response split from the name of the person who gave it. */
-  .report-paper .report-answer {
-    break-inside: avoid;
-    padding: 8pt 0;
-    border-bottom: 0.5pt solid #ddd;
-  }
-
-  .report-paper .report-answer.winner {
-    box-shadow: none;
-    border-left: 2pt solid #000;
-    padding-left: 8pt;
-  }
-
-  .report-paper .answer-text {
-    font-size: 10.5pt;
-    line-height: 1.45;
-    color: #000;
-  }
-
-  .report-paper .answer-meta { font-size: 8pt; color: #555; }
-  .report-paper .answer-meta > * + *::before { color: #999; }
-  .report-paper .winner-badge { font-size: 7pt; color: #000; }
-  .report-paper .answer-author { font-size: 8.5pt; color: #000; }
-  .report-paper .answer-points { font-size: 8pt; color: #000; }
-
-  /* ---- FINAL STANDINGS ----
-     Its own page. A closing section that begins halfway down a sheet under the
-     tail of the last round reads as a leftover; a marketing person would give
-     the standings the page. Each row is indivisible; the block as a whole is
-     not, because a 30-player session legitimately runs over. */
-  .report-paper .report-final-scores {
-    break-before: page;
-    margin-top: 0;
-  }
-
-  /* A forced page break makes this section's rule meaningless — it would print
-     as a stray hairline under the top margin of a fresh page. */
-  .report-paper .report-final-scores > .report-question-header {
-    border-top: 0;
-    padding-top: 0;
-  }
-
-  .report-paper .score-item {
-    break-inside: avoid;
-    padding: 7pt 0;
-    border-bottom: 0.5pt solid #ddd;
-    color: #000;
-  }
-
-  .report-paper .score-item.champion {
-    box-shadow: none;
-    border-left: 2pt solid #000;
-    padding-left: 8pt;
-  }
-
-  .report-paper .score-rank { font-size: 8.5pt; color: #555; }
-  .report-paper .score-item .player-name { font-size: 10.5pt; color: #000; }
-  .report-paper .champion-badge { font-size: 7pt; color: #000; }
-  .report-paper .player-final-score { font-size: 13pt; color: #000; }
-  .report-paper .player-final-score::after { font-size: 7pt; color: #555; }
-
-  /* ---- COLOPHON ----
-     The page has to say it is finished. A document that simply stops at the
-     last row is the other tell of a screenshot. */
-  .report-paper .report-colophon {
-    display: block;
-    break-inside: avoid;
-    margin-top: 26pt;
-    padding-top: 8pt;
-    border-top: 0.5pt solid #000;
-    font-size: 7.5pt;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #666;
-    text-align: center;
-  }
-
-  /* Links print as text; a bare URL in parentheses is noise on paper. */
-  .report-paper a { text-decoration: none; color: #000; }
-  .report-paper a::after { content: ""; }
+  /* Links print as text. */
+  .report-doc a { text-decoration: none; color: var(--rpt-ink); }
 }
-
-/* QUESTIONS FOR THE ROOM (components/ReportFollowUps.jsx, docs/design/followup-icons):
-   the same indented shape as a comment — about the round above — with the
-   counts as a plain list so a monochrome printout keeps them. */
-.report-paper .report-followups { margin-top: 20px; padding-top: 4px; }
-.report-paper .report-followup {
-  box-shadow: inset 2px 0 0 var(--report-rule-strong, currentColor);
-  padding: 12px 0 12px 16px;
-  margin: 0 0 4px;
-}
-.report-paper .report-followup-q { margin: 0 0 6px; overflow-wrap: anywhere; }
-.report-paper .report-followup-list { margin: 4px 0; padding-left: 18px; }
-.report-paper .report-followup-note { margin: 4px 0 0; font-size: 13px; }
-
-/* ARRIVED LATE (components/ReportLate.jsx, late items Task 5): the comment's
-   shape, with the review label set apart in words a monochrome printer keeps.
-   The line saying what "Include items not reviewed" left out sits above the
-   rounds, as plain as the caveat. */
-.report-paper .report-late { margin-top: 20px; padding-top: 4px; }
-.report-paper .report-late-when,
-.report-paper .report-late-label { margin-left: 8px; }
-.report-paper .report-late-label { font-weight: 600; }
-.report-paper .report-left-out { margin: 0 0 16px; font-size: 13px; font-style: italic; }

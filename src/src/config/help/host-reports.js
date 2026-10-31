@@ -168,9 +168,13 @@ const heard = {
   (SessionSetupPanel ~940 → handleViewReports → this session's report), the
   ENDED primary RW.openReport, or the Sessions list (W2). GameReport.jsx
   toolbar: "Back to session", "All session reports", "Print", "Save report";
-  sections "About this session", "Who was here", per round (the task, "AI
-  Analysis", answers with places and points, "Comments", "Arrived late"),
-  "Final Scores". Built fresh each time (create-report is a POST).
+  a cover (Held = startedAt else createdAt, Hosted by, Format, the result
+  strip), "About this session", "Who was here", per round (the opener, the
+  task, "Workie's read", "What the room said" ranked with points,
+  "Comments", "Arrived late"), "Final scores", "How to read this report".
+  The saved PDF (utils/saveReport.js): the cover on page one, a stamped head
+  and "Page n of N" foot on every later page. Built fresh each time
+  (create-report is a POST).
 */
 const reporting = {
   id: 'host-reporting',
@@ -189,7 +193,11 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'It holds what the session was about, who was there, then each round: the question and the task, Workie\'s read, every answer with its place and points, the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores.',
+          text: 'It opens with a cover: the session\'s title, the day it was held, who hosted it, the format, and the result at a glance (how many people, rounds and responses, and the top-voted response). Then what the session was about, who was there, and each round: the question and the task, Workie\'s read (marked as AI analysis, not your words), every answer ranked with its points, the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores and a short guide to reading the report.',
+        },
+        {
+          t: 'p',
+          text: 'The saved PDF is the same report on Letter pages: the cover is page one, and every page after it carries the session\'s name at the top and the session, its date and "Page n of N" at the foot. It reads the same printed in black and white.',
         },
         {
           t: 'p',

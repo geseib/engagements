@@ -24,16 +24,25 @@ import {
 
 const mockPasses = [];
 let mockSizes = [];
-jest.mock('html2pdf.js', () => () => ({
-  set: (opt) => {
-    mockPasses.push(opt);
-    return {
-      from: () => ({
-        outputPdf: async () => `data:application/pdf;base64,${'A'.repeat(mockSizes[mockPasses.length - 1] ?? 16)}`,
-      }),
-    };
-  },
-}));
+jest.mock('html2pdf.js', () => () => {
+  // The chain utils/saveReport.js drives: parts, then the stamp, then output.
+  const pdf = {
+    internal: { getNumberOfPages: () => 1, pageSize: { getWidth: () => 8.5, getHeight: () => 11 } },
+    setPage() {}, setFillColor() {}, lines() {}, setFont() {}, setFontSize() {}, setTextColor() {},
+    text() {}, getTextWidth: () => 1, setDrawColor() {}, setLineWidth() {}, line() {}, addPage() {},
+  };
+  const worker = {
+    set: (opt) => { mockPasses.push(opt); return worker; },
+    from: () => worker,
+    toContainer: () => worker,
+    toCanvas: () => worker,
+    toPdf: () => worker,
+    get: () => worker,
+    then: (fn) => { fn(pdf); return worker; },
+    outputPdf: async () => `data:application/pdf;base64,${'A'.repeat(mockSizes[mockPasses.length - 1] ?? 16)}`,
+  };
+  return worker;
+});
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 const { authFetch } = require('../auth/authFetch');
 import GameReport from '../components/GameReport';
@@ -45,7 +54,9 @@ describe('the PDF\'s settings', () => {
     expect(opt.image).toEqual({ type: 'jpeg', quality: 0.8 });
     expect(opt.html2canvas.scale).toBe(2);
     expect(opt.filename).toBe('Q3-Offsite-2026-09-28.pdf');
-    // Unchanged from before: letter, portrait, the report's own keep-together units.
+    // Letter, portrait, the report's own keep-together units — and since the
+    // refresh, a deeper head and foot for the stamped running head and foot.
+    expect(opt.margin).toEqual([0.75, 0.75, 0.85, 0.75]);
     expect(opt.jsPDF).toEqual({ unit: 'in', format: 'letter', orientation: 'portrait' });
     expect(opt.pagebreak).toEqual({ mode: ['css', 'legacy'], avoid: ['.report-keep'] });
   });
