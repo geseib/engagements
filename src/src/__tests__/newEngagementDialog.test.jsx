@@ -897,7 +897,9 @@ describe('after Create, the sessions list says what happened (live dev test B6/C
     expect(done).toHaveTextContent('Created “UX QA — Retro test”. Its code is 1224.');
     expect(done).toHaveTextContent(/nobody can join until you press Start/);
     fireEvent.click(within(done).getByRole('button', { name: /Start it now/ }));
-    expect(onStart).toHaveBeenCalledWith(SESSION);
+    // (gameId, title), as the row's own Start calls it — never the row object
+    // (issue #48 finding 1: POST /games/[object Object]/start).
+    expect(onStart).toHaveBeenCalledWith('1224', 'UX QA — Retro test');
     expect(screen.getByText(/Set: Lessons from Different Schools/)).toBeInTheDocument();
     expect(screen.queryByText(/host Host/)).toBeNull();
   });

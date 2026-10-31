@@ -7,7 +7,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove, promptOwnsOpening,
   backgroundLine, withholdBackground, HONESTY_RULE,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
@@ -3581,7 +3581,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     machinery.
   */
   const openingMove = pickOpeningMove();
-  console.log(`🎬 OPENING MOVE: ${openingMove}`);
+  // buildOutputContract drops the move when the prompt names its own first
+  // line (personas.js promptOwnsOpening); the log says which happened.
+  console.log(`🎬 OPENING MOVE: ${promptOwnsOpening(promptData) ? 'none (the prompt names its own opening)' : openingMove}`);
 
   /*
     THIS ROUND'S ANGLE — question, race, event or fact, drawn per round

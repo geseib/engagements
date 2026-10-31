@@ -5680,6 +5680,19 @@ Focus on actionable business strategy insights.`;
    * the host reads it; nothing here reaches for alert().
    */
   const startSession = async (selectedGameId, selectedEventTitle, overrides = {}) => {
+    /*
+      A GAME ID IS A STRING (or a number), NEVER AN OBJECT. A caller once
+      passed a whole session row here and the request went out as
+      POST /games/[object Object]/start (issue #48 finding 1). Refuse anything
+      that is not a plain id rather than build a URL from it.
+    */
+    const idOk = (typeof selectedGameId === 'string' && selectedGameId.trim() !== '')
+      || (typeof selectedGameId === 'number' && Number.isFinite(selectedGameId));
+    if (!idOk) {
+      console.error('❌ startSession called without a game id:', selectedGameId);
+      return { ok: false, error: 'This page lost track of which session to start. Use the Start button on its row.' };
+    }
+    selectedGameId = String(selectedGameId).trim();
     let response;
     try {
       console.log(`🚀 HOST: Starting game ${selectedGameId}`);
