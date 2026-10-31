@@ -34,8 +34,9 @@
  *     promptList and knownPromptIds live in components/SessionOptions.jsx),
  *     briefing and briefingWorking (Workie's briefing, Call & Answer only —
  *     the session's own row carries the saved one), and the New engagement
- *     redesign's own (docs/design/new-engagement, 30 Oct 2026): viewMode
- *     (Guided or Quick, remembered in localStorage), setsDialog (which route
+ *     redesign's own (docs/design/new-engagement, 30 Oct 2026): howHidden
+ *     ("How it runs" folded to its rail, remembered in localStorage),
+ *     setsDialog (which route
  *     the sets side task opened on), chooserClose, view (the form or Compare),
  *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote,
  *     pendingCreate (a ⌘↵ queued while topics load) and narrow (useNarrow:

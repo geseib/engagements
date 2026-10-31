@@ -56,9 +56,29 @@ export function StatusLine({ rows = [] }) {
 export default function CreateSummary({
   format = '', label = '', notice = null,
   rowsHeading = 'Three decisions', rows = [], edit = false,
+  /* "How it runs" folded to its rail (README round 3, option A). */
+  hidden = false, onToggleHidden = null,
 }) {
+  if (!edit && hidden) {
+    /* THE RAIL: one button, named for what it holds, so a host who hid the
+       storyboard can see what is there and how to get it back. */
+    return (
+      <aside className="gsd-side gsd-side--rail" aria-label="How it runs">
+        {notice && <div className="gsd-side-notice">{notice}</div>}
+        <button
+          type="button"
+          className="gsd-how-rail"
+          aria-expanded="false"
+          onClick={() => onToggleHidden?.(false)}
+        >
+          <Icon name="CaretLeft" size={14} weight="bold" />
+          <span className="gsd-how-rail-t">Show how {label || 'it'} runs</span>
+        </button>
+      </aside>
+    );
+  }
   return (
-    <aside className="gsd-side" aria-label={edit ? 'This session' : 'How it runs'}>
+    <aside className="gsd-side" aria-label={edit ? 'This session' : 'How it runs'} id={edit ? undefined : 'gsd-how-pane'}>
       {notice && <div className="gsd-side-notice">{notice}</div>}
       {edit ? (
         <div className="gsd-side-pin">
@@ -66,10 +86,27 @@ export default function CreateSummary({
         </div>
       ) : (
         <>
-          {/* THE WALKTHROUGH (README round 2, decision 4): how the chosen
-              format runs, a step at a time. A new format starts at step 1. */}
+          {/* THE STORYBOARD (README round 3): how the chosen format runs,
+              stage by stage, to scroll through. Hide sits on the thing it
+              hides. */}
           <div className="gsd-side-pv">
-            <FormatWalkthrough key={format || 'none'} format={format} label={label} layout="pane" />
+            <FormatWalkthrough
+              key={format || 'none'}
+              format={format}
+              label={label}
+              layout="pane"
+              headActs={onToggleHidden ? (
+                <button
+                  type="button"
+                  className="gsd-btn gsd-how-hide"
+                  aria-expanded="true"
+                  aria-controls="gsd-how-pane"
+                  onClick={() => onToggleHidden(true)}
+                >
+                  Hide <Icon name="CaretRight" size={13} weight="bold" />
+                </button>
+              ) : null}
+            />
           </div>
           <div className="gsd-side-pin">
             <StatusLine rows={rows.slice(0, 3)} />

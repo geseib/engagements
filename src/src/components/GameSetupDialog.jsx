@@ -8,16 +8,15 @@
  * Create: Name it → Format → Questions, on one page; everything else sits
  * under "Optional — every one has a safe default".
  *
- *   GUIDED   (the default for everyone since the owner's round 2) min(1240px,
- *            100vw−48px), a form on the left and a 420px side pane walking
- *            through how the chosen format runs (components/FormatWalkthrough)
- *            over a one-line status. A first-time host gets a gallery of cards
- *            with "Planning a…" meeting chips; a host with history gets chips.
- *   QUICK    a fixed 1060px single column: format chips with the last-used
- *            one chosen, the recents list, a one-line briefing, no helper copy
- *            and no side pane. The Guided | Quick switch in the head moves
- *            between them and is remembered in this browser.
- *   GUIDE    "Format guide" from either view: the card widens to min(1760px,
+ *   ONE LAYOUT (owner round 3, option A) min(1240px, 100vw−48px): the form
+ *            on the left and a 420px pane, "How <format> runs", a storyboard
+ *            to scroll through (components/FormatWalkthrough) over a one-line
+ *            status. Its Hide folds it to a 56px rail, "Show how <format>
+ *            runs", remembered in this browser; the form takes the width. A
+ *            first-time host gets a gallery of cards with "Planning a…"
+ *            meeting chips; a host with history gets chips. On a phone the
+ *            storyboard is a fold under Format.
+ *   GUIDE    "Compare formats" opens the Format guide: the card widens to min(1760px,
  *            100vw−48px) for the walkthrough and seven format cards
  *            (components/FormatCompare), and narrows back on leaving.
  *
@@ -72,7 +71,7 @@ import { BUILD_KIND, EVENT_KIND, kindLabel, kindIcon } from '../config/engagemen
 import { offeredForSessions } from '../config/setFinder';
 import {
   formatGuide, isHandoffFormat, MEETING_TYPES,
-  readViewMode, writeViewMode, isMacPlatform, createShortcutLabel, isCreateShortcut,
+  readHowHidden, writeHowHidden, isMacPlatform, createShortcutLabel, isCreateShortcut,
 } from '../config/formatGuide';
 import SetChooser from './SetChooser';
 import { ENGAGE } from '../utils/setOwnerTag';
@@ -80,6 +79,7 @@ import FormatPicker from './FormatPicker';
 import FormatCompare from './FormatCompare';
 import MeetingTypeChips from './MeetingTypeChips';
 import CreateSummary from './CreateSummary';
+import FormatWalkthrough from './FormatWalkthrough';
 import OtherFormatHandoff from './OtherFormatHandoff';
 import './GameSetupDialog.css';
 
@@ -123,44 +123,6 @@ function openAdvancedAt(root, selector) {
   if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center' });
 }
 
-/**
- * GUIDED | QUICK (README round 2, decision 1; frames 2-01, 2-02). One radio
- * group: the arrow keys move and choose, the chosen one has a tick and a 2px
- * border so the state is never colour alone.
- */
-function ViewSwitch({ value, onChange }) {
-  const refs = useRef({});
-  const items = [['guided', 'Guided'], ['quick', 'Quick']];
-  const key = (event) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const next = value === 'guided' ? 'quick' : 'guided';
-    const to = event.key === 'Home' ? 'guided' : (event.key === 'End' ? 'quick' : next);
-    onChange(to);
-    if (refs.current[to]) refs.current[to].focus();
-  };
-  return (
-    <span className="gsd-vsw" role="radiogroup" aria-label="View">
-      {items.map(([id, word]) => (
-        <button
-          key={id}
-          ref={(el) => { refs.current[id] = el; }}
-          type="button"
-          role="radio"
-          aria-checked={value === id}
-          tabIndex={value === id ? 0 : -1}
-          className={`gsd-vsw-opt${value === id ? ' is-on' : ''}`}
-          onClick={() => onChange(id)}
-          onKeyDown={key}
-        >
-          {value === id && <Icon name="Check" size={12} weight="bold" />}
-          {word}
-        </button>
-      ))}
-    </span>
-  );
-}
-
 export default function GameSetupDialog({
   /* 'create' (default) | 'edit' — edit is the same form pointed at an
      EXISTING unstarted session (`initialValues` from GET
@@ -187,7 +149,7 @@ export default function GameSetupDialog({
   /**
    * WHAT THE HOST'S HISTORY SAYS (README §6), derived by the page from the
    * GET /games read it already makes: has this account created a session
-   * (compact layout) and the newest one's format (chosen on open). A novice
+   * (chips, not the gallery) and the newest one's format (chosen on open). A novice
    * gets no format chosen and the full layout.
    */
   hasCreated = false,
@@ -223,21 +185,34 @@ export default function GameSetupDialog({
   ];
   const offeredIds = [...PICKER_GAME_TYPES.map((t) => t.id), ...otherFormats];
 
-  /* ── the view: Guided or Quick (README round 2, decision 1) ──────────────
-     GUIDED IS THE DEFAULT FOR EVERYONE (the owner: "it seems to default to
-     the simple mode with no way to switch back"). The Guided | Quick switch
-     in the head is always there and remembered in this browser (wrapped
-     localStorage; a lost choice costs one click). Quick is the compact form;
-     an edit is neither. */
-  const [viewMode, setViewMode] = useState(() => (isEdit ? 'guided' : readViewMode()));
-  const compact = !isEdit && viewMode === 'quick';
-  const chooseView = (value) => {
-    setViewMode(value);
-    writeViewMode(value);
+  /* ── ONE LAYOUT (README round 3, option A) ─────────────────────────────
+     The owner: "the guided vs quick is not intuitive". There is no mode: the
+     form on the left, "How <format> runs" on the right, open by default. Its
+     only control is Hide, which folds it to a rail; hidden, the form takes
+     the width and the dialog never changes size. Remembered per browser
+     (wrapped localStorage; lost, the pane shows). */
+  const [howHidden, setHowHidden] = useState(() => (isEdit ? false : readHowHidden()));
+  /* Focus follows the fold: to the rail when hidden, back to Hide when shown. */
+  const howFocus = useRef(null);
+  const toggleHow = (hidden) => {
+    setHowHidden(hidden);
+    writeHowHidden(hidden);
+    howFocus.current = hidden ? '.gsd-how-rail' : '.gsd-how-hide';
   };
+  useEffect(() => {
+    const sel = howFocus.current;
+    if (!sel) return;
+    howFocus.current = null;
+    const root = bodyRef.current && bodyRef.current.closest('[role="dialog"]');
+    const el = root && root.querySelector(sel);
+    if (el && el.focus) el.focus();
+  }, [howHidden]);
   /* A PHONE (frames 10, 10b): formats folded behind "More", no meeting chips,
      a one-line head and a full-width Create (live dev tests B2, V1). */
   const phone = useNarrow(600);
+  /* No room beside the form: "How it runs" is a fold under Format (frame
+     3-A-recommended-390), following the same remembered choice. */
+  const narrow = useNarrow(900);
 
   // Seeded once, not controlled. A novice opens with NO format chosen (README
   // §3.1: a novice never asked to choose never learns a choice exists); a
@@ -697,7 +672,7 @@ export default function GameSetupDialog({
   const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
   /* The gallery is for someone who has never created a session (README
      round 2, decision 2); a host who has gets chips, in either view. */
-  const showGallery = !compact && !isEdit && !galleryDone && !hasCreated;
+  const showGallery = !isEdit && !galleryDone && !hasCreated;
 
   /* ── the foot ─────────────────────────────────────────────────────────── */
   let footNote = null;
@@ -766,7 +741,7 @@ export default function GameSetupDialog({
     </div>
   ) : null;
 
-  const showSide = !compact && !chooserOpen && view === 'form';
+  const showSide = !chooserOpen && view === 'form';
   const stepMark = (n, done) => (
     <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
       {done ? <Icon name="Check" size={13} weight="bold" /> : n}
@@ -804,7 +779,7 @@ export default function GameSetupDialog({
     <section className="gsd-step">
       <h3 className="gsd-step-h" id="gsd-set-label">
         {stepMark(3, Boolean(chosenSet) || (isEdit && Boolean(newGameSetId)))}Question set
-        {chooserOpen && !compact && <span className="gsd-req">Required</span>}
+        {chooserOpen && <span className="gsd-req">Required</span>}
       </h3>
       {/* THE SET CHOOSER (issue #41): pair keys, the refusal of an unreadable
           set and the pinned set on an edit all carry over. */}
@@ -884,7 +859,7 @@ export default function GameSetupDialog({
         label="Topics in this set"
         bareCount
         noun="topics"
-        hint={compact ? '' : 'Switch off any you want to skip.'}
+        hint="Switch off any you want to skip."
         loading={categoriesLoading}
         error={categoriesError}
         onRetry={onRetryCategories ? () => onRetryCategories(newGameSetId, newGameSetRef.scope) : null}
@@ -901,17 +876,15 @@ export default function GameSetupDialog({
   let namesBlock = null;
   if (isCallAndAnswer && !chooserOpen) {
     namesBlock = (
-      <div className={`gsd-namesline${compact ? ' is-compact' : ''}`} data-testid="gsd-namesline">
+      <div className="gsd-namesline" data-testid="gsd-namesline">
         <Icon name={anonymousResponses ? 'EyeSlash' : 'Eye'} size={16} />
         <div>
           <b>{anonymousResponses ? 'Names are hidden until the vote closes' : 'Names are shown from the start'}</b>
-          {!compact && (
-            <span>
-              {anonymousResponses
-                ? ' While people answer and vote, nobody sees who wrote what, not even you. Names are shown with the results.'
-                : ' Every answer carries its author’s name from the moment voting opens.'}
-            </span>
-          )}
+          <span>
+            {anonymousResponses
+              ? ' While people answer and vote, nobody sees who wrote what, not even you. Names are shown with the results.'
+              : ' Every answer carries its author’s name from the moment voting opens.'}
+          </span>
         </div>
         <button
           type="button"
@@ -927,7 +900,7 @@ export default function GameSetupDialog({
     namesBlock = (
       <div className="gsd-namesline is-compact" data-testid="gsd-namesline">
         <Icon name="EyeSlash" size={16} />
-        <div><b>Names: {namesMode(namesChoice).label}</b>{compact ? '' : ' · locked when it opens'}</div>
+        <div><b>Names: {namesMode(namesChoice).label}</b> · locked when it opens</div>
         <button
           type="button"
           className="gsd-btn"
@@ -943,7 +916,7 @@ export default function GameSetupDialog({
   const workieIntro = 'Workie is Engage’s AI assistant: after each round it sums up what the room said. Background makes that summary speak to your situation.';
   const optionalBlock = hasFormat && !isOther ? (
     <div hidden={chooserOpen || undefined}>
-      {!compact && <h3 className="gsd-optional-h">Optional — every one has a safe default</h3>}
+      <h3 className="gsd-optional-h">Optional — every one has a safe default</h3>
       {/* ONE QUIET LINE until opened, in both layouts (frame 3b; live dev
           tests V4: the large dashed box was the heaviest thing on the form
           for an optional field). Open on its own when it holds a briefing. */}
@@ -988,15 +961,13 @@ export default function GameSetupDialog({
     focusAfter.current = '#gsd-compare-t';
     setView('compare');
   };
-  /* "Format guide", top right of the step in every view (frames 2-01,
-     2-02, 2-03). It sits BEFORE the radio group, so the Tab path from the
-     formats to the set search has nothing between them (live dev test 5 N1).
-     "I know these" and "Always open with the full guide" are gone: the
-     Guided | Quick switch in the head replaces both. */
+  /* "Compare formats" (frame 3-A1), top right of the step. It sits BEFORE
+     the radio group, so the Tab path from the formats to the set search has
+     nothing between them (live dev test 5 N1). It opens the Format guide. */
   const formatActs = !isEdit && (
     <span className="gsd-step-acts">
       <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
-        <Icon name="ListBullets" size={14} /> Format guide
+        <Icon name="ListBullets" size={14} /> {phone ? 'Compare' : 'Compare formats'}
       </button>
     </span>
   );
@@ -1031,10 +1002,22 @@ export default function GameSetupDialog({
         collapseAfter={phone && !isEdit ? 3 : 0}
         onEnter={afterFormatEnter}
       />
-      {/* `blurb` from config/gameTypes.js — the chip row's plain line, in
-          Guided only: Quick knows the formats (live dev test 2 O3). */}
-      {!showGallery && !compact && hasFormat && (
+      {/* `blurb` from config/gameTypes.js — the chip row's plain line. */}
+      {!showGallery && hasFormat && (
         <p className="gsd-blurb">{isOther ? formatGuide(engagementType).short : gameTypeMeta(engagementType).blurb}</p>
+      )}
+      {narrow && !isEdit && hasFormat && (
+        <details
+          className="gsd-how-fold"
+          open={!howHidden}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            if (open === howHidden) { setHowHidden(!open); writeHowHidden(!open); }
+          }}
+        >
+          <summary><i className="gsd-chev" aria-hidden="true" />How {formatLabel} runs</summary>
+          <FormatWalkthrough key={engagementType} format={engagementType} label={formatLabel} layout="phone" idPrefix="gsd-fold-wt" />
+        </details>
       )}
       {isEdit && (
         /* DISABLED, NOT HIDDEN, AND THE NOTE SAYS WHY: the format and set pin
@@ -1062,9 +1045,9 @@ export default function GameSetupDialog({
         onKeyDown={titleKey}
         placeholder="e.g. Q3 Leadership Offsite — Pricing Strategy"
         className="dialog-input"
-        aria-describedby={compact ? undefined : 'gsd-title-help'}
+        aria-describedby="gsd-title-help"
       />
-      {!compact && <small className="dialog-help-text" id="gsd-title-help">The room sees this on the main screen and on their phones.</small>}
+      <small className="dialog-help-text" id="gsd-title-help">The room sees this on the main screen and on their phones.</small>
     </section>
   );
 
@@ -1096,7 +1079,7 @@ export default function GameSetupDialog({
   return (
     <Modal
       overlayClassName="new-game-overlay"
-      contentClassName={`new-game-dialog gsd ${compact ? 'gsd--compact' : 'gsd--full'}${view === 'compare' ? ' gsd--guide' : ''}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
+      contentClassName={`new-game-dialog gsd gsd--full${view === 'compare' ? ' gsd--guide' : ''}${isEdit ? ' gsd--edit' : ''}${phone ? ' gsd--phone' : ''}`}
       labelledBy="gsd-heading"
       onClose={escape}
       /* THE BACKDROP STAYS INERT: there is nothing behind the overlay to go
@@ -1117,10 +1100,6 @@ export default function GameSetupDialog({
       <div className="gsd-head">
         <h2 id="gsd-heading">{phone && view === 'compare' ? 'Format guide' : headingText}</h2>
         <span className="gsd-head-acts">
-          {/* GUIDED | QUICK, on every screen but an edit and a phone (README
-              round 2, decision 1; frame 2-09 has no switch). A radiogroup:
-              the chosen one carries a tick and a border, not colour alone. */}
-          {!isEdit && !phone && <ViewSwitch value={viewMode} onChange={chooseView} />}
           <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
           {/* THE X goes through requestClose(), exactly like Cancel and Escape. */}
           <button
@@ -1136,7 +1115,7 @@ export default function GameSetupDialog({
       </div>
 
       <div
-        className={`gsd-body${showSide ? ' has-side' : ''}`}
+        className={`gsd-body${showSide && !(howHidden && !isEdit) ? ' has-side' : ''}${showSide && howHidden && !isEdit ? ' has-rail' : ''}`}
         ref={bodyRef}
         /* THE DISCARD QUESTION NEVER HIDES CREATE FOR LONG (live dev test 1
            B5): going back to the form is "keep editing". */
@@ -1165,6 +1144,8 @@ export default function GameSetupDialog({
         {showSide && (
           <CreateSummary
             edit={isEdit}
+            hidden={howHidden}
+            onToggleHidden={isEdit ? null : toggleHow}
             format={engagementType}
             label={formatLabel}
             notice={refusalNode}
@@ -1238,8 +1219,10 @@ export default function GameSetupDialog({
           >
             {primaryLabel}
             {isOther && !busy && <Icon name="ArrowRight" size={14} />}
-            {/* Keycaps for the host who uses them: compact only (README §6). */}
-            {compact && !isEdit && !isOther && !busy && (
+            {/* Keycaps for every host (README round 3): there is no "quick"
+                host to keep them for. aria-hidden; the shortcut is in
+                aria-keyshortcuts. */}
+            {!isEdit && !isOther && !busy && (
               <kbd className="gsd-kbd" aria-hidden="true">{shortcut}</kbd>
             )}
           </button>

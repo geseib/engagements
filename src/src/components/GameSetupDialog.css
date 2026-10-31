@@ -116,7 +116,7 @@
   border-radius: 14px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
-.gsd.new-game-dialog.gsd--compact { width: min(1060px, calc(100vw - 48px)); }
+
 /* THE FORMAT GUIDE TAKES THE WIDTH, whichever view opened it (README round
    2, decision 6), and the card returns to that view's width on Back. */
 @media (min-width: 601px) {
@@ -126,8 +126,7 @@
 /* THE PHONE (frames 10, 10b): the whole screen, edge to edge. The overlay
    pads 20px (styles.css); the negative margin gives it back. */
 @media (max-width: 600px) {
-  .gsd.new-game-dialog,
-  .gsd.new-game-dialog.gsd--compact {
+  .gsd.new-game-dialog {
     width: 100vw;
     height: 100vh;
     height: 100dvh;
@@ -222,13 +221,10 @@
 
 .gsd-close:hover { background: rgba(155, 168, 190, 0.14); color: var(--gsd-text); }
 
-/* The `?` beside the X (Help Phase 3), in the head's action group, with the
-   Guided | Quick switch before them, so the head pads for all three. */
-.gsd .gsd-head { padding-right: 320px; }
-.gsd.gsd--edit .gsd-head { padding-right: 132px; }
+/* The `?` beside the X (Help Phase 3), in the head's action group. */
+.gsd .gsd-head { padding-right: 132px; }
 @media (max-width: 600px) {
-  .gsd .gsd-head,
-  .gsd.gsd--compact .gsd-head { padding: 14px 112px 12px 16px; }
+  .gsd .gsd-head { padding: 14px 112px 12px 16px; }
   .gsd .gsd-head-acts .gsd-btn { display: none; }
 }
 
@@ -722,7 +718,6 @@
 .gsd .category-button .category-count { color: var(--gsd-muted); }
 .gsd .category-button.selected .category-name { color: var(--gsd-text); font-weight: 600; }
 .gsd .category-button.selected .category-count { color: var(--gsd-muted); font-weight: 700; }
-
 
 /* ------------------------------------------------------------- option cards */
 
@@ -1892,8 +1887,7 @@
   .gsd.new-game-dialog h2,
   .gsd h2 { font-size: var(--gsd-t-head); white-space: nowrap; }
   .gsd .gsd-sub { display: none; }
-  .gsd .gsd-head,
-  .gsd.gsd--compact .gsd-head { padding: 12px 104px 10px 16px; }
+  .gsd .gsd-head { padding: 12px 104px 10px 16px; }
   .gsd .gsd-head-acts { top: 6px; }
   .gsd .gsd-meet { display: none; }
   .gsd .dialog-actions { flex-wrap: wrap; padding: 10px 16px 12px; gap: 8px; }
@@ -1972,53 +1966,20 @@
 .gsd .gsd-step.is-later { padding-bottom: 4px; }
 .gsd .gsd-step .dialog-help-text { margin-top: 0; }
 
-/* Compact: no dead band between the topics and Advanced (devtest 4 N4). */
-.gsd.gsd--compact .gsd-cats { margin-bottom: 4px; }
-.gsd.gsd--compact .gsd-adv { margin-top: 4px; }
-.gsd.gsd--compact .gsd-namesline { margin: 4px 0 6px; }
-
 /* ============================================================ ROUND 2, OWNER
    docs/design/new-engagement README "Round 2 — owner feedback": the
-   Guided | Quick switch, the walkthrough, the two-row Format guide. */
-
-/* GUIDED | QUICK (decision 1). The chosen one: a tick and a 2px border, so
-   the state is never colour alone. */
-.gsd .gsd-vsw {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--gsd-rule-strong);
-  border-radius: 10px;
-}
-.gsd .gsd-vsw-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--gsd-muted);
-  font: inherit;
-  font-size: var(--gsd-t-label);
-  font-weight: 700;
-  cursor: pointer;
-}
-.gsd .gsd-vsw-opt:hover { color: var(--gsd-text); }
-.gsd .gsd-vsw-opt.is-on { border-color: var(--gsd-primary); background: var(--gsd-wash); color: var(--gsd-primary); }
-.gsd .gsd-vsw-opt:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+   walkthrough (a storyboard since round 3) and the two-row Format guide. */
 
 /* THE WALKTHROUGH (decision 4; components/FormatWalkthrough.jsx). */
 .gsd .gsd-wt { display: flex; flex-direction: column; gap: 12px; }
 .gsd .gsd-wt-head { display: flex; align-items: center; gap: 10px; }
 .gsd .gsd-wt-h { margin: 0 auto 0 0; font-size: var(--gsd-t-body); font-weight: 700; color: var(--gsd-text); }
-.gsd .gsd-wt-status { font-size: var(--gsd-t-label); color: var(--gsd-muted); white-space: nowrap; }
-.gsd .gsd-wt-play { padding: 5px 10px; }
+
 .gsd .gsd-wt-empty { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
 
 /* The picture: the room screen, and a phone over its right edge. Boxes and
    a few words; aria-hidden, the rows below say it. */
-.gsd .gsd-wt-pic { position: relative; display: block; min-height: 226px; padding-right: 64px; }
+.gsd .gsd-wt-pic { position: relative; display: block; min-height: 242px; padding-right: 64px; }
 .gsd .gsd-wt-stage {
   display: flex;
   flex-direction: column;
@@ -2054,7 +2015,7 @@
 .gsd .gsd-wt-dots { display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px; }
 .gsd .gsd-wt-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--gsd-rule-strong); }
 .gsd .gsd-wt-dots i.is-on { background: var(--gsd-secondary); }
-.gsd .gsd-wt-vote { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; max-width: 250px; }
+.gsd .gsd-wt-vote { display: flex; flex-direction: column; gap: 5px; max-width: 260px; }
 .gsd .gsd-wt-item { display: flex; gap: 5px; min-width: 0; padding: 3px 6px; border-radius: 5px; background: var(--gsd-field); font-size: var(--gsd-t-floor); color: var(--gsd-text); }
 .gsd .gsd-wt-item em { color: var(--gsd-primary); font-weight: 800; }
 .gsd .gsd-wt-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2122,7 +2083,7 @@
   flex-direction: column;
   gap: 5px;
   width: 130px;
-  height: 180px;
+  height: 196px;
   overflow: hidden;
   padding: 16px 9px 10px;
   border: 3px solid var(--gsd-rule-strong);
@@ -2132,7 +2093,8 @@
   color: var(--gsd-text);
 }
 .gsd .gsd-wt-notch { position: absolute; top: 6px; left: 50%; width: 28px; height: 4px; margin-left: -14px; border-radius: 2px; background: var(--gsd-rule-strong); }
-.gsd .gsd-wt-phone b { line-height: 1.25; }
+.gsd .gsd-wt-phone b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; line-height: 1.25; }
+.gsd .gsd-wt-field { flex: none; }
 .gsd .gsd-wt-field { display: block; min-height: 34px; padding: 3px 5px; border-radius: 5px; background: var(--gsd-field); color: var(--gsd-text); overflow: hidden; }
 .gsd .gsd-wt-field.is-sm { min-height: 16px; padding: 0 5px; }
 .gsd .gsd-wt-send { display: block; padding: 2px 0; border-radius: 5px; background: var(--gsd-primary); color: var(--gsd-card); text-align: center; font-weight: 800; }
@@ -2146,7 +2108,7 @@
 .gsd .gsd-wt-abcd i.is-on { box-shadow: inset 0 0 0 2px var(--gsd-primary); }
 .gsd .gsd-wt-right { display: inline-flex; align-items: center; gap: 4px; color: var(--gsd-success-text); font-weight: 700; }
 
-/* The step: number, title, then You / Phones / Room screen. */
+/* A stage: number and title, then its plain description. */
 .gsd .gsd-wt-t { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: var(--gsd-t-body); font-weight: 700; line-height: 1.35; color: var(--gsd-text); }
 .gsd .gsd-wt-n {
   flex: none;
@@ -2161,38 +2123,8 @@
   font-weight: 800;
 }
 .gsd .gsd-wt-n.is-get { background: var(--gsd-success); }
-.gsd .gsd-wt-rows { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; }
-.gsd .gsd-wt-row-l { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; font-size: var(--gsd-t-label); line-height: 1.45; }
-.gsd .gsd-wt-row-l dt { display: flex; align-items: flex-start; gap: 6px; color: var(--gsd-muted); }
-.gsd .gsd-wt-row-l dt svg { margin-top: 3px; color: var(--gsd-secondary); }
-.gsd .gsd-wt-row-l dd { margin: 0; color: var(--gsd-text); }
-.gsd .gsd-wt-get { margin: 8px 0 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
-.gsd .gsd-wt-sum { margin: 0; font-size: var(--gsd-t-body); line-height: 1.45; color: var(--gsd-text); }
 
-/* Back · dots · Next. */
-.gsd .gsd-wt-ctl { display: flex; align-items: center; gap: 10px; }
-.gsd .gsd-wt-dots-nav { display: inline-flex; align-items: center; gap: 4px; margin: 0 auto; }
-.gsd .gsd-wt--guide .gsd-wt-dots-nav { margin: 0; }
-.gsd .gsd-wt-dot {
-  display: inline-grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 1.5px solid var(--gsd-muted);
-  border-radius: 99px;
-  background: none;
-  color: var(--gsd-success-text);
-  cursor: pointer;
-}
-.gsd .gsd-wt-dot.is-get { border-color: var(--gsd-success-text); }
-.gsd .gsd-wt-dot.is-on { width: 26px; border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
-.gsd .gsd-wt-dot.is-get.is-on { border-color: var(--gsd-success); background: var(--gsd-success); }
-.gsd .gsd-wt-dot:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
-.gsd .gsd-wt-next { border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
-.gsd .gsd-wt-next:hover { border-color: var(--gsd-primary); }
-.gsd .gsd-wt-back[aria-disabled="true"],
-.gsd .gsd-wt-next[aria-disabled="true"] { border: 1px dashed var(--gsd-rule-strong); background: none; color: var(--gsd-muted); cursor: default; }
+.gsd .gsd-wt-sum { margin: 0; font-size: var(--gsd-t-body); line-height: 1.45; color: var(--gsd-text); }
 
 /* The pane: the walkthrough scrolls, the status line stays at the foot. */
 .gsd .gsd-side .gsd-side-pv { padding-top: 16px; }
@@ -2210,22 +2142,11 @@
 .gsd .gsd-guide-t:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
 .gsd .gsd-guide-sub { font-size: var(--gsd-t-label); color: var(--gsd-muted); }
 .gsd .gsd-guide-top { padding: 14px 16px; border: 1px solid var(--gsd-rule-strong); border-radius: 12px; background: var(--gsd-side); }
-.gsd .gsd-wt-grid { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr) 240px; gap: 20px; align-items: start; }
-.gsd .gsd-wt--guide .gsd-wt-pic { min-height: 200px; }
-.gsd .gsd-wt-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+
 .gsd .gsd-guide-name { display: flex; align-items: center; gap: 12px; }
 .gsd .gsd-guide-name h4 { display: flex; align-items: center; gap: 8px; margin: 0 auto 0 0; font-size: var(--gsd-t-head); font-weight: 800; color: var(--gsd-text); white-space: nowrap; }
 .gsd .gsd-guide-use { white-space: nowrap; }
-.gsd .gsd-wt-rail { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 0 16px; border-left: 1px solid var(--gsd-rule); list-style: none; }
-.gsd .gsd-wt-railbtn { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 4px 0; border: 0; background: none; color: var(--gsd-muted); font: inherit; font-size: var(--gsd-t-label); line-height: 1.4; text-align: left; cursor: pointer; }
-.gsd .gsd-wt-railbtn .gsd-wt-n { background: none; border: 1px solid var(--gsd-muted); color: var(--gsd-muted); }
-.gsd .gsd-wt-railbtn .gsd-wt-n.is-get { border-color: var(--gsd-success-text); color: var(--gsd-success-text); }
-.gsd .gsd-wt-rail li.is-on .gsd-wt-railbtn { color: var(--gsd-text); font-weight: 700; }
-.gsd .gsd-wt-rail li.is-on .gsd-wt-n { border-color: var(--gsd-primary); background: var(--gsd-primary); color: var(--gsd-card); }
-@media (max-width: 1400px) {
-  .gsd .gsd-wt-grid { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
-  .gsd .gsd-wt-rail { display: none; }
-}
 
 /* Seven cards, as tabs, with their group labels above them. */
 .gsd .gsd-guide-cards {
@@ -2274,8 +2195,7 @@
   .gsd .gsd-guide-top { padding: 10px 14px; }
   .gsd .gsd-wt--guide .gsd-wt-sum { font-size: var(--gsd-t-label); }
   .gsd .gsd-wt--guide .gsd-wt-stage { min-height: 150px; }
-  .gsd .gsd-wt--guide .gsd-wt-main { gap: 6px; }
-  .gsd .gsd-wt--guide .gsd-wt-rows { gap: 2px; margin-top: 4px; }
+
   .gsd .gsd-guide-card { gap: 4px; padding: 8px 10px 10px; }
   .gsd .gsd-guide-card.is-on { padding: 7px 9px 9px; }
   .gsd .gsd-wt--pane .gsd-wt-stage { min-height: 160px; }
@@ -2283,7 +2203,6 @@
   .gsd .gsd-wt--pane .gsd-wt-phone { top: 16px; }
   .gsd .gsd-wt--pane { gap: 8px; }
   .gsd .gsd-guide-fact b { display: inline; margin-right: 4px; }
-  .gsd .gsd-wt--guide .gsd-wt-pic { min-height: 0; }
 }
 
 /* THE PHONE GUIDE (decision 7; frame 2-09): one format at a time. */
@@ -2312,6 +2231,130 @@
 .gsd .gsd-guide-foot .btn-secondary,
 .gsd .gsd-guide-foot .btn-primary { flex: 1 1 0; min-height: 44px; justify-content: center; }
 .gsd.gsd--guide.gsd--phone .dialog-actions { display: none; }
-.gsd .gsd-wt--phone .gsd-wt-row-l { grid-template-columns: 70px minmax(0, 1fr); }
-.gsd .gsd-wt--phone .gsd-wt-back,
-.gsd .gsd-wt--phone .gsd-wt-next { justify-content: center; width: 44px; height: 44px; padding: 0; }
+
+
+/* ============================================================ ROUND 3, OWNER
+   README "Round 3 — one view, not two" (option A) and the owner's storyboard:
+   "rather than having to click through prev and next if you just scrolled
+   through the stages. with an image and description". */
+
+/* THE STORYBOARD: stage cards in a column the pane scrolls through. */
+.gsd .gsd-sb { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.gsd .gsd-sb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+  scroll-margin-top: 96px;
+}
+.gsd .gsd-sb-card:focus { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-sb-card.is-get { border-color: var(--gsd-success); }
+.gsd .gsd-sb-text { margin: 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-text); }
+.gsd .gsd-wt-read.is-big { max-width: none; padding: 10px 12px; font-size: var(--gsd-t-label); line-height: 1.45; }
+.gsd .gsd-wt-read.is-big .gsd-wt-k { margin-bottom: 4px; }
+
+/* The heading, Hide and the index hold still at the top of the pane. */
+.gsd .gsd-wt--pane .gsd-wt-sticky {
+  position: sticky;
+  align-items: stretch;
+  top: -16px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -16px -22px 0;
+  padding: 16px 22px 10px;
+  background: var(--gsd-side);
+  border-bottom: 1px solid var(--gsd-rule);
+}
+.gsd .gsd-sb-index { display: flex; flex-wrap: wrap; gap: 6px; }
+.gsd .gsd-sb-jump {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--gsd-rule-strong);
+  border-radius: 99px;
+  background: none;
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-floor);
+  font-weight: 800;
+  cursor: pointer;
+}
+.gsd .gsd-sb-jump:hover { border-color: var(--gsd-primary); }
+.gsd .gsd-sb-jump.is-get { border-color: var(--gsd-success-text); color: var(--gsd-success-text); }
+.gsd .gsd-sb-jump:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-how-hide { padding: 5px 10px; }
+
+/* HIDDEN: a 56px rail that says what it holds; the form takes the width and
+   the dialog keeps its size (README round 3). */
+.gsd .gsd-body.has-rail { grid-template-columns: minmax(0, 1fr) 56px; }
+.gsd .gsd-side.gsd-side--rail { align-items: stretch; }
+.gsd .gsd-how-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 18px 0;
+  border: 0;
+  background: none;
+  color: var(--gsd-text);
+  font: inherit;
+  font-size: var(--gsd-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.gsd .gsd-how-rail svg { color: var(--gsd-secondary); }
+.gsd .gsd-how-rail-t { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.gsd .gsd-how-rail:hover .gsd-how-rail-t { color: var(--gsd-primary); }
+.gsd .gsd-how-rail:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: -4px; }
+@media (max-width: 900px) {
+  .gsd .gsd-body.has-rail { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* THE PHONE (frame 3-A-recommended-390): a fold under Format. */
+.gsd .gsd-how-fold { margin-top: 4px; border: 1px solid var(--gsd-rule-strong); border-radius: 12px; background: var(--gsd-side); }
+.gsd .gsd-how-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  list-style: none;
+  font-size: var(--gsd-t-body);
+  font-weight: 700;
+  color: var(--gsd-text);
+  cursor: pointer;
+}
+.gsd .gsd-how-fold > summary::-webkit-details-marker { display: none; }
+.gsd .gsd-how-fold[open] > summary .gsd-chev { transform: rotate(90deg); }
+.gsd .gsd-how-fold > summary:focus-visible { outline: 2px solid var(--gsd-focus); outline-offset: 2px; }
+.gsd .gsd-how-fold > .gsd-wt { padding: 0 12px 12px; }
+.gsd .gsd-wt--phone .gsd-wt-sticky { display: contents; }
+
+/* THE GUIDE: the name, Use and summary on the left; the stages in a row
+   that scrolls sideways inside the panel, never the page. */
+.gsd .gsd-wt--guide { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.gsd .gsd-wt-guidehead { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.gsd .gsd-wt-guidehead .gsd-guide-name { flex-wrap: wrap; }
+.gsd .gsd-wt--guide .gsd-sb {
+  flex-direction: row;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: 8px;
+}
+.gsd .gsd-wt--guide .gsd-sb-card { flex: 0 0 320px; scroll-snap-align: start; scroll-margin-top: 0; scroll-margin-left: 4px; }
+.gsd .gsd-wt--guide .gsd-wt-pic { min-height: 242px; }
+@media (max-height: 800px) {
+  .gsd .gsd-wt--guide .gsd-sb-card { flex-basis: 300px; padding: 10px; gap: 6px; }
+  .gsd .gsd-wt--guide .gsd-wt-pic { min-height: 196px; }
+  .gsd .gsd-wt--guide .gsd-wt-phone { top: 16px; }
+  .gsd .gsd-wt--guide .gsd-sb-text { line-height: 1.4; }
+}

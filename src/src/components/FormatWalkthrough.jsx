@@ -1,29 +1,30 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import Icon from './Icon';
-import { walkthroughFor, PLAY_MS } from '../config/formatWalkthrough';
+import { walkthroughFor } from '../config/formatWalkthrough';
 
 /**
- * HOW A FORMAT RUNS, STEP BY STEP (docs/design/new-engagement README "Round 2
- * — owner feedback", decisions 4–6; frames 2-01, 2-03, 2-04, 2-06, 2-09).
+ * HOW A FORMAT RUNS, AS A STORYBOARD (docs/design/new-engagement README
+ * rounds 2 and 3; the owner, 30 Oct 2026: "rather than having to click
+ * through prev and next if you just scrolled through the stages. with an
+ * image and description").
  *
- * Replaces the one-picture preview the owner said "doesnt shed light as to
- * what happens". Each step pairs what YOU do, what PHONES show and what the
- * ROOM SCREEN shows, with a picture of both screens; the last dot is "What you
- * get". The words live in config/formatWalkthrough.js.
+ * A run of stage cards the host scrolls through — each a picture of the room
+ * screen and a phone, a numbered title and a plain description — ending with
+ * "What you get". The words live in config/formatWalkthrough.js. Nothing has
+ * to be clicked; there is no current step, so switching format can never
+ * point past the end of a shorter storyboard (the round-2 white page).
  *
- *   ‹ Back · the dots · Next ›   labelled buttons; ← → on a dot moves too
- *   ▶ Play                        off by default; every 8s; paused while the
- *                                 pointer or focus is inside; stops at the
- *                                 end; never offered under reduced motion
- *   "Step n of m"                 said politely as it changes
+ *   index   a small row of numbered buttons at the top: each scrolls its
+ *           stage into view and focuses it (no animation under reduced
+ *           motion). Not drawn on a phone, where the stages are stacked.
  *
- * The picture is boxes and a few words (aria-hidden: the rows say it), and
- * each is its step's end state, so nothing depends on animation.
+ *   layout  'pane'   the side pane: heading (+ Hide), index, stages in a column
+ *           'guide'  the Format guide: name, Use, summary, index, then the
+ *                    stages in a row that scrolls sideways inside the panel
+ *           'phone'  the fold under Format: the stages in a column
  *
- *   layout  'pane'   the Guided side pane: heading, picture, step, controls
- *           'guide'  the Format guide's top row: picture | step | step rail
- *           'phone'  the phone guide: picture, step, controls
- *   head    the guide's own head (name + Use button) in place of "How X runs"
+ * The pictures are boxes and a few words (aria-hidden: the text says it),
+ * each its stage's end state, so nothing depends on animation.
  */
 
 function prefersReducedMotion() {
@@ -81,6 +82,13 @@ function Stage({ art }) {
             ))}
             <span className="gsd-wt-read"><span className="gsd-wt-k">What we heard · Workie</span>{art.read}</span>
           </span>
+        </>
+      );
+    case 'read':
+      return (
+        <>
+          {top}
+          <span className="gsd-wt-read is-big"><span className="gsd-wt-k">{art.k}</span>{art.text}</span>
         </>
       );
     case 'comments':
@@ -277,209 +285,106 @@ export function WalkthroughPicture({ art, report = false }) {
   );
 }
 
-/* ── the walkthrough ─────────────────────────────────────────────────────── */
+/* ── the storyboard ──────────────────────────────────────────────────────── */
 
 export default function FormatWalkthrough({
-  format = '', label = '', layout = 'pane', head = null, summary = '', idPrefix = 'gsd-wt',
+  format = '', label = '', layout = 'pane', head = null, summary = '', idPrefix = 'gsd-wt', headActs = null,
 }) {
   const walk = walkthroughFor(format);
-  const total = walk ? walk.steps.length + 1 : 0; // the last is "What you get"
-  const [step, setStep] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  /* Paused while the pointer or the host's focus is inside (README decision
-     4). Focus on Play itself does not count, or pressing it would pause it. */
-  const [hover, setHover] = useState(false);
-  const [focusIn, setFocusIn] = useState(false);
-  const paused = hover || focusIn;
-  const rootRef = useRef(null);
-  const dotsRef = useRef([]);
-  const reduced = prefersReducedMotion();
-
-  /* A NEW FORMAT STARTS AT STEP 1, and stops playing (README decision 4).
-     Reset DURING the render that brings the new format, not in an effect
-     after it: that first render used to keep the old format's step number,
-     and on Call & Answer's last step (index 5) a shorter format has no step
-     5, so `current.art` threw and the whole page went white (owner,
-     2026-10-30). The clamp below is the second guard. */
-  const [stepFormat, setStepFormat] = useState(format);
-  if (stepFormat !== format) {
-    setStepFormat(format);
-    setStep(0);
-    setPlaying(false);
-  }
-
-  /* PLAY: one step every 8s while nothing of the host's is inside the pane. */
-  useEffect(() => {
-    if (!playing || paused || reduced || !total) return undefined;
-    const t = setInterval(() => {
-      setStep((s) => {
-        if (s + 1 >= total - 1) setPlaying(false);
-        return Math.min(s + 1, total - 1);
-      });
-    }, PLAY_MS);
-    return () => clearInterval(t);
-  }, [playing, paused, reduced, total]);
 
   if (!walk) {
     return (
       <section className={`gsd-wt gsd-wt--${layout} is-empty`} aria-labelledby={`${idPrefix}-h`}>
-        <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How it runs</h3>
-        <WalkthroughPicture art={null} />
-        <p className="gsd-wt-empty">Choose a format to see how it runs, step by step.</p>
+        <div className="gsd-wt-head">
+          <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How it runs</h3>
+          {headActs}
+        </div>
+        <p className="gsd-wt-empty">Choose a format to see how it runs, stage by stage.</p>
       </section>
     );
   }
 
-  const shown = stepFormat === format ? Math.min(Math.max(step, 0), total - 1) : 0;
-  const atGet = shown === total - 1;
-  const current = atGet ? null : walk.steps[shown];
-  const art = atGet ? walk.get.art : current.art;
-  const status = atGet ? 'What you get' : `Step ${shown + 1} of ${total - 1}`;
-  const go = (n) => setStep(Math.max(0, Math.min(total - 1, n)));
-  const stepName = (i) => (i === total - 1 ? 'What you get' : `Step ${i + 1} of ${total - 1}: ${walk.steps[i].title}`);
+  const cards = [
+    ...walk.stages.map((s, i) => ({ key: `s${i}`, n: String(i + 1), title: s.title, text: s.text, art: s.art, get: false })),
+    { key: 'get', n: '', title: 'What you get', text: walk.get.text, art: walk.get.art, get: true },
+  ];
+  const cardId = (c) => `${idPrefix}-${format}-${c.key}`;
 
-  const focusMoved = (event) => {
-    const el = event.target;
-    setFocusIn(Boolean(el && !(el.classList && el.classList.contains('gsd-wt-play'))));
-  };
-  const leave = (event) => {
-    if (!rootRef.current || !rootRef.current.contains(event.relatedTarget)) setFocusIn(false);
-  };
-  const dotKey = (event, i) => {
-    let next = null;
-    if (event.key === 'ArrowRight') next = Math.min(total - 1, i + 1);
-    else if (event.key === 'ArrowLeft') next = Math.max(0, i - 1);
-    else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = total - 1;
-    if (next === null) return;
-    event.preventDefault();
-    go(next);
-    if (dotsRef.current[next]) dotsRef.current[next].focus();
+  /* The index scrolls the stage into view and gives it focus; no animation
+     under reduced motion (README round 3, owner's storyboard). */
+  const goTo = (c) => {
+    const el = typeof document !== 'undefined' ? document.getElementById(cardId(c)) : null;
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'nearest', inline: 'start' });
+    }
+    if (typeof el.focus === 'function') el.focus({ preventScroll: true });
   };
 
-  const rows = current ? [
-    ['you', 'UserCircle', 'You', current.you],
-    ['phones', 'DeviceMobile', 'Phones', current.phones],
-    ['room', 'Monitor', layout === 'phone' ? 'Room' : 'Room screen', current.room],
-  ].filter((r) => r[3]) : [];
-
-  const play = reduced ? null : (
-    <button
-      type="button"
-      className="gsd-btn gsd-wt-play"
-      aria-pressed={playing}
-      onClick={() => { if (atGet && !playing) go(0); setPlaying((p) => !p); }}
-    >
-      <Icon name={playing ? 'Pause' : 'Play'} size={13} weight="fill" /> {playing ? 'Pause' : 'Play'}
-    </button>
+  const index = (
+    <nav className="gsd-sb-index" aria-label={`Stages of ${label}`}>
+      {cards.map((c) => (
+        <button
+          key={c.key}
+          type="button"
+          className={`gsd-sb-jump${c.get ? ' is-get' : ''}`}
+          aria-label={c.get ? 'What you get' : `Stage ${c.n}: ${c.title}`}
+          title={c.get ? 'What you get' : c.title}
+          onClick={() => goTo(c)}
+        >
+          {c.get ? <Icon name="Check" size={11} weight="bold" /> : c.n}
+        </button>
+      ))}
+    </nav>
   );
 
-  const controls = (
-    <div className="gsd-wt-ctl">
-      <button type="button" className="gsd-btn gsd-wt-back" aria-disabled={shown === 0 || undefined} onClick={() => go(shown - 1)}>
-        <Icon name="CaretLeft" size={13} weight="bold" />{layout === 'phone' ? <span className="gsd-sr">Back</span> : ' Back'}
-      </button>
-      <span className="gsd-wt-dots-nav" role="group" aria-label={`Steps of ${label}`}>
-        {Array.from({ length: total }, (_, i) => (
-          <button
-            key={i}
-            ref={(el) => { dotsRef.current[i] = el; }}
-            type="button"
-            className={`gsd-wt-dot${i === shown ? ' is-on' : ''}${i === total - 1 ? ' is-get' : ''}`}
-            aria-label={stepName(i)}
-            aria-current={i === shown ? 'step' : undefined}
-            tabIndex={i === shown ? 0 : -1}
-            onClick={() => go(i)}
-            onKeyDown={(event) => dotKey(event, i)}
-          >
-            {i === total - 1 && <Icon name="Check" size={10} weight="bold" />}
-          </button>
-        ))}
-      </span>
-      <button type="button" className="gsd-btn gsd-wt-next" aria-disabled={atGet || undefined} onClick={() => go(shown + 1)}>
-        {layout === 'phone' ? <span className="gsd-sr">Next</span> : 'Next '}<Icon name="CaretRight" size={13} weight="bold" />
-      </button>
-      {layout === 'guide' && play}
-    </div>
+  const list = (
+    <ol className="gsd-sb" aria-label={`How ${label} runs, stage by stage`}>
+      {cards.map((c) => (
+        <li key={c.key} id={cardId(c)} className={`gsd-sb-card${c.get ? ' is-get' : ''}`} tabIndex={-1}>
+          <WalkthroughPicture art={c.art} report={c.get} />
+          <h4 className="gsd-wt-t">
+            <span className={`gsd-wt-n${c.get ? ' is-get' : ''}`} aria-hidden="true">
+              {c.get ? <Icon name="Check" size={12} weight="bold" /> : c.n}
+            </span>
+            {c.title}
+          </h4>
+          <p className="gsd-sb-text">{c.text}</p>
+        </li>
+      ))}
+    </ol>
   );
 
-  const stepText = (
-    <div className="gsd-wt-step">
-      <h4 className="gsd-wt-t">
-        <span className={`gsd-wt-n${atGet ? ' is-get' : ''}`} aria-hidden="true">
-          {atGet ? <Icon name="Check" size={12} weight="bold" /> : shown + 1}
-        </span>
-        {atGet ? 'What you get' : current.title}
-      </h4>
-      {atGet ? (
-        <p className="gsd-wt-get">{walk.get.text}</p>
-      ) : (
-        <dl className="gsd-wt-rows">
-          {rows.map(([key, icon, name, text]) => (
-            <div key={key} className="gsd-wt-row-l">
-              <dt><Icon name={icon} size={14} /> {name}</dt>
-              <dd>{text}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
-  );
+  if (layout === 'guide') {
+    return (
+      <section className="gsd-wt gsd-wt--guide" aria-labelledby={`${idPrefix}-h`} data-format={format}>
+        <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs</h3>
+        <div className="gsd-wt-guidehead">
+          {head}
+          {summary && <p className="gsd-wt-sum">{summary}</p>}
+          {index}
+        </div>
+        {list}
+      </section>
+    );
+  }
 
   return (
-    <section
-      ref={rootRef}
-      className={`gsd-wt gsd-wt--${layout}`}
-      aria-labelledby={`${idPrefix}-h`}
-      data-format={format}
-      onPointerEnter={() => setHover(true)}
-      onPointerLeave={() => setHover(false)}
-      onFocus={focusMoved}
-      onBlur={leave}
-    >
-      {layout === 'pane' && (
-        <div className="gsd-wt-head">
-          <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How {label} runs</h3>
-          <span className="gsd-wt-status" aria-live="polite">{status}</span>
-          {play}
-        </div>
-      )}
-      {layout !== 'pane' && (
-        <>
-          <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs</h3>
-          <span className="gsd-sr" aria-live="polite">{status}</span>
-        </>
-      )}
-      {layout === 'guide' ? (
-        <div className="gsd-wt-grid">
-          <WalkthroughPicture art={art} report={atGet} />
-          <div className="gsd-wt-main">
-            {head}
-            {summary && <p className="gsd-wt-sum">{summary}</p>}
-            {stepText}
-            {controls}
+    <section className={`gsd-wt gsd-wt--${layout}`} aria-labelledby={`${idPrefix}-h`} data-format={format}>
+      {/* The heading, Hide and the index stay at the top while the stages
+          scroll under them. */}
+      <div className="gsd-wt-sticky">
+        {layout !== 'phone' && (
+          <div className="gsd-wt-head">
+            <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How {label} runs</h3>
+            {headActs}
           </div>
-          <ol className="gsd-wt-rail" aria-label={`All the steps of ${label}`}>
-            {Array.from({ length: total }, (_, i) => (
-              <li key={i} className={i === shown ? 'is-on' : ''}>
-                <button type="button" className="gsd-wt-railbtn" aria-current={i === shown ? 'step' : undefined} onClick={() => go(i)}>
-                  <span className={`gsd-wt-n${i === total - 1 ? ' is-get' : ''}`} aria-hidden="true">
-                    {i === total - 1 ? <Icon name="Check" size={11} weight="bold" /> : i + 1}
-                  </span>
-                  {i === total - 1 ? 'What you get' : walk.steps[i].title}
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : (
-        <>
-          {layout === 'phone' && summary && <p className="gsd-wt-sum">{summary}</p>}
-          <WalkthroughPicture art={art} report={atGet} />
-          {stepText}
-          {controls}
-        </>
-      )}
+        )}
+        {layout === 'phone' && <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs</h3>}
+        {layout === 'phone' && summary && <p className="gsd-wt-sum">{summary}</p>}
+        {layout !== 'phone' && index}
+      </div>
+      {list}
     </section>
   );
 }

@@ -1,239 +1,210 @@
 /**
- * HOW EACH FORMAT RUNS, STEP BY STEP (docs/design/new-engagement README
- * "Round 2 — owner feedback", frames 2-04 and 2-05).
+ * HOW EACH FORMAT RUNS, AS A STORYBOARD (docs/design/new-engagement README
+ * rounds 2 and 3).
  *
- * The owner, 30 Oct 2026: "the preview doesnt shed light as to what happens".
- * So the side pane and the Format guide walk through a session instead: per
- * step what YOU do, what PHONES show and what the ROOM SCREEN shows, ending
- * with what you get. The words are the designer's, checked against the help
- * (host-running.js, host-reports.js, player.js): phones rank their top three,
- * names are hidden while voting and go up with the results, comments come
- * after Workie's read and carry the writer's name, Wavelength has no winners,
- * a survey opens as it is created, an event holds up to 16 items.
+ * The owner, 30 Oct 2026, on the round-2 walkthrough: "what about rather
+ * than having to click through prev and next if you just scrolled through
+ * the stages. with an image and description." So each format is a short run
+ * of STAGES the host scrolls through — a picture and a plain description
+ * each — ending with what you get. Nothing to click.
  *
- * Each step describes the DEFAULTS (names hidden until the vote closes). A
- * blank `phones` or `room` means that screen has nothing to show at that step
- * (setting up a Build Room or an event happens on its own page); the
- * walkthrough leaves the row out rather than invent one.
+ * ONE CONCRETE THREAD PER FORMAT. Call & Answer carries the owner's own
+ * example from the ask to the report; the others carry one of the same
+ * spirit. Every behaviour is checked against config/gameTypes.js and the help
+ * (host-running.js, host-reports.js, host-surveys.js, build-room.js,
+ * host-events.js, player.js): phones rank their top three, names are hidden
+ * while voting and go up with the results, comments carry the writer's name,
+ * a poll has no right answer and no names, Wavelength has no winners, a
+ * survey opens as it is created, an event holds up to 16 items. The stages
+ * describe the defaults (names hidden until the vote closes).
  *
- *   steps  [{ title, you, phones, room, art: { stage, phone } }]
- *   get    { text, art: { stage } }  — the last dot, "What you get"
+ *   stages  [{ title, text, art: { stage, phone } }]
+ *   get     { text, art: { stage } }  — the last card, "What you get"
  *
  * `art` is data for components/FormatWalkthrough.jsx's picture: a `kind` and
- * the few words it draws. Pictures are boxes, never images, and each is the
- * step's end state, so nothing depends on animation.
+ * the few words it draws. Pictures are boxes, never images.
  */
 import { BUILD_KIND, EVENT_KIND } from './engagementKinds';
 
-const CHIP = 'Round 1 · Architecture';
-const QUESTION = 'Build a Threshold, Not a Door';
-const ANSWERS = [
-  'A staging step before prod that people can actually linger in',
-  'Onboarding: a week of reading before the first ticket',
-  'Design reviews that happen in the hallway first',
-  'Hallway reviews before formal ones',
-  'A “threshold” week for new tools',
+const ASK = 'If we had unlimited people and resources, what should we build?';
+const RESPONSES = [
+  'A Rube Goldberg machine',
+  'A grass-seeding robot',
+  'An AI-enabled fax machine',
+  'A for-hire one-week enterprise tech-debt remover',
 ];
+const CA_CHIP = 'Round 1 · Big ideas';
+
+const OCTOPUS = 'How many hearts does an octopus have?';
+const ROOM_NAME = 'What should we call the new meeting room?';
+const DRAWER = 'Things you find in a junk drawer';
 
 export const FORMAT_WALKTHROUGH = Object.freeze({
   'call-and-answer': {
-    steps: [
+    stages: [
       {
-        title: 'You ask a question',
-        you: 'Press Start, then put the first question up. People join with the code on screen.',
-        phones: 'The question, and a box to write an answer.',
-        room: 'The question, the join code and how many have answered.',
+        title: 'The ask',
+        text: `You put the question up: “${ASK}” People join with the code on the screen, and their phones show the question with a box to answer in.`,
         art: {
-          stage: { kind: 'question', chip: CHIP, title: QUESTION, count: '0', of: 'of 18 answered' },
-          phone: { kind: 'answer', q: QUESTION },
+          stage: { kind: 'question', chip: CA_CHIP, title: ASK, count: '0', of: 'of 18 answered' },
+          phone: { kind: 'answer', q: ASK },
         },
       },
       {
-        title: 'Everyone answers on their phone',
-        you: 'Watch the count. Move on when enough answers are in.',
-        phones: 'They type an answer and send it. Nobody sees who wrote it.',
-        room: '“14 of 18 answered”. The answers stay hidden for now.',
+        title: 'Everyone answers',
+        text: 'Each person types an answer on their phone and sends it. The screen counts them in, “14 of 18 answered”, and nobody can see who wrote what.',
         art: {
-          stage: { kind: 'question', chip: CHIP, title: QUESTION, count: '14', of: 'of 18 answered', dots: [14, 18] },
-          phone: { kind: 'answer', q: QUESTION, typed: 'A staging step before prod', note: 'Nobody sees who wrote it' },
+          stage: { kind: 'question', chip: CA_CHIP, title: ASK, count: '14', of: 'of 18 answered', dots: [14, 18] },
+          phone: { kind: 'answer', q: ASK, typed: RESPONSES[1], note: 'Nobody sees who wrote it' },
         },
       },
       {
-        title: 'Everyone reads all the answers and votes',
-        you: 'Press Start voting.',
-        phones: 'Every answer, numbered, with no names. Each person ranks their top three.',
-        room: 'Every answer with its number, no names, so people can say “look at six”.',
+        title: 'The responses, and the vote',
+        text: 'When you press Start voting, every answer goes up numbered, with no names: the Rube Goldberg machine, the grass-seeding robot, the AI-enabled fax machine and the tech-debt remover. Everyone reads them all and ranks their top three on their phone.',
         art: {
-          stage: { kind: 'vote', chip: CHIP, title: 'Vote for the best response', items: ANSWERS },
-          phone: { kind: 'rank', q: 'Rank your top three.', ranks: [1, 0, 3, 2, 0] },
+          stage: { kind: 'vote', chip: CA_CHIP, title: 'Vote for the best response', items: RESPONSES },
+          phone: { kind: 'rank', q: 'Rank your top three.', ranks: [2, 0, 3, 1] },
         },
       },
       {
-        title: 'The results, ranked, and Workie’s read',
-        you: 'Show the results, then Workie’s read of what the room said.',
-        phones: '“You wrote response 3”, the points it earned and their place.',
-        room: 'The room’s pick first, the rest ranked. Names go up with the results.',
+        title: 'The results, ranked',
+        text: 'The answers come back in order of their vote points, the room’s pick first. Names go up with the results: Priya’s tech-debt remover wins, and the robot comes second.',
         art: {
           stage: {
             kind: 'results',
-            chip: CHIP,
+            chip: CA_CHIP,
             label: 'The room’s pick',
-            rows: [[ANSWERS[0], 'Priya · 9 points'], [ANSWERS[1], 'Sam · 4'], [ANSWERS[2], 'Ade · 2']],
-            read: 'The room wants a pause before things go live.',
+            rows: [[RESPONSES[3], 'Priya · 31 points'], [RESPONSES[1], 'Sam · 24'], [RESPONSES[0], 'Ade · 17']],
           },
-          phone: { kind: 'points', q: 'You wrote response 3', pts: '+2 points', note: '7th of 18' },
+          phone: { kind: 'points', q: 'You wrote response 2', pts: '24 points', note: '2nd of 18' },
         },
       },
       {
-        title: 'Comments, then the next question',
-        you: 'Ask for comments on the read, or start the next round.',
-        phones: 'People comment on the read, the results or any answer. Comments carry their name.',
-        room: '“What do you make of it?” and any comment you choose to put up.',
+        title: 'Workie’s read',
+        text: 'Workie, Engage’s AI assistant, sums up what the room said in a few lines: practical before shiny, with a soft spot for the absurd.',
         art: {
-          stage: { kind: 'comments', chip: CHIP, title: 'What do you make of it?', quote: '“A staging step only works if someone owns it.” — Jordan', count: '7', of: 'comments' },
-          phone: { kind: 'answer', q: 'Comment on what we heard', typed: 'A staging step only works if…', note: 'Shown with your name' },
+          stage: { kind: 'read', chip: CA_CHIP, k: 'What we heard · Workie', text: 'The room would clear tech debt before building gadgets, but the Rube Goldberg machine kept its fans.' },
+          phone: null,
+        },
+      },
+      {
+        title: 'Comments',
+        text: 'Ask for comments and people add theirs on their phones, about Workie’s read, the results or any answer. Each carries the writer’s name, and you choose which go up on the screen.',
+        art: {
+          stage: { kind: 'comments', chip: CA_CHIP, title: 'What do you make of it?', quote: '“Can the fax machine fax the tech-debt remover?” — Jordan', count: '7', of: 'comments' },
+          phone: { kind: 'answer', q: 'Comment on what we heard', typed: 'Can the fax machine fax…', note: 'Shown with your name' },
         },
       },
     ],
     get: {
-      text: 'The report: every answer ranked by the room’s votes, with who wrote it; Workie’s read; every comment. Save it and it stays after the session expires.',
-      art: { stage: { kind: 'report', title: 'Session report · Team retro', rows: ['Round 1 · ' + QUESTION, 'What we heard', 'Comments · 7'] } },
+      text: 'The report: the question, every answer ranked by its vote points with who wrote it, Workie’s read and every comment. Save it and it stays after the session expires.',
+      art: { stage: { kind: 'report', title: 'Session report · Big ideas', rows: ['Round 1 · ' + ASK, 'What we heard', 'Comments · 7'] } },
     },
   },
 
   trivia: {
-    steps: [
+    stages: [
       {
         title: 'You ask',
-        you: 'Put the question up.',
-        phones: 'A, B, C and D to tap.',
-        room: 'The question and its four options.',
-        art: { stage: { kind: 'options', title: 'Which planet has the most moons?' }, phone: { kind: 'abcd' } },
+        text: `The question and its four options go up: “${OCTOPUS}” 1, 2, 3 or 8. Phones show A, B, C and D to tap.`,
+        art: { stage: { kind: 'options', title: OCTOPUS, labels: ['A 1', 'B 2', 'C 3', 'D 8'] }, phone: { kind: 'abcd' } },
       },
       {
         title: 'Everyone picks',
-        you: 'Watch the count, then reveal the answer.',
-        phones: 'Each person taps an answer and locks it in.',
-        room: 'The screen counts who has answered.',
-        art: { stage: { kind: 'count', title: 'Which planet has the most moons?', count: '14', of: '/18' }, phone: { kind: 'abcd', picked: 'C' } },
+        text: 'Each person taps an answer and locks it in. The screen counts who has answered, so you know when to reveal.',
+        art: { stage: { kind: 'count', title: OCTOPUS, count: '14', of: '/18' }, phone: { kind: 'abcd', picked: 'C' } },
       },
       {
         title: 'You reveal',
-        you: 'Reveal the answer.',
-        phones: 'Right or wrong.',
-        room: 'The right answer is marked and the others dim, with how many chose each.',
-        art: { stage: { kind: 'options', title: 'Which planet has the most moons?', right: 'C' }, phone: { kind: 'abcd', picked: 'C', result: 'Right' } },
+        text: 'Three is right. The right option is marked, the others dim, and each shows how much of the room chose it. Phones say right or wrong.',
+        art: { stage: { kind: 'options', title: OCTOPUS, labels: ['A 1', 'B 2', 'C 3', 'D 8'], right: 'C 3' }, phone: { kind: 'abcd', picked: 'C', result: 'Right' } },
       },
       {
-        title: 'Scores',
-        you: 'Press S for the scoreboard.',
-        phones: 'Their points and place.',
-        room: 'The scoreboard.',
+        title: 'The scoreboard',
+        text: 'Press S and the scoreboard goes up. Phones show each person’s points and place.',
         art: { stage: { kind: 'scores', rows: [['Priya', '40'], ['Sam', '35'], ['Ade', '30']] }, phone: { kind: 'points', q: 'Your score', pts: '30 points', note: '3rd of 18' } },
       },
     ],
     get: {
-      text: 'Scores, and which questions the room knew or missed.',
+      text: 'The scores, and which questions the room knew or missed.',
       art: { stage: { kind: 'report', title: 'Session report · Friday quiz', rows: ['Scores', 'Questions the room knew', 'Questions the room missed'] } },
     },
   },
 
   poll: {
-    steps: [
+    stages: [
       {
         title: 'You ask',
-        you: 'Ask a choice, a rating, yes or no, or an open question.',
-        phones: 'Its options, straight away.',
-        room: 'The question and its options.',
-        art: { stage: { kind: 'options', title: 'Best day to meet in person?', labels: ['Mon', 'Wed', 'Fri', 'None'] }, phone: { kind: 'choice', opts: ['Monday', 'Wednesday', 'Friday'] } },
+        text: `A quick question goes up, “${ROOM_NAME}”, with its options: The Think Tank, Room 101 or The Fax Lounge. A poll can also be a rating, a yes or no, or a few words.`,
+        art: { stage: { kind: 'options', title: ROOM_NAME, labels: ['The Think Tank', 'Room 101', 'The Fax Lounge'] }, phone: { kind: 'choice', opts: ['The Think Tank', 'Room 101', 'The Fax Lounge'] } },
       },
       {
         title: 'Results fill in live',
-        you: 'Watch the result build.',
-        phones: 'People answer on their phones. No names, no right answer.',
-        room: 'The bars fill in as people answer.',
-        art: { stage: { kind: 'bars', title: 'Best day to meet in person?', bars: [['Monday', 70], ['Wednesday', 40], ['Friday', 18]] }, phone: { kind: 'choice', opts: ['Monday', 'Wednesday', 'Friday'], picked: 0 } },
+        text: 'People pick on their phones and the bars fill in as they do. There is no right answer and no names.',
+        art: { stage: { kind: 'bars', title: ROOM_NAME, bars: [['Fax Lounge', 64], ['Think Tank', 40], ['Room 101', 18]] }, phone: { kind: 'choice', opts: ['The Think Tank', 'Room 101', 'The Fax Lounge'], picked: 2 } },
       },
       {
         title: 'Show results',
-        you: 'Show results, then the next question.',
-        phones: 'The result, as the room answered.',
-        room: 'The board freezes for everyone to read.',
-        art: { stage: { kind: 'bars', title: 'Best day to meet in person?', bars: [['Monday', 82], ['Wednesday', 46], ['Friday', 20]], done: true }, phone: { kind: 'points', q: 'Monday', pts: '58%', note: 'of the room' } },
+        text: 'The board freezes for everyone to read: The Fax Lounge it is. Then the next question.',
+        art: { stage: { kind: 'bars', title: ROOM_NAME, bars: [['Fax Lounge', 72], ['Think Tank', 44], ['Room 101', 20]], done: true }, phone: null },
       },
     ],
     get: {
       text: 'Each result, as the room answered it.',
-      art: { stage: { kind: 'report', title: 'Session report · Team pulse', rows: ['Best day to meet in person?', 'How was the week?', 'Anything else?'] } },
+      art: { stage: { kind: 'report', title: 'Session report · Team pulse', rows: [ROOM_NAME, 'How was the week?', 'Anything else?'] } },
     },
   },
 
   wavelength: {
-    steps: [
+    stages: [
       {
         title: 'You give a subject',
-        you: 'Put the subject up.',
-        phones: 'The subject and ten word boxes.',
-        room: 'The subject.',
-        art: { stage: { kind: 'subject', term: 'Onboarding' }, phone: { kind: 'boxes', q: 'Onboarding' } },
+        text: `The subject goes up: “${DRAWER}”. Phones show it with ten boxes for words.`,
+        art: { stage: { kind: 'subject', term: DRAWER }, phone: { kind: 'boxes', q: DRAWER } },
       },
       {
         title: 'Everyone writes words',
-        you: 'Wait until everyone is in.',
-        phones: 'They go for the obvious words the rest will think of too.',
-        room: 'How many have answered. Nothing else shows until everyone is in.',
-        art: { stage: { kind: 'count', title: 'Onboarding', count: '14', of: '/18' }, phone: { kind: 'boxes', q: 'Onboarding', typed: ['docs', 'buddy'] } },
+        text: 'People write the obvious words, the ones the rest will think of too. Nothing shows on the screen until everyone is in.',
+        art: { stage: { kind: 'count', title: DRAWER, count: '14', of: '/18' }, phone: { kind: 'boxes', q: DRAWER, typed: ['batteries', 'rubber bands'] } },
       },
       {
         title: 'The shared words',
-        you: 'Show the words.',
-        phones: '',
-        room: 'Spellings and plurals count together. Words on every list stand out; the rest show how many said them.',
-        art: { stage: { kind: 'cloud', words: [['docs', '×6', true], ['buddy', '4'], ['laptop', '3'], ['wiki', '2']] }, phone: null },
+        text: 'Spellings and plurals count together. Batteries is on every list and stands out; the rest show how many said them.',
+        art: { stage: { kind: 'cloud', words: [['batteries', '×18', true], ['rubber bands', '11'], ['takeaway menus', '7'], ['a mystery key', '4']] }, phone: null },
       },
       {
         title: 'End of the session',
-        you: 'End the session.',
-        phones: '',
-        room: 'The words the whole room shared. Nobody scores.',
-        art: { stage: { kind: 'shared', words: ['docs', 'buddy', 'access'] }, phone: null },
+        text: 'The screen shows the words the whole room shared. Nobody scores, and nobody wins.',
+        art: { stage: { kind: 'shared', words: ['batteries', 'rubber bands', 'sticky tape'] }, phone: null },
       },
     ],
     get: {
       text: 'Where the team already thinks alike, and where it doesn’t.',
-      art: { stage: { kind: 'report', title: 'Session report · Team words', rows: ['Onboarding', 'Words the room shared', 'Words only some wrote'] } },
+      art: { stage: { kind: 'report', title: 'Session report · Team words', rows: [DRAWER, 'Words the room shared', 'Words only some wrote'] } },
     },
   },
 
   survey: {
-    steps: [
+    stages: [
       {
         title: 'Open it',
-        you: 'Press Open the survey: it is created and opened at once.',
-        phones: 'People join with the code or the QR.',
-        room: 'The join code and QR.',
+        text: 'Pressing Open the survey creates it and opens it at once: say, the offsite feedback form. The join code and QR go up, and people join with either.',
         art: { stage: { kind: 'qr', code: '4821' }, phone: null },
       },
       {
         title: 'People answer in their own time',
-        you: 'Watch how far the room has got.',
-        phones: 'Every question, on their own phone, at their own pace.',
-        room: 'How many have finished.',
+        text: 'Everyone works through the questions on their own phone, “Rate the coffee, 1 to 5” included, at their own pace. The screen shows how far the room has got.',
         art: { stage: { kind: 'progress', label: '23 of 36 finished', pct: 64 }, phone: { kind: 'form', done: 2 } },
       },
       {
         title: 'Warn, then close',
-        you: 'Send a two-minute warning, then close it.',
-        phones: 'The warning, on every phone.',
-        room: 'The warning, then the survey closes.',
+        text: 'A two-minute warning goes to every phone, then you close it.',
         art: { stage: { kind: 'progress', label: '2 minutes left', pct: 92, warn: true }, phone: { kind: 'points', q: 'Two minutes left', pts: '2:00', note: 'Finish your answers' } },
       },
       {
         title: 'Read it back',
-        you: 'See the results yourself, walk through them with the room, then Workie’s summary.',
-        phones: '',
-        room: 'The results, as you walk through them.',
-        art: { stage: { kind: 'bars', title: 'How was the offsite?', bars: [['Great', 76], ['Fine', 40], ['Poor', 12]], done: true }, phone: null },
+        text: 'See the results yourself, walk the room through them, then Workie’s summary. The coffee scored a 2.',
+        art: { stage: { kind: 'bars', title: 'Rate the coffee, 1 to 5', bars: [['1–2', 58], ['3', 30], ['4–5', 12]], done: true }, phone: null },
       },
     ],
     get: {
@@ -243,84 +214,65 @@ export const FORMAT_WALKTHROUGH = Object.freeze({
   },
 
   [BUILD_KIND]: {
-    steps: [
+    stages: [
       {
         title: 'Set it up',
-        you: 'On the Build Room page: the title, the goal (or let the room decide), and connect your Claude Code.',
-        phones: '',
-        room: '',
-        art: { stage: { kind: 'connected', title: 'Food bank sign-up', ok: 'Claude Code connected' }, phone: null },
+        text: 'On the Build Room page: the title, the goal, say a sign-up page for the office bake-off (or let the room decide), and connect your Claude Code.',
+        art: { stage: { kind: 'connected', title: 'Bake-off sign-up page', ok: 'Claude Code connected' }, phone: null },
       },
       {
         title: 'Claude asks the room',
-        you: 'Check each question Claude writes before it goes out.',
-        phones: 'Ideas to suggest, a choice between options or mockups, or a rating.',
-        room: 'Claude’s question and the options.',
+        text: 'Claude asks for ideas, a choice between options or mockups, or a rating: “Which sign-up page: A, a big photo of cakes, or B, a short form?” You check each question before it goes out.',
         art: { stage: { kind: 'mockups', cap: 'Which sign-up page?' }, phone: { kind: 'choice', opts: ['Page A', 'Page B'] } },
       },
       {
         title: 'The room answers',
-        you: 'Watch the answers come in.',
-        phones: 'On phones, tablets or laptops, with the four-digit code.',
-        room: 'The answers as they come in.',
+        text: 'People answer on phones, tablets or laptops, with the four-digit code, and the answers come in on the screen.',
         art: { stage: { kind: 'mockups', cap: 'Which sign-up page?', pick: 'A', bars: true }, phone: { kind: 'choice', opts: ['Page A', 'Page B'], picked: 0 } },
       },
       {
         title: 'You decide',
-        you: 'Turn the room’s answer into a direction and Claude builds it. Then the next question.',
-        phones: '',
-        room: 'The direction you sent to Claude.',
-        art: { stage: { kind: 'direction', k: 'Direction for Claude', text: 'Build page A, with B’s big button.' }, phone: null },
+        text: 'You turn the room’s answer into a direction, “Build B, with A’s cake photo on top”, and Claude builds it. Then the next question.',
+        art: { stage: { kind: 'direction', k: 'Direction for Claude', text: 'Build B, with A’s cake photo on top.' }, phone: null },
       },
     ],
     get: {
       text: 'Something built, every decision the room made, and a report.',
-      art: { stage: { kind: 'report', title: 'Build report · Food bank sign-up', rows: ['What was built', 'Every decision the room made', 'Each question and its answers'] } },
+      art: { stage: { kind: 'report', title: 'Build report · Bake-off sign-up', rows: ['What was built', 'Every decision the room made', 'Each question and its answers'] } },
     },
   },
 
   [EVENT_KIND]: {
-    steps: [
+    stages: [
       {
         title: 'Plan the day',
-        you: 'Name, date, start time and place, then the agenda: up to 16 items.',
-        phones: '',
-        room: '',
+        text: 'Name, date, start time and place, then the agenda, up to 16 items: Welcome at 9:00, Trivia at 9:20, a break, then a Call & Answer round.',
         art: { stage: { kind: 'agenda', items: [['09:00', 'Welcome'], ['09:20', 'Trivia'], ['09:45', 'Break'], ['10:00', 'Call & Answer']] }, phone: null },
       },
       {
         title: 'One code all day',
-        you: 'Open the event.',
-        phones: 'People join once. Their phones follow the agenda.',
-        room: 'The join code and QR.',
+        text: 'People join once with one code, and their phones follow the agenda.',
         art: { stage: { kind: 'qr', code: '4821' }, phone: null },
       },
       {
         title: 'You start each item',
-        you: 'Start each item when it is due.',
-        phones: 'Straight into it: a quiz, a poll, a Call & Answer round, a talk or a break.',
-        room: 'The item that is on now.',
+        text: 'Start each item when it is due. Phones go straight into it: the quiz, a poll, the Call & Answer round, a talk or a break.',
         art: { stage: { kind: 'agenda', items: [['09:00', 'Welcome', 'done'], ['09:20', 'Trivia', 'now'], ['09:45', 'Break'], ['10:00', 'Call & Answer']] }, phone: { kind: 'abcd' } },
       },
       {
         title: 'Each item reports',
-        you: 'Read each session’s report, gathered under the event.',
-        phones: '',
-        room: '',
-        art: { stage: { kind: 'report', title: 'Platform Offsite', rows: ['09:20 Trivia', '10:00 Call & Answer', '11:00 Poll'] }, phone: null },
+        text: 'Every session on the agenda keeps its own report, gathered under the event.',
+        art: { stage: { kind: 'report', title: 'Friday offsite', rows: ['09:20 Trivia', '10:00 Call & Answer', '11:00 Poll'] }, phone: null },
       },
     ],
     get: {
       text: 'Each item’s report, gathered under the event.',
-      art: { stage: { kind: 'report', title: 'Event · Platform Offsite', rows: ['Trivia report', 'Call & Answer report', 'Poll report'] } },
+      art: { stage: { kind: 'report', title: 'Event · Friday offsite', rows: ['Trivia report', 'Call & Answer report', 'Poll report'] } },
     },
   },
 });
 
-/** The walkthrough for a format id, or null. */
+/** The storyboard for a format id, or null. */
 export function walkthroughFor(id) {
   return FORMAT_WALKTHROUGH[id] || null;
 }
-
-/** How long Play holds each step (README round 2, decision 4). */
-export const PLAY_MS = 8000;
