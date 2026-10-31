@@ -95,6 +95,11 @@ const radio = (name) => screen.getByRole('radio', { name });
 const hideHow = () => window.localStorage.setItem('engage.newEngagement.howItRuns', 'hidden');
 afterEach(() => { try { window.localStorage.clear(); } catch (e) { /* blocked in one test */ } });
 const createButton = () => screen.getByRole('button', { name: /create engagement|loading topics/i });
+/* Round 4 (review A1): Create is aria-disabled until ready, never `disabled`,
+   so it stays in the Tab order and is described by "Still needed". */
+const notReady = (el) => { expect(el).toHaveAttribute('aria-disabled', 'true'); expect(el).not.toBeDisabled(); };
+const live = () => document.querySelector('.gsd-sr[aria-live="polite"]');
+const need = () => document.getElementById('gsd-need');
 
 /* ── README §2: the bug ────────────────────────────────────────────────── */
 describe('changing the set never shows the old set\'s topics (README §2)', () => {
@@ -123,7 +128,7 @@ describe('changing the set never shows the old set\'s topics (README §2)', () =
     // ...and even if the page claims to be done, a list for another key is not B's.
     PageHarness.answer(KEY_A, A);
     expect(screen.queryByText('Architecture')).toBeNull();
-    expect(createButton()).toBeDisabled();
+    notReady(createButton());
   });
 
   test('a failed fetch shows zero topics and an error line with Retry, not set A\'s', () => {
@@ -144,9 +149,10 @@ describe('changing the set never shows the old set\'s topics (README §2)', () =
     render(<PageHarness />);
     pickSet(KEY_B);
     const button = screen.getByRole('button', { name: 'Loading topics…' });
-    expect(button).toBeDisabled();
+    notReady(button);
     PageHarness.answer(KEY_B, B);
     expect(screen.getByRole('button', { name: 'Create engagement' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create engagement' })).not.toHaveAttribute('aria-disabled');
   });
 
   test('Create never sends one set\'s topics for another', () => {
@@ -177,12 +183,17 @@ describe('changing the set never shows the old set\'s topics (README §2)', () =
 
 /* ── README §8: the dialog ─────────────────────────────────────────────── */
 describe('a first-time host', () => {
-  test('nothing is chosen, step 3 is visible but waits, and Create is disabled', () => {
+  /* Round 4: only Name it and Format on open; no Question set section. */
+  test('nothing is chosen: only Name it and Format on open, no Question set section, and Create waits', () => {
     render(<GameSetupDialog {...base()} />);
     const group = screen.getByRole('radiogroup', { name: /pick a format/i });
     expect(within(group).getAllByRole('radio').every((r) => r.getAttribute('aria-checked') === 'false')).toBe(true);
-    expect(screen.getByText(/Choose a format first/)).toBeInTheDocument();
-    expect(createButton()).toBeDisabled();
+    const headings = within(document.querySelector('.gsd-main')).getAllByRole('heading').map((h) => h.textContent);
+    expect(headings).toEqual(['Name it', 'Pick a format']);
+    // rejects: round 3's greyed "3 Questions — Choose a format first" waiting underneath
+    expect(screen.queryByText(/Choose a format first/)).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /question set/i })).toBeNull();
+    notReady(createButton());
     expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
     // The gallery card says it in one plain sentence (frame 2-03); Good for lives in the guide.
     expect(screen.getByText('Everyone answers, reads all the answers and votes for their favourites.')).toBeInTheDocument();
@@ -205,7 +216,12 @@ describe('a first-time host', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retro' }));
     expect(screen.getByRole('button', { name: /Retro/ })).toHaveAttribute('aria-pressed', 'true');
     expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText(/what went well, what should change/)).toBeInTheDocument();
+    const reason = document.querySelector('.gsd-reason');
+    expect(reason).toHaveTextContent(/what went well, what should change/);
+    // The paragraph is not a live region of its own: the one region speaks (A2).
+    expect(reason).not.toHaveAttribute('aria-live');
+    // The reason and the reveal are ONE message, not two that interrupt each other.
+    expect(live().textContent).toMatch(/^For a retro: Call & Answer\. .*what went well.* Question set is below\.$/);
   });
 
   test('the Format guide: seven format cards as tabs, one Use button, and Use returns with that format', () => {
@@ -304,12 +320,27 @@ describe('a first-time host', () => {
 
   /* Live check, round 3: a first-time host with nothing chosen saw an empty
      pane, the moment the storyboard helps most. */
-  test('nothing chosen: the pane shows Call & Answer, said to be an example', () => {
+  /* Round 4, Fork 1 A: present from the start, but quiet. */
+  test('nothing chosen: the pane is quiet — one sentence and one labelled example stage, no index', () => {
     render(<GameSetupDialog {...base()} />);
-    expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
-    expect(screen.getByText('Pick a format to see its own.')).toBeInTheDocument();
-    expect(screen.queryByText(/Choose a format to see how it runs/)).toBeNull();
-    expect(within(screen.getByRole('complementary', { name: 'How it runs' })).getAllByRole('listitem').length).toBeGreaterThan(3);
+    const pane = screen.getByRole('complementary', { name: 'How it runs' });
+    expect(within(pane).getByRole('heading', { name: 'How it runs' })).toBeInTheDocument();
+    expect(within(pane).getByText(/this side shows what happens in the room, stage by stage/)).toBeInTheDocument();
+    expect(within(pane).getByTestId('gsd-wt-example')).toHaveTextContent('Example · Call & Answer, stage 1 of 6');
+    // rejects: the full storyboard and its index on open (round 3)
+    expect(within(pane).queryByRole('navigation')).toBeNull();
+    expect(within(pane).queryAllByRole('listitem')).toHaveLength(0);
+    // Hide is still there, on the thing it hides.
+    expect(within(pane).getByRole('button', { name: /^Hide/ })).toBeInTheDocument();
+  });
+
+  test('a format chosen: the full storyboard and its index', () => {
+    render(<GameSetupDialog {...base()} />);
+    fireEvent.click(radio('Trivia'));
+    const pane = screen.getByRole('complementary', { name: 'How it runs' });
+    expect(within(pane).getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
+    expect(within(pane).getByRole('navigation', { name: 'Stages of Trivia' })).toBeInTheDocument();
+    expect(within(pane).queryByTestId('gsd-wt-example')).toBeNull();
   });
 
   test('hovering or focusing a gallery card previews its storyboard, debounced; leaving returns to the example; choosing shows the choice', () => {
@@ -318,20 +349,20 @@ describe('a first-time host', () => {
       render(<GameSetupDialog {...base()} />);
       fireEvent.mouseEnter(radio('Trivia'));
       // Not yet: a pointer crossing the gallery does not flicker the pane.
-      expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
+      expect(screen.getByTestId('gsd-wt-example')).toBeInTheDocument();
       act(() => { jest.advanceTimersByTime(200); });
       expect(screen.getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
-      expect(screen.getByText('Pick a format to see its own.')).toBeInTheDocument();
+      expect(screen.getByText('A preview of the card you are on. Click it, or press Enter, to choose it.')).toBeInTheDocument();
       fireEvent.mouseLeave(screen.getByRole('radiogroup', { name: /pick a format/i }));
       act(() => { jest.advanceTimersByTime(300); });
-      expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
+      expect(screen.getByTestId('gsd-wt-example')).toHaveTextContent('Example · Call & Answer');
       fireEvent.focus(radio('Poll'));
       act(() => { jest.advanceTimersByTime(200); });
       expect(screen.getByRole('heading', { name: 'How Poll runs' })).toBeInTheDocument();
       fireEvent.click(radio('Wavelength'));
       act(() => { jest.advanceTimersByTime(300); });
       expect(screen.getByRole('heading', { name: 'How Wavelength runs' })).toBeInTheDocument();
-      expect(screen.queryByText('Pick a format to see its own.')).toBeNull();
+      expect(screen.queryByText(/A preview of the card you are on/)).toBeNull();
     } finally { jest.useRealTimers(); }
   });
 
@@ -352,7 +383,7 @@ describe('a first-time host', () => {
     window.matchMedia = (q) => ({ matches: /max-width: (600|900)px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
     try {
       render(<GameSetupDialog {...base()} />);
-      expect(document.querySelector('details.gsd-how-fold summary').textContent).toMatch('How Call & Answer runs — an example');
+      expect(document.querySelector('details.gsd-how-fold summary').textContent).toMatch('How it runs — an example');
     } finally { window.matchMedia = before; }
   });
 
@@ -447,6 +478,9 @@ describe('⌘/Ctrl+Enter', () => {
 describe('the hand-offs and the survey', () => {
   test('a survey says people can answer as soon as it opens, and the button opens it', () => {
     render(<GameSetupDialog {...base()} lastFormat="survey" />);
+    // Until the set is in, the foot says what is still needed (round 4).
+    expect(need()).toHaveTextContent('Still needed: a question set.');
+    pickSet(setRefKey({ id: 'pulse' }));
     expect(screen.getByText(/People can answer as soon as you open it\. There is no separate Start\./)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open the survey' })).toBeInTheDocument();
     // The walkthrough's first step says so too.
@@ -459,7 +493,7 @@ describe('the hand-offs and the survey', () => {
     fireEvent.click(radio('Event'));
     expect(screen.getByTestId('gsd-event-plan')).toHaveTextContent('Events come with the Standard plan.');
     expect(screen.queryByTestId('gsd-event-price')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Continue to the event' })).toBeDisabled();
+    notReady(screen.getByRole('button', { name: 'Continue to the event' }));
   });
 
   test('Event on a paid plan states the price', () => {
@@ -472,7 +506,7 @@ describe('the hand-offs and the survey', () => {
 
 describe('names and Workie, said plainly', () => {
   test('Call & Answer states the names rule beside the questions, and Change opens it', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.getByTestId('gsd-namesline')).toHaveTextContent('Names are hidden until the vote closes');
     fireEvent.click(screen.getByRole('button', { name: 'Change how names are shown' }));
     expect(document.querySelector('details.gsd-adv').open).toBe(true);
@@ -480,7 +514,7 @@ describe('names and Workie, said plainly', () => {
   });
 
   test('Workie is introduced in one line', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.getByText(/Workie is Engage’s AI assistant/)).toBeInTheDocument();
   });
 
@@ -562,7 +596,8 @@ describe('live dev test fixes', () => {
     render(<GameSetupDialog {...props} lastFormat="call-and-answer" />);
     fireEvent.keyDown(screen.getByRole('combobox', { name: /choose a question set/i }), { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'x' } });
+    // Work in hand without a set picked (round 4: Advanced waits for the set).
+    fireEvent.click(radio('Trivia'));
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: /Browse all/ }));
@@ -621,15 +656,21 @@ describe('live dev test fixes', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  test('a phone: "How it runs" is a fold under Format, open unless hidden', () => {
+  /* Round 4 (review A7): closed by default, so the revealed Question set is
+     not pushed two screens down; opening it does not touch the laptop pane. */
+  test('a phone: "How it runs" is a closed fold under Format, saying how many stages', () => {
     const before = window.matchMedia;
     window.matchMedia = (q) => ({ matches: /max-width: (600|900)px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
     try {
       render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
       const fold = document.querySelector('details.gsd-how-fold');
       expect(fold).not.toBeNull();
-      expect(fold.open).toBe(true);
-      expect(fold.querySelector('summary').textContent).toMatch('How Call & Answer runs');
+      expect(fold.open).toBe(false);
+      expect(fold.querySelector('summary').textContent).toBe('How Call & Answer runs, 6 stages');
+      fold.open = true;
+      fireEvent(fold, new Event('toggle'));
+      expect(within(fold).getAllByRole('listitem').length).toBe(7);
+      expect(window.localStorage.getItem('engage.newEngagement.howItRuns')).toBeNull();
       expect(screen.getByRole('button', { name: 'Compare' })).toBeInTheDocument();
     } finally { window.matchMedia = before; }
   });
@@ -643,11 +684,13 @@ describe('live dev test fixes', () => {
 
 
   test('V4: Background for Workie is one closed line until opened', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
     const fold = document.querySelector('details.gsd-brief-fold');
     expect(fold).not.toBeNull();
     expect(fold.open).toBe(false);
-    expect(fold.querySelector('summary').textContent).toMatch(/Background for Workie/);
+    // Round 4: "Background for Workie · Optional", no uppercase header above it.
+    expect(fold.querySelector('summary').textContent).toBe('Background for WorkieOptional');
+    expect(screen.queryByText(/every one has a safe default/i)).toBeNull();
   });
 
   test('C1/N6: this chooser says Ready-made and Whose, never Unfiled; the shared label is untouched', () => {
@@ -672,10 +715,23 @@ describe('live dev test fixes', () => {
     expect(within(chooser()).queryByRole('columnheader', { name: 'Tags' })).toBeNull();
   });
 
-  test('B3: "Make a new set" opens the sets dialog on the new-set panel, above the shelf', async () => {
+  /* Round 4: a host with no set of their own sees one link, "Make your own set". */
+  test('B3: "Make your own set" opens the sets dialog on the new-set panel, above the shelf', async () => {
     render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Make a new set' }));
+    expect(screen.queryByRole('button', { name: 'Your question sets' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Make your own set' }));
     expect(await screen.findByText('How do you want to make it?')).toBeInTheDocument();
+  });
+
+  test('"Your question sets" shows only to a host who owns a set of this format', () => {
+    const sets = [...SETS, { id: 'mine', scope: 'org', mine: true, name: 'My retro', totalQuestions: 4, engagementType: 'call-and-answer' }];
+    render(<GameSetupDialog {...base()} questionSets={sets} lastFormat="call-and-answer" />);
+    expect(screen.getByRole('button', { name: 'Your question sets' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Make a new set' })).toBeInTheDocument();
+    // Trivia: the host owns none, so one link.
+    fireEvent.click(radio('Trivia'));
+    expect(screen.queryByRole('button', { name: 'Your question sets' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Make your own set' })).toBeInTheDocument();
   });
 
   test('phone (frames 10/10b): formats folded behind More, Create says Create', () => {
@@ -720,7 +776,7 @@ describe('round 2: focus home, the sessions dialog, icons', () => {
     const opener = screen.getByRole('button', { name: 'Create engagement' });
     opener.focus();
     fireEvent.click(opener);
-    fireEvent.change(screen.getByLabelText(/event details/i), { target: { value: 'x' } });
+    fireEvent.click(radio('Trivia'));
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
     expect(screen.getByRole('button', { name: 'Create engagement' })).toHaveFocus();
@@ -878,9 +934,12 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
     expect(phone).toMatch(/\.schs\.schs--wide \.schs-tbl \.schs-c-own,\s*\.schs\.schs--wide \.schs-tbl \.schs-c-when \{ width: 0; \}/);
   });
 
-  test('R3 (1366/1280): on a short window the gallery cards drop only their picture', () => {
-    const css = readCss('GameSetupDialog.css');
-    expect(css).toMatch(/@media \(max-height: 800px\) \{\s*\.gsd \.gsd-fmt-group--gallery \.gsd-fmt-art \{ display: none; \}\s*\}/);
+  /* (R3 1366/1280, "the gallery cards drop only their picture", is retired in
+     round 4: the gallery cards carry no picture at all.) */
+  test('round 4: the gallery cards are text, with no picture to drop', () => {
+    render(<GameSetupDialog {...base()} />);
+    expect(document.querySelector('.gsd-fmt-art')).toBeNull();
+    expect(readCss('GameSetupDialog.css')).not.toMatch(/\.gsd-fmt-art/);
   });
 });
 
@@ -925,5 +984,250 @@ describe('no set fits', () => {
     expect(within(routes).getByRole('button', { name: /Write your own questions/ })).toBeInTheDocument();
     expect(within(routes).getByRole('button', { name: /Make a set with Workie/ })).toBeInTheDocument();
     expect(within(routes).getByRole('button', { name: /Fill in a spreadsheet/ })).toBeInTheDocument();
+  });
+});
+
+/*
+  ── ROUND 4: SHOW THE NEXT DECISION, NOT ALL OF THEM ─────────────────────
+  docs/design/new-engagement README "Round 4" (the reveal rules table, Motion,
+  Focus, Announcements, Create pressed early) and reviews/round-4.md. The
+  owner approved Fork 1 A (a quiet pane from the start) and Fork 2 A (one rule
+  for every host; history only preselects the last format).
+*/
+describe('round 4: the reveal rules', () => {
+  const setHeading = () => screen.queryByRole('heading', { name: 'Question set' });
+  const advanced = () => document.querySelector('details.gsd-adv');
+
+  test('the title reveals nothing: typing it leaves the form as it was, and only the foot changes', () => {
+    const props = base({ eventTitle: '' });
+    const { rerender } = render(<GameSetupDialog {...props} />);
+    expect(need()).toHaveTextContent('Still needed: a title, a format and a question set.');
+    rerender(<GameSetupDialog {...props} eventTitle="Team retro" />);
+    expect(setHeading()).toBeNull();
+    expect(need()).toHaveTextContent('Still needed: a format and a question set.');
+    expect(live().textContent).toBe('');
+  });
+
+  test('choosing a format reveals Question set, says so once, and does not move the focus', () => {
+    render(<GameSetupDialog {...base()} />);
+    expect(setHeading()).toBeNull();
+    const ca = radio('Call & Answer');
+    ca.focus();
+    fireEvent.keyDown(ca, { key: ' ' });
+    expect(setHeading()).toBeInTheDocument();
+    // A section with its own heading, so heading navigation finds it (A3).
+    expect(setHeading().closest('section')).toHaveAttribute('aria-labelledby', 'gsd-set-label');
+    expect(live().textContent).toBe('Question set is below.');
+    // rejects: a reveal that takes the focus away from the control just used
+    expect(ca).toHaveFocus();
+    expect(need()).toHaveTextContent('Still needed: a question set.');
+  });
+
+  // rejects: "Question set added below" on every arrow (review A2)
+  test('arrowing through the formats announces the reveal once, not on every arrow', () => {
+    render(<GameSetupDialog {...base()} />);
+    fireEvent.click(radio('Call & Answer'));
+    expect(live().textContent).toBe('Question set is below.');
+    fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
+    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
+    expect(live().textContent).toBe('');
+    fireEvent.keyDown(radio('Trivia'), { key: 'ArrowLeft' });
+    expect(live().textContent).toBe('');
+    expect(setHeading()).toBeInTheDocument();
+  });
+
+  test('picking a set reveals the names card, Background for Workie and Advanced — not before', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    expect(setHeading()).toBeInTheDocument();
+    expect(screen.queryByTestId('gsd-namesline')).toBeNull();
+    expect(document.querySelector('details.gsd-brief-fold')).toBeNull();
+    expect(advanced()).toBeNull();
+    pickSet(KEY_B);
+    expect(screen.getByTestId('gsd-namesline')).toHaveTextContent('Names are hidden until the vote closes');
+    expect(document.querySelector('details.gsd-brief-fold')).not.toBeNull();
+    expect(advanced()).not.toBeNull();
+    // Nothing is said: they arrive below the set just picked (README, Announcements).
+    expect(live().textContent).toBe('');
+  });
+
+  test('once shown they stay: switching format keeps Advanced, and each section shows only where it applies', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    pickSet(KEY_B);
+    fireEvent.click(radio('Trivia'));
+    expect(chosenSet()).toBe('');                 // a set belongs to one format
+    expect(advanced()).not.toBeNull();            // …but what was revealed stays
+    expect(screen.queryByTestId('gsd-namesline')).toBeNull(); // no names card for Trivia, as before
+    expect(document.querySelector('details.gsd-brief-fold')).toBeNull();
+    fireEvent.click(radio('Survey'));
+    expect(screen.getByTestId('gsd-namesline')).toHaveTextContent(/Names:/);
+    fireEvent.click(radio('Call & Answer'));
+    expect(screen.getByTestId('gsd-namesline')).toHaveTextContent('Names are hidden until the vote closes');
+    expect(document.querySelector('details.gsd-brief-fold')).not.toBeNull();
+  });
+
+  test('Build Room puts "Next:" in the set\'s slot and says so once per swap; going back restores the set', () => {
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} eventsAccess={{ enabled: true, canCreate: true }} lastFormat="call-and-answer" />);
+    pickSet(KEY_B);
+    fireEvent.click(radio('Build Room'));
+    expect(setHeading()).toBeNull();
+    const next = screen.getByRole('heading', { name: 'Next: the Build Room page' });
+    expect(next.closest('[data-reveal="set"]')).not.toBeNull(); // the same slot
+    expect(live().textContent).toBe('Next: the Build Room page, below.');
+    expect(advanced()).toBeNull();                // hidden with the set
+    fireEvent.click(radio('Event'));
+    expect(screen.getByRole('heading', { name: 'Next: the event page' })).toBeInTheDocument();
+    expect(live().textContent).toBe('Next: the event page, below.');
+    fireEvent.click(radio('Call & Answer'));
+    expect(chosenSet()).toBe(KEY_B);              // setByFormat, shipped
+    expect(advanced()).not.toBeNull();            // and the options come back with it
+    expect(live().textContent).toBe('');          // nothing new to say
+  });
+
+  test('a host with history opens two decisions in: Question set is there, the names card waits for a set', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" recentSetUses={new Map([[KEY_B, Date.now()]])} />);
+    expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'true');
+    expect(setHeading()).toBeInTheDocument();
+    expect(screen.getByRole('listbox', { name: 'Used by you lately' })).toBeInTheDocument();
+    // There on open: no entrance, nothing announced.
+    expect(document.querySelector('.gsd-reveal')).toBeNull();
+    expect(live().textContent).toBe('');
+    expect(screen.queryByTestId('gsd-namesline')).toBeNull();
+    expect(advanced()).toBeNull();
+    // The one-line explanation of a set is for a host with nothing used lately.
+    expect(screen.queryByText(/The questions you will ask/)).toBeNull();
+  });
+
+  test('a first-timer with nothing used lately gets one line on what a set is, and Browse all beside the search', () => {
+    render(<GameSetupDialog {...base()} />);
+    fireEvent.click(radio('Call & Answer'));
+    expect(screen.getByText('The questions you will ask. Start from a ready-made set; you can switch topics off once it is picked.')).toBeInTheDocument();
+    const search = screen.getByRole('combobox', { name: /choose a question set/i });
+    expect(search.closest('.schs-searchrow')).toContainElement(screen.getByRole('button', { name: 'Browse all 2 sets' }));
+  });
+
+  test('an edit shows everything from the start, with no entrance', () => {
+    render(<GameSetupDialog {...base()} mode="edit" initialValues={{ gameType: 'call-and-answer', title: 'Retro', questionSetId: 'setb' }} />);
+    expect(setHeading()).toBeInTheDocument();
+    expect(screen.getByTestId('gsd-namesline')).toBeInTheDocument();
+    expect(document.querySelector('details.gsd-brief-fold')).not.toBeNull();
+    expect(advanced()).not.toBeNull();
+    expect(document.querySelector('.gsd-reveal')).toBeNull();
+    expect(screen.queryByText(/Still needed/)).toBeNull();
+  });
+
+  test('no step numbers, no ticks, no status line and no OPTIONAL header', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    expect(document.querySelector('.gsd-step-n')).toBeNull();
+    expect(document.querySelector('.gsd-stat')).toBeNull();
+    expect(document.querySelector('.gsd-optional-h')).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Your decisions' })).toBeNull();
+    // The title's help sits in the heading row beside its label.
+    expect(document.querySelector('.gsd-title-row')).toContainElement(document.getElementById('gsd-title-help'));
+  });
+});
+
+describe('round 4: the entrance', () => {
+  test('a revealed section fades in once; swapping its contents later never plays it again', () => {
+    jest.useFakeTimers();
+    try {
+      render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} />);
+      fireEvent.click(radio('Call & Answer'));
+      expect(document.querySelector('[data-reveal="set"]')).toHaveClass('gsd-reveal');
+      act(() => { jest.advanceTimersByTime(500); });
+      expect(document.querySelector('[data-reveal="set"]')).not.toHaveClass('gsd-reveal');
+      // A format change, and a hand-off and back: the contents swap, no entrance.
+      fireEvent.click(radio('Trivia'));
+      expect(document.querySelector('[data-reveal="set"]')).not.toHaveClass('gsd-reveal');
+      fireEvent.click(radio('Build Room'));
+      fireEvent.click(radio('Call & Answer'));
+      expect(document.querySelector('.gsd-reveal')).toBeNull();
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('the options fade in on the first set pick, and not again after a hand-off and back', () => {
+    jest.useFakeTimers();
+    try {
+      render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer" />);
+      pickSet(KEY_B);
+      expect(document.querySelector('[data-reveal="after"]')).toHaveClass('gsd-reveal');
+      act(() => { jest.advanceTimersByTime(500); });
+      fireEvent.click(radio('Build Room'));
+      expect(document.querySelector('[data-reveal="after"]')).toBeNull();
+      fireEvent.click(radio('Call & Answer'));
+      expect(document.querySelector('[data-reveal="after"]')).not.toHaveClass('gsd-reveal');
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('under prefers-reduced-motion there is no entrance at all', () => {
+    const before = window.matchMedia;
+    window.matchMedia = (q) => ({ matches: /prefers-reduced-motion: reduce/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
+    try {
+      render(<GameSetupDialog {...base()} />);
+      fireEvent.click(radio('Call & Answer'));
+      expect(screen.getByRole('heading', { name: 'Question set' })).toBeInTheDocument();
+      expect(document.querySelector('.gsd-reveal')).toBeNull();
+    } finally { window.matchMedia = before; }
+  });
+});
+
+describe('round 4: Create is never inert', () => {
+  test('it is a tab stop while not ready, described by the foot\'s "Still needed", which is not live', () => {
+    render(<GameSetupDialog {...base({ eventTitle: '' })} />);
+    const create = createButton();
+    notReady(create);
+    expect(create.tabIndex).toBe(0);
+    const need = document.getElementById('gsd-need');
+    expect(need).toHaveTextContent('Still needed: a title, a format and a question set.');
+    expect(create.getAttribute('aria-describedby').split(' ')).toContain('gsd-need');
+    // rejects: a reason that speaks on every keystroke (review A5)
+    expect(need).not.toHaveAttribute('aria-live');
+    expect(need.closest('[aria-live]')).toBeNull();
+  });
+
+  test('pressed early it takes the focus to the first gap — title, then format, then set — and says which', async () => {
+    const props = base({ eventTitle: '' });
+    const { rerender } = render(<GameSetupDialog {...props} />);
+    fireEvent.click(createButton());
+    await waitFor(() => expect(screen.getByLabelText(/name it/i)).toHaveFocus());
+    expect(live().textContent).toBe('Add a title first.');
+    expect(props.onCreate).not.toHaveBeenCalled();
+
+    rerender(<GameSetupDialog {...props} eventTitle="Retro" />);
+    fireEvent.click(createButton());
+    expect(radio('Call & Answer')).toHaveFocus(); // the group's one tab stop
+    expect(live().textContent).toBe('Pick a format first.');
+
+    fireEvent.click(radio('Call & Answer'));
+    fireEvent.click(createButton());
+    expect(screen.getByRole('combobox', { name: /choose a question set/i })).toHaveFocus();
+    expect(live().textContent).toBe('Pick a question set first.');
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('⌘/Ctrl+Enter early takes the same path', () => {
+    const props = base({ eventTitle: 'Retro' });
+    render(<GameSetupDialog {...props} />);
+    fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
+    expect(radio('Call & Answer')).toHaveFocus();
+    expect(live().textContent).toBe('Pick a format first.');
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  test('pressed while only the topics are loading, it queues the create, as ⌘↵ does', () => {
+    const onCreate = jest.fn();
+    render(<PageHarness onCreate={onCreate} />);
+    pickSet(KEY_B);
+    fireEvent.click(createButton());
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Waiting for topics…' })).toBeInTheDocument();
+    PageHarness.answer(KEY_B, B);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test('ready: the foot says nobody can join until it starts, and Create fills', () => {
+    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    expect(screen.queryByText(/Still needed/)).toBeNull();
+    expect(screen.getByText('Nobody can join until you start it.')).toBeInTheDocument();
+    expect(createButton()).not.toHaveAttribute('aria-disabled');
   });
 });

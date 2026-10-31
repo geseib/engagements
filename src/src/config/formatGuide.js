@@ -96,6 +96,8 @@ export const FORMAT_GUIDE = Object.freeze({
   [BUILD_KIND]: {
     short: 'Build something with your Claude Code while the room steers: people suggest ideas, pick between options and rate what Claude makes.',
     col: 'Your Claude Code builds; the room suggests ideas, picks options and rates.',
+    /* The gallery's quieter row under "Bigger than one session" (round 4). */
+    tag: 'with your Claude Code',
     good: 'Software teams.',
     group: 'Any size',
     startsShort: 'On its own page',
@@ -109,6 +111,7 @@ export const FORMAT_GUIDE = Object.freeze({
   [EVENT_KIND]: {
     short: 'Run a whole day behind one join code: an agenda of quizzes, polls, talks and breaks, each with its own report.',
     col: 'A whole day behind one join code: quizzes, polls, talks and breaks.',
+    tag: 'a whole day, one join code',
     good: 'Offsites, workshops.',
     group: 'Any size',
     startsShort: 'On its own page',
