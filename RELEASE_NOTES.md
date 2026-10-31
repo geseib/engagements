@@ -11,7 +11,7 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ## 31 Oct 2026 (Build Room: fixes from the test walk)
 
-**Test:** merge of dev `DEVCOMMIT`. Everything below this entry is already on test; this push adds only what is here.
+**Test:** merge of dev `ab020e52`. Everything below this entry is already on test; this push adds only what is here.
 
 Fixes for what the QA walk on engage.test found in the Build Room on 31 Oct, mostly in a room where Claude Code never connected. They close gaps in the four "Build Room, simpler" entries below.
 
