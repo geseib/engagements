@@ -201,9 +201,9 @@ describe('where F is bound', () => {
     expect(call).toBeGreaterThan(0);
     expect(call).toBeLessThan(host.indexOf('if (showQuickstartMenu) {'));
     expect(read('components', 'event', 'HostEventAgenda.jsx')).toMatch(/useFullscreenKey\(\);/);
-    // F waits while any of the stage's asks is open (the go-live ask and
-    // EXIT joined them, 31 Oct 2026).
-    expect(read('components', 'event', 'EventStage.jsx')).toMatch(/useFullscreenKey\(\{ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen, target: \(\) => deckFrame\.current \}\)/);
+    // F waits while any of the stage's asks is open (the go-live ask, EXIT
+    // and REOPEN joined them, 31 Oct 2026).
+    expect(read('components', 'event', 'EventStage.jsx')).toMatch(/useFullscreenKey\(\{ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen && !askReopen, target: \(\) => deckFrame\.current \}\)/);
   });
 
   test('no phone page takes F: it is a letter there', () => {
