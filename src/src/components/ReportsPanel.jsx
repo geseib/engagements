@@ -453,7 +453,6 @@ export default function ReportsPanel({ heading = null }) {
             className="rp-btn rp-btn--sm"
             disabled={busyId === event.id}
             onClick={() => summaryPdf(event)}
-            aria-label={`Event summary PDF of ${title}`}
           >
             <Icon name="FilePdf" weight="bold" size={14} color="currentColor" />
             {busyId === event.id ? 'Making…' : 'Summary PDF'}

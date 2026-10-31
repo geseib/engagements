@@ -11,6 +11,7 @@ const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
 const { shapeForLog } = require('./log-shape');
+const { triviaOptionCounts } = require('./trivia-tally');
 const { reconcileReport, answersCouldHaveExpired } = require('./report-merge');
 const { surveyResultsPayload } = require('./survey-host');
 const { normalizeNames } = require('./survey-names');
@@ -872,6 +873,13 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
           } : {})
         },
         
+        // HOW THE ROOM ANSWERED a trivia question (2026-10-31): how many
+        // picked each option and which is right — counts only, no names
+        // (trivia-tally.js, read through the scorer's own slot rules).
+        ...(gameMetadata.Item.GameType === 'trivia' && questionDetails
+          ? { triviaTally: triviaOptionCounts(questionDetails, questionAnswers) }
+          : {}),
+
         // Answer data ranked by vote results
         answers: rankedAnswers,
         

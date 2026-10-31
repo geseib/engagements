@@ -1,4 +1,4 @@
-// skin-allowance: colour=5
+// skin-allowance: colour=6
 /**
  * THE SESSION REPORT.
  *
@@ -144,6 +144,15 @@ function SparkleMark() {
   return (
     <svg className="rpt-workie-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z" fill="#0F1A2E" />
+    </svg>
+  );
+}
+
+/** The right answer's tick, beside the word "Correct" — never colour alone. */
+function TickMark() {
+  return (
+    <svg className="rpt-tick" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M3 8.5 L6.5 12 L13 4.5" fill="none" stroke="#1B2942" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -977,28 +986,63 @@ function ReportDocument({ reportData }) {
                       </span>
                     </p>
                   )}
-                </div>
 
                 {/* Trivia: the choices, the right one marked by a rule, bold
-                    and the word "Correct" — never by colour alone. */}
+                    and the word "Correct" — never by colour alone. Inside the
+                    opener's unit: a trivia question is its choices, and a
+                    heading left at a page foot without them says nothing. */}
                 {isTrivia && (
                   <div className="rpt-choices">
                     {(() => {
+                      /* HOW THE ROOM ANSWERED (create-report.js triviaTally:
+                         counts only, read through the scorer's slot rules) and
+                         WHY IT'S RIGHT (the set's answerDetails) — the owner,
+                         2026-10-31. Never the question's `background`: that is
+                         Workie's material, never shown to players. */
+                      const tally = question.triviaTally && Array.isArray(question.triviaTally.options) ? question.triviaTally : null;
+                      const bySlot = new Map(((tally && tally.options) || []).map((o) => [o.slot, o]));
+                      const answered = tally ? tally.answered || 0 : 0;
+                      const why = String(questionData.answerDetails || '').trim();
                       const choices = OPTION_LETTERS.filter((letter) => questionData[`option${letter}`]).map((letter) => {
                         const optionText = questionData[`option${letter}`];
-                        const isCorrect = correctAnswer === `Option${letter}` || correctAnswer === optionText;
+                        const counted = bySlot.get(letter) || null;
+                        const isCorrect = counted ? counted.correct === true
+                          : correctAnswer === `Option${letter}` || correctAnswer === optionText;
+                        const count = counted ? counted.count || 0 : 0;
+                        const share = answered > 0 ? Math.round((count / answered) * 100) : 0;
                         return (
-                          <div key={letter} className={`rpt-choice report-keep${isCorrect ? ' rpt-choice--correct' : ''}`}>
-                            <span className="rpt-choice-letter">{letter}</span>
-                            <span className="rpt-choice-text">{optionText}</span>
-                            {isCorrect && <span className="rpt-tag">Correct</span>}
+                          <div key={letter} className={`rpt-choice report-keep${isCorrect ? ' rpt-choice--correct' : ''}${tally ? ' rpt-choice--counted' : ''}`}>
+                            <span className="rpt-choice-letter">{counted ? counted.letter : letter}</span>
+                            <span className="rpt-choice-text">
+                              {optionText}
+                              {isCorrect && <span className="rpt-tag rpt-tag--correct"><TickMark />Correct</span>}
+                            </span>
+                            {tally && (
+                              <span className="rpt-choice-count">
+                                <span className="rpt-choice-n">{count} picked</span>
+                                <span className="rpt-choice-pct">{share}%</span>
+                              </span>
+                            )}
+                            {tally && (
+                              <span className="rpt-choice-bar" aria-hidden="true"><i style={{ width: `${share}%` }} /></span>
+                            )}
+                            {isCorrect && why && (
+                              <span className="rpt-why">
+                                <span className="rpt-why-label">Why it&rsquo;s right</span>
+                                <span className="rpt-why-text">{why}</span>
+                              </span>
+                            )}
                           </div>
                         );
                       });
+                      const correctPicks = tally ? tally.correct || 0 : 0;
+                      const note = tally
+                        ? `${answered} answered${answered > 0 ? ` · ${Math.round((correctPicks / answered) * 100)}% correct` : ''}`
+                        : '';
                       return (
                         <>
                           <div className="rpt-keepnext report-keep">
-                            <SubHead title="Answer choices" />
+                            <SubHead title="Answer choices" note={note} />
                             {choices[0]}
                           </div>
                           {choices.slice(1)}
@@ -1007,6 +1051,7 @@ function ReportDocument({ reportData }) {
                     })()}
                   </div>
                 )}
+                </div>
 
                 <ReportAISummary aiSummary={question.aiSummary} />
 

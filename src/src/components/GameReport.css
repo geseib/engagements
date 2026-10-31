@@ -596,6 +596,66 @@
 .report-doc .rpt-choice--correct .rpt-choice-letter { color: var(--rpt-ink); }
 .report-doc .rpt-choice--correct .rpt-choice-text { font-weight: 700; }
 
+/* With the room's counts (create-report.js triviaTally): a count column and a
+   bar under the option, like a response's points bar. The right one's bar is
+   ink, the rest grey, and it also carries the tick and the word. */
+.report-doc .rpt-choice--counted { grid-template-columns: 2.2em minmax(0, 1fr) 7em; }
+
+.report-doc .rpt-choice-count {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.8em;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.report-doc .rpt-choice-pct { min-width: 2.6em; text-align: right; font-weight: 700; }
+.report-doc .rpt-choice--correct .rpt-choice-count { font-weight: 700; }
+
+.report-doc .rpt-choice-bar {
+  grid-column: 2 / 4;
+  position: relative;
+  display: block;
+  height: 0.3em;
+  margin-top: 0.45em;
+  background: var(--rpt-rule-soft);
+}
+
+.report-doc .rpt-choice-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--rpt-bar-2); }
+.report-doc .rpt-choice--correct .rpt-choice-bar i { background: var(--rpt-ink); }
+
+.report-doc .rpt-tag--correct {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.7em;
+  font-weight: 700;
+  vertical-align: 0.1em;
+}
+
+.report-doc .rpt-tick { width: 1.1em; height: 1.1em; display: block; }
+
+/* WHY IT'S RIGHT — the set's own explanation, under the right answer. */
+.report-doc .rpt-why {
+  grid-column: 2 / -1;
+  display: block;
+  margin-top: 0.6em;
+  padding-left: 0.9em;
+  border-left: var(--rpt-hair) solid var(--rpt-ink);
+}
+
+.report-doc .rpt-why-label {
+  display: block;
+  margin-bottom: 0.15em;
+  font-size: max(var(--rpt-floor), 0.7em);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpt-muted);
+}
+
+.report-doc .rpt-why-text { display: block; font-size: 0.95em; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+
 /* ==========================================================================
    WORKIE'S READ — a framed panel with a dusk bar. The tint is optional ink;
    the frame, the bar and the label keep it distinct without it.

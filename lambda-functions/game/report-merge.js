@@ -141,6 +141,12 @@ function mergeRound(live, kept, mayHaveExpired = true) {
       ...(live.wordAnalysis === undefined && kept.wordAnalysis !== undefined
         ? { wordAnalysis: kept.wordAnalysis }
         : {}),
+      // A trivia round's per-option counts (trivia-tally.js) are counted off
+      // the answer rows, which expire at 7 days: a rebuild after that counts
+      // nobody, so the stored counts stand until live ones have someone in them.
+      ...(kept.triviaTally && !(live.triviaTally && live.triviaTally.answered > 0)
+        ? { triviaTally: kept.triviaTally }
+        : {}),
     },
     recovered,
     unrecoverable: !liveHas && !keptHas && !neverHeldAnswers(live) && mayHaveExpired,

@@ -193,7 +193,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'It opens with a cover: the session\'s title, the day it was held, who hosted it, the format, and the result at a glance (how many people, rounds and responses, and the top-voted response). Then what the session was about, who was there, and each round: the question and the task, Workie\'s read (marked as AI analysis, not your words), every answer ranked with its points, the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores and a short guide to reading the report.',
+          text: 'It opens with a cover: the session\'s title, the day it was held, who hosted it, the format, and the result at a glance (how many people, rounds and responses, and the top-voted response). Then what the session was about, who was there, and each round: the question and the task, Workie\'s read (marked as AI analysis, not your words), every answer ranked with its points (for trivia, each choice with how many picked it, the right one ticked, and the question set\'s explanation of why it is right when it has one), the comments, any questions you asked the room, and anything that arrived late. It ends with the final scores and a short guide to reading the report.',
         },
         {
           t: 'p',

@@ -454,7 +454,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'Each session item\'s report is in Sessions on your start screen, under the event\'s row: see The session report. For one short document of the whole day, use **Save event summary (PDF)** on the agenda page, or **Summary PDF** on the event\'s row in Reports.',
+          text: 'Each session item\'s report is in Sessions on your start screen, under the event\'s row: see The session report.',
         },
       ],
     },
