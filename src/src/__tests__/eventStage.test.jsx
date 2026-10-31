@@ -156,6 +156,10 @@ test('Go live brings everyone: the item starts, the wipe runs, and the host\'s s
     render(<EventStage code={CODE} />);
     await act(async () => { await Promise.resolve(); });
     fireEvent.click(within(rowOf('How well do you know our customers?')).getByRole('button', { name: /^Go live/ }));
+    // The first go-live starts the event, so it asks (owner, 31 Oct 2026).
+    const ask = screen.getByRole('dialog', { name: 'Start the event?' });
+    expect(api.runEvent).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Start the event' }));
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[0].itemId);
@@ -192,6 +196,11 @@ test('Open on a talk shows its screen as a preview — "Bring everyone here", an
   expect(window.location.search).toBe(`?focus=${DAY[1].itemId}`);
 
   fireEvent.click(screen.getByRole('button', { name: 'Bring everyone here' }));
+  // Nothing has started yet, so bringing everyone here starts the event: it asks.
+  const ask = await screen.findByRole('dialog', { name: 'Start the event?' });
+  expect(ask).toHaveTextContent(/FY26 in review/);
+  expect(api.runEvent).not.toHaveBeenCalled();
+  fireEvent.click(within(ask).getByRole('button', { name: 'Start the event' }));
   await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[1].itemId));
   expect(await screen.findByText('Now presenting')).toBeInTheDocument();
 
@@ -374,7 +383,7 @@ test('ending the event asks first, and says what it does', async () => {
   render(<EventStage code={CODE} />);
 
   await screen.findByText('Between items');
-  // Everything has run: the dock's step and END EVENT both end it.
+  // Everything has run: the dock's step ends it (EXIT offers the same end).
   fireEvent.click(screen.getAllByRole('button', { name: 'End the event' })[0]);
   const confirm = await screen.findByRole('dialog');
   expect(confirm).toHaveTextContent(/nobody new can join/);
@@ -382,6 +391,152 @@ test('ending the event asks first, and says what it does', async () => {
   fireEvent.click(within(confirm).getByRole('button', { name: 'End the event' }));
   await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'end-event', undefined));
   expect(await screen.findByText('The day is over')).toBeInTheDocument();
+});
+
+/*
+  THE GUARD RAILS (owner, 31 Oct 2026): "if i accidentally press space bar it
+  starts the event … there is no exit of the event only end event … we really
+  need guard rails on if they really want to start or end events."
+*/
+describe('asking before the room moves, and EXIT', () => {
+  const space = () => fireEvent.keyDown(window, { key: ' ' });
+
+  // rejects: one stray SPACE starting the event.
+  test('SPACE before anything has started asks, and Not yet leaves everything where it was', async () => {
+    api.getEvent.mockResolvedValue(view());
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Starting soon');
+    space();
+    const ask = await screen.findByRole('dialog', { name: 'Start the event?' });
+    expect(ask).toHaveTextContent(/How well do you know our customers\?/);
+    // A second SPACE with the ask open is not a yes.
+    space();
+    expect(api.runEvent).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Not yet' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
+
+  // rejects: a preview's SPACE moving the room mid-event, unasked.
+  test('mid-event, going live from a preview asks, and says the live item ends', async () => {
+    const liveTalk = { ...DAY[1], state: 'live' };
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: liveTalk.itemId }, [{ ...DAY[0], state: 'done' }, liveTalk, DAY[2], DAY[3]]));
+    render(<EventStage code={CODE} />);
+    fireEvent.click(within(rowOf(await screen.findByText('Break').then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
+    await screen.findByText('Preview');
+    space();
+    const ask = await screen.findByRole('dialog', { name: 'Bring everyone here?' });
+    expect(ask).toHaveTextContent(/FY26 in review ends/);
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
+
+  // rejects: a guard on the ordinary step — moving on mid-event stays one step.
+  test('mid-event, the dock\'s next item goes live straight away', async () => {
+    const live = { ...DAY[0], state: 'live', gameId: '4821' };
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: live.itemId }, [live, ...DAY.slice(1)]));
+    api.runEvent.mockResolvedValue(view({ state: 'LIVE', liveItemId: DAY[1].itemId }, [{ ...live, state: 'done' }, { ...DAY[1], state: 'live' }, DAY[2], DAY[3]]));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Live now');
+    space();
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', DAY[1].itemId));
+    expect(screen.queryByRole('dialog', { name: /Start the event|Bring everyone/ })).toBeNull();
+  });
+
+  // rejects: END EVENT as the only way off the stage.
+  test('EXIT asks: Leave goes to the console\'s Events and ends nothing', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, [{ ...DAY[0], state: 'done' }, ...DAY.slice(1)]));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Between items');
+    expect(screen.queryByRole('button', { name: /END EVENT/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Exit/ }));
+    const ask = await screen.findByRole('dialog', { name: 'Leave the stage, or end the event?' });
+    expect(ask).toHaveTextContent(/people can still join/);
+    fireEvent.click(within(ask).getByRole('button', { name: /^Leave/ }));
+    expect(navigateTo).toHaveBeenCalledWith('/admin?section=events');
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
+
+  test('EXIT\'s End the event ends it, saying what that does first', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'LIVE' }, [{ ...DAY[0], state: 'done' }, ...DAY.slice(1)]));
+    api.runEvent.mockResolvedValue(view({ state: 'ENDED' }, [{ ...DAY[0], state: 'done' }, ...DAY.slice(1)]));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('Between items');
+    fireEvent.click(screen.getByRole('button', { name: /^Exit/ }));
+    const ask = await screen.findByRole('dialog', { name: 'Leave the stage, or end the event?' });
+    expect(ask).toHaveTextContent(/nobody new can join/);
+    fireEvent.click(within(ask).getByRole('button', { name: 'End the event' }));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'end-event', undefined));
+  });
+
+  test('Stay closes EXIT\'s ask and changes nothing; an ended event\'s EXIT just leaves', async () => {
+    api.getEvent.mockResolvedValue(view());
+    const { unmount } = render(<EventStage code={CODE} />);
+    await screen.findByText('Starting soon');
+    fireEvent.click(screen.getByRole('button', { name: /^Exit/ }));
+    const ask = await screen.findByRole('dialog');
+    expect(ask).toHaveTextContent(/Nothing has started/);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Stay' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(navigateTo).not.toHaveBeenCalled();
+    unmount();
+
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED' }, DAY.map((i) => ({ ...i, state: 'done' }))));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    fireEvent.click(screen.getByRole('button', { name: /^Exit/ }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(navigateTo).toHaveBeenCalledWith('/admin?section=events');
+  });
+});
+
+/*
+  WHEN IT GOES, AND RUNNING IT AGAIN (owner, 31 Oct 2026: "resume events should
+  be an option as long as its within the ttl timeframes. Do we mark info around
+  when events expire").
+*/
+describe('kept until, and reopening an ended event', () => {
+  const later = new Date(Date.now() + 30 * 86400000).toISOString();
+  const gone = new Date(Date.now() - 86400000).toISOString();
+
+  test('the board says when the event is kept until', async () => {
+    api.getEvent.mockResolvedValue(view({ expiresAt: '2027-01-09T00:00:00.000Z' }));
+    render(<EventStage code={CODE} />);
+    expect(await screen.findByText(/Kept until Sat 9 Jan 2027/)).toBeInTheDocument();
+  });
+
+  test('an ended event still kept offers REOPEN, which asks, says what it does, then reopens', async () => {
+    const done = DAY.map((i) => ({ ...i, state: 'done' }));
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: later }, done));
+    api.runEvent.mockResolvedValue(view({ state: 'LIVE', expiresAt: later }, done));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen the event' }));
+    const ask = await screen.findByRole('dialog', { name: 'Reopen the event?' });
+    expect(ask).toHaveTextContent(/join again/);
+    expect(ask).toHaveTextContent(/What finished stays finished/);
+    expect(api.runEvent).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Reopen the event' }));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'reopen-event', undefined));
+    expect(await screen.findByText('Between items')).toBeInTheDocument();
+  });
+
+  // rejects: a reopen the server will refuse — the ttl is past.
+  test('an ended event past its date offers no REOPEN', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: gone }, DAY.map((i) => ({ ...i, state: 'done' }))));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    expect(screen.queryByRole('button', { name: 'Reopen the event' })).toBeNull();
+  });
+
+  test('Not now closes the ask and reopens nothing', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: later }, DAY.map((i) => ({ ...i, state: 'done' }))));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen the event' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
 });
 
 /** Stubs clientHeight/clientWidth/offsetHeight/scrollHeight by class name. */

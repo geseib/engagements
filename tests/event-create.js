@@ -117,13 +117,17 @@ function reset() {
   await check('201 with the event, its code and an empty agenda', () => {
     assert.strictEqual(made.statusCode, 201, made.body);
     assert.match(event.code, /^\d{4}$/);
-    assert.deepStrictEqual({ ...event, code: 'x', createdAt: 'x', updatedAt: 'x' }, {
+    assert.deepStrictEqual({ ...event, code: 'x', createdAt: 'x', updatedAt: 'x', expiresAt: 'x' }, {
       code: 'x', title: 'Q4 Kickoff', place: 'Harbour Room, 4th floor', startsAt: STARTS,
       timeZone: 'Europe/London', access: 'open', state: 'SCHEDULED', itemCount: 0,
       engagementCount: 0, breakCount: 0, attendeeReports: 'anonymous', createdAt: 'x', updatedAt: 'x',
       // Events M2 and M3: nobody has joined, nothing is live, the day has not ended.
       attendeeCount: 0, liveItemId: '', endedAt: null,
+      // When it may go (31 Oct 2026): the row's ttl as a time, checked below.
+      expiresAt: 'x',
     });
+    const metaRow = table.get(`EVENT#${event.code}`, 'METADATA');
+    assert.strictEqual(event.expiresAt, new Date(metaRow.ttl * 1000).toISOString());
   });
   const code = event.code;
   const reservation = table.get('GAMES', `GAME#${code}`);

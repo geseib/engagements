@@ -61,6 +61,21 @@ const printBlock = (() => {
   return printCss.slice(at);
 })();
 
+/**
+ * Does some rule in `css` list `selector` (as one of its comma-separated
+ * selectors, matched at the end of a compound) and declare `decl`? Read off
+ * the text, because jsdom loads no stylesheet.
+ */
+function declares(css, selector, decl) {
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(css))) {
+    const sels = m[1].split(',').map((x) => x.trim());
+    if (sels.some((x) => x === selector || x.endsWith(` ${selector}`)) && decl.test(m[2])) return true;
+  }
+  return false;
+}
+
 const reportData = {
   gameId: 'ENG-77',
   eventTitle: 'Northwind Q3 Offsite',
@@ -108,19 +123,19 @@ describe('the document renders everything the inline version did', () => {
   test('title block, rounds, responses and standings are all on the page', () => {
     const { container } = render(<ReportDocument reportData={reportData} />);
     expect(screen.getByText('Northwind Q3 Offsite')).toBeInTheDocument();
-    expect(screen.getByText('ENG-77')).toBeInTheDocument();
+    expect(screen.getByText('Session ENG-77')).toBeInTheDocument();
     expect(screen.getByText('What do we protect?')).toBeInTheDocument();
     expect(screen.getByText('Background for the room.')).toBeInTheDocument();
     expect(screen.getByText('Protect the handover ritual.')).toBeInTheDocument();
     expect(screen.getByText('3 first, 1 second')).toBeInTheDocument();
-    expect(screen.getByText('40 points')).toBeInTheDocument();
+    expect(container.querySelector('.rpt-resp-pts').textContent).toBe('40points');
     expect(screen.getByText('The room split cleanly.')).toBeInTheDocument();
     expect(screen.getByText('Which constraint is real?')).toBeInTheDocument();
     expect(screen.getByText('Name an owner.')).toBeInTheDocument();
-    expect(screen.getByText('Final Scores')).toBeInTheDocument();
+    expect(screen.getByText('Final scores')).toBeInTheDocument();
     // Devi now also names a roster row (Task 2's "Who was here"), so this is
-    // scoped to Final Scores specifically rather than screen.getByText.
-    expect(within(container.querySelector('.report-final-scores')).getByText('Devi'))
+    // scoped to the standings specifically rather than screen.getByText.
+    expect(within(container.querySelector('.rpt-standings')).getByText('Devi'))
       .toBeInTheDocument();
   });
 
@@ -142,23 +157,25 @@ describe('the document renders everything the inline version did', () => {
       ],
     };
     const { container } = render(<ReportDocument reportData={mixed} />);
-    const meta = [...container.querySelectorAll('.report-meta-item')].map((n) => n.textContent);
+    const meta = [...container.querySelectorAll('.rpt-strip-count')].map((n) => n.textContent);
     // Two rounds, and the noun is the ARTWORK one the second question forces.
-    expect(meta[2]).toBe('Artworks2');
+    expect(meta[1]).toBe('2Artworks');
 
     // And the singular still works — pluralRoundNoun, not a bare `${noun}s`.
     const one = render(<ReportDocument reportData={reportData} />).container;
-    expect([...one.querySelectorAll('.report-meta-item')][2].textContent).toBe('Poll1');
+    expect([...one.querySelectorAll('.rpt-strip-count')][1].textContent).toBe('1Poll');
   });
 
   // rejects: losing the correct-answer marker, or matching it by option TEXT
   // only (both `correctAnswer: 'OptionB'` and the literal text are in use).
   test('trivia marks exactly one choice correct', () => {
     const { container } = render(<ReportDocument reportData={triviaData} />);
-    const correct = container.querySelectorAll('.trivia-option-report.correct-answer');
+    const correct = container.querySelectorAll('.rpt-choice--correct');
     expect(correct).toHaveLength(1);
     expect(correct[0].textContent).toContain('The mobile call');
-    expect(container.querySelectorAll('.trivia-option-report')).toHaveLength(3);
+    // Marked in WORDS as well as by the rule, so a greyscale printer keeps it.
+    expect(correct[0].textContent).toContain('Correct');
+    expect(container.querySelectorAll('.rpt-choice')).toHaveLength(3);
   });
 
   // rejects: dropping `.report-keep` from the units the print sheet and the
@@ -166,8 +183,8 @@ describe('the document renders everything the inline version did', () => {
   // saved PDF slices quotations in half and nothing else fails.
   test('the indivisible units carry .report-keep', () => {
     const { container } = render(<ReportDocument reportData={triviaData} />);
-    expect(container.querySelector('.report-answer, .report-keep')).not.toBeNull();
-    for (const sel of ['.trivia-option-report', '.score-item', '.report-titleblock']) {
+    expect(container.querySelector('.report-keep')).not.toBeNull();
+    for (const sel of ['.rpt-choice', '.rpt-standing:not(.rpt-standing--head)', '.rpt-opener-unit']) {
       const nodes = [...container.querySelectorAll(sel)];
       expect(nodes.length).toBeGreaterThan(0);
       for (const n of nodes) expect(n.classList.contains('report-keep')).toBe(true);
@@ -313,9 +330,8 @@ describe('the print stylesheet declares the properties that do the work', () => 
   // the middle. These are the units that certainly fit on a page; the sections
   // around them are deliberately NOT in this list.
   test('the indivisible units are protected from a page break', () => {
-    for (const sel of ['.report-answer', '.score-item', '.trivia-option-report', '.report-titleblock']) {
-      const rule = new RegExp(`${sel.replace('.', '\\.')}\\s*\\{[^}]*break-inside:\\s*avoid`);
-      expect(printBlock).toMatch(rule);
+    for (const sel of ['.rpt-resp', '.rpt-standing', '.rpt-choice', '.rpt-cover', '.rpt-opener-unit', '.rpt-keepnext']) {
+      expect(declares(printBlock, sel, /break-inside:\s*avoid/)).toBe(true);
     }
   });
 
@@ -324,7 +340,9 @@ describe('the print stylesheet declares the properties that do the work', () => 
   // overleaf. Asserted on the heading rule specifically.
   test('no heading can be left at the foot of a page', () => {
     expect(printBlock).toMatch(/h1[^{]*h2[^{]*\{[^}]*break-after:\s*avoid/);
-    expect(printBlock).toMatch(/\.report-question-header\s*\{[^}]*break-after:\s*avoid/);
+    for (const sel of ['.rpt-kick', '.rpt-sub', '.rpt-opener']) {
+      expect(declares(printBlock, sel, /break-after:\s*avoid/)).toBe(true);
+    }
   });
 
   // rejects: letting the SCREEN layout reach the printer — the owner's "width"
@@ -333,8 +351,8 @@ describe('the print stylesheet declares the properties that do the work', () => 
   // of a browser window.
   test('the screen container is neutralised on paper', () => {
     expect(printBlock).toMatch(/\.report-container\.report-paper\s*\{[^}]*min-height:\s*0/);
-    expect(printBlock).toMatch(/\.report-paper \.report-doc\s*\{[^}]*max-width:\s*none/);
-    expect(printBlock).toMatch(/\.report-paper \.report-doc\s*\{[^}]*box-shadow:\s*none/);
+    expect(declares(printBlock, '.report-container .report-doc', /max-width:\s*none/)).toBe(true);
+    expect(declares(printBlock, '.report-container .report-doc', /border:\s*0/)).toBe(true);
   });
 
   // rejects: keeping a fill without print-color-adjust, which Chrome drops —
@@ -342,7 +360,7 @@ describe('the print stylesheet declares the properties that do the work', () => 
   // read as the host's.
   test('the one retained fill is forced through', () => {
     expect(printBlock).toMatch(
-      /\.report-ai-summary\s*\{[^}]*background:\s*#[0-9A-Fa-f]{3,6}[^}]*print-color-adjust:\s*exact/,
+      /\.rpt-workie\s*\{[^}]*background:\s*var\(--rpt-tint\)[^}]*print-color-adjust:\s*exact/,
     );
   });
 
@@ -403,8 +421,9 @@ describe('comments in the session report', () => {
   });
 
   test('they are headed as comments, so nobody reads one as a response', () => {
-    render(<ReportDocument reportData={withComments} />);
-    expect(screen.getByText('Comments')).toBeInTheDocument();
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    // Scoped: the appendix also names Comments, as a term it explains.
+    expect(within(container.querySelector('.report-comments')).getByText('Comments')).toBeInTheDocument();
   });
 
   test('each states which section it is about', () => {
@@ -632,8 +651,8 @@ describe('the caveat can actually be read', () => {
   // product (styles.css:22-35 — 4.38:1 on --surface), and rejects reaching for
   // the amber tokens that fail on paper.
   test('the caveat does not use a token that cannot carry text here', () => {
-    const block = screenCss.slice(screenCss.indexOf('.report-paper .report-caveat'));
-    const rules = block.slice(0, block.indexOf('.report-paper .report-eyebrow'));
+    const block = screenCss.slice(screenCss.indexOf('.report-doc .report-caveat'));
+    const rules = block.slice(0, block.indexOf('.report-doc .report-left-out'));
     expect(rules).not.toMatch(/color:\s*var\(--danger\)/);
     expect(rules).not.toMatch(/color:\s*var\(--primary(-deep)?\)/);
   });
@@ -645,8 +664,8 @@ describe('the caveat can actually be read', () => {
   // sit on the screen-only toolbar button.)
   test('the caveat rules themselves hold no colour of their own', () => {
     const screenOnly = screenCss.slice(0, screenCss.indexOf('@media print'));
-    const from = screenOnly.indexOf('.report-paper .report-caveat');
-    const rules = screenOnly.slice(from, screenOnly.indexOf('.report-paper .report-eyebrow', from));
+    const from = screenOnly.indexOf('.report-doc .report-caveat');
+    const rules = screenOnly.slice(from, screenOnly.indexOf('.report-doc .report-left-out', from));
     expect(rules).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(rules).toMatch(/var\(--report-caution\)/);
   });
@@ -685,7 +704,7 @@ describe('About this session and Who was here', () => {
     const { container } = render(<ReportDocument reportData={withFrontMatter} />);
     expect(screen.getByText('About this session')).toBeInTheDocument();
     expect(screen.getByText('A quarterly check-in for the whole team.')).toBeInTheDocument();
-    expect(screen.getByText('What people were asked to do')).toBeInTheDocument();
+    expect(screen.getByText('From the question set’s description')).toBeInTheDocument();
     expect(screen.getByText('Ten questions about the Q3 roadmap.')).toBeInTheDocument();
     expect(screen.getByText('Who was here')).toBeInTheDocument();
     // Amara also names the round's answer author below, so this is scoped to
@@ -710,7 +729,8 @@ describe('About this session and Who was here', () => {
   // brief is explicit that Final Scores alone owns ranking.
   test('the roster carries no score — Final Scores keeps ranking', () => {
     const { container } = render(<ReportDocument reportData={withFrontMatter} />);
-    const roster = container.querySelector('.report-roster');
+    // The names themselves; the kicker above them counts heads, not points.
+    const roster = container.querySelector('.rpt-roster-list');
     expect(roster.textContent).not.toMatch(/\d/);
   });
 
@@ -745,7 +765,7 @@ describe('About this session and Who was here', () => {
       questionSetData: { description: 'A retro on the launch.' },
     };
     render(<ReportDocument reportData={setOnly} />);
-    expect(screen.getByText('What people were asked to do')).toBeInTheDocument();
+    expect(screen.getByText('From the question set’s description')).toBeInTheDocument();
     expect(screen.getByText('A retro on the launch.')).toBeInTheDocument();
   });
 
@@ -755,13 +775,24 @@ describe('About this session and Who was here', () => {
   // description of its own: with only one field behind both labels in that
   // case, the honest thing is to omit the second label rather than echo the
   // first paragraph under a different heading.
-  test('with no set description, "what people were asked to do" is omitted — the Details text appears exactly once', () => {
+  test('with no set description, the Details text appears exactly once — on the cover when it is short', () => {
     const detailsOnly = { ...reportData, eventDetails: 'Standup for the whole team.', questionSetData: null };
     const { container } = render(<ReportDocument reportData={detailsOnly} />);
-    const about = container.querySelector('.report-about');
-    expect(about.textContent).not.toContain('What people were asked to do');
+    // Its only words are the cover's standfirst, so About has nothing left to say.
+    expect(container.querySelector('.report-about')).toBeNull();
     const matches = [...container.querySelectorAll('p')].filter((p) => p.textContent === 'Standup for the whole team.');
     expect(matches.length).toBe(1);
+    expect(matches[0].classList.contains('rpt-cover-dek')).toBe(true);
+  });
+
+  // rejects: a long brief pushed onto the cover, where it would run the cover
+  // past one page; it prints under About, once, with its source.
+  test('long Details print under About, not on the cover', () => {
+    const long = 'We are here to decide one thing. '.repeat(12).trim();
+    const { container } = render(<ReportDocument reportData={{ ...reportData, eventDetails: long, questionSetData: null }} />);
+    expect(container.querySelector('.rpt-cover-dek')).toBeNull();
+    expect(container.querySelector('.report-about').textContent).toContain('From the session’s details');
+    expect([...container.querySelectorAll('p')].filter((p) => p.textContent === long)).toHaveLength(1);
   });
 
   // rejects: the new roster leaking who answered what in a round the host
@@ -785,7 +816,7 @@ describe('About this session and Who was here', () => {
     // The roster names her (Final Scores also names her — scoped to the
     // roster specifically, since both surfaces legitimately show the name).
     expect(container.querySelector('.report-roster').textContent).toContain('Amara');
-    const author = container.querySelector('.answer-author');
+    const author = container.querySelector('.rpt-resp-author');
     expect(author).not.toBeNull();
     expect(author.textContent).toBe('');
   });
@@ -919,15 +950,16 @@ describe('Survey results in the report', () => {
   // render nothing useful (no QUESTION# rows) or, worse, print a Final
   // Scores leaderboard of every joined player at a meaningless zero score —
   // the mockup (docs/design/survey-redesign/34-report.html) has neither.
-  test('Final Scores is not rendered for a survey', () => {
-    render(<ReportDocument reportData={surveyReportData} />);
-    expect(screen.queryByText('Final Scores')).toBeNull();
+  test('Final scores is not rendered for a survey', () => {
+    const { container } = render(<ReportDocument reportData={surveyReportData} />);
+    expect(screen.queryByText('Final scores')).toBeNull();
+    expect(container.querySelector('.rpt-standings')).toBeNull();
   });
 
   test('the header states the question count off surveyResults, not the empty rounds array', () => {
     const { container } = render(<ReportDocument reportData={surveyReportData} />);
-    const meta = [...container.querySelectorAll('.report-meta-item')].map((n) => n.textContent);
-    expect(meta[2]).toBe('Questions2');
+    const meta = [...container.querySelectorAll('.rpt-strip-count')].map((n) => n.textContent);
+    expect(meta[1]).toBe('2Questions');
   });
 
   /*
@@ -981,7 +1013,7 @@ describe('Survey results in the report', () => {
     const { container } = render(<ReportDocument reportData={notClosed} />);
     expect(container.querySelector('.report-doc')).not.toBeNull();
     expect(screen.queryByText('Survey results')).toBeNull();
-    expect(screen.queryByText('Final Scores')).toBeNull();
+    expect(screen.queryByText('Final scores')).toBeNull();
   });
 
   /*

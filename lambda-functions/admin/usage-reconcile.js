@@ -49,9 +49,32 @@
  * the same snapshot also closes the month just ended (its month-end figure).
  * A failure here is logged and costs that org's gauges only: the meter and
  * the invoice above it are not held up by a dashboard.
+ *
+ * ── EVERY 3 HOURS, ONCE A DAY (the report sweep, 2026-10-31) ───────────────
+ *
+ * The stack is near CloudFormation's 500-resource ceiling, so the automatic
+ * report sweep rides THIS function's one schedule rather than a rule of its
+ * own. The rule fires every 3 hours (template-clean.yaml, rate(3 hours)).
+ *
+ * The usage job still runs ONCE A DAY: the first scheduled run of each UTC
+ * day takes `SCHEDULE#usage-reconcile / DAY#<yyyy-mm-dd>` with a conditional
+ * put and runs; every later run that day finds it and skips. A rate schedule
+ * fires every 3h from whenever the rule was created, so "when the hour is 0"
+ * could miss every day; the first-run-of-the-day claim cannot, and it lands
+ * within 3h of midnight — the 1st of the month is still the 1st. If the run
+ * fails outright the claim is released so the next run tries again. (The job
+ * is idempotent anyway, so a duplicate delivery could not double-count.)
+ * A manual or test invocation (no `source: 'aws.events'`) runs it at once.
+ *
+ * The SWEEP runs on every scheduled run: an asynchronous invoke of
+ * CreateReportFunction with `{ __reportSweep: true }`
+ * (game/report-sweep.js). It lives in game/ because it builds through
+ * create-report.js, and the bundler confines each function to its own folder.
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const {
+  DynamoDBDocumentClient, QueryCommand, PutCommand, DeleteCommand,
+} = require('@aws-sdk/lib-dynamodb');
 const { ORGS_INDEX_PK } = require('./shared/tenant');
 const { closeInvoice } = require('./shared/invoices');
 const {
@@ -102,10 +125,80 @@ async function listOrgIds() {
   return ids;
 }
 
+/** EventBridge's scheduled event; anything else is a manual or test run. */
+const isScheduled = (event) => !!event && (event.source === 'aws.events' || event['detail-type'] === 'Scheduled Event');
+
+const USAGE_DAY_PK = 'SCHEDULE#usage-reconcile';
+const usageDayKey = (now) => ({ PK: USAGE_DAY_PK, SK: `DAY#${now.toISOString().slice(0, 10)}` });
+
+/** Take today's usage run. True when this run is the day's first. */
+async function claimUsageDay(now) {
+  try {
+    await db.send(new PutCommand({
+      TableName: process.env.TABLE_NAME,
+      Item: { ...usageDayKey(now), startedAt: now.toISOString(), ttl: Math.floor(now.getTime() / 1000) + 8 * 86400 },
+      ConditionExpression: 'attribute_not_exists(PK)',
+    }));
+    return true;
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') return false;
+    throw error;
+  }
+}
+
+async function releaseUsageDay(now) {
+  try {
+    await db.send(new DeleteCommand({ TableName: process.env.TABLE_NAME, Key: usageDayKey(now) }));
+  } catch (error) {
+    console.error('⚠️ usage-reconcile: could not release today\'s claim:', error && error.message);
+  }
+}
+
+/**
+ * Start the automatic report sweep (game/report-sweep.js) on
+ * CreateReportFunction, asynchronously. Never throws: the usage job is not
+ * held up by a report.
+ */
+async function startReportSweep(now) {
+  const functionName = process.env.REPORT_SWEEP_FUNCTION_NAME;
+  if (!functionName) return { started: false, reason: 'no REPORT_SWEEP_FUNCTION_NAME' };
+  try {
+    const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+    await new LambdaClient({}).send(new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'Event',
+      Payload: Buffer.from(JSON.stringify({ __reportSweep: true, now: now.toISOString() })),
+    }));
+    console.log('🧾 usage-reconcile: report sweep started');
+    return { started: true };
+  } catch (error) {
+    console.error('⚠️ usage-reconcile: the report sweep was not started:', error && error.message);
+    return { started: false, reason: error && error.message };
+  }
+}
+
 exports.handler = async (event = {}) => {
   // `event.now` is a test/manual-run hook only; a scheduled invocation carries
   // no such field and the real clock is used.
   const now = event.now ? new Date(event.now) : new Date();
+  if (!isScheduled(event)) return reconcileUsage(now);
+
+  // Every 3 hours: the report sweep; once a day: the usage job.
+  const reportSweep = await startReportSweep(now);
+  if (!(await claimUsageDay(now))) {
+    console.log('ℹ️ usage-reconcile: already ran today; report sweep only');
+    return { usage: 'already-ran-today', reportSweep };
+  }
+  try {
+    return { ...(await reconcileUsage(now)), reportSweep };
+  } catch (error) {
+    await releaseUsageDay(now);
+    throw error;
+  }
+};
+
+/** The daily usage job, exactly as it ran nightly before the sweep. */
+async function reconcileUsage(now) {
   const period = periodOf(now);
   const previous = previousPeriod(period);
 
@@ -176,6 +269,8 @@ exports.handler = async (event = {}) => {
 
   console.log(`✅ usage-reconcile: ${orgIds.length} orgs, ${repaired.length} counters repaired`);
   return { orgs: orgIds.length, repaired };
-};
+}
 
 module.exports.previousPeriod = previousPeriod;
+module.exports.isScheduled = isScheduled;
+module.exports.USAGE_DAY_PK = USAGE_DAY_PK;

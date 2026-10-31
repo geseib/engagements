@@ -9,6 +9,37 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (reports that always get built, and a redesigned PDF)
+
+**Test:** merge of dev `2c48a433`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Reports build themselves.** Every 3 hours Engage looks for sessions that ran but have no saved report: ended more than a day ago, idle for 12 hours, or within 2 days of their answers being removed. It builds the report for the rounds that were completed, retries Workie's read once for any finished round that is missing it, and lists the rounds that did not run. The host gets "Your report for … is ready" in the bell. If a report still cannot be built a day before the answers are removed, the bell says so.
+- **Reports stay readable after the session's 7 days.** In **Reports** an automatic report reads **Auto-built — open to make the PDF**; **Make the PDF** turns it into a PDF in one click. Events show how many of their items were auto-built.
+- **A redesigned PDF.** A proper cover (the session's title, when it was held, who hosted, the format, and a result strip with people, rounds, responses and the top-voted answer), round openers with a large number, the question and the task, Workie's read in a labelled panel, and a running header and "Page n of N" footer on every page. White paper with the site's colours as accents; it prints well in greyscale. The on-screen report has the same design.
+
+### Fixed
+
+- **The saved PDF never used the report's own styles**: the PDF tool copied the report out of its frame and dropped them, so the site's old styles drew it (yellow cards, emoji medals, "The taskHow…" run together, headings cut across pages). It now uses its own design.
+- **The PDF showed the day it was saved, not the day of the session**, and no host. Both are on the cover now.
+- **A long report could fail to save**: it is now drawn in parts, so very long sessions still produce a PDF.
+
+### What to look at
+
+1. On engage.test, open a session's report and press **Save PDF**. Open the PDF: the cover, the round openers, Workie's read panel, and the header and page numbers on each page.
+2. Print one page in greyscale: it still reads.
+3. Run a short session (two rounds), then leave it. Within about 3 hours of it going idle for 12 hours, or a day after you end it, the bell says the report is ready and **Reports** shows it as **Auto-built**. Press **Make the PDF**.
+
+### Known gaps
+
+- Sessions idle for more than 10 days are not swept, so the first run does not report every old session at once.
+- An auto-built report keeps the session code for 90 days (a saved PDF already did).
+- The event roll-up PDF (the whole day in one document) is not built yet; each item has its own report.
+- Trivia rows do not show per-option counts yet.
+
+---
+
 ## 31 Oct 2026 (event items whose sessions have expired)
 
 **Test:** merge of dev `04720cb5`. Everything below this entry is already on test; this push adds only what is here.

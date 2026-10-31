@@ -96,9 +96,17 @@ exports.handler = async (event) => {
         savedAt: r.savedAt,
         expiresAt: r.expiresAt,
         sessionGone: !meta,
+        // AUTO-BUILT (game/report-sweep.js): the report's data is stored, its
+        // PDF not yet drawn. No s3Key, no passkey, nothing to download — the
+        // console opens it with GET /games/{id}/report and saves the PDF
+        // through the usual save, which replaces this row. `covers` says which
+        // rounds it holds and which the session opened but never ran.
+        auto: r.auto === true,
+        pdf: r.auto === true ? r.pdf === true : true,
+        ...(r.Covers ? { covers: r.Covers } : {}),
         // Relative, resolved by the console against its own API base (the same
         // rule save-report.js gives for its download URL).
-        downloadUrl: `reports/download?key=${encodeURIComponent(r.s3Key)}`,
+        downloadUrl: r.s3Key ? `reports/download?key=${encodeURIComponent(r.s3Key)}` : null,
         // The two items a person with no account needs: the page link is built
         // by the console from gameId + s3Key, and this is the passkey. Only on
         // rows saved since passkeys were kept; an older report has none and is

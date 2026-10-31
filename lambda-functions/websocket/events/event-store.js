@@ -56,6 +56,12 @@ function projectEvent(row) {
     // "N joined" (events M2): joins, not people — a "Not you?" re-join is a
     // second row and counts again. A count only; never a name.
     attendeeCount: Number(r.AttendeeCount) || 0,
+    // WHEN IT GOES (owner, 31 Oct 2026: "Do we mark info around when events
+    // expire"): the row's `ttl` — 90 days after the event's date
+    // (agenda-rules.eventTtl) — as an ISO time. METADATA and the list row
+    // carry the same one (create-event.js, update-event.js). DynamoDB deletes
+    // lazily, so this is when it MAY go, never proof it has.
+    expiresAt: Number(r.ttl) > 0 ? new Date(Number(r.ttl) * 1000).toISOString() : null,
   };
   if (r.SK === META_SK) {
     // THE DAY AS IT RUNS (events M3, run.js): the one live item, if any, and

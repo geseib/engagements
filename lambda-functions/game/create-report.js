@@ -48,7 +48,26 @@ const db = DynamoDBDocumentClient.from(client, {
   }
 });
 
+/**
+ * THE AUTOMATIC REPORT SWEEP (report-sweep.js) arrives on this function as a
+ * direct, asynchronous Lambda invoke from the usage-reconcile schedule — never
+ * over HTTP. API Gateway builds every HTTP event itself, always with a
+ * `requestContext`, and a request body cannot set a top-level field, so this
+ * shape is unreachable from the route; the same reasoning get-ai-summary.js's
+ * `__workerMode` rests on. No new function, no new rule: the stack is near
+ * CloudFormation's 500-resource ceiling.
+ */
+const isSweepInvocation = (event) => !!event
+  && event.__reportSweep === true
+  && !event.requestContext
+  && !event.httpMethod
+  && !event.routeKey;
+
 exports.handler = async (event) => {
+  if (isSweepInvocation(event)) {
+    // Lazy: report-sweep.js requires this file for buildReport.
+    return require('./report-sweep').runSweep({ db, now: event.now ? new Date(event.now) : new Date() });
+  }
   try {
     const { gameId } = event.pathParameters || {};
     
@@ -104,6 +123,57 @@ exports.handler = async (event) => {
       };
     }
 
+    const reportData = await buildReportFrom(gameId, gameMetadata.Item);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        gameId: gameId,
+        report: reportData,
+        message: 'Game report created successfully'
+      }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+
+  } catch (error) {
+    console.error('Create report error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: `Failed to create report: ${error.message}` }),
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    };
+  }
+};
+
+/**
+ * BUILD AND STORE THE REPORT FOR ONE SESSION — with no caller check.
+ *
+ * The HTTP handler above asks `callerMayDriveSession` first and then calls
+ * this; the automatic sweep (report-sweep.js) calls `buildReport` directly
+ * from a scheduled invocation that has no caller at all. This function is not
+ * reachable over HTTP any other way.
+ *
+ * Returns the report (plaintext, as the route answers with it), or null when
+ * the session's METADATA row is gone. Writes it through report-store.js
+ * sealed under the SESSION's org, exactly as the route always has.
+ *
+ * `ttlSeconds` (epoch seconds) is the sweep's 90-day ttl. A stored report's
+ * ttl is never SHORTENED by a rebuild: the host opening an auto-built report
+ * on day 3 must not cut its 90 days back to 30.
+ */
+async function buildReport(gameId, { ttlSeconds = null } = {}) {
+  const res = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: 'METADATA' }
+  }));
+  if (!res || !res.Item) return null;
+  return buildReportFrom(gameId, res.Item, { ttlSeconds });
+}
+
+async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {}) {
+  const gameMetadata = { Item: metadataItem };
+  {
     // Get game state
     const gameState = await db.send(new GetCommand({
       TableName: process.env.TABLE_NAME,
@@ -1214,11 +1284,16 @@ exports.handler = async (event) => {
     };
 
     // Store the report in DynamoDB
+    // 30 days, or the sweep's 90 — and never shorter than the stored copy's.
     const reportRecord = {
       PK: `GAME#${gameId}`,
       SK: 'REPORT',
       ...reportData,
-      ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
+      ttl: Math.max(
+        Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days TTL
+        Number(ttlSeconds) || 0,
+        Number(storedReport && storedReport.ttl) || 0
+      )
     };
 
     // ── THE REPORT IS THE DENSEST ROW IN THE TABLE ───────────────────────────
@@ -1242,23 +1317,9 @@ exports.handler = async (event) => {
 
     console.log(`✅ Report created for game ${gameId}: ${gameStats.totalQuestions} questions, ${gameStats.totalPlayers} players`);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        success: true,
-        gameId: gameId,
-        report: reportData,
-        message: 'Game report created successfully'
-      }),
-      headers: { 'Access-Control-Allow-Origin': '*' }
-    };
-
-  } catch (error) {
-    console.error('Create report error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: `Failed to create report: ${error.message}` }),
-      headers: { 'Access-Control-Allow-Origin': '*' }
-    };
+    return reportData;
   }
-};
+}
+
+module.exports.buildReport = buildReport;
+module.exports.isSweepInvocation = isSweepInvocation;
