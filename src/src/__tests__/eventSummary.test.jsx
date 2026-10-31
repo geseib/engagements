@@ -13,7 +13,9 @@ import fs from 'fs';
 import path from 'path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import EventSummaryDocument from '../components/EventSummary';
-import { eventSummaryData, eventRunning, summaryFileName, REPORT_STATUS } from '../utils/eventSummary';
+import {
+  eventSummaryData, eventRunning, summaryFileName, REPORT_STATUS, hostOf, signedInName,
+} from '../utils/eventSummary';
 
 jest.mock('../components/EventBuilder', () => () => null);
 jest.mock('../utils/eventSummary', () => {
@@ -123,13 +125,13 @@ describe('where the host gets it', () => {
     const HostEventAgenda = require('../components/event/HostEventAgenda').default;
     render(<HostEventAgenda code="KX7Q" />);
     fireEvent.click(screen.getByRole('button', { name: /Save event summary \(PDF\)/ }));
-    await waitFor(() => expect(downloadEventSummary).toHaveBeenCalledWith('KX7Q'));
+    await waitFor(() => expect(downloadEventSummary).toHaveBeenCalledWith('KX7Q', { user: null }));
   });
 
   test('the event\'s row in Reports offers it too, and says it is not kept', () => {
     const panel = fs.readFileSync(path.join(__dirname, '..', 'components', 'ReportsPanel.jsx'), 'utf8');
     expect(panel).toMatch(/Summary PDF/);
-    expect(panel).toMatch(/downloadEventSummary\(event\.code\)/);
+    expect(panel).toMatch(/downloadEventSummary\(event\.code, \{ user: currentUser \}\)/);
     expect(panel).toMatch(/It is not kept here/);
   });
 
@@ -140,5 +142,59 @@ describe('where the host gets it', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     expect(util).not.toMatch(/save-report|saveReportPdf/);
     expect(util).toMatch(/drawReportPdf/);
+  });
+});
+
+/*
+ * HOSTED BY (owner, 2026-10-31: "We want it"). create-event.js keeps the
+ * creator's display name and the team's (sealed); GET /events/{code} returns
+ * them. An event made before that has neither: then the signed-in host's own
+ * name stands in, but only when they made it.
+ */
+describe('Hosted by', () => {
+  const me = { attributes: { sub: 'u_dana', name: 'Dana Whitfield', email: 'dana@example.com' } };
+  const colleague = { attributes: { sub: 'u_other', name: 'Sam Other' } };
+
+  test('the name kept on the event, and its team, print in the overview', () => {
+    const named = eventSummaryData({ ...view, event: { ...view.event, hostName: 'Dana Whitfield', teamName: 'Platform Engineering' } }, reportsBody);
+    expect(named.hostName).toBe('Dana Whitfield');
+    expect(named.teamName).toBe('Platform Engineering');
+    const { container } = render(<EventSummaryDocument data={named} />);
+    const host = container.querySelector('.rpt-ev-host');
+    expect(host.querySelector('dt').textContent).toBe('Hosted by');
+    expect(host.querySelector('dd').textContent).toBe('Dana WhitfieldPlatform Engineering');
+  });
+
+  test('an older event (no kept name) made by the signed-in host: their own name', () => {
+    const older = { ...view, event: { ...view.event, createdBy: 'u_dana' } };
+    expect(eventSummaryData(older, reportsBody, { user: me }).hostName).toBe('Dana Whitfield');
+  });
+
+  // rejects: printing the viewer's name on a colleague's event.
+  test('an older event made by someone else names nobody, and the row is omitted', () => {
+    const older = { ...view, event: { ...view.event, createdBy: 'u_dana' } };
+    const data = eventSummaryData(older, reportsBody, { user: colleague });
+    expect(data.hostName).toBe('');
+    const { container } = render(<EventSummaryDocument data={data} />);
+    expect(container.querySelector('.rpt-ev-host')).toBeNull();
+    expect(container.textContent).not.toContain('Hosted by');
+    expect(container.textContent).not.toContain('Sam Other');
+  });
+
+  test('a kept name wins over the signed-in host', () => {
+    expect(hostOf({ hostName: 'Dana Whitfield', createdBy: 'u_other' }, colleague)).toBe('Dana Whitfield');
+    expect(hostOf({ createdBy: 'u_other' }, null)).toBe('');
+  });
+
+  test('a team with no host name prints as Team', () => {
+    const data = eventSummaryData({ ...view, event: { ...view.event, teamName: 'Platform Engineering' } }, reportsBody);
+    const { container } = render(<EventSummaryDocument data={data} />);
+    expect(container.querySelector('.rpt-ev-host dt').textContent).toBe('Team');
+  });
+
+  test('the signed-in name: name, else given and family, else the email before the @', () => {
+    expect(signedInName({ attributes: { given_name: 'Ada', family_name: 'Lovelace' } })).toBe('Ada Lovelace');
+    expect(signedInName({ attributes: { email: 'grace.liu@example.com' } })).toBe('grace.liu');
+    expect(signedInName(null)).toBe('');
   });
 });

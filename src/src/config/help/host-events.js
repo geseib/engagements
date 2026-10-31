@@ -137,7 +137,7 @@ const eventAgenda = {
             { title: '**Edit details**', text: 'Change the name, date, time, place or the reports default.' },
             { title: '**Run the event**', text: 'Opens the event\'s stage in a new tab, so the agenda stays open here. Once the event is running it reads **Open the stage**. **Open the stage** at the top right goes there in this tab.' },
             { title: '**Add item**', text: 'Adds to the agenda; see the next section.' },
-            { title: '**Save event summary (PDF)**', text: 'Downloads a short PDF of the event: its date, place and agenda, who leads each item, each item\'s state, and for every session whether its report is saved, auto-built, not made yet or gone with its expired session, with the report\'s name and where it is filed (Reports, under the event). Nothing from inside the sessions. It is not kept in Reports; make it again whenever you need it.' },
+            { title: '**Save event summary (PDF)**', text: 'Downloads a short PDF of the event: its date, place, who hosted it and for which team, and its agenda, who leads each item, each item\'s state, and for every session whether its report is saved, auto-built, not made yet or gone with its expired session, with the report\'s name and where it is filed (Reports, under the event). Nothing from inside the sessions. It is not kept in Reports; make it again whenever you need it.' },
             { title: '**Main screen**', text: 'Back to your start screen.' },
           ],
         },

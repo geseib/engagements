@@ -8,6 +8,7 @@ import { adminApiUrl } from '../../utils/adminApi';
 import { navigateTo } from '../../auth/navigate';
 import useFullscreenKey from '../../hooks/useFullscreenKey';
 import { downloadEventSummary } from '../../utils/eventSummary';
+import { useOptionalAuth } from '../../auth/AuthContext';
 import './HostEventAgenda.css';
 
 /**
@@ -33,13 +34,17 @@ export default function HostEventAgenda({ code }) {
   const [title, setTitle] = useState('');
   // The event summary PDF (utils/eventSummary.js): drawing, or why it failed.
   const [summary, setSummary] = useState({ busy: false, error: '' });
+  // The signed-in host: their name stands in on an event made before the
+  // event kept its creator's (utils/eventSummary.js hostOf).
+  const auth = useOptionalAuth();
+  const user = auth && auth.currentUser;
   useFullscreenKey();
 
   const saveSummary = async () => {
     if (summary.busy) return;
     setSummary({ busy: true, error: '' });
     try {
-      await downloadEventSummary(code);
+      await downloadEventSummary(code, { user });
       setSummary({ busy: false, error: '' });
     } catch (err) {
       setSummary({ busy: false, error: `The event summary was not made${err && err.message ? ` (${err.message})` : ''}. Please try again.` });

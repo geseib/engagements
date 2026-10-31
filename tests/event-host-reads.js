@@ -123,6 +123,20 @@ async function seedItem(code, itemId, fields) {
     assert.strictEqual(body.event.title, 'Q4 Kickoff');
     assert.deepStrictEqual(body.items.map((i) => i.itemId), ['it_00000001', 'it_00000002', 'it_00000003', 'it_00000004', 'it_00000005']);
   });
+  // Who made it (31 Oct 2026, the event summary's "Hosted by"): sealed at
+  // rest, opened for the host. This event's token carried no name.
+  await check('the host read carries who made it, decrypted', async () => {
+    assert.strictEqual(body.event.hostName, '');
+    assert.strictEqual(body.event.teamName, NW);
+    const named = bodyOf(await create(request({
+      method: 'POST', path: '/events',
+      requestContext: { authorizer: { lambda: { userId: 'u_dana', groups: 'hosts', orgId: NW, orgIds: NW, orgRole: 'member', name: 'Dana Whitfield' } } },
+      body: { title: 'Named', place: 'Room', startsAt: startsIn(40), timeZone: 'Europe/London' },
+    }))).event;
+    const got = await read(named.code, asHost(NW));
+    assert.strictEqual(bodyOf(got).event.hostName, 'Dana Whitfield');
+    assert.ok(!/"ct":/.test(got.body), 'an envelope reached the response');
+  });
   await check('every word decrypted, no envelope anywhere', () => {
     assert.strictEqual(body.items[0].title, 'How well do you know our customers?');
     assert.strictEqual(body.items[1].description, 'Coffee');
