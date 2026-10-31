@@ -562,3 +562,317 @@ guided vs quick is not intuitive." The mockups are in `index-3.html`, and each P
   - A first-time host gets the gallery and a returning host gets chips, in both states.
 - **Help:** replace the Guided/Quick paragraph in `host-setup.js` with one line about Hide and
   the rail.
+
+## Round 4 — show the next decision, not all of them
+
+*31 Oct 2026. The owner, on the shipped round-3 dialog: "i wonder if it would be less daunting if
+we revealed the sections as needed? As this seems overwhelming to a newbie". The mockups are in
+`index-4.html`, and each PNG is prefixed `4-`. The review is in `reviews/round-4.md`. Rounds 1–3
+stand except where this section says otherwise. No application code has changed.*
+
+### The problem
+
+The owner's screenshot (about 1440px wide) shows every section at once:
+
+- Name it.
+- Format: seven chips, Compare formats and a description.
+- Question set: search, Browse all, Your question sets and Make a new set.
+- The names card.
+- "OPTIONAL — EVERY ONE HAS A SAFE DEFAULT", with Background for Workie and a 30-word Advanced
+  line.
+- A storyboard pane with a stage index.
+- A status line of Title · Format · Questions.
+- Create.
+
+That screenshot is the **returning host's** view: chips, with the last format already chosen. A
+true first-timer today sees a heavier version. They get seven meeting chips and seven gallery
+cards, each with a mini picture that the pane beside them draws again at three times the size. A
+greyed "3 Questions — Choose a format first" waits underneath.
+
+Every one of those things was added for a reason in rounds 1–3. The problem is that they all
+compete at once, so a newcomer cannot tell which one to deal with first.
+
+### Decisions
+
+1. **One rule for everyone: a section appears when the decision above it is made, and stays
+   while the dialog is open.** This applies to every host, not only first-timers.
+   - A host with history is not given a different dialog. They start two decisions in, because
+     their last format is preselected, so Question set is there on open (frame 4e).
+   - There is no `hasCreated` branch for what is shown and no remembered "revealed" state.
+     Everything is derived from the decisions on screen.
+   - Round 3 removed a mode for exactly this reason: a dialog whose shape depends on something
+     the host cannot see. (Fork 2 below.)
+2. **The title gates nothing.** It is required only to create. Typing never reveals anything, so
+   nothing appears while the host is mid-word, and a host who decides "it's a quiz" before
+   naming it is not held up. Frame 4b shows that after the title, only the foot's line changes;
+   Enter moves focus to the formats, as it does today.
+3. **Name it and Format are on screen from the start.** Format is the interesting decision, and
+   the pane's preview follows the card under the pointer or focus, so it helps a first-timer
+   choose.
+4. **Choosing a format reveals Question set.** It appears with a 180ms fade and a 4px rise, once
+   per dialog; under reduced motion it is simply there. It lands directly under Format, and its
+   heading is on the first screen at 1440×900 and 1280×720 (frames 4c, 4f).
+5. **Picking a set reveals the names card, Background for Workie and Advanced.** Before there is
+   a set there is nothing to be anonymous about, and the first-time reviewer said the names card
+   "turned up right when the questions did".
+6. **Create is always in the foot.** Until the decisions are in, it is outlined, and the foot
+   says "Still needed: a title, a format and a question set." (shortening as each is made). Once
+   ready, the foot says "Nobody can join until you start it." and Create fills.
+   - The button is `aria-disabled`, not `disabled`, so it stays reachable.
+   - Pressing it early moves focus to the first gap and says which (review A1).
+7. **The right pane is present from the first frame, kept quiet** (Fork 1 below).
+   - **Before a format is chosen**, it shows one sentence ("Pick a format and this side shows
+     what happens in the room, stage by stage.") and **one** example stage, labelled "Example ·
+     Call & Answer, stage 1 of 6". There is no index and no storyboard.
+   - **While a gallery card has focus or the pointer**, the pane shows that card's storyboard,
+     debounced (shipped), with "A preview of the card you are on".
+   - **Once a format is chosen**, the pane shows the full storyboard and its index.
+   - Hide and the rail are unchanged.
+8. **The pane's status line is dropped**, because the foot's "Still needed" says the same thing
+   beside the button it concerns. Edit mode keeps its summary rows.
+9. **Density cuts, for everyone:**
+   - **No step numbers or ticks** (1, ✓, 3). They counted steps that waited on screen, and
+     nothing waits now. A finished section shows its answer, and that is the tick.
+   - **No "OPTIONAL — EVERY ONE HAS A SAFE DEFAULT" header.** Two quiet fold lines remain:
+     "Background for Workie · Optional" and "Advanced · Defaults: questions shuffled, Workie's
+     standard summary" (or "Changed: …" in amber). The full defaults sentence moves inside the
+     fold. The names rule was being stated twice on one screen, on the names card and in the
+     Advanced line (design-system hard rule 5).
+   - **The gallery becomes text cards, three across, with no mini pictures.** The pane draws the
+     same pictures larger and follows focus. Build Room and Event share the sixth cell as two
+     quieter rows under "Bigger than one session", each with a three-word line and "each
+     continues on its own page". This makes the gallery two rows instead of two rows of tall
+     picture cards, and is what puts the revealed section on the first screen at 1280×720.
+   - **The title's help sits beside its label**, which saves a line.
+   - **"Your question sets" shows only to a host who has a set**; otherwise there is one link,
+     "Make your own set".
+   - **A one-line explanation of what a set is** ("The questions you will ask. Start from a
+     ready-made set; you can switch topics off once it is picked.") shows only when "Used by you
+     lately" is empty.
+10. **On a phone, "How it runs" is a closed fold** (it was open in round 3). Open, its stacked
+    stages push the revealed Question set two screens down (frame 4g).
+
+### The reveal rules, precisely
+
+| Section | Shown when | Hidden again when |
+|---|---|---|
+| Name it | Always | Never |
+| Format (gallery or chips, by `hasCreated` as today) | Always | Never |
+| Question set | `engagementType` is set. On open this is true for a host whose `lastFormat` was preselected | Never for a session format. Choosing Build Room or Event puts "Next: the … page" (`OtherFormatHandoff`) in the **same slot**; choosing a session format again brings Question set back with the set it had (`setByFormat`, shipped) |
+| Topics | A set is picked (unchanged) | The set is cleared or the chooser is open (unchanged) |
+| Names card (C&A, Survey), Background for Workie (C&A), Advanced | A set has been picked **at any point** while the dialog is open (`revealed` latch, dialog-local) | Never while open. Each shows only for the formats it applies to, as today. A hand-off format hides them along with Question set; returning brings them back |
+| Gallery → chips | A set is picked (shipped `galleryDone`), or a hand-off format is chosen (shipped) | — |
+| Create | Always | Never. `aria-disabled` + "Still needed: …" until title, format and set are in (or, on a hand-off, until the format is chosen and not blocked) |
+| Edit mode | Everything, from the start | — |
+
+**Motion.** The entrance is opacity 0→1 plus translateY(4px→0) over 180ms ease-out, and runs
+once per section per dialog. The base CSS is the end state; the animation is declared only under
+`prefers-reduced-motion: no-preference`. Nothing animates height or the position of other
+content. Swapping a section's contents (a format change) never animates.
+
+**Focus.** A reveal never moves focus. Focus moves only where it does today: Enter in the title
+goes to the format's tab stop, and Enter on a format goes to the set search. New sections follow the current one in DOM order, so the next Tab reaches them.
+Each is a `<section aria-labelledby>` with an `h3`.
+
+**Announcements.** There is one polite live region (the existing `.gsd-sr`) and at most one
+message per action:
+
+- "Question set is below." on its first reveal only.
+- "Next: the Build Room page, below." (or "the event page") once per swap to a hand-off format.
+- Nothing when returning to a session format, or when names and options appear. They arrive
+  below the set just picked and are the next Tab stops, and a second message would talk over
+  the chooser's own feedback on the pick.
+- A meeting chip's reason and the reveal are one message.
+- The foot's "Still needed" is **not** live.
+
+**Create pressed early** (click, Enter or ⌘/Ctrl+Enter) moves focus to the first gap, in the
+order title, format tab stop, set search. It announces "Add a title first." / "Pick a format
+first." / "Pick a question set first." The shipped queue-while-topics-load (`pendingCreate`) is
+unchanged.
+
+### What stays for experienced hosts
+
+- The last format is preselected and marked "last", so Question set is on screen at open.
+- The search shows "Used by you lately" on focus.
+- The rail is remembered if they hid the pane.
+- ⌘↵ and the keycaps stay.
+- The key path is unchanged: type the title, Tab, Tab, Enter, ⌘↵.
+
+What they lose is the step numbers, the status line, the uppercase header and 25 words of the
+Advanced line. The names card and options now arrive with the set, which costs no keys: in the
+review, Sam never touches options before the set.
+
+### Forks
+
+| | A (recommended) | B |
+|---|---|---|
+| **1. The pane before a format is chosen** | Present from the start, quiet: one sentence and one labelled example stage (frame 4a) | Absent until a format is chosen (frame `4-fork1-B-no-pane-1440.png`) |
+| Why | B is calmer on open, but the pane's arrival takes 420px from the form at the moment of the click, so the cards re-wrap under the pointer that just pressed one. It also loses the hover and focus preview that helps a first-timer choose (4b). | |
+| **2. Who gets the reveal** | Everyone, by one derived rule (frame 4e) | `hasCreated` hosts see every section at once, as in the proposal (frame `4-fork2-B-expert-all-1440.png`) |
+| Why | B is no faster (same key path), and it reintroduces two shapes of one dialog chosen by history the host cannot see, which is round 3's lesson. A first-timer's second visit would look different from their first. | |
+
+### Frames
+
+| # | File | What it shows |
+|---|---|---|
+| 4a | `4-a-open-1440.png` | First time, on open: Name it and Pick a format only; text cards; the quiet pane; "Still needed" in the foot |
+| 4b | `4-b-title-1440.png` | After the title and Enter: focus on the first card, the pane previewing it; nothing revealed |
+| 4c | `4-c-format-chosen-1440.png` | Retro pressed → Call & Answer; Question set revealed (dashed outline = annotation); full storyboard |
+| 4d | `4-d-ready-1440.png` | Set picked: chips, topics, names card, two quiet optional lines; Create filled |
+| 4e | `4-e-experienced-1440.png` | A host with history: last format chosen, Question set with recents, pane as the rail |
+| 4f | `4-f-1280x720.png` | 4c on a short laptop: the revealed heading is on the first screen |
+| 4g | `4-g-phone-390.png` | 4c on a phone: format rows, the storyboard folded, Question set revealed |
+| Fork 1 B | `4-fork1-B-no-pane-1440.png` | No pane until a format is chosen (not recommended) |
+| Fork 2 B | `4-fork2-B-expert-all-1440.png` | A returning host sees every section at once (not recommended) |
+
+### Open questions for the owner
+
+1. **Show three ready-made sets under the search for a first-timer?** Dana asked for it. The
+   cost is a taller revealed section that no longer lands on the first screen at 1280×720, and a
+   choice of *which* three (there is no "popular" signal today).
+2. **Text cards instead of picture cards in the gallery.** The pictures were round 1's "flashy
+   way to show the difference". They live on, larger, in the pane. Is that acceptable?
+
+### For the builder
+
+**`src/src/components/GameSetupDialog.jsx`**
+
+- **The reveal.**
+  - Add a dialog-local `revealed` ref/state, set to true the first time `newGameSetId` is
+    non-empty. Seed it true in edit mode.
+  - Render `questionsStep` only when `hasFormat`. Delete the `is-later` placeholder branch and
+    "Choose a format first, then …".
+  - Render `namesBlock` and `optionalBlock` only when `revealed` (and `hasFormat && !isOther`,
+    as now).
+- **The entrance.**
+  - Add a class `gsd-reveal` on a section's first mount per dialog. Track it in a `Set` ref of
+    section ids already shown; skip the class after the first time.
+- **Announcements.**
+  - Write to the existing `announce` state, once per first reveal and once per hand-off swap.
+  - In `pickMeeting`, compose the reason and the reveal into one string. The reason paragraph
+    loses its own `aria-live`, and the single region speaks.
+- **Step numbers.**
+  - Remove `stepMark` and every `gsd-step-n`. The headings stay `h3`; "Pick a format" / "Format"
+    is unchanged.
+  - Move the title help into the heading row.
+- **Optional.**
+  - Remove the `gsd-optional-h` heading.
+  - The briefing summary reads "Optional" (or "added · Workie will use it").
+- **Create.**
+  - Replace `disabled={!canCreate || busy}` with `disabled={busy}` and
+    `aria-disabled={!canCreate || undefined}`.
+  - Add `aria-describedby` pointing at a new `#gsd-need` foot line.
+  - In `submit()`, when `!canCreate`, focus the first gap (`titleRef`, then `focusFormat()`, then
+    `#gsd-set-search`) and `setAnnounce(...)`.
+  - The ⌘↵ handler takes the same path when not ready (keep the `readyButTopics` queue first).
+- **The foot note.**
+  - When `!canCreate && !isOther && !isEdit`, the foot shows "Still needed: …", built from the
+    three booleans.
+  - Otherwise it shows today's notes.
+- **The pane.**
+  - Pass `preview='example'` with a new `exampleOnly` flag when nothing is chosen and nothing is
+    hovered.
+  - Keep `'hover'` for the focused or pointed card.
+- **The phone fold.** Default closed: `open={!howHidden && !narrow}` becomes a separate
+  `foldOpen` state, defaulting to false on a phone.
+
+**`src/src/components/FormatWalkthrough.jsx`**
+
+- With `exampleOnly`, render the one-sentence welcome, the "Example · {label}, stage 1 of n"
+  label and the first stage only. There is no index.
+- The `'hover'` note becomes "A preview of the card you are on. Click it, or press Enter, to
+  choose it."
+
+**`src/src/components/CreateSummary.jsx`**
+
+- Drop `StatusLine` and its `gsd-side-pin` in create mode. `SummaryRows` stays for edit.
+
+**`src/src/components/FormatPicker.jsx`** (gallery skin)
+
+- Drop `FormatPreview` from the cards.
+- Lay the session formats out as three columns.
+- Render the hand-off options as compact rows inside one "Bigger than one session" cell. They
+  stay radios in the same group, so the roving tabindex is unchanged. The cell is
+  `role="presentation"`, and each row is described by its line plus a shared "each continues on
+  its own page" id.
+
+**`src/src/components/SessionOptions.jsx` + `config/setupDefaults.js`**
+
+- Add a `brief` field to `advancedSummary()`:
+  - "Defaults: questions shuffled, Workie's standard summary", leaving out whatever the names
+    card already states;
+  - or `lead` alone when something changed.
+- The closed summary shows `brief`. The full sentence (`lead` + `rest`) moves to the top of
+  `.gsd-adv-body`.
+
+**`src/src/components/SetChooser.jsx`**
+
+- With no recents (a first-timer), show "Browse all N sets" as a button beside the search, and
+  the one-line explanation above it.
+- Show "Your question sets" only when the host owns a set of this format; otherwise show "Make
+  your own set" alone.
+
+**`src/src/components/GameSetupDialog.css`**
+
+- Remove `.gsd-step-n`, `.gsd-later`, `.gsd-optional-h` and `.gsd-stat` (and their short-height
+  overrides).
+- Add `.gsd-reveal` with the entrance under `prefers-reduced-motion: no-preference` only, with
+  the end state as the base.
+- Add the three-column text gallery and the hand-off cell.
+- Restyle `.gsd-foot-need` and the `aria-disabled` primary, reusing the outlined disabled style
+  already measured at 7.0:1.
+
+**`src/src/config/help/host-setup.js`**
+
+- In "Create engagement, field by field" and "Topics, names and creating":
+  - Sections appear as each decision is made.
+  - Say what "Still needed" means, and that Create pressed early takes you to the gap.
+  - No step numbers.
+  - The Optional wording changes.
+  - The phone fold is closed.
+- Run `node scripts/help-drift.js`. `helpContent.test.js` must still pass.
+
+**Tests that will change** (in `src/src/__tests__/`)
+
+- **`newEngagementDialog.test.jsx`**
+  - "nothing is chosen, step 3 is visible but waits…" (`/Choose a format first/`) becomes "only
+    Name it and Format on open; no Question set section".
+  - `toBeDisabled()` on Create (lines ~126, 147, 185) becomes `aria-disabled="true"`, plus a
+    new test that pressing it focuses the first gap and announces.
+  - "names rule beside the questions", "Workie is introduced in one line" and "V4: Background
+    for Workie…" render with `lastFormat` only. They now need a picked set (`initialSetId`) for
+    the names card and the optional lines to appear.
+  - "nothing chosen: the pane shows Call & Answer, said to be an example" now expects the
+    example-only pane (one stage, no index).
+  - "a phone: How it runs is a fold under Format, open unless hidden" becomes closed by
+    default.
+  - "B7: compact draws no pinned summary row" still holds.
+  - "R3 (1366/1280): on a short window the gallery cards drop only their picture" is retired
+    (no pictures).
+  - "O3/E4/N1" and "the keyboard path" tab-order tests: Create is now a tab stop when not ready.
+    Re-check the filter at line ~599 (`!el.disabled`).
+- **`gameSetupDialog.test.jsx`**
+  - Create `toBeDisabled()` at ~298–318 and ~1126 becomes `aria-disabled`.
+  - The Advanced line assertion at ~626 (full "Using the defaults — …" sentence) now reads the
+    closed `brief`, and the full sentence moves into the open fold.
+- **`gameSetupGoal.test.jsx`**: `create()` `toBeDisabled()` at ~81 and ~106 becomes
+  `aria-disabled`. The goal's `role="alert"` reason is unchanged. The `Changed: a goal of 5
+  questions.` assertion on `gsd-adv-summary` still holds (the lead shows closed).
+- **`setupDefaults.test.js`**: the existing sentences are unchanged. Add cases for `brief`.
+- **`sessionOptions.test.jsx`**: the closed summary text.
+- **`gameSetupPalette.test.js`**
+  - Line ~135 (`.gsd-later` colour) is retired.
+  - Add composited checks for `.gsd-foot-need` and the hand-off cell's 12px muted line.
+  - Add a contract that `.gsd-reveal`'s animation is declared only inside
+    `prefers-reduced-motion: no-preference`, and that no `@keyframes` used by it ends away from
+    the base rule.
+- **`formatWalkthrough.test.jsx`**: the example-only render (one stage, label, no index) and the
+  new hover note.
+- **`gameSetupDialogDom.test.jsx`**: re-record on purpose (`-u`), with a header note naming
+  round 4.
+- **New behaviour tests:**
+  - choosing a format reveals Question set, and arrowing formats announces once;
+  - a set pick reveals names and options, and switching format keeps them;
+  - Build Room swaps the slot and announces once;
+  - edit mode shows everything;
+  - a host with `lastFormat` sees Question set on open but no names card until a set is picked.
