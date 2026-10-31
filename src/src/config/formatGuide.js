@@ -174,13 +174,13 @@ export function historyFacts(games = [], offered = []) {
 
 /*
   A CACHE OF THOSE TWO VALUES, so the first paint picks gallery or chips
-  before the request returns, and the Guided | Quick choice. Both are
+  before the request returns, and whether "How it runs" is hidden. Both are
   per-viewer conveniences whose loss costs one click (README §6), so both live
   in localStorage, wrapped: a private window or blocked storage throws on
   access, and the dialog must work exactly the same without it.
 */
 const HISTORY_KEY = 'engage.newEngagement.history';
-const VIEW_KEY = 'engage.newEngagement.view';
+const HOW_KEY = 'engage.newEngagement.howItRuns';
 
 function storage() {
   try {
@@ -211,26 +211,24 @@ export function writeHistoryCache(facts) {
 }
 
 /*
-  GUIDED BY DEFAULT, FOR EVERYONE (README round 2, decision 1; the owner: "it
-  seems to default to the simple mode with no way to switch back"). Round 1's
-  "derive compact from history" is retired: nothing stored means Guided.
+  "HOW IT RUNS", SHOWN OR HIDDEN (README round 3, option A). One layout: the
+  storyboard sits beside the form, open by default; its Hide folds it to a
+  rail. The choice is per browser; lost or unreadable, the pane simply shows,
+  which is the safe default. (Round 2's Guided | Quick switch is retired.)
 */
-export const VIEW_MODES = Object.freeze(['guided', 'quick']);
-
-/** 'guided' | 'quick' — 'guided' when nothing (or nothing readable) is stored. */
-export function readViewMode() {
+export function readHowHidden() {
   try {
-    const v = storage() && storage().getItem(VIEW_KEY);
-    return v === 'quick' ? 'quick' : 'guided';
+    return Boolean(storage() && storage().getItem(HOW_KEY) === 'hidden');
   } catch (e) {
-    return 'guided';
+    return false;
   }
 }
 
-export function writeViewMode(value) {
+export function writeHowHidden(hidden) {
   try {
     const s = storage();
-    if (s) s.setItem(VIEW_KEY, value === 'quick' ? 'quick' : 'guided');
+    if (!s) return;
+    if (hidden) s.setItem(HOW_KEY, 'hidden'); else s.removeItem(HOW_KEY);
   } catch (e) { /* a convenience: nothing depends on it */ }
 }
 

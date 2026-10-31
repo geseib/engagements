@@ -382,10 +382,14 @@ describe('the card never moves, and nothing animates for ever', () => {
     expect(body).toMatch(/\.gsd \.gsd-side-pv\s*\{[^}]*overflow-y:\s*auto/);
   });
 
-  test('the layouts are fixed sizes: Guided, Quick at 1060 (owner round 2), and the guide wide', () => {
+  test('one layout at a fixed size (owner round 3), the rail inside it, and the guide wide', () => {
     expect(body).toMatch(/\.gsd\.new-game-dialog\s*\{[^}]*width:\s*min\(1240px, calc\(100vw - 48px\)\)/);
-    expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--compact\s*\{[^}]*width:\s*min\(1060px/);
+    // Guided | Quick and its 1060px Quick width are gone (README round 3).
+    expect(body).not.toMatch(/gsd--compact/);
+    expect(JSX.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/gsd--compact/);
     expect(body).toMatch(/--gsd-side-w:\s*420px/);
+    // Hidden, the pane is a 56px rail in the same card.
+    expect(body).toMatch(/\.gsd \.gsd-body\.has-rail\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 56px/);
     // The Format guide uses the window whichever view opened it (README round 2, decision 6).
     expect(body).toMatch(/\.gsd\.new-game-dialog\.gsd--guide\s*\{[^}]*width:\s*min\(1760px, calc\(100vw - 48px\)\)/);
     // Each guide card's name stays on one line.

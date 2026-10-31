@@ -12,10 +12,10 @@ import { formatGuide } from '../config/formatGuide';
  * were the least readable way to say what happens (the owner's screenshot,
  * feedback/owner-2026-10-30.md). Two rows instead:
  *
- *   top     the shown format's walkthrough — picture, plain summary, the
- *           step with You / Phones / Room screen, Back / dots / Next / Play,
- *           a rail of every step — and the ONE "Use …" button, beside the
- *           name, where no column can clip it
+ *   top     the shown format's storyboard (round 3) — its name, the ONE
+ *           "Use …" button where no column can clip it, the plain summary
+ *           and the stage index on the left; the stage cards in a row that
+ *           scrolls sideways inside the panel
  *   bottom  seven short cards, one per format, acting as TABS (← → move and
  *           show); group labels above them
  *

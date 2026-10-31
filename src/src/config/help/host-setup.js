@@ -113,7 +113,7 @@ const quickStart = {
           items: [
             'Choose **Create engagement** on the start screen.',
             'Under **Name it**, type the session\'s name. The room sees it, so make it the name of the meeting.',
-            'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Format guide** to see how each one runs.',
+            'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Compare formats** to see how each one runs.',
             'Every topic in the set starts on. Switch off any you want to skip.',
             'Press **Create engagement**.',
           ],
@@ -218,17 +218,17 @@ const gameSetup = {
   sections: [
     /*
       GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
-      heading "New engagement" | "Start a new engagement"; the Guided | Quick
-      switch in the head (owner round 2: Guided by default for everyone,
-      remembered in localStorage, formatGuide.js readViewMode; no switch on
-      an edit or a phone). Guided: the side pane walks through the format
-      (FormatWalkthrough.jsx, config/formatWalkthrough.js) over a status line;
-      a first-time host gets the gallery, a host with history chips. Quick:
-      the 1060px form, no pane, keycaps. Enter on a format chip focuses the
-      set search. Steps: "Name it" (autofocus; Enter goes to the next empty
+      heading "New engagement" | "Start a new engagement"; one layout (owner
+      round 3, option A): the form, and "How <format> runs" beside it
+      (FormatWalkthrough.jsx, config/formatWalkthrough.js) over a status
+      line, open by default; its Hide folds it to a rail "Show how <format>
+      runs" (formatGuide.js readHowHidden, localStorage); on a phone a fold
+      under Format. A first-time host gets the gallery, a host with history
+      chips. Keycaps on Create. Enter on a format chip focuses the set
+      search. Steps: "Name it" (autofocus; Enter goes to the next empty
       step), "Pick a format" gallery with "Planning a…" chips
-      (config/formatGuide.js MEETING_TYPES), or "Format" chips; "Format
-      guide" top right of the step; one radio group (arrows choose).
+      (config/formatGuide.js MEETING_TYPES), or "Format" chips; "Compare
+      formats" top right of the step; one radio group (arrows choose).
       "Question set": the recents list ("Used by you lately", "Browse all"),
       "Your question sets · Make a new set"; the set is remembered per format
       while open. "Topics in this set" (all on, "Switch off any you want to
@@ -291,12 +291,12 @@ const gameSetup = {
     /*
       FormatPicker.jsx (gallery / chips, one radio group), MeetingTypeChips.jsx
       ("Planning a…", config/formatGuide.js MEETING_TYPES), FormatCompare.jsx
-      (the Format guide: the walkthrough over seven format cards acting as
+      (the Format guide: the storyboard over seven format cards acting as
       tabs, one "Use …" button; one format at a time on a phone),
-      FormatWalkthrough.jsx (How … runs, Step n of m, You / Phones / Room
-      screen, Back / Next / the dots, Play: every 8 seconds, paused while the
-      pointer or focus is in the pane, not offered under reduced motion; the
-      last dot What you get). The view: readViewMode / writeViewMode.
+      FormatWalkthrough.jsx (How … runs: stage cards to scroll through, each
+      a picture, a numbered title and a plain description, ending What you
+      get; a row of numbered buttons jumps to a stage). Hide / Show:
+      readHowHidden / writeHowHidden.
     */
     {
       id: 'choosing-a-format',
@@ -307,13 +307,13 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Planning a…', text: 'Press the kind of meeting (Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day) and it picks a format and says why. You can still pick any other.' },
-            { title: 'How it runs', text: 'In Guided view the panel on the right walks through the chosen format a step at a time: what you do, what phones show and what the room screen shows, ending with what you get. **Back**, **Next** and the dots move through it; **Play** steps on every 8 seconds and pauses while your pointer or focus is in the panel.' },
-            { title: 'Format guide', text: 'Opens wide from either view: the walkthrough on top and a short card for every format below. Pick a card to see how it runs, then press the Use button beside its name to go back to the form with it chosen. Your title and choices are kept.' },
+            { title: 'How it runs', text: 'Beside the form, the chosen format as a storyboard to scroll through: each stage a picture of the room screen and a phone with a plain description, from the first question to what you get at the end. The numbers at the top jump to a stage.' },
+            { title: 'Compare formats', text: 'Opens the Format guide, wide: the storyboard on top and a short card for every format below. Pick a card to see how it runs, then press the Use button beside its name to go back to the form with it chosen. Your title and choices are kept.' },
           ],
         },
         {
           t: 'p',
-          text: 'The dialog opens in **Guided** view, with the walkthrough. **Quick**, at the top of the dialog, is the same form on its own, narrower and without the walkthrough, for a host who knows the formats. Whichever you pick is kept in this browser. Once you have created a session, the last format you used is chosen for you.',
+          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format. Once you have created a session, the last format you used is chosen for you.',
         },
       ],
     },
