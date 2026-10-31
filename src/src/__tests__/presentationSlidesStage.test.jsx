@@ -21,7 +21,7 @@
  * deck unasked, or does not follow the stage's slide once it shows it.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import EventStage from '../components/event/EventStage';
 import EventAttendeePage from '../components/event/EventAttendeePage';
 
@@ -148,6 +148,11 @@ describe('the stage', () => {
     key('ArrowRight');
     expect(api.runEvent).not.toHaveBeenCalled();
     key(' ');
+    // SPACE reaches the dock's step; on a preview before the day has
+    // started, that step asks first (owner, 31 Oct 2026).
+    const ask = await screen.findByRole('dialog', { name: 'Start the event?' });
+    expect(api.runEvent).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Start the event' }));
     await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', TALK.itemId));
     expect(await screen.findByText('Now presenting')).toBeInTheDocument();
     expect(at()).toBe('Slide 6 of 12');
@@ -249,6 +254,10 @@ describe('the stage', () => {
     expect(screen.queryByTestId('slides')).toBeNull();
     expect(api.readDeck).not.toHaveBeenCalled();
     key('ArrowRight');
+    // → is the dock's step again; that step asks first here (a preview, and
+    // the first item of the day).
+    const ask = await screen.findByRole('dialog', { name: 'Start the event?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Start the event' }));
     await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'start', bare.itemId));
   });
 });

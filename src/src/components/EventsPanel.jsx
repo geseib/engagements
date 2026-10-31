@@ -231,7 +231,16 @@ export default function EventsPanel({
                       </button>
                       {event.place && <span className="evts-sub" title={event.place}>{event.place}</span>}
                     </td>
-                    <td className="evts-when">{rules.formatEventWhen(event.startsAt)}</td>
+                    <td className="evts-when">
+                      {rules.formatEventWhen(event.startsAt)}
+                      {/* WHEN IT GOES (owner, 31 Oct 2026): the event and its
+                          join list are kept until 90 days after its date. */}
+                      {rules.formatKeptUntil(event.expiresAt) && (
+                        <span className="evts-sub" title="The event, its agenda and its join list are kept until this date, then deleted. Reports already made are kept in the session history.">
+                          {`Kept until ${rules.formatKeptUntil(event.expiresAt)}`}
+                        </span>
+                      )}
+                    </td>
                     <td className="evts-num">{event.itemCount}</td>
                     <td>{event.access === 'invite' ? 'Invite only' : 'Anyone with the code'}</td>
                     <td className="evts-mono">{event.code}</td>

@@ -19,6 +19,11 @@
  *   { action: 'extend',    itemId }  a live break: back five minutes later
  *   { action: 'end-event' }          every live or paused item ends, and the
  *                                    event is over
+ *   { action: 'reopen-event' }       an ended event runs again while it is
+ *                                    still kept (before its ttl): people can
+ *                                    join, and items that never ran can go
+ *                                    live. Finished items stay finished
+ *                                    (owner, 31 Oct 2026)
  *   { action: 'page', itemId, page } the slide a presentation's stage is on
  *                                    (27 Sep 2026): kept on the item, so a
  *                                    reload lands on it and phones following
@@ -71,7 +76,7 @@ const { json, readBody } = require('./event-http');
 const S = require('./event-store');
 const C = require('./child-session');
 
-const ACTIONS = Object.freeze(['prepare', 'start', 'resume', 'pause', 'end', 'extend', 'end-event', 'page']);
+const ACTIONS = Object.freeze(['prepare', 'start', 'resume', 'pause', 'end', 'extend', 'end-event', 'reopen-event', 'page']);
 const EXTEND_MINUTES = 5;
 const MINUTE_MS = 60 * 1000;
 
@@ -541,6 +546,53 @@ async function endEvent(db, tableName, { meta, code }) {
 }
 
 /**
+ * THE DAY, AGAIN — an ended event reopened (owner, 31 Oct 2026: "resume
+ * events should be an option as long as its within the ttl timeframes").
+ *
+ * What ending did, and what reopening does about it:
+ *   - live and paused items ENDED, with their sessions (session-end.js). Those
+ *     stay done: a session that ended is over, its report is kept, and
+ *     nothing here brings it back;
+ *   - planned items stayed planned, and their previews were let go
+ *     (letPreviewGo). They can go live again — a preview is made afresh on
+ *     the next Open;
+ *   - joining was refused (attendees.js refuses State ENDED). It opens again.
+ *
+ * It goes back to LIVE if anything ever ran, else SCHEDULED, which is what
+ * the event would read had it not been ended. Refused once the event is past
+ * its `ttl`: DynamoDB deletes lazily, so a row can outlive its date, and a
+ * reopened event must not be one the table is about to drop. Phones learn
+ * from RunRev, which every run action bumps (get-agenda.js `now`).
+ */
+async function reopenEvent(db, tableName, { meta, code }) {
+  if (meta.State !== 'ENDED') return { refusal: refuse('This event has not ended.', 'event_not_ended') };
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!(Number(meta.ttl) > nowSeconds)) {
+    return { refusal: refuse('This event is past the date it is kept until, so it cannot be reopened.', 'event_expired') };
+  }
+  const rows = await S.readItems(db, tableName, code);
+  const back = rows.some((row) => stateOf(row) !== 'planned') ? 'LIVE' : 'SCHEDULED';
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: metaKey(code),
+      UpdateExpression: 'SET #st = :back, ReopenedAt = :now REMOVE EndedAt',
+      ConditionExpression: '#st = :ended AND #ttl > :nowSeconds',
+      ExpressionAttributeNames: { '#st': 'State', '#ttl': 'ttl' },
+      ExpressionAttributeValues: {
+        ':back': back, ':ended': 'ENDED', ':now': new Date().toISOString(), ':nowSeconds': nowSeconds,
+      },
+    }));
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') return { refusal: raced() };
+    throw error;
+  }
+  await markList(db, tableName, meta, code, back);
+  console.log(`🔁 run: EVENT#${code} reopened (${back})`);
+  return {};
+}
+
+/**
  * A PREVIEW NOBODY TOOK LIVE, at the end of the day (prepare): its session
  * was never opened and now never will be, so it goes — and its code with it,
  * rather than being held for the unstarted TTL's ninety days — and the item
@@ -654,6 +706,8 @@ async function runEvent(db, tableName, request, meta, code) {
   let outcome;
   if (action === 'end-event') {
     outcome = await endEvent(db, tableName, { meta, code });
+  } else if (action === 'reopen-event') {
+    outcome = await reopenEvent(db, tableName, { meta, code });
   } else {
     if (meta.State === 'ENDED') return refuse('This event has ended.', 'event_ended');
     const itemId = String(body.itemId || '');

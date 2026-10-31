@@ -524,6 +524,19 @@ function weekdayOf(s) {
   return WEEKDAYS[new Date(Date.UTC(s.y, s.mo - 1, s.d)).getUTCDay()];
 }
 
+/**
+ * `Thu 7 Jan 2027` — the day an event may be forgotten, from the host view's
+ * `expiresAt` (event-store.projectEvent; the row's ttl). Read in UTC: the
+ * ttl is a UTC midnight plus whole days (eventTtl), so it is that date
+ * everywhere. '' for anything that is not a time.
+ */
+function formatKeptUntil(expiresAt) {
+  const t = Date.parse(expiresAt);
+  if (!Number.isFinite(t)) return '';
+  const d = new Date(t);
+  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
 /** `Fri 9 Oct 2026` — the facts strip and the agenda page. */
 function formatEventDay(startsAt) {
   const s = parseStartsAt(startsAt);
@@ -554,6 +567,6 @@ module.exports = {
   canonicalSetType, isEngagement, isCounted, countItems, capRefusal,
   SETTING_DEFAULTS, SETTING_KEYS, settingKeysFor, settingsFor, sessionFormOf,
   isTimeZone, parseStartsAt, checkEventFields, checkItemFields, checkLedBy, checkAttendeeName,
-  clock, agendaTimes, formatDuration, eventTtl,
+  clock, agendaTimes, formatDuration, eventTtl, formatKeptUntil,
   formatEventDay, formatStartTime, formatEventWhen,
 };
