@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report refresh</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FBF7F1; --surface: #FFFFFF; --text: #1B2942; --muted: #5E6167;
+  --accent-ink: #9A5B18; --amber: #F6A94C; --rule: rgba(27,41,66,.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0F1A2E; --surface: #1B2942; --text: #F4EDE4; --muted: #9BA8BE; --accent-ink: #F6A94C; --rule: rgba(244,237,228,.16); }
+}
+:root[data-theme="dark"] { --bg: #0F1A2E; --surface: #1B2942; --text: #F4EDE4; --muted: #9BA8BE; --accent-ink: #F6A94C; --rule: rgba(244,237,228,.16); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Inter", system-ui, sans-serif; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 40px 16px 80px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 8px; }
+h1 { font-family: "Archivo", sans-serif; font-stretch: 125%; font-weight: 800; font-size: 30px; line-height: 1.1; margin: 0 0 12px; }
+h2 { font-family: "Archivo", sans-serif; font-stretch: 125%; font-weight: 700; font-size: 19px; margin: 48px 0 6px; padding-top: 20px; border-top: 1px solid var(--rule); }
+p.lede { max-width: 760px; margin: 0 0 8px; }
+p.note { color: var(--muted); font-size: 13px; max-width: 760px; margin: 0 0 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.grid.wide { grid-template-columns: 1fr; }
+figure { margin: 0; }
+figure img { width: 100%; height: auto; display: block; background: #fff; border: 1px solid var(--rule); box-shadow: 0 6px 24px rgba(27,41,66,.08); }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+figcaption b { color: var(--text); font-weight: 600; }
+a { color: var(--accent-ink); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 700px) { .pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Design · 31 Oct 2026</p>
+  <h1>Session report PDF: title sections refresh</h1>
+  <p class="lede">The owner: <i>“the PDF version title sections could use a real design refresh. to match the professional look that we have given the site.”</i> Today’s saved PDF is on the left of each comparison: it is real output from the shipped generator, run on a realistic fixture. The proposal is on the right. Every proposal page is drawn at actual size in <a href="pages.html">pages.html</a>, which you can open and print.</p>
+  <p class="note">Main finding: the saved PDF never gets the report’s own stylesheet. html2pdf copies <code>.report-doc</code> out of its <code>.report-paper</code> parent, so none of the rules scoped under <code>.report-paper</code> match, and the old dashboard styles from styles.css draw the page instead. README.md has the details and the implementation map.</p>
+
+  <h2>Today and the proposal, side by side</h2>
+  <div class="grid wide">
+    <figure><img src="shots/compare-1-cover.png" alt="Today's first page beside the proposed cover"><figcaption><b>Cover.</b> Today: the date is the day the report was built, not the day of the session, the meta labels have lost their small caps, and “Session / About this session” runs together on one line. Proposal: a real cover with the brand, the ridge, the title, the date, the host and the format, plus a summary strip that leads with the result.</figcaption></figure>
+    <figure><img src="shots/compare-2-round-opener.png" alt="Round opener comparison"><figcaption><b>Round opener.</b> Today: “The taskHow could you…” is run together, the AI box is a card inside a card, and the heading is split across the page break. Proposal: a numbered opener, the question set as the heading, the task between rules, then Workie’s read.</figcaption></figure>
+    <figure><img src="shots/compare-3-responses.png" alt="Responses comparison"><figcaption><b>What the room said.</b> Today: yellow gradient cards, orange pills with white text, emoji medals, and comments with no shape at all. Proposal: a ranked list with a points bar and the vote breakdown, and comments indented behind a rule with what each one is about.</figcaption></figure>
+    <figure><img src="shots/compare-4-standings.png" alt="Standings comparison"><figcaption><b>Standings.</b> Today: a grid of orange tiles with a red badge. Proposal: a table with the champion marked by a rule and a word, then an appendix and an end mark.</figcaption></figure>
+  </div>
+
+  <h2>Single session · US Letter</h2>
+  <p class="note">Five pages. The running head and foot are stamped onto each page after slicing (jsPDF), so they sit in the margin and carry page numbers.</p>
+  <div class="grid">
+    <figure><img src="shots/proposal-L1.png" alt="L1 cover"><figcaption><b>L1</b> Cover</figcaption></figure>
+    <figure><img src="shots/proposal-L2.png" alt="L2"><figcaption><b>L2</b> About, attendance, round opener, Workie’s read</figcaption></figure>
+    <figure><img src="shots/proposal-L3.png" alt="L3"><figcaption><b>L3</b> What the room said, comments</figcaption></figure>
+    <figure><img src="shots/proposal-L4.png" alt="L4"><figcaption><b>L4</b> Next round opener; the trivia answer-choices variant</figcaption></figure>
+    <figure><img src="shots/proposal-L5.png" alt="L5"><figcaption><b>L5</b> Standings, appendix, end of report</figcaption></figure>
+  </div>
+
+  <h2>Event roll-up · US Letter</h2>
+  <p class="note">This is a new document. Today an event has no combined PDF, only the saved report of each session, listed under the event in Reports.</p>
+  <div class="grid">
+    <figure><img src="shots/proposal-E1.png" alt="E1"><figcaption><b>E1</b> Event cover</figcaption></figure>
+    <figure><img src="shots/proposal-E2.png" alt="E2"><figcaption><b>E2</b> The day at a glance: the agenda as a contents page</figcaption></figure>
+    <figure><img src="shots/proposal-E3.png" alt="E3"><figcaption><b>E3</b> A session inside the roll-up: part opener, then its rounds</figcaption></figure>
+  </div>
+
+  <h2>A4, print safety, and a variant</h2>
+  <div class="grid">
+    <figure><img src="shots/proposal-A1.png" alt="A1"><figcaption><b>A1</b> Cover on A4: same margins, taller sheet</figcaption></figure>
+    <figure><img src="shots/proposal-A3.png" alt="A3"><figcaption><b>A3</b> Round page on A4</figcaption></figure>
+    <figure><img src="shots/proposal-L1-grey-noink.png" alt="Cover in greyscale"><figcaption><b>Greyscale, no background ink</b>: the cover</figcaption></figure>
+    <figure><img src="shots/proposal-L2-grey-noink.png" alt="Round page greyscale"><figcaption><b>Greyscale, no background ink</b>: Workie’s read stays a separate panel because its frame and bar are rules, not fill</figcaption></figure>
+    <figure><img src="shots/proposal-V1.png" alt="Dusk variant"><figcaption><b>V1</b> Dusk cover, for sharing on screen only. Not the print default.</figcaption></figure>
+    <figure><img src="shots/proof-html2pdf-L2.png" alt="html2pdf proof"><figcaption><b>Proof.</b> L2 run through the shipped html2pdf 0.10.3. Archivo expanded and the letter-spacing survive. SVG <code>&lt;use&gt;</code> symbols do not, so the marks must be inline paths.</figcaption></figure>
+  </div>
+
+  <h2>Today’s saved PDF, every page</h2>
+  <p class="note">The output of <code>utils/saveReport.js</code>’s first pass (quality 0.8, scale 2, Letter, 0.5in margins) on the fixture in <code>_harness/fixture.js</code>. The PDF itself is <a href="baseline-today.pdf">baseline-today.pdf</a>.</p>
+  <div class="grid">
+    <figure><img src="shots/baseline-p-1.png" alt="baseline page 1"><figcaption>Page 1</figcaption></figure>
+    <figure><img src="shots/baseline-p-2.png" alt="baseline page 2"><figcaption>Page 2</figcaption></figure>
+    <figure><img src="shots/baseline-p-3.png" alt="baseline page 3"><figcaption>Page 3</figcaption></figure>
+    <figure><img src="shots/baseline-p-4.png" alt="baseline page 4"><figcaption>Page 4</figcaption></figure>
+    <figure><img src="shots/baseline-p-5.png" alt="baseline page 5"><figcaption>Page 5</figcaption></figure>
+    <figure><img src="shots/baseline-p-6.png" alt="baseline page 6"><figcaption>Page 6</figcaption></figure>
+  </div>
+</div>
+</body>
+</html>
