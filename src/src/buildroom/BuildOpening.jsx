@@ -286,7 +286,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
           <span>{W.openingFramed(count.n, count.of, count.more)}</span>
           {opening.readyForDraft && !room.briefDraft && (
             <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
-              onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true }))}>
+              onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true, engagePrompt: 'draft-brief' }))}>
               {opening.drafted ? 'Ask Claude to redraft the brief' : 'Ask Claude to draft the brief'}
             </button>
           )}
@@ -340,7 +340,7 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
       <ol className="brm-bp">{coreSteps(opening).map(line)}</ol>
       {more.length > 0 && (
         <details className="brm-bp-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
-          <summary>{W.openingMore}<span className="brm-muted">{` · ${W.openingMoreHint(more.length)}`}</span></summary>
+          <summary>{W.openingMore}<span className="brm-muted">{` · ${W.openingMoreHint(more.filter((x) => !framed(x)).length, more.length)}`}</span></summary>
           <ol className="brm-bp">{more.map(line)}</ol>
         </details>
       )}

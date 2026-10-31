@@ -143,7 +143,7 @@ const buildRoom = {
         {
           t: 'list',
           items: [
-            { title: 'Before the room starts', text: 'One card, three rows that turn green as they happen. **Connect Claude Code**: its **Connect** is the orange button, and the row is done only once Claude Code has called in, not when a key is made. **The room joins**: the code, and **Show the code** for the Stage. **The room watches this laptop**: one screen unless you press **Use two screens**. All done, the card folds to one line.' },
+            { title: 'Before the room starts', text: 'One card, three rows that turn green as they happen. **Connect Claude Code**: its **Connect** is the orange button, and the row is done only once Claude Code has called in, not when a key is made. **The room joins**: the code, and **Show the code** for the Stage. **The room watches this laptop**: one screen unless you press **Use two screens**. All done, the card folds to one line. It goes when the opening ends; if Claude Code is still not connected, **Claude now** has **Connect Claude Code**.' },
             { title: 'No need to wait for Claude', text: 'Start the opening straight away. Anything you send first waits, marked Queued for Claude.' },
             { title: 'The opening', text: 'Frames the build with the room before Claude writes code. See Running a Build Room.' },
             { title: 'Only what is in use', text: 'A list or fold with nothing in it is not drawn yet; it appears with its first item, in the same place. **Open the build** appears once Claude has a build to open.' },
@@ -447,7 +447,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, and in History\'s Asks and Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Click a mark to open History at that entry, on All.',
+          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, and in History\'s Asks and Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Until Claude Code has connected, a sent mark reads **Queued for Claude** instead, as the line after a send does. Click a mark to open History at that entry, on All.',
         },
         {
           t: 'p',
@@ -725,7 +725,7 @@ const twoScreens = {
           items: [
             { title: 'The top line', text: '← **Main menu** (the start screen; the session keeps running), the title, Join (shows the join code to the room; press it again, J or Esc takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
             { title: 'The strip', text: 'Where the ask is: Opening, then Ask, Collect, Settle, Send to Claude, then Wrap up. Between asks it stays, dimmed, and says what is happening instead (Between asks, or the run list with how many are done).' },
-            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now** (What\'s next below has the moves); wrapped up, **Check the report**. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
+            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now**, or **Connect Claude Code** while that leads What\'s next; wrapped up, **Check the report**. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
             { title: 'Mockups ready', text: 'When Claude\'s mockups are all in, a card under Your part now shows them, with **Put to the room now** and **Next, after this ask**. It never replaces the main button.' },
           ],
         },
@@ -768,7 +768,7 @@ const wrapUp = {
         },
         {
           t: 'p',
-          text: 'Without Claude, or to write it yourself, **Write it myself** (or **Wrap up** in the Session panel) opens the form filled in from the session: the brief\'s headline as the summary, the decisions Claude got as What we built, and the latest build as the demo link. Each link is two boxes, a label and the address; **Add a link** adds a row. Check it, then **Save wrap-up**.',
+          text: 'Without Claude, or to write it yourself, **Write it myself** (or **Wrap up** in the Session panel) opens the form filled in from the session: the brief\'s headline as the summary (with no headline from Claude, the opening\'s Good looks like, else The problem, else Making, and it says which), the decisions Claude got as What we built, and the build Claude showed as the demo link. Each link is two boxes, a label and the address, and **The build** beside them marks the one link that is the build (Open the build, in the header and on the room\'s window, opens it; the others are just links). **Add a link** adds a row. Check it, then **Save wrap-up**.',
         },
         {
           t: 'p',
@@ -783,7 +783,7 @@ const wrapUp = {
       blocks: [
         {
           t: 'p',
-          text: 'Once the wrap-up is saved, What\'s next on the Host screen has two moves: **Check the report** (Report, the one Space presses), then **End the session**. On two screens, Your part now has the same two: **Check the report** as its main button and **End session** beside it. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out.',
+          text: 'Once the wrap-up is saved, What\'s next on the Host screen has two moves: **Check the report** (Report, the one Space presses), then **End the session**. On two screens, Your part now has the same two: **Check the report** as its main button and **End session** beside it. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out. Ended, the header reads **Session ended** in place of Live and Claude\'s status.',
         },
         {
           t: 'p',
@@ -802,7 +802,7 @@ const wrapUp = {
           items: [
             'Build brief: the headline, the opening\'s answers, who it is for and Keep in mind. Then What we built, then Decisions: each ask, how the room answered, and the direction Claude got. A decision the wheel settled says **Settled by the wheel**; one saved for later or recorded only says it was not sent to Claude.',
             'Screenshots along the way, and Version history: each commit Claude made on your laptop.',
-            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what. What Engage itself told Claude reads as a plain line, such as **Start building: Claude got the brief**, never the prompt Claude was given.',
+            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what. What Engage itself told Claude reads as a plain line, such as **Start building: Claude got the brief**, never the prompt Claude was given, here as on the phones, the Stage and Claude now.',
             'Host notes are left out, because a report gets handed round.',
             '**Save report** keeps it as a PDF, listed in Reports, as for any session: see The session report › Saving and sharing a report.',
           ],

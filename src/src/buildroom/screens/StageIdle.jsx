@@ -12,7 +12,8 @@ import {
 import { OpenLink } from './common';
 
 /**
- * Claude has wrapped up: the stage says so, and the demo is one click away.
+ * Claude has wrapped up: the stage says so, and the demo (the link marked as
+ * the build) is one click away.
  * On the Host screen the report holds the one orange (PLAN item 15), so the
  * demo link is plain there (`plainLinks`).
  */
@@ -35,7 +36,8 @@ export function WrappedStage({ outcome, agent, images = [], plainLinks = false }
       {links.length > 0 && (
         <div className="brm-openrow">
           {links.map((l, i) => (
-            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (i === 0 ? 'Open the demo' : l.url)} primary={i === 0 && !plainLinks} />
+            // Only the link marked as the build leads (QA walk on test, 31 Oct 2026); the first is not the build by place.
+            <OpenLink key={`${l.url}:${i}`} href={l.url} label={l.label || (l.demo ? 'Open the demo' : l.url)} primary={l.demo === true && !plainLinks} />
           ))}
         </div>
       )}

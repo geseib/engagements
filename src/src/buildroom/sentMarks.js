@@ -20,8 +20,14 @@
  *
  * Sent beats later beats queued: an item held for later and then sent reads as
  * sent; the newest of two sends wins.
+ *
+ * QUEUED FOR CLAUDE (QA walk on test, 31 Oct 2026): while Claude Code has never
+ * called in, nothing has reached it, so a sent or reworded mark carries
+ * `claudeQueued: true` and reads "Queued for Claude" (the header's and Claude
+ * now's words). It still opens History at its entry.
  */
 import { W } from './words';
+import { agentNeverCame } from './buildScreens';
 
 const RANK = Object.freeze({ queued: 1, later: 2, sent: 3, reworded: 3 });
 
@@ -93,6 +99,9 @@ export function sentMarks(room) {
     }
   }
   for (const a of asks) if (a.status === 'proposed' && a.fromItem) set(a.fromItem, queued);
+  if (agentNeverCame(room.agent)) {
+    for (const [k, m] of marks) if (m.mark === 'sent' || m.mark === 'reworded') marks.set(k, { ...m, claudeQueued: true });
+  }
   return marks;
 }
 

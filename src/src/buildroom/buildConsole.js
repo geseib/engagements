@@ -172,6 +172,16 @@ export function consoleStrip(room, current, { pickId = null, answering = false, 
  */
 export function finishControls(room, current, controls) {
   const wrapped = Boolean(room && room.outcome && room.outcome.summary);
+  // CONNECT LEADS, SO IT IS THE MAIN MOVE (QA walk on test, 31 Oct 2026: the card said "Connect
+  // Claude Code…" beside "No main move now", with Connect the orange button below). Between asks,
+  // when What's next leads with Connect, the card holds it; the page opens Connect Claude Code.
+  if (!wrapped && !current && !(controls && controls.primary) && room && room.state !== 'ENDED'
+    && !(room.opening && room.opening.phase === 'opening')) {
+    const lead = whatsNextMoves(room)[0];
+    if (lead && lead.key === 'connect') {
+      return { ...controls, primary: { action: 'connect', label: W.connectClaude, id: 'p:connect', icon: 'Lock', disabled: false, capability: 'claude-status' } };
+    }
+  }
   if (!wrapped || current || (room && room.state === 'ENDED') || (controls && controls.primary)) return controls;
   return {
     ...controls,
@@ -212,6 +222,7 @@ export function consolePart(moment, controls, room, current, { answering = false
     return part('When Claude finishes the item, ', p.label, '.');
   }
   if (moment === 'point' && p) return part('The room talks it over. Then ', p.label, '.');
+  if (p && p.action === 'connect') return part('', p.label, ': nothing is built without it.');
   if (p && p.action === 'report') return part(`${room && room.outcome && room.outcome.by === 'agent' ? 'Claude has wrapped up' : 'Wrap-up saved'}. `, p.label, ', then end the session.');
   if (p) return part('', p.label, '.');
   // No main move: the likely one, in words, never as a button (answer (b)).

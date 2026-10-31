@@ -9,6 +9,47 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (Build Room: fixes from the test walk)
+
+**Test:** merge of dev `ab020e52`. Everything below this entry is already on test; this push adds only what is here.
+
+Fixes for what the QA walk on engage.test found in the Build Room on 31 Oct, mostly in a room where Claude Code never connected. They close gaps in the four "Build Room, simpler" entries below.
+
+### New
+
+- Nothing new. One small addition to an existing form: in the wrap-up, each link has a **The build** tick, so you can say which link is the build.
+
+### Fixed
+
+- **The Start building prompt reached the room.** Pressing **Start building** before Claude Code connected put Engage's instructions for Claude ("The room has framed the build. Plan 3 to 6 steps, post the plan with post_update…" and the whole brief) on every phone, on the Stage and in your Claude now. Engage's own prompts (Start building, Back to the opening, Ask Claude to draft the brief, Preview the work, mockups for an ask, Ask Claude to wrap up) are now marked as Engage's when they are saved. The phones, the Stage, the room's window, Claude now and the timeline show a plain line such as "Start building: Claude got the brief", as the report already did. Claude still gets the full prompt.
+- **"Sent" while Claude was not connected.** The header and Claude now said **Queued for Claude**, but the green line after a send said "Sent to Claude as …", the composer folded to "Sent: …", and every decision in History had a **Sent to Claude** mark. Until Claude Code connects they all say **Queued for Claude**, and the line is no longer green. Once Claude connects they say Sent, as before.
+- **Write it myself left the summary blank** when Claude had not drafted a headline, under "Filled in from the session". The summary now comes from the opening's answers: Good looks like, else The problem, else Making, and the form says which one it used. If there is nothing to use, the field stays empty and nothing says it was filled in.
+- **Your part now on two screens** said "Connect Claude Code…" beside a "No main move now" box, with Connect as the orange button further down. When What's next leads with Connect, **Connect Claude Code** is now Your part now's main button, and What's next's own Connect is a plain button. A move focused in the main area no longer ends up half hidden under the card.
+- **A wrap-up link was taken for the build.** After the wrap-up, the header's **Open the build** and the room's window opened the first link ("Shift sheet") although Claude never showed a build, and the window made that link the orange button. Only a build Claude showed, or a link you tick as **The build**, counts as the build. Other links are plain links.
+- **After End session the header still said Live and Queued for Claude.** It now reads **Session ended**, and the Claude status chip and the "directions wait for it" notice are gone.
+- **Before the room starts never went away** if Claude never connected. It stayed through the wrap-up and the end, still saying "You can start the opening now". It now goes when the opening ends, as planned. If Claude has still not connected, **Claude now** says so and has a **Connect Claude Code** button, and What's next leads with Connect.
+- **More framing questions · 4** stayed at 4 after one was answered. It now counts what is left: "3 of 4 left, if the room has time".
+
+### What to look at
+
+1. On engage.test, create a Build Room and do not connect Claude Code. Join on a phone. Answer the opening's core steps yourself, then press **Start building** and confirm. On the phone's Now, the Stage (2) and the room's window: **Queued for Claude** with "Start building: Claude got the brief", and no post_update or brief text anywhere. Claude now on the right says the same line.
+2. In a second room without Claude, put an opening step to the room (**Ask the room**), and once the phone has answered, send the pick: the line after it reads "Queued for Claude as Keep in mind: …" in blue, not green. Open **Tell Claude…** and send something: it folds to "Queued for Claude: …". Decide an ask and press **Decided** in History: its mark reads **Queued for Claude** and still opens History at the entry.
+3. Before Start building, open **More framing questions**, answer **Never**: the fold's count reads "3 of 4 left, if the room has time".
+4. After Start building: **Before the room starts** is gone. Claude now reads "Waiting for Claude Code" (or Queued for Claude) with a **Connect Claude Code** button that opens Connect.
+5. Press **Use two screens** in Settings, Screens (or on a fresh room before starting). Between asks with Claude not connected, **Your part now** says "Connect Claude Code: nothing is built without it." with **Connect Claude Code** as its button. There is no "No main move now", and What's next's first row is fully in view.
+6. Decide one ask, then in What's next press **Write it myself**. With no headline from Claude, the Summary holds your Good looks like answer, and the hint under it says "From the opening's Good looks like". Add two links, for example Shift sheet and Volunteer handbook, leave **The build** unticked, and save. The header has no **Open the build**, and the room's window shows both links as plain buttons. Edit the wrap-up, tick **The build** on one link and save: **Open the build** appears and opens that link.
+7. Press **End session**. The header reads **Session ended**, with no Live and no Queued for Claude.
+8. Connect Claude Code in a new room, press Start building, and check Claude got the full prompt: it posts a plan as a milestone. The room's screens still show only the plain line.
+9. Open help (?): Before the room starts says the card goes when the opening ends; Your part now mentions Connect Claude Code; Writing the wrap-up describes the summary fallback and **The build**; History's marks mention Queued for Claude.
+
+### Known gaps
+
+- A wrap-up Claude writes does not mark a link as the build. If Claude showed a build, that build is still Open the build; if it never did, its links are plain links.
+- The two console errors seen on the walk are not Build Room bugs. "Error fetching question sets: Failed to fetch" comes from the main menu's question set list (`AdminPage` fetchQuestionSets). That request is cut off when you leave the main menu for the new Build Room page. The Build Room page never makes that call, and its address and sign-in are the same as every other admin list. The 403 could not be traced without the walk's network log.
+- Phones still name who is spinning the wheel (the owner accepted this: phones are personal).
+
+---
+
 ## 31 Oct 2026 (later still: the event summary names its host)
 
 **Test:** merge of dev `86ff1123`. Everything below this entry is already on test; this push adds only what is here.

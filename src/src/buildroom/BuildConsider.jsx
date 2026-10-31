@@ -32,10 +32,11 @@ const askNo = (askId) => Number(askId) || askId;
 /** One mark. With `onOpen` and an entry a sent mark is a button that opens History there. */
 export function SentMark({ mark, onOpen = null }) {
   if (!mark) return null;
-  const words = MARK_WORDS[mark.mark];
+  // Queued for Claude while Claude Code has never called in (QA walk on test, 31 Oct 2026): no tick, nothing went.
+  const words = mark.claudeQueued ? W.queuedHeadline : MARK_WORDS[mark.mark];
   if (!words) return null;
-  const cls = `brm-mark brm-mark--${mark.mark}`;
-  const tick = mark.mark !== 'queued' ? <Icon name="Check" size={12} aria-hidden="true" /> : null;
+  const cls = `brm-mark brm-mark--${mark.claudeQueued ? 'queued' : mark.mark}`;
+  const tick = mark.mark !== 'queued' && !mark.claudeQueued ? <Icon name="Check" size={12} aria-hidden="true" /> : null;
   if (onOpen && mark.entryId && mark.mark !== 'queued') {
     return (
       <button type="button" className={`${cls} brm-mark--link`} title={W.markOpens} onClick={(e) => { e.stopPropagation(); onOpen(mark.entryId); }}>

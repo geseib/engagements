@@ -56,7 +56,9 @@ const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 const UP = { open: true, fullscreen: true, visible: true, statusAt: NOW, ageMs: 1000 };
 
 function hostState({ presenting = 0, detail = null, wallScreen = 'stage', rev = 1, seen = true } = {}) {
-  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, ...(seen ? { AgentSeenAt: ago(6) } : {}), Phase: 'building' }]);
+  // Not seen: a new room, still in the opening, where Before the room starts lives (it leaves with the
+  // opening since the QA walk on test, 31 Oct 2026).
+  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, ...(seen ? { AgentSeenAt: ago(6), Phase: 'building' } : {}) }]);
   const view = S.hostView({
     gameId: GAME,
     meta: { Title: 'Volunteer sign-up', Details: 'A one-page site to pick a shift in a minute.' },

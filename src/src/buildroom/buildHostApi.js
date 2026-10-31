@@ -114,10 +114,13 @@ export function buildApi(gameId) {
      * A direction; `as` is keep, later or ask (step 7c), else Do now. `from` names
      * what it was written from (`{ askIds, ideaIds }`, parity PLAN §2.8 H1), so
      * History can mark those as sent to Claude. `hideFromRoom`: Don't show the room.
+     * `engagePrompt`: the key of a prompt Engage wrote (QA walk on test, 31 Oct 2026),
+     * so the room reads its plain line, never its words.
      */
-    postDirection: (text, as, from = null, { hideFromRoom = false } = {}) => post('directions', {
+    postDirection: (text, as, from = null, { hideFromRoom = false, engagePrompt = null } = {}) => post('directions', {
       text,
       ...(hideFromRoom ? { hideFromRoom: true } : {}),
+      ...(engagePrompt ? { engagePrompt } : {}),
       ...(as && as !== 'do-now' ? { as } : {}),
       ...(from && from.askIds && from.askIds.length ? { fromAskIds: from.askIds } : {}),
       ...(from && from.ideaIds && from.ideaIds.length ? { fromIdeaIds: from.ideaIds } : {}),

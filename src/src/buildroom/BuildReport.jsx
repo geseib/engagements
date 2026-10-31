@@ -445,7 +445,7 @@ export default function BuildReport({ state, onBack }) {
               <tbody>
                 {log.map((l) => {
                   // Engage's own prompt to Claude reads as one plain line, its detail with it.
-                  const plain = plainPromptLine(l.text);
+                  const plain = plainPromptLine(l);
                   return (
                   <tr key={l.logId}>
                     <td>{hhmm(l.createdAt)}</td>

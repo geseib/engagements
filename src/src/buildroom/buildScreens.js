@@ -258,8 +258,10 @@ export function latestBuild(room) {
     const l = log[i];
     if (l.by === 'agent' && BUILD_LOG_KINDS.includes(l.kind) && safeHref(l.link)) { link = l.link; break; }
   }
+  // A wrap-up link is the build only when it is marked so (QA walk on test, 31 Oct 2026: the first
+  // link, "Shift sheet", read as Open the build though Claude never showed one); the rest are links.
   if (!link) {
-    const demo = ((room && room.outcome && room.outcome.links) || []).find((l) => safeHref(l.url));
+    const demo = ((room && room.outcome && room.outcome.links) || []).find((l) => l && l.demo === true && safeHref(l.url));
     if (demo) link = demo.url;
   }
   const shots = ((room && room.images) || []).filter((im) => im.kind !== 'mockup');
@@ -352,9 +354,15 @@ export const SENT_UNPICKED_WARN_MS = 2 * 60 * 1000;
 export function sentOf(room) {
   const s = room && room.sent;
   if (!s || typeof s !== 'object' || !Number.isFinite(timeOf(s.at))) return null;
+  const words = typeof s.text === 'string' ? s.text.trim() : '';
+  // A prompt Engage wrote reads as its plain line on every screen, never the prompt (QA walk on test,
+  // 31 Oct 2026); the room's read carries no words for it, the host's the words Claude got.
+  const plain = s.hidden && !words ? '' : plainPromptLine({ engagePrompt: s.engagePrompt, text: words, askId: s.askId });
   return {
     verb: ['decided', 'asked', 'told'].includes(s.verb) ? s.verb : 'told',
-    text: typeof s.text === 'string' ? s.text.trim() : '',
+    text: plain || words,
+    // The words are Engage's plain line, not what someone wrote: no quotes round it.
+    ...(plain ? { plain: true } : {}),
     askId: typeof s.askId === 'string' && s.askId ? s.askId : null,
     at: s.at,
     pickedAt: Number.isFinite(timeOf(s.pickedAt)) ? s.pickedAt : null,
@@ -362,6 +370,8 @@ export function sentOf(room) {
     queued: s.queued === true,
     // Don't show the room: the host's read keeps the words, the room's has none; either way the room sees none.
     hidden: s.hidden === true,
+    // ENGAGE'S OWN PROMPT (QA walk on test, 31 Oct 2026): every screen says its plain line.
+    ...(typeof s.engagePrompt === 'string' && s.engagePrompt ? { engagePrompt: s.engagePrompt } : {}),
     pick: s.pick && Array.isArray(s.pick.items) && s.pick.items.length ? {
       method: typeof s.pick.method === 'string' ? s.pick.method : 'vote',
       items: s.pick.items.filter((i) => i && typeof i.label === 'string').map((i) => ({ label: i.label, title: typeof i.title === 'string' ? i.title : '' })),
@@ -390,6 +400,7 @@ export function sentCard(sent, asks) {
     text: hidden ? W.sentHiddenLine : sent.text,
     pick: !hidden && sent.pick && sent.pick.items.length ? W.sentPickLine(sent.pick.method, sent.pick.items) : '',
     hidden,
+    plain: Boolean(sent.plain),
     at: sent.at,
     sent,
   };
@@ -512,7 +523,7 @@ export function stageSide(room) {
   const decision = latestDecisionLine(room);
   const decidedMs = decided ? timeOf(decided.decidedAt) : NaN;
   if (sent && sent.verb !== 'decided' && sent.text && !sent.hidden && !(timeOf(sent.at) < decidedMs)) {
-    return { label: sent.verb === 'asked' ? W.weAskedClaude : W.weToldClaude, text: `\u201c${sent.text}\u201d`, at: sent.at };
+    return { label: sent.verb === 'asked' ? W.weAskedClaude : W.weToldClaude, text: sent.plain ? sent.text : `\u201c${sent.text}\u201d`, at: sent.at };
   }
   return decision ? { label: W.weDecided, text: decision, at: decided ? decided.decidedAt || null : null } : null;
 }
@@ -1505,17 +1516,37 @@ export const WRAP_UP_TEXT = 'We are wrapping up. Call room_status, then write th
  * building, Back to the opening and the one-press asks post a prompt written
  * for Claude, tool names and all; the report and anywhere else a person reads
  * the record show this line instead. '' for anything a person wrote.
+ *
+ * ONE MAPPING FOR EVERY READER (QA walk on test, 31 Oct 2026): the server now
+ * stores each such prompt with its key (build-store.js ENGAGE_PROMPTS) and the
+ * room's reads carry the key without the words, so the phones, the Stage, the
+ * room's window, the host's Claude now, the timeline and the report all draw
+ * the line from here. A row from before the key is known by its words.
  */
 const ENGINE_PROMPTS = Object.freeze([
-  { re: /^The room has framed the build\. Plan /, line: () => 'Start building: Claude got the brief' },
-  { re: /^The host has gone back to the opening /, line: () => 'Back to the opening: Claude was asked to pause' },
-  { re: /^Draft the one-page build brief now /, line: () => 'Asked Claude to draft the brief' },
-  { re: /^Show the room the work so far, running\./, line: () => 'Asked Claude to preview the work' },
-  { re: /^We are wrapping up\. Call room_status/, line: () => 'Asked Claude to wrap up' },
-  { re: /^Before ask (\d+) opens to the room: make a quick mockup/, line: (m) => `Asked Claude for mockups for ask ${Number(m[1])}` },
+  { key: 'start-building', re: /^The room has framed the build\. Plan /, line: () => 'Start building: Claude got the brief' },
+  { key: 'back-to-opening', re: /^The host has gone back to the opening /, line: () => 'Back to the opening: Claude was asked to pause' },
+  { key: 'draft-brief', re: /^Draft the one-page build brief now /, line: () => 'Asked Claude to draft the brief' },
+  { key: 'preview', re: /^Show the room the work so far, running\./, line: () => 'Asked Claude to preview the work' },
+  { key: 'wrap-up', re: /^We are wrapping up\. Call room_status/, line: () => 'Asked Claude to wrap up' },
+  {
+    key: 'mockups',
+    re: /^Before ask (\d+) opens to the room: make a quick mockup/,
+    line: (m, askId) => {
+      const n = m ? Number(m[1]) : Number(askId);
+      return Number.isFinite(n) && n > 0 ? `Asked Claude for mockups for ask ${n}` : 'Asked Claude for mockups';
+    },
+  },
 ]);
-export function plainPromptLine(text) {
-  const t = String(text || '');
+/**
+ * `entry`: a log entry or the read's `sent` (`{ engagePrompt, text, askId }`), or
+ * the words alone (a row from before the key).
+ */
+export function plainPromptLine(entry) {
+  const e = entry && typeof entry === 'object' ? entry : { text: entry };
+  const t = String(e.text || '');
+  const keyed = ENGINE_PROMPTS.find((p) => p.key === e.engagePrompt);
+  if (keyed) return keyed.line(keyed.re.exec(t), e.askId);
   for (const p of ENGINE_PROMPTS) {
     const m = p.re.exec(t);
     if (m) return p.line(m);
@@ -1540,23 +1571,39 @@ export function builtDecisions(room) {
  * (combineText), and the newest build link is the demo. `from` says where each
  * came from, so the form can say so under it. Next steps stay the host's.
  */
+/**
+ * THE SUMMARY WITHOUT CLAUDE'S HEADLINE (QA walk on test, 31 Oct 2026: Write it
+ * myself left Summary blank, under "Filled in from the session"). The brief's
+ * headline only exists once Claude drafted it. Otherwise the opening's own
+ * answers: Good looks like first, since it is written as the launch-day
+ * headline ("It is launch day. Write the headline."), then The problem, then
+ * Making, the barest. `from.summary` names where the words came from ('' none).
+ */
+const WRAP_SUMMARY_LINES = Object.freeze([['good', 'Good looks like'], ['problem', 'The problem'], ['kind', 'Making']]);
+
 export function wrapPrefill(room) {
   const b = (room && room.brief) || {};
   const head = String(b.headline || '').trim();
   const more = String(b.summary || '').trim();
-  const summary = head && more ? `${head}${/[.!?]$/.test(head) ? '' : '.'} ${more}` : head || more;
+  let summary = head && more ? `${head}${/[.!?]$/.test(head) ? '' : '.'} ${more}` : head || more;
+  let summaryFrom = summary ? W.wrapFromHeadline : '';
+  if (!summary) {
+    const hit = WRAP_SUMMARY_LINES.find(([k]) => String((b.lines || {})[k] || '').trim());
+    if (hit) { summary = String(b.lines[hit[0]]).trim(); summaryFrom = W.wrapFromLine(hit[1]); }
+  }
   const decided = builtDecisions(room);
   const built = decided.length ? combineText(decided).split('\n').filter(Boolean) : [];
   const link = latestBuild(room).link;
   return {
-    summary, built, links: link ? [{ label: W.wrapDemoLabel, url: link }] : [], nextSteps: [],
-    from: { summary: Boolean(summary), built: decided.length, link: Boolean(link) },
+    // The build Claude showed is the build (`demo`), so the wrap-up keeps it marked.
+    summary, built, links: link ? [{ label: W.wrapDemoLabel, url: link, demo: true }] : [], nextSteps: [],
+    from: { summary: summaryFrom, built: decided.length, link: Boolean(link) },
   };
 }
 
 /** Claude was asked to wrap up and has not yet: the prompt is in the log, the outcome is not. */
 export const wrapAsked = (room) => !(room && room.outcome && room.outcome.summary)
-  && ((room && room.log) || []).some((l) => l.kind === 'direction' && String(l.text || '').startsWith(WRAP_UP_TEXT.slice(0, 40)));
+  && ((room && room.log) || []).some((l) => l.kind === 'direction' && (l.engagePrompt === 'wrap-up' || String(l.text || '').startsWith(WRAP_UP_TEXT.slice(0, 40))));
 
 export function whatsNextMoves(room, { ticked = 0, laterTicked = 0 } = {}) {
   const ideas = ((room && room.ideas) || []).filter((i) => i.status === 'new');

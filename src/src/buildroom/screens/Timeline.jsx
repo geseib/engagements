@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import DeleteReasonField from '../../components/DeleteReasonField';
 import BuildImage from '../BuildImage';
 import { W } from '../words';
-import { claudeKindLabel } from '../buildScreens';
+import { claudeKindLabel, plainPromptLine } from '../buildScreens';
 import { safeHref } from '../links';
 import {
   byLabel, clockTime, entryTone, SafeLink, continueCommand,
@@ -22,6 +22,8 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
   const [reason, setReason] = useState('');
   const asStaff = deleteAs === 'platform-admin';
   const [text, setText] = useState(entry.text);
+  // A prompt Engage wrote reads as its plain line here too (QA walk on test, 31 Oct 2026); it is not the host's to edit.
+  const plain = plainPromptLine(entry);
   const save = async () => {
     const ok = await run(() => api.logAction(entry.logId, { action: 'edit', text }));
     if (ok !== undefined) setEditing(false);
@@ -42,7 +44,7 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
         ) : (
           <>
             <span className="brm-by">{byLabel(entry)}</span>
-            <span className="brm-tl-text">{entry.hidden && !entry.text ? W.historyNotShown : entry.text}</span>
+            <span className="brm-tl-text">{entry.hidden && !entry.text ? W.historyNotShown : plain || entry.text}</span>
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
@@ -66,8 +68,8 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
               </>
             ) : (
               <>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
+                {!plain && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>}
+                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${plain || entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
               </>
             )}
           </span>
