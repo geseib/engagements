@@ -68,6 +68,18 @@
 .rp-alert-close:hover { border-color: var(--danger-text); }
 
 .rp-loading { color: var(--muted); }
+.rp-note { color: var(--muted); margin: 0 0 14px; }
+
+/* An auto-built report drawn for its PDF (ReportsPanel makePdf): laid out at
+   page width, off screen. Not display:none — the PDF is rasterised from the
+   layout, and a hidden element has none. */
+.rp-render {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 816px;
+  pointer-events: none;
+}
 
 /* ----------------------------------------------------------------- empty --- */
 

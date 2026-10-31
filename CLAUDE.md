@@ -152,6 +152,17 @@ not repeated here. This section carries only what those two sections do not say.
   90-day rule deleted "1 year" reports at day 90. The list is the console's Reports section and the host's "Reports" door (`components/ReportsPanel.jsx`, `GET /reports`, `GET /reports/download`);
   mockup in `docs/design/reports-list/`.
 
+- **Auto-built reports (since 2026-10-31).** `game/report-sweep.js` builds the
+  report of any started session with no `REPORT#<game>` index row once it has
+  ended > 24h, idled > 12h or is < 48h from its ttl: one Workie retry per
+  RESULTS-without-read round, then create-report's `buildReport` (90-day ttl,
+  sealed under the session's org), an index row `auto:true, pdf:false`, and a
+  `report.auto` bell (`report.failed` at T-24h). It rides the one schedule:
+  `UsageReconcileFunction` fires `rate(3 hours)`, runs usage once per UTC day,
+  and async-invokes `CreateReportFunction` with `{__reportSweep:true}`. After
+  METADATA expires, get-report/save-report authorise on the index row
+  (`report-access.js`); ReportsPanel's "Make the PDF" replaces the auto row.
+
 ### Game Flow
 ```
 Create → Start (players join) → Questions (ASK/VOTE/RESULTS) → End

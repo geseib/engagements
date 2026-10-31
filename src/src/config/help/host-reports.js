@@ -205,7 +205,11 @@ const reporting = {
       Saving this session again keeps the same passkey.", "Anyone on your team
       can open it from Reports without a passkey.", "Download PDF", "Done").
       save-report.js: retention 90 / 365 days from saving. The list:
-      components/ReportsPanel.jsx (search, type, retention, sort; Share, PDF).
+      components/ReportsPanel.jsx (search, type, retention, sort; Share, PDF;
+      an auto-built row: "Auto-built — open to make the PDF", "N rounds done ·
+      N not run", "Make the PDF"; an event row "· N auto-built").
+      game/report-sweep.js: every 3 hours; due when ended > 24h, idle > 12h or
+      < 48h before expiry; 90-day report; bell 'report.auto' / 'report.failed'.
     */
     {
       id: 'saving-report',
@@ -231,10 +235,33 @@ const reporting = {
       ],
     },
     /*
+      game/report-sweep.js (every 3 hours on the usage-reconcile schedule):
+      due when ended > 24h, idle > 12h, or < 48h before expiry; one Workie
+      retry per round that reached results without a read; 90-day report;
+      bell report.auto / report.failed. ReportsPanel: "Auto-built — open to
+      make the PDF", "Make the PDF". get-report reads it after expiry.
+    */
+    {
+      id: 'auto-report',
+      title: 'Ran out of time? Engage builds the report for you',
+      icon: 'Sparkle',
+      blocks: [
+        {
+          t: 'p',
+          text: 'If a session that ran has no saved report a day after it ends (or after 12 hours with nothing happening, or 2 days before it expires), Engage builds its report from the rounds that finished, and the bell tells you it is ready. If a round\'s Workie read failed, Engage tries it once more first; a round that never reached its results is listed but not read.',
+        },
+        {
+          t: 'p',
+          text: 'Reports lists it as **Auto-built — open to make the PDF**, with how many rounds it covers and how many were not run. Press **Make the PDF** to draw and save it; it then has a link and passkey like any saved report. An auto-built report is kept 90 days, and it still opens after the session has expired.',
+        },
+      ],
+    },
+    /*
       session-ttl.js (game/ and websocket/): created → +90 days; started →
       started + 7 days (game/session-start.js). Deletion is lazy (up to ~48h).
       The report is rebuilt from the session (create-report), so it cannot be
-      made once the session is gone. Saved reports: save-report.js 90 / 365.
+      made once the session is gone — unless the sweep (report-sweep.js) built
+      it first. Saved reports: save-report.js 90 / 365; auto-built 90.
     */
     {
       id: 'how-long-data-lasts',
@@ -243,13 +270,13 @@ const reporting = {
       blocks: [
         {
           t: 'p',
-          text: 'In short: a session lasts 7 days from its start (90 days from creation if it never starts), and a saved report 90 days or a year from saving. Everything, in one table: Data & privacy › How long things are kept.',
+          text: 'In short: a session lasts 7 days from its start (90 days from creation if it never starts), a saved report 90 days or a year from saving, and an auto-built report 90 days from when it was built. Everything, in one table: Data & privacy › How long things are kept.',
         },
         {
           t: 'note',
           tone: 'warn',
           title: 'Save the report within the week',
-          text: 'When a session expires, its answers, rounds and report go with it, and the report can no longer be made. If the results matter, save the report while the session still exists. A session can linger a day or two past its time; do not count on that.',
+          text: 'When a session expires, its answers and rounds go with it, and the report can no longer be rebuilt. Engage builds one automatically before then if you have not saved one, but only from what is there when it runs. If the results matter, save the report yourself while the session still exists.',
         },
       ],
     },

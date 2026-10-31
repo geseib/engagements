@@ -174,3 +174,111 @@ describe('the reports stylesheet is the sessions sheet under its own scope', () 
     expect(fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8')).toMatch(/onReports=/);
   });
 });
+
+/*
+  AUTO-BUILT REPORTS (lambda-functions/game/report-sweep.js). A session nobody
+  made a report for gets one built; the list shows it with no PDF yet, and
+  "Make the PDF" reads it, draws it with the session report's own document and
+  keeps it through utils/saveReport.js — neither of which this panel changes.
+*/
+jest.mock('../utils/saveReport', () => ({ saveReportPdf: jest.fn() }));
+jest.mock('../components/GameReport', () => ({
+  __esModule: true,
+  default: () => null,
+  ReportDocument: ({ reportData }) => <article className="report-doc">{reportData.eventTitle}</article>,
+}));
+
+describe('ReportsPanel — auto-built reports', () => {
+  const { saveReportPdf } = require('../utils/saveReport');
+  const auto = {
+    id: 'REPORT#5150', gameId: '5150', title: 'Ops Retro', auto: true, pdf: false, permanent: false,
+    savedAt: iso(-1), expiresAt: iso(89), sessionGone: true, downloadUrl: null, passkey: null,
+    covers: { completed: ['001', '002'], notRun: ['003'] },
+  };
+  const stored = {
+    gameId: '5150', gameTitle: 'Ops Retro', gameType: 'call-and-answer',
+    playerPerformance: [{ playerName: 'Ada', totalScore: 3 }],
+    detailedQuestions: [{ questionNumber: '001', answers: [{ playerName: 'Ada', totalScore: 3, voteBreakdown: '1 first' }] }],
+    gameStats: { totalComments: 2 },
+  };
+  beforeEach(() => { saveReportPdf.mockReset(); });
+
+  it('says it is auto-built, what it covers, and offers Make the PDF instead of Share and PDF', async () => {
+    authFetch.mockImplementation(() => respond({ reports: [auto] }));
+    render(<ReportsPanel />);
+    await waitFor(() => screen.getByTestId('report-auto'));
+    expect(screen.getByTestId('report-auto').textContent).toBe('Auto-built — open to make the PDF');
+    expect(screen.getByText(/2 rounds done · 1 not run/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /make the pdf of ops retro/i })).toBeInTheDocument();
+    // rejects: a Share with no passkey, or a download of a PDF that does not exist.
+    expect(screen.queryByRole('button', { name: /share ops retro/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /download ops retro/i })).toBeNull();
+  });
+
+  it('Make the PDF reads the stored report, draws it, and saves it through the shared util', async () => {
+    const saved = { ...auto, auto: false, pdf: true, s3Key: 'Ops-Retro.pdf.enc', passkey: 'K7-Q2', downloadUrl: 'reports/download?key=x' };
+    let listCalls = 0;
+    authFetch.mockImplementation((url) => {
+      if (/games\/5150\/report\?role=host$/.test(url)) return respond(stored);
+      listCalls += 1;
+      return respond({ reports: [listCalls === 1 ? auto : saved] });
+    });
+    saveReportPdf.mockResolvedValue({ passkey: 'K7-Q2' });
+    render(<ReportsPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: /make the pdf of ops retro/i }));
+    await waitFor(() => expect(saveReportPdf).toHaveBeenCalledTimes(1));
+    const args = saveReportPdf.mock.calls[0][0];
+    expect(args.gameId).toBe('5150');
+    expect(args.title).toBe('Ops Retro');
+    expect(args.permanent).toBe(false);
+    expect(args.element.className).toBe('report-doc');
+    await waitFor(() => expect(screen.getByTestId('reports-notice').textContent).toMatch(/PDF of “Ops Retro” is saved/));
+    // The list is read again: the row is a PDF row now, shared and downloaded as any other.
+    await waitFor(() => expect(screen.getByRole('button', { name: /download ops retro/i })).toBeInTheDocument());
+    expect(screen.queryByTestId('report-render')).toBeNull();
+  });
+
+  it('a refusal is shown in the host\'s words and the row stays auto-built', async () => {
+    authFetch.mockImplementation((url) => (/report\?role=host$/.test(url) ? respond(stored) : respond({ reports: [auto] })));
+    saveReportPdf.mockRejectedValue(Object.assign(new Error('save-report 413'), { hostMessage: 'This report is too large to save. Print it instead.' }));
+    render(<ReportsPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: /make the pdf of ops retro/i }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/too large to save/));
+    expect(screen.getByTestId('report-auto')).toBeInTheDocument();
+  });
+
+  it('an event row counts its auto-built reports', async () => {
+    authFetch.mockImplementation(() => respond({
+      reports: [{ ...auto, eventRef: 'E100' }],
+      events: [{ kind: 'event', code: 'E100', title: 'Offsite', itemCount: 2, state: 'ENDED', items: [
+        { itemId: 'i1', type: 'call-and-answer', title: 'Retro', gameId: '5150', reportId: 'REPORT#5150' },
+        { itemId: 'i2', type: 'talk', title: 'Keynote' },
+      ] }],
+    }));
+    render(<ReportsPanel />);
+    const row = await screen.findByTestId('event-row');
+    expect(row.textContent).toMatch(/1 report saved · 1 auto-built/);
+  });
+});
+
+describe('reportDocumentData and coversText', () => {
+  const { reportDocumentData, coversText } = require('../components/ReportsPanel');
+  it('maps GET /report onto the fields the report document prints', () => {
+    const d = reportDocumentData({
+      gameId: '1', gameTitle: 'T', eventDetails: 'About', surveyNames: 'named', surveyResults: { a: 1 },
+      playerPerformance: [{ playerName: 'A' }], detailedQuestions: [{ questionNumber: '001', answers: [] }],
+      gameStats: { totalComments: 4 }, notReviewedLeftOut: { line: 'x' },
+    });
+    expect(d).toMatchObject({
+      gameId: '1', eventTitle: 'T', eventDetails: 'About', surveyNames: 'named', surveyResults: { a: 1 },
+      players: [{ playerName: 'A' }], totalComments: 4, notReviewedLeftOut: { line: 'x' },
+    });
+    expect(d.questions).toHaveLength(1);
+    expect(d.allAnswers).toEqual([{ questionNumber: '001', answers: [] }]);
+  });
+  it('says what an auto report covers', () => {
+    expect(coversText({ completed: ['001'], notRun: [] })).toBe('1 round done');
+    expect(coversText({ completed: ['001', '002'], notRun: ['003'] })).toBe('2 rounds done · 1 not run');
+    expect(coversText(null)).toBe('');
+  });
+});
