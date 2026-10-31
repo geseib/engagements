@@ -5,14 +5,13 @@ import Icon from './Icon';
  * THE FORMAT CHOICE — ONE RADIO GROUP, TWO SKINS (docs/design/new-engagement
  * README §3.8, frames 1, 3, 4, 10, 10b).
  *
- *   gallery  TEXT cards, three across — the name and one plain line — for a
- *            host choosing for the first time (round 4: the mini pictures
+ *   gallery  TEXT cards, three across — the name and one plain line — for
+ *            every host until a set is picked (revision 31 Oct; round 4: the mini pictures
  *            are gone; the pane beside draws the same pictures larger and
  *            follows the card under the pointer or focus). Build Room and
  *            Event share the sixth cell as two quieter rows under "Bigger
  *            than one session". On a phone the cards become rows (frame 10).
- *   chips    one row, for a host who knows the formats (and once a set is
- *            picked in full mode)
+ *   chips    one row, once a set is picked (or a hand-off format chosen)
  *
  * ONE WIDGET MODEL either way: role="radiogroup" with a roving tabindex — one
  * tab stop (the chosen option; when none is chosen, the option marked

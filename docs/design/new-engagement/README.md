@@ -658,7 +658,7 @@ compete at once, so a newcomer cannot tell which one to deal with first.
 | Section | Shown when | Hidden again when |
 |---|---|---|
 | Name it | Always | Never |
-| Format (gallery or chips, by `hasCreated` as today) | Always | Never |
+| Format (gallery until a set is picked, then chips; by `hasCreated` until the 31 Oct revision) | Always | Never |
 | Question set | `engagementType` is set. Since the 31 Oct revision this is never true on open for a new engagement | Never for a session format. Choosing Build Room or Event puts "Next: the … page" (`OtherFormatHandoff`) in the **same slot**; choosing a session format again brings Question set back with the set it had (`setByFormat`, shipped) |
 | Topics | A set is picked (unchanged) | The set is cleared or the chooser is open (unchanged) |
 | Names card (C&A, Survey), Background for Workie (C&A), Advanced | A set has been picked **at any point** while the dialog is open (`revealed` latch, dialog-local) | Never while open. Each shows only for the formats it applies to, as today. A hand-off format hides them along with Question set; returning brings them back |
@@ -890,21 +890,22 @@ Question set already open with a format they may not want this time. A host who 
 the formats are, or clicked ahead, had nothing to orient them, and decision 1's "one rule for
 everyone" was only half true: the rule was the same, but the starting point was not.
 
-**The new rule.** Every new engagement opens with **no format chosen**, for every host. The pane
-shows the quiet example, Question set is not yet revealed, and the foot says "Still needed: a
+**The new rule.** Every new engagement opens exactly as a first-timer's, for every host: **no
+format chosen** and **the gallery** (text cards and "Planning a…"), which folds to chips once a
+set is picked, as it always did. Round 2's rule that a host with history gets chips from the
+start (`hasCreated`) is retired. The pane shows the quiet example, Question set is not yet revealed, and the foot says "Still needed: a
 title, a format and a question set." (or "a format and a question set." with a title in hand).
 Editing a session is unchanged: everything filled in from the start.
 
 What a host with history keeps, so they lose no keys:
 
-- **Chips, not the gallery** (`hasCreated`, unchanged), with the last format's chip tagged
-  **last**.
+- **The last format is marked.** Its card says "You used it last." (its chip, once the row is
+  chips, says "last").
 - **The keyboard lands on the last format.** When nothing is chosen, the format group's one tab
-  stop (roving tabindex, `FormatPicker`) is the last-used option, not the first. Enter in the
-  title goes to that stop; Enter or Space picks it. Tab from the title reaches it one stop
-  later, past "Compare formats" (round 2 put that link before the chips in the Tab order, and
-  that is unchanged). On a phone the last format is drawn even when the row is folded behind
-  "More".
+  stop (roving tabindex, `FormatPicker`) is the last-used card, not the first. Enter in the
+  title goes to that stop; Enter or Space picks it. Tab from the title reaches it after
+  "Compare formats" and the "Planning a…" chips (that order is unchanged). On a phone, where the
+  gallery's rows fold behind "More", the last format is drawn even past the fold.
 - **Recents one keystroke away.** Once the format is chosen, the set search has "Used by you
   lately" under it. The fast path is title, Enter, Enter, Enter, ⌘/Ctrl+Enter
   (`newEngagementDialog.test.jsx`, "the keyboard path").
@@ -912,13 +913,14 @@ What a host with history keeps, so they lose no keys:
 
 Round 3's rule holds: one layout, the same card for every host.
 
-**The chip row at 1280×720.** With the pane open, the seven chips wrapped "Event" onto a second
+**The chip row at 1280×720.** With the pane open, the seven chips (shown once a set is picked) wrapped "Event" onto a second
 line at 1280×720 (seen live). The form column there is 8px narrower than at 1440 and, 720
 tall, it scrolls. Between 901px and 1440px with the pane open, the chips' padding (10 → 8px),
 the gaps (5 → 4px) and the form's side padding (28 → 24px) step in. No text shrinks: chip names
 stay at 13px and the "last" tag at the 12px floor (`gameSetupPalette.test.js`).
 
 **In code.** `GameSetupDialog` no longer seeds `engagementType` from `lastFormat`, and the
-effect that applied a late history read is gone; `lastFormat` now only tags a chip. An
+effect that applied a late history read is gone; `showGallery` no longer reads `hasCreated`.
+`hasCreated` and `lastFormat` now only mark the last format. An
 `initialFormat` prop, like `initialSetId`, is a seam no caller passes; the tests use it to start
 past the format decision.

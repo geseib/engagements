@@ -307,13 +307,21 @@ describe('a first-time host', () => {
     } finally { spy.mockRestore(); spySet.mockRestore(); }
   });
 
-  test.each([['shown', false], ['hidden', true]])('gallery or chips depends only on history (pane %s)', (_, hidden) => {
+  /* Revision, 31 Oct: the gallery is for everyone until a set is picked —
+     history no longer decides it. rejects: chips on open for a host with history */
+  test.each([['shown', false], ['hidden', true]])('the gallery for everyone until a set is picked, then chips (pane %s)', (_, hidden) => {
     if (hidden) hideHow();
     const { unmount } = render(<GameSetupDialog {...base()} />);
     expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
     unmount();
     if (hidden) hideHow();
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" initialFormat="trivia" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
+    expect(document.querySelector('.gsd-fmt--chips')).toBeNull();
+    expect(screen.getByText('Planning a…')).toBeInTheDocument();
+    fireEvent.click(radio('Call & Answer'));
+    expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
+    pickSet(KEY_B);
     expect(document.querySelector('.gsd-fmt--gallery')).toBeNull();
     expect(document.querySelector('.gsd-fmt--chips')).not.toBeNull();
   });
@@ -400,7 +408,7 @@ describe('a first-time host', () => {
    format is tagged and is where the keyboard lands, so a repeat host is still
    one key per decision. */
 describe('a host with history', () => {
-  test('opens like a first-timer: no format chosen, the quiet example, no Question set — chips, with the last one tagged', () => {
+  test('opens exactly like a first-timer: the gallery and "Planning a…", no format chosen, the quiet example, no Question set; the last card says so', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
     // rejects: the last format preselected on open (round 4 before 31 Oct)
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
@@ -413,10 +421,12 @@ describe('a host with history', () => {
     expect(screen.queryByRole('heading', { name: 'Question set' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: /choose a question set/i })).toBeNull();
     expect(need()).toHaveTextContent('Still needed: a format and a question set.');
-    // Chips, not the gallery, and the last one keeps its tag.
-    expect(document.querySelector('.gsd-fmt--gallery')).toBeNull();
-    expect(radio('Trivia').closest('button').textContent).toMatch('last used');
-    expect(radio('Call & Answer').closest('button').textContent).not.toMatch('last');
+    // rejects: chips for a host with history (round 2's rule, retired 31 Oct)
+    expect(screen.getByRole('heading', { name: 'Pick a format' })).toBeInTheDocument();
+    expect(document.querySelector('.gsd-fmt--chips')).toBeNull();
+    expect(screen.getByText('Planning a…')).toBeInTheDocument();
+    expect(radio('Trivia').closest('button')).toHaveTextContent('You used it last.');
+    expect(screen.getAllByText('You used it last.')).toHaveLength(1);
     // Round 3's one layout: the same card as a first-timer's.
     expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
     expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--compact');
@@ -424,17 +434,22 @@ describe('a host with history', () => {
     expect(screen.getByRole('button', { name: /create engagement/i })).toHaveAttribute('aria-keyshortcuts', 'Meta+Enter Control+Enter');
   });
 
-  test('focus entering the format group lands on the last format, and Space picks it', () => {
+  test('focus entering the gallery lands on the last card, and Space picks it', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
-    // The roving tab stop is the last format, not the first chip.
+    // The roving tab stop is the last card, not the first.
     expect(radios.filter((r) => r.tabIndex === 0)).toEqual([radio('Trivia')]);
-    // In the Tab order: title, Compare formats, then the group's one stop.
+    // In the Tab order the group's one stop follows Compare formats and the
+    // meeting chips: every stop between the title and it is one of those.
     const form = document.querySelector('.gsd-main');
     const all = Array.from(form.querySelectorAll('button, input, [tabindex]'))
       .filter((el) => el.tabIndex >= 0 && !el.disabled);
     const title = all.indexOf(screen.getByLabelText(/name it/i));
-    expect(all[title + 2]).toBe(radio('Trivia'));
+    const stop = all.indexOf(radio('Trivia'));
+    const between = all.slice(title + 1, stop);
+    expect(between[0]).toBe(screen.getByRole('button', { name: /compare formats/i }));
+    between.slice(1).forEach((el) => expect(el).toHaveClass('gsd-meet-chip'));
+    expect(all.slice(stop + 1).some((el) => el.getAttribute('role') === 'radio')).toBe(false);
     // Enter in the title goes straight to it.
     const input = screen.getByLabelText(/name it/i);
     input.focus();
@@ -674,7 +689,9 @@ describe('live dev test fixes', () => {
   /* Round 2 (devtest 5 N1): the next Tab stop after the format chips is the
      set search. "Compare formats" sits top right of the step, BEFORE the
      chips in the Tab order, never between. */
-  test('O3/E4/N1: title → Compare formats → formats → search, nothing between the chips and the search', () => {
+  /* Revision, 31 Oct: everyone opens on the gallery, whose "Planning a…"
+     chips sit between Compare formats and the cards. */
+  test('O3/E4/N1: title → Compare formats → meeting chips → formats → search, nothing between the formats and the search', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
     const form = document.querySelector('.gsd-main');
     const all = Array.from(form.querySelectorAll('button, input, [tabindex]'))
@@ -684,32 +701,37 @@ describe('live dev test fixes', () => {
     const fmt = all.indexOf(radio('Call & Answer'));
     const search = all.indexOf(screen.getByRole('combobox', { name: /choose a question set/i }));
     expect(guide).toBe(title + 1);
-    expect(fmt).toBe(guide + 1);
+    all.slice(guide + 1, fmt).forEach((el) => expect(el).toHaveClass('gsd-meet-chip'));
     expect(search).toBe(fmt + 1);
   });
 
   /* THE FAST PATH for a host who repeats themselves (revision 31 Oct): no
-     format is chosen on open, but the last one is where the keyboard lands —
-     title, Enter (to the last format), Enter (picks it, on to the set search,
-     the recents one keystroke away), Enter (the recent), ⌘/Ctrl+Enter. Tab
-     from the title reaches the same chip one stop later, past Compare
-     formats, where Space or Enter picks it. */
+     format is chosen on open and everyone starts at the gallery, but the
+     last format is where the keyboard lands — title, Enter (to the last
+     card), Enter (picks it, on to the set search, the recents one keystroke
+     away), Enter (the recent), ⌘/Ctrl+Enter. Tab from the title reaches the
+     same card after Compare formats and the "Planning a…" chips. */
   test('the keyboard path: title → Enter → Enter → Enter → Ctrl+Enter creates, and the keycaps show for every host', async () => {
     const onCreate = jest.fn();
-    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer"
-      recentSetUses={new Map([[KEY_B, Date.now()]])} />);
+    const KEY_SPACE = setRefKey({ id: 'space' });
+    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="trivia"
+      recentSetUses={new Map([[KEY_SPACE, Date.now()]])} />);
+    expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
     expect(document.querySelector('.btn-primary .gsd-kbd')).toHaveAttribute('aria-hidden', 'true');
     const title = screen.getByLabelText(/name it/i);
     title.focus();
     fireEvent.keyDown(title, { key: 'Enter' });
-    expect(radio('Call & Answer')).toHaveFocus();
-    expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'false');
-    fireEvent.keyDown(radio('Call & Answer'), { key: 'Enter' });
+    expect(radio('Trivia')).toHaveFocus();
+    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.keyDown(radio('Trivia'), { key: 'Enter' });
+    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
     const box = await screen.findByRole('combobox', { name: /choose a question set/i });
     await waitFor(() => expect(box).toHaveFocus());
     expect(within(screen.getByRole('listbox', { name: 'Used by you lately' })).getByRole('option')).toBeInTheDocument();
     fireEvent.keyDown(box, { key: 'Enter' });
-    expect(chosenSet()).toBe(KEY_B);
+    expect(chosenSet()).toBe(KEY_SPACE);
+    // The set is picked: the gallery folds to chips.
+    expect(document.querySelector('.gsd-fmt--chips')).not.toBeNull();
     fireEvent.keyDown(document.activeElement, { key: 'Enter', ctrlKey: true });
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
@@ -795,14 +817,23 @@ describe('live dev test fixes', () => {
   test('phone (frames 10/10b): formats folded behind More, Create says Create', () => {
     const before = window.matchMedia;
     window.matchMedia = (q) => ({ matches: /max-width: 600px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
+    const names = () => within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio')
+      .map((r) => r.getAttribute('data-format'));
     try {
-      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
-      const group = screen.getByRole('radiogroup', { name: /format/i });
-      expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Call & Answerlast used', 'Trivia', 'Poll']);
-      fireEvent.click(screen.getByRole('button', { name: /^More/ }));
-      expect(within(group).getAllByRole('radio').length).toBe(5);
+      const { unmount } = render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+      // The gallery, as rows, for a host with history too; no meeting chips on a phone.
+      expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
+      expect(screen.queryByText('Planning a…')).toBeNull();
+      expect(names()).toEqual(['call-and-answer', 'trivia', 'poll']);
+      fireEvent.click(screen.getByRole('button', { name: /Wavelength, Survey/ }));
+      expect(names().length).toBe(5);
       expect(screen.getByRole('button', { name: /^Create$/ })).toBeInTheDocument();
       expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--phone');
+      unmount();
+      // A last format past the fold is still drawn, so the keyboard can land on it.
+      render(<GameSetupDialog {...base()} hasCreated lastFormat="survey" />);
+      expect(names()).toEqual(['call-and-answer', 'trivia', 'poll', 'survey']);
+      expect(radio('Survey').tabIndex).toBe(0);
     } finally { window.matchMedia = before; }
   });
 });
@@ -937,10 +968,13 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
     const pane = screen.getByRole('complementary', { name: 'How it runs' });
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
     expect(radios.length).toBeGreaterThanOrEqual(6);
-    radios.forEach((r) => {
-      expect(pane.contains(r)).toBe(false);
-      fireEvent.click(r);
-      expect(r).toHaveAttribute('aria-checked', 'true');
+    // By format id, re-found each time: a hand-off folds the gallery to chips.
+    const ids = radios.map((r) => r.getAttribute('data-format'));
+    ids.forEach((id) => {
+      const r = () => document.querySelector(`[role="radio"][data-format="${id}"]`);
+      expect(pane.contains(r())).toBe(false);
+      fireEvent.click(r());
+      expect(r()).toHaveAttribute('aria-checked', 'true');
     });
     // The pane is a grid column beside the form, never laid over it.
     expect(document.querySelector('.gsd-body')).toHaveClass('has-side');

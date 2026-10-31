@@ -14,8 +14,9 @@
  *            card, Background for Workie and Advanced once a set has been
  *            picked in this dialog. Nothing shown is taken away again while
  *            the dialog is open. Every new engagement opens with no format
- *            chosen, a host with history too (revision 31 Oct): their last
- *            format is tagged "last" and is the group's tab stop. A reveal never moves
+ *            chosen and the gallery, a host with history too (revision 31
+ *            Oct): their last format's card says "You used it last." and is
+ *            the group's tab stop. A reveal never moves
  *            focus; it fades in once (180ms, none under reduced motion) and
  *            says so once in the one polite live region. Create stays in the
  *            foot, aria-disabled with "Still needed: …"; pressed early, it
@@ -25,9 +26,9 @@
  *            on the left and a 420px pane, "How <format> runs", a storyboard
  *            to scroll through (components/FormatWalkthrough); before a
  *            format is chosen, one quiet example stage. Its Hide folds it to a 56px rail, "Show how <format>
- *            runs", remembered in this browser; the form takes the width. A
- *            first-time host gets a gallery of cards with "Planning a…"
- *            meeting chips; a host with history gets chips. On a phone the
+ *            runs", remembered in this browser; the form takes the width.
+ *            Every host gets a gallery of cards with "Planning a…" meeting
+ *            chips until a set is picked, then chips. On a phone the
  *            storyboard is a fold under Format.
  *   GUIDE    "Compare formats" opens the Format guide: the card widens to min(1760px,
  *            100vw−48px) for the walkthrough and seven format cards
@@ -204,9 +205,10 @@ export default function GameSetupDialog({
   recentSetUses = EMPTY_USES,
   /**
    * WHAT THE HOST'S HISTORY SAYS (README §6), derived by the page from the
-   * GET /games read it already makes: has this account created a session
-   * (chips, not the gallery) and the newest one's format (tagged "last" and
-   * the format group's tab stop — never chosen on open, revision 31 Oct).
+   * GET /games read it already makes: has this account created a session,
+   * and the newest one's format. Since 31 Oct they decide only which format
+   * is marked as used last (and is the format group's tab stop): never the
+   * gallery or chips, and never a format chosen on open.
    */
   hasCreated = false,
   lastFormat = '',
@@ -808,9 +810,10 @@ export default function GameSetupDialog({
     chooseFormat(id);
   };
   const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
-  /* The gallery is for someone who has never created a session (README
-     round 2, decision 2); a host who has gets chips, in either view. */
-  const showGallery = !isEdit && !galleryDone && !hasCreated;
+  /* The gallery is for everyone until the first set is picked (owner, 31 Oct:
+     "we need to support those that forgot or clicked ahead"). It replaced
+     round 2's rule that only a host who had never created a session got it. */
+  const showGallery = !isEdit && !galleryDone;
 
   /* ── the foot ─────────────────────────────────────────────────────────── */
   let footNote = null;
