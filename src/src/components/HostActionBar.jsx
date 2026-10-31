@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
+import KeyCap from './stage/KeyCap';
 
 /**
  * The host's one and only "move the room forward" control.
@@ -276,10 +277,10 @@ export default function HostActionBar({
           >
             <Icon name={primary.icon} weight="bold" size={20} />
             <span>{labelOf(primary)}</span>
+            {/* The key, on the button (./stage/KeyCap.jsx). Inside a Dock the
+                dock says whether it works; on the console, this bar does. */}
+            <KeyCap on={!primary.disabled && shortcutsEnabled} />
           </button>
-          {!primary.disabled && shortcutsEnabled && (
-            <span className="host-action-bar__kbd" aria-hidden="true">or press Space</span>
-          )}
         </div>
         {/*
           WHAT THE KEYS DO RIGHT NOW — "should there be a visual queue on what

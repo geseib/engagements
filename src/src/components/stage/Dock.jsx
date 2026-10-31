@@ -3,6 +3,7 @@ import RoomWindowLink from './RoomWindowLink';
 import CompletionFlag from './CompletionFlag';
 import HelpButton from '../HelpButton';
 import { helpFor } from '../../config/help/screens';
+import { DockKeyContext, keyName } from './KeyCap';
 
 /**
  * The dock — the `.dock` grid area, and the room's one persistent action
@@ -111,8 +112,13 @@ function useCrowded(ref, deps) {
   an open overlay), which slid the main button right and back; and the hint,
   which sat after the buttons and pushed them by the width of its words.
   So a `kbd` passed as '' keeps its slot, hidden (`data-off`, visibility in
-  styles/stage.css), and the hint comes before the buttons. A caller that
-  never passes `kbd` still gets none.
+  styles.css), and the hint comes before the buttons. A caller that never
+  passes `kbd` still gets none.
+
+  THE KEY IS ON THE BUTTON NOW (owner, 31 Oct 2026: "i dont like the word
+  SPACE just dangling outside the button"). The dock no longer draws it; it
+  hands `kbd` to the main button's <KeyCap> through DockKeyContext
+  (./KeyCap.jsx), which draws a small cap at the button's trailing edge.
 
   `home` is a type's way back to its own host screen (Build Room's HOST), a
   fixed item just before SESSION; the two are always last. `setupCount` and
@@ -120,8 +126,8 @@ function useCrowded(ref, deps) {
   say whether its panel is open, without a second SESSION button;
   `setupProps` are extra attributes for it (a data- attribute, say).
 */
-/** How a key reads in a sentence: 'SPACE' → 'Space', '→' stays '→'. */
-export const keyName = (k) => (/^[A-Z]{2,}$/.test(String(k)) ? String(k).charAt(0) + String(k).slice(1).toLowerCase() : String(k));
+// Kept as an export for anything that imported it from here.
+export { keyName };
 
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
@@ -162,12 +168,9 @@ export default function Dock({
       )}
       <span className="spacer" />
       {hint && <span className="hint">{hint}</span>}
-      {children}
-      {typeof kbd === 'string' && (
-        // A hint, not a control (owner, 25 Oct: a boxed "SPACE" beside the main
-        // button read as a second button). Words in a sentence, no outline.
-        <span className="kbd" aria-hidden="true" data-off={kbd ? undefined : ''}>or press {keyName(kbd || 'SPACE')}</span>
-      )}
+      <DockKeyContext.Provider value={typeof kbd === 'string' ? kbd : null}>
+        {children}
+      </DockKeyContext.Provider>
       {/*
         HELP (Help Phase 3): `help` is a screen id from config/help/screens.js,
         and the `?` opens that guide section on the host's screen, in the

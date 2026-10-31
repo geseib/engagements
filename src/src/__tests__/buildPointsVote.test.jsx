@@ -383,7 +383,8 @@ describe('T6 results: highlight what moves forward', () => {
     expect(m.extras.map((x) => x.label)).toEqual(['Save the rest for later']);
     const dockButtons = await screen.findAllByRole('button', { name: /Save the rest for later|Work through in turn|Send these 3 to Claude/ });
     // The shared bar's order (parity PLAN §2a D1): the secondary, the third slot, the main button last.
-    expect(dockButtons.map((b) => b.textContent)).toEqual(['Work through in turn', 'Save the rest for later', 'Send these 3 to Claude']);
+    // The labels, without the main button's keycap (KeyCap, aria-hidden).
+    expect(dockButtons.map((b) => b.textContent.replace(/Space$/, ''))).toEqual(['Work through in turn', 'Save the rest for later', 'Send these 3 to Claude']);
     fireEvent.click(screen.getByRole('button', { name: 'Work through in turn' }));
     await waitFor(() => expect(postsTo('asks/005')).toHaveLength(1));
     expect(postsTo('asks/005')[0].body).toEqual({ action: 'forward', pointIds: ['p2', 'p1', 'p4'], then: 'run' });
@@ -625,7 +626,7 @@ describe('T7b the Stage and room safety', () => {
     await openRoom(RUNNING(true));
     fireEvent.keyDown(window, { key: '2' });
     await screen.findByRole('region', { name: 'Working through' });
-    expect(document.querySelector('.dock .kbd').textContent).toBe('or press Space');
+    expect(document.querySelector('.dock .keycap').textContent).toBe('Space');
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
     expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1' });
