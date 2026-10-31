@@ -879,6 +879,55 @@
   cursor: not-allowed;
 }
 
+/* THE GO-AHEAD in an ask that is not destructive — Start the event, Bring
+   everyone here, Leave (owner, 31 Oct 2026: guard rails on starting and
+   ending). Amber with the dusk ground as its text: #0F1A2E on #F6A94C is
+   9.2:1. */
+.ag-yes {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--bg);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ag-yes:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* The exit's two ways out, each with what it does underneath. */
+.ag-exit-ways {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ag-exit-way {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--ag-rule);
+  border-radius: 10px;
+}
+
+.ag-exit-way p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ag-exit-way .ag-yes,
+.ag-exit-way .ag-end {
+  justify-self: start;
+}
+
 /* AN ITEM WHOSE SESSION EXPIRED (owner, 31 Oct 2026): the word on its row,
    and the board's one plain line saying what happened. */
 .ag-r-st--expired {

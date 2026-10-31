@@ -7,6 +7,7 @@ import HelpButton from '../HelpButton';
 import { helpFor } from '../../config/help/screens';
 import { getEvent, runEvent, readDeck, turnPage, sessionExists } from '../../utils/eventsApi';
 import { navigateTo } from '../../auth/navigate';
+import { eventGoLiveConfirm, eventHasStarted } from '../../config/hostControls';
 import { loadProfile } from '../../config/displayProfile';
 import {
   TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, upNext,
@@ -24,6 +25,8 @@ import './EventStage.css';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
 const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
+// EXIT's "leave": the console's Events, where the event is opened again.
+const EVENTS_PATH = '/admin?section=events';
 
 /**
  * THE EVENT'S STAGE — /host/event/<code> (events M3, reworked 27 Sep 2026).
@@ -274,6 +277,11 @@ export default function EventStage({ code }) {
     return /^it_[0-9a-f]{8}$/.test(f) ? f : 'agenda';
   });
   const [confirmEndEvent, setConfirmEndEvent] = useState(false);
+  // THE GUARD RAILS (owner, 31 Oct 2026): going live that starts the event,
+  // or from a preview, asks first — { item, ask } — and EXIT asks whether to
+  // leave the stage or end the event.
+  const [askGoLive, setAskGoLive] = useState(null);
+  const [exitOpen, setExitOpen] = useState(false);
   /** The board row whose End is waiting for the host to say yes (finding #25). */
   const [confirmEnd, setConfirmEnd] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -379,7 +387,7 @@ export default function EventStage({ code }) {
   const fullEl = useFullscreenElement();
   const presenting = Boolean(deckItem) && fullEl !== null && fullEl === deckFrame.current;
   const [fullscreenOk] = useState(() => canFullscreen());
-  useFullscreenKey({ enabled: !confirmEndEvent && !confirmEnd && !qrOpen, target: () => deckFrame.current });
+  useFullscreenKey({ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen, target: () => deckFrame.current });
   const [cue, setCue] = useState(false);
   const cueTimer = useRef(null);
   const wake = useCallback(() => {
@@ -537,6 +545,31 @@ export default function EventStage({ code }) {
     if (live) setFocus(live.itemId);
   }, [act, code, setFocus, markExpired]);
 
+  /*
+    ASK FIRST, WHERE ONE KEY WOULD MOVE EVERY PHONE BY ACCIDENT (owner, 31 Oct
+    2026: "if i accidentally press space bar it starts the event"). Two
+    moments ask, from SPACE, the dock or a row alike: the first go-live, which
+    starts the event, and going live from a PREVIEW, where the host was only
+    looking. Moving on to the next item while the room is running stays one
+    step. The words are config/hostControls.js eventGoLiveConfirm, which the
+    engagement's own stage asks with.
+  */
+  const requestGoLive = useCallback((item) => {
+    if (!item) return;
+    const startsEvent = !eventHasStarted(event, items);
+    const fromPreview = Boolean(focused && focused.itemId === item.itemId && focused.state === 'planned');
+    if (!startsEvent && !fromPreview) { goLive(item); return; }
+    const live = event ? items.find((i) => i.itemId === event.liveItemId) : null;
+    setAskGoLive({
+      item,
+      ask: eventGoLiveConfirm({
+        itemTitle: item.title || typeLabel(item.type) || 'this item',
+        startsEvent,
+        liveTitle: live && live.itemId !== item.itemId ? (live.title || typeLabel(live.type)) : '',
+      }),
+    });
+  }, [event, items, focused, goLive]);
+
   const next = upNext(items, event && event.liveItemId);
 
   // ── The one obvious next step, for the dock ──────────────────────────────
@@ -545,13 +578,13 @@ export default function EventStage({ code }) {
     if (event.state === 'ENDED') return { label: 'Back to the agenda', run: () => navigateTo(agendaPath(code)) };
     if (focused) {
       if (focused.state !== 'live' && focused.state !== 'done') {
-        return { label: focused.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here', run: () => goLive(focused) };
+        return { label: focused.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here', run: () => requestGoLive(focused) };
       }
       if (focused.state === 'live') {
         // Going live on the next item ends this one on the server, in the
         // same step (run.js stepAside) — a talk, a break or an activity alike.
         const after = nextAfter(items, focused.itemId);
-        if (after) return { label: `Go live: ${startWords(after)}`, run: () => goLive(after) };
+        if (after) return { label: `Go live: ${startWords(after)}`, run: () => requestGoLive(after) };
         return isBreak(focused.type)
           ? { label: 'End the break', run: () => act('end', focused) }
           : { label: `End ${focused.title || typeLabel(focused.type)}`, run: () => act('end', focused) };
@@ -561,16 +594,16 @@ export default function EventStage({ code }) {
     // The next planned item after the one the room saw last; with nothing
     // left planned, the day is done. Never "Resume <an earlier item>": a
     // paused item keeps its own Resume on its row.
-    if (next) return { label: `Go live: ${startWords(next)}`, run: () => goLive(next) };
+    if (next) return { label: `Go live: ${startWords(next)}`, run: () => requestGoLive(next) };
     return { label: 'End the event', run: () => setConfirmEndEvent(true) };
-  }, [event, focused, items, next, act, goLive, setFocus, code]);
+  }, [event, focused, items, next, act, requestGoLive, setFocus, code]);
 
   // SPACE (and the clicker's arrow) takes the dock's step, as on every stage.
   // With slides up, the arrows and PageUp/PageDown turn the slide instead —
   // from a focused ‹ › too, since a clicker's key lands wherever focus is.
   useEffect(() => {
     const onKey = (e) => {
-      if (confirmEndEvent || confirmEnd || qrOpen) return;
+      if (confirmEndEvent || confirmEnd || qrOpen || askGoLive || exitOpen) return;
       const tag = (e.target && e.target.tagName) || '';
       if (presenting && e.key === ' ') {
         e.preventDefault();
@@ -591,7 +624,7 @@ export default function EventStage({ code }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [plan, confirmEndEvent, confirmEnd, qrOpen, busy, deckItem, turn, presenting]);
+  }, [plan, confirmEndEvent, confirmEnd, qrOpen, askGoLive, exitOpen, busy, deckItem, turn, presenting]);
 
   if (loadError) {
     return (
@@ -785,7 +818,7 @@ export default function EventStage({ code }) {
               item={item}
               busy={busy || ended}
               onOpen={openItem}
-              onLive={goLive}
+              onLive={requestGoLive}
               onAct={act}
               onEnd={setConfirmEnd}
               expired={Boolean(item.gameId) && expired.has(String(item.gameId))}
@@ -825,11 +858,17 @@ export default function EventStage({ code }) {
               <span className="dock-more-lbl">QR</span>
             </button>
           )}
-          {!ended && (
-            <button type="button" className="dock-more ag-dock-end" onClick={() => setConfirmEndEvent(true)} aria-label="End the event">
-              <span className="dock-more-lbl">END EVENT</span>
-            </button>
-          )}
+          {/* EXIT, not END EVENT (owner, 31 Oct 2026): leaving and ending are
+              two different things, and the stage had only the second. EXIT
+              asks which; once the day is over there is only leaving. */}
+          <button
+            type="button"
+            className="dock-more"
+            onClick={() => (ended ? navigateTo(EVENTS_PATH) : setExitOpen(true))}
+            aria-label={ended ? 'Exit to the console' : 'Exit — leave the stage, or end the event'}
+          >
+            <span className="dock-more-lbl">EXIT</span>
+          </button>
         </>
       )}
     </footer>
@@ -899,6 +938,73 @@ export default function EventStage({ code }) {
             >
               End it
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {askGoLive && (
+        <Modal
+          overlayClassName="ag-scrim"
+          contentClassName="ag-confirm"
+          onClose={() => setAskGoLive(null)}
+          closeOnEscape={() => !busy}
+          label={askGoLive.ask.title}
+          theme="dark"
+        >
+          <h2>{askGoLive.ask.title}</h2>
+          <p>{askGoLive.ask.message}</p>
+          <div className="ag-confirm-foot">
+            <button type="button" className="ag-close" onClick={() => setAskGoLive(null)}>Not yet</button>
+            <button
+              type="button"
+              className="ag-yes"
+              disabled={busy}
+              onClick={async () => { const { item } = askGoLive; setAskGoLive(null); await goLive(item); }}
+            >
+              {askGoLive.ask.confirmText}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {exitOpen && (
+        <Modal
+          overlayClassName="ag-scrim"
+          contentClassName="ag-confirm"
+          onClose={() => setExitOpen(false)}
+          closeOnEscape={() => !busy}
+          label="Leave the stage, or end the event?"
+          theme="dark"
+        >
+          <h2>Leave the stage, or end the event?</h2>
+          <div className="ag-exit-ways">
+            <div className="ag-exit-way">
+              <button type="button" className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(EVENTS_PATH); }}>
+                Leave — the event keeps going
+              </button>
+              <p>
+                {started
+                  ? 'Phones stay where they are and people can still join. Open the event again from Events in the console.'
+                  : 'Nothing has started. The event stays ready; open it again from Events in the console.'}
+              </p>
+            </div>
+            <div className="ag-exit-way">
+              <button
+                type="button"
+                className="ag-end"
+                disabled={busy}
+                onClick={async () => { setExitOpen(false); setFocus('agenda'); await act('end-event'); }}
+              >
+                End the event
+              </button>
+              <p>
+                Anything live or paused ends now, and nobody new can join. Items that have not started stay
+                on the agenda, unplayed. Reports already made are kept.
+              </p>
+            </div>
+          </div>
+          <div className="ag-confirm-foot">
+            <button type="button" className="ag-close" onClick={() => setExitOpen(false)}>Stay</button>
           </div>
         </Modal>
       )}

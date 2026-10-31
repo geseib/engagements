@@ -406,6 +406,45 @@ export function endSessionConfirm() {
 }
 
 /**
+ * WHAT GOING LIVE ASKS, IN AN EVENT — the owner, 31 Oct 2026: "if i
+ * accidentally press space bar it starts the event … we really need guard
+ * rails on if they really want to start or end events."
+ *
+ * Two moments move every phone with one key and could not be taken back:
+ *   - the first item going live STARTS the event (`startsEvent`);
+ *   - going live from a PREVIEW, where the host was only looking.
+ * Moving on from the live item to the next stays one step: that is the
+ * dock's job on every stage, and the host is already running the room.
+ *
+ * Going live ends whatever was live (websocket/events/run.js stepAside),
+ * except an open survey, which pauses — so that is said when there is one.
+ * `irreversible` keeps → from answering yes: a clicker sends it twice.
+ * The event stage (components/event/EventStage.jsx) asks in the same words.
+ */
+export function eventGoLiveConfirm({ itemTitle = 'this item', startsEvent = false, liveTitle = '' } = {}) {
+  if (startsEvent) {
+    return {
+      title: 'Start the event?',
+      message: `Everyone who has joined moves to ${itemTitle} now, and the event is under way. Not ready? Stay where you are: nothing moves until you say so.`,
+      confirmText: 'Start the event',
+      irreversible: true,
+    };
+  }
+  return {
+    title: 'Bring everyone here?',
+    message: `Every phone moves to ${itemTitle} now.${liveTitle ? ` ${liveTitle} ends (an open survey pauses instead).` : ''}`,
+    confirmText: 'Bring everyone here',
+    irreversible: true,
+  };
+}
+
+/** Has anything in this event happened yet? Before then, going live starts it. */
+export function eventHasStarted(event, items = []) {
+  return Boolean(event && (event.state === 'LIVE' || event.state === 'ENDED'))
+    || items.some((i) => (i.state || 'planned') !== 'planned');
+}
+
+/**
  * May the host end this session from the settings panel right now?
  *
  * A survey has its own way out — CLOSED's own primary, SURVEY#CLOSED ->

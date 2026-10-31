@@ -95,7 +95,7 @@ import { historyFacts, readHistoryCache, writeHistoryCache } from './config/form
 import {
   hostControlsFor, notesReadyFor, phaseOfGameState, isLobbyState, HOST_INTENTS, roomIsComplete,
   stageBeatFromFrame, STAGE_BEATS, hostPhaseForBeat, isSurveyType, endSessionConfirm,
-  resultsRoundOf, SURVEY_ROUND,
+  resultsRoundOf, SURVEY_ROUND, eventGoLiveConfirm, eventHasStarted,
 } from './config/hostControls';
 import {
   stageAnswersKey, stageAnswersReady, askFetchStillCurrent,
@@ -246,6 +246,9 @@ function GameHostPage() {
     again whenever the event's frames say something moved.
   */
   const [eventItem, setEventItem] = useState(null);
+  // The rest of the event, for the go-live ask (config/hostControls.js
+  // eventGoLiveConfirm): has it started, and what is live now.
+  const [eventRun, setEventRun] = useState({ started: false, liveTitle: '' });
   const [eventRefresh, setEventRefresh] = useState(0);
   useEffect(() => {
     if (!eventCode || !gameId) {
@@ -256,7 +259,13 @@ function GameHostPage() {
     getEvent(eventCode)
       .then((view) => {
         if (cancelled) return;
-        setEventItem((view.items || []).find((i) => String(i.gameId || '') === String(gameId)) || null);
+        const items = view.items || [];
+        setEventItem(items.find((i) => String(i.gameId || '') === String(gameId)) || null);
+        const live = view.event && items.find((i) => i.itemId === view.event.liveItemId);
+        setEventRun({
+          started: eventHasStarted(view.event, items),
+          liveTitle: live ? (live.title || '') : '',
+        });
       })
       .catch(() => { /* the item's own stage still works; only its event door waits */ });
     return () => { cancelled = true; };
@@ -7159,6 +7168,17 @@ Focus on actionable business strategy insights.`;
         label: eventItem.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here',
         intent: HOST_INTENTS.EVENT_GO_LIVE,
         disabled: eventBusy,
+        // A PREVIEW asks before the phones move, on every route to this
+        // control (runHostAction honours `confirm`): a stray SPACE here
+        // started the event (owner, 31 Oct 2026). A paused item is the
+        // room's own, and Bring everyone back stays one step.
+        ...(eventItem.state === 'planned' ? {
+          confirm: eventGoLiveConfirm({
+            itemTitle: eventItem.title || 'this item',
+            startsEvent: !eventRun.started,
+            liveTitle: eventRun.liveTitle,
+          }),
+        } : {}),
       },
       secondary: null,
       tertiary: null,

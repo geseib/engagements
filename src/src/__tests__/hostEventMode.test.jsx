@@ -77,6 +77,13 @@ function installFetch(state) {
   });
 }
 
+// ConfirmDialog (components/ConfirmDialog.jsx) draws its card as .confirmation-modal.
+const findAsk = () => waitFor(() => {
+  const el = document.querySelector('.confirmation-modal');
+  if (!el) throw new Error('no ask is open');
+  return el;
+});
+
 async function mountItemStage() {
   window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}`);
   render(<GameHostPage />);
@@ -109,11 +116,42 @@ test('"Bring everyone here" takes the item live and the host stays, now running 
   const bring = await screen.findByRole('button', { name: 'Bring everyone here' }, { timeout: 5000 });
   installFetch('STARTED');
   fireEvent.click(bring);
+  // A preview asks before the phones move (owner, 31 Oct 2026).
+  const ask = await findAsk();
+  expect(ask).toHaveTextContent('Bring everyone here?');
+  expect(events.runEvent).not.toHaveBeenCalled();
+  fireEvent.click(within(ask).getByRole('button', { name: 'Bring everyone here' }));
   await waitFor(() => expect(events.runEvent).toHaveBeenCalledWith(CODE, 'start', ITEM.itemId));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Bring everyone here' })).toBeNull(), { timeout: 5000 });
   expect(navigateTo).not.toHaveBeenCalled();
 });
 
+// rejects: the owner's report, 31 Oct 2026 — "if i accidentally press space
+// bar it starts the event". On a preview SPACE asks; it never moves the room.
+test('SPACE on a preview asks first, and moves nobody until the host says yes', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue(viewWith(ITEM));
+  await mountItemStage();
+  await screen.findByRole('button', { name: 'Bring everyone here' }, { timeout: 5000 });
+  fireEvent.keyDown(window, { key: ' ' });
+  const ask = await findAsk();
+  expect(ask).toHaveTextContent('Bring everyone here?');
+  expect(events.runEvent).not.toHaveBeenCalled();
+});
+
+test('a preview in an event that has not started asks to START THE EVENT', async () => {
+  installFetch('CREATED');
+  events.getEvent.mockResolvedValue({ ...viewWith(ITEM), event: { ...viewWith(ITEM).event, state: 'SCHEDULED' } });
+  await mountItemStage();
+  await screen.findByRole('button', { name: 'Bring everyone here' }, { timeout: 5000 });
+  fireEvent.keyDown(window, { key: ' ' });
+  const ask = await findAsk();
+  expect(ask).toHaveTextContent('Start the event?');
+  expect(ask).toHaveTextContent(/Space night/);
+  expect(events.runEvent).not.toHaveBeenCalled();
+});
+
+// rejects: a guard on the room's own paused item — Bring everyone back stays one step.
 test('a paused item offers "Bring everyone back"', async () => {
   installFetch('ASK#002');
   events.getEvent.mockResolvedValue(viewWith({ ...ITEM, state: 'paused' }));

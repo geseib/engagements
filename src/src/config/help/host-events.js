@@ -42,10 +42,12 @@
     the-board          EventStage.jsx: rail chips (Starting soon, Live now,
                        Between items, The day is over), "N of M done", JOIN,
                        board rows (Open, Go live, Resume, Pause, End), dock
-                       (EDIT AGENDA, QR, END EVENT), F for full screen.
+                       (EDIT AGENDA, QR, EXIT), F for full screen.
     open-or-go-live    EventStage openItem/goLive; GameHostPage eventWaiting
                        ("Bring everyone here", "Preview — the phones are not
-                       here yet"), previewRunningOrder.
+                       here yet"), previewRunningOrder; the asks before the
+                       phones move (hostControls eventGoLiveConfirm: "Start
+                       the event?", "Bring everyone here?", Not yet).
     moving-through     EventStage plan (Go live: …, End …), run.js stepAside
                        (moving on finishes the live item; an open survey
                        pauses), End confirm ("End it", "Keep it"), survey refusal.
@@ -56,7 +58,9 @@
                        Space and click while full screen, Esc; the "Just
                        arrived? Open" join block and "Coming up".
     breaks-on-the-day  EventStage break: Back at, countdown, +5 min, End the break.
-    ending-the-event   EventStage "End the event?" (Keep going / End the event),
+    ending-the-event   EventStage EXIT ("Leave the stage, or end the event?":
+                       Leave — the event keeps going / End the event / Stay),
+                       "End the event?" (Keep going / End the event),
                        run.js endEvent; "That's the day."
 */
 
@@ -286,7 +290,7 @@ const eventDay = {
           items: [
             { title: 'The top line', text: 'Where the day is (**Starting soon**, **Live now**, **Between items**), the event\'s name, how many items are done, and **JOIN** with the address and the event code.' },
             { title: 'The rows', text: 'Each item with its time and its state (**Live**, **Paused**, **Done**), and the buttons that fit it: **Open**, **Go live**, **Resume**, **Pause**, **End**.' },
-            { title: 'The dock', text: 'The next step on its main button (Space presses it), **EDIT AGENDA**, **QR** (a large join code for the room) and **END EVENT**.' },
+            { title: 'The dock', text: 'The next step on its main button (Space presses it), **EDIT AGENDA**, **QR** (a large join code for the room) and **EXIT** (leave the stage, or end the event).' },
           ],
         },
         {
@@ -315,6 +319,10 @@ const eventDay = {
         {
           t: 'p',
           text: 'When you are ready, press **Bring everyone here** on that item\'s dock (**Bring everyone back** on a paused one), or **Go live** on its row.',
+        },
+        {
+          t: 'p',
+          text: 'Two moments ask before any phone moves, so a stray Space cannot do them: going live from a preview asks **Bring everyone here?**, and the first item of the day asks **Start the event?**. Press the button to go ahead, or **Not yet** to stay where you are. Once the event is running, moving on to the next item is still one press.',
         },
       ],
     },
@@ -418,9 +426,13 @@ const eventDay = {
         {
           t: 'steps',
           items: [
-            { title: 'End it', text: 'On the event\'s stage, press **END EVENT** on the dock, or the main button once nothing is left to go live.' },
+            { title: 'End it', text: 'On the event\'s stage, press **EXIT** on the dock and choose **End the event**, or press the main button once nothing is left to go live.' },
             { title: 'Confirm', text: '**End the event?** says what happens: anything live or paused ends, nobody new can join, items that never started stay unplayed, and reports already made are kept. Press **End the event**, or **Keep going**.' },
           ],
+        },
+        {
+          t: 'p',
+          text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join; open the event again from **Events** in the console. **Stay** closes the question.',
         },
         {
           t: 'p',
