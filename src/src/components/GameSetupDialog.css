@@ -2407,3 +2407,19 @@
   transform: none;
 }
 .gsd .btn-primary[aria-disabled="true"]:hover { filter: none; }
+
+/* SEVEN CHIPS ON ONE ROW AT 1280 WIDE, PANE OPEN (revision, 31 Oct). At
+   1280×720 the form column is ~8px narrower than at 1440 and scrolls, so its
+   scrollbar takes the rest: "Event" wrapped to a second line (seen live).
+   Between the pane's breakpoint and 1440 the chips, their gaps and the form's
+   side padding take a step in; the words stay at 13px and the "last" tag at
+   the 12px floor. */
+@media (min-width: 901px) and (max-width: 1440px) {
+  .gsd .gsd-body.has-side .dialog-content { padding-left: 24px; padding-right: 24px; }
+  .gsd .gsd-body.has-side .gsd-fmt-group--chips { gap: 4px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips { padding: 0 8px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips[aria-checked="true"] { padding: 0 7px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips .gsd-fmt-top { gap: 4px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips .gsd-fmt-last { padding-left: 5px; }
+  .gsd .gsd-body.has-side .gsd-fmt-sep { margin: 4px 1px; }
+}

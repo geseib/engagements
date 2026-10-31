@@ -258,7 +258,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Each part appears once the one above it is done, and stays while the dialog is open: a format brings up **Question set**; a set brings up the names line, **Background for Workie** and **Advanced**. Once you have created a session, your last format is already chosen.',
+          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Each part appears once the one above it is done, and stays while the dialog is open: a format brings up **Question set**; a set brings up the names line, **Background for Workie** and **Advanced**. Every new engagement starts with no format chosen. Your last one is marked **last**; **Enter** in the title goes to it.',
         },
         {
           t: 'list',
@@ -328,7 +328,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format, closed until you open it. Once you have created a session, the last format you used is chosen for you.',
+          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format, closed until you open it. Until you pick a format, the storyboard shows one example stage; your last format is marked **last** on its chip, but nothing is chosen for you.',
         },
       ],
     },

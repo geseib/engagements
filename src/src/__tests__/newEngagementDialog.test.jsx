@@ -66,7 +66,7 @@ function PageHarness({ initialKey = '', lists = {}, onCreate, onRetry, holdLoads
   return (
     <GameSetupDialog
       {...base({ onCreate, onRetryCategories: onRetry })}
-      lastFormat="call-and-answer"
+      initialFormat="call-and-answer"
       categories={state.categories}
       activeCategoryIds={state.active}
       categoryStatus={state.status}
@@ -157,18 +157,18 @@ describe('changing the set never shows the old set\'s topics (README §2)', () =
 
   test('Create never sends one set\'s topics for another', () => {
     const onCreate = jest.fn();
-    const { rerender } = render(<GameSetupDialog {...base({ onCreate })} lastFormat="call-and-answer" categories={B}
+    const { rerender } = render(<GameSetupDialog {...base({ onCreate })} initialFormat="call-and-answer" categories={B}
       activeCategoryIds={new Set(['Architecture', 'Pricing'])} categoryStatus={{ key: '', loading: false, error: '' }} />);
     pickSet(KEY_B);
     // The page says B's list is in, but the selection still holds a name from A.
-    rerender(<GameSetupDialog {...base({ onCreate })} lastFormat="call-and-answer" categories={B}
+    rerender(<GameSetupDialog {...base({ onCreate })} initialFormat="call-and-answer" categories={B}
       activeCategoryIds={new Set(['Architecture', 'Pricing'])} categoryStatus={{ key: KEY_B, loading: false, error: '' }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Create engagement' }));
     expect(onCreate.mock.calls[0][0].categoryIds).toEqual(['Pricing']);
   });
 
   test('opening Change unmounts the topics, and "Keep the set I had" brings back the same selection', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" categories={A}
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" categories={A}
       activeCategoryIds={new Set(['Law'])} categoryStatus={{ key: KEY_A, loading: false, error: '' }} initialSetId="seta" />);
     expect(screen.getByText('Law').closest('button')).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(within(chooser()).getByRole('button', { name: 'Change' }));
@@ -249,7 +249,7 @@ describe('a first-time host', () => {
   });
 
   test('the guide\'s cards answer the arrow keys like tabs: they move and show', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     fireEvent.click(screen.getByRole('button', { name: /compare formats/i }));
     const first = screen.getByRole('tab', { name: 'Call & Answer' });
     expect(first).toHaveAttribute('aria-selected', 'true');
@@ -260,7 +260,7 @@ describe('a first-time host', () => {
   });
 
   test('one layout: no view switch; "How it runs" is open beside the form by default', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" initialFormat="trivia" />);
     expect(screen.queryByRole('radiogroup', { name: 'View' })).toBeNull();
     expect(screen.queryByRole('radio', { name: /Guided|Quick/ })).toBeNull();
     expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--compact');
@@ -269,7 +269,7 @@ describe('a first-time host', () => {
   });
 
   test('Hide folds the pane to a rail named for the format; Show brings it back; focus follows', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
     const card = document.querySelector('.new-game-dialog').className;
     fireEvent.click(screen.getByRole('button', { name: /^Hide/ }));
     const rail = screen.getByRole('button', { name: 'Show how Call & Answer runs' });
@@ -291,7 +291,7 @@ describe('a first-time host', () => {
 
   test('hidden is remembered: the next open starts on the rail', () => {
     hideHow();
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="poll" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="poll" initialFormat="poll" />);
     expect(screen.getByRole('button', { name: 'Show how Poll runs' })).toBeInTheDocument();
     expect(document.querySelector('.gsd-wt')).toBeNull();
   });
@@ -300,7 +300,7 @@ describe('a first-time host', () => {
     const spy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const spySet = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     try {
-      render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+      render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
       expect(screen.getByRole('heading', { name: 'How Call & Answer runs' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /^Hide/ }));
       expect(screen.getByRole('button', { name: 'Show how Call & Answer runs' })).toBeInTheDocument();
@@ -313,7 +313,7 @@ describe('a first-time host', () => {
     expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
     unmount();
     if (hidden) hideHow();
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" initialFormat="trivia" />);
     expect(document.querySelector('.gsd-fmt--gallery')).toBeNull();
     expect(document.querySelector('.gsd-fmt--chips')).not.toBeNull();
   });
@@ -394,42 +394,89 @@ describe('a first-time host', () => {
   });
 });
 
+/* REVISION, 31 OCT (README round 4): the owner, "Why can't we get it to
+   appear like the first timer we need to support those that forgot or
+   clicked ahead". Every new engagement opens with no format chosen; the last
+   format is tagged and is where the keyboard lands, so a repeat host is still
+   one key per decision. */
 describe('a host with history', () => {
-  test('opens Guided with chips (no gallery), the last format chosen and marked, and its walkthrough', () => {
+  test('opens like a first-timer: no format chosen, the quiet example, no Question set — chips, with the last one tagged', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
-    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
+    // rejects: the last format preselected on open (round 4 before 31 Oct)
+    const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
+    expect(radios.filter((r) => r.getAttribute('aria-checked') === 'true')).toEqual([]);
+    const pane = screen.getByRole('complementary', { name: 'How it runs' });
+    expect(within(pane).getByRole('heading', { name: 'How it runs' })).toBeInTheDocument();
+    expect(within(pane).getByTestId('gsd-wt-example')).toHaveTextContent('Example · Call & Answer, stage 1 of 6');
+    expect(screen.queryByRole('heading', { name: 'How Trivia runs' })).toBeNull();
+    // rejects: Question set already open for a host with history
+    expect(screen.queryByRole('heading', { name: 'Question set' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /choose a question set/i })).toBeNull();
+    expect(need()).toHaveTextContent('Still needed: a format and a question set.');
+    // Chips, not the gallery, and the last one keeps its tag.
     expect(document.querySelector('.gsd-fmt--gallery')).toBeNull();
-    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
     expect(radio('Trivia').closest('button').textContent).toMatch('last used');
-    expect(screen.getByRole('complementary', { name: 'How it runs' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
-    expect(screen.queryByText(/Planning a/)).toBeNull();
+    expect(radio('Call & Answer').closest('button').textContent).not.toMatch('last');
+    // Round 3's one layout: the same card as a first-timer's.
+    expect(document.querySelector('.new-game-dialog')).toHaveClass('gsd--full');
+    expect(document.querySelector('.new-game-dialog')).not.toHaveClass('gsd--compact');
     // ⌘ on a Mac, Ctrl elsewhere — jsdom is not a Mac.
     expect(screen.getByRole('button', { name: /create engagement/i })).toHaveAttribute('aria-keyshortcuts', 'Meta+Enter Control+Enter');
   });
 
-  test('the history read landing after open chooses the last format, and is not "work in hand"', () => {
+  test('focus entering the format group lands on the last format, and Space picks it', () => {
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="trivia" />);
+    const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
+    // The roving tab stop is the last format, not the first chip.
+    expect(radios.filter((r) => r.tabIndex === 0)).toEqual([radio('Trivia')]);
+    // In the Tab order: title, Compare formats, then the group's one stop.
+    const form = document.querySelector('.gsd-main');
+    const all = Array.from(form.querySelectorAll('button, input, [tabindex]'))
+      .filter((el) => el.tabIndex >= 0 && !el.disabled);
+    const title = all.indexOf(screen.getByLabelText(/name it/i));
+    expect(all[title + 2]).toBe(radio('Trivia'));
+    // Enter in the title goes straight to it.
+    const input = screen.getByLabelText(/name it/i);
+    input.focus();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(radio('Trivia')).toHaveFocus();
+    fireEvent.keyDown(radio('Trivia'), { key: ' ' });
+    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('heading', { name: 'Question set' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
+  });
+
+  test('the history read landing after open tags the last format and moves the tab stop, but chooses nothing and is not "work in hand"', () => {
     const props = base();
     const { rerender } = render(<GameSetupDialog {...props} />);
     rerender(<GameSetupDialog {...props} hasCreated lastFormat="trivia" />);
-    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'true');
+    expect(radio('Trivia')).toHaveAttribute('aria-checked', 'false');
+    expect(radio('Trivia').tabIndex).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: /close without creating/i }));
     expect(props.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  test('the recents are one click away, and a Tab into the search does not open the full chooser', () => {
+  test('once the format is chosen the recents are one click away, and a Tab into the search does not open the full chooser', () => {
     const props = base();
     render(<GameSetupDialog {...props} hasCreated lastFormat="call-and-answer" recentSetUses={new Map([[KEY_B, Date.now()]])} />);
+    expect(screen.queryByRole('listbox', { name: 'Used by you lately' })).toBeNull();
+    fireEvent.click(radio('Call & Answer'));
     fireEvent.focus(screen.getByRole('combobox', { name: /choose a question set/i }));
     expect(screen.queryByTestId('set-chooser-row')).toBeNull();
     fireEvent.click(within(screen.getByRole('listbox', { name: 'Used by you lately' })).getByRole('option'));
     expect(props.onQuestionSetChange).toHaveBeenLastCalledWith('setb', 'platform');
   });
+
+  test('a first-timer\'s tab stop is still the first format', () => {
+    render(<GameSetupDialog {...base()} />);
+    const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
+    expect(radios.filter((r) => r.tabIndex === 0)).toEqual([radio('Call & Answer')]);
+  });
 });
 
 describe('the format radio group', () => {
   test('exactly one tab stop, and the arrow keys move and choose', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
     expect(radios.filter((r) => r.tabIndex === 0)).toEqual([radio('Call & Answer')]);
     fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
@@ -442,7 +489,7 @@ describe('the format radio group', () => {
 
   test('arrowing C&A → Trivia → C&A restores the set the host had (README §6)', () => {
     const props = base();
-    render(<GameSetupDialog {...props} hasCreated lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...props} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
     pickSet(KEY_B);
     fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
     expect(chosenSet()).toBe('');
@@ -455,18 +502,18 @@ describe('the format radio group', () => {
 describe('⌘/Ctrl+Enter', () => {
   test('creates only when Create could be pressed', () => {
     const props = base({ eventTitle: '' });
-    const { rerender } = render(<GameSetupDialog {...props} lastFormat="call-and-answer" />);
+    const { rerender } = render(<GameSetupDialog {...props} initialFormat="call-and-answer" />);
     pickSet(KEY_B);
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
     expect(props.onCreate).not.toHaveBeenCalled(); // no title yet
-    rerender(<GameSetupDialog {...props} eventTitle="Retro" lastFormat="call-and-answer" />);
+    rerender(<GameSetupDialog {...props} eventTitle="Retro" initialFormat="call-and-answer" />);
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', metaKey: true });
     expect(props.onCreate).toHaveBeenCalledTimes(1);
   });
 
   test('on Build Room it moves the focus to Continue and never leaves on its own', () => {
     const onChooseOther = jest.fn();
-    render(<GameSetupDialog {...base({ onChooseOther })} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base({ onChooseOther })} initialFormat="call-and-answer" />);
     fireEvent.click(radio('Build Room'));
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
     expect(onChooseOther).not.toHaveBeenCalled();
@@ -477,7 +524,7 @@ describe('⌘/Ctrl+Enter', () => {
 
 describe('the hand-offs and the survey', () => {
   test('a survey says people can answer as soon as it opens, and the button opens it', () => {
-    render(<GameSetupDialog {...base()} lastFormat="survey" />);
+    render(<GameSetupDialog {...base()} initialFormat="survey" />);
     // Until the set is in, the foot says what is still needed (round 4).
     expect(need()).toHaveTextContent('Still needed: a question set.');
     pickSet(setRefKey({ id: 'pulse' }));
@@ -488,7 +535,7 @@ describe('the hand-offs and the survey', () => {
   });
 
   test('Event on the Free plan replaces the price line with the plan, and Continue is disabled', () => {
-    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer"
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} initialFormat="call-and-answer"
       eventsAccess={{ enabled: true, canCreate: false, offerPlanName: 'Standard plan' }} />);
     fireEvent.click(radio('Event'));
     expect(screen.getByTestId('gsd-event-plan')).toHaveTextContent('Events come with the Standard plan.');
@@ -497,7 +544,7 @@ describe('the hand-offs and the survey', () => {
   });
 
   test('Event on a paid plan states the price', () => {
-    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer"
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} initialFormat="call-and-answer"
       eventsAccess={{ enabled: true, canCreate: true, offerPlanName: '' }} />);
     fireEvent.click(radio('Event'));
     expect(screen.getByTestId('gsd-event-price')).toHaveTextContent(/an event, counted when it first goes live/);
@@ -506,7 +553,7 @@ describe('the hand-offs and the survey', () => {
 
 describe('names and Workie, said plainly', () => {
   test('Call & Answer states the names rule beside the questions, and Change opens it', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.getByTestId('gsd-namesline')).toHaveTextContent('Names are hidden until the vote closes');
     fireEvent.click(screen.getByRole('button', { name: 'Change how names are shown' }));
     expect(document.querySelector('details.gsd-adv').open).toBe(true);
@@ -514,7 +561,7 @@ describe('names and Workie, said plainly', () => {
   });
 
   test('Workie is introduced in one line', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.getByText(/Workie is Engage’s AI assistant/)).toBeInTheDocument();
   });
 
@@ -528,7 +575,7 @@ describe('names and Workie, said plainly', () => {
 describe('live dev test fixes', () => {
   test('E1: pick a recent with Enter, then Ctrl+Enter creates (focus stays in the dialog)', () => {
     const onCreate = jest.fn();
-    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer"
+    render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer"
       recentSetUses={new Map([[KEY_B, Date.now()]])} />);
     const box = screen.getByRole('combobox', { name: /choose a question set/i });
     box.focus();
@@ -540,7 +587,7 @@ describe('live dev test fixes', () => {
 
   test('E1: Ctrl+Enter on <body> while the dialog is open still creates', () => {
     const onCreate = jest.fn();
-    render(<GameSetupDialog {...base({ onCreate })} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base({ onCreate })} initialFormat="call-and-answer" />);
     pickSet(KEY_B);
     document.activeElement.blur();
     fireEvent.keyDown(document.body, { key: 'Enter', ctrlKey: true });
@@ -561,7 +608,7 @@ describe('live dev test fixes', () => {
   });
 
   test('E6: on a plan without events, Ctrl+Enter says why instead of claiming a move', () => {
-    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer"
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} initialFormat="call-and-answer"
       eventsAccess={{ enabled: true, canCreate: false, offerPlanName: 'Standard plan' }} />);
     fireEvent.click(radio('Event'));
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
@@ -593,7 +640,7 @@ describe('live dev test fixes', () => {
 
   test('B5: Esc in the empty set search does not ask to discard; the discard bar goes when the host goes back to the form', () => {
     const props = base();
-    render(<GameSetupDialog {...props} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...props} initialFormat="call-and-answer" />);
     fireEvent.keyDown(screen.getByRole('combobox', { name: /choose a question set/i }), { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
     // Work in hand without a set picked (round 4: Advanced waits for the set).
@@ -606,7 +653,7 @@ describe('live dev test fixes', () => {
   });
 
   test('B7: compact draws no pinned summary row over the topics', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" categories={A}
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" categories={A}
       activeCategoryIds={new Set(['Law'])} initialSetId="seta" />);
     expect(document.querySelector('.gsd-compact-sum')).toBeNull();
     expect(screen.queryByText(/all 2 topics/)).toBeNull();
@@ -628,7 +675,7 @@ describe('live dev test fixes', () => {
      set search. "Compare formats" sits top right of the step, BEFORE the
      chips in the Tab order, never between. */
   test('O3/E4/N1: title → Compare formats → formats → search, nothing between the chips and the search', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
     const form = document.querySelector('.gsd-main');
     const all = Array.from(form.querySelectorAll('button, input, [tabindex]'))
       .filter((el) => el.tabIndex >= 0 && !el.disabled);
@@ -641,7 +688,13 @@ describe('live dev test fixes', () => {
     expect(search).toBe(fmt + 1);
   });
 
-  test('the keyboard path: title → Enter → Enter → Ctrl+Enter creates, and the keycaps show for every host', async () => {
+  /* THE FAST PATH for a host who repeats themselves (revision 31 Oct): no
+     format is chosen on open, but the last one is where the keyboard lands —
+     title, Enter (to the last format), Enter (picks it, on to the set search,
+     the recents one keystroke away), Enter (the recent), ⌘/Ctrl+Enter. Tab
+     from the title reaches the same chip one stop later, past Compare
+     formats, where Space or Enter picks it. */
+  test('the keyboard path: title → Enter → Enter → Enter → Ctrl+Enter creates, and the keycaps show for every host', async () => {
     const onCreate = jest.fn();
     render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="call-and-answer"
       recentSetUses={new Map([[KEY_B, Date.now()]])} />);
@@ -649,9 +702,14 @@ describe('live dev test fixes', () => {
     const title = screen.getByLabelText(/name it/i);
     title.focus();
     fireEvent.keyDown(title, { key: 'Enter' });
-    const box = screen.getByRole('combobox', { name: /choose a question set/i });
-    expect(box).toHaveFocus();
+    expect(radio('Call & Answer')).toHaveFocus();
+    expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.keyDown(radio('Call & Answer'), { key: 'Enter' });
+    const box = await screen.findByRole('combobox', { name: /choose a question set/i });
+    await waitFor(() => expect(box).toHaveFocus());
+    expect(within(screen.getByRole('listbox', { name: 'Used by you lately' })).getByRole('option')).toBeInTheDocument();
     fireEvent.keyDown(box, { key: 'Enter' });
+    expect(chosenSet()).toBe(KEY_B);
     fireEvent.keyDown(document.activeElement, { key: 'Enter', ctrlKey: true });
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
@@ -662,7 +720,7 @@ describe('live dev test fixes', () => {
     const before = window.matchMedia;
     window.matchMedia = (q) => ({ matches: /max-width: (600|900)px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
     try {
-      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
       const fold = document.querySelector('details.gsd-how-fold');
       expect(fold).not.toBeNull();
       expect(fold.open).toBe(false);
@@ -676,7 +734,7 @@ describe('live dev test fixes', () => {
   });
 
   test('N1: Enter on a format chip chooses it and moves on to the set search', async () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
     fireEvent.keyDown(radio('Call & Answer'), { key: 'ArrowRight' });
     fireEvent.keyDown(radio('Trivia'), { key: 'Enter' });
     await waitFor(() => expect(screen.getByRole('combobox', { name: /choose a question set/i })).toHaveFocus());
@@ -684,7 +742,7 @@ describe('live dev test fixes', () => {
 
 
   test('V4: Background for Workie is one closed line until opened', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     const fold = document.querySelector('details.gsd-brief-fold');
     expect(fold).not.toBeNull();
     expect(fold.open).toBe(false);
@@ -698,7 +756,7 @@ describe('live dev test fixes', () => {
       { id: 'lib', scope: 'platform', name: 'Library set', totalQuestions: 4, engagementType: 'call-and-answer', topic: '' },
       { id: 'mine', scope: 'org', mine: true, name: 'My set', totalQuestions: 4, engagementType: 'call-and-answer', topic: '' },
     ];
-    render(<GameSetupDialog {...base()} questionSets={sets} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} questionSets={sets} initialFormat="call-and-answer" />);
     fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
     const list = chooser();
     expect(within(list).getByRole('columnheader', { name: 'Whose' })).toBeInTheDocument();
@@ -710,14 +768,14 @@ describe('live dev test fixes', () => {
   });
 
   test('N4: no Tags column when no set has a tag', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
     expect(within(chooser()).queryByRole('columnheader', { name: 'Tags' })).toBeNull();
   });
 
   /* Round 4: a host with no set of their own sees one link, "Make your own set". */
   test('B3: "Make your own set" opens the sets dialog on the new-set panel, above the shelf', async () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     expect(screen.queryByRole('button', { name: 'Your question sets' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Make your own set' }));
     expect(await screen.findByText('How do you want to make it?')).toBeInTheDocument();
@@ -725,7 +783,7 @@ describe('live dev test fixes', () => {
 
   test('"Your question sets" shows only to a host who owns a set of this format', () => {
     const sets = [...SETS, { id: 'mine', scope: 'org', mine: true, name: 'My retro', totalQuestions: 4, engagementType: 'call-and-answer' }];
-    render(<GameSetupDialog {...base()} questionSets={sets} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} questionSets={sets} initialFormat="call-and-answer" />);
     expect(screen.getByRole('button', { name: 'Your question sets' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Make a new set' })).toBeInTheDocument();
     // Trivia: the host owns none, so one link.
@@ -738,7 +796,7 @@ describe('live dev test fixes', () => {
     const before = window.matchMedia;
     window.matchMedia = (q) => ({ matches: /max-width: 600px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
     try {
-      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" />);
+      render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" />);
       const group = screen.getByRole('radiogroup', { name: /format/i });
       expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Call & Answerlast used', 'Trivia', 'Poll']);
       fireEvent.click(screen.getByRole('button', { name: /^More/ }));
@@ -756,7 +814,7 @@ describe('round 2: focus home, the sessions dialog, icons', () => {
   function Page({ withWork = false }) {
     const [open, setOpen] = useState(false);
     if (!open) return <button type="button" className="wel-action is-primary" onClick={() => setOpen(true)}>Create engagement</button>;
-    return <GameSetupDialog {...base({ onCancel: () => setOpen(false) })} lastFormat={withWork ? 'call-and-answer' : ''} />;
+    return <GameSetupDialog {...base({ onCancel: () => setOpen(false) })} initialFormat={withWork ? 'call-and-answer' : ''} />;
   }
   test.each([
     ['the X on a clean form', (s) => fireEvent.click(s.getByRole('button', { name: /close without creating/i }))],
@@ -839,7 +897,7 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
         {...base({ onCancel: () => setOpen(false) })}
         eventTitle={title}
         onEventTitleChange={setTitle}
-        lastFormat=""
+        initialFormat=""
       />
     );
   }
@@ -859,8 +917,8 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
   test('R1: Discard in create mode tells the page to empty the title before closing', () => {
     const onEventTitleChange = jest.fn();
     const onCancel = jest.fn();
-    const { rerender } = render(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: '' })} lastFormat="" />);
-    rerender(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: 'Draft A' })} lastFormat="" />);
+    const { rerender } = render(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: '' })} initialFormat="" />);
+    rerender(<GameSetupDialog {...base({ onEventTitleChange, onCancel, eventTitle: 'Draft A' })} initialFormat="" />);
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^discard$/i }));
     expect(onEventTitleChange).toHaveBeenLastCalledWith('');
@@ -875,7 +933,7 @@ describe('round 3: discard means discard, the drawer pushes, focus home from the
   });
 
   test('R3-1: with the walkthrough beside the form every format chip is in the form column and can be chosen', () => {
-    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" onChooseOther={jest.fn()} />);
+    render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" initialFormat="call-and-answer" onChooseOther={jest.fn()} />);
     const pane = screen.getByRole('complementary', { name: 'How it runs' });
     const radios = within(screen.getByRole('radiogroup', { name: /format/i })).getAllByRole('radio');
     expect(radios.length).toBeGreaterThanOrEqual(6);
@@ -977,7 +1035,7 @@ describe('the routes open straight into their builder (HostQuestionSetsDialog in
 
 describe('no set fits', () => {
   test('the no-match state offers the three make-your-own routes after the exits', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     fireEvent.click(screen.getByRole('button', { name: /Browse all/ }));
     fireEvent.change(screen.getByRole('combobox', { name: /Search 2 Call & Answer sets/ }), { target: { value: 'retro' } });
     const routes = screen.getByTestId('set-chooser-routes');
@@ -1037,7 +1095,7 @@ describe('round 4: the reveal rules', () => {
   });
 
   test('picking a set reveals the names card, Background for Workie and Advanced — not before', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     expect(setHeading()).toBeInTheDocument();
     expect(screen.queryByTestId('gsd-namesline')).toBeNull();
     expect(document.querySelector('details.gsd-brief-fold')).toBeNull();
@@ -1051,7 +1109,7 @@ describe('round 4: the reveal rules', () => {
   });
 
   test('once shown they stay: switching format keeps Advanced, and each section shows only where it applies', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" />);
     pickSet(KEY_B);
     fireEvent.click(radio('Trivia'));
     expect(chosenSet()).toBe('');                 // a set belongs to one format
@@ -1066,7 +1124,7 @@ describe('round 4: the reveal rules', () => {
   });
 
   test('Build Room puts "Next:" in the set\'s slot and says so once per swap; going back restores the set', () => {
-    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} eventsAccess={{ enabled: true, canCreate: true }} lastFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} eventsAccess={{ enabled: true, canCreate: true }} initialFormat="call-and-answer" />);
     pickSet(KEY_B);
     fireEvent.click(radio('Build Room'));
     expect(setHeading()).toBeNull();
@@ -1083,14 +1141,17 @@ describe('round 4: the reveal rules', () => {
     expect(live().textContent).toBe('');          // nothing new to say
   });
 
-  test('a host with history opens two decisions in: Question set is there, the names card waits for a set', () => {
+  /* Revision, 31 Oct: replaces "a host with history opens two decisions in". */
+  test('a host with history opens no decisions in: no format, no Question set; choosing one reveals it with the recents', () => {
     render(<GameSetupDialog {...base()} hasCreated lastFormat="call-and-answer" recentSetUses={new Map([[KEY_B, Date.now()]])} />);
-    expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'true');
+    expect(radio('Call & Answer')).toHaveAttribute('aria-checked', 'false');
+    expect(setHeading()).toBeNull();
+    expect(screen.queryByRole('listbox', { name: 'Used by you lately' })).toBeNull();
+    expect(screen.getByTestId('gsd-wt-example')).toBeInTheDocument();
+    fireEvent.click(radio('Call & Answer'));
     expect(setHeading()).toBeInTheDocument();
+    expect(live().textContent).toBe('Question set is below.');
     expect(screen.getByRole('listbox', { name: 'Used by you lately' })).toBeInTheDocument();
-    // There on open: no entrance, nothing announced.
-    expect(document.querySelector('.gsd-reveal')).toBeNull();
-    expect(live().textContent).toBe('');
     expect(screen.queryByTestId('gsd-namesline')).toBeNull();
     expect(advanced()).toBeNull();
     // The one-line explanation of a set is for a host with nothing used lately.
@@ -1116,7 +1177,7 @@ describe('round 4: the reveal rules', () => {
   });
 
   test('no step numbers, no ticks, no status line and no OPTIONAL header', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     expect(document.querySelector('.gsd-step-n')).toBeNull();
     expect(document.querySelector('.gsd-stat')).toBeNull();
     expect(document.querySelector('.gsd-optional-h')).toBeNull();
@@ -1147,7 +1208,7 @@ describe('round 4: the entrance', () => {
   test('the options fade in on the first set pick, and not again after a hand-off and back', () => {
     jest.useFakeTimers();
     try {
-      render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} lastFormat="call-and-answer" />);
+      render(<GameSetupDialog {...base({ onChooseOther: jest.fn() })} initialFormat="call-and-answer" />);
       pickSet(KEY_B);
       expect(document.querySelector('[data-reveal="after"]')).toHaveClass('gsd-reveal');
       act(() => { jest.advanceTimersByTime(500); });
@@ -1225,7 +1286,7 @@ describe('round 4: Create is never inert', () => {
   });
 
   test('ready: the foot says nobody can join until it starts, and Create fills', () => {
-    render(<GameSetupDialog {...base()} lastFormat="call-and-answer" initialSetId="setb" />);
+    render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.queryByText(/Still needed/)).toBeNull();
     expect(screen.getByText('Nobody can join until you start it.')).toBeInTheDocument();
     expect(createButton()).not.toHaveAttribute('aria-disabled');

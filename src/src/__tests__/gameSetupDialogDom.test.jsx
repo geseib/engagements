@@ -16,7 +16,8 @@
  * steps, the format as one radio group, the topics under the set with a tick
  * on each, the names line, "Background for Workie". The diff of this
  * snapshot is that change; the shared SessionOptions fold is otherwise as it
- * was. `lastFormat` opens it on Call & Answer, as a returning host sees it.
+ * was. `initialFormat` opens it on Call & Answer (the test seam; no host
+ * opens with a format chosen since 31 Oct).
  * Re-recorded again the same day after the live dev tests (reviews/devtest-*):
  * bare topic counts ("Architecture 2"), the step's links after the chips in
  * the Tab order, and the set search as a combobox.
@@ -62,7 +63,7 @@ const CATEGORIES = [
 const dialog = (props = {}) => render(
   <GameSetupDialog
     isFirstEngagement
-    lastFormat="call-and-answer"
+    initialFormat="call-and-answer"
     eventTitle="Q3 Offsite"
     onEventTitleChange={jest.fn()}
     questionSets={SETS}

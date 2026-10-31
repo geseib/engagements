@@ -15,12 +15,15 @@ import Icon from './Icon';
  *            picked in full mode)
  *
  * ONE WIDGET MODEL either way: role="radiogroup" with a roving tabindex — one
- * tab stop (the chosen option, or the first when none is chosen), the arrow
+ * tab stop (the chosen option; when none is chosen, the option marked
+ * `lastUsed`, else the first — revision 31 Oct: nothing is preselected, so
+ * Tab into the group lands on the last-used format and Enter/Space picks
+ * it), the arrow
  * keys move AND choose, wrapping at the ends, Home and End go to the ends. In
  * the gallery ↑/↓ move by a row of cards and ←/→ by one (live dev test 3 L2).
  *
  * `collapseAfter` (a phone, frames 10/10b): only the first N formats — and the
- * chosen one, wherever it is — are drawn, with "More ▾" (a plain button, not
+ * chosen one (or, with none chosen, the last-used one), wherever it is — are drawn, with "More ▾" (a plain button, not
  * an option) for the rest.
  *
  * SELECTION IS NEVER COLOUR ALONE: a tick and a 2px border on the chosen
@@ -48,11 +51,17 @@ export default function FormatPicker({
 
   const collapsed = collapseAfter > 0 && !expanded && options.length > collapseAfter + 1;
   const shown = collapsed
-    ? options.filter((o, i) => i < collapseAfter || o.id === value)
+    ? options.filter((o, i) => i < collapseAfter || o.id === value || (!value && o.lastUsed))
     : options;
   const hiddenLabels = collapsed ? options.filter((o) => !shown.includes(o)).map((o) => o.label) : [];
   const chosenIndex = shown.findIndex((o) => o.id === value);
-  const tabStop = chosenIndex >= 0 ? chosenIndex : 0;
+  /* Nothing chosen (every new engagement opens so, revision 31 Oct): the tab
+     stop is the last-used format, so Title → Tab → Enter is still one key per
+     decision for a host who repeats their format. */
+  const lastIndex = shown.findIndex((o) => o.lastUsed);
+  let tabStop = 0;
+  if (chosenIndex >= 0) tabStop = chosenIndex;
+  else if (lastIndex >= 0) tabStop = lastIndex;
 
   const choose = (index) => {
     const option = shown[index];

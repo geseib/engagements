@@ -13,8 +13,9 @@
  *            Format always; Question set once a format is chosen; the names
  *            card, Background for Workie and Advanced once a set has been
  *            picked in this dialog. Nothing shown is taken away again while
- *            the dialog is open. A host with history has their last format
- *            chosen, so Question set is there on open. A reveal never moves
+ *            the dialog is open. Every new engagement opens with no format
+ *            chosen, a host with history too (revision 31 Oct): their last
+ *            format is tagged "last" and is the group's tab stop. A reveal never moves
  *            focus; it fades in once (180ms, none under reduced motion) and
  *            says so once in the one polite live region. Create stays in the
  *            foot, aria-disabled with "Still needed: …"; pressed early, it
@@ -194,14 +195,18 @@ export default function GameSetupDialog({
      it, on purpose — the owner retired remembering the last set. */
   initialSetId = '',
   initialSetScope = '',
+  /* The same kind of seam for the format: no caller passes it (a new
+     engagement opens with no format chosen, revision 31 Oct). The tests use
+     it to open past the format decision. */
+  initialFormat = '',
   questionSets = [],
   /** The host's own recent uses of sets: the chooser's "Used by you lately". */
   recentSetUses = EMPTY_USES,
   /**
    * WHAT THE HOST'S HISTORY SAYS (README §6), derived by the page from the
    * GET /games read it already makes: has this account created a session
-   * (chips, not the gallery) and the newest one's format (chosen on open). A novice
-   * gets no format chosen and the full layout.
+   * (chips, not the gallery) and the newest one's format (tagged "last" and
+   * the format group's tab stop — never chosen on open, revision 31 Oct).
    */
   hasCreated = false,
   lastFormat = '',
@@ -281,20 +286,17 @@ export default function GameSetupDialog({
   };
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
-  // Seeded once, not controlled. A novice opens with NO format chosen (README
-  // §3.1: a novice never asked to choose never learns a choice exists); a
-  // host with history opens on their last one.
+  // Seeded once, not controlled. EVERY NEW ENGAGEMENT OPENS WITH NO FORMAT
+  // CHOSEN (README round 4, "Revision, 31 Oct"): the owner, "we need to
+  // support those that forgot or clicked ahead". A host with history used to
+  // open on their last format, with Question set already showing and no
+  // example in the pane; now everyone sees the first-timer state. The last
+  // format keeps its "last" tag and is the group's tab stop (FormatPicker),
+  // so Title → Tab → Enter still picks it in one key.
   const [engagementType, setEngagementType] = useState(() => {
     if (isEdit) return seed.gameType || 'call-and-answer';
-    return offeredIds.includes(lastFormat) ? lastFormat : '';
+    return offeredIds.includes(initialFormat) ? initialFormat : '';
   });
-  const formatTouched = useRef(false);
-  // The history read may land after the dialog opened: apply it then, unless
-  // the host has already chosen.
-  useEffect(() => {
-    if (isEdit || formatTouched.current || engagementType) return;
-    if (lastFormat && offeredIds.includes(lastFormat)) setEngagementType(lastFormat);
-  }, [lastFormat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /*
     THE SELECTION IS A PAIR, held as the encoded key (utils/setRef.js):
@@ -320,8 +322,7 @@ export default function GameSetupDialog({
   const dialogReady = useRef(false);
   useEffect(() => { dialogReady.current = true; }, []);
   /* The Question set reveal is announced once per dialog (review A2). A slot
-     already on screen (a host's last format, the history read landing) has
-     nothing to announce. */
+     already on screen (an `initialFormat` seed) has nothing to announce. */
   const setAnnounced = useRef(false);
   const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
@@ -481,7 +482,6 @@ export default function GameSetupDialog({
   };
   const chooseFormat = (typeId, lead = '') => {
     if (typeId === engagementType) return;
-    formatTouched.current = true;
     setAnnounce([lead, formatMessage(typeId)].filter(Boolean).join(' '));
     setPendingCreate(false);
     if (engagementType) {
@@ -651,10 +651,6 @@ export default function GameSetupDialog({
     briefing ? briefing.text : null, briefingWorking,
   ]);
   const openedAs = useRef(snapshot);
-  // The history read choosing the last format is not the host's work.
-  useEffect(() => {
-    if (!formatTouched.current && !isEdit) openedAs.current = snapshot;
-  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = snapshot !== openedAs.current;
 
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -680,8 +676,7 @@ export default function GameSetupDialog({
   };
 
   const requestClose = () => {
-    // Read now, not from the render: the history read can re-baseline the form
-    // in an effect after this render was drawn.
+    // Read now, not from the render.
     if (snapshot === openedAs.current) { onCancel?.(); return; }
     setConfirmingClose(true);
   };

@@ -441,7 +441,7 @@ function renderDialog(overrides = {}) {
       isFirstEngagement
       // A novice opens with no format (new-engagement README §3.1); these
       // tests are about Call & Answer's plan line.
-      lastFormat="call-and-answer"
+      initialFormat="call-and-answer"
       eventTitle=""
       onEventTitleChange={jest.fn()}
       questionSets={SETS}

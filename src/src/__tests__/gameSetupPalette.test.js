@@ -476,4 +476,31 @@ describe('the ladder', () => {
     const sizes = [...CSS.matchAll(/font-size:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
     expect(sizes.filter((px) => px < 12)).toEqual([]);
   });
+
+  /* Revision, 31 Oct: at 1280×720, pane open, "Event" wrapped to a second
+     row. The form column there is 8px narrower than at 1440 (the card is
+     100vw − 48px) and, 720 tall, it scrolls: ~15px of scrollbar. A laptop
+     block gives that back by spacing alone — never by shrinking the words. */
+  test('seven chips fit one row at 1280 with the pane open: spacing steps in, text stays on the ladder', () => {
+    const at = CSS.indexOf('@media (min-width: 901px) and (max-width: 1440px)');
+    expect(at).toBeGreaterThan(-1);
+    const block = CSS.slice(at, CSS.indexOf('\n}', at));
+    const px = (re) => Number(block.match(re)[1]);
+    // Only with the pane open, and only spacing: no font-size in the block.
+    expect(block).not.toMatch(/font-size/);
+    expect(block).toMatch(/\.gsd-body\.has-side \.gsd-fmt--chips\s*\{/);
+    const chipPad = px(/\.has-side \.gsd-fmt--chips\s*\{\s*padding:\s*0 (\d+)px/);
+    const groupGap = px(/\.has-side \.gsd-fmt-group--chips\s*\{\s*gap:\s*(\d+)px/);
+    const iconGap = px(/\.has-side \.gsd-fmt--chips \.gsd-fmt-top\s*\{\s*gap:\s*(\d+)px/);
+    const sidePad = px(/\.has-side \.dialog-content\s*\{\s*padding-left:\s*(\d+)px/);
+    // What it gives back against the 1440 values (chips 10px, gaps 5px, side 28px).
+    const chips = 7;
+    const back = chips * 2 * (10 - chipPad) + chips * (5 - iconGap) + chips * (5 - groupGap) + 2 * (28 - sidePad);
+    const shortfall = (1240 - (1280 - 48)) + 15;
+    expect(back).toBeGreaterThanOrEqual(shortfall * 2); // with room to spare for font metrics
+    // The words: chips at the label size, the "last" tag at the 12px floor.
+    expect(CSS).toMatch(/\.gsd \.gsd-fmt-top\s*\{[^}]*font-size:\s*var\(--gsd-t-label\)/);
+    expect(CSS).toMatch(/\.gsd \.gsd-fmt-last\s*\{[^}]*font-size:\s*var\(--gsd-t-floor\)/);
+    expect(SCOPE).toMatch(/--gsd-t-label:\s*13px/);
+  });
 });

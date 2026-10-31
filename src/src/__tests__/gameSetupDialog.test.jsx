@@ -45,9 +45,9 @@ function setup(overrides = {}) {
     isFirstEngagement: true,
     /* THE REDESIGN OPENS A NOVICE WITH NO FORMAT CHOSEN (README §3.1). Most
        of this suite is about Call & Answer's form, which it used to get by
-       default; it now gets it the way a returning host does — as the last
-       format. The no-format novice has its own describe at the end. */
-    lastFormat: 'call-and-answer',
+       default; it now opens on it through the `initialFormat` seam (since 31 Oct
+       nobody, returning host or not, opens with a format chosen). The no-format novice has its own describe at the end. */
+    initialFormat: 'call-and-answer',
     eventTitle: '',
     onEventTitleChange: jest.fn(),
     questionSets: SETS,

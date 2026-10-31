@@ -33,7 +33,7 @@ function setup(overrides = {}) {
   const props = {
     isFirstEngagement: true,
     // A novice opens with no format (README §3.1); these tests start from Call & Answer.
-    lastFormat: 'call-and-answer',
+    initialFormat: 'call-and-answer',
     eventTitle: 'Q3 All-Hands',
     onEventTitleChange: jest.fn(),
     questionSets: SETS,

@@ -596,8 +596,9 @@ compete at once, so a newcomer cannot tell which one to deal with first.
 
 1. **One rule for everyone: a section appears when the decision above it is made, and stays
    while the dialog is open.** This applies to every host, not only first-timers.
-   - A host with history is not given a different dialog. They start two decisions in, because
-     their last format is preselected, so Question set is there on open (frame 4e).
+   - A host with history is not given a different dialog. ~~They start two decisions in, because
+     their last format is preselected, so Question set is there on open (frame 4e).~~ Superseded
+     by the revision of 31 Oct below: they start where a first-timer does.
    - There is no `hasCreated` branch for what is shown and no remembered "revealed" state.
      Everything is derived from the decisions on screen.
    - Round 3 removed a mode for exactly this reason: a dialog whose shape depends on something
@@ -658,7 +659,7 @@ compete at once, so a newcomer cannot tell which one to deal with first.
 |---|---|---|
 | Name it | Always | Never |
 | Format (gallery or chips, by `hasCreated` as today) | Always | Never |
-| Question set | `engagementType` is set. On open this is true for a host whose `lastFormat` was preselected | Never for a session format. Choosing Build Room or Event puts "Next: the … page" (`OtherFormatHandoff`) in the **same slot**; choosing a session format again brings Question set back with the set it had (`setByFormat`, shipped) |
+| Question set | `engagementType` is set. Since the 31 Oct revision this is never true on open for a new engagement | Never for a session format. Choosing Build Room or Event puts "Next: the … page" (`OtherFormatHandoff`) in the **same slot**; choosing a session format again brings Question set back with the set it had (`setByFormat`, shipped) |
 | Topics | A set is picked (unchanged) | The set is cleared or the chooser is open (unchanged) |
 | Names card (C&A, Survey), Background for Workie (C&A), Advanced | A set has been picked **at any point** while the dialog is open (`revealed` latch, dialog-local) | Never while open. Each shows only for the formats it applies to, as today. A hand-off format hides them along with Question set; returning brings them back |
 | Gallery → chips | A set is picked (shipped `galleryDone`), or a hand-off format is chosen (shipped) | — |
@@ -692,11 +693,13 @@ unchanged.
 
 ### What stays for experienced hosts
 
-- The last format is preselected and marked "last", so Question set is on screen at open.
+- The last format is marked "last" and is the format group's tab stop. (Until 31 Oct it was
+  also preselected, so Question set was on screen at open; see the revision below.)
 - The search shows "Used by you lately" on focus.
 - The rail is remembered if they hid the pane.
 - ⌘↵ and the keycaps stay.
-- The key path is unchanged: type the title, Tab, Tab, Enter, ⌘↵.
+- The key path, since 31 Oct: type the title, Enter (the last format), Enter (picks it, on to
+  the set search), Enter (the recent set), ⌘↵.
 
 What they lose is the step numbers, the status line, the uppercase header and 25 words of the
 Advanced line. The names card and options now arrive with the set, which costs no keys: in the
@@ -719,7 +722,7 @@ review, Sam never touches options before the set.
 | 4b | `4-b-title-1440.png` | After the title and Enter: focus on the first card, the pane previewing it; nothing revealed |
 | 4c | `4-c-format-chosen-1440.png` | Retro pressed → Call & Answer; Question set revealed (dashed outline = annotation); full storyboard |
 | 4d | `4-d-ready-1440.png` | Set picked: chips, topics, names card, two quiet optional lines; Create filled |
-| 4e | `4-e-experienced-1440.png` | A host with history: last format chosen, Question set with recents, pane as the rail |
+| 4e | `4-e-experienced-1440.png` | A host with history: last format chosen, Question set with recents, pane as the rail (superseded 31 Oct: nothing is chosen on open) |
 | 4f | `4-f-1280x720.png` | 4c on a short laptop: the revealed heading is on the first screen |
 | 4g | `4-g-phone-390.png` | 4c on a phone: format rows, the storyboard folded, Question set revealed |
 | Fork 1 B | `4-fork1-B-no-pane-1440.png` | No pane until a format is chosen (not recommended) |
@@ -875,4 +878,47 @@ review, Sam never touches options before the set.
   - a set pick reveals names and options, and switching format keeps them;
   - Build Room swaps the slot and announces once;
   - edit mode shows everything;
-  - a host with `lastFormat` sees Question set on open but no names card until a set is picked.
+  - ~~a host with `lastFormat` sees Question set on open but no names card until a set is
+    picked.~~ Replaced on 31 Oct: see the revision below.
+
+### Revision, 31 Oct — every new engagement opens as a first-timer's
+
+**Why.** The owner, on the shipped round 4: *"Why can't we get it to appear like the first timer
+we need to support those that forgot or clicked ahead"*. A host with history had their last
+format preselected, so they never saw the first-timer state: no quiet example in the pane, and
+Question set already open with a format they may not want this time. A host who forgot what
+the formats are, or clicked ahead, had nothing to orient them, and decision 1's "one rule for
+everyone" was only half true: the rule was the same, but the starting point was not.
+
+**The new rule.** Every new engagement opens with **no format chosen**, for every host. The pane
+shows the quiet example, Question set is not yet revealed, and the foot says "Still needed: a
+title, a format and a question set." (or "a format and a question set." with a title in hand).
+Editing a session is unchanged: everything filled in from the start.
+
+What a host with history keeps, so they lose no keys:
+
+- **Chips, not the gallery** (`hasCreated`, unchanged), with the last format's chip tagged
+  **last**.
+- **The keyboard lands on the last format.** When nothing is chosen, the format group's one tab
+  stop (roving tabindex, `FormatPicker`) is the last-used option, not the first. Enter in the
+  title goes to that stop; Enter or Space picks it. Tab from the title reaches it one stop
+  later, past "Compare formats" (round 2 put that link before the chips in the Tab order, and
+  that is unchanged). On a phone the last format is drawn even when the row is folded behind
+  "More".
+- **Recents one keystroke away.** Once the format is chosen, the set search has "Used by you
+  lately" under it. The fast path is title, Enter, Enter, Enter, ⌘/Ctrl+Enter
+  (`newEngagementDialog.test.jsx`, "the keyboard path").
+- The meeting-type chips, Compare formats' "Use …" and the arrows all choose a format as before.
+
+Round 3's rule holds: one layout, the same card for every host.
+
+**The chip row at 1280×720.** With the pane open, the seven chips wrapped "Event" onto a second
+line at 1280×720 (seen live). The form column there is 8px narrower than at 1440 and, 720
+tall, it scrolls. Between 901px and 1440px with the pane open, the chips' padding (10 → 8px),
+the gaps (5 → 4px) and the form's side padding (28 → 24px) step in. No text shrinks: chip names
+stay at 13px and the "last" tag at the 12px floor (`gameSetupPalette.test.js`).
+
+**In code.** `GameSetupDialog` no longer seeds `engagementType` from `lastFormat`, and the
+effect that applied a late history read is gone; `lastFormat` now only tags a chip. An
+`initialFormat` prop, like `initialSetId`, is a seam no caller passes; the tests use it to start
+past the format decision.
