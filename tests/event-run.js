@@ -517,6 +517,52 @@ async function makeEvent() {
     assert.strictEqual(bodyOf(res).code, 'event_ended');
   });
 
+  // THE DAY, AGAIN (owner, 31 Oct 2026: "resume events should be an option as
+  // long as its within the ttl timeframes").
+  console.log('\n9b. reopening an ended event');
+  await check('an event that has not ended is not reopened', async () => {
+    table.put({ ...meta(code), State: 'LIVE' });
+    const res = await run(code, { action: 'reopen-event' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(bodyOf(res).code, 'event_not_ended');
+    table.put({ ...meta(code), State: 'ENDED' });
+  });
+  await check('an event past its ttl stays ended', async () => {
+    const kept = meta(code).ttl;
+    table.put({ ...meta(code), ttl: Math.floor(Date.now() / 1000) - 60 });
+    const res = await run(code, { action: 'reopen-event' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(bodyOf(res).code, 'event_expired');
+    assert.strictEqual(meta(code).State, 'ENDED');
+    table.put({ ...meta(code), ttl: kept });
+  });
+  await check('reopen-event runs the day again: LIVE (things ran), no EndedAt, finished items stay done', async () => {
+    const res = await run(code, { action: 'reopen-event' });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(meta(code).State, 'LIVE');
+    assert.strictEqual(meta(code).EndedAt, undefined);
+    assert.ok(meta(code).ReopenedAt);
+    assert.strictEqual(itemRow(code, ids.talk3).State, 'done');
+    assert.strictEqual(itemRow(code, ids.talk4).State, 'done');
+    assert.strictEqual(bodyOf(res).event.state, 'LIVE');
+  });
+  await check('once reopened, people can join again, and an item that never ran can go live', async () => {
+    const joined = await join(code, 'Latecomer');
+    assert.strictEqual(joined.statusCode, 201, joined.body);
+    const encore = bodyOf(await add(code, { type: 'presentation', title: 'Encore', minutes: 5 })).item.itemId;
+    const res = await run(code, { action: 'start', itemId: encore });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(itemRow(code, encore).State, 'live');
+    await run(code, { action: 'end-event' });
+    assert.strictEqual(meta(code).State, 'ENDED');
+  });
+  await check('the host\'s view says when the event may go (its ttl, as a time)', async () => {
+    const res = await run(code, { action: 'reopen-event' });
+    const { expiresAt } = bodyOf(res).event;
+    assert.strictEqual(expiresAt, new Date(meta(code).ttl * 1000).toISOString());
+    await run(code, { action: 'end-event' });
+  });
+
   console.log('\n10. the door');
   await check('another organisation\'s host gets the unknown code\'s 404 and changes nothing', async () => {
     const before = JSON.stringify(meta(code));

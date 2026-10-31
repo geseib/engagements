@@ -61,6 +61,10 @@
     ending-the-event   EventStage EXIT ("Leave the stage, or end the event?":
                        Leave — the event keeps going / End the event / Stay),
                        "End the event?" (Keep going / End the event),
+                       REOPEN ("Reopen the event?": Not now / Reopen the
+                       event; run.js reopenEvent, refused past the ttl),
+                       "Kept until <date>" (projectEvent expiresAt) on the
+                       board and in EventsPanel's When column,
                        run.js endEvent; "That's the day."
 */
 
@@ -432,11 +436,19 @@ const eventDay = {
         },
         {
           t: 'p',
+          text: 'The stage then reads **The day is over**, and phones show "That\'s the day." A survey that is still collecting stops the end until you close it on its stage.',
+        },
+        {
+          t: 'p',
           text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join; open the event again from **Events** in the console. **Stay** closes the question.',
         },
         {
           t: 'p',
-          text: 'The stage then reads **The day is over**, and phones show "That\'s the day." A survey that is still collecting stops the end until you close it on its stage.',
+          text: 'Ended too soon? While the event is still kept, its stage offers **REOPEN**. **Reopen the event?** says what it does: people can join again with the same code, and items that never ran can go live. What finished stays finished; those sessions are over and their reports are kept.',
+        },
+        {
+          t: 'p',
+          text: 'An event is kept until 90 days after its date, then deleted with its agenda and its join list. The date is on the event\'s stage and beside it in **Events** (**Kept until**). After that date it cannot be reopened.',
         },
         {
           t: 'p',

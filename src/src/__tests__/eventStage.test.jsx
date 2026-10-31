@@ -489,6 +489,56 @@ describe('asking before the room moves, and EXIT', () => {
   });
 });
 
+/*
+  WHEN IT GOES, AND RUNNING IT AGAIN (owner, 31 Oct 2026: "resume events should
+  be an option as long as its within the ttl timeframes. Do we mark info around
+  when events expire").
+*/
+describe('kept until, and reopening an ended event', () => {
+  const later = new Date(Date.now() + 30 * 86400000).toISOString();
+  const gone = new Date(Date.now() - 86400000).toISOString();
+
+  test('the board says when the event is kept until', async () => {
+    api.getEvent.mockResolvedValue(view({ expiresAt: '2027-01-09T00:00:00.000Z' }));
+    render(<EventStage code={CODE} />);
+    expect(await screen.findByText(/Kept until Sat 9 Jan 2027/)).toBeInTheDocument();
+  });
+
+  test('an ended event still kept offers REOPEN, which asks, says what it does, then reopens', async () => {
+    const done = DAY.map((i) => ({ ...i, state: 'done' }));
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: later }, done));
+    api.runEvent.mockResolvedValue(view({ state: 'LIVE', expiresAt: later }, done));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen the event' }));
+    const ask = await screen.findByRole('dialog', { name: 'Reopen the event?' });
+    expect(ask).toHaveTextContent(/join again/);
+    expect(ask).toHaveTextContent(/What finished stays finished/);
+    expect(api.runEvent).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Reopen the event' }));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'reopen-event', undefined));
+    expect(await screen.findByText('Between items')).toBeInTheDocument();
+  });
+
+  // rejects: a reopen the server will refuse — the ttl is past.
+  test('an ended event past its date offers no REOPEN', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: gone }, DAY.map((i) => ({ ...i, state: 'done' }))));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    expect(screen.queryByRole('button', { name: 'Reopen the event' })).toBeNull();
+  });
+
+  test('Not now closes the ask and reopens nothing', async () => {
+    api.getEvent.mockResolvedValue(view({ state: 'ENDED', expiresAt: later }, DAY.map((i) => ({ ...i, state: 'done' }))));
+    render(<EventStage code={CODE} />);
+    await screen.findByText('The day is over');
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen the event' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
+});
+
 /** Stubs clientHeight/clientWidth/offsetHeight/scrollHeight by class name. */
 function stubLayout(sizes) {
   const by = (el, table) => {

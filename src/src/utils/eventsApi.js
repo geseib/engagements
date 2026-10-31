@@ -84,8 +84,8 @@ export const reorderItems = (code, order) =>
 
 /**
  * RUNNING THE DAY (events M3) — POST events/{code}/run.
- * `action` is start | resume | pause | end | extend | end-event; every one but
- * end-event names an item. Answers `{ event, items, gameId? }`, the same shape
+ * `action` is start | resume | pause | end | extend | end-event |
+ * reopen-event; every one but the two whole-event actions names an item. Answers `{ event, items, gameId? }`, the same shape
  * as getEvent, so the stage and the builder redraw from what the server holds.
  * A refusal (409 with `code`: run_changed, survey_open, item_done, …) throws
  * EventsApiError with the server's own sentence.

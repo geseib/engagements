@@ -282,6 +282,8 @@ export default function EventStage({ code }) {
   // leave the stage or end the event.
   const [askGoLive, setAskGoLive] = useState(null);
   const [exitOpen, setExitOpen] = useState(false);
+  // REOPEN an ended event, while it is still kept (owner, 31 Oct 2026).
+  const [askReopen, setAskReopen] = useState(false);
   /** The board row whose End is waiting for the host to say yes (finding #25). */
   const [confirmEnd, setConfirmEnd] = useState(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -387,7 +389,7 @@ export default function EventStage({ code }) {
   const fullEl = useFullscreenElement();
   const presenting = Boolean(deckItem) && fullEl !== null && fullEl === deckFrame.current;
   const [fullscreenOk] = useState(() => canFullscreen());
-  useFullscreenKey({ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen, target: () => deckFrame.current });
+  useFullscreenKey({ enabled: !confirmEndEvent && !confirmEnd && !qrOpen && !askGoLive && !exitOpen && !askReopen, target: () => deckFrame.current });
   const [cue, setCue] = useState(false);
   const cueTimer = useRef(null);
   const wake = useCallback(() => {
@@ -603,7 +605,7 @@ export default function EventStage({ code }) {
   // from a focused ‹ › too, since a clicker's key lands wherever focus is.
   useEffect(() => {
     const onKey = (e) => {
-      if (confirmEndEvent || confirmEnd || qrOpen || askGoLive || exitOpen) return;
+      if (confirmEndEvent || confirmEnd || qrOpen || askGoLive || exitOpen || askReopen) return;
       const tag = (e.target && e.target.tagName) || '';
       if (presenting && e.key === ' ') {
         e.preventDefault();
@@ -624,7 +626,7 @@ export default function EventStage({ code }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [plan, confirmEndEvent, confirmEnd, qrOpen, askGoLive, exitOpen, busy, deckItem, turn, presenting]);
+  }, [plan, confirmEndEvent, confirmEnd, qrOpen, askGoLive, exitOpen, askReopen, busy, deckItem, turn, presenting]);
 
   if (loadError) {
     return (
@@ -648,6 +650,10 @@ export default function EventStage({ code }) {
   const done = items.filter((i) => i.state === 'done' && !isBreak(i.type)).length;
   const counted = items.filter((i) => !isBreak(i.type)).length;
   const joined = `${event.attendeeCount || 0} joined`;
+  // WHEN IT GOES, and whether an ended day can run again before then
+  // (event-store.projectEvent expiresAt; run.js reopenEvent refuses after).
+  const keptUntil = rules.formatKeptUntil(event.expiresAt);
+  const canReopen = ended && Date.parse(event.expiresAt) > Date.now();
 
   // ── The rail ─────────────────────────────────────────────────────────────
   let chip;
@@ -799,7 +805,7 @@ export default function EventStage({ code }) {
       <div className="ag-board">
         <div className="ag-board-head">
           <p className="ag-when">
-            {[rules.formatEventDay(event.startsAt), event.place].filter(Boolean).join(' · ')}
+            {[rules.formatEventDay(event.startsAt), event.place, keptUntil && `Kept until ${keptUntil}`].filter(Boolean).join(' · ')}
           </p>
           <p className="ag-live">
             {ended ? 'That’s the day. Each item’s report is in the session history.'
@@ -856,6 +862,11 @@ export default function EventStage({ code }) {
           {!ended && (
             <button type="button" className="dock-more" onClick={() => setQrOpen(true)} aria-label="Show the join QR code">
               <span className="dock-more-lbl">QR</span>
+            </button>
+          )}
+          {canReopen && (
+            <button type="button" className="dock-more" onClick={() => setAskReopen(true)} aria-label="Reopen the event">
+              <span className="dock-more-lbl">REOPEN</span>
             </button>
           )}
           {/* EXIT, not END EVENT (owner, 31 Oct 2026): leaving and ending are
@@ -962,6 +973,35 @@ export default function EventStage({ code }) {
               onClick={async () => { const { item } = askGoLive; setAskGoLive(null); await goLive(item); }}
             >
               {askGoLive.ask.confirmText}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {askReopen && (
+        <Modal
+          overlayClassName="ag-scrim"
+          contentClassName="ag-confirm"
+          onClose={() => setAskReopen(false)}
+          closeOnEscape={() => !busy}
+          label="Reopen the event?"
+          theme="dark"
+        >
+          <h2>Reopen the event?</h2>
+          <p>
+            People can join again with the same code, and items that never ran can go live. What finished
+            stays finished: those sessions are over, and their reports are kept.
+            {keptUntil ? ` The event is kept until ${keptUntil}.` : ''}
+          </p>
+          <div className="ag-confirm-foot">
+            <button type="button" className="ag-close" onClick={() => setAskReopen(false)}>Not now</button>
+            <button
+              type="button"
+              className="ag-yes"
+              disabled={busy}
+              onClick={async () => { setAskReopen(false); await act('reopen-event'); }}
+            >
+              Reopen the event
             </button>
           </div>
         </Modal>

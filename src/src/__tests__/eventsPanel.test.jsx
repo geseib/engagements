@@ -53,6 +53,15 @@ describe('a Team-plan organisation (01)', () => {
     expect(screen.getByRole('button', { name: /upcoming 2/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  // Owner, 31 Oct 2026: "Do we mark info around when events expire".
+  it('each event says when it is kept until, and one with no ttl says nothing', async () => {
+    api.listEvents.mockResolvedValue([{ ...EVENTS[0], expiresAt: '2027-01-09T00:00:00.000Z' }, EVENTS[1]]);
+    render(<EventsPanel {...props()} />);
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows()[0]).toHaveTextContent('Kept until Sat 9 Jan 2027');
+    expect(rows()[1]).not.toHaveTextContent('Kept until');
+  });
+
   it('Past is a filter, not a second page', async () => {
     render(<EventsPanel {...props()} />);
     await waitFor(() => expect(rows()).toHaveLength(2));
