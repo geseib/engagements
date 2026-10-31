@@ -52,6 +52,11 @@
 
 /* The card's held slot keeps the card's height steady with or without a button. */
 .hc--build .hc-now { min-height: 76px; }
+/* The card sits above the scrolling main area, so a move focused in it lands below the
+   main area's top edge with its row and heading in view, never cut off under the card
+   (QA walk on test, 31 Oct 2026, screen 162: half of What's next's first row was hidden). */
+.hc--build .hc-main { scroll-padding-top: 16px; }
+.hc--build .hc-main .brm-wn .brm-btn { scroll-margin-top: 56px; }
 
 /* The ask: the board, and beside it the moment's panel. */
 .hc--build .bc-askcols { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }

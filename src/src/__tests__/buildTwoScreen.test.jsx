@@ -213,6 +213,19 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     expect(screen.getByRole('heading', { name: 'Now', level: 2 })).toBeInTheDocument();
   });
 
+  // QA walk on test, 31 Oct 2026 (screen 162): "Connect Claude Code…" beside "No main move now".
+  test('a · between asks, Claude never connected: Connect Claude Code is the main move, never "No main move now"', async () => {
+    await openRoom(hostState({ st: { AgentSeenAt: undefined }, rows: [ask(DECIDED)] }));
+    expect(mainButton()).toHaveTextContent('Connect Claude Code');
+    expect(card().querySelector('[data-empty-slot]')).toBeNull();
+    expect(card().textContent).not.toMatch('No main move now');
+    // One orange: What's next's own Connect is plain while the card holds it.
+    const lead = consoleEl().querySelector('.brm-wn.is-lead button');
+    expect(lead).not.toHaveClass('brm-btn--primary');
+    fireEvent.click(mainButton());
+    expect(screen.getByRole('dialog', { name: 'Connect Claude Code' })).toBeInTheDocument();
+  });
+
   test('a · between asks: the strip stays, dimmed, and its left end says "Between asks" (c)', async () => {
     await openRoom(MOMENTS['a · between asks']());
     expect(strip()).toHaveClass('is-idle');

@@ -249,7 +249,7 @@ async function announce(ctx, rev) {
 }
 
 /** Write a timeline entry. */
-async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly, why, roomWords, liked, considered, roomHidden }) {
+async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, forAgent, forBuilder, shareId, name, spoken, as, claudeNote, noBrief, from, runItem, runId, step, ideaId, sources, asWritten, hold, hostOnly, why, roomWords, liked, considered, roomHidden, engagePrompt }) {
   const now = new Date().toISOString();
   const sk = S.SK.log(now);
   // FOR CLAUDE, LATER (owner, 2026-10-06): recorded and on the host's list,
@@ -294,6 +294,8 @@ async function logEntry(ctx, { kind, text, detail, link, linkRole, by, askId, fo
     ...(hostOnly ? { HostOnly: true } : {}),
     // DON'T SHOW THE ROOM (owner, 23 Oct 2026): Claude gets it as ever; the room's reads carry no words.
     ...(forAgent && roomHidden ? { RoomHidden: true } : {}),
+    // ENGAGE'S OWN PROMPT (QA walk on test, 31 Oct 2026): the room's reads carry this key, never the words.
+    ...(forAgent && engagePrompt ? { EngagePrompt: engagePrompt } : {}),
     CreatedAt: now,
   };
   const saved = await put(ctx, row);
@@ -1074,7 +1076,10 @@ async function postDirection(ctx, body) {
   const why = S.cleanText((body || {}).why, S.LIMITS.reason);
   const hiddenFromRoom = S.roomHiddenOf(body);
   if (hiddenFromRoom.error) return fail(400, hiddenFromRoom.error);
-  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, why, roomHidden: hiddenFromRoom.value, ...src.value });
+  // The page's one-press prompts (draft the brief, preview, mockups, wrap up) name theirs.
+  const engage = S.engagePromptOf(body);
+  if (engage.error) return fail(400, engage.error);
+  const row = await logEntry(ctx, { kind: 'direction', text, by: 'host', forAgent: true, as: (body || {}).as, why, roomHidden: hiddenFromRoom.value, engagePrompt: engage.value, ...src.value });
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);
   return reply(201, { entry: S.logView(row) });
@@ -1376,7 +1381,7 @@ async function openingAction(ctx, action, body) {
     const text = S.briefText(brief);
     await touchState(ctx, { set: { Phase: 'building' } });
     await logEntry(ctx, {
-      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now', engagePrompt: 'start-building',
       text: `The room has framed the build. Plan 3 to 6 steps, post the plan with post_update (kind "milestone"), and start building.${text ? `\n\n${text}` : ''}`,
     });
     // Only a Claude that has called in is building (host review, 25 Oct 2026); else it starts when it connects.
@@ -1389,7 +1394,7 @@ async function openingAction(ctx, action, body) {
     // The room frames the build again on the Stage (PLAN §2.3).
     await touchState(ctx, { set: { Phase: 'opening', WallScreen: 'stage' }, add: { WallRev: 1 } });
     await logEntry(ctx, {
-      kind: 'direction', by: 'host', forAgent: true, as: 'do-now',
+      kind: 'direction', by: 'host', forAgent: true, as: 'do-now', engagePrompt: 'back-to-opening',
       text: 'The host has gone back to the opening to frame the build further. Pause building: finish or set aside what you are doing, write no new product code, and wait with wait_for_direction until the host presses Start building again.',
     });
     await logEntry(ctx, { kind: 'milestone', text: 'Back to the opening: the room is framing the build further.', by: 'system' });
@@ -1572,7 +1577,7 @@ async function askFromIdeas(ctx, body) {
   // No question in the entry: phones read the timeline, and a waiting vote
   // stays hidden from the room until it opens.
   else await logEntry(ctx, { kind: 'ask', text: `${ideas.length + held.length} ideas are waiting for a vote`, by: 'system', askId });
-  if (mockups) await logEntry(ctx, { kind: 'direction', text: S.mockupDirection(askId, v.options.map((o) => o.label)), by: 'host', askId, forAgent: true });
+  if (mockups) await logEntry(ctx, { kind: 'direction', text: S.mockupDirection(askId, v.options.map((o) => o.label)), by: 'host', askId, forAgent: true, engagePrompt: 'mockups' });
   const after = await loadRoom(ctx);
   const rev = (await touchState(ctx)).Rev;
   await announce(ctx, rev);

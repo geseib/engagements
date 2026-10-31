@@ -405,6 +405,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // ask never inherits it, not even for one frame.
   const [answeringKey, setAnsweringKey] = useState('');
   const [sent, setSent] = useState('');
+  // Claude Code has never called in (QA walk on test, 31 Oct 2026): what was just sent is queued, not sent.
+  const claudeQueuedRef = useRef(false);
   // UNSENT DIRECTIONS, KEPT PER ASK (Review Focus 2): what the host typed in
   // Send survives another ask opening. {askId: {direction, as, chosen, pickId, spoken}}.
   const [drafts, setDrafts] = useState({});
@@ -836,7 +838,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     const short = direction.length > 80 ? `${direction.slice(0, 80).trimEnd()}…` : direction;
     if (!send) setSent(W.logged(short));
     else if (as === 'later') setSent(`${W.savedLater}: ${short}`);
-    else setSent(`Sent to Claude as ${claudeKindLabel(as)}: ${short}`);
+    else setSent(W.sentAsLine(claudeQueuedRef.current, claudeKindLabel(as), short));
   }, []);
 
   /** Every host action: one at a time, the server's sentence on failure, then refetch. */
@@ -1003,6 +1005,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // CONNECT stays until Claude has really called in (host review, 25 Oct 2026):
   // not until the first ask, and not until a key is minted.
   const claudeAway = !ended && !claudeEverConnected(room.agent) && !(room.log || []).some((l) => l.by === 'agent');
+  claudeQueuedRef.current = agentNeverCame(room.agent);
   // On the first view (no ask yet) Connect is the one orange button; later the card stays, its button plain.
   const connectLeads = claudeAway && !asks.length;
   // BEFORE THE ROOM STARTS (simplify PLAN item 10, smaller; owner, 26 Oct 2026): one card,
@@ -1010,7 +1013,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // stays while Claude has not called in (as the old card did), and through the opening
   // until its rows are done; done, it folds to one line until the opening ends.
   const framingNow = Boolean(room.opening && room.opening.phase === 'opening');
-  const setupNode = !ended && (claudeAway || framingNow) ? (
+  // QA walk on test, 31 Oct 2026: it stayed through the wrap-up and the end while Claude never
+  // connected ("You can start the opening now"). It goes when the opening ends, as phase 1 said;
+  // Claude now then says Claude is not connected and offers Connect (and What's next leads with it).
+  const openingOver = Boolean(room.opening && room.opening.phase === 'building');
+  const setupNode = !ended && !openingOver && (claudeAway || framingNow) ? (
     <BuildSetup
       s={{
         connected: !claudeAway,
@@ -1075,7 +1082,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     else if (key === 'ask-room') setDialog({ compose: 'suggest' });
     else if (key === 'connect') setDialog('connect');
     // WRAP UP, THEN THE REPORT, THEN END (PLAN item 15).
-    else if (key === 'wrap-claude') run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true }));
+    else if (key === 'wrap-claude') run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true, engagePrompt: 'wrap-up' }));
     else if (key === 'wrap-write') setDialog('wrap');
     else if (key === 'report') goView('report');
     else if (key === 'end') setDialog('end');
@@ -1101,7 +1108,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const pointsLead = pointTickedNow > 0 && whatsNextShown;
   const sendPointRequest = (kind, subject, extra) => run(() => api.pointRequest(kind, subject, extra));
   // Preview the work from the composer's More: the Now card's own button, once a build is there to open.
-  const previewWork = () => run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true }));
+  const previewWork = () => run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true, engagePrompt: 'preview' }));
   // Put N to a vote opens the window (T5); its Open voting makes the ask.
   const putPointsToVote = (ids) => { setPointVote(ids); return undefined; };
   const openPointsVote = async (body) => {
@@ -1227,6 +1234,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       }
       if (c.action === 'report') { goView('report'); return; }
       if (c.action === 'end') { setDialog('end'); return; }
+      if (c.action === 'connect') { setDialog('connect'); return; }
       consoleMove(c);
     };
     const overlay = Boolean(panel || confirmPick || joinZoom || takeDown || detailAskId || viewer || dialog || voteIdeas || pointVote || (runConfirm && listRunning));
@@ -1287,7 +1295,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             </>
           ) : null}
         </div>
-        <UnheardNotice room={room} onConnect={() => setDialog('connect')} />
+        {!ended && <UnheardNotice room={room} onConnect={() => setDialog('connect')} />}
         {freshWallComment(room, now) && (
           <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
             <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
@@ -1334,7 +1342,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ))}
               <button type="button" className="bc-chip" title={W.wallSeeHereHint} onClick={() => setScreen(wallScreen)}>{W.wallSeeHere}</button>
             </div>
-            <ConnectionChip connection={connection} onReconnect={reconnect} />
+            {ended ? <EndedChip /> : <ConnectionChip connection={connection} onReconnect={reconnect} />}
           </div>
         )}
         strip={{ strip: stripNow.strip, mode: 'full' }}
@@ -1396,7 +1404,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           // THE RIGHT COLUMN (owner, 28 Oct 2026): Claude now, The brief, History, as on one screen.
           // Claude now is the console's status line too, and the Now card's last decision is History's.
           <div data-capability="whats-next" className="bc-folds">
-            {!ended && <ClaudeNow room={room} now={now} />}
+            {!ended && <ClaudeNow room={room} now={now} onConnect={setupNode ? null : () => setDialog('connect')} />}
             <HistoryStack
               openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
               lead={foldLead}
@@ -1451,7 +1459,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               />
             )}
             {unsentAsk && <p className="brm-notice brm-unsent" role="status">{W.unsentDirection(askNumber(unsentAsk.askId))}</p>}
-            {sent && <p className="brm-sentline" role="status">{sent}</p>}
+            {sent && <p className={`brm-sentline${sent.startsWith(W.queuedHeadline) ? ' is-queued' : ''}`} role="status">{sent}</p>}
             {shownPoint && (
               // Its two moves, Take it down and Save for later, are the card's buttons.
               <ConsolePoint point={shownPoint} ideas={shownPointIdeas(room)} sources={((pointsList.find((x) => x.id === shownPoint.id) || {}).sources) || []} />
@@ -1492,7 +1500,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             ) : (
               room.opening && room.opening.phase === 'opening'
                 ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => showRoom('stage')} calm={connectLeads} />
-                : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={Boolean(bar.primary) || pointsLead || listRunning || demoLeads || connectLeads} />
+                : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={Boolean(bar.primary) || pointsLead || listRunning || demoLeads || (connectLeads && Boolean(setupNode))} />
             )}
             {!ended && <Composer agent={room.agent} busy={busy} run={run} api={api} onCompose={(kind) => setDialog({ compose: kind })} text={composeText} setText={setComposeText} fromAskIds={composeFrom} focusKey={composeFocus} leadShows onRequest={(kind) => setDialog({ points: kind })} onPreview={previewWork} />}
           </>
@@ -1645,7 +1653,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
                   {W.unsentDirection(askNumber(unsentAsk.askId))}
                 </p>
               )}
-              {sent && <p className="brm-sentline" role="status">{sent}</p>}
+              {sent && <p className={`brm-sentline${sent.startsWith(W.queuedHeadline) ? ' is-queued' : ''}`} role="status">{sent}</p>}
               {shownPoint && (
                 <ShownPointCard
                   point={shownPoint} ideas={shownPointIdeas(room).length} busy={busy} ended={ended}
@@ -1692,7 +1700,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ) : (
                 room.opening && room.opening.phase === 'opening'
                   ? <OpeningPanel room={room} focus={openFocus} setFocus={setOpenFocus} busy={busy} ended={ended} run={run} api={api} onShowWall={() => showRoom('stage')} calm={connectLeads} />
-                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads || connectLeads} />
+                  : <NowBuilding room={room} now={now} ended={ended} busy={busy} run={run} api={api} onCompose={(kind, extra) => setDialog({ compose: kind, ...extra })} ticked={tickedNow} laterTicked={laterTickedNow} onMove={onMove} leadOutline={pointsLead || listRunning || demoLeads || (connectLeads && Boolean(setupNode))} />
               )}
             </>
           )}
@@ -1706,7 +1714,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <h2 className="brm-h5" id="brm-waiting-h" tabIndex={-1}>
             Waiting for you{waitingCount(room) > 0 ? ` · ${waitingCount(room)}` : ''}
           </h2>
-          <UnheardNotice room={room} onConnect={() => setDialog('connect')} />
+          {!ended && <UnheardNotice room={room} onConnect={() => setDialog('connect')} />}
           {freshWallComment(room, now) && (
             <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
               <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
@@ -1739,7 +1747,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             one open at a time. The open one fills the column and scrolls inside
             itself, so the page never scrolls (owner, 2026-10-05). */}
         <aside className="brm-hostcol brm-hostcol--stack" data-capability="whats-next">
-          {!ended && <ClaudeNow room={room} now={now} />}
+          {!ended && <ClaudeNow room={room} now={now} onConnect={setupNode ? null : () => setDialog('connect')} />}
           <HistoryStack
             openKey={historyFocus && historyFocus.on === 'section' ? { key: 'history', n: historyFocus.n } : null}
             lead={foldLead}
@@ -1759,7 +1767,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           tab={panel.tab} focusGroup={panel.group} onTab={(t) => setPanel({ tab: t, group: '' })} onClose={closePanel}
           topLine={narrow || screen === 'stage' ? <HeaderTools {...headerTools} host /> : null}
           slots={{
-            agentChip: <AgentChip room={room} now={now} />,
+            agentChip: ended ? null : <AgentChip room={room} now={now} />,
             autoSwitch: ended ? null : <AutoSwitch settings={room.settings} busy={busy} run={run} api={api} />,
           }}
           listNames={Boolean(room.settings && room.settings.listNames)} onListNames={(on) => run(() => api.saveSettings({ listNames: on }))}
@@ -1956,7 +1964,7 @@ function StepsFold({ items, now }) {
  * Claude Code when it has never connected), then the newest commands. It is
  * the console's status line too: the main area no longer repeats it.
  */
-export function ClaudeNow({ room, now }) {
+export function ClaudeNow({ room, now, onConnect = null }) {
   const activity = room.activity || [];
   const agent = room.agent;
   const items = activity.slice().reverse();
@@ -1994,11 +2002,17 @@ export function ClaudeNow({ room, now }) {
       {/* What went, word for word: the host's own screen (as the console's status line said it). */}
       {st.key === 'sent' && st.sent && st.sent.text && (
         <p className="brm-claudenow-sent" data-testid="brm-claudenow-sent">
-          {`“${st.sent.text}”`}
+          {st.sent.plain ? st.sent.text : `“${st.sent.text}”`}
           {st.sent.hidden && <span className="brm-muted brm-notshown">{` · ${W.notShownMark}`}</span>}
         </p>
       )}
       {st.helperLine && <p className="brm-doing-helper">{st.helperLine}</p>}
+      {/* Never connected, Before the room starts gone (QA walk on test, 31 Oct 2026): Connect is here. */}
+      {onConnect && agentNeverCame(agent) && (
+        <div className="brm-row brm-gap">
+          <button type="button" className="brm-btn brm-btn--sm" data-capability="claude-status" onClick={onConnect}>{W.connectClaude}</button>
+        </div>
+      )}
       {latest && (
         <p className="brm-activity-now" data-testid="brm-activity-now">
           <Icon name={ACTIVITY_ICON[latest.kind] || 'Gear'} size={18} />
@@ -2145,6 +2159,11 @@ export function AutoSwitch({ settings, busy, run, api }) {
 }
 
 /** The host's one connection status. A button whenever there is something to do. */
+/** After End session: the session reads ended, in the wall's own words, never Live (QA walk on test, 31 Oct 2026). */
+export function EndedChip() {
+  return <span className="brm-conn brm-conn--ended" data-testid="brm-ended">{W.wallEnded}</span>;
+}
+
 export function ConnectionChip({ connection = 'live', onReconnect }) {
   const c = CONNECTION[connection] || CONNECTION.live;
   if (connection === 'live' || connection === 'connecting') {
@@ -2276,8 +2295,9 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
           busy={share.busy} run={share.run} api={share.api} onShowWall={share.onShowWall} nudge={Boolean(share.nudge)}
         />
       )}
-      <span className="brm-agentwrap" data-capability="claude-status"><AgentChip room={room} now={now} /></span>
-      {host && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
+      {/* ENDED READS ENDED (QA walk on test, 31 Oct 2026): no Live, no Queued for Claude after End session. */}
+      {!ended && <span className="brm-agentwrap" data-capability="claude-status"><AgentChip room={room} now={now} /></span>}
+      {host && (ended ? <EndedChip /> : <ConnectionChip connection={connection} onReconnect={onReconnect} />)}
       <button
         type="button"
         className="brm-codewrap brm-codebtn"
@@ -2735,7 +2755,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
       + 'Then tell me they are in.',
       'do-now', null,
       // An instruction about an ask the room has not seen: never the room's Sent to Claude card.
-      { hideFromRoom: true },
+      { hideFromRoom: true, engagePrompt: 'mockups' },
     ));
     if (out !== undefined) setAskedMockups(true);
   };
@@ -3329,7 +3349,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = nul
               className="brm-btn"
               disabled={busy || quiet}
               title={quiet ? 'Connect Claude Code first' : W.tipPreview}
-              onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true })); if (ok !== undefined) setSent(true); }}
+              onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true, engagePrompt: 'preview' })); if (ok !== undefined) setSent(true); }}
             >
               Preview the work
             </button>
@@ -3421,7 +3441,8 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
   const tellAs = async (as) => {
     if (!words) return;
     const ok = await run(() => api.postDirection(words, as, { askIds: fromAskIds }, { hideFromRoom: hide }));
-    if (ok !== undefined) { mirror.done(); done(`Sent${as && as !== 'do-now' ? ` as ${claudeKindLabel(as)}` : ''}: ${words}`); }
+    // Queued, not Sent, while Claude Code has never called in (QA walk on test, 31 Oct 2026).
+    if (ok !== undefined) { mirror.done(); done(W.composerSent(agentNeverCame(agent), as && as !== 'do-now' ? claudeKindLabel(as) : '', words)); }
   };
   const tell = (e) => { e.preventDefault(); tellAs('do-now'); };
   // QUEUE IT (step 4, C1): the host's own idea, waiting in the queue for later.
@@ -4396,14 +4417,17 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
   const initial = useMemo(() => ({
     summary: src.summary || '',
     built: (src.built || []).join('\n'),
-    links: (src.links || []).length ? src.links.map((l) => ({ label: l.label || '', url: l.url || '' })) : [{ label: '', url: '' }],
+    links: (src.links || []).length ? src.links.map((l) => ({ label: l.label || '', url: l.url || '', demo: l.demo === true })) : [{ label: '', url: '', demo: false }],
     nextSteps: (src.nextSteps || []).join('\n'),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [form, setForm] = useState(initial);
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setLink = (i, k) => (e) => setForm((f) => ({ ...f, links: f.links.map((l, j) => (j === i ? { ...l, [k]: e.target.value } : l)) }));
-  const addLink = () => setForm((f) => ({ ...f, links: [...f.links, { label: '', url: '' }] }));
+  const addLink = () => setForm((f) => ({ ...f, links: [...f.links, { label: '', url: '', demo: false }] }));
+  // THE BUILD IS MARKED, NOT GUESSED (QA walk on test, 31 Oct 2026): the first link was treated as
+  // the build. One link at most is the build; the header's Open the build and the room's window open it.
+  const setDemo = (i) => (e) => setForm((f) => ({ ...f, links: f.links.map((l, j) => ({ ...l, demo: j === i ? e.target.checked : false })) }));
   const removeLink = (i) => setForm((f) => ({ ...f, links: f.links.filter((_, j) => j !== i) }));
   const requestClose = () => {
     if (dirty && !window.confirm('Discard your changes to the wrap-up?')) return;
@@ -4413,14 +4437,14 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
     const body = {
       summary: form.summary.trim(),
       built: lines(form.built),
-      links: form.links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.url),
+      links: form.links.map((l) => ({ label: l.label.trim(), url: l.url.trim(), ...(l.demo ? { demo: true } : {}) })).filter((l) => l.url),
       nextSteps: lines(form.nextSteps),
     };
     const ok = await run(() => api.saveOutcome(body));
     if (ok !== undefined) onClose();
   };
   const askClaude = async () => {
-    const ok = await run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true }));
+    const ok = await run(() => api.postDirection(WRAP_UP_TEXT, 'do-now', null, { hideFromRoom: true, engagePrompt: 'wrap-up' }));
     if (ok !== undefined) onClose();
   };
   const filled = Boolean(fill && (fill.from.summary || fill.from.built || fill.from.link));
@@ -4437,7 +4461,7 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
       )}
       <div className="brm-field">
         <label className="brm-block"><span className="brm-lbl">Summary</span><textarea className="brm-input brm-ta" value={form.summary} maxLength={4000} onChange={set('summary')} /></label>
-        {from(fill && fill.from.summary, W.wrapFromHeadline)}
+        {from(fill && fill.from.summary, fill && fill.from.summary)}
       </div>
       <div className="brm-field">
         <label className="brm-block"><span className="brm-lbl">What we built (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.built} onChange={set('built')} /></label>
@@ -4449,6 +4473,7 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
           <div className="brm-wraplink" key={i}>
             <input className="brm-input brm-input--sm" aria-label={W.wrapLinkLabel(i + 1)} placeholder={W.wrapLinkLabelPh} value={l.label} maxLength={120} onChange={setLink(i, 'label')} />
             <input className="brm-input brm-input--sm" aria-label={W.wrapLinkUrl(i + 1)} placeholder="https://…" value={l.url} maxLength={500} onChange={setLink(i, 'url')} />
+            <label className="brm-wraplink-demo" title={W.wrapIsBuildTip}><input type="checkbox" aria-label={W.wrapIsBuildLabel(i + 1)} checked={Boolean(l.demo)} onChange={setDemo(i)} /> {W.wrapIsBuild}</label>
             {form.links.length > 1
               ? <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={W.wrapRemoveLink(i + 1)} onClick={() => removeLink(i)}><Icon name="X" size={14} /></button>
               : <span />}

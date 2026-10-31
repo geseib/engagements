@@ -533,8 +533,9 @@ describe('each ask status', () => {
   });
 
   // BEFORE THE ROOM STARTS (simplify PLAN item 10; owner, 26 Oct 2026) replaced How a Build Room works.
+  // A new room is in the opening (Phase unset); the card leaves when it ends (QA walk on test, 31 Oct 2026).
   test('an empty room shows Before the room starts: Connect, the code, the room\'s screen; no gate', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     const rows = within(card).getAllByRole('listitem');
     expect(rows.map((r) => r.querySelector('b').textContent)).toEqual(['Connect Claude Code', 'The room joins', 'The room watches this laptop']);
@@ -549,8 +550,8 @@ describe('each ask status', () => {
   });
 
   test('Connect stays until Claude has called in, not until a key or an ask (host review, 25 Oct 2026, F2)', async () => {
-    const keyed = { st: { AgentSeenAt: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] };
-    await openRoom(hostState({ ...keyed, asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'x', chosen: ['B'] }, DecidedAt: ago(60) }] }));
+    const keyed = { st: { AgentSeenAt: undefined, Phase: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] };
+    await openRoom(hostState({ ...keyed, asks: [{ ...CHOICE, OpeningStep: 'kind', Status: 'decided', Decision: { direction: 'x', chosen: ['B'] }, DecidedAt: ago(60) }] }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     const connect = within(card).getByRole('button', { name: /^Connect/ });
     // Past the first view the card's Connect is a plain button: the ask's move is the orange one.
@@ -579,7 +580,7 @@ describe('each ask status', () => {
   });
 
   test('on the first view, Connect is the one orange button (F3)', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     expect(within(card).getByRole('button', { name: /^Connect/ }).className).toMatch(/brm-btn--primary/);
     // Nothing else on the Host screen is orange.
@@ -587,7 +588,7 @@ describe('each ask status', () => {
   });
 
   test('Show the code puts the join code on the Stage, as Join in the header does', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Before the room starts' })).getByRole('button', { name: 'Show the code' }));
     await waitFor(() => expect(posts().some((c) => path(c) === `games/${GAME}/build/wall` && c.body.codes === 'join')).toBe(true));
   });
@@ -725,7 +726,7 @@ describe('the host side panel', () => {
     fireEvent.click(within(wn).getByRole('button', { name: 'Ask Claude to wrap up' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     // Do now is the default kind, so it is not named; the room never sees the prompt.
-    expect(lastPost().body).toEqual({ text: expect.stringMatching(/^We are wrapping up\. Call room_status, then write the outcome with wrap_up/), hideFromRoom: true });
+    expect(lastPost().body).toEqual({ text: expect.stringMatching(/^We are wrapping up\. Call room_status, then write the outcome with wrap_up/), hideFromRoom: true, engagePrompt: 'wrap-up' });
   });
 });
 
@@ -3381,7 +3382,9 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     'a proposed ask waiting': () => hostState({ asks: [{ ...CHOICE, Status: 'proposed' }], ideas: [{ PlayerName: 'Jordan', Text: 'A map link' }] }),
     'the opening': () => hostState({ st: { Phase: undefined } }),
     'the opening with a step done': () => hostState({ st: { Phase: undefined, Brief: { forWhom: 'Two friends', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } } }),
-    'a first run, nothing yet': () => hostState({ st: { AgentSeenAt: undefined } }),
+    'a first run, nothing yet': () => hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }),
+    // QA walk on test, 31 Oct 2026: past the opening, Before the room starts is gone; What's next's Connect leads.
+    'building, Claude never connected': () => hostState({ st: { AgentSeenAt: undefined } }),
     'a live ask with a proposed one waiting': () => hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'live' }, { ...CHOICE, Status: 'proposed' }], resps: IDEAS_RESPS }),
   };
   test.each(Object.keys(states))('exactly one orange button on the Host screen: %s', async (name) => {
@@ -3656,5 +3659,98 @@ describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => 
     const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
     await act(async () => { handler[1]({ type: 'presentChanged', gameId: GAME }); });
     await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBeGreaterThan(before));
+  });
+});
+
+// ── The QA walk on test, 31 Oct 2026 (buildQaWalkFixes.test.jsx holds the rest) ──
+describe('the QA walk on test, 31 Oct 2026', () => {
+  const never = { AgentSeenAt: undefined };
+
+  test('2. before Claude Code ever connects, the composer folds to "Queued for Claude: …", not "Sent: …"', async () => {
+    await openRoom(hostState({ st: never }));
+    const panel = composerPanel();
+    fireEvent.change(within(panel).getByLabelText(/Tell Claude/), { target: { value: 'Use large tap targets' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(await screen.findByText(`${W.queuedHeadline}: Use large tap targets`)).toBeInTheDocument();
+    expect(screen.queryByText('Sent: Use large tap targets')).toBeNull();
+  });
+
+  test('2. a decision sent before Claude connects: the Now card says "Queued for Claude as Do now: …"', async () => {
+    await openRoom(hostState({ st: { ...never, CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
+    const line = await screen.findByText(`${W.queuedHeadline} as Do now: Which header should volunteers see first: Calm photo + calendar`);
+    expect(line).toHaveAttribute('role', 'status');
+    expect(line).toHaveClass('is-queued');
+  });
+
+  // The opening's answers, no headline from Claude: the summary falls back to Good looks like.
+  const wrapRoom = (lines) => ({
+    ...hostState({
+      st: { ...never, Brief: { lines } },
+      asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Which header should volunteers see first? B', chosen: ['B'], note: '' } }],
+    }),
+  });
+  const openWrap = () => {
+    const wn = screen.getByRole('list', { name: "What's next" });
+    fireEvent.click(within(wn).getByRole('button', { name: 'Write it myself' }));
+    return screen.getByRole('dialog', { name: 'Wrap up' });
+  };
+
+  test('3. Write it myself without Claude: the summary comes from the opening (Good looks like), and says so', async () => {
+    await openRoom(wrapRoom({ kind: 'A website or page', problem: 'Volunteers miss shifts', good: 'Volunteers pick a shift in under a minute' }));
+    const dialog = openWrap();
+    expect(within(dialog).getByLabelText('Summary')).toHaveValue('Volunteers pick a shift in under a minute');
+    expect(dialog.textContent).toMatch(W.wrapFromLine('Good looks like'));
+    expect(dialog.textContent).toMatch('Filled in from the session');
+  });
+
+  test('3. no Good looks like: The problem; neither: Making', async () => {
+    await openRoom(wrapRoom({ kind: 'A website or page', problem: 'Volunteers miss shifts' }));
+    expect(within(openWrap()).getByLabelText('Summary')).toHaveValue('Volunteers miss shifts');
+    cleanup();
+    await openRoom(wrapRoom({ kind: 'A website or page' }));
+    expect(within(openWrap()).getByLabelText('Summary')).toHaveValue('A website or page');
+  });
+
+  test('5. a wrap-up link is not the build: no Open the build until Claude shows one or the host marks one', async () => {
+    const OUT = { summary: 'A shift picker.', built: [], links: [{ label: 'Shift sheet', url: 'https://example.com/sheet' }, { label: 'Volunteer handbook', url: 'https://example.com/hb' }], nextSteps: [], by: 'host', updatedAt: ago(10) };
+    await openRoom(hostState({ st: { ...never, Outcome: OUT } }));
+    expect(screen.queryByRole('link', { name: /^Open the build/ })).toBeNull();
+    cleanup();
+    const marked = { ...OUT, links: [OUT.links[0], { label: 'The demo', url: 'https://example.com/demo', demo: true }] };
+    await openRoom(hostState({ st: { ...never, Outcome: marked } }));
+    expect(screen.getByRole('link', { name: /^Open the build/ })).toHaveAttribute('href', 'https://example.com/demo');
+  });
+
+  test('6. after End session the header reads Session ended: no Live, no Queued for Claude', async () => {
+    await openRoom({ ...hostState({ st: never, logs: [{ Kind: 'direction', Text: 'Go calm', By: 'host', ForAgent: true, ForAgentAs: 'do-now' }] }), state: 'ENDED' });
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
+    expect(screen.queryByTestId('brm-agentchip')).toBeNull();
+    expect(screen.getAllByText(W.wallEnded).length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(W.queuedHeadline);
+  });
+
+  test('7. Before the room starts leaves when the opening ends, with Claude never connected; Connect stays one press away', async () => {
+    await openRoom(hostState({ st: never }));
+    expect(screen.queryByText(W.setupHead)).toBeNull();
+    expect(screen.queryByText(/You can start the opening now/)).toBeNull();
+    // Claude now says so and offers Connect.
+    const now = document.querySelector('[data-claude-now]');
+    fireEvent.click(within(now).getByRole('button', { name: W.connectClaude }));
+    expect(screen.getByRole('dialog', { name: 'Connect Claude Code' })).toBeInTheDocument();
+  });
+
+  test('7. during the opening, the card is there as before', async () => {
+    await openRoom(hostState({ st: { ...never, Phase: undefined } }));
+    expect(screen.getByText(W.setupHead)).toBeInTheDocument();
+  });
+
+  test('More framing questions counts what is left, not all four', async () => {
+    await openRoom(hostState({ st: { ...never, Phase: undefined, Brief: { lines: { kind: 'A website or page' }, keep: [{ id: 'k', text: 'Never ask for a password', at: ago(9) }], steps: { never: 'done' } } } }));
+    const more = document.querySelector('.brm-bp-more summary');
+    expect(more.textContent).toBe(`${W.openingMore} · ${W.openingMoreHint(3, 4)}`);
+    expect(W.openingMoreHint(3, 4)).toBe('3 of 4 left, if the room has time');
+    expect(W.openingMoreHint(4, 4)).toBe('4, if the room has time');
   });
 });

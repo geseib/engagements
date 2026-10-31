@@ -88,8 +88,10 @@ describe('what the Build screen shows', () => {
     expect(latestBuild(room)).toEqual({ link: 'http://localhost:5173/', shot: { imageId: 'p1', kind: 'progress' } });
   });
 
+  // Only a link marked as the build (QA walk on test, 31 Oct 2026); an unmarked first link is just a link.
   test('falls back to the wrap-up demo, and to nothing', () => {
-    expect(latestBuild({ log: [], images: [], outcome: { links: [{ url: 'http://localhost:3000/' }] } }).link).toBe('http://localhost:3000/');
+    expect(latestBuild({ log: [], images: [], outcome: { links: [{ url: 'http://localhost:3000/', demo: true }] } }).link).toBe('http://localhost:3000/');
+    expect(latestBuild({ log: [], images: [], outcome: { links: [{ url: 'http://localhost:3000/' }] } }).link).toBe('');
     expect(latestBuild({})).toEqual({ link: '', shot: null });
   });
 });

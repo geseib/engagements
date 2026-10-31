@@ -11,20 +11,29 @@
  *     mind, Ask Claude). The server's `later` kind stays accepted.
  */
 
+/** One wording for "it went" and "it waits" (QA walk on test, 31 Oct 2026); every surface reads these. */
+const SENT_HEAD = 'Sent to Claude';
+const QUEUED_HEAD = 'Queued for Claude';
+
 export const W = Object.freeze({
   // What Claude is doing (docs/design/build-room-doing): the line itself is Claude's own words.
   helperIs: (t) => `A helper is ${t.charAt(0).toLowerCase()}${t.slice(1)}`,
   doingFromClaude: (time) => `Claude said this at ${time}`,
   doingFromTodo: "From Claude's to-do list",
   // Sent to Claude (docs/design/build-room-ideas I9): the headline until Claude says what it is doing.
-  sentHeadline: 'Sent to Claude',
+  sentHeadline: SENT_HEAD,
   sentWaiting: (t) => (t ? `${t} \u00b7 waiting for Claude to pick it up` : 'Waiting for Claude to pick it up'),
   sentPicked: (t) => (t ? `Claude picked it up at ${t}` : 'Claude picked it up'),
   sentNotPicked: "Claude hasn't picked this up yet. Is Claude Code still running?",
   // QUEUED, NOT SENT (host review, 25 Oct 2026): Claude Code has never called in, so nothing has reached it.
-  queuedHeadline: 'Queued for Claude',
+  queuedHeadline: QUEUED_HEAD,
   queuedLine: 'Claude Code is not connected yet. It gets this when it connects.',
   queuedHostLine: 'Claude Code is not connected yet. Connect it and it gets this first.',
+  // QUEUED, THE SAME WORDS EVERYWHERE (QA walk on test, 31 Oct 2026): the Now card's line after a
+  // send, the composer's folded line and History's marks said "Sent" while Claude Code had never
+  // connected. They say the headline above until Claude has called in; then "Sent", as before.
+  sentAsLine: (queued, kind, short) => `${queued ? QUEUED_HEAD : SENT_HEAD} as ${kind}: ${short}`,
+  composerSent: (queued, kind, words) => `${queued ? QUEUED_HEAD : 'Sent'}${kind ? ` as ${kind}` : ''}: ${words}`,
   /** The directions-waiting notice for a Claude that never called in. */
   neverCameBefore: (n) => `Claude Code has not connected yet. ${n === 1 ? 'Your direction waits' : `${n} directions wait`} for it.`,
   connectClaude: 'Connect Claude Code',
@@ -875,7 +884,8 @@ export const W = Object.freeze({
   openingStepOf: (n, of) => `step ${n} of ${of}`,
   openingMoreStep: 'one more question',
   openingMore: 'More framing questions',
-  openingMoreHint: (n) => `${n}, if the room has time`,
+  // What is left, not all of them (QA walk on test, 31 Oct 2026: it stayed at 4 after one was answered).
+  openingMoreHint: (left, of = left) => (left === of ? `${of}, if the room has time` : left ? `${left} of ${of} left, if the room has time` : 'none left'),
   openingFramed: (n, of, more) => `${n} of ${of} framed${more ? `, and ${more} more` : ''}. Claude gets the brief as it is.`,
   openingCoreDone: (more) => `The core is framed. Start building, or ask ${more === 1 ? 'the last' : `one of the ${more}`} under More framing questions.`,
   openingAllDone: 'Every step is answered or skipped. Start building when the room is ready.',
@@ -920,6 +930,8 @@ export const W = Object.freeze({
   wrapOrClaude: 'Claude can write this for you.',
   wrapFilled: 'Filled in from the session',
   wrapFromHeadline: "From the brief's headline",
+  // No headline from Claude (QA walk on test, 31 Oct 2026): the opening's answer it took.
+  wrapFromLine: (label) => `From the opening's ${label}`,
   wrapFromDecisions: (n) => `From the ${n === 1 ? 'decision' : `${n} decisions`}`,
   wrapFromBuild: 'From the latest build',
   wrapLinks: 'Links',
@@ -929,6 +941,10 @@ export const W = Object.freeze({
   wrapAddLink: 'Add a link',
   wrapRemoveLink: (i) => `Remove link ${i}`,
   wrapDemoLabel: 'The demo',
+  // One link may be marked as the build (QA walk on test, 31 Oct 2026); the rest are just links.
+  wrapIsBuild: 'The build',
+  wrapIsBuildLabel: (n) => `Link ${n} is the build`,
+  wrapIsBuildTip: 'Open the build, in the header and on the room\'s window, opens this link.',
   checkReport: 'Check the report',
   checkReportHint: (decisions, shots) => `The brief, ${decisions} ${decisions === 1 ? 'decision' : 'decisions'}, ${shots} ${shots === 1 ? 'screenshot' : 'screenshots'}`,
   reportBtn: 'Report',

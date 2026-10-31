@@ -669,7 +669,7 @@ function SentCard({ card }) {
   return (
     <section className="bpl-latest bpl-sentcard" aria-label={card.head} data-testid="bpl-sentcard">
       <h2 className="bpl-kind bpl-kind--amber">{card.head}</h2>
-      <p className="bpl-text bpl-latest-tx">{card.hidden ? card.text : `\u201c${card.text}\u201d`}</p>
+      <p className="bpl-text bpl-latest-tx">{card.hidden || card.plain ? card.text : `\u201c${card.text}\u201d`}</p>
       {card.pick ? <p className="plr-help bpl-sentpick">{card.pick}</p> : null}
     </section>
   );

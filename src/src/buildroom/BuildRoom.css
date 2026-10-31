@@ -472,6 +472,7 @@
 .brm .brm-conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .brm .brm-conn--live { color: var(--brm-success-text); }
 .brm .brm-conn--connecting { color: var(--muted); }
+.brm .brm-conn--ended { color: var(--muted); }
 .brm button.brm-conn { cursor: pointer; color: var(--danger-text); border-color: var(--danger-text); }
 .brm button.brm-conn:hover, .brm button.brm-conn:focus-visible { background: var(--surface-2); }
 .brm .brm-resp { font-size: var(--brm-st-body); font-weight: 700; }
@@ -1127,11 +1128,13 @@
 .brm .brm-askmore > .brm-field:first-of-type { margin-top: 6px; }
 .brm .brm-selfstart { align-self: flex-start; justify-self: start; }
 /* Wrap up's links (PLAN item 15): label and address, two boxes a row. */
-.brm .brm-wraplink { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.brm .brm-wraplink { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto 36px; gap: 8px; align-items: center; margin-bottom: 6px; }
+/* "The build" (QA walk on test, 31 Oct 2026): one link may be marked as the build. */
+.brm .brm-wraplink-demo { display: inline-flex; align-items: center; gap: 4px; font-size: var(--brm-t-label); color: var(--muted); white-space: nowrap; }
 .brm .brm-wrap-filled { margin-left: 8px; }
 @media (max-width: 480px) {
   .brm .brm-seg--askkinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .brm .brm-wraplink { grid-template-columns: minmax(0, 1fr) 36px; }
+  .brm .brm-wraplink { grid-template-columns: minmax(0, 1fr) auto 36px; }
   .brm .brm-wraplink > input:first-child { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
@@ -1419,6 +1422,9 @@
   margin: 0; padding: 10px 14px; border-radius: 10px; font-size: var(--brm-t-body); color: var(--text);
   background: var(--brm-tint-green); border: 1px solid var(--brm-tint-green); overflow-wrap: anywhere;
 }
+/* Queued, not sent (QA walk on test, 31 Oct 2026): Claude Code has never called in, so not green.
+   Text on the blue tint, the pair "Queued for the room" already measured. */
+.brm .brm-sentline.is-queued { background: var(--brm-tint-blue); border-color: var(--brm-line-blue); }
 @media (max-width: 560px) {
   .brm .brm-path-head { flex-wrap: wrap; }
   .brm .brm-path-s { max-width: none; flex-basis: 100%; text-align: left; padding-left: 36px; }
