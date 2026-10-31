@@ -35,6 +35,10 @@ export default function FormatPicker({
   collapseAfter = 0,
   /** Enter on an option: after choosing, the caller moves on (the set search). */
   onEnter = null,
+  /* The gallery card under the pointer or focus, or null when neither is
+     on a card: the side pane shows that format's storyboard while nothing is
+     chosen (live check, round 3). */
+  onPreview = null,
 }) {
   const refs = useRef([]);
   const groupRef = useRef(null);
@@ -99,6 +103,10 @@ export default function FormatPicker({
         className={`gsd-fmt-group gsd-fmt-group--${skin}`}
         role="radiogroup"
         aria-labelledby={labelledBy}
+        onMouseLeave={gallery && onPreview ? () => onPreview(null) : undefined}
+        onBlur={gallery && onPreview ? (event) => {
+          if (!groupRef.current || !groupRef.current.contains(event.relatedTarget)) onPreview(null);
+        } : undefined}
         aria-disabled={disabled || undefined}
       >
         {shown.map((option, i) => {
@@ -122,8 +130,8 @@ export default function FormatPicker({
                 data-format={option.id}
                 onClick={() => choose(i)}
                 onKeyDown={(event) => onKeyDown(event, i)}
-                onMouseEnter={gallery ? () => replay(option.id) : undefined}
-                onFocus={gallery ? () => replay(option.id) : undefined}
+                onMouseEnter={gallery ? () => { replay(option.id); onPreview?.(option.id); } : undefined}
+                onFocus={gallery ? () => { replay(option.id); onPreview?.(option.id); } : undefined}
               >
                 {gallery && (
                   <span className="gsd-fmt-art">

@@ -9,6 +9,29 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (later: How it runs is never empty)
+
+**Test:** merge of dev `6ff06fa7`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Before you pick a format, How it runs shows an example**: Call & Answer's storyboard, headed "How Call & Answer runs — an example", with "Pick a format to see its own." Hovering or tabbing onto a format card shows that format's storyboard; moving off returns to the example.
+
+### Fixed
+
+- **A first-time host saw an empty How it runs pane** until a format was picked, the moment the storyboard helps most.
+
+### What to look at
+
+1. On engage.test, as a host with no sessions (or after clearing this site's storage), open **Create engagement**: the right pane shows Call & Answer's storyboard as an example.
+2. Move the pointer over the Trivia, Poll and Event cards: the pane shows each one's storyboard. Move off the cards: it goes back to the example. Pick a format: the pane shows that format's own.
+
+### Known gaps
+
+- None beyond the entries below.
+
+---
+
 ## 31 Oct 2026 (New engagement: one view, and a storyboard you scroll)
 
 **Test:** merge of dev `048a221b`. Everything below this entry is already on test; this push adds only what is here.
