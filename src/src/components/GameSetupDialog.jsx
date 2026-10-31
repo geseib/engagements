@@ -213,6 +213,17 @@ export default function GameSetupDialog({
   /* No room beside the form: "How it runs" is a fold under Format (frame
      3-A-recommended-390), following the same remembered choice. */
   const narrow = useNarrow(900);
+  /* NOTHING CHOSEN YET IS WHEN THE STORYBOARD HELPS MOST (live check, round
+     3): the pane shows the gallery card under the pointer or focus, and
+     otherwise Call & Answer, said plainly to be an example. Debounced both
+     ways, so crossing the gallery does not flicker the pane. */
+  const [hoverFormat, setHoverFormat] = useState('');
+  const hoverTimer = useRef(null);
+  const previewFormat = (id) => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHoverFormat(id || ''), id ? 150 : 250);
+  };
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
   // Seeded once, not controlled. A novice opens with NO format chosen (README
   // §3.1: a novice never asked to choose never learns a choice exists); a
@@ -742,6 +753,11 @@ export default function GameSetupDialog({
   ) : null;
 
   const showSide = !chooserOpen && view === 'form';
+  const hovered = !hasFormat && hoverFormat && offeredIds.includes(hoverFormat) ? hoverFormat : '';
+  const paneFormat = hasFormat ? engagementType : (hovered || 'call-and-answer');
+  let panePreview = '';
+  if (!hasFormat) panePreview = hovered ? 'hover' : 'example';
+  const paneLabel = isHandoffFormat(paneFormat) ? kindLabel(paneFormat) : gameTypeMeta(paneFormat).label;
   const stepMark = (n, done) => (
     <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
       {done ? <Icon name="Check" size={13} weight="bold" /> : n}
@@ -1001,12 +1017,13 @@ export default function GameSetupDialog({
         labelledBy="gsd-format-label"
         collapseAfter={phone && !isEdit ? 3 : 0}
         onEnter={afterFormatEnter}
+        onPreview={showGallery ? previewFormat : null}
       />
       {/* `blurb` from config/gameTypes.js — the chip row's plain line. */}
       {!showGallery && hasFormat && (
         <p className="gsd-blurb">{isOther ? formatGuide(engagementType).short : gameTypeMeta(engagementType).blurb}</p>
       )}
-      {narrow && !isEdit && hasFormat && (
+      {narrow && !isEdit && (
         <details
           className="gsd-how-fold"
           open={!howHidden}
@@ -1015,8 +1032,8 @@ export default function GameSetupDialog({
             if (open === howHidden) { setHowHidden(!open); writeHowHidden(!open); }
           }}
         >
-          <summary><i className="gsd-chev" aria-hidden="true" />How {formatLabel} runs</summary>
-          <FormatWalkthrough key={engagementType} format={engagementType} label={formatLabel} layout="phone" idPrefix="gsd-fold-wt" />
+          <summary><i className="gsd-chev" aria-hidden="true" />How {paneLabel} runs{hasFormat ? '' : ' — an example'}</summary>
+          <FormatWalkthrough key={paneFormat} format={paneFormat} label={paneLabel} preview={hasFormat ? '' : 'example'} layout="phone" idPrefix="gsd-fold-wt" />
         </details>
       )}
       {isEdit && (
@@ -1146,8 +1163,9 @@ export default function GameSetupDialog({
             edit={isEdit}
             hidden={howHidden}
             onToggleHidden={isEdit ? null : toggleHow}
-            format={engagementType}
-            label={formatLabel}
+            format={paneFormat}
+            label={paneLabel}
+            preview={panePreview}
             notice={refusalNode}
             rowsHeading="Editing this session"
             rows={isEdit ? [

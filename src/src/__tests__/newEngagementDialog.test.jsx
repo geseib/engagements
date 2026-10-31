@@ -302,6 +302,60 @@ describe('a first-time host', () => {
     expect(document.querySelector('.gsd-fmt--chips')).not.toBeNull();
   });
 
+  /* Live check, round 3: a first-time host with nothing chosen saw an empty
+     pane, the moment the storyboard helps most. */
+  test('nothing chosen: the pane shows Call & Answer, said to be an example', () => {
+    render(<GameSetupDialog {...base()} />);
+    expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
+    expect(screen.getByText('Pick a format to see its own.')).toBeInTheDocument();
+    expect(screen.queryByText(/Choose a format to see how it runs/)).toBeNull();
+    expect(within(screen.getByRole('complementary', { name: 'How it runs' })).getAllByRole('listitem').length).toBeGreaterThan(3);
+  });
+
+  test('hovering or focusing a gallery card previews its storyboard, debounced; leaving returns to the example; choosing shows the choice', () => {
+    jest.useFakeTimers();
+    try {
+      render(<GameSetupDialog {...base()} />);
+      fireEvent.mouseEnter(radio('Trivia'));
+      // Not yet: a pointer crossing the gallery does not flicker the pane.
+      expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
+      act(() => { jest.advanceTimersByTime(200); });
+      expect(screen.getByRole('heading', { name: 'How Trivia runs' })).toBeInTheDocument();
+      expect(screen.getByText('Pick a format to see its own.')).toBeInTheDocument();
+      fireEvent.mouseLeave(screen.getByRole('radiogroup', { name: /pick a format/i }));
+      act(() => { jest.advanceTimersByTime(300); });
+      expect(screen.getByRole('heading', { name: 'How Call & Answer runs — an example' })).toBeInTheDocument();
+      fireEvent.focus(radio('Poll'));
+      act(() => { jest.advanceTimersByTime(200); });
+      expect(screen.getByRole('heading', { name: 'How Poll runs' })).toBeInTheDocument();
+      fireEvent.click(radio('Wavelength'));
+      act(() => { jest.advanceTimersByTime(300); });
+      expect(screen.getByRole('heading', { name: 'How Wavelength runs' })).toBeInTheDocument();
+      expect(screen.queryByText('Pick a format to see its own.')).toBeNull();
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('the preview never speaks: nothing in the pane is a live region', () => {
+    jest.useFakeTimers();
+    try {
+      render(<GameSetupDialog {...base()} />);
+      fireEvent.mouseEnter(radio('Trivia'));
+      act(() => { jest.advanceTimersByTime(200); });
+      const pane = screen.getByRole('complementary', { name: 'How it runs' });
+      expect(pane.querySelector('[aria-live]')).toBeNull();
+      expect(pane.closest('[aria-live]')).toBeNull();
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('a phone with nothing chosen: the fold carries the example too', () => {
+    const before = window.matchMedia;
+    window.matchMedia = (q) => ({ matches: /max-width: (600|900)px/.test(q), media: q, addEventListener() {}, removeEventListener() {} });
+    try {
+      render(<GameSetupDialog {...base()} />);
+      expect(document.querySelector('details.gsd-how-fold summary').textContent).toMatch('How Call & Answer runs — an example');
+    } finally { window.matchMedia = before; }
+  });
+
   test('an edit has no Hide and no storyboard', () => {
     render(<GameSetupDialog {...base()} mode="edit" initialValues={{ gameType: 'trivia', title: 'Quiz', questionSetId: 'space' }} />);
     expect(screen.queryByRole('button', { name: /^Hide/ })).toBeNull();

@@ -289,6 +289,11 @@ export function WalkthroughPicture({ art, report = false }) {
 
 export default function FormatWalkthrough({
   format = '', label = '', layout = 'pane', head = null, summary = '', idPrefix = 'gsd-wt', headActs = null,
+  /* No format chosen yet (live check, round 3): 'example' heads it "— an
+     example", 'hover' is the gallery card being looked at. Either way one
+     plain line says how to see your own. Nothing here is a live region, so
+     a pointer crossing the gallery says nothing to a screen reader. */
+  preview = '',
 }) {
   const walk = walkthroughFor(format);
 
@@ -376,11 +381,12 @@ export default function FormatWalkthrough({
       <div className="gsd-wt-sticky">
         {layout !== 'phone' && (
           <div className="gsd-wt-head">
-            <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How {label} runs</h3>
+            <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How {label} runs{preview === 'example' ? ' — an example' : ''}</h3>
             {headActs}
           </div>
         )}
-        {layout === 'phone' && <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs</h3>}
+        {preview && <p className="gsd-wt-note">Pick a format to see its own.</p>}
+        {layout === 'phone' && <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs{preview === 'example' ? ' — an example' : ''}</h3>}
         {layout === 'phone' && summary && <p className="gsd-wt-sum">{summary}</p>}
         {layout !== 'phone' && index}
       </div>

@@ -2358,3 +2358,6 @@
   .gsd .gsd-wt--guide .gsd-wt-phone { top: 16px; }
   .gsd .gsd-wt--guide .gsd-sb-text { line-height: 1.4; }
 }
+
+/* Nothing chosen yet: one plain line under the heading (live check, round 3). */
+.gsd .gsd-wt-note { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }

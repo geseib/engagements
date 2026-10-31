@@ -58,6 +58,9 @@ export default function CreateSummary({
   rowsHeading = 'Three decisions', rows = [], edit = false,
   /* "How it runs" folded to its rail (README round 3, option A). */
   hidden = false, onToggleHidden = null,
+  /* Nothing chosen yet: 'example' (Call & Answer, said to be one) or
+     'hover' (the gallery card under the pointer or focus). */
+  preview = '',
 }) {
   if (!edit && hidden) {
     /* THE RAIL: one button, named for what it holds, so a host who hid the
@@ -94,6 +97,7 @@ export default function CreateSummary({
               key={format || 'none'}
               format={format}
               label={label}
+              preview={preview}
               layout="pane"
               headActs={onToggleHidden ? (
                 <button

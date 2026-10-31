@@ -36,6 +36,7 @@
  *     the session's own row carries the saved one), and the New engagement
  *     redesign's own (docs/design/new-engagement, 30 Oct 2026): howHidden
  *     ("How it runs" folded to its rail, remembered in localStorage),
+ *     hoverFormat (the gallery card the pane previews while none is chosen),
  *     setsDialog (which route
  *     the sets side task opened on), chooserClose, view (the form or Compare),
  *     meeting (the "Planning a…" chip), galleryDone, announce and clearedNote,
