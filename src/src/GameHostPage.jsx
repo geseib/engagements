@@ -152,6 +152,7 @@ import { recentUses } from './config/setFinder';
 import EventDetailsDialog from './components/EventDetailsDialog';
 import {
   hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
+  expiredItemPath, goneSessionNotice,
 } from './config/runningOrder';
 
 const API_BASE = window.API_BASE;
@@ -921,6 +922,9 @@ function GameHostPage() {
   // words (utils/startRefusal.js). Shown on the list; cleared whenever the
   // list goes away, by whichever route, so it never greets the next opening.
   const [historyNotice, setHistoryNotice] = useState('');
+  /* Why the host is on the welcome screen, when that needs saying (a session
+     that no longer exists). */
+  const [welcomeNotice, setWelcomeNotice] = useState('');
   /*
     WHAT WAS JUST MADE, said on the list it lands on (live dev tests B6, C10:
     "Did it work? What's 1224? Do I press Start now?"). { gameId, title,
@@ -1868,7 +1872,9 @@ function GameHostPage() {
           gameType: gameData.gameType || null
         };
       } else if (response.status === 404) {
-        return { exists: false, started: false };
+        // GONE, not unreachable: a session's rows expire 7 days after it
+        // starts (session-ttl.js), and the caller says so (31 Oct 2026).
+        return { exists: false, started: false, gone: true };
       } else {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -2708,9 +2714,15 @@ Focus on actionable business strategy insights.`;
             // Show game history so user can start the game
             setTimeout(() => handleViewGameHistory(), 500);
           }
+        } else if (gameStatus.gone && eventItemStage) {
+          /* AN EVENT ITEM WHOSE SESSION EXPIRED (owner, 31 Oct 2026, event
+             9630): never the main menu. Back to that event's agenda, which
+             says what happened and offers to run it again. */
+          navigateTo(expiredItemPath(urlParams.get('event'), gameIdFromUrl));
         } else {
-          // Game doesn't exist - show welcome screen
+          // Game doesn't exist - show welcome screen, and say so.
           console.log(`❌ HOST: Game ${gameIdFromUrl} doesn't exist - showing welcome screen`);
+          if (gameStatus.gone) setWelcomeNotice(goneSessionNotice(gameIdFromUrl));
           setShowWelcomeScreen(true);
         }
       }).catch(error => {
@@ -6698,6 +6710,7 @@ Focus on actionable business strategy insights.`;
           onQuestionSets={() => setShowHostSets(true)}
           onReports={() => setShowHostReports(true)}
           onSignOut={handleSignOut}
+          notice={welcomeNotice}
         />
         {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
             `position: fixed; inset: 0` with its own `data-theme="dark"`, so a

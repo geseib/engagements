@@ -5,7 +5,7 @@ import Modal from '../Modal';
 import Icon from '../Icon';
 import HelpButton from '../HelpButton';
 import { helpFor } from '../../config/help/screens';
-import { getEvent, runEvent, readDeck, turnPage } from '../../utils/eventsApi';
+import { getEvent, runEvent, readDeck, turnPage, sessionExists } from '../../utils/eventsApi';
 import { navigateTo } from '../../auth/navigate';
 import { loadProfile } from '../../config/displayProfile';
 import {
@@ -18,6 +18,7 @@ import useFullscreenKey, { useFullscreenElement } from '../../hooks/useFullscree
 import { canFullscreen, toggleFullscreen } from '../../utils/fullscreen';
 import {
   sessionStagePath, readOrderParam, dropParam, offersRunningOrder, ORDER_PARAM, QUESTIONS_PANEL,
+  readExpiredParam, EXPIRED_PARAM, expiredItemNotice,
 } from '../../config/runningOrder';
 import './EventStage.css';
 
@@ -280,6 +281,15 @@ export default function EventStage({ code }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [profile] = useState(() => loadProfile(window.localStorage, window.innerWidth));
   const [boardGrid, setBoardGrid] = useState(null);
+  /*
+    ITEMS WHOSE SESSION EXPIRED (owner, 31 Oct 2026, event 9630): a session's
+    rows are deleted 7 days after it starts, and Open used to send the host to
+    a 404 and on to the main menu. Their gameIds, found by Open/Resume asking
+    first, or handed back by the host page (?expired=), and one plain line.
+  */
+  const [expired, setExpired] = useState(() => new Set());
+  const [expiredNote, setExpiredNote] = useState('');
+  const expiredWanted = useRef(readExpiredParam(window.location.search));
   const [slide, setSlide] = useState({ key: '', page: 1 });
   const mounted = useRef(true);
   const slideSave = useRef({ timer: null, pending: false, server: {} });
@@ -446,6 +456,29 @@ export default function EventStage({ code }) {
     }
   }, [code, load]);
 
+  const markExpired = useCallback((item) => {
+    setExpired((prev) => new Set(prev).add(String(item.gameId)));
+    setExpiredNote(expiredItemNotice(item.title || typeLabel(item.type)));
+  }, []);
+  /** The host page sent the host back here from a session that is gone. */
+  useEffect(() => {
+    const gid = expiredWanted.current;
+    if (!gid || !items.length) return;
+    expiredWanted.current = '';
+    dropParam(EXPIRED_PARAM);
+    const item = items.find((i) => String(i.gameId || '') === gid);
+    if (item) markExpired(item);
+  }, [items, markExpired]);
+
+  /** RUN IT AGAIN: a fresh, unopened session in the expired one's place (run.js replaceGone). */
+  const runAgain = useCallback(async (item) => {
+    const fresh = await act('prepare', item);
+    const ready = fresh && fresh.gameId;
+    if (!ready) return;
+    setExpiredNote('');
+    navigateTo(sessionStage(fresh.gameId, code));
+  }, [act, code]);
+
   /** OPEN: the host's screen only. The phones stay where the event is.
       `panel` lands the item's stage on a Session panel tab (config/
       runningOrder.js) — "Set the running order" is Open plus that. */
@@ -456,13 +489,14 @@ export default function EventStage({ code }) {
       return;
     }
     if (item.gameId) {
+      if (!(await sessionExists(item.gameId))) { markExpired(item); return; }
       navigateTo(sessionStage(item.gameId, code, { panel }));
       return;
     }
     const fresh = await act('prepare', item);
     const ready = fresh && fresh.gameId;
     if (ready) navigateTo(sessionStage(fresh.gameId, code, { panel }));
-  }, [act, code, setFocus]);
+  }, [act, code, setFocus, markExpired]);
 
   /*
     "SET THE RUNNING ORDER" FROM THE BUILDER (QA drive finding #4). The
@@ -487,6 +521,8 @@ export default function EventStage({ code }) {
   /** GO LIVE: the host's screen, and everyone's, to this item. */
   const goLive = useCallback(async (item) => {
     if (!item) return;
+    // A paused item's session may have expired: ask before resuming it.
+    if (item.state === 'paused' && item.gameId && !(await sessionExists(item.gameId))) { markExpired(item); return; }
     const fresh = await act(item.state === 'paused' ? 'resume' : 'start', item);
     if (!fresh) return;
     const live = (fresh.items || []).find((i) => i.itemId === fresh.event.liveItemId);
@@ -499,7 +535,7 @@ export default function EventStage({ code }) {
       return;
     }
     if (live) setFocus(live.itemId);
-  }, [act, code, setFocus]);
+  }, [act, code, setFocus, markExpired]);
 
   const next = upNext(items, event && event.liveItemId);
 
@@ -737,6 +773,7 @@ export default function EventStage({ code }) {
               : liveItem ? <>Live now: <b>{liveItem.title || typeLabel(liveItem.type)}</b>. Open any item to look at it; only Go live moves the phones.</>
                 : 'Nothing is live. Open any item to look at it; Go live brings everyone to it.'}
           </p>
+          {expiredNote && <p className="ag-expired-note" role="status">{expiredNote}</p>}
         </div>
         <ol
           className="ag-grid"
@@ -751,6 +788,8 @@ export default function EventStage({ code }) {
               onLive={goLive}
               onAct={act}
               onEnd={setConfirmEnd}
+              expired={Boolean(item.gameId) && expired.has(String(item.gameId))}
+              onRunAgain={runAgain}
             />
           ))}
         </ol>
@@ -902,11 +941,32 @@ export default function EventStage({ code }) {
  * (the stage's dialog): it cannot be undone, and it was one stray tap away
  * (QA drive 29 Sep 2026, finding #25).
  */
-function BoardRow({ item, busy, onOpen, onLive, onAct, onEnd }) {
+function BoardRow({ item, busy, onOpen, onLive, onAct, onEnd, expired = false, onRunAgain }) {
   const state = item.state || 'planned';
   const words = { planned: '', live: 'Live', paused: 'Paused', done: 'Done' };
   const name = item.title || typeLabel(item.type);
   const sub = typeLine(item);
+  /* EXPIRED (owner, 31 Oct 2026): its session's answers were removed 7 days
+     after it ran, so Open and Resume have nothing to show. "Run it again"
+     prepares a fresh session for the item instead. */
+  if (expired) {
+    return (
+      <li className="ag-r ag-r--expired">
+        <span className="ag-r-at">{item.at}</span>
+        <span className="ag-r-main" title={`${name} · ${sub}`}>
+          <TypeIcon type={item.type} size={18} />
+          <span className="ag-r-tt">{name}</span>
+          <span className="ag-r-sub">{sub}</span>
+        </span>
+        <span className="ag-r-st ag-r-st--expired">Expired</span>
+        <span className="ag-r-go">
+          <button type="button" className="ag-b" disabled={busy} onClick={() => onRunAgain(item)} aria-label={`Run ${name} again: a fresh session`}>
+            Run it again
+          </button>
+        </span>
+      </li>
+    );
+  }
   return (
     <li className={`ag-r ag-r--${state}${isBreak(item.type) ? ' ag-r--brk' : ''}`}>
       <span className="ag-r-at">{item.at}</span>

@@ -4,7 +4,9 @@
  *   { action: 'prepare',   itemId }  an engagement's session, made but NOT
  *                                    opened, so the host can preview its
  *                                    stage; the item stays planned and the
- *                                    phones stay where they are
+ *                                    phones stay where they are. An item
+ *                                    whose session has expired (TTL) gets a
+ *                                    fresh one in its place ("Run it again")
  *   { action: 'start',     itemId }  planned → live ("Go live"); paused → live.
  *                                    The item that WAS live is finished
  *                                    (done), unless it is an open survey,
@@ -165,7 +167,18 @@ async function prepare(db, tableName, { meta, code, row, itemId }) {
   if (!rules.isEngagement(row.Type)) {
     return { refusal: refuse('Only an engagement has a stage of its own. Open this one on the agenda.', 'not_an_engagement') };
   }
-  if (row.GameId) return { gameId: String(row.GameId) };
+  if (row.GameId) {
+    /*
+      A SESSION THAT IS GONE IS NO SESSION (owner, 31 Oct 2026). A session's
+      rows expire 7 days after it starts (session-ttl.js), but the item keeps
+      pointing at it, so Open sent the host to a code that answers 404 and
+      the host page dropped to its menu. Only when the session is really
+      gone is a fresh one made, and the pointer replaced; a session that
+      still exists is always the answer, whatever its state.
+    */
+    if (await readSessionState(db, tableName, row.GameId)) return { gameId: String(row.GameId) };
+    return replaceGone(db, tableName, { meta, code, row, itemId });
+  }
   if (stateOf(row) !== 'planned') return { refusal: raced() };
   const { item, refusal } = await playableItem(meta, row);
   if (refusal) return { refusal };
@@ -189,6 +202,39 @@ async function prepare(db, tableName, { meta, code, row, itemId }) {
     return { refusal: raced() };
   }
   console.log(`👁️ run: EVENT#${code} ${itemId} prepared for preview as ${gameId}`);
+  return { gameId };
+}
+
+/**
+ * RUN IT AGAIN: a fresh, unopened session for an item whose own expired. The
+ * item keeps its state (a finished item stays finished on the agenda); the
+ * new session is CREATED, so nobody can join it until the host starts it on
+ * its stage. The swap is conditional on the old pointer, so two screens
+ * doing this at once make one session, not two.
+ */
+async function replaceGone(db, tableName, { meta, code, row, itemId }) {
+  const old = String(row.GameId);
+  const { item, refusal } = await playableItem(meta, row);
+  if (refusal) return { refusal };
+  const gameId = await C.createChildSession(db, tableName, {
+    item, orgId: meta.orgId, code, itemId, open: false, createdBy: meta.CreatedBy,
+  });
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: itemKey(code, itemId),
+      UpdateExpression: 'SET GameId = :gid, PreparedAt = :now, ExpiredGameId = :old',
+      ConditionExpression: 'attribute_exists(SK) AND GameId = :old',
+      ExpressionAttributeValues: { ':gid': gameId, ':old': old, ':now': new Date().toISOString() },
+    }));
+  } catch (error) {
+    await C.discardChildSession(db, tableName, gameId, meta.orgId);
+    if (!(error && error.name === 'ConditionalCheckFailedException')) throw error;
+    const again = await readItem(db, tableName, code, itemId);
+    if (again && again.GameId && String(again.GameId) !== old) return { gameId: String(again.GameId) };
+    return { refusal: raced() };
+  }
+  console.log(`♻️ run: EVENT#${code} ${itemId}'s session ${old} had expired; prepared ${gameId} in its place`);
   return { gameId };
 }
 

@@ -26,6 +26,7 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 import EventStage from '../components/event/EventStage';
 
 jest.mock('../utils/eventsApi', () => ({
+  sessionExists: jest.fn(async () => true),
   getEvent: jest.fn(),
   runEvent: jest.fn(),
 }));
@@ -88,8 +89,62 @@ test('Open on an engagement that already has a session goes straight to its stag
   api.getEvent.mockResolvedValue(view({}, [{ ...DAY[0], gameId: '4821' }, ...DAY.slice(1)]));
   render(<EventStage code={CODE} />);
   fireEvent.click(within(rowOf(await screen.findByText('How well do you know our customers?').then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
-  expect(navigateTo).toHaveBeenCalledWith('/host?gameId=4821&event=5307');
+  await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/host?gameId=4821&event=5307'));
+  expect(api.sessionExists).toHaveBeenCalledWith('4821');
   expect(api.runEvent).not.toHaveBeenCalled();
+});
+
+/* THE OWNER'S EVENT 9630 (31 Oct 2026): its items' sessions were deleted 7
+   days after they ran, and Open/Resume sent the host to a 404 and on to the
+   main menu. */
+describe('an item whose session expired', () => {
+  const ran = [{ ...DAY[0], state: 'done', gameId: '8912' }, DAY[1], DAY[2], { ...DAY[3], state: 'paused', gameId: '1430' }];
+
+  test('Open asks first: a session that is gone marks the row Expired, says why, and does not navigate', async () => {
+    api.getEvent.mockResolvedValue(view({}, ran));
+    api.sessionExists.mockResolvedValueOnce(false);
+    render(<EventStage code={CODE} />);
+    fireEvent.click(within(rowOf(await screen.findByText(DAY[0].title).then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
+    const row = await waitFor(() => {
+      const r = rowOf(DAY[0].title);
+      expect(within(r).getByText('Expired')).toBeInTheDocument();
+      return r;
+    });
+    expect(within(row).queryByRole('button', { name: /^Open/ })).toBeNull();
+    expect(within(row).getByRole('button', { name: /^Run .* again/ })).toBeInTheDocument();
+    expect(screen.getByText(`${DAY[0].title}: this session’s answers were removed 7 days after it ran. Its report is under Reports if one was saved.`)).toBeInTheDocument();
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  test('Resume on a paused item whose session is gone is Expired too, and never resumes', async () => {
+    api.getEvent.mockResolvedValue(view({}, ran));
+    api.sessionExists.mockResolvedValueOnce(false);
+    render(<EventStage code={CODE} />);
+    fireEvent.click(within(rowOf(await screen.findByText(DAY[3].title).then((el) => el.textContent))).getByRole('button', { name: /^Resume/ }));
+    await waitFor(() => expect(within(rowOf(DAY[3].title)).getByText('Expired')).toBeInTheDocument());
+    expect(api.runEvent).not.toHaveBeenCalled();
+  });
+
+  test('Run it again prepares a fresh session and goes to its stage', async () => {
+    api.getEvent.mockResolvedValue(view({}, ran));
+    api.sessionExists.mockResolvedValueOnce(false);
+    api.runEvent.mockResolvedValue({ ...view({}, [{ ...ran[0], gameId: '5550' }, ...ran.slice(1)]), gameId: '5550' });
+    render(<EventStage code={CODE} />);
+    fireEvent.click(within(rowOf(await screen.findByText(DAY[0].title).then((el) => el.textContent))).getByRole('button', { name: /^Open/ }));
+    fireEvent.click(await waitFor(() => within(rowOf(DAY[0].title)).getByRole('button', { name: /^Run .* again/ })));
+    await waitFor(() => expect(api.runEvent).toHaveBeenCalledWith(CODE, 'prepare', DAY[0].itemId));
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/host?gameId=5550&event=5307'));
+  });
+
+  test('sent back by the host page (?expired=), the board marks the item and says why, and tidies the address', async () => {
+    window.history.pushState({}, '', `/host/event/${CODE}?expired=8912`);
+    api.getEvent.mockResolvedValue(view({}, ran));
+    render(<EventStage code={CODE} />);
+    await waitFor(() => expect(within(rowOf(DAY[0].title)).getByText('Expired')).toBeInTheDocument());
+    expect(screen.getByText(/this session’s answers were removed 7 days after it ran/)).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+    expect(api.sessionExists).not.toHaveBeenCalled();
+  });
 });
 
 test('Go live brings everyone: the item starts, the wipe runs, and the host\'s stage follows', async () => {

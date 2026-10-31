@@ -35,6 +35,7 @@ import useFullscreenKey from '../hooks/useFullscreenKey';
 import EventStage from '../components/event/EventStage';
 
 jest.mock('../utils/eventsApi', () => ({
+  sessionExists: jest.fn(async () => true),
   getEvent: jest.fn(),
   runEvent: jest.fn(),
   readDeck: jest.fn(),
