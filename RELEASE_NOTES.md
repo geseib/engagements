@@ -9,6 +9,31 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 31 Oct 2026 (event items whose sessions have expired)
+
+**Test:** merge of dev `04720cb5`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **Run it again** on an agenda item whose session has expired: it prepares a fresh session for that item (nobody can join until you take it live) and opens its stage.
+
+### Fixed
+
+- **Open or Resume on an event item sent the host to the main menu** when the item's session no longer existed. A session's answers are removed 7 days after it starts, but the event and its agenda stay, so an event run weeks ago still pointed at sessions that were gone. Now the row says **Expired**, the agenda says "<item>: this session's answers were removed 7 days after it ran. Its report is under Reports if one was saved.", and the host stays on the agenda. Outside an event, a link to a session that no longer exists says so on the main screen instead of showing nothing.
+
+### What to look at
+
+1. On engage.dev, open event 9630 (Northstar Studio — Project Beacon Kickoff), whose sessions ran on 30 September. Press **Open** or **Resume** on the Warm-up or Direction Builder: you stay on the agenda, the row reads **Expired**, and the line above explains why.
+2. Press **Run it again** on one: a fresh session opens on its stage, and nobody can join until you take it live.
+3. On engage.test, with an event of your own, Open and Resume still go straight to a session that exists.
+
+### Known gaps
+
+- Sessions in an event still expire 7 days after they start, even while the event is open. Whether they should live as long as the event is a decision for the owner.
+- Run it again is refused once the whole event has ended, as every agenda action is.
+
+---
+
 ## 31 Oct 2026 (later: How it runs is never empty)
 
 **Test:** merge of dev `6ff06fa7`. Everything below this entry is already on test; this push adds only what is here.
