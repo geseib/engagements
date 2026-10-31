@@ -75,7 +75,7 @@
    floor); inside the console they are pinned to the laptop ladder. */
 .hc-acts .host-action-bar__hint, .hc-acts .host-action-bar__armed { font-size: 13px; }
 .hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary { font-size: 15px; }
-.hc-acts .host-action-bar__keyhint { font-size: 12px; }
+.hc-acts .host-action-bar__keyhint, .hc-acts .host-action-bar__primary .keycap { font-size: 12px; }
 
 /* Keyboard focus, as WorkflowStrip.css draws it. */
 .hc-sec summary:focus-visible, .hc-leave:focus-visible, .hc-link:focus-visible, .hc-code:focus-visible, .hc-btn:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

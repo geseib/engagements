@@ -369,7 +369,8 @@ body {
   border: 1px solid currentColor;
   border-radius: 0.3em;
   font-family: var(--font-ui);
-  font-size: 0.62em;
+  /* Never under the laptop floor: .62em of a 15px console button is 9px. */
+  font-size: max(12px, 0.62em);
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.35;

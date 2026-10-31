@@ -447,7 +447,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'Ended too soon? While the event is still kept, its stage offers **REOPEN**. **Reopen the event?** says what it does: people can join again with the same code, and items that never ran can go live. What finished stays finished; those sessions are over and their reports are kept.',
+          text: 'Ended too soon? While the event is still kept, its stage offers **REOPEN**: people can join again with the same code, and items that never ran can go live. What finished stays finished, its report kept.',
         },
         {
           t: 'p',
