@@ -26,6 +26,7 @@ import EventStage from '../components/event/EventStage';
 import EventAttendeePage from '../components/event/EventAttendeePage';
 
 jest.mock('../utils/eventsApi', () => ({
+  sessionExists: jest.fn(async () => true),
   getEvent: jest.fn(),
   runEvent: jest.fn(),
   readDeck: jest.fn(),

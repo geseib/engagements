@@ -26,6 +26,7 @@ import {
 } from '../config/runningOrder';
 
 jest.mock('../utils/eventsApi', () => ({
+  sessionExists: jest.fn(async () => true),
   deleteEvent: jest.fn(),
   getEvent: jest.fn(),
   reorderItems: jest.fn(),

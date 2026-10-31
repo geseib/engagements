@@ -878,3 +878,18 @@
   opacity: .5;
   cursor: not-allowed;
 }
+
+/* AN ITEM WHOSE SESSION EXPIRED (owner, 31 Oct 2026): the word on its row,
+   and the board's one plain line saying what happened. */
+.ag-r-st--expired {
+  color: var(--muted);
+}
+
+.ag-expired-note {
+  margin: 0;
+  padding-left: calc(var(--hair) * 8);
+  border-left: calc(var(--hair) * 3) solid var(--muted);
+  font-size: var(--t-meta);
+  color: var(--text);
+  line-height: 1.35;
+}

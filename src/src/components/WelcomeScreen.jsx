@@ -71,6 +71,8 @@ export default function WelcomeScreen({
   onReports,
   onQuestionSets,
   onSignOut,
+  /** A plain line about why the host is here, e.g. the session they opened no longer exists. */
+  notice = '',
 }) {
   const code = digitsOnly(continueGameId).slice(0, CODE_LENGTH);
   const complete = code.length === CODE_LENGTH;
@@ -200,6 +202,7 @@ export default function WelcomeScreen({
               Two ways in. Either one puts a four&#8209;digit code on the screen for the
               room to join with.
             </p>
+            {notice && <p className="wel-notice" role="status">{notice}</p>}
 
             <div className="wel-stack">
               {/* THE ONE AMBER THING ON THE PAGE. Four full-width buttons of

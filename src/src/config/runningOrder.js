@@ -53,6 +53,34 @@ export function sessionStagePath(gameId, code, { panel = '' } = {}) {
   return panel ? `${base}&${PANEL_PARAM}=${encodeURIComponent(panel)}` : base;
 }
 
+/*
+  AN ITEM WHOSE SESSION EXPIRED (owner, 31 Oct 2026, event 9630). A
+  session's rows are deleted 7 days after it starts (session-ttl.js); the
+  item still points at it. The host page sends a host who opened one back to
+  the event's board with ?expired=<gameId>, and the board says what happened.
+*/
+export const EXPIRED_PARAM = 'expired';
+
+export function expiredItemPath(code, gameId) {
+  return `/host/event/${encodeURIComponent(code)}?${EXPIRED_PARAM}=${encodeURIComponent(gameId)}`;
+}
+
+/** `?expired=` as the board reads it: a session code, or ''. */
+export function readExpiredParam(search) {
+  try {
+    const value = new URLSearchParams(search || '').get(EXPIRED_PARAM) || '';
+    return /^\d{4}$/.test(value) ? value : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+/** The board's line for an item whose session expired. */
+export const expiredItemNotice = (title) => `${title}: this session’s answers were removed 7 days after it ran. Its report is under Reports if one was saved.`;
+
+/** The welcome screen's line for a session code that no longer exists. */
+export const goneSessionNotice = (gameId) => `That session (${gameId}) no longer exists. A session’s answers are removed 7 days after it runs; its report is under Reports if one was saved.`;
+
 /** Where "Set the running order" goes for this item. */
 export function runningOrderHref(code, item) {
   if (item && item.gameId) return sessionStagePath(item.gameId, code, { panel: QUESTIONS_PANEL });

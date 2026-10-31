@@ -588,3 +588,15 @@
   .wel-aside-more { margin-top: 18px; padding-top: 14px; }
   .wel-links { gap: 12px; }
 }
+
+/* Why the host landed here (a session that no longer exists, 31 Oct 2026). */
+.wel-page .wel-notice {
+  margin-top: 14px;
+  max-width: 48ch;
+  padding: 10px 12px;
+  border-left: 3px solid var(--info);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--wel-t-label);
+}

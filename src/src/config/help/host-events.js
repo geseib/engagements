@@ -291,7 +291,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'Press F for full screen, and Esc to leave it. The stage checks for changes every ten seconds, so a second laptop on the same event keeps up.',
+          text: 'Press F for full screen, and Esc to leave it. The stage checks for changes every ten seconds, so a second laptop on the same event keeps up. A session\'s answers are removed 7 days after it runs: its row then reads **Expired**, and **Run it again** prepares a fresh session for that item. Its report is under Reports if one was saved.',
         },
       ],
     },

@@ -93,6 +93,21 @@ export const reorderItems = (code, order) =>
 export const runEvent = (code, action, itemId) =>
   call(`events/${enc(code)}/run`, { method: 'POST', body: itemId ? { action, itemId } : { action } });
 
+/**
+ * DOES AN ITEM'S SESSION STILL EXIST? (owner, 31 Oct 2026, event 9630.) A
+ * session's rows expire 7 days after it starts, and the item keeps its code.
+ * GET games/{id} is public; only a 404 means gone. A network fault answers
+ * true, so a flaky connection never hides a session that is there.
+ */
+export async function sessionExists(gameId) {
+  try {
+    const res = await authFetch(adminApiUrl(`games/${enc(gameId)}`));
+    return res.status !== 404;
+  } catch (_) {
+    return true;
+  }
+}
+
 // ── A presentation's slides (27 Sep 2026; events/deck-store.js) ────────────
 /**
  * `{ upload: { key, url, contentType, expiresIn, maxBytes, name } }` — one

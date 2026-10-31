@@ -696,6 +696,51 @@ async function makeEvent() {
     });
   }
 
+  console.log('\n11b. an item whose session expired (owner, 31 Oct 2026: event 9630)');
+  // rejects: prepare answering with a session that TTL has deleted (Open then
+  // sent the host to a 404 and on to the main menu), or replacing a session
+  // that still exists.
+  {
+    table.clear();
+    seedOrg(table, NW);
+    seedSets();
+    const day = await makeEvent();
+    const forget = (gameId) => {
+      for (const [k, r] of [...table.store.entries()]) if (r.PK === `GAME#${gameId}`) table.store.delete(k);
+    };
+    assert.strictEqual((await run(day.code, { action: 'start', itemId: day.ids.trivia })).statusCode, 200);
+    assert.strictEqual((await run(day.code, { action: 'end', itemId: day.ids.trivia })).statusCode, 200);
+    const old = itemRow(day.code, day.ids.trivia).GameId;
+    await check('a session that still exists is the answer, never replaced', async () => {
+      const res = await run(day.code, { action: 'prepare', itemId: day.ids.trivia });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.strictEqual(bodyOf(res).gameId, old);
+    });
+    await check('a dangling gameId: prepare makes a fresh, unopened session in its place; the item stays done', async () => {
+      forget(old);
+      const res = await run(day.code, { action: 'prepare', itemId: day.ids.trivia });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      const fresh = bodyOf(res).gameId;
+      assert.match(fresh, /^\d{4}$/);
+      assert.notStrictEqual(fresh, old);
+      assert.strictEqual(gameState(fresh).State, 'CREATED');
+      assert.strictEqual(gameMeta(fresh).EventRef, day.code);
+      assert.strictEqual(itemRow(day.code, day.ids.trivia).GameId, fresh);
+      assert.strictEqual(itemRow(day.code, day.ids.trivia).ExpiredGameId, old);
+      assert.strictEqual(itemRow(day.code, day.ids.trivia).State, 'done');
+      // Asked again, the fresh one is the answer.
+      assert.strictEqual(bodyOf(await run(day.code, { action: 'prepare', itemId: day.ids.trivia })).gameId, fresh);
+    });
+    await check('a previewed item whose preview expired gets a fresh one too, and stays planned', async () => {
+      const prev = bodyOf(await run(day.code, { action: 'prepare', itemId: day.ids.friction })).gameId;
+      forget(prev);
+      const res = await run(day.code, { action: 'prepare', itemId: day.ids.friction });
+      assert.strictEqual(res.statusCode, 200, res.body);
+      assert.notStrictEqual(bodyOf(res).gameId, prev);
+      assert.strictEqual(itemRow(day.code, day.ids.friction).State, 'planned');
+    });
+  }
+
   console.log('\n12. a day run straight through (QA drive 29 Sep 2026, finding #2)');
   // rejects: "0 OF 5 DONE" after every item was taken live in turn, four of
   // them Paused, and phones listing a closed survey as Paused.
