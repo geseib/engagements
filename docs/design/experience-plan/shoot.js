@@ -1,8 +1,11 @@
 // Renders each frame of index.html to p-*.png beside it, and checks every frame for
 // overflow (a descendant that spills past its frame, or text cut without an ellipsis).
 //   node docs/design/experience-plan/shoot.js
-// Also reports any text below the 12px floor. The viewport is 2420 wide so frame 6's
-// three-across board (2348px) is not clipped by its .scroll wrapper.
+// Also reports any text below the 12px floor. The viewport is 3060 wide so the widest
+// board, frame 8 (three frames plus the phone column, 3026px), is not clipped by its
+// .scroll wrapper. Name frames to shoot only those:  node shoot.js f-p8
+// (a wider viewport recentres .doc, which shifts frames 1-5 by a sub-pixel and re-encodes
+// their PNGs with no visible change, so shoot only what you changed).
 const path = require('path');
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 
@@ -14,15 +17,17 @@ const FRAMES = [
   ['f-p5', 'p-5-primitives-before-after.png'],
   ['f-p6', 'p-6-every-type.png'],
   ['f-p7', 'p-7-person-row.png'],
+  ['f-p8', 'p-8-every-type-one-screen.png'],
 ];
 
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const page = await browser.newPage({ viewport: { width: 2420, height: 1100 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: 3060, height: 1100 }, deviceScaleFactor: 2 });
   await page.goto(`file://${path.join(__dirname, 'index.html')}`);
   await page.evaluate(() => document.fonts.ready);
   let problems = 0;
-  for (const [id, file] of FRAMES) {
+  const only = process.argv.slice(2);
+  for (const [id, file] of FRAMES.filter(([id]) => !only.length || only.includes(id))) {
     const report = await page.evaluate((rootId) => {
       const root = document.getElementById(rootId);
       const out = [];

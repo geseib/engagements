@@ -205,12 +205,37 @@ visible without opening anything.[^13]
 |---|---|---|
 | The laptop | Private. The full frame. | Public: it *is* the room's screen. |
 | What the room watches | The room's window (`/present`). | The frame's content area, large, plus a slim top bar and the slim Your part now. |
-| People column | Shown. | Hidden; the room's count shows in the content area as today. |
+| Top bar | Main menu · name · Join · Room's window · Needs you · ? · Session menu. | The same slots in the same places; two words change: *Show join code* in Join's place, *The room sees this screen* in the room's-window place. |
+| People column | Shown. | Hidden; the room's count shows in the content area as today. The list, with the same person row (§3.2b), is on the phone Remote. |
+| Steps strip and pulse tiles | Shown. | Folded into the room's view: its eyebrow says where we are ("Round 3 · Strategy"), its meter is the count. Private tiles ("Correct so far") go to the phone. In an event, Agenda stays in the Session menu. |
 | Needs you | Bell + the Needs-you line + marks, named. | Bell count only, never a name. Pressing it opens a sheet that starts with "The room can see this screen", lists items by kind ("A name request", "2 late answers"), and offers per item *Show on this screen* or *Open on your phone*. |
+| Needs-you line | At its fixed height; calm, or amber with the named item and its buttons. | Still there, same height, same place, public-safe. Calm: the same muted line ("1 late answer to review, on your phone" for Soon items). When something waits: an amber edge but no amber wash, a count by kind and where to handle it ("1 name request · on your phone"), and one outlined *Open* that opens the bell's sheet. Never a name and never *Let them* / *Not now* on the room's screen. |
 | Private detail (read-check, late text, Workie settings, the trivia answer, host notes) | In the frame. | On the phone Remote, or one item at a time after *Show on this screen*. |
 | Main action | Your part now, under the top bar. | The same place, slim. Space and the clicker as today. |
 
 ![One screen: what the room sees, and where the private things go](p-3-one-screen-and-remote.png)
+
+(Frame 3 predates the public-safe Needs-you line and draws none; frame 8 is current.)
+
+**One screen, every type** (owner, 1 Nov: "the same hold true from 1 screen host mode too?").
+Yes: §3.2a holds in one-screen mode, with the subtractions above. Each format's content area
+becomes its room view:
+
+| Format | The room sees | Moves to the phone |
+|---|---|---|
+| Call & Answer | the question and the count; responses once voting opens | late answers, Workie's read and its Retry, who wrote what |
+| Trivia | the options, nothing marked and no split, until *Show the answer* | the answer, correct so far, the split per option |
+| Poll | the live board, as on the room's window | nothing extra |
+| Wavelength | the subject and the count; no words until Reveal | the words as they come in |
+| Survey | progress only, overall: how many finished, when it closes (per-question counts can point at a person in a small group) | progress per question, who has not finished |
+| Build Room | the ask, the room's own vote, and one line of Claude's status | Claude's asks in full, the direction being shaped, ideas to let in |
+| Event item | its type's room view | its type's items, plus Agenda |
+
+People and the Session menu are on the phone in every format. Drawn at frame 6's type sizes;
+the cells are 90px wider than frame 6's because the two longer top-bar labels need it at that
+compact size (at a real 1280 laptop they fit, as frame 3 shows).
+
+![One frame, seven formats, one screen, and the phone's private half](p-8-every-type-one-screen.png)
 
 **What the phone Remote is for.** On one screen it is the host's private half: the Needs-you
 list with its buttons, the trivia answer, the late list, Workie's read with Retry, host
