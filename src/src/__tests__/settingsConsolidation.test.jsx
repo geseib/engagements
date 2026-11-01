@@ -49,7 +49,7 @@ describe('the Settings tab, grouped', () => {
     expect(groups).toEqual(['Screens', 'Your phone as a remote', 'The rounds', 'Joining']);
     const folds = [...container.querySelectorAll('.setup-settings > details.setup-fold > summary')]
       .map((s) => s.textContent);
-    expect(folds).toEqual(['Session: back to menu, end it, sign out', 'Keyboard shortcuts']);
+    expect(folds).toEqual(['Session: Main menu, End session, sign out', 'Keyboard shortcuts']);
     container.querySelectorAll('details.setup-fold').forEach((d) => expect(d.open).toBe(false));
   });
 
@@ -180,7 +180,7 @@ describe('Setup in the loop', () => {
     expect(first).toBeTruthy();
     fireEvent.click(within(first).getByRole('button', { name: 'One screen' }));
     expect(onChoose).toHaveBeenCalledWith('classic');
-    fireEvent.click(screen.getByRole('button', { name: 'All settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
     expect(onAll).toHaveBeenCalled();
   });
 

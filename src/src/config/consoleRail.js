@@ -4,7 +4,9 @@
  * choice can hold until the moment changes (ConsoleRail keeps that state).
  */
 import { waitingRoster } from './anonymity';
-export const CONSOLE_SECTIONS = Object.freeze(['queue', 'people', 'late', 'tools']);
+// No 'tools' (experience plan 2a): the connection is the top bar's, only when
+// broken, and the settings are the Session menu's, top right.
+export const CONSOLE_SECTIONS = Object.freeze(['queue', 'people', 'late']);
 
 const OPENS = Object.freeze({
   LOBBY: 'queue',
@@ -24,10 +26,12 @@ export function consoleRailFor(moment) {
   return OPENS[moment] || null;
 }
 
-/** The People header: the one count for the moment. */
-export function peopleSummary({ moment, players = 0, answered = 0, voted = 0 } = {}) {
-  if (moment === 'ANSWERING') return `${answered} of ${players} answered`;
-  if (moment === 'VOTING' || moment === 'VOTE_RESPONSES') return `${voted} of ${players} voted`;
+/**
+ * The People header: "N here" in every phase. The answered and voted count is
+ * the pulse's (config/consolePulse.js; session-start D3 "the count leaves the
+ * People header"), so the console says it once.
+ */
+export function peopleSummary({ players = 0 } = {}) {
   return `${players} here`;
 }
 

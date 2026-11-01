@@ -46,7 +46,9 @@ import './NotificationsBell.css';
 const FOCUS_THROTTLE_MS = 60 * 1000;
 const INTERVAL_MS = 5 * 60 * 1000;
 
-export default function NotificationsBell({ libraries = [], onOpen, refreshKey = 0, session = null }) {
+/* `labelled` (the console's top bar, experience plan 2a): in a live session the
+   button also says "Needs you" in words beside the bell. */
+export default function NotificationsBell({ libraries = [], onOpen, refreshKey = 0, session = null, labelled = false }) {
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -182,7 +184,7 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
       <button
         type="button"
         ref={buttonRef}
-        className={`nbell-btn${count || dot ? ' nbell-btn--some' : ''}`}
+        className={`nbell-btn${count || dot ? ' nbell-btn--some' : ''}${labelled && session ? ' nbell-btn--labelled' : ''}`}
         aria-label={label}
         title={label}
         aria-expanded={open}
@@ -191,6 +193,7 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
         data-testid="nbell-button"
       >
         <Icon name="Bell" weight={count ? 'fill' : 'bold'} size={18} color="currentColor" />
+        {labelled && session ? <span className="nbell-label" aria-hidden="true">{NEEDS_WORDS.title}</span> : null}
         {count > 0 && <span className="nbell-count" data-testid="nbell-count">{count > 99 ? '99+' : count}</span>}
         {dot && <span className="nbell-soon" data-testid="nbell-dot" aria-hidden="true" />}
       </button>

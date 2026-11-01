@@ -85,7 +85,7 @@ const running = {
         { t: 'h', text: 'Letting latecomers in' },
         {
           t: 'p',
-          text: 'People can join at any point. During a round press J to show the QR and code in a panel beside the question, and J again to hide it. In the Session panel, Settings › **Joining** has **Copy join link**, **Invite…** and **Put the join code back on the stage**.',
+          text: 'People can join at any point. During a round press J to show the QR and code in a panel beside the question, and J again to hide it. In the Session panel, Settings › **Joining** has **Copy join link**, **Invite…** and **Show join code**.',
         },
       ],
     },
@@ -241,7 +241,7 @@ const running = {
       ],
     },
     /*
-      End: SessionSetupPanel fold "Session: back to menu, end it, sign out",
+      End: SessionSetupPanel fold "Session: Main menu, End session, sign out",
       "End session" (canEndSession: not survey, not lobby, not ended);
       endSessionConfirm "End this session?" / "Ending closes the session for
       every phone, laptop or tablet in the room, right now." Leave dialog
@@ -259,7 +259,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Stop whenever you like. Open the Session panel, Settings, the fold **Session: back to menu, end it, sign out**, and press **End session**. It asks first (**End this session?**): ending closes the session on every device in the room straight away.',
+          text: 'Stop whenever you like. Open the Session menu, Settings, the Session fold at the foot, and press **End session**. It asks first (**End this session?**): ending closes the session on every device in the room straight away.',
         },
         {
           t: 'p',
@@ -275,8 +275,8 @@ const running = {
         {
           t: 'note',
           tone: 'info',
-          title: 'Back to menu does not end anything',
-          text: '**Back to Menu** in the same fold, or **Back to menu** on the dock, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
+          title: 'Main menu does not end anything',
+          text: '**Main menu** in the same fold or top left on the two-screen console, or **Back to menu** on the dock, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
         },
       ],
     },
@@ -286,7 +286,8 @@ const running = {
 /*
   THE SESSION PANEL (components/stage/SessionSetupPanel.jsx; tabs from
   config/setupPanel.js: Players, Questions, Rounds, Settings). Opened by
-  SESSION on the dock or \ (useSessionPanelKey); header "Session setup",
+  SESSION on the dock, Session menu on the two-screen console's top bar (a
+  sheet over the content area), or \ (useSessionPanelKey); header "Session menu",
   "Connected"/"Connecting…", Help, ✕; Esc or \ closes. Sections moved here
   from host-running-engagements in Phase 2 keep their ids (HELP_SECTION_MOVES).
 */
@@ -303,7 +304,7 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'Press **SESSION** on the dock, or \\, to open the panel over the right of the stage; \\ or Esc closes it. Its header reads **Session setup** and says **Connected** while live updates are reaching you. The room can see the panel on one screen, so it never shows correct answers.',
+          text: 'Press **SESSION** on the dock, or \\, to open the panel over the right of the stage; on the two-screen console, **Session menu** top right opens it over the main area, never over Your part now. \\ or Esc closes it. Its header reads **Session menu** and says **Connected** while live updates are reaching you. The room can see the panel on one screen, so it never shows correct answers.',
         },
         {
           t: 'table',
@@ -420,12 +421,12 @@ const sessionPanel = {
             { title: 'Workie', text: '**Redo the read on screen**, and the voice and approach Workie uses from the next round.' },
             { title: 'Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. Opening anything pauses it.' },
             { title: 'Scoreboard', text: '**Scoreboard style**, for Trivia and Call & Answer.' },
-            { title: '**Joining**', text: 'The join address and code, **Copy join link**, **Invite…** and **Put the join code back on the stage**.' },
+            { title: '**Joining**', text: 'The join address and code, **Copy join link**, **Invite…** and **Show join code**.' },
           ],
         },
         {
           t: 'p',
-          text: 'Two folds close the tab. **Session: back to menu, end it, sign out** (see Ending the session) also has **Show how this works on the stage →**, which explains the session to the room. **Keyboard shortcuts** lists the main keys.',
+          text: 'Two folds close the tab. The Session fold (**Main menu**, **End session**, sign out; see Ending the session) also has **Show how this works on the stage →**, which explains the session to the room. **Keyboard shortcuts** lists the main keys.',
         },
       ],
     },

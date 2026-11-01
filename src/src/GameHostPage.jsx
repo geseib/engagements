@@ -1,5 +1,6 @@
 import { useRosterMode, rosterRevealFor } from './hooks/useRosterReveal';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
@@ -132,6 +133,8 @@ import ReadPanel from './components/console/panels/ReadPanel';
 import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
 import { needsYou, markHandoverRequested, NEEDS_ACTIONS } from './config/needsYou';
 import NeedsYouLine from './components/needs/NeedsYouLine';
+import ConsolePulse from './components/console/ConsolePulse';
+import { arrivalsSince, withoutRoomCount } from './config/consolePulse';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import CW from './config/consoleWords';
@@ -467,6 +470,26 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    THE SESSION MENU'S SHEET HOST ON THE CONSOLE (experience plan §3.2b, 2a):
+    HostConsole's box over the content area. On two screens the Session menu
+    is portalled into it, so it opens over the pulse and the main area and
+    never over Your part now. One screen keeps the fixed panel.
+  */
+  const [consoleSheetHost, setConsoleSheetHost] = useState(null);
+  /*
+    WHEN THIS PAGE SAW EACH PHASE BEGIN (the pulse's time tile, 2c): the
+    server stamps when answering opened (currentQuestion.startedAt), not when
+    voting did, so each state ('ASK#002', 'VOTE#002', …) is stamped here the
+    first time it is seen. A reload re-stamps; the round's own start still
+    comes from the server.
+  */
+  const [phaseSeenAt, setPhaseSeenAt] = useState({});
+  useEffect(() => { setPhaseSeenAt({}); }, [gameId]);
+  useEffect(() => {
+    if (!gameState) return;
+    setPhaseSeenAt((seen) => (seen[gameState] ? seen : { ...seen, [gameState]: Date.now() }));
+  }, [gameState]);
   // The workflow strip's step the host is LOOKING at (session flow v3 §4.8),
   // or null for the live view. Private to this laptop; nothing is sent.
   const [viewingStep, setViewingStep] = useState(null);
@@ -1273,6 +1296,9 @@ function GameHostPage() {
     and the clicker the moment the host put a response up.
   */
   const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
+  // On the console a pinned join code is on the room's window only and covers
+  // nothing here (experience plan 2a), so it does not hold the host's keys.
+  const qrCovers = useConsole && qrMode === 'pinned' ? null : qrMode;
   const [sessionProfile, setSessionProfile] = useState(null);
   const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
   const profileRef = useRef(profile);
@@ -6685,7 +6711,7 @@ Focus on actionable business strategy insights.`;
   const scoreboardKeysOn = scoreboardKeysLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    lessonExpanded, isLoadingData, qrMode,
+    lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -6728,7 +6754,7 @@ Focus on actionable business strategy insights.`;
   const sessionPanelKeyOn = sessionPanelKeyLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    isLoadingData, qrMode,
+    isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -7328,7 +7354,7 @@ Focus on actionable business strategy insights.`;
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
     showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
-    showReportsModal, lessonExpanded, isLoadingData, qrMode,
+    showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
@@ -8283,6 +8309,37 @@ Focus on actionable business strategy insights.`;
     authorsRevealed,
   });
   /*
+    THE PULSE (session-start D3; experience plan 2c). The round opened at the
+    server's currentQuestion.startedAt, else when this page saw ASK#n; voting
+    and results from when this page saw VOTE#n and RESULTS#n. Arrivals are the
+    people whose joinedAt is after the round opened.
+  */
+  const pulseRound = (String(gameState || '').match(/#(\d+)/) || [])[1] || null;
+  // The first time this page saw `PREFIX#n` (or a sub-state of it, `VOTE#n#…`).
+  const seenFor = (prefix) => {
+    if (!pulseRound) return null;
+    const key = `${prefix}#${pulseRound}`;
+    const ts = Object.entries(phaseSeenAt).filter(([k]) => k === key || k.startsWith(`${key}#`)).map(([, t]) => t);
+    return ts.length ? Math.min(...ts) : null;
+  };
+  const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
+  const consolePulse = useConsole ? (
+    <ConsolePulse
+      moment={consoleMoment}
+      players={players.length}
+      answered={answeredCount}
+      voted={playersWhoVoted.length}
+      everyoneIn={consoleMoment === 'ANSWERING' || consoleMoment === 'VOTING' || consoleMoment === 'VOTE_RESPONSES' ? everybodyIn : null}
+      openedAt={pulseOpenedAt}
+      voteAt={seenFor('VOTE')}
+      resultsAt={seenFor('RESULTS')}
+      arrivals={arrivalsSince(players, pulseOpenedAt)}
+      late={lateCounts.notReviewed}
+      // The late count is the Needs-you item's own Review (one home for the late list).
+      onLate={openLateList}
+    />
+  ) : null;
+  /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
     on screen, and what the server's plan says comes next (`upNext`, read on
     every round start and whenever the Session panel opens). Capped at the
@@ -8390,6 +8447,12 @@ Focus on actionable business strategy insights.`;
     }
   };
   const needsBell = { needs, onAct: onNeedsAct, busy: needsBusy, error: needsError };
+  /*
+    WHERE THE SESSION MENU OPENS (experience plan §3.2b, 2a). On the console,
+    in HostConsole's sheet host: over the content area, never over Your part
+    now or the Needs-you line. On one screen, the fixed panel as before.
+  */
+  const sessionMenuWhere = (panel) => (useConsole && consoleSheetHost ? createPortal(panel, consoleSheetHost) : panel);
 
   const consolePanel = !useConsole ? null : (() => {
     /* Drafting a question for the room: the read with the composer beside it,
@@ -8496,13 +8559,27 @@ Focus on actionable business strategy insights.`;
           top={{
             title: eventTitle || 'Engagements',
             code: gameId,
-            onJoin: () => setQrMode('pinned'),
+            // THE ONE JOIN TOGGLE (experience plan §3.6, 2a): the code on the
+            // room's window, or not; J does the same.
+            onJoin: () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
+            joinPressed: qrMode === 'pinned',
             presentHref: gameId ? presentHref(gameId) : '',
             presentDetail,
+            // The state alone beside "Room's window ↗", as the Build Room's bar does, so the bar fits at 1280.
+            short: true,
             help: consoleHelp,
             // The bell is the Needs-you door in a live session (experience plan §4.3).
             bellSession: needsBell,
+            // Main menu, always (2a): the step's leave control when it has one, else this.
+            onLeave: requestLeave,
+            // The connection, on the top bar only when it is broken.
+            connected: wsConnected || !wsEverConnected.current,
+            // The Session menu, top right: a sheet over the content area.
+            onSessionMenu: () => setSetupPanelOpen((isOpen) => !isOpen),
+            sessionMenuOpen: setupPanelOpen,
           }}
+          pulse={consolePulse}
+          sheetRef={setConsoleSheetHost}
           strip={workflow ? {
             strip: workflow,
             mode: 'full',
@@ -8524,7 +8601,6 @@ Focus on actionable business strategy insights.`;
             lateWall,
             onLateShow: showLateOnWall,
             onLateMark: markLateReviewed,
-            connected: wsConnected,
             onOpenSection: openSetupAt,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
             // Askers lifted to the top of People, with Let them / Not now on the row.
@@ -8534,10 +8610,10 @@ Focus on actionable business strategy insights.`;
             needsError,
           }}
           footer={{
-            // roundStep's own status: the count, said here and in the People header only.
+            // roundStep's own status, without the room's count: the pulse says it (one fact, once).
             status: viewing
               ? { text: RW.viewingNothingMoves, tone: 'info' }
-              : (sessionActionError ? { text: sessionActionError, tone: 'error' } : hostControls.status),
+              : (sessionActionError ? { text: sessionActionError, tone: 'error' } : withoutRoomCount(hostControls.status, consoleMoment)),
             nextOnWall: consoleNext,
             part: workflow ? workflow.part : null,
             controls: dockControls,
@@ -9546,7 +9622,7 @@ Focus on actionable business strategy insights.`;
         />
       )}
 
-      {setupPanelOpen && (
+      {setupPanelOpen && sessionMenuWhere(
         <SessionSetupPanel
           // A place asked for re-mounts the panel at its tab.
           key={setupPanelLanding || 'session'}
@@ -9762,7 +9838,10 @@ Focus on actionable business strategy insights.`;
           the class's comment in styles.css for why. */}
       {/* On one screen during a round the QR is the side panel (joinPanelLive),
           so the rail's hover preview no longer covers the stage there. */}
-      {(showExpandedQR || (qrMode && !(joinPanelAllowed && qrMode === 'preview'))) && (
+      {/* On the two-screen console Join is a toggle for the room's window
+          (experience plan 2a): the code goes up there, and the host's own
+          laptop is not covered; the pressed Join says it is up. */}
+      {(showExpandedQR || (qrMode && !(joinPanelAllowed && qrMode === 'preview') && !(useConsole && qrMode === 'pinned'))) && (
         <div
           className={qrOverlayClassName(qrMode)}
           onClick={() => { setShowExpandedQR(false); setQrMode(null); }}

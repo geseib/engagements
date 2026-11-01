@@ -12,15 +12,16 @@ describe('which rail section opens by itself (spec §3.3)', () => {
   test('an unknown moment opens nothing', () => {
     expect(consoleRailFor('UNKNOWN')).toBeNull();
   });
-  test('the four sections, in order', () => {
-    expect(CONSOLE_SECTIONS).toEqual(['queue', 'people', 'late', 'tools']);
+  // Session tools went (experience plan 2a): the Session menu and the top bar's connection replace it.
+  test('the three sections, in order', () => {
+    expect(CONSOLE_SECTIONS).toEqual(['queue', 'people', 'late']);
   });
 });
 
-describe('the People header says the one count for the moment', () => {
-  test('answering, voting, otherwise who is here', () => {
-    expect(peopleSummary({ moment: 'ANSWERING', players: 4, answered: 3, voted: 0 })).toBe('3 of 4 answered');
-    expect(peopleSummary({ moment: 'VOTING', players: 4, answered: 4, voted: 2 })).toBe('2 of 4 voted');
+describe('the People header says who is here; the count is the pulse\'s (2c)', () => {
+  test('"N here" in every phase', () => {
+    expect(peopleSummary({ moment: 'ANSWERING', players: 4, answered: 3, voted: 0 })).toBe('4 here');
+    expect(peopleSummary({ moment: 'VOTING', players: 4, answered: 4, voted: 2 })).toBe('4 here');
     expect(peopleSummary({ moment: 'READ', players: 4, answered: 4, voted: 4 })).toBe('4 here');
     expect(peopleSummary({ moment: 'LOBBY', players: 1, answered: 0, voted: 0 })).toBe('1 here');
   });

@@ -54,15 +54,18 @@
                        PresentEnded; PresentPage.jsx Scoreboard overlay;
                        config/roundStep.js momentOf (a round's results stay up
                        until the next round starts).
-    laptop-console     components/console/HostConsole.jsx, ConsoleTop.jsx,
-                       ConsoleFooter.jsx; config/consoleWords.js; WorkflowStrip
-                       labels config/workflowStrip.js; StepView.jsx;
-                       GameHostPage.jsx dockControls (Back to the room),
-                       consoleOnBackKey. "All sessions" runs handleSwitchGame,
-                       which shows the start screen (its tooltip says "your
-                       sessions": defect noted, not described).
+    laptop-console     components/console/HostConsole.jsx, ConsoleTop.jsx
+                       (the top bar's slots, config/hostWords.js TOP_SLOTS),
+                       ConsoleFooter.jsx, ConsolePulse.jsx
+                       (config/consolePulse.js); config/consoleWords.js;
+                       WorkflowStrip labels config/workflowStrip.js;
+                       StepView.jsx; GameHostPage.jsx dockControls (Back to
+                       the room), consoleOnBackKey, sessionMenuWhere (the
+                       Session menu portalled into HostConsole's sheet host).
+                       Main menu runs requestLeave (asks first with people in
+                       the room), then handleSwitchGame.
     console-rail       components/console/ConsoleRail.jsx; config/consoleRail.js
-                       (which section opens per moment).
+                       (which section opens per moment; People says "N here").
     console-main       GameHostPage.jsx consolePanel; panels/SimplePanels.jsx,
                        ResponsesPanel.jsx, ReadPanel.jsx.
     putting-up         ResponsesPanel.jsx (The question / The results / All
@@ -76,8 +79,9 @@
                        expanded-QR overlay (click anywhere closes, the address
                        copies); presentModel.js withJoin (ASK, VOTE, RESULTS
                        only); JoinPanel; StageJoinPanel.jsx and joinPanelAllowed
-                       (one screen); SessionSetupPanel "Put the join code back
-                       on the stage"; HostRemote.jsx Join code panel.
+                       (one screen); SessionSetupPanel "Show join code";
+                       ConsoleTop's Join toggles (no overlay on the console);
+                       HostRemote.jsx Join code panel.
     drive-from-window  present/presentControls.js (keys armed only for a host
                        who may drive; STRIP_MS 3 s; CONFIRM_MS 8 s; Enter/Esc);
                        present/presentKeys.js; PresentPage.jsx strip and the
@@ -254,10 +258,12 @@ const twoScreens = {
           t: 'table',
           head: ['Part', 'What it is for'],
           rows: [
-            ['Top line', '← **All sessions** (in the lobby and at the end) takes you to the start screen; the session keeps running, and Rejoin a session there brings you back. Then the session\'s name, **Join** and the code, **Room\'s window ↗** with its status, and the bell.'],
-            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup holds Screens and **All settings**.'],
-            ['**Your part now**', 'What to do next in one sentence, the count for the step, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
-            ['Left rail', 'Round queue, People, Late & not reviewed and Session tools (see The left rail).'],
+            ['Top bar', 'Always in this order: **Main menu** (the start screen; the session keeps running, and Rejoin brings you back), the session\'s name, **Join** and the code, **Room\'s window ↗** with its status, **Not hearing the room** only while the connection is down, the bell (**Needs you**), **?**, and **Session menu**.'],
+            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup holds Screens and **Session menu**.'],
+            ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
+            ['The Needs-you line', 'Under Your part now: calm, or amber with what needs you and its buttons.'],
+            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning to **Everyone\'s in**; **Time**, how long the round has been open; **Since this round opened**, who joined since, and any late items to review.'],
+            ['Left rail', 'Round queue, People and Late & not reviewed (see The left rail).'],
             ['Main area', 'What the step needs, from the lobby to the report (see The main area).'],
           ],
         },
@@ -271,10 +277,10 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. **Rounds and questions** opens the Rounds tab of the Session panel.' },
-            { title: 'People', text: 'Who is here, and while the room answers or votes, who has and who has not. The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. **All players** opens the Players tab.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. **Rounds and questions** opens the Rounds tab of the Session menu.' },
+            { title: 'People', text: 'How many are here, and while the room answers or votes, who has and who has not (the count itself is the Answered tile). The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
             { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the full list in the Rounds tab (see Late answers and comments).' },
-            { title: 'Session tools', text: 'Whether the console is connected, and **Questions**, **Rounds** and **Settings**, which open the Session panel at that tab.' },
+            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds Players, Questions, Rounds and the settings, with **Main menu** and **End session** at the foot of Settings.' },
           ],
         },
         {
@@ -351,9 +357,9 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Two screens', text: 'Press **Join** and the code on the top line, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; your laptop shows the code large. Click anywhere on the laptop, or press J, to take it down everywhere; click the address to copy it. In the lobby the room\'s window shows it already.' },
+            { title: 'Two screens', text: 'Press **Join** and the code on the top bar, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; **Join** stays pressed on your laptop while it is up, and nothing covers your console. Press **Join** again, or J, to take it down. In the lobby the room\'s window shows it already.' },
             { title: 'From your phone', text: '**Join code**, then **Display on screen** (and **Take it off the screen**).' },
-            { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Put the join code back on the stage** in Settings, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
+            { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Show join code** in Settings, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
           ],
         },
       ],
@@ -408,7 +414,7 @@ const twoScreens = {
         {
           t: 'steps',
           items: [
-            { title: 'Open it', text: 'In the Session panel\'s Settings tab (on the console: Session tools, then **Settings**), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
+            { title: 'Open it', text: 'In the Settings tab of the Session menu (on the console: **Session menu**, top right), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
             { title: 'Sign in', text: 'On a team session, as any host or admin of that team; it does not have to be the account on this laptop. On a personal account, as you. Only your account can drive this session. The box under the QR names who is signed in on this laptop. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.' },
             { title: 'If the phone refuses', text: 'Press **Sign in as someone else**, pick the session\'s team if the phone offers a team switcher, or **Enter a different code**.' },
           ],

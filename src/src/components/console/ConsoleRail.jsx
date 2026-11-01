@@ -30,13 +30,13 @@ export function Section({ id, title, summary, alert = false, open, onToggle, chi
 }
 
 /**
- * THE CONSOLE'S RAIL (spec §3.3): round queue, people, late & not reviewed,
- * session tools. The section that matters for the moment opens by itself; the
+ * THE CONSOLE'S RAIL (spec §3.3): round queue, people, late & not reviewed.
+ * The section that matters for the moment opens by itself; the
  * host's own open/close choice holds until the moment changes.
  */
 export default function ConsoleRail({
   moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
-  onLateShow = () => {}, onLateMark = () => {}, connected = true, onOpenSection = () => {},
+  onLateShow = () => {}, onLateMark = () => {}, onOpenSection = () => {},
   scoreboard = null,
   /* NEEDS YOU, ON THE PERSON (experience plan §3.2b, §4.4): the name items
      from config/needsYou.js. An asker's row is lifted to the top under
@@ -96,7 +96,7 @@ export default function ConsoleRail({
         alert={askers.length > 0}
         open={peopleOpen}
         onToggle={askers.length ? () => {} : toggle}
-        link={CW.allPlayers}
+        link={CW.allPeople(counts && counts.players)}
         onLink={() => onOpenSection('players')}
       >
         {askers.length || opened.length ? (
@@ -173,13 +173,9 @@ export default function ConsoleRail({
         ) : <p className="hc-empty">{CW.noLate}</p>}
         {lateError ? <p className="hc-empty hc-error" role="alert">{lateError}</p> : null}
       </Section>
-      <Section id="tools" title={CW.tools} summary={connected ? `● ${CW.connected}` : CW.offline} open={open === 'tools'} onToggle={toggle}>
-        <ul className="hc-list">
-          <li><button type="button" className="hc-link" onClick={() => onOpenSection('questions')}>{CW.questions}</button></li>
-          <li><button type="button" className="hc-link" onClick={() => onOpenSection('history')}>{CW.rounds}</button></li>
-          <li><button type="button" className="hc-link" onClick={() => onOpenSection('settings')}>{CW.settings}</button></li>
-        </ul>
-      </Section>
+      {/* No fourth section (experience plan 2a): the connection is on the top
+          bar when it is broken, and Questions, Rounds and the settings are in
+          the Session menu, top right. */}
     </aside>
   );
 }

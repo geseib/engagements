@@ -61,7 +61,7 @@ describe('looking at another step (session flow v3 §4.8)', () => {
     expect(screen.getByText('Relay expansion')).toBeInTheDocument();
     expect(screen.getAllByText(/From the next round/)).toHaveLength(3);
     expect(screen.getByText(/never change from the settings/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'All settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
     expect(onAll).toHaveBeenCalled();
   });
 

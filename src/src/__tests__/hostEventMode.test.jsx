@@ -195,9 +195,9 @@ test('a preview lobby offers "Set the running order", which opens SESSION on Que
   await mountItemStage();
 
   const door = await screen.findByTestId('preview-running-order', {}, { timeout: 5000 });
-  expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   fireEvent.click(within(door).getByRole('button', { name: 'Set the running order' }));
-  const panel = await screen.findByRole('dialog', { name: 'Session setup' });
+  const panel = await screen.findByRole('dialog', { name: 'Session menu' });
   expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
   expect(within(panel).getByText('Running order')).toBeInTheDocument();
 });
@@ -216,16 +216,16 @@ test('?panel=questions lands on the Session panel\'s Questions tab, once', async
   window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}&panel=questions`);
   render(<GameHostPage />);
 
-  const panel = await screen.findByRole('dialog', { name: 'Session setup' }, { timeout: 5000 });
+  const panel = await screen.findByRole('dialog', { name: 'Session menu' }, { timeout: 5000 });
   expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
   expect(window.location.search).not.toMatch(/panel=/);
   expect(window.location.search).toMatch(`gameId=${GAME}`);
 
   // Closed and opened again with SESSION, it is the ordinary panel.
-  fireEvent.click(within(panel).getByRole('button', { name: 'Close setup' }));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull());
+  fireEvent.click(within(panel).getByRole('button', { name: 'Close the Session menu' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull());
   fireEvent.click(screen.getByRole('button', { name: /session panel/i }));
-  const again = await screen.findByRole('dialog', { name: 'Session setup' });
+  const again = await screen.findByRole('dialog', { name: 'Session menu' });
   expect(within(again).getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -234,5 +234,5 @@ test('without ?panel= the stage opens with the Session panel shut', async () => 
   events.getEvent.mockResolvedValue(viewWith(ITEM));
   await mountItemStage();
   await screen.findByRole('button', { name: 'Bring everyone here' }, { timeout: 5000 });
-  expect(screen.queryByRole('dialog', { name: 'Session setup' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
 });

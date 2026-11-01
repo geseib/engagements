@@ -103,7 +103,7 @@ describe('§2 the host has a way in', () => {
     const { container } = render(<SessionSetupPanel {...panelProps} />);
     const header = container.querySelector('.setup-panel__header');
     expect(within(header).getByRole('button', { name: /Help and feedback/i })).toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: /Close setup/i })).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: /Close the Session menu/i })).toBeInTheDocument();
   });
 
   test('it stays reachable on every tab', () => {

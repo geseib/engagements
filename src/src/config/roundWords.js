@@ -204,13 +204,14 @@ const RW = Object.freeze({
     twoScreens: (presenting) => (presenting ? 'Two screens · the room\'s window is open' : 'Two screens · the room\'s window is not open yet'),
     oneScreen: 'One screen · the room sees this laptop',
     settingsScope: 'Settings apply from the next round. The live question, its answers and its ballots never change from the settings.',
-    allSettings: 'All settings',
+    // The panel's one name (experience plan §3.6, 2a).
+    allSettings: 'Session menu',
     answeredOf: (x, n) => `${x} of ${n} answered this round.`,
     votedOf: (x, n) => `${x} of ${n} voted this round.`,
     heardDone: 'The results and the read are done for this round.',
     comesLater: 'This step has not happened yet in this round.',
     roundsPlayed: (n) => `${n} ${n === 1 ? 'round' : 'rounds'} played so far.`,
-    reportFromSession: 'The report so far opens from the session panel. Finishing the session is its own step there.',
+    reportFromSession: 'The report so far opens from the menu at the top right. Finishing the session is its own step there.',
   }),
 
   // ── The room's devices and the wall ───────────────────────────────────

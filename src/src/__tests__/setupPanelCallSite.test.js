@@ -44,7 +44,7 @@ describe('the page actually mounts the panel', () => {
     // SetupPanel/` alone still matched after the element was renamed to
     // <SessionSetupPanelX> and the condition replaced with `false`.
     expect(host).toMatch(/import\s+SessionSetupPanel\s+from\s+'\.\/components\/stage\/SessionSetupPanel'/);
-    expect(host).toMatch(/\{setupPanelOpen && \(\s*<SessionSetupPanel\s/);
+    expect(host).toMatch(/\{setupPanelOpen && (?:sessionMenuWhere)?\(\s*<SessionSetupPanel\s/);
   });
 
   test('closing the panel goes through closeAllSidePanels', () => {
