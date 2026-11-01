@@ -25,6 +25,16 @@ import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
 import ScreensGroup from './ScreensGroup';
 import { TWO_SURFACE_TYPES } from '../../config/surfaces';
+import PrivateReveal from '../needs/PrivateReveal';
+
+/** The late list's count for the room's eyes: a number, never a text or a name. */
+export function lateSummary(late) {
+  const items = (late && Array.isArray(late.rounds) ? late.rounds : [])
+    .flatMap((r) => (Array.isArray(r.items) ? r.items : []))
+    .filter((it) => !it.reviewed);
+  if (!items.length) return 'Nothing late to review';
+  return items.length === 1 ? '1 late item to review' : `${items.length} late items to review`;
+}
 
 /** The header `?`'s section for each tab (config/help/screens.js). */
 export const TAB_HELP = {
@@ -283,6 +293,18 @@ export default function SessionSetupPanel({
      reads and the writes; null draws nothing. In the Rounds tab, so one
      screen (the dock's count) and two (the rail's "Review them") reach it. */
   late = null,
+  /* THE ROOM CAN SEE THIS PANEL (experience plan §2 principle 3, step 1e;
+     audit B §2.3). On one screen the laptop IS the room's screen and this
+     panel opens over it, so its private parts — a name request with its
+     name, the late answers and their authors, Workie's voice, briefing and
+     read-check warning, the upcoming question titles — draw only after "Show
+     on this screen" for that one part (components/needs/PrivateReveal.jsx).
+     What stays: counts, the roster and scores (owner, 25 Sep), the settings. */
+  oneScreen = false,
+  /* Not now and Lock again for every round type (experience plan 1a): wired
+     where the page passes them, as the Build Room always has. */
+  onRefuseHandover = null,
+  onLockHandover = null,
 }) {
   const screenChoiceOffered = typeof onRoomScreenChange === 'function'
     && TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer');
@@ -610,11 +632,16 @@ export default function SessionSetupPanel({
                   panel's own right-hand column: points, and the per-round tick.
                   `searchAfter={Infinity}`: this tab has never had a search box,
                   and moving the rows must not change what the host sees. */}
+              {(() => {
+                const list = (rows, live) => (
               <PlayersList
-                rows={roster}
+                rows={rows}
                 departed={departed}
                 searchAfter={Infinity}
+                askingFirst={live}
                 onGrant={onGrantHandover}
+                onRefuse={live ? onRefuseHandover : null}
+                onLock={live ? onLockHandover : null}
                 onRemove={onRemovePlayer}
                 onRestore={onRestorePlayer}
                 renderExtra={(player, gone) => (gone ? (
@@ -633,6 +660,23 @@ export default function SessionSetupPanel({
                   </>
                 ))}
               />
+                );
+                const flagged = roster.filter((r) => r.handoverRequested || r.handoverOpen).length;
+                if (!oneScreen || !flagged) return list(roster, true);
+                // The room sees the list without anyone's flag; the flags and
+                // their buttons after "Show on this screen".
+                const bare = roster.map((r) => ({ ...r, handoverRequested: false, handoverOpen: false }));
+                return (
+                  <PrivateReveal
+                    oneScreen
+                    testId="private-names"
+                    summary={flagged === 1 ? '1 name request' : `${flagged} name requests`}
+                    fallback={list(bare, false)}
+                  >
+                    {list(roster, true)}
+                  </PrivateReveal>
+                );
+              })()}
             </section>
           )}
 
@@ -695,6 +739,12 @@ export default function SessionSetupPanel({
                 somewhere else, and the empty line is where the difference
                 between Ask next and Ask now is stated.
               */}
+              <PrivateReveal
+                oneScreen={oneScreen}
+                testId="private-questions"
+                shown={focusRunningOrder}
+                summary={`${questionQueue.length} in the running order · ${remaining} questions remaining`}
+              >
               <QueueList
                 queue={questionQueue}
                 questions={questions}
@@ -922,6 +972,7 @@ export default function SessionSetupPanel({
                   </div>
                 </>
               )}
+              </PrivateReveal>
             </section>
           )}
 
@@ -962,7 +1013,13 @@ export default function SessionSetupPanel({
                     <h3 className="late-heading">{LW.heading}</h3>
                     <HelpButton {...helpFor('host-late-items')} variant="inline" size="small" tooltip={`Help: ${LW.heading}`} className="setup-panel__help" />
                   </div>
-                  <LateList {...late} />
+                  <PrivateReveal
+                    oneScreen={oneScreen}
+                    testId="private-late"
+                    summary={lateSummary(late)}
+                  >
+                    <LateList {...late} />
+                  </PrivateReveal>
                 </div>
               ) : null}
 
@@ -1170,14 +1227,16 @@ export default function SessionSetupPanel({
                 <p className="setup-note">{LW.report.settingNote}</p>
 
                 {workie && (
-                  <WorkieSettings
-                    {...workie}
-                    showNextRound={nextRoundPickersApply({
-                      gameType,
-                      gameState,
-                      remaining: catRows.length ? remaining : null,
-                    })}
-                  />
+                  <PrivateReveal oneScreen={oneScreen} testId="private-workie" summary="Workie's voice, approach and briefing">
+                    <WorkieSettings
+                      {...workie}
+                      showNextRound={nextRoundPickersApply({
+                        gameType,
+                        gameState,
+                        remaining: catRows.length ? remaining : null,
+                      })}
+                    />
+                  </PrivateReveal>
                 )}
 
                 {/* PACE, between Names and Display: it changes what the room

@@ -1,6 +1,6 @@
 /* THE HOST CONSOLE (host console spec). Two screens only; private laptop chrome.
    Laptop ladder 12 / 13 / 15 / 19 / 24px; dusk tokens; scope hc-. */
-.hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail now" "rail main"; background: var(--bg); color: var(--text); font-size: 15px; }
+.hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail now" "rail needs" "rail main"; background: var(--bg); color: var(--text); font-size: 15px; }
 .hc-top { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
 .hc-brand { font-weight: 800; }
 .hc-name { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -56,6 +56,16 @@
 .hc-bullet { color: var(--muted); }
 .hc-action { color: var(--accent-text); }
 .hc-acts { flex: none; }
+/* THE NEEDS-YOU LINE'S ROW (experience plan §4.3): under the card, at the
+   line's one height (components/needs/NeedsYou.css), so the main area below
+   never moves when something arrives. */
+/* Workie's read that did not arrive (experience plan §4.2 row 5): the card
+   with a danger edge, never danger text (--danger carries no text). */
+.hc-failcard { border-left: 4px solid var(--danger); }
+.hc-fail-h { margin: 0; font-size: 15px; color: var(--text); }
+.hc-fail-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.hc-fail-acts .ui-btn { --ui-size: 13px; }
+.hc-needs { grid-area: needs; margin: 10px 20px 0; min-width: 0; }
 /* A second card under Your part now (`extra`): the row wraps and the card takes a line of its own. */
 .hc-now--extra { flex-wrap: wrap; }
 .hc-now--extra .hc-now-text { flex: 1 1 0; }
@@ -167,7 +177,7 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 /* ONE CONSOLE, OTHER USES (parity PLAN §2.6, B8). A side column right of the
    centre (the Build Room's folds): it runs from the next-step card's row to
    the foot and scrolls inside itself. Call & Answer has none: unchanged. */
-.hc.hc--side { grid-template-columns: 260px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail main side"; }
+.hc.hc--side { grid-template-columns: 260px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail needs side" "rail main side"; }
 .hc-side { grid-area: side; min-height: 0; overflow: auto; border-left: 1px solid rgb(var(--glow-rgb) / .12); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
 /* The strip with nothing live (answer (c)): kept, dimmed; its label stays readable. */
 .hc-loop.is-idle .wfs-loop .wfs-step { opacity: .55; }

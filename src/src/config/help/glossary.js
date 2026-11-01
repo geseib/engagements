@@ -238,7 +238,7 @@ const glossary = {
       title: 'The bell',
       icon: 'Bell',
       blocks: [
-        { t: 'p', text: 'Your notifications: a draft that is ready, an invitation, someone waiting for approval. It is on your start screen, the console\'s top line, the two-screen console and your phone remote, never on a screen the room sees.' },
+        { t: 'p', text: 'Your notifications: a draft that is ready, an invitation, someone waiting for approval. It is on your start screen, the console\'s top line, the two-screen console and your phone remote, never on a screen the room sees. In a live session it counts what the session needs from you first; on one screen the stage has only Needs you, a count with no names.' },
       ],
     },
     {

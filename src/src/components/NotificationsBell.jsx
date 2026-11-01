@@ -6,6 +6,8 @@ import {
   listNotifications, markNotificationRead, markAllNotificationsRead, daysLeftLabel,
 } from '../utils/notificationsApi';
 import { libraryLabel, ENGAGE_KEY } from '../utils/libraries';
+import SessionNeedsList from './needs/SessionNeedsList';
+import { NEEDS_WORDS } from '../config/needsYou';
 import './NotificationsBell.css';
 
 /**
@@ -33,10 +35,18 @@ import './NotificationsBell.css';
  * WHERE A CLICK GOES is the page's business (`onOpen`): it may have to switch
  * library first, which reloads the console.
  */
+/*
+ * IN A LIVE SESSION THE BELL IS THE NEEDS-YOU DOOR (experience plan §4.3,
+ * owner decision 1, 1 Nov 2026). With `session` ({ needs, onAct, busy,
+ * error }) its number counts this session's Now items only, a Soon item adds
+ * a dot and never a number, and the panel opens on "This session" with each
+ * item's buttons, acting in place; "Your account" sits below it, folded, with
+ * no count. Without `session` it is the account inbox, exactly as before.
+ */
 const FOCUS_THROTTLE_MS = 60 * 1000;
 const INTERVAL_MS = 5 * 60 * 1000;
 
-export default function NotificationsBell({ libraries = [], onOpen, refreshKey = 0 }) {
+export default function NotificationsBell({ libraries = [], onOpen, refreshKey = 0, session = null }) {
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -112,39 +122,15 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
   };
 
   const storedUnread = items.some((n) => n.source === 'stored' && !n.read);
-  const label = unread ? `Notifications, ${unread} waiting` : 'Notifications';
+  const needs = session && session.needs ? session.needs : null;
+  const count = session ? (needs ? needs.nowCount : 0) : unread;
+  const dot = Boolean(session && !count && needs && needs.soonCount > 0);
+  const label = session
+    ? (count ? `${NEEDS_WORDS.title}, ${count} waiting` : (dot ? `${NEEDS_WORDS.title}, something to review` : NEEDS_WORDS.title))
+    : (unread ? `Notifications, ${unread} waiting` : 'Notifications');
 
-  return (
-    <div className="nbell" ref={rootRef}>
-      <button
-        type="button"
-        ref={buttonRef}
-        className={`nbell-btn${unread ? ' nbell-btn--some' : ''}`}
-        aria-label={label}
-        title={label}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        onClick={toggle}
-        data-testid="nbell-button"
-      >
-        <Icon name="Bell" weight={unread ? 'fill' : 'bold'} size={18} color="currentColor" />
-        {unread > 0 && <span className="nbell-count" data-testid="nbell-count">{unread > 99 ? '99+' : unread}</span>}
-      </button>
-
-      {open && (
-        <div className="nbell-panel" role="dialog" aria-label="Notifications" data-testid="nbell-panel">
-          <header className="nbell-head">
-            <h2 className="nbell-title">Notifications</h2>
-            {storedUnread && (
-              <button type="button" className="nbell-link" onClick={readAll}>Mark all read</button>
-            )}
-            {/* The bell's own section of the drafts guide (Help Phase 3). */}
-            <HelpButton {...helpFor('ai-bell')} variant="inline" size="small" tooltip="Help: notifications" className="help-button-quiet" />
-            <button type="button" className="nbell-x" aria-label="Close notifications" onClick={() => setOpen(false)}>
-              <Icon name="X" weight="bold" size={14} color="currentColor" />
-            </button>
-          </header>
-
+  const accountBody = (
+      <>
           {error && (
             <p className="nbell-error" role="alert">
               {error} <button type="button" className="nbell-link" onClick={load}>Try again</button>
@@ -188,6 +174,53 @@ export default function NotificationsBell({ libraries = [], onOpen, refreshKey =
               })}
             </ul>
           )}
+    </>
+  );
+
+  return (
+    <div className="nbell" ref={rootRef}>
+      <button
+        type="button"
+        ref={buttonRef}
+        className={`nbell-btn${count || dot ? ' nbell-btn--some' : ''}`}
+        aria-label={label}
+        title={label}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={toggle}
+        data-testid="nbell-button"
+      >
+        <Icon name="Bell" weight={count ? 'fill' : 'bold'} size={18} color="currentColor" />
+        {count > 0 && <span className="nbell-count" data-testid="nbell-count">{count > 99 ? '99+' : count}</span>}
+        {dot && <span className="nbell-soon" data-testid="nbell-dot" aria-hidden="true" />}
+      </button>
+
+      {open && (
+        <div className="nbell-panel" role="dialog" aria-label={session ? NEEDS_WORDS.title : 'Notifications'} data-testid="nbell-panel">
+          <header className="nbell-head">
+            <h2 className="nbell-title">{session ? NEEDS_WORDS.title : 'Notifications'}</h2>
+            {storedUnread && (
+              <button type="button" className="nbell-link" onClick={readAll}>Mark all read</button>
+            )}
+            {/* The bell's own section of the drafts guide (Help Phase 3). */}
+            <HelpButton {...helpFor('ai-bell')} variant="inline" size="small" tooltip="Help: notifications" className="help-button-quiet" />
+            <button type="button" className="nbell-x" aria-label="Close notifications" onClick={() => setOpen(false)}>
+              <Icon name="X" weight="bold" size={14} color="currentColor" />
+            </button>
+          </header>
+
+          {session && (
+            <section className="nbell-session ny" aria-label={NEEDS_WORDS.thisSession} data-testid="nbell-session">
+              <p className="ny-k">{NEEDS_WORDS.thisSession}</p>
+              <SessionNeedsList needs={needs} onAct={session.onAct} busy={session.busy} error={session.error} />
+            </section>
+          )}
+          {session ? (
+            <details className="nbell-account" data-testid="nbell-account">
+              <summary className="nbell-account-sum">{NEEDS_WORDS.yourAccount}</summary>
+              {accountBody}
+            </details>
+          ) : accountBody}
 
           <footer className="nbell-foot">
             <button type="button" className="nbell-link" onClick={() => setOpen(false)}>Close</button>

@@ -69,10 +69,13 @@ export function splitLeave(controls) {
     onLeave     a way out that is not a round control (the Build Room's Main menu)
     stripIdle   the strip with nothing live: kept, dimmed (answer (c))
     mainLabel   the main area's accessible name
+    needs       the Needs-you line (experience plan §4.3), directly under
+                Your part now, in its own grid row so it never moves the card
 */
 export default function HostConsole({
   top, strip, rail, footer, children,
   variant = '', railSlot = null, side = null, topExtra = null, onLeave: leaveTo = null, stripIdle = false, mainLabel = undefined,
+  needs = null,
 }) {
   const { controls, leave } = splitLeave(footer && footer.controls);
   const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : leaveTo;
@@ -83,6 +86,7 @@ export default function HostConsole({
       <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
       {railSlot || <ConsoleRail {...rail} />}
       <ConsoleFooter {...footer} controls={controls} />
+      {needs ? <div className="hc-needs">{needs}</div> : null}
       <main className="hc-main" aria-label={mainLabel}>{children}</main>
       {side ? <aside className="hc-side" aria-label="What happened">{side}</aside> : null}
     </div>

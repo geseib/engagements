@@ -11,7 +11,7 @@ import { helpFor } from '../../config/help/screens';
  * whether that window is really up. Only what the app can know: connected,
  * full screen, visible. Never "the projector is on".
  */
-export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent, onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '' }) {
+export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent, onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '', bellSession = null }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   return (
     <header className="hc-top">
@@ -62,8 +62,10 @@ export default function ConsoleTop({ title, code, onJoin, joinHint = '', joinPre
         />
       ) : null}
       {/* THE BELL (owner, 21 Oct 2026), last on the line. The laptop's private
-          screen; a click opens the console in a new tab so the session stays put. */}
-      <HostNotificationsBell newTab />
+          screen; a click opens the console in a new tab so the session stays put.
+          With `bellSession` it is the session's Needs-you door (experience
+          plan §4.3): its count is this session's Now items, This session first. */}
+      {bellSession ? <HostNotificationsBell newTab session={bellSession} /> : <HostNotificationsBell newTab />}
     </header>
   );
 }

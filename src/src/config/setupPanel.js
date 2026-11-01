@@ -14,6 +14,45 @@
  */
 
 /**
+ * NAME REQUESTS LAPSE (experience plan §4.4 step 5; owner decision 5). The
+ * one reading of a roster row's handover flags, shared with the Needs-you list
+ * (config/needsYou.js re-exports these), so a row and the list never disagree.
+ */
+export const REQUEST_LAPSE_MS = 10 * 60 * 1000;
+
+function isoMs(iso) {
+  if (!iso) return NaN;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : NaN;
+}
+
+/**
+ * IS THIS NAME ASKED FOR, NOW? A request, not yet answered by a grant, and not
+ * lapsed. A row from a backend with no `requestedAt` cannot lapse (it is
+ * shown, never silently dropped). The one reading both the list and every
+ * People row use, so they never disagree.
+ */
+export function askingNow(handover, now = Date.now()) {
+  const h = handover || {};
+  if (!h.requested || h.open || h.requestLapsed) return false;
+  // The server's own lapse time (get-players `requestExpiresAt`) when it
+  // sends one; the request time plus the lapse otherwise.
+  const until = isoMs(h.requestExpiresAt);
+  if (Number.isFinite(until)) return now < until;
+  const at = isoMs(h.requestedAt);
+  return !Number.isFinite(at) || now - at < REQUEST_LAPSE_MS;
+}
+
+/** Is the name open (granted, not yet taken, not lapsed)? */
+export function openNow(handover, now = Date.now()) {
+  const h = handover || {};
+  if (!h.open) return false;
+  const exp = Number(h.expiresAt);
+  return !Number.isFinite(exp) || exp * 1000 > now;
+}
+
+
+/**
  * Three tabs, named by the owner: Players · Questions · Settings.
  *
  * A function rather than a constant because the panel's siblings in this
@@ -308,8 +347,10 @@ export function rosterRows({
       score: player.score || 0,
       rank: currentRank,
       done,
-      handoverRequested: Boolean(handover.requested),
-      handoverOpen: Boolean(handover.open),
+      /* A request lapses after ten minutes (config/needsYou.js, the same
+         reading the Needs-you list uses, so the row and the list agree). */
+      handoverRequested: Boolean(handover.requested) && (openNow(handover) || askingNow(handover)),
+      handoverOpen: openNow(handover),
     };
   });
 }

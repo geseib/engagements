@@ -284,7 +284,7 @@ const drafts = {
         },
         {
           t: 'p',
-          text: 'A draft\'s entry is read once you open it; **Mark all read** clears those at once. A Build Room entry for Claude\'s question set arrives already read and turns into a reminder two days before the session ends; it goes when you save or remove the set. The others stay in the count until the thing is dealt with. On a session\'s two-screen console or phone remote, an entry opens the console in a new tab so the session stays put.',
+          text: 'A draft\'s entry is read once you open it; **Mark all read** clears those at once. A Build Room entry for Claude\'s question set arrives already read and turns into a reminder two days before the session ends; it goes when you save or remove the set. The others stay in the count until the thing is dealt with. In a live session the bell counts what the session needs first, with these folded below it.',
         },
       ],
     },
