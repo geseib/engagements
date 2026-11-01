@@ -15,8 +15,12 @@ import './NeedsYou.css';
  *
  * `oneScreen` false (a private laptop): the children, untouched. The reveal is
  * this component's own state, so it ends when the panel holding it closes.
+ *
+ * `note` false: leave out "The room can see this screen", because the
+ * surface around it already says so once (the one-screen Needs-you sheet's
+ * heading; dev QA 1 Nov found it said twice).
  */
-export default function PrivateReveal({ oneScreen, summary = '', children, testId = 'private-reveal', after = null, fallback = null, shown = false }) {
+export default function PrivateReveal({ oneScreen, summary = '', children, testId = 'private-reveal', after = null, fallback = null, shown = false, note = true }) {
   // `shown`: the host already asked for this part by name ("Set the running
   // order" lands on it), which is the deliberate press.
   const [stage, setStage] = useState(shown ? 'shown' : 'hidden');
@@ -36,7 +40,7 @@ export default function PrivateReveal({ oneScreen, summary = '', children, testI
   return (
     <>
     <div className="ny ny-private" data-testid={testId}>
-      <p className="ny-k">{NEEDS_WORDS.roomCanSee}</p>
+      {note ? <p className="ny-k">{NEEDS_WORDS.roomCanSee}</p> : null}
       {summary ? <p className="ny-private-s">{summary}</p> : null}
       {stage === 'confirm' ? (
         <>

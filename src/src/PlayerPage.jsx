@@ -702,7 +702,7 @@ function PlayerPage({ event = null } = {}) {
    * (see components/joinResult.js). `claimExisting` is only ever true when the
    * person has said so out loud.
    */
-  const performJoin = async (gid, name, { accessCode = null, claimExisting = false, attendeeToken = null } = {}) => {
+  const performJoin = async (gid, name, { accessCode = null, claimExisting = false, attendeeToken = null, waitStatus = false } = {}) => {
     const trimmed = String(name || '').trim();
     const clientId = getClientId(gid);
 
@@ -716,6 +716,10 @@ function PlayerPage({ event = null } = {}) {
           accessCode,
           clientId,
           claimExisting,
+          // THE QUIET RETRY ASKS FOR "STILL WAITING" AS A 200 (dev QA 1 Nov):
+          // the expected not-yet no longer prints a red 409 in the console
+          // every four seconds. Read below exactly as the 409 was.
+          ...(waitStatus ? { waitStatus: true } : {}),
           // An event's attendee (events M4): the server takes the name from
           // the event, so `playerName` is empty here.
           ...(attendeeToken ? { attendeeToken } : {})
@@ -746,6 +750,12 @@ function PlayerPage({ event = null } = {}) {
         status: response.status,
         failure: classifyJoinFailure(response.status, data)
       };
+    }
+
+    // "Still waiting" (join-game.js `waiting`): the same refusal the 409
+    // carried, so the handover flow cannot tell the two apart.
+    if (data && data.waiting === true) {
+      return { ok: false, status: 409, failure: classifyJoinFailure(409, data) };
     }
 
     return { ok: true, data: data || {} };
@@ -806,6 +816,10 @@ function PlayerPage({ event = null } = {}) {
         playerName: failure.playerName || name,
         message: failure.message,
       });
+      // The host already said Not now to THIS browser (join-game.js sends
+      // `handoverRefused` to the asker only): the declined screen, with Ask
+      // again after its pause, not the first-ask buttons (dev QA 1 Nov).
+      if (failure.handoverRefused) handover.declined();
       return;
     }
 
@@ -1213,7 +1227,9 @@ function PlayerPage({ event = null } = {}) {
 
     // Connect as player - WebSocket is required
     console.log('🔌 PLAYER: Connecting WebSocket for real-time updates');
-    webSocketClient.connect(gameId, playerName, false);
+    // The client id rides along so connect.js can tell this browser from the
+    // one the name may have moved to (dev QA 1 Nov).
+    webSocketClient.connect(gameId, playerName, false, { clientId: getClientId(gameId) || undefined });
 
     // Do a single explicit initial state check (onReconnected covers every
     // subsequent reopen; it does NOT fire on the first open).
@@ -2922,6 +2938,7 @@ function PlayerPage({ event = null } = {}) {
     return performJoin(gameId, joinCollision.playerName, {
       accessCode: accessCodeInput.trim() || null,
       claimExisting: true,
+      waitStatus: true,
     });
   };
 

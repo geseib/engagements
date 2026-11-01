@@ -90,3 +90,12 @@ test('nothing waiting: no number, a calm sheet', () => {
   fireEvent.click(screen.getByTestId('needs-bell'));
   expect(screen.getByRole('dialog')).toHaveTextContent('Nothing needs you now.');
 });
+
+// rejects: dev QA 1 Nov — the one-screen sheet said "The room can see this
+//          screen" twice: once as its heading, once again on the item.
+test('the sheet says "The room can see this screen" once, however many items', () => {
+  render(<OneScreenNeedsBell needs={needs} onAct={() => {}} />);
+  fireEvent.click(screen.getByTestId('needs-bell'));
+  const sheet = screen.getByRole('dialog');
+  expect(sheet.textContent.match(/The room can see this screen/g)).toHaveLength(1);
+});
