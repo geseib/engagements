@@ -201,7 +201,8 @@ describe('§6 the features that shipped today are documented', () => {
   const corpus = () => allGuides().map((g) => guideText(g)).join(' ');
 
   test.each([
-    ['the one-shot name handover', /ask the host to hand it over/],
+    ['the one-shot name handover', /that's me: use my name on this device/],
+    ['the old device stopping once the name moves', /is now on another device/],
     ['the host side of the handover', /let them take it/],
     ['unlocking a name unprompted', /unlock name/],
     ['that the unlock is spent once', /one handover/],

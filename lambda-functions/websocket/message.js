@@ -13,6 +13,7 @@ const { answerTiming, LATE_TTL_DAYS } = require('./late-answer');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
+const { heldByAnotherDevice, nameMovedFrame, presentedClientId, NAME_MOVED } = require('./name-holder');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -61,6 +62,16 @@ exports.handler = async (event) => {
     // player socket sending this changes nothing.
     if (messageType === 'PRESENT_STATUS') {
       await recordPresentStatus(gameId, connectionId, body);
+      return { statusCode: 200, body: 'ok' };
+    }
+
+    // "DO I STILL HOLD MY NAME?" (experience plan step 1d). A player page sends
+    // this after its socket reopens. If the host let the name move while this
+    // phone was asleep, it missed the push join-game.js sends (step 1f), and
+    // the answer it gets here is the same `nameMoved` frame. Nothing is
+    // forwarded anywhere; the reply goes only to the asking socket.
+    if (messageType === 'NAME_CHECK') {
+      await checkNameHolder(gameId, playerName, body.clientId, connectionId);
       return { statusCode: 200, body: 'ok' };
     }
 
@@ -812,14 +823,76 @@ async function keepLateAnswer(gameId, playerName, questionNumber, answer, answer
  */
 
 /**
+ * Does the sending device still hold this name? (experience plan step 1d)
+ *
+ * Read only when the frame presents a client id: a page loaded before this
+ * shipped sends none and keeps its old behaviour, with no extra read (see
+ * name-holder.js for every shape that is let through). Strongly consistent,
+ * because the moment that matters is the one straight after a handover, when
+ * a stale read would still name the old browser.
+ */
+async function nameMovedAway(gameId, playerName, clientId) {
+  if (!playerName || !presentedClientId(clientId)) return false;
+  const row = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+    ProjectionExpression: 'ClientId, AttendeeId',
+    ConsistentRead: true
+  }));
+  return heldByAnotherDevice(row.Item, clientId);
+}
+
+/**
+ * The NAME_CHECK frame: answer the asking socket, and if its name has moved,
+ * drop its connection row so the room's broadcasts stop reaching a page that
+ * has stopped. Silent when the name is still this device's.
+ */
+async function checkNameHolder(gameId, playerName, clientId, connectionId) {
+  if (!(await nameMovedAway(gameId, playerName, clientId))) return;
+  console.log(`📵 A socket in game ${clipForLog(gameId)} checked in for a name that has moved`);
+  await sendToConnection(connectionId, nameMovedFrame(gameId, playerName));
+  await db.send(new DeleteCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `CONNECTION#${connectionId}` }
+  })).catch(() => {});
+}
+
+/**
  * Handle player messages - process and send to host
  */
-async function handlePlayerMessage(gameId, playerName, messageType, messageData, connectionId = null) {
+async function handlePlayerMessage(gameId, playerName, messageType, rawMessageData, connectionId = null) {
   console.log(`👤 Player message ${messageType} from ${playerName} in game ${gameId}`);
-  
+
+  // THE CLIENT ID STOPS HERE. It rides in on ANSWER# frames so the server can
+  // tell which device sent them (step 1d), and it is a capability
+  // (get-answers.js returns a player's own answer text to whoever presents
+  // it), so it must never be spread into the `playerAnswered` frame the host
+  // is sent below.
+  const { clientId, ...messageData } = rawMessageData || {};
+
   try {
     // Handle ANSWER# messages by storing the answer in DynamoDB
     if (messageType.startsWith('ANSWER#')) {
+      // FROM A DEVICE THAT NO LONGER HOLDS THE NAME (step 1d): not stored, not
+      // kept late, not counted, and the host hears nothing. The sender is told
+      // twice over — `answerReceived` with `kept: false` and the reason, so a
+      // receipt it already showed is withdrawn, and `nameMoved`, which stops
+      // the page.
+      if (await nameMovedAway(gameId, playerName, clientId)) {
+        console.log(`📵 Answer refused in game ${clipForLog(gameId)}: the name has moved to another device`);
+        if (connectionId) {
+          await sendToConnection(connectionId, {
+            type: 'answerReceived',
+            gameId,
+            questionNumber: String(messageType.replace('ANSWER#', '')).padStart(3, '0'),
+            kept: false,
+            late: false,
+            code: NAME_MOVED,
+          });
+          await sendToConnection(connectionId, nameMovedFrame(gameId, playerName));
+        }
+        return;
+      }
       const outcome = await handlePlayerAnswer(gameId, playerName, messageType, messageData);
       // THE PHONE IS TOLD (session flow v3 §4.4): stored, kept late, or not
       // taken. A late answer is not an answer to the round in progress, so the

@@ -102,7 +102,7 @@ describe('what a participant sees when they join', () => {
 */
 describe('the join screens speak the session\'s own terms', () => {
   const CODE = '4821';
-  const GAME_HELP = 'Used for the scoreboard and to get you back in if you lose this page. On rounds '
+  const GAME_HELP = 'Used for the scoreboard and to get you back in on this phone if you lose this page. On rounds '
     + 'where the room votes, your name is not shown next to your answer until voting closes.';
   const GAME_REJOIN = `This phone joined session ${CODE} as Ada. Rejoining brings your answers and your score back with you.`;
   const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
@@ -136,7 +136,7 @@ describe('the join screens speak the session\'s own terms', () => {
   // rejects: a survey told its name is for a scoreboard and for voting rounds.
   test.each(NAMES_MODES.map((m) => [m.label, m]))('a survey (%s): what the name is for, in the Names value\'s own words', async (_label, mode) => {
     openFromLink({ gameType: 'survey', names: mode.id });
-    const expected = `Used to get you back in if you lose this page. ${mode.phoneLead ? `${mode.phoneLead} ` : ''}${mode.phoneLine}`;
+    const expected = `Used to get you back in on this phone if you lose this page. ${mode.phoneLead ? `${mode.phoneLead} ` : ''}${mode.phoneLine}`;
     await waitFor(() => expect(nameHelp()).toBe(expected));
     expect(nameHelp()).not.toMatch(/scoreboard|round|score/i);
   });
@@ -144,7 +144,7 @@ describe('the join screens speak the session\'s own terms', () => {
   // rejects: guessing a Names value the brief did not carry.
   test('a survey whose brief carries no Names value: neutral, nothing claimed', async () => {
     openFromLink({ gameType: 'survey', names: null });
-    await waitFor(() => expect(nameHelp()).toBe('Used to get you back in if you lose this page.'));
+    await waitFor(() => expect(nameHelp()).toBe('Used to get you back in on this phone if you lose this page.'));
   });
 
   test('a typed four-digit code reads the brief too', async () => {
@@ -152,7 +152,7 @@ describe('the join screens speak the session\'s own terms', () => {
     render(<PlayerPage />);
     expect(nameHelp()).toBe(GAME_HELP);
     fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: CODE } });
-    await waitFor(() => expect(nameHelp()).toMatch(/^Used to get you back in if you lose this page\. Your host sees that you finished/));
+    await waitFor(() => expect(nameHelp()).toMatch(/^Used to get you back in on this phone if you lose this page\. Your host sees that you finished/));
   });
 
   // rejects: rewording every type's join screen to fit the survey.

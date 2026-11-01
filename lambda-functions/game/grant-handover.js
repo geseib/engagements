@@ -46,6 +46,18 @@
  * and a host who pressed "let them take it" should not get "let anyone take
  * it".
  *
+ * A BOUND GRANT NEEDS A LIVE ASK (experience plan §4.4, owner 1 Nov 2026). An
+ * ask lapses `HANDOVER_REQUEST_SECONDS` (ten minutes) after it was made, when
+ * the asking phone stops waiting; a bound grant for it is refused 409
+ * `REQUEST_LAPSED`. A host surface may also send back the `requestedAt` it was
+ * looking at, and a newer ask is refused 409 `REQUEST_CHANGED` rather than
+ * granted on the strength of the old one. Every 409/404 here carries a `code`
+ * the host page can switch on; the `message` is the sentence to show.
+ *
+ * "Is the first device still here?" is not this route's to decide: the roster
+ * (`get-players.js`) carries `deviceConnected` per player, and the host page
+ * arms Let them in place when it is true. The server grants either way.
+ *
  * ── WHAT IT DOES NOT DO ────────────────────────────────────────────────────
  *
  * It does not move anything. No `ClientId` is written here, no score, no
@@ -57,7 +69,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 
-const { handoverExpiryFrom, HANDOVER_WINDOW_SECONDS, publicHandoverState } = require('./handover');
+const {
+  handoverExpiryFrom, HANDOVER_WINDOW_SECONDS, HANDOVER_REQUEST_SECONDS, publicHandoverState, requestState,
+} = require('./handover');
 const { callerMayDriveSession } = require('./tenant');
 const { notifyHost } = require('./host-notify');
 const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewaymanagementapi');
@@ -126,6 +140,7 @@ exports.handler = async (event) => {
         statusCode: 404,
         body: JSON.stringify({
           error: 'Player not found',
+          code: 'PLAYER_NOT_FOUND',
           message: `Nobody in this session is answering as "${playerName}".`
         }),
         headers: cors
@@ -155,6 +170,7 @@ exports.handler = async (event) => {
           statusCode: 409,
           body: JSON.stringify({
             error: 'Not unlocked',
+            code: 'NOT_UNLOCKED',
             message: `"${playerName}" is not unlocked, or has already been taken.`
           }),
           headers: cors
@@ -190,6 +206,7 @@ exports.handler = async (event) => {
           statusCode: 409,
           body: JSON.stringify({
             error: 'No pending request',
+            code: 'NO_PENDING_REQUEST',
             message: `Nobody is asking to take "${playerName}" right now.`
           }),
           headers: cors
@@ -220,6 +237,7 @@ exports.handler = async (event) => {
           statusCode: 409,
           body: JSON.stringify({
             error: 'No pending request',
+            code: 'REQUEST_CHANGED',
             message: `That request has already changed. Look again.`
           }),
           headers: cors
@@ -249,10 +267,52 @@ exports.handler = async (event) => {
         statusCode: 409,
         body: JSON.stringify({
           error: 'No pending request',
+          code: 'NO_PENDING_REQUEST',
           message: `Nobody has asked to take over "${playerName}". Unlock the name instead if they asked you out loud.`
         }),
         headers: cors
       };
+    }
+
+    if (bindToRequester) {
+      const ask = requestState(existing.Item);
+
+      // THE ASK THE HOST WAS LOOKING AT, OR A NEWER ONE? Optional: a host
+      // surface that read `handover.requestedAt` off the roster may send it
+      // back, and a different stamp means somebody asked again (perhaps from
+      // a third device) since the host decided. Granting that newer ask on the
+      // strength of the old one is the mistake this refuses.
+      if (typeof body.requestedAt === 'string' && body.requestedAt && body.requestedAt !== ask.requestedAt) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'Request changed',
+            code: 'REQUEST_CHANGED',
+            message: `Somebody asked for "${playerName}" again since you looked. Look again.`,
+            handover: publicHandoverState(existing.Item)
+          }),
+          headers: cors
+        };
+      }
+
+      // A LAPSED ASK CANNOT BE GRANTED (owner, 1 Nov: "the request lapses
+      // after 10"). The asking phone has already stopped waiting and told its
+      // person "The host hasn't answered", so a grant now would sit bound to a
+      // browser that is no longer looking — or worse, one that comes back
+      // twenty minutes later and walks into the name. They ask again; the new
+      // ask is grantable at once.
+      if (ask.lapsed) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'Request lapsed',
+            code: 'REQUEST_LAPSED',
+            message: `That request is more than ${Math.round(HANDOVER_REQUEST_SECONDS / 60)} minutes old. If it is still them, they can ask again.`,
+            handover: publicHandoverState(existing.Item)
+          }),
+          headers: cors
+        };
+      }
     }
 
     const expiresAt = handoverExpiryFrom();
@@ -290,6 +350,7 @@ exports.handler = async (event) => {
         statusCode: 404,
         body: JSON.stringify({
           error: 'Player not found',
+          code: 'PLAYER_NOT_FOUND',
           message: `Nobody in this session is answering as "${playerName}".`
         }),
         headers: cors

@@ -74,9 +74,53 @@
  */
 const HANDOVER_WINDOW_SECONDS = 5 * 60;
 
+/**
+ * HOW LONG AN ASK STANDS (experience plan §4.4, owner's timing 1 Nov 2026:
+ * "Ask again after 1 minute, the request lapses after 10, a grant stays open
+ * 5").
+ *
+ * An ask nobody answers used to stand for the rest of the session: the host
+ * could press Let them an hour later and hand the name to a phone that had
+ * long since given up and picked another name. Now it lapses, and BOTH sides
+ * read the same `HandoverRequestedAt`: the asking phone stops waiting and
+ * says "The host hasn't answered", and the host's item disappears, at the
+ * same moment, because `publicHandoverState` stops reporting `requested`.
+ * `grant-handover.js` refuses a bound grant for a lapsed ask (REQUEST_LAPSED).
+ *
+ * `ASK_AGAIN_AFTER_SECONDS` is the phone's: Ask again appears after a minute
+ * with no answer. It lives here so the server's reply can carry it and the
+ * phone never hard-codes a number the server might change.
+ */
+const HANDOVER_REQUEST_SECONDS = 10 * 60;
+const ASK_AGAIN_AFTER_SECONDS = 60;
+
 /** DynamoDB comparisons need a number; the row stores epoch seconds. */
 function nowSeconds(now = Date.now()) {
   return Math.floor(now / 1000);
+}
+
+/**
+ * Where the row's ask stands. `HandoverRequestedAt` is ISO; an unparseable or
+ * absent stamp with a requester is treated as lapsed rather than eternal — a
+ * request nobody can date must not keep the host's line amber forever.
+ */
+function requestState(item, now = Date.now()) {
+  const by = (item && item.HandoverRequestedBy) || null;
+  const at = (item && item.HandoverRequestedAt) || null;
+  if (!by) return { exists: false, pending: false, lapsed: false, requestedAt: at, expiresAt: null };
+  const askedMs = Date.parse(at);
+  if (!Number.isFinite(askedMs)) {
+    return { exists: true, pending: false, lapsed: true, requestedAt: at, expiresAt: null };
+  }
+  const expiresMs = askedMs + HANDOVER_REQUEST_SECONDS * 1000;
+  const lapsed = now >= expiresMs;
+  return {
+    exists: true,
+    pending: !lapsed,
+    lapsed,
+    requestedAt: at,
+    expiresAt: new Date(expiresMs).toISOString(),
+  };
 }
 
 /** When a grant made at `now` lapses. */
@@ -142,19 +186,32 @@ function handoverOpenFor(item, clientId, now = Date.now()) {
  */
 function publicHandoverState(item, now = Date.now()) {
   const state = handoverState(item, now);
+  const ask = requestState(item, now);
   return {
     open: state.open,
     expiresAt: state.expiresAt,
-    requested: Boolean(state.requestedBy),
+    // A LAPSED ASK IS NOT A REQUEST. `requested` is what every host surface
+    // reads to raise the item, so it goes false the moment the asking phone
+    // stops waiting (HANDOVER_REQUEST_SECONDS) — the two read one stamp.
+    requested: ask.pending,
     requestedAt: state.requestedAt,
+    // ISO. When the ask lapses; null when there is none. The host's item can
+    // count down to it and clear itself without another fetch.
+    requestExpiresAt: ask.pending ? ask.expiresAt : null,
+    // Somebody asked and nobody answered in time. Never a reason to raise the
+    // item; there for a host surface that wants to say "an ask lapsed".
+    requestLapsed: ask.lapsed,
   };
 }
 
 module.exports = {
   HANDOVER_WINDOW_SECONDS,
+  HANDOVER_REQUEST_SECONDS,
+  ASK_AGAIN_AFTER_SECONDS,
   nowSeconds,
   handoverExpiryFrom,
   handoverState,
   handoverOpenFor,
+  requestState,
   publicHandoverState,
 };

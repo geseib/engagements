@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './Icon';
 
 /**
  * The screen the second Chris now sees instead of quietly inheriting the first
@@ -26,103 +27,132 @@ import React from 'react';
  * name."* A clash is as likely to be two different people as one person on a
  * new device, and only the host can see the room.
  *
- * So the actions step, and the step is load-bearing:
+ * ── MOVING A NAME HERE, END TO END (experience plan §4.4, 1 Nov 2026) ─────
  *
- *   idle     "Ask the host to hand it over" — records the ask and pings the
- *            host's Players tab. It grants NOTHING (request-handover.js).
- *   asked    "Take over the name" — retries the join with `claimExisting`. The
- *            SERVER refuses it unless the host has opened a one-shot grant, so
- *            this button is a request to try, not a permission. `join-game.js`
- *            spends the grant in a conditional write; `tests/name-handover.js`
- *            §1 pins that a claim without a grant is still a collision.
- *   refused  the same button plus a line saying the host has not unlocked it
- *            yet, because "nothing happened" is the one outcome a person on a
- *            blocked screen cannot interpret.
+ * The screen follows `useHandoverFlow`'s stage, and BOTH halves read it — the
+ * words in the stage and the buttons in the dock must describe one step:
  *
- * There is no state in which "Take over the name" is the FIRST thing on this
- * screen. Reaching it takes an explicit ask, so a person who mistyped a
- * colleague's name is never one tap from taking their round.
+ *   idle       "Sam is already in this session." — That's me: use my name on
+ *              this device, or I'm someone else: pick another name
+ *   asking     the ask is in flight; the first button is disabled
+ *   askFailed  the ask did not arrive, and the screen SAYS so, with Try again.
+ *              (It used to advance to "Asked the host" whatever happened.)
+ *   waiting    "Waiting for the host to let you in as Sam", how long ago it
+ *              asked, and that the page moves on by itself: the join is
+ *              retried quietly, so a yes lands the phone in the session with
+ *              nobody pressing anything. Ask again appears after a minute.
+ *   granted    "You're in as Sam. Your answers and score came with you."
+ *   declined   "The host said not now." Pick another name becomes the main
+ *              button; Ask again waits thirty seconds.
+ *   lapsed     "The host hasn't answered." after ten minutes: Ask again, or
+ *              pick another name.
+ *
+ * There is still no state in which a button TAKES the name. The orange button
+ * asks; only the host's grant, spent by the server's conditional write
+ * (join-game.js `handover`), moves it. A person who mistyped a colleague's
+ * name can ask, and the host — who can see the room — says not now.
  *
  * IT IS TWO EXPORTS BECAUSE THE SHELL IS THREE REGIONS, NOT ONE.
  *
- * This shipped as a single component that rendered its heading, its sentence
- * and two full-width `.btn-primary`/`.btn-secondary` buttons into the middle of
- * `.plr-stage` — the one scrolling region on the surface. Every other ACT state
- * on the player's device puts its actions in `.plr-dock`, which sits OUTSIDE
- * that region precisely so "scrolling to read is fine, scrolling to act is not"
- * (RATIONALE §5.2) is structural rather than editorial. The rejoin prompt
- * twenty lines away in `PlayerPage.jsx` is the same screen — heading, lede, two
- * stacked choices — and it does it correctly. This one was the exception, and
- * an exception in the one place a player is already stuck.
- *
- * The shell takes its dock as a prop, so the refusal is split at the seam the
- * shell already has: the body here, the actions in `JoinNameCollisionActions`.
- * BOTH READ `ambiguous` FROM THE SAME PREDICATE — two copies of that ternary
- * is how a screen ends up asking a question the buttons do not answer. The
- * handover stage is read by both halves for the same reason: the note in the
- * stage and the label in the dock must never describe different steps.
+ * Every ACT state on the player's device puts its actions in `.plr-dock`,
+ * which sits OUTSIDE the one scrolling region, so "scrolling to read is fine,
+ * scrolling to act is not" (RATIONALE §5.2) is structural. The body is here,
+ * the actions in `JoinNameCollisionActions`; both read `ambiguous` from the
+ * same predicate and the stage from the same value.
  *
  * Shaped after docs/design/player-redesign/03-join-ended.html and
- * 04-join-locked.html, which are the design's two blocking join sub-states:
- * heading at the primary rung, one muted sentence, actions in the dock. There
- * is no card, no left rule and no amber heading, because RATIONALE §4.3 spends
- * the view's one amber idea on the task — here, the dock button — and nothing
- * decorative is ever amber.
- *
- * IT NO LONGER HAS A STYLESHEET. `JoinNameCollision.css` painted `#444` body
- * copy — 1.79:1 on `--bg #0F1A2E`, i.e. unreadable — because its header comment
- * still described a `.join-screen` container that was white, and that container
- * had been deleted. Every class below is `PlayerSurface.css` vocabulary that
- * already existed; the handover additions use `.plr-note`, which the dock's
- * own copy already uses, and add no rule at all.
+ * 04-join-locked.html: heading at the primary rung, one muted sentence,
+ * actions in the dock. No stylesheet of its own: every class is
+ * `PlayerSurface.css` vocabulary (`.plr-note`, `.plr-err`, `.plr-btn`).
  */
 
 /** One reading of `kind`, shared by the body and the actions. */
 export const isAmbiguousCollision = (kind) => kind === 'name-unverified';
 
 /**
- * The sentence under the refusal that says what just happened and what to do
- * next — `null` before the person has done anything, because a screen that
- * narrates a step nobody has taken is noise.
- *
- * Exported and pure so the copy is assertable without rendering: the two
- * halves of this screen have to agree, and the way they agree is by both
- * calling this.
+ * The words on the buttons, once. Plain string literals (not JSX text) so the
+ * help's **labels** can be checked against them character for character
+ * (helpGuardrails.test.js §2), apostrophes included.
  */
-export function handoverNote(stage, playerName) {
-  if (stage === 'asked') {
-    return `Asked the host to hand “${playerName}” over. When they say go ahead, tap Take over the name.`;
+export const HANDOVER_LABELS = Object.freeze({
+  claim: "That's me: use my name on this device",
+  someoneElse: "I'm someone else: pick another name",
+  asking: 'Asking the host…',
+  tryAgain: 'Try again',
+  askAgain: 'Ask again',
+  pickAnother: 'Pick another name',
+});
+
+/**
+ * What the stage says at each step: a heading, a sentence, and sometimes an
+ * error or a live note. Pure and exported, so the copy is assertable without
+ * rendering and the two halves of the screen cannot disagree about the step.
+ *
+ * `message` is the server's refusal sentence, shown only before anything has
+ * been asked; after that the screen speaks for the step it is on.
+ */
+export function handoverCopy({ stage = 'idle', playerName, message = '', agoText = '', error = '' }) {
+  switch (stage) {
+    case 'askFailed':
+      return {
+        heading: `${playerName} is already in this session.`,
+        lede: message,
+        error: error || 'Your request did not reach the host.',
+        note: 'Check your connection and try again. Nothing has changed yet.',
+      };
+    case 'waiting':
+      return {
+        heading: `Waiting for the host to let you in as ${playerName}.`,
+        lede: 'The host can see your request. This page moves on by itself as soon as they say yes.',
+        note: agoText ? `Asked ${agoText} ago.` : null,
+      };
+    case 'granted':
+      return {
+        heading: `You're in as ${playerName}.`,
+        lede: 'Your answers and score came with you.',
+        note: null,
+      };
+    case 'declined':
+      return {
+        heading: 'The host said not now.',
+        lede: 'If this is you, ask them in person.',
+        note: null,
+      };
+    case 'lapsed':
+      return {
+        heading: "The host hasn't answered.",
+        lede: 'Ask again, or pick another name.',
+        note: null,
+      };
+    case 'asking':
+    case 'idle':
+    default:
+      return {
+        heading: `${playerName} is already in this session.`,
+        lede: message,
+        note: null,
+      };
   }
-  if (stage === 'declined') {
-    return 'The host said not now.';
-  }
-  if (stage === 'refused') {
-    // NEVER "something went wrong". The host simply has not got to it, and
-    // saying so is what stops the person tapping the same button forever.
-    return `The host has not unlocked “${playerName}” yet. Ask them out loud, then try again.`;
-  }
-  return null;
 }
 
 /**
  * The ways out, for `PlayerShell`'s `dock`.
  *
- * `name-taken` renders EXACTLY TWO buttons and neither of them is "join as
- * them": the missing third button is the silent merge, and
- * `joinNameCollision.test.jsx` counts them and checks their handlers for that
- * reason. The first button either asks the host or retries the claim the host
- * has authorised — it is never an unconditional takeover, because the server
- * would refuse one and this screen must not offer what it cannot deliver.
+ * `name-taken` never renders a button that takes the name: the first button
+ * ASKS (or asks again), and the server moves the name only on the host's
+ * grant. `joinNameCollision.test.jsx` walks every stage and checks the
+ * handlers for that reason. A way to pick another name is in every stage but
+ * `granted`, because a person who cannot get the name must always be able to
+ * leave.
  */
 export function JoinNameCollisionActions({
   kind,
   playerName,
-  handoverStage = 'idle',
+  stage = 'idle',
+  canAskAgain = false,
   onRejoinAnyway,
   onUseAnotherName,
   onRequestHandover,
-  onTakeOver,
-  busy = false,
 }) {
   const ambiguous = isAmbiguousCollision(kind);
 
@@ -139,48 +169,78 @@ export function JoinNameCollisionActions({
     );
   }
 
-  const asked = handoverStage !== 'idle';
-
-  return (
-    <>
-      <button
-        type="button"
-        className="plr-btn"
-        onClick={asked ? onTakeOver : onRequestHandover}
-        disabled={busy}
-      >
-        {asked ? 'Take over the name' : 'Ask the host to hand it over'}
-      </button>
-      <button type="button" className="plr-btn plr-btn--ghost" onClick={onUseAnotherName}>
-        Pick a different name
-      </button>
-    </>
+  const ask = (label, ghost = false) => (
+    <button
+      type="button"
+      className={ghost ? 'plr-btn plr-btn--ghost' : 'plr-btn'}
+      onClick={onRequestHandover}
+    >
+      {label}
+    </button>
   );
+  const leave = (label, ghost = true) => (
+    <button
+      type="button"
+      className={ghost ? 'plr-btn plr-btn--ghost' : 'plr-btn'}
+      onClick={onUseAnotherName}
+    >
+      {label}
+    </button>
+  );
+
+  switch (stage) {
+    case 'asking':
+      return (
+        <>
+          <button type="button" className="plr-btn" disabled>{HANDOVER_LABELS.asking}</button>
+          {leave(HANDOVER_LABELS.someoneElse)}
+        </>
+      );
+    case 'askFailed':
+      return <>{ask(HANDOVER_LABELS.tryAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+    case 'waiting':
+      return <>{canAskAgain && ask(HANDOVER_LABELS.askAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+    case 'lapsed':
+      return <>{ask(HANDOVER_LABELS.askAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+    case 'declined':
+      // §4.4 step 7: Pick another name becomes the main button.
+      return <>{leave(HANDOVER_LABELS.pickAnother, false)}{canAskAgain && ask(HANDOVER_LABELS.askAgain, true)}</>;
+    case 'granted':
+      return null;
+    case 'idle':
+    default:
+      return <>{ask(HANDOVER_LABELS.claim)}{leave(HANDOVER_LABELS.someoneElse)}</>;
+  }
 }
 
-function JoinNameCollision({ kind, playerName, message, handoverStage = 'idle' }) {
-  const ambiguous = isAmbiguousCollision(kind);
-  const note = ambiguous ? null : handoverNote(handoverStage, playerName);
+function JoinNameCollision({ kind, playerName, message, stage = 'idle', agoText = '', error = '' }) {
+  if (isAmbiguousCollision(kind)) {
+    // The wrapper carries `role="alert"` and nothing else: the heading and the
+    // sentence are announced as one refusal rather than two updates.
+    return (
+      <div role="alert">
+        <h1 className="plr-h1 plr-h1--primary">{`Are you the ${playerName} already here?`}</h1>
+        <p className="plr-lede plr-muted">{message}</p>
+      </div>
+    );
+  }
 
-  // The wrapper carries `role="alert"` and nothing else: it exists so the
-  // heading and the sentence are announced as one refusal rather than two
-  // unrelated updates, and it deliberately has no class, because a bare div
-  // with a class nothing declares is how an orphan selector starts.
+  const copy = handoverCopy({ stage, playerName, message, agoText, error });
+
   return (
     <div role="alert">
-      <h1 className="plr-h1 plr-h1--primary">
-        {ambiguous
-          ? `Are you the ${playerName} already here?`
-          : 'That name is taken.'}
-      </h1>
-
-      <p className="plr-lede plr-muted">{message}</p>
-
-      {/* The step, announced. `aria-live` rather than a second `role="alert"`:
-          the refusal above is the alert, and this is a progress note under it —
-          two alerts on one screen is two interruptions for one event. */}
-      {note && (
-        <p className="plr-note" aria-live="polite">{note}</p>
+      <h1 className="plr-h1 plr-h1--primary">{copy.heading}</h1>
+      {copy.lede && <p className="plr-lede plr-muted">{copy.lede}</p>}
+      {copy.error && (
+        <p className="plr-err">
+          <Icon name="WarningCircle" weight="bold" size={16} />
+          {copy.error}
+        </p>
+      )}
+      {/* The step's progress, announced politely: the refusal above is the
+          alert, and "Asked 0:40 ago" ticking is not an interruption. */}
+      {copy.note && (
+        <p className="plr-note" aria-live="polite">{copy.note}</p>
       )}
     </div>
   );

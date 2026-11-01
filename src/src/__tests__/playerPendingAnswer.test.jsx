@@ -160,7 +160,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     await screen.findByText(/Answer Submitted!/i);
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(2);
     expect(webSocketClient.sendCleanMessage).toHaveBeenLastCalledWith(
-      'ANSWER#001', { answer: 'B', answerType: 'trivia' }
+      'ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) }
     );
     expect(screen.queryByText(/^Not sent yet$/)).not.toBeInTheDocument();
     expect(sessionStorage.getItem(KEY)).toBeNull();
@@ -196,7 +196,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
 
     await screen.findByText(/Answer Submitted!/i);
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith(
-      'ANSWER#001', { answer: 'B', answerType: 'trivia' }
+      'ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) }
     );
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
@@ -215,7 +215,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     await setConnected(true);
 
     await waitFor(() => expect(sessionStorage.getItem(KEY)).toBeNull());
-    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 'B', answerType: 'trivia' });
+    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) });
     expect(screen.queryByText(/^Not sent yet$/)).not.toBeInTheDocument();
     // Round 2's form is still there: a late round-1 answer is not round 2's.
     expect(screen.getByRole('button', { name: /Submit Answer/i })).toBeInTheDocument();

@@ -571,7 +571,7 @@ const playerRow = (name) => store.get(key(PK, `PLAYER#${name}`));
     });
     assert.deepStrictEqual(
       Object.keys(state).sort(),
-      ['expiresAt', 'open', 'requested', 'requestedAt'],
+      ['expiresAt', 'open', 'requestExpiresAt', 'requestLapsed', 'requested', 'requestedAt'],
       'a new field reached the public shape without being considered'
     );
     assert.ok(!JSON.stringify(state).includes('secret'));

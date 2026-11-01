@@ -117,6 +117,7 @@ export const HELP_FOR_SCREEN = {
      `player-join` while joining and `player-page` otherwise. */
   'player-join': { guide: 'player-joining', section: 'getting-in' },
   'player-name-taken': { guide: 'player-joining', section: 'name-taken' },
+  'player-name-moved': { guide: 'player-joining', section: 'name-moved' },
   'player-join-errors': { guide: 'player-joining', section: 'other-things-join-screen' },
   'player-lobby': { guide: 'player-playing', section: 'between-rounds' },
   'player-answering': { guide: 'player-playing', section: 'answering' },
