@@ -26,6 +26,7 @@ import RW from '../../config/roundWords';
 import ScreensGroup from './ScreensGroup';
 import { TWO_SURFACE_TYPES } from '../../config/surfaces';
 import PrivateReveal from '../needs/PrivateReveal';
+import HW from '../../config/hostWords';
 
 /** The late list's count for the room's eyes: a number, never a text or a name. */
 export function lateSummary(late) {
@@ -505,13 +506,14 @@ export default function SessionSetupPanel({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Session setup"
+        aria-label={HW.sessionMenu}
         onKeyDown={trapFocus}
       >
         <div className="setup-panel__header">
           {/* The mark, NOT a link: a tap here must never leave a live round. */}
           <BrandMark size={20} />
-          <h2 className="setup-panel__title">Session setup</h2>
+          {/* THE SESSION MENU (experience plan §3.6): one name for this panel. */}
+          <h2 className="setup-panel__title">{HW.sessionMenu}</h2>
           {/* THE FIRST THING A HOST LOOKS AT WHEN THE ROOM STOPS UPDATING, so
               it is in the header rather than behind a tab. It is also the only
               WebSocket status anywhere on the host page. The `useWebSocket ===
@@ -564,13 +566,13 @@ export default function SessionSetupPanel({
             type="button"
             className="setup-panel__close"
             onClick={onClose}
-            aria-label="Close setup"
+            aria-label={HW.closeSessionMenu}
           >
             ✕
           </button>
         </div>
 
-        <div className="setup-panel__tabs" role="tablist" aria-label="Session setup sections">
+        <div className="setup-panel__tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
           {setupPanelTabs().map((t) => (
             <button
               key={t.id}
@@ -1301,14 +1303,14 @@ export default function SessionSetupPanel({
                     {'Invite…'}
                   </button>
                   <button type="button" onClick={onShowJoinCode}>
-                    Put the join code back on the stage
+                    {HW.showJoinCode}
                   </button>
                 </div>
 
               </section>
 
               <details className="setup-fold">
-                <summary>Session: back to menu, end it, sign out</summary>
+                <summary>{`Session: ${HW.mainMenu}, ${HW.endSession}, sign out`}</summary>
                 <div className="setup-row">
                   {/* The host guides used to be here, which is why nobody found
                       them. They are in the panel header now, beside Close. This
@@ -1335,7 +1337,8 @@ export default function SessionSetupPanel({
                     Same label on ENDED's new secondary and on the phone remote,
                     because it is the same act on all three.
                   */}
-                  <button type="button" onClick={onSwitchGame}>Back to Menu</button>
+                  {/* Main menu since experience plan 2a (§3.6): one word for leaving. */}
+                  <button type="button" onClick={onSwitchGame} title={HW.mainMenuHint}>{HW.mainMenu}</button>
                   {/*
                     "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
                     ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
@@ -1349,7 +1352,7 @@ export default function SessionSetupPanel({
                     action `onEndSession` builds, not here.
                   */}
                   {canEndSession(gameType, gameState) && (
-                    <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
+                    <button type="button" className="btn-danger" onClick={onEndSession} title={HW.endSessionHint}>{HW.endSession}</button>
                   )}
                   {/*
                     ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.

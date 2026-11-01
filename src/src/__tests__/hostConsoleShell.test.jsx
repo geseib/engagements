@@ -51,11 +51,14 @@ test('the rail opens the moment\'s section; the host\'s choice holds until the m
   expect(open()).toEqual(['late']);
 });
 
-test('People says the one count; a section\'s link opens the session menu at its tab', () => {
+// The count moved to the pulse (experience plan 2c): People says who is here.
+test('People says who is here; its link opens the Session menu at People', () => {
   const p = props();
   const { container } = render(<HostConsole {...p}><div /></HostConsole>);
-  expect(container.querySelector('[data-section="people"] summary').textContent).toMatch('3 of 4 answered');
-  fireEvent.click(screen.getByRole('button', { name: 'All players' }));
+  const summary = container.querySelector('[data-section="people"] summary').textContent;
+  expect(summary).toMatch('4 here');
+  expect(summary).not.toMatch(/answered/);
+  fireEvent.click(screen.getByRole('button', { name: 'All 4, and who left' }));
   expect(p.rail.onOpenSection).toHaveBeenCalledWith('players');
 });
 
@@ -339,21 +342,25 @@ test('the next step is a card at the top of the centre, before the panel', () =>
   expect(now.querySelector('.hc-part').textContent.length).toBeGreaterThan(0);
 });
 
-test('leaving is the top line\'s "All sessions", never a button beside the round controls', () => {
+test('leaving is the top bar\'s Main menu, never a button beside the round controls', () => {
   const onAction = jest.fn();
   const leave = { id: 'leave', label: 'Back to menu', intent: 'leave', icon: 'House' };
   const lobby = { primary: { id: 'start', label: 'Start round 1', intent: 'start', icon: 'Play' }, secondary: leave, status: { text: '', tone: '' } };
   const { container } = render(<HostConsole {...props({ footer: { status: lobby.status, part: strip.part, controls: lobby, onAction } })}><div /></HostConsole>);
   expect(screen.queryByRole('button', { name: /Back to menu/ })).toBeNull();
-  expect(container.querySelector('.hc-now').textContent).not.toMatch(/All sessions/);
-  const out = screen.getByRole('button', { name: /All sessions/ });
+  expect(container.querySelector('.hc-now').textContent).not.toMatch(/Main menu/);
+  const out = screen.getByRole('button', { name: /Main menu/ });
   expect(out.closest('.hc-top')).toBeTruthy();
   fireEvent.click(out);
   expect(onAction).toHaveBeenCalledWith(leave);
   expect(screen.getByRole('button', { name: /Start round 1/ })).toBeInTheDocument();
 });
 
-test('no way out on the top line mid-round, where there is no leave control', () => {
-  render(<HostConsole {...props()}><div /></HostConsole>);
-  expect(screen.queryByRole('button', { name: /All sessions/ })).toBeNull();
+// Experience plan 2a: Main menu is always there, mid-round too, and it is the page's way out.
+test('mid-round, Main menu is still top left and takes the page\'s way out', () => {
+  const onLeave = jest.fn();
+  const p = props();
+  render(<HostConsole {...p} top={{ ...p.top, onLeave }}><div /></HostConsole>);
+  fireEvent.click(screen.getByRole('button', { name: /Main menu/ }));
+  expect(onLeave).toHaveBeenCalled();
 });

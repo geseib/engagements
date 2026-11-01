@@ -568,7 +568,7 @@ describe('the Settings tab', () => {
       claims nothing about the session's fate. ("Exit" was considered and
       rejected for claiming a consequence the button does not have.)
     */
-    fireEvent.click(screen.getByRole('button', { name: /back to menu/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Main menu$/ }));
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     fireEvent.click(screen.getByRole('button', { name: /how this works/i }));
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);

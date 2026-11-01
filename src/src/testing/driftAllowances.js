@@ -319,10 +319,7 @@ module.exports = {
     },
     "components/stage/SessionSetupPanel.jsx": {
       "AI summary": 2,
-      "Back to Menu": 2,
       "Feedback": 1,
-      "Put the join code back on the stage": 1,
-      "Session setup": 3,
       "game": 1
     },
     "components/stage/WorkieSettings.jsx": {
@@ -343,13 +340,6 @@ module.exports = {
     },
     "config/consoleSections.js": {
       "Settings": 2
-    },
-    "config/consoleWords.js": {
-      "All players": 1,
-      "All sessions": 1,
-      "Joined so far": 1,
-      "Session tools": 1,
-      "Settings": 1
     },
     "config/formatGuide.js": {
       "Main screen": 1,
@@ -400,11 +390,9 @@ module.exports = {
       "Session reports": 1
     },
     "config/help/host-running.js": {
-      "Back to Menu": 6,
-      "Put the join code back on the stage": 2,
+      "Back to Menu": 2,
       "SESSION": 3,
-      "Session panel": 7,
-      "Session setup": 1,
+      "Session panel": 6,
       "Unlock name": 2
     },
     "config/help/host-setup.js": {
@@ -416,17 +404,12 @@ module.exports = {
       "Session panel": 2
     },
     "config/help/host-two-screens.js": {
-      "All players": 1,
-      "All sessions": 1,
-      "All settings": 1,
       "Back to Menu": 1,
       "Display on screen": 1,
       "Feedback": 2,
       "Players & rounds": 1,
-      "Put the join code back on the stage": 1,
       "Results": 2,
-      "Session panel": 4,
-      "Session tools": 3,
+      "Session panel": 1,
       "Show QR": 1
     },
     "config/help/player-events.js": {
@@ -469,11 +452,9 @@ module.exports = {
       "projector": 15
     },
     "config/roundWords.js": {
-      "All settings": 1,
       "Back to Menu": 1,
       "Feedback": 1,
-      "Results": 1,
-      "Session panel": 1
+      "Results": 1
     },
     "config/setTopics.js": {
       "game": 3

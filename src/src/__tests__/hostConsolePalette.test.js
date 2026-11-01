@@ -21,8 +21,8 @@ test('the laptop ladder only: 12 / 13 / 15 / 19 / 24px', () => {
 test('the main area scrolls; the next-step card is above it, outside it (Review Focus 5)', () => {
   expect(css).toMatch(/\.hc-main\s*\{[^}]*overflow:\s*auto/);
   // The Needs-you line has its own row between the card and the main area
-  // (experience plan §4.3): the card stays first under the strip.
-  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail now"\s*"rail needs"\s*"rail main"/);
+  // (experience plan §4.3), then the pulse (2c): the card stays first under the strip.
+  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail now"\s*"rail needs"\s*"rail pulse"\s*"rail main"/);
 });
 test('no colour literal', () => {
   expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/);

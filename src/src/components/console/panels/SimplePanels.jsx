@@ -13,7 +13,7 @@ export function LobbyPanel({ code, joined = [], firstTask = '', chooser = null }
   if (chooser) return <section className="hc-panel">{chooser}</section>;
   return (
     <section className="hc-panel">
-      <p className="hc-kicker">{CW.joinedSoFar}</p>
+      <p className="hc-kicker">{CW.people}</p>
       <p className="hc-code-big">{code}</p>
       {joined.length
         // Two people can share a name: key by position as well.
