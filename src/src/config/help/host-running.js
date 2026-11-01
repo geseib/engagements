@@ -189,7 +189,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. **SESSION** shows a number when someone is asking to take over a name.',
+          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. **NEEDS YOU**, just before **SESSION**, counts what is waiting on you. On one screen it never shows a name: see Managing players › Needs you.',
         },
         {
           t: 'keys',
@@ -575,10 +575,11 @@ const playerManagement = {
   summary: 'Handing a name over, removing someone who left, and what neither of those destroys.',
   sections: [
     /*
-      components/stage/PlayersList.jsx:107-170. The Session panel passes no
-      onLock/onRefuse (SessionSetupPanel.jsx ~613), so its rows show Unlock
-      name | Let them take it, and Remove; the Build Room's panel adds Not now
-      and Lock again (BuildSessionPanel.jsx:416-420; grant-handover.js).
+      components/stage/PlayersList.jsx. Since 1 Nov 2026 (experience plan 1a)
+      the Session panel passes onRefuse/onLock/askingFirst for every round
+      type, as the Build Room's always did (grant-handover.js refuse/lock).
+      On one screen the flags wait behind Show on this screen
+      (components/needs/PrivateReveal.jsx).
     */
     {
       id: 'players-tab',
@@ -591,7 +592,7 @@ const playerManagement = {
         },
         {
           t: 'p',
-          text: 'Each row carries two actions: **Unlock name** (it reads **Let them take it** when someone is asking) and **Remove**. In a Build Room a row can also show **Not now**, to turn down someone asking for the name, or **Lock again**, to close an unlock nobody has taken yet. All of them are about people, not about scores; none can take points away from anybody.',
+          text: 'Each row carries **Unlock name** (it reads **Let them take it** when someone is asking) and **Remove**. Someone asking is lifted to the top, with **Not now** to turn them down; an unlocked name shows **Lock again** until someone takes it. On one screen those flags wait behind **Show on this screen**. None of these can take points away from anybody.',
         },
       ],
     },
@@ -625,9 +626,9 @@ const playerManagement = {
         {
           t: 'steps',
           items: [
-            { title: 'They ask', text: 'On their screen they tap **Ask the host to hand it over**. Their row on your Players tab now reads "asking to take this name", and **SESSION** on the dock shows a count.' },
-            { title: 'You decide', text: 'Usually out loud: "Sam, is that you on the iPad?" Press **Let them take it**.' },
-            { title: 'The row says "unlocked for one handover"', text: 'They tap **Take over the name** and they are in, with everything that name has scored.' },
+            { title: 'They ask', text: 'On their new device they ask for the name. It shows at once under your main button, on the bell and at the top of People.' },
+            { title: 'You decide', text: 'Usually out loud: "Sam, is that you on the iPad?" Press **Let them**, or **Not now**. A refusal from the server shows on the line.' },
+            { title: 'It waits for their device', text: 'The line reads "Waiting for Sam\'s new device" with **Lock again**. Their device takes the name, with everything it has scored.' },
           ],
         },
         { t: 'h', text: 'Unlocking without being asked' },
@@ -645,7 +646,37 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'When it was just a coincidence',
-          text: 'Do nothing (in a Build Room, press **Not now**). The other Sam already has "Pick a different name" in front of them, which is the correct outcome.',
+          text: 'Press **Not now**. The other Sam can then pick a different name, which is the correct outcome. A request nobody answers lapses after ten minutes.',
+        },
+      ],
+    },
+    {
+      /*
+        config/needsYou.js (the list), components/needs/* (the line, the
+        bell's This session, the one-screen sheet), ConsoleRail's People,
+        HostRemote's card. Experience plan §4, Phase 1a/1b/1e.
+      */
+      id: 'needs-you',
+      title: 'Needs you',
+      icon: 'Bell',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Anything waiting on you is one item in one list: a name request, a read from Workie that did not arrive, late answers, a read to check, a name left open.',
+        },
+        {
+          t: 'list',
+          items: [
+            'On two screens it is the Needs-you line under your main button: calm when nothing waits, amber with the buttons when someone is waiting.',
+            'In a live session the bell counts only what this session needs now, and lists it first. Your account\'s notifications are folded below it.',
+            'The phone Remote shows the same list, named, with the same buttons. Whichever you press first wins.',
+          ],
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'On one screen the room can see the laptop',
+          text: '**NEEDS YOU** shows a count, never a name. Its sheet lists each item by kind; **Show on this screen** asks first, then shows that one item. The Session panel holds late answers, name requests, Workie\'s settings and the running order back the same way.',
         },
       ],
     },
