@@ -243,10 +243,6 @@ module.exports = {
       "Game ID": 1,
       "game": 1
     },
-    "components/JoinNameCollision.jsx": {
-      "Ask the host to hand it over": 1,
-      "Take over the name": 2
-    },
     "components/PromptAssembledPreview.jsx": {
       "projector": 1
     },
@@ -404,14 +400,11 @@ module.exports = {
       "Session reports": 1
     },
     "config/help/host-running.js": {
-      "Ask the host to hand it over": 1,
-      "Asking to take this name": 1,
       "Back to Menu": 6,
       "Put the join code back on the stage": 2,
-      "SESSION": 4,
+      "SESSION": 3,
       "Session panel": 7,
       "Session setup": 1,
-      "Take over the name": 1,
       "Unlock name": 2
     },
     "config/help/host-setup.js": {
@@ -444,11 +437,9 @@ module.exports = {
       "Main screen": 1
     },
     "config/help/player.js": {
-      "Ask the host to hand it over": 2,
       "Join Game": 3,
       "Main screen": 18,
       "Results": 1,
-      "Take over the name": 2,
       "game": 5
     },
     "config/help/technical.js": {
@@ -514,9 +505,7 @@ module.exports = {
       "Results": 3
     }
   },
-  "helpFalseClaims": {
-    "config/help/host-running.js": 2
-  },
+  "helpFalseClaims": {},
   "buttonFamilyNames": [
     "add-option-btn",
     "add-set-buttons",
