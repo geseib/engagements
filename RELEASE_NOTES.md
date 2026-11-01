@@ -9,6 +9,47 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 1 Nov 2026 (new engagement reveals as you go; Space on the button; review #48 fixes; the two lesson sets)
+
+**Test:** merge of dev `d93829e7`. Everything below this entry is already on test, except the two entries directly below (**Build Room: fixes from the test walk** and **the event summary names its host**): they were written for pushes that had not happened, and arrive on test with this one.
+
+**Data on test (done 1 Nov, before this push):** *Lessons from the Tech World* and *Lessons from Other Professions* were installed with `scripts/install-question-set.js` and set up as Apply rounds with `scripts/replace-question-set.js` (dry run first each time). Neither existed on test before. Prod needs the same when this goes there.
+
+### New
+
+- **A new engagement reveals itself as you go** (owner, 31 Oct: "less daunting if we revealed the sections as needed"). **Name it** and **Format** show from the start; **Question set** appears once a format is chosen; the names card, Background for Workie and Advanced appear once a set is picked. Nothing goes away again while the dialog is open. **Every** host now starts where a first-timer does, at the format cards, with no format chosen; the format you used last is marked ("You used it last.", or a **last** tag on its chip) and is where the keyboard lands, so Title, Enter, Enter still gets you there. **Create** says what is still needed, and pressing it early takes you to the first gap.
+- **The Space key is on the main button.** Every host stage's main dock button (the event board, a session's stage, the Build Room, the survey walkthrough) carries a small **Space** keycap at its right edge, in place of the loose "or press Space" beside it. Off when Space does nothing, it keeps its width so the button never moves; it shows on every display profile, never under 12px.
+- **EXIT on an event's stage leaves to your start screen**, where the event is listed with a button back to it (it went to the console's Events).
+- **Lessons from the Tech World, rewritten** (owner, 1 Nov: it did not follow the lessons pattern). Thirty things that really happened in tech, each with its source, from Knight Capital's 2012 deploy to CrowdStrike's 2024 update, in six categories. Each states the lesson and asks where it would land on your team, project or company. It is an **Apply** round with the Transfer Reader as its Workie.
+- **Lessons from Other Professions** (was *Lessons from the School of Hard Books*): the same 80 lessons from eight professions, now an Apply round with the same instruction shape and Workie. On test it is new.
+- `scripts/replace-question-set.js`: a new version of an Engage set from a CSV, and its details, through the app's own handlers (a dry run by default).
+
+### Fixed
+
+- **Start it now on Your sessions started nothing** ("That session did not start: Game not found") (review #48, finding 1). It now starts the session it names.
+- **Workie invented a disagreement** (review #48, finding 2): every round's opening demanded "the tension between two responses". It names a split only when two answers really pulled apart. A Judge round's reader no longer gives a verdict of its own, and a prompt that writes its own first line keeps it.
+- **The Verdict Board counted an outright no as "No verdict"** and described a split nobody stated (review #48). Its prompt counts "not shown", "fails" and "does not meet the bar" as not shown to clear, and the two-sides question applies only when answers split. The new prompt text reaches test when its repo version is taken (done after this deploy).
+- **Comments on a round** (phone and report): the phone ranks responses in the report's order (points, then first-place votes); a response is named "Name's response"; switching what you comment on keeps each draft; the Comment buttons render as pills; the report says "N comments on this round" and calls the summary **Workie's read**.
+
+### What to look at
+
+1. On engage.test, press **New engagement**. It opens at the format cards with nothing chosen, even if you have created engagements before; your last format says **You used it last.** Pick one: **Question set** appears. Pick a set: Background for Workie and Advanced appear. Press **Create** before naming it: it says what is missing and takes you there.
+2. Host any Call & Answer round: the main button at the bottom carries a small **Space** cap; nothing floats beside it. Press Space: it does what the button says.
+3. Open an event's stage and press **EXIT**, then **Leave — the event keeps going**: you land on your start screen with the event listed.
+4. In the console's Question sets, open **Lessons from the Tech World**: 30 questions in six categories, each a real event with its source, the round kind **Apply**, and the instruction "This happened somewhere else…". Run one round and read Workie's take.
+5. Open **Lessons from Other Professions**: 80 questions, Apply, the instruction "This lesson comes from another profession…".
+6. On **Your sessions**, create a session, press **Edit**, close it unchanged, then **Start it now**: the session starts.
+7. Run a Judge round (*Ready or Not*) where every answer says no: Workie counts them as not shown to clear and invents no split.
+8. In a Call & Answer round with comments on, comment from a phone on two responses in turn: each keeps its own draft; the report reads "N comments on this round".
+
+### Known gaps
+
+- On test the two lesson sets use the Transfer Reader prompt that is still marked **draft** in Admin › Prompts. Draft prompts run (only archived ones are skipped); switch it to active when convenient.
+- *Lessons from Other Professions* has the id `lessons` on dev and `lessonsfromotherprofessions` on test: the installer names a new set from its title.
+- The Space cap goes when the dock is crowded (below 1100px wide, or 1280px with AGENDA) before a button would wrap.
+
+---
+
 ## 31 Oct 2026 (Build Room: fixes from the test walk)
 
 **Test:** merge of dev `ab020e52`. Everything below this entry is already on test; this push adds only what is here.
