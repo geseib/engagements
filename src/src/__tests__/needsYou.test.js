@@ -151,3 +151,25 @@ describe('what a screen the room sees may say (principle 3)', () => {
     expect(kindSummary(needsYou({}))).toBe('Nothing needs you now.');
   });
 });
+
+describe('dev QA 1 Nov: the host\'s two clocks', () => {
+  // rejects: "Waiting for Sam's new device · 5:07 left" straight after Let
+  //          them. The server stamps its grant time plus five minutes; a
+  //          laptop a few seconds slow read more than the window.
+  test('the grant countdown never starts above 5:00', () => {
+    const sec = Math.floor(NOW / 1000);
+    expect(leftText(sec + 307, NOW)).toBe('5:00 left');
+    expect(leftText(sec + 300, NOW)).toBe('5:00 left');
+    expect(leftText(sec + 299, NOW)).toBe('4:59 left');
+    const n = needsYou({ players: [player('Sam', { open: true, requested: true, expiresAt: sec + 307 })], now: NOW });
+    expect(n.top.text).toBe("Waiting for Sam's new device · 5:00 left");
+  });
+
+  // rejects: the People row and the Needs-you line showing different "ago"
+  //          times for one request (0:03 against 0:00, 0:33 against 0:29).
+  test('a name request carries its own "ago", from the list\'s one clock', () => {
+    const n = needsYou({ players: [player('Sam', { requested: true, requestedAt: iso(29000) })], now: NOW });
+    expect(n.top.ago).toBe('0:29 ago');
+    expect(n.top.detail).toContain(`Asked ${n.top.ago}`);
+  });
+});

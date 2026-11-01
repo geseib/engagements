@@ -119,11 +119,23 @@ export function agoText(iso, now = Date.now()) {
   return `${Math.floor(s / 60)} min ago`;
 }
 
-/** "4:10 left" from epoch seconds. */
+/**
+ * THE GRANT WINDOW (lambda-functions/game/handover.js HANDOVER_WINDOW_SECONDS):
+ * the server stamps `expiresAt` as its own grant time plus five minutes.
+ */
+export const GRANT_WINDOW_SECONDS = 5 * 60;
+
+/**
+ * "4:10 left" from epoch seconds — the server's grant time plus the window.
+ * NEVER MORE THAN THE WINDOW (dev QA 1 Nov: "5:07 left" straight after Let
+ * them). `expiresAt` is on the server's clock and `now` on this laptop's, so
+ * a laptop running a few seconds slow read more than five minutes; whatever
+ * the skew, a grant cannot have more left than it was given.
+ */
 export function leftText(expiresAtSec, now = Date.now()) {
   const exp = Number(expiresAtSec);
   if (!Number.isFinite(exp)) return '';
-  const s = Math.max(0, Math.floor(exp - now / 1000));
+  const s = Math.min(GRANT_WINDOW_SECONDS, Math.max(0, Math.floor(exp - now / 1000)));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} left`;
 }
 
@@ -184,6 +196,11 @@ export function needsYou({
         name,
         text: `${name} wants their name on a new device`,
         at: h.requestedAt || null,
+        /* "0:20 ago", worked out HERE with the list's one `now`, so the
+           Needs-you line and the People row read the same words from the same
+           tick (dev QA 1 Nov: the row recomputed from Date.now() at its own
+           render and the two disagreed, 0:03 against 0:00). */
+        ago: agoText(h.requestedAt, now),
         /* WHILE THE FIRST DEVICE IS STILL ANSWERING a second "Sam" is more
            likely someone else, so Let them arms in place: a second press
            within six seconds goes ahead (PLAN §4.4; host standards §3). */

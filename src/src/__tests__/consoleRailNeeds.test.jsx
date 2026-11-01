@@ -76,3 +76,18 @@ test('a refused answer says why, on People', () => {
   renderRail({ needsError: 'Nobody is asking to take "Sam" right now.' });
   expect(screen.getByRole('alert')).toHaveTextContent('Nobody is asking to take "Sam" right now.');
 });
+
+// rejects: dev QA 1 Nov — the People row recomputed "ago" from Date.now() at
+//          its own render while the Needs-you line read the page's tick, so
+//          one request showed 0:03 in one place and 0:00 in the other.
+test('the asker row shows the item\'s own "ago", the same words the Needs-you line has', () => {
+  const NOW = Date.parse('2026-11-01T12:00:00Z');
+  const stale = needsYou({
+    players: [{ name: 'Sam', handover: { requested: true, requestedAt: new Date(NOW - 29000).toISOString() } }],
+    now: NOW,
+  }).items.filter((i) => i.kind === 'name-request');
+  renderRail({ asking: stale });
+  const row = screen.getByTestId('people-asker');
+  expect(row).toHaveTextContent('0:29 ago');
+  expect(stale[0].detail).toContain('0:29 ago');
+});

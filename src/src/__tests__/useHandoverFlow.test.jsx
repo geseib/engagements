@@ -224,3 +224,36 @@ describe('the pure pieces', () => {
     expect(formatAgo(65 * 1000)).toBe('1:05');
   });
 });
+
+describe('dev QA 1 Nov: Ask again after Not now', () => {
+  // rejects: Ask again never returning after Not now. The one-second tick
+  //          alone decided it; the moment it is due is now scheduled on its
+  //          own, so it arrives even when the browser drops the interval.
+  test('Ask again appears at thirty seconds even if the one-second tick never runs', async () => {
+    const realSetInterval = global.setInterval;
+    global.setInterval = () => 0;
+    try {
+      const h = setup({ claims: [notNow] });
+      await askNow(h);
+      await advance(T.retryEveryMs);
+      expect(h.current().stage).toBe('declined');
+      await advance(T.askAgainAfterDeclineMs - 10);
+      expect(h.current().canAskAgain).toBe(false);
+      await advance(20);
+      expect(h.current().canAskAgain).toBe(true);
+    } finally {
+      global.setInterval = realSetInterval;
+    }
+  });
+
+  // rejects: a Not now heard by a fresh join resetting to the first ask.
+  test('declined() puts the flow on Not now, with no retry and Ask again after thirty seconds', async () => {
+    const h = setup();
+    await act(async () => { h.current().declined(); });
+    expect(h.current().stage).toBe('declined');
+    expect(h.current().canAskAgain).toBe(false);
+    await advance(T.askAgainAfterDeclineMs);
+    expect(h.current().canAskAgain).toBe(true);
+    expect(h.claim).not.toHaveBeenCalled();
+  });
+});

@@ -50,7 +50,9 @@ export default function SessionNeedsList({
       {items.map((item) => (
         <li key={item.id} className={`ny-item${item.level === NEEDS_LEVELS.NOW ? ' is-now' : ''}`} data-testid={`needs-kind-${item.kind}`}>
           <p className="ny-item-t">{item.kindText}</p>
-          <PrivateReveal oneScreen summary="" testId={`needs-reveal-${item.kind}`} after={phone}>
+          {/* The sheet's heading already says "The room can see this screen";
+              each item does not say it again. */}
+          <PrivateReveal oneScreen note={false} summary="" testId={`needs-reveal-${item.kind}`} after={phone}>
             <ul className="ny-list"><NeedsItem item={item} onAct={onAct} busy={busy} /></ul>
           </PrivateReveal>
         </li>

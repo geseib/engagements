@@ -251,7 +251,32 @@ async function joinAsAttendee(gameId, token, clientId) {
   });
 }
 
+/*
+  "STILL WAITING" IS AN ANSWER, NOT AN ERROR (dev QA 1 Nov). While a phone
+  waits on the host it retries the join every few seconds with
+  `claimExisting`, and until the host says yes every retry was a 409 — which
+  the browser prints in red in the console, every four seconds, for an answer
+  the page expected. A retry that sends `waitStatus: true` gets the same
+  refusal body with 200 and `waiting: true` instead; the page reads it exactly
+  as it read the 409 (PlayerPage performJoin). Only the two name refusals
+  convert, and only for a claim: every other failure keeps its status, and a
+  caller that does not ask gets the 409 it always got.
+*/
+const WAITING_CODES = new Set(['NAME_TAKEN', 'NAME_UNVERIFIED']);
+
 exports.handler = async (event) => {
+  const response = await joinHandler(event);
+  let body = {};
+  try { body = JSON.parse(event.body || '{}') || {}; } catch (_) { return response; }
+  if (body.waitStatus !== true || body.claimExisting !== true) return response;
+  if (!response || response.statusCode !== 409) return response;
+  let payload;
+  try { payload = JSON.parse(response.body || '{}'); } catch (_) { return response; }
+  if (!payload || !WAITING_CODES.has(payload.code)) return response;
+  return { ...response, statusCode: 200, body: JSON.stringify({ ...payload, waiting: true }) };
+};
+
+async function joinHandler(event) {
   try {
     const { gameId } = event.pathParameters || {};
     const body = JSON.parse(event.body || '{}');
@@ -572,7 +597,7 @@ exports.handler = async (event) => {
       headers: { 'Access-Control-Allow-Origin': '*' }
     };
   }
-};
+}
 
 
 /**
@@ -606,7 +631,8 @@ async function notifyHostOfPlayerJoin(gameId, playerData) {
  *
  * WHY EVERY PLAYER SOCKET UNDER THIS NAME IS THE OLD DEVICE'S. Connection rows
  * carry `PlayerName` and no client id (connect.js stores what the handshake's
- * query string says, and a client id must never ride in a URL). That would be
+ * query string says; a player page's client id rides in that handshake only
+ * to be compared with the name's holder, and is never stored or logged). That would be
  * too weak to aim at a device in general — but at THIS instant it is exact:
  * the new device has no socket yet. It opens one only after this join
  * answers, and this runs before the join answers. So every PLAYER row under
