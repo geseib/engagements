@@ -26,6 +26,9 @@
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
 const FUNC_RE = /\b(rgba?|hsla?)\(/g;
 const CHANNEL_RE = /^rgba?\(\s*var\(--[\w-]+-rgb\)/; // rgb(var(--slate-rgb) / .28) is allowed
+// JSX: a quoted value straight after a colour-bearing style key or SVG paint attribute
+const STYLE_COLOUR_KEY_RE = /\b(color|background(?:Color)?|border(?:Top|Right|Bottom|Left)?(?:Color)?|outline(?:Color)?|fill|stroke|stopColor|floodColor|lightingColor|caretColor|accentColor|columnRuleColor|textDecorationColor|boxShadow|textShadow)\s*[:=]\s*\{?\s*$/;
+const NAMED_COLOUR_RE = /\b(white|black|red|green|blue|yellow|orange|purple|pink|gr[ae]y|silver|navy|teal|maroon|olive|lime|aqua|cyan|magenta|fuchsia|gold|crimson|tomato|coral|salmon|indigo|violet|brown|beige|ivory|khaki|lavender|turquoise|darkgr[ae]y|lightgr[ae]y|whitesmoke|gainsboro)\b/gi;
 const NAMED_RE = /(^|[\s:,(])(white|black)(?=$|[\s,;)!])/gi;
 const FAMILY_WORDS = /\b(monospace|serif|sans-serif|system-ui|cursive|fantasy|Georgia|Menlo|Monaco|Consolas|Courier|Helvetica|Arial|Inter|Archivo|SFMono-Regular|ui-monospace|-apple-system|BlinkMacSystemFont|Segoe UI|Roboto|Times)\b/;
 
@@ -225,9 +228,15 @@ function scanJsx(src) {
       hits.push(body.slice(m.index, matchParen(body, m.index + m[0].length - 1) + 1));
     }
     if (/^(white|black)$/i.test(body.trim())) hits.push(body.trim());
+    else if (STYLE_COLOUR_KEY_RE.test(stripped.slice(Math.max(0, q.index - 40), q.index))) {
+      // An inline style or SVG paint: style={{ border: '1px solid red' }}, fill="navy".
+      // Hex and rgb() were caught above; this adds the named colours, which only mean a
+      // colour in this position (experience-plan PLAN §5.3: the gate covers .jsx inline styles).
+      for (const m of body.matchAll(NAMED_COLOUR_RE)) hits.push(m[0]);
+    }
     for (const h of hits) findings.push({ type: 'colour', literal: h, line: lineAt(stripped, q.index) });
   }
-  // fill={"#fff"} is caught above; fill="white" too. Nothing else to add.
+  // fill={"#fff"} is caught above; fill="white" too.
   const dataSkin = [...stripped.matchAll(/data-skin\b|dataset\.skin\b/g)].map((m) => lineAt(stripped, m.index));
   return { findings, counts: { colour: findings.length }, dataSkinLines: dataSkin };
 }

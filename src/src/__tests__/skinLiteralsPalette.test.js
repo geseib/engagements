@@ -23,6 +23,10 @@
  *            do read --primary, so it is a third ratcheted number instead: it reaches 0 file
  *            by file, and Phase 8 deletes the aliases.
  * Skin values files (styles/skins/*.css) are exempt: they ARE the values.
+ * JSX and JS (inline styles; experience-plan PLAN §5.3, Phase 0): every quoted #hex, rgb()
+ *          or hsl(); white/black as a whole value; and a NAMED colour ('1px solid red',
+ *          fill="navy") in the value of a colour-bearing style key or SVG paint attribute.
+ *          Counted per file against its `// skin-allowance: colour=N` (first line).
  *
  * Fix a failure with: node scripts/skins/codemod.js --report --file <file>  (then --apply).
  *
@@ -147,6 +151,15 @@ describe('the gate can fail (it is not vacuous)', () => {
     const css = '/* skin-allowance: colour=3 font=0 primary=0 */\n.x { color: #0F1A2E; }\n';
     const { findings, counts } = S.scanCss(css);
     expect(ratchet('fixture.css', findings, counts, S.filePragma(css), 'fixture.css').join('\n')).toMatch(/lower fixture\.css's allowance to colour=1/);
+  });
+  test('JSX inline styles: hex, rgb and named colours in a style value count; class names, titles and currentColor do not', () => {
+    const src = [
+      "const a = <div style={{ color: '#0F1A2E', boxShadow: '0 1px 2px rgba(0,0,0,.2)' }} />;",
+      "const b = <div style={{ border: '1px solid red', background: 'white' }} />;",
+      'const c = <path fill="navy" stroke="currentColor" />;',
+      "const d = <div className=\"red-team\" style={{ color: 'var(--text)' }} title=\"Red team\" />;",
+    ].join('\n');
+    expect(S.scanJsx(src).findings.map((f) => f.literal)).toEqual(['#0F1A2E', 'rgba(0,0,0,.2)', 'red', 'white', 'navy']);
   });
   test('rgb(var(--x-rgb) / a) is not a literal; a pragma in a later comment does not count', () => {
     const css = '.x { color: rgb(var(--slate-rgb) / .28); }\n/* skin-allowance: colour=9 */\n';
