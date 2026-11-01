@@ -50,6 +50,21 @@ export default function useHandoverFlow({
     setFlow({ stage: 'idle', askedAt: null, declinedAt: null, error: null, timing: baseTiming });
   }, [baseTiming]);
 
+  /*
+    NOT NOW, HEARD OUTSIDE THE RETRY (dev QA 1 Nov). The host's answer also
+    reaches a FRESH join — a reload, the rejoin prompt, the form — as
+    `handoverRefused`. That used to reset the flow to idle, so the phone said
+    "The host said not now" in the lede over the first-ask buttons and never
+    offered Ask again. It now lands on the same declined screen the retry
+    reaches, with the same thirty-second pause.
+  */
+  const declined = useCallback(() => {
+    generation.current += 1;
+    const at = callbacks.current.clock();
+    setNow(at);
+    setFlow((f) => ({ ...f, stage: 'declined', declinedAt: at, error: null }));
+  }, []);
+
   const requestHandover = useCallback(async () => {
     const mine = ++generation.current;
     setFlow((f) => ({ ...f, stage: 'asking', error: null }));
@@ -80,6 +95,31 @@ export default function useHandoverFlow({
     const id = setInterval(() => setNow(callbacks.current.clock()), 1000);
     return () => clearInterval(id);
   }, [ticking]);
+
+  /*
+    ASK AGAIN ARRIVES ON TIME (dev QA 1 Nov: after Not now it never came
+    back). The one-second tick alone decided when the button appeared, and a
+    browser is free to slow or drop an interval on a page it considers idle.
+    So the moment Ask again is due is also scheduled on its own, and a page
+    coming back into view reads the clock at once.
+  */
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const due = flow.stage === 'declined'
+      ? (flow.declinedAt || 0) + flow.timing.askAgainAfterDeclineMs
+      : (flow.askedAt || 0) + flow.timing.askAgainAfterMs;
+    const wait = due - callbacks.current.clock();
+    const refresh = () => setNow(callbacks.current.clock());
+    const id = wait > 0 ? setTimeout(refresh, wait + 1) : null;
+    const onVisible = () => { if (typeof document === 'undefined' || document.visibilityState !== 'hidden') refresh(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    if (typeof window !== 'undefined') window.addEventListener('focus', onVisible);
+    return () => {
+      if (id) clearTimeout(id);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onVisible);
+    };
+  }, [ticking, flow.stage, flow.askedAt, flow.declinedAt, flow.timing]);
 
   const view = handoverWaitView({ ...flow, now, timing: flow.timing });
 
@@ -148,5 +188,6 @@ export default function useHandoverFlow({
     canAskAgain: view.canAskAgain,
     requestHandover,
     reset,
+    declined,
   };
 }

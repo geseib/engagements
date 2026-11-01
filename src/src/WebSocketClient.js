@@ -48,6 +48,11 @@ class WebSocketClient {
     // A PRESENTATION IS A VIEWER (two-surface D4): no name, never host, its own
     // per-tab id so two walls do not retire each other's connection row.
     this.viewerId = typeof options.viewerId === 'string' && options.viewerId ? options.viewerId : null;
+    // THE BROWSER'S CLIENT ID (player pages only; dev QA 1 Nov). connect.js
+    // checks it against the name's holder before retiring older rows under the
+    // name, so a phone the name has moved away from cannot, by reconnecting,
+    // evict the phone that now holds it. Omitted = the server's old behaviour.
+    this.clientId = typeof options.clientId === 'string' && options.clientId ? options.clientId : null;
 
     // Retire whatever we were holding before opening its replacement.
     //
@@ -65,7 +70,8 @@ class WebSocketClient {
 
     const wsUrl = this.viewerId
       ? `${window.WS_URL}?gameId=${gameId}&viewer=present&viewerId=${encodeURIComponent(this.viewerId)}`
-      : `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`;
+      : `${window.WS_URL}?gameId=${gameId}${playerName ? `&playerName=${encodeURIComponent(playerName)}` : ''}${isHost ? '&isHost=true' : ''}`
+        + (playerName && !isHost && this.clientId ? `&clientId=${encodeURIComponent(this.clientId)}` : '');
 
     if (isHost && this.hostTicketProvider) return this._openWithHostTicket(wsUrl);
     return this._open(wsUrl);
@@ -106,7 +112,7 @@ class WebSocketClient {
 
   _open(wsUrl) {
     // The ticket is a credential until the handshake spends it: never logged.
-    console.log(`🔌 Connecting to WebSocket: ${wsUrl.replace(/([?&]hostTicket=)[^&]*/, '$1…')}`);
+    console.log(`🔌 Connecting to WebSocket: ${wsUrl.replace(/([?&](?:hostTicket|clientId)=)[^&]*/g, '$1…')}`);
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -198,7 +204,7 @@ class WebSocketClient {
 
   /** Reopen as whoever we were — including the host-ticket provider. */
   _reconnect() {
-    this.connect(this.gameId, this.playerName, this.isHost, { hostTicket: this.hostTicketProvider, viewerId: this.viewerId });
+    this.connect(this.gameId, this.playerName, this.isHost, { hostTicket: this.hostTicketProvider, viewerId: this.viewerId, clientId: this.clientId });
   }
 
   _startHeartbeat() {

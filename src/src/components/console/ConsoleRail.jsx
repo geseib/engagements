@@ -4,7 +4,7 @@ import { consoleRailFor, peopleSummary } from '../../config/consoleRail';
 import LW from '../../config/lateWords';
 import { canShowOnWall } from '../../utils/lateClient';
 import NeedsActions from '../needs/NeedsActions';
-import { NEEDS_ACTIONS, NEEDS_WORDS, agoText } from '../../config/needsYou';
+import { NEEDS_ACTIONS, NEEDS_WORDS } from '../../config/needsYou';
 
 /** The rail shows the first few; "Review them" opens the whole list. */
 const LATE_SHOWN = 3;
@@ -107,7 +107,8 @@ export default function ConsoleRail({
                 <span className="ny-asker-name">
                   <span className="ny-dot" aria-hidden="true" />
                   {a.name}
-                  {agoText(a.at) ? <span className="ny-asker-meta">{agoText(a.at)}</span> : null}
+                  {/* The item's own `ago`, from the same clock as the Needs-you line. */}
+                  {a.ago ? <span className="ny-asker-meta">{a.ago}</span> : null}
                 </span>
                 <span className="ny-asker-flag">{CW.wantsName}</span>
                 <NeedsActions item={a} onAct={onNeedsAct} busy={needsBusy} only={[NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW]} />
