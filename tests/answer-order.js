@@ -255,8 +255,13 @@ const alphabetical = (round) => NAMES.map((n) => textOf(n, round));
   say('\n4. the report breaks ties in the room\'s order');
   await check('create-report sorts equal scores by display position, not by name', () => {
     const src = fs.readFileSync(path.join(REPO, 'lambda-functions/game/create-report.js'), 'utf8');
-    assert.match(src, /shownPlace\.get\(a\.answerIndex\) - shownPlace\.get\(b\.answerIndex\)/);
+    // The last tiebreak now lives in response-order.js (shared with the
+    // phone); create-report hands it each row's display position.
+    assert.match(src, /compareResponses\(a, b, \(row\) => shownPlace\.get\(row\.answerIndex\)\)/);
     assert.match(src, /displayOrder\(questionAnswers, gameId, questionNumber\)/);
+    const { compareResponses } = require(path.join(REPO, 'lambda-functions/game/response-order.js'));
+    const tie = { totalScore: 3, firstPlace: 1 };
+    assert.ok(compareResponses({ ...tie, shownPlace: 0 }, { ...tie, shownPlace: 1 }) < 0, 'display order is the last tiebreak');
   });
 
   say(`\n${pass} passed, ${fail} failed`);

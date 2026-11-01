@@ -36,6 +36,7 @@ import { namesMode } from './config/surveyNames';
 import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 import { resolveJoinCode, joinPathFor } from './utils/joinCode';
 import { navigateTo } from './auth/navigate';
+import { rankResponses } from './config/responseOrder';
 
 const API_BASE = window.API_BASE;
 
@@ -186,9 +187,10 @@ export const rankHolding = (votes, answerIndex) =>
  * `RoundReport` expects:
  *
  *   - trivia answers `data.leaderboard` — already ranked, used as-is;
- *   - Call & Answer answers `data.voteTallies`, an OBJECT keyed by answer
- *     index, never an array — sorted by `totalScore` here, with the same
- *     tie rule `create-report.js` uses (equal scores share a rank);
+ *   - Call & Answer answers `data.voteTallies`, an OBJECT keyed by display
+ *     position, never an array — ranked here by `config/responseOrder.js`,
+ *     the exact order `create-report.js` uses (points, then first-place
+ *     votes, then display order; equal scores share a rank);
  *   - WAVELENGTH answers `data.answers` (fix round 2, item 1) — one row per
  *     submission (get-results.js's wavelength handler), genuinely unranked:
  *     there is no vote or score to sort by, so submission order is kept and
@@ -228,16 +230,20 @@ export function rankedResultsFrom(data) {
   }
   if (data && data.voteTallies && typeof data.voteTallies === 'object'
     && Object.keys(data.voteTallies).length > 0) {
-    const list = Object.values(data.voteTallies)
-      .map((t) => ({
-        answer: t.answerText, playerName: t.playerName, totalScore: Number(t.totalScore) || 0,
-      }))
-      .sort((a, b) => b.totalScore - a.totalScore);
-    let currentRank = 1;
-    return list.map((row, idx) => {
-      if (idx > 0 && row.totalScore !== list[idx - 1].totalScore) currentRank = idx + 1;
-      return { answer: row.answer, playerName: row.playerName, rank: currentRank };
-    });
+    // The keys ARE the display positions (get-results.js keys the tallies by
+    // the order the room voted in). Ranked by config/responseOrder.js, the
+    // report's own rule — points, then first-place votes, then that order —
+    // so a comment anchored here to "Response 2" is the report's second row.
+    const rows = Object.entries(data.voteTallies).map(([key, t]) => ({
+      answer: t.answerText,
+      playerName: t.playerName,
+      totalScore: Number(t.totalScore) || 0,
+      firstPlace: Number(t.firstPlace) || 0,
+      shownPlace: Number(key),
+    }));
+    return rankResponses(rows).map((row) => ({
+      answer: row.answer, playerName: row.playerName, rank: row.rank,
+    }));
   }
   if (data && Array.isArray(data.answers)) {
     return data.answers.map((row, i) => ({

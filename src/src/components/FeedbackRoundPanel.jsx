@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import RoundReport from './RoundReport';
-import { MAX_COMMENT, plainOf } from '../config/comments';
+import { MAX_COMMENT, anchorLabelShown, plainOf } from '../config/comments';
 import './FeedbackRoundPanel.css';
 
 /**
@@ -45,6 +45,9 @@ import './FeedbackRoundPanel.css';
  * than being re-derived on submit — which is what keeps a comment on a tied
  * response attached to the row that was actually tapped.
  */
+/** Which section a draft belongs to: its kind and, for a response, its row. */
+const draftKeyOf = (anchor) => `${anchor.anchorKind}#${anchor.anchorRef ?? ''}`;
+
 export default function FeedbackRoundPanel({
   /** The round being commented on, in `config/sessionHistory.js`'s shape. */
   round,
@@ -103,7 +106,23 @@ export default function FeedbackRoundPanel({
     ? savedDraft : null;
   /** The section being commented on, or null when the composer is closed. */
   const [anchor, setAnchor] = useState(restored ? restored.anchor : null);
-  const [text, setText] = useState(restored ? restored.text : '');
+  /*
+    ONE DRAFT PER SECTION, keyed by anchor. Tapping Comment on a different
+    section used to clear the box, silently throwing away whatever had been
+    typed; now each section keeps its own words and gets them back when the
+    participant returns to it. Only Cancel (an explicit "not this one") and a
+    successful send clear a section's draft.
+  */
+  const [drafts, setDrafts] = useState(
+    restored ? { [draftKeyOf(restored.anchor)]: restored.text } : {},
+  );
+  const text = anchor ? drafts[draftKeyOf(anchor)] || '' : '';
+  const setText = useCallback((value) => {
+    if (!anchor) return;
+    const k = draftKeyOf(anchor);
+    setDrafts((d) => ({ ...d, [k]: value }));
+  }, [anchor]);
+  const anyDraft = Object.values(drafts).some((t) => String(t || '').trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const boxRef = useRef(null);
@@ -118,9 +137,11 @@ export default function FeedbackRoundPanel({
   // Reported on every change to `text`, not only at send/cancel: a container
   // deciding "is it safe to close this out from under them right now" needs
   // the CURRENT answer, not the answer as of the last open/close.
+  // ANY section's draft counts: words kept for a section the participant has
+  // stepped away from are still words a container must not close over.
   useEffect(() => {
-    onDraftChange?.(Boolean(text.trim()));
-  }, [text, onDraftChange]);
+    onDraftChange?.(anyDraft);
+  }, [anyDraft, onDraftChange]);
 
   // The draft itself, for a container keeping one per round. Through a ref so
   // a caller passing a fresh function each render does not re-fire this.
@@ -132,17 +153,24 @@ export default function FeedbackRoundPanel({
     save(anchor && text.trim() ? { anchor, text } : null);
   }, [anchor, text]);
 
+  // Switching section keeps the draft of the one left behind (see `drafts`).
   const open = useCallback((next) => {
     setAnchor(next);
-    setText('');
     setError('');
   }, []);
 
+  // Cancel, or a comment that landed: this section's draft is done with.
   const close = useCallback(() => {
+    if (anchor) {
+      const k = draftKeyOf(anchor);
+      setDrafts((d) => {
+        const { [k]: _gone, ...rest } = d;
+        return rest;
+      });
+    }
     setAnchor(null);
-    setText('');
     setError('');
-  }, []);
+  }, [anchor]);
 
   const send = useCallback(async () => {
     const prose = text.trim();
@@ -202,10 +230,10 @@ export default function FeedbackRoundPanel({
           while they write about it. `RemoteSessionPanel` settled the same
           question the same way: a modal on a phone covers the dock.
         */
-        <div className="fbr__composer" role="group" aria-label={`Comment on ${anchor.anchorLabel}`}>
+        <div className="fbr__composer" role="group" aria-label={`Comment on ${anchorLabelShown(anchor)}`}>
           <div className="fbr__on">
             <span className="fbr__on-label">Commenting on</span>
-            <span className="fbr__on-anchor">{anchor.anchorLabel}</span>
+            <span className="fbr__on-anchor">{anchorLabelShown(anchor)}</span>
             {anchor.anchorExcerpt && (
               <span className="fbr__on-excerpt">{plainOf(anchor.anchorExcerpt)}</span>
             )}

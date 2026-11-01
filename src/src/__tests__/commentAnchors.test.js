@@ -23,6 +23,7 @@ import {
   isAnchorKind,
   normalizeAnchorRef,
   anchorLabelFor,
+  anchorLabelShown,
   excerptOf,
 } from '../config/comments';
 
@@ -87,7 +88,7 @@ describe('normalizeAnchorRef', () => {
 describe('anchorLabelFor', () => {
   test('names the summary and the results plainly', () => {
     expect(anchorLabelFor({ anchorKind: 'summary', anchorRef: '' }, { answers: [] }))
-      .toBe('AI summary');
+      .toBe('Workie’s read');
     expect(anchorLabelFor({ anchorKind: 'results', anchorRef: '' }, { answers: [] }))
       .toBe('Results');
   });
@@ -178,5 +179,37 @@ describe('the ceilings', () => {
   test('a comment is capped at 1000 characters and an excerpt at 140', () => {
     expect(MAX_COMMENT).toBe(1000);
     expect(MAX_EXCERPT).toBe(140);
+  });
+});
+
+/*
+  A STORED LABEL, AS PRINTED. Rows keep the label they were written with; the
+  mapping happens at render, so nothing stored has to be rewritten.
+*/
+describe('anchorLabelShown', () => {
+  test('an older "AI summary" label prints as Workie’s read', () => {
+    // rejects: "On AI summary" printed under the report's "Workie's read" panel.
+    expect(anchorLabelShown({ anchorKind: 'summary', anchorLabel: 'AI summary' })).toBe('Workie’s read');
+    expect(anchorLabelShown({ anchorLabel: 'AI summary' })).toBe('Workie’s read');
+    expect(anchorLabelShown({ anchorKind: 'summary', anchorLabel: 'Workie’s read' })).toBe('Workie’s read');
+  });
+
+  test('a named response prints by name, without the phone\'s position number', () => {
+    // rejects: "Response 2 — A" in a report that prints placements (1, 1, 3),
+    // where "2" names nothing the reader can find, and where an older
+    // comment's position may come from the phone's old tie order.
+    expect(anchorLabelShown({ anchorKind: 'response', anchorLabel: 'Response 2 — Sam Ortiz' }))
+      .toBe('Sam Ortiz’s response');
+  });
+
+  test('a response with no name (authors hidden) keeps its stored label', () => {
+    // rejects: an empty label, or an invented name, on a hidden-author round.
+    expect(anchorLabelShown({ anchorKind: 'response', anchorLabel: 'Response 3' })).toBe('Response 3');
+    expect(anchorLabelShown({ anchorKind: 'response' })).toBe('');
+  });
+
+  test('the results keep their label; nothing at all is empty', () => {
+    expect(anchorLabelShown({ anchorKind: 'results', anchorLabel: 'Results' })).toBe('Results');
+    expect(anchorLabelShown(null)).toBe('');
   });
 });

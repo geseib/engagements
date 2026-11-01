@@ -48,7 +48,7 @@ import ReportSavedDialog from './ReportSavedDialog';
 import { BRAND_MARK_PATH } from './BrandMark';
 import { saveReportPdf } from '../utils/saveReport';
 import { resolveRoundNoun, pluralRoundNoun, resolveInstruction } from '../config/instructions';
-import { plainOf } from '../config/comments';
+import { anchorLabelShown, plainOf } from '../config/comments';
 import { calculatePlayerRankings } from '../config/podium';
 import { namesMode } from '../config/surveyNames';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -516,11 +516,17 @@ function ReportAISummary({ aiSummary }) {
  */
 function ReportComments({ comments }) {
   if (!Array.isArray(comments) || comments.length === 0) return null;
-  const note = `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} on this round’s results`;
+  // "On this round", not "on this round's results": the list holds comments
+  // on Workie's read as well as on the results and single responses.
+  const note = `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} on this round`;
   const one = (comment, cIdx) => (
     <div key={comment.commentId || cIdx} className="report-comment report-keep">
-      {comment.anchorLabel && (
-        <div className="comment-on">On {comment.anchorLabel}</div>
+      {/* The STORED label, mapped at render (config/comments.js): an older
+          "AI summary" reads "Workie’s read", and "Response N — Name" reads
+          "Name’s response", since this report prints placements, not the
+          phone's positions. The excerpt below says which words. */}
+      {anchorLabelShown(comment) && (
+        <div className="comment-on">On {anchorLabelShown(comment)}</div>
       )}
       {/* THE EXCERPT — quoted material the comment is about. Absent on a
           comment stored before this field existed — `''`, never undefined,

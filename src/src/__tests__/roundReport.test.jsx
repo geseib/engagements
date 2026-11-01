@@ -117,11 +117,11 @@ describe('what Workie had', () => {
 });
 
 describe('the three sections', () => {
-  test('renders the question, the responses and the AI summary', () => {
+  test('renders the question, the responses and Workie’s read', () => {
     render(<RoundReport round={aRound()} />);
     expect(screen.getByText('Competitive response')).toBeInTheDocument();
     expect(screen.getByText('Responses')).toBeInTheDocument();
-    expect(screen.getByText('AI summary')).toBeInTheDocument();
+    expect(screen.getByText('Workie’s read')).toBeInTheDocument();
     expect(screen.getByText(/The room wants to defend price/)).toBeInTheDocument();
   });
 
@@ -204,7 +204,7 @@ describe('commenting on a section', () => {
 
   test('the three sections the owner named become commentable', () => {
     render(<RoundReport round={aRound()} onComment={jest.fn()} />);
-    expect(screen.getByRole('button', { name: 'Comment on the AI summary' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on Workie’s read' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comment on the results' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comment on response 1' })).toBeInTheDocument();
   });
@@ -222,9 +222,9 @@ describe('commenting on a section', () => {
   test('a summary anchor carries no position', () => {
     const onComment = jest.fn();
     render(<RoundReport round={aRound()} onComment={onComment} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(onComment).toHaveBeenCalledWith(expect.objectContaining({
-      anchorKind: 'summary', anchorRef: '', anchorLabel: 'AI summary',
+      anchorKind: 'summary', anchorRef: '', anchorLabel: 'Workie’s read',
     }));
   });
 
@@ -317,9 +317,10 @@ describe('showing the comments', () => {
     */
     render(<RoundReport round={aRound({ answers: [] })} comments={[COMMENTS[1]]} />);
     expect(screen.getByText(/This is the only one that touches/)).toBeInTheDocument();
-    expect(screen.getByText(/Response 2 — Sam Ortiz/)).toBeInTheDocument();
+    // Stored as "Response 2 — Sam Ortiz", printed by name (anchorLabelShown).
+    expect(screen.getByText(/Sam Ortiz’s response/)).toBeInTheDocument();
     // The excerpt is what makes the label mean something once the response
-    // itself is gone — without it "Response 2 — Sam Ortiz" names a response
+    // itself is gone — without it "Sam Ortiz’s response" names a response
     // the reader cannot see, on a round with no responses on the page at all.
     expect(screen.getByText(/Re-price the onboarding package/)).toBeInTheDocument();
   });
@@ -342,5 +343,28 @@ describe('a comment the host put on the wall', () => {
     expect(marks).toHaveLength(1);
     expect(marks[0].textContent).toBe('Shown to the room');
     expect(marks[0].closest('.rr-c__item').textContent).toContain(COMMENTS[1].text);
+  });
+});
+
+describe('the Comment buttons sit inside the scope that styles them', () => {
+  test('every Comment button is a descendant of the report root carrying rr-c-root', () => {
+    // rejects: buttons rendered outside any element declaring the --rr-c-*
+    // locals, which drew them as plain text instead of pills.
+    const { container } = render(<RoundReport round={aRound()} onComment={jest.fn()} />);
+    const buttons = [...container.querySelectorAll('.rr-c__add')];
+    expect(buttons.length).toBeGreaterThan(2);
+    for (const b of buttons) {
+      expect(b.closest('.rr-c-root')).toBeTruthy();
+      // And never inside the comment box, which is where the locals used to live.
+      expect(b.closest('.rr-c')).toBeNull();
+    }
+  });
+
+  test('each response row holds exactly one Comment button, as its own child', () => {
+    // rejects: the button rendered outside its row's <li>.
+    const { container } = render(<RoundReport round={aRound()} onComment={jest.fn()} />);
+    for (const li of container.querySelectorAll('.past-round__answers > li')) {
+      expect(li.querySelectorAll(':scope > .rr-c__add')).toHaveLength(1);
+    }
   });
 });

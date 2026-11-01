@@ -7,7 +7,9 @@ import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
-import { anchorLabelFor, excerptOf, plainOf } from '../config/comments';
+import {
+  anchorLabelFor, anchorLabelShown, excerptOf, plainOf, SUMMARY_LABEL,
+} from '../config/comments';
 import ReportFollowUps from './ReportFollowUps';
 import ReportLate from './ReportLate';
 import './RoundReport.css';
@@ -92,8 +94,8 @@ function CommentList({ comments, showAnchor = false }) {
               position up again, so a comment on a response that has since
               expired out of the report still reads correctly.
             */}
-            {showAnchor && comment.anchorLabel && (
-              <span className="rr-c__anchor">{comment.anchorLabel}</span>
+            {showAnchor && anchorLabelShown(comment) && (
+              <span className="rr-c__anchor">{anchorLabelShown(comment)}</span>
             )}
             {/*
               THE EXCERPT — quoted material the comment is ABOUT, never the
@@ -242,7 +244,10 @@ export default function RoundReport({
   });
 
   return (
-    <div className="past-round__body">
+    /* `rr-c-root` carries the comment block's colour and type locals
+       (RoundReport.css), so a Comment button in a section head or a response
+       row — outside any `.rr-c` — inherits them too. */
+    <div className="past-round__body rr-c-root">
       {/* THE QUESTION. Shown, not just the results — a results screen with no
           question on it is unreadable a quarter of an hour later. */}
       <section className="past-round__question">
@@ -404,10 +409,10 @@ export default function RoundReport({
       */}
       <section className="past-round__summary">
         <div className="rr-c__section-head">
-          <h4>AI summary</h4>
+          <h4>{SUMMARY_LABEL}</h4>
           {onComment && (
             <CommentButton
-              label="the AI summary"
+              label={SUMMARY_LABEL}
               onClick={() => onComment(anchorFor(
                 'summary', '',
                 summary.markdownResponse || summary.summaryText || '',
