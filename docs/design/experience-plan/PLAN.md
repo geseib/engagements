@@ -137,6 +137,39 @@ and its own sections inside the Session menu.
 
 ![The same frame for Trivia](p-2-frame-two-screen-trivia.png)
 
+### 3.2a One frame, every type (owner, 1 Nov: "only adding or subtracting items that apply")
+
+Every live session, whatever its format, is the same frame. A format may only add or
+subtract items in the slots below; it never moves a slot or restyles it.
+
+| Slot | Call & Answer | Trivia | Poll | Wavelength | Survey | Build Room | Event item |
+|---|---|---|---|---|---|---|---|
+| Steps strip | Answer · Vote · Results · What we heard | Question · Reveal · Scores | Ask · Results | Write · Reveal | — (no live steps; progress instead) | Opening · Building · the ask's steps | the item's own strip, with **Agenda** as the first crumb |
+| Your part now | the one main button | same | same | same | Close survey / Remind | Open the ask / Send to Claude | same as its type, plus "Back to agenda" when the item ends |
+| Needs-you line | name requests, late items, failed read | name requests, late | name requests | name requests | name requests, closing soon | Claude's asks, room ideas, name requests | its type's, plus "the event moved on" |
+| Pulse tiles | Answered · Time · Since opened | Answered · Time · Correct so far | Answered · Time · Since opened | Wrote · Time · Since opened | Completed · Days left · Since opened | On this ask · Claude · Since opened | its type's |
+| Content area | responses | the question and the private answer | live board | words | progress per question | the ask and Claude's status | its type's |
+| People column | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (people carry across items) |
+| Session menu | Screens · Phone remote · Rounds · Joining · End session | same | same | same | Screens · Joining · Close · End | same + Build settings | same + Agenda |
+
+### 3.2b One person row, everywhere
+
+A person looks the same in every list (People column, the full list, the phone remote, the
+lobby, Setup): **status dot** (here / away / left) · **name** · **what they are doing now**
+(writing, answered, voted, done) · **the Needs-you flag with its buttons, in the row itself** ·
+a **⋯ menu** (rename, move to a new device, lock name, remove). Formats add one fact at the
+end of the row and never anything else:
+
+| Format | The one added fact |
+|---|---|
+| Call & Answer | score |
+| Trivia | score, and ✓/✗ after Reveal |
+| Poll | — |
+| Wavelength | — (nobody scores) |
+| Survey | progress, e.g. 6 of 9 |
+| Build Room | ideas given |
+| Event item | the item's fact, plus "joined at item N" for latecomers |
+
 **The Session menu** replaces the right-hand panel and its six names. It opens from one
 labelled button, top right, as a sheet over the content area (never over Your part now). It
 holds set-once settings: Screens, Your phone as a remote, The rounds, Joining, then End
