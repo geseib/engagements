@@ -144,13 +144,22 @@ subtract items in the slots below; it never moves a slot or restyles it.
 
 | Slot | Call & Answer | Trivia | Poll | Wavelength | Survey | Build Room | Event item |
 |---|---|---|---|---|---|---|---|
-| Steps strip | Answer · Vote · Results · What we heard | Question · Reveal · Scores | Ask · Results | Write · Reveal | — (no live steps; progress instead) | Opening · Building · the ask's steps | the item's own strip, with **Agenda** as the first crumb |
+| Steps strip | Answer · Vote · Results · What we heard | Question · Reveal · Scores | Ask · Results | Write · Reveal | no live steps: the schedule instead (Opened · Open · Closes) | Opening · Building · then the ask's own: Vote · Shape · Sent | the item's own strip, with **‹ Agenda** as the first crumb |
 | Your part now | the one main button | same | same | same | Close survey / Remind | Open the ask / Send to Claude | same as its type, plus "Back to agenda" when the item ends |
 | Needs-you line | name requests, late items, failed read | name requests, late | name requests | name requests | name requests, closing soon | Claude's asks, room ideas, name requests | its type's, plus "the event moved on" |
 | Pulse tiles | Answered · Time · Since opened | Answered · Time · Correct so far | Answered · Time · Since opened | Wrote · Time · Since opened | Completed · Days left · Since opened | On this ask · Claude · Since opened | its type's |
 | Content area | responses | the question and the private answer | live board | words | progress per question | the ask and Claude's status | its type's |
 | People column | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (people carry across items) |
-| Session menu | Screens · Phone remote · Rounds · Joining · End session | same | same | same | Screens · Joining · Close · End | same + Build settings | same + Agenda |
+| Session menu | Screens · Phone remote · Rounds · Joining · End session | same | same | same | Screens · Joining · Close survey · End session (no Phone remote, no Rounds) | same + Build settings | same + Agenda |
+
+![One frame, seven formats, at one scale](p-6-every-type.png)
+
+Drawn in frame 6: the top bar, Your part now, the Needs-you line, the pulse tiles, People and
+the Session menu button land in the same place in all seven; only the dashed slots change. The
+Needs-you line is calm in five of them (one muted line, no buttons, the same height as the amber
+state) and amber in two (Claude's new question in a Build Room; a name request carried across an
+agenda). The top bar is literally identical in every format: an event adds **Agenda** as the
+steps strip's first crumb and as a Session menu item, never as a top-bar button.
 
 ### 3.2b One person row, everywhere
 
@@ -168,7 +177,20 @@ end of the row and never anything else:
 | Wavelength | — (nobody scores) |
 | Survey | progress, e.g. 6 of 9 |
 | Build Room | ideas given |
-| Event item | the item's fact, plus "joined at item N" for latecomers |
+| Event item | the item's fact (a latecomer shows "from item N" in the doing-now slot, the way anyone new shows "joined 2 min ago"; it is not a second fact) |
+
+The slots have fixed widths in this order, so the columns line up in every list: status dot ·
+name (the only flexible slot; ellipsis, full name on hover) · doing now · the added fact · ⋯.
+When a format has no fact (Poll, Wavelength, the lobby before round 1) the slot stays empty
+rather than collapsing. Trivia's ✓/✗ sits in front of the score in the same slot. The five
+slots fit at 15px in a **340px** People column (frames 1 and 2 drew it at 268px, which is too
+narrow for "joined 2 min ago" beside a score). On the phone remote the row is the same
+component, full width and 44px tall to tap. A name request turns the row amber and opens one
+line inside it with *Let them* / *Not now*, the same pair the Needs-you line carries; either
+clears both. ⋯ holds Rename, Move to a new device, Lock name, then Remove from session in danger
+text, confirmed.
+
+![One person row in every format, the phone remote and the lobby](p-7-person-row.png)
 
 **The Session menu** replaces the right-hand panel and its six names. It opens from one
 labelled button, top right, as a sheet over the content area (never over Your part now). It
@@ -214,7 +236,7 @@ Workie warning ever reaches either.
 | Say this | Not these (all in use today) | Meaning |
 |---|---|---|
 | **Main menu** (House icon) | Back to Menu, Back to menu, ← All sessions, ← Main screen, Back to the console | Leave this screen; the session keeps running. |
-| **Agenda** | Back to the agenda | In an event, up one level. Sits beside Main menu, never instead of it. |
+| **Agenda** | Back to the agenda | In an event, up one level. The first crumb of the steps strip (and an item in the Session menu); Main menu stays top left, and the top bar does not change. |
 | **End session** | — (exists, but three levels deep) | Stop it for everyone. Session menu foot, confirmed. |
 | **Session menu** | SESSION, Session setup, Session panel, Session tools, Settings, All settings | The one place for set-once settings. |
 | **Needs you** | (nothing: today there is no name) | The list of things waiting on the host, behind the bell. |

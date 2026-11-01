@@ -1,6 +1,8 @@
 // Renders each frame of index.html to p-*.png beside it, and checks every frame for
 // overflow (a descendant that spills past its frame, or text cut without an ellipsis).
 //   node docs/design/experience-plan/shoot.js
+// Also reports any text below the 12px floor. The viewport is 2420 wide so frame 6's
+// three-across board (2348px) is not clipped by its .scroll wrapper.
 const path = require('path');
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 
@@ -10,11 +12,13 @@ const FRAMES = [
   ['f-p3', 'p-3-one-screen-and-remote.png'],
   ['f-p4', 'p-4-takeover-participant.png'],
   ['f-p5', 'p-5-primitives-before-after.png'],
+  ['f-p6', 'p-6-every-type.png'],
+  ['f-p7', 'p-7-person-row.png'],
 ];
 
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const page = await browser.newPage({ viewport: { width: 1800, height: 1100 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: 2420, height: 1100 }, deviceScaleFactor: 2 });
   await page.goto(`file://${path.join(__dirname, 'index.html')}`);
   await page.evaluate(() => document.fonts.ready);
   let problems = 0;
@@ -22,6 +26,11 @@ const FRAMES = [
     const report = await page.evaluate((rootId) => {
       const root = document.getElementById(rootId);
       const out = [];
+      // Text below the 12px floor, anywhere in the frame (annotations included).
+      for (const el of root.querySelectorAll('*')) {
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (own && parseFloat(getComputedStyle(el).fontSize) < 12) out.push(`below 12px: <${el.tagName.toLowerCase()} class="${el.className.baseVal ?? el.className}"> "${el.textContent.trim().slice(0, 30)}" at ${getComputedStyle(el).fontSize}`);
+      }
       // Each .frame inside (or the root itself) bounds its descendants.
       const frames = root.classList.contains('frame') ? [root] : [...root.querySelectorAll('.frame')];
       for (const fr of frames) {
