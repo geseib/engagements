@@ -537,6 +537,10 @@ phase, not per step.
 
 ## 7. Decisions for the owner
 
+**Decided 1 Nov 2026: the owner took every recommendation below** ("go with the
+recommendations"), including the People column at 340px (§3.2b) and "on your phone" only
+when the Remote is connected (§3.3). Phase 0 and Phase 1 start on dev.
+
 Each has a recommendation. The ones folded in from session-start and phone-comments are
 marked.
 
