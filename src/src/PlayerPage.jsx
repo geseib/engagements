@@ -12,6 +12,9 @@ import {
   participationUrl, participationFrom, nextParticipation, fetchOwnAnswer,
 } from './utils/playerParticipation';
 import JoinNameCollision, { JoinNameCollisionActions } from './components/JoinNameCollision';
+import NameMoved, { NameMovedActions } from './components/NameMoved';
+import useHandoverFlow from './hooks/useHandoverFlow';
+import { formatAgo } from './config/handoverWait';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
 import {
@@ -526,9 +529,22 @@ function PlayerPage({ event = null } = {}) {
   // A join the server refused because the name is already answering in this
   // session: { kind: 'name-taken' | 'name-unverified', playerName, message }.
   const [joinCollision, setJoinCollision] = useState(null);
-  /* In flight, so the ask and the take-over cannot be double-tapped into two
-     requests — the second of which would spend a grant the first already had. */
-  const [handoverBusy, setHandoverBusy] = useState(false);
+  /* THIS DEVICE'S NAME MOVED TO ANOTHER ONE (experience plan §4.4, step 1d):
+     { playerName } | null. Set by the server's `nameMoved` frame, a refused
+     answer or vote, or a rejoin refused with `nameMoved`. The page has
+     stopped; the only way on is to join again under another name. */
+  const [nameMoved, setNameMoved] = useState(null);
+  const showNameMovedRef = useRef(() => {});
+  /* MOVING A NAME TO THIS DEVICE (experience plan §4.4): the checked ask, the
+     quiet retry of the join while the host decides, Ask again, the ten-minute
+     lapse, Not now. The arrows are lazy because the functions they call are
+     declared further down this component. */
+  const handover = useHandoverFlow({
+    ask: () => askHostForName(),
+    claim: () => claimNameIfGranted(),
+    onIn: (data) => enterGrantedName(data),
+    onStop: (failure) => applyJoinFailure(failure, joinCollision ? joinCollision.playerName : ''),
+  });
   /*
     WHY THE JOIN REFUSAL IS STATE AND NOT AN `alert()`.
 
@@ -773,16 +789,22 @@ function PlayerPage({ event = null } = {}) {
       return;
     }
 
+    if (failure.kind === 'name-taken' && failure.nameMoved) {
+      // THIS browser held the name until the host let it move. Not "that name
+      // is taken, ask the host": it is the device the name just left.
+      showNameMoved(failure.playerName || name);
+      return;
+    }
+
     if (failure.kind === 'name-taken' || failure.kind === 'name-unverified') {
+      // A FRESH refusal starts the handover flow over. A wait carried across
+      // a new join attempt would show "Waiting for the host" to somebody who
+      // has asked nobody anything about this name.
+      handover.reset();
       setJoinCollision({
         kind: failure.kind,
         playerName: failure.playerName || name,
         message: failure.message,
-        // A FRESH refusal starts the handover flow over. Carrying a stale
-        // `asked` across a new join attempt would offer "Take over the name"
-        // to somebody who has not asked anybody anything — the two-step is the
-        // guard, so it must not survive the screen being re-entered.
-        handoverStage: 'idle'
       });
       return;
     }
@@ -951,7 +973,18 @@ function PlayerPage({ event = null } = {}) {
     // ASK#→VOTE#→RESULTS# transition that fired while offline is caught here.
     webSocketClient.onReconnected(() => {
       console.log('🔁 PLAYER: WS reconnected — reconciling state');
+      // DO I STILL HOLD MY NAME? (step 1d) A phone asleep when the host let
+      // its name move missed the push; the server answers this with the same
+      // `nameMoved` frame, and says nothing at all to the device that holds it.
+      webSocketClient.sendCleanMessage('NAME_CHECK', { clientId: getClientId(gameId) });
       checkGameState();
+    });
+
+    // THE NAME MOVED TO ANOTHER DEVICE (experience plan §4.4, steps 1d/1f):
+    // pushed when the new device joins, or the answer to a refused answer or
+    // a NAME_CHECK. The page stops.
+    webSocketClient.onMessage('nameMoved', (data) => {
+      showNameMovedRef.current((data && data.playerName) || playerName);
     });
 
     // Initial state handler for reconnection/late joining
@@ -1055,6 +1088,9 @@ function PlayerPage({ event = null } = {}) {
     // its round moved on is kept, apart from the vote, and the player hears so
     // plainly rather than finding out from the results.
     webSocketClient.onMessage('answerReceived', (data) => {
+      // Refused because this device no longer holds the name: the `nameMoved`
+      // frame that follows stops the page, so no late notice here.
+      if (data && data.code === 'NAME_MOVED') return;
       if (!data || !data.late) return;
       setLateNotice(/^VOTE#/.test(String(gameStateRef.current || ''))
         ? 'Voting has started. Your answer is kept with this round, but it is not in the vote.'
@@ -1203,6 +1239,7 @@ function PlayerPage({ event = null } = {}) {
       webSocketClient.offMessage('commentPosted');
       webSocketClient.offMessage('followUpChanged');
       webSocketClient.offMessage('answerReceived');
+      webSocketClient.offMessage('nameMoved');
       webSocketClient.offMessage('aiSummaryReady');
       webSocketClient.offMessage('aiSummaryError');
       webSocketClient.offMessage('hostMessage');
@@ -1303,6 +1340,7 @@ function PlayerPage({ event = null } = {}) {
         const sent = webSocketClient.sendCleanMessage(pending.messageType, {
           answer: pending.answer,
           answerType: pending.answerType,
+          clientId: getClientId(pending.gameId),
         });
         if (sent && verdict === 'late') {
           // Its round has moved on: the server keeps it, labelled late, and
@@ -2569,7 +2607,9 @@ function PlayerPage({ event = null } = {}) {
       // Send answer via WebSocket. `false` means NOTHING LEFT THIS PHONE — the
       // socket was down. That used to be ignored and the page said
       // "Submitted" over an answer the server never saw (QA 2026-09-29 #1).
-      const sent = webSocketClient.sendCleanMessage(messageType, { answer, answerType });
+      // `clientId` so the server can tell which device sent it (step 1d): a
+      // device the host has moved the name away from is refused, not counted.
+      const sent = webSocketClient.sendCleanMessage(messageType, { answer, answerType, clientId: getClientId(gameId) });
 
       if (!sent) {
         // Keep it, say so, and let the flush effect send it on reconnect. The
@@ -2713,12 +2753,21 @@ function PlayerPage({ event = null } = {}) {
         body: JSON.stringify({
           playerName: playerName,
           questionNumber: currentQuestionNumber,
-          votes: backendVotes
+          votes: backendVotes,
+          // Which device is voting (step 1d): one the name has moved away
+          // from is refused with NAME_MOVED rather than overwriting the
+          // ballot of the device that holds it now.
+          clientId: getClientId(gameId)
         })
       });
       
       if (!voteRes.ok) {
         const errorData = await voteRes.json();
+
+        if (errorData && errorData.code === 'NAME_MOVED') {
+          showNameMoved(errorData.playerName || playerName);
+          return;
+        }
         
         // Check if voting has closed
         if (errorData.error === 'Invalid game state for voting' && errorData.currentState && errorData.currentState.startsWith('RESULTS#')) {
@@ -2818,77 +2867,97 @@ function PlayerPage({ event = null } = {}) {
 
   /** "No, I'm a different Chris." Back to the form with the name cleared. */
   const handleCollisionRename = () => {
+    handover.reset();
     setJoinCollision(null);
     setNameInput('');
     setPlayerName('');
   };
 
   /**
-   * "Ask the host to let me take this name."
+   * "That's me: use my name on this device." — the ASK (useHandoverFlow).
    *
-   * The escape hatch from NAME_TAKEN, and it deliberately does not take
-   * anything: it records the ask and pings the host's Players tab. The host
-   * decides, because the host is the only party who can tell "Chris on a new
-   * laptop" from "a second Chris" — owner: *"they need the choice though
-   * because they may have just mistakenly picked the same name."*
+   * It records the ask and pings the host; it takes nothing. The host decides,
+   * because the host is the only party who can tell "Chris on a new laptop"
+   * from "a second Chris" — owner: *"they need the choice though because they
+   * may have just mistakenly picked the same name."*
+   *
+   * CHECKED. It used to advance to "Asked the host" whether or not the request
+   * arrived (audit C §3.2); now `ok` is the server's answer, and a failure
+   * shows as a failure with Try again. The reply's timings
+   * (`askAgainAfterSeconds`, `lapseSeconds`) are the server's.
    *
    * The route carries no authorizer, and must not: the caller is by definition
    * somebody who is NOT in the session.
    */
-  const handleRequestHandover = async () => {
-    if (!joinCollision) return;
+  const askHostForName = async () => {
+    if (!joinCollision) return { ok: false };
     const name = joinCollision.playerName;
-    setHandoverBusy(true);
     try {
-      await fetch(`${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover-request`, {
+      const res = await fetch(`${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: getClientId(gameId), accessCode: accessCodeInput.trim() || null }),
       });
+      let body = {};
+      try { body = (await res.json()) || {}; } catch (_) { body = {}; }
+      if (!res.ok) {
+        return { ok: false, message: body.message || 'The host could not be asked just now.' };
+      }
+      return { ...body, ok: true };
     } catch (error) {
-      // A failed ask is not a dead end — the host can unlock without being
-      // asked through the app at all, which is the commoner case in a real
-      // room. So advance to `asked` either way and let the person try.
       console.error('PLAYER: handover request failed:', error);
+      return { ok: false, message: 'Your request did not reach the host.' };
     }
-    setHandoverBusy(false);
-    setJoinCollision((current) => (current ? { ...current, handoverStage: 'asked' } : current));
   };
 
   /**
-   * "The host said go ahead."
-   *
-   * A retry of the join carrying `claimExisting`. NOT a takeover: the server
-   * refuses it outright unless the host has opened a one-shot grant on this
-   * name, and spends the grant in a conditional write so two people racing one
-   * grant cannot both get in (join-game.js's `handover` branch).
-   *
-   * A refusal is not an error screen — it is "not yet", which is the only
-   * reading a person on a blocked screen can act on.
+   * The quiet retry: a join carrying `claimExisting`. NOT a takeover — the
+   * server refuses it unless the host has opened a grant for this browser,
+   * and spends the grant in a conditional write so two people racing one
+   * grant cannot both get in (join-game.js's `handover` branch). A refusal
+   * here is "not yet", and the flow simply tries again shortly.
    */
-  const handleTakeOverName = async () => {
-    if (!joinCollision) return;
-    const name = joinCollision.playerName;
-    setHandoverBusy(true);
-    const result = await performJoin(gameId, name, {
+  const claimNameIfGranted = () => {
+    if (!joinCollision) return Promise.resolve({ ok: false, failure: { kind: 'network' } });
+    return performJoin(gameId, joinCollision.playerName, {
       accessCode: accessCodeInput.trim() || null,
       claimExisting: true,
     });
-    setHandoverBusy(false);
+  };
 
-    if (result.ok) {
-      enterSession(gameId, name, result.data);
-      return;
-    }
+  /** The host said yes and the retry spent the grant: into the session. */
+  const enterGrantedName = (data) => {
+    if (!joinCollision) return;
+    enterSession(gameId, joinCollision.playerName, data || {});
+  };
 
-    if (result.failure.kind === 'name-taken' || result.failure.kind === 'name-unverified') {
-      // 'declined' when the host answered Not now to THIS device's ask;
-      // 'refused' is the quieter "not unlocked yet".
-      const stage = result.failure.handoverRefused ? 'declined' : 'refused';
-      setJoinCollision((current) => (current ? { ...current, handoverStage: stage } : current));
-      return;
-    }
-    applyJoinFailure(result.failure, name);
+  /**
+   * THIS DEVICE'S NAME MOVED (step 1d). Leave the session and stop: the
+   * socket closes (the connection effect's cleanup, on `joined` going false)
+   * and is not reopened, so the two devices cannot race. A held answer is
+   * dropped (it would be refused) and the saved name is forgotten, so a
+   * reload does not offer to rejoin as a name this phone no longer holds.
+   */
+  const showNameMoved = (name) => {
+    const gone = String(name || playerName || '').trim();
+    if (gameId && gone) clearPendingAnswer(gameId, gone);
+    setPendingAnswer(null);
+    try { if (gameId) localStorage.removeItem(`playerName_${gameId}`); } catch (_) { /* storage off */ }
+    webSocketClient.disconnect();
+    setJoined(false);
+    setRejoinPrompt(null);
+    setJoinCollision(null);
+    setNameMoved({ playerName: gone });
+  };
+
+  showNameMovedRef.current = showNameMoved;
+
+  /** "Join again with a different name": the join form, code kept, name empty. */
+  const handleJoinAgainAfterMove = () => {
+    setNameMoved(null);
+    setPlayerName('');
+    setNameInput('');
+    setJoinError(null);
   };
 
   const handleRejoinDecline = () => {
@@ -3086,6 +3155,23 @@ function PlayerPage({ event = null } = {}) {
     );
   }
 
+  // THIS DEVICE'S NAME MOVED TO ANOTHER ONE (experience plan §4.4, step 1d).
+  // Ahead of everything: the page has stopped, and nothing else it could show
+  // is true for this device any more.
+  if (nameMoved) {
+    return (
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx="Join a session"
+        help="player-name-moved"
+        dock={<NameMovedActions onJoinAgain={handleJoinAgainAfterMove} />}
+      >
+        <NameMoved playerName={nameMoved.playerName} />
+      </PlayerShell>
+    );
+  }
+
   // The name is already answering in this session. Shown ahead of everything
   // else on the join side: it is the only screen that tells the second Chris
   // they are the second Chris, and it used to not exist — the server merged
@@ -3109,12 +3195,11 @@ function PlayerPage({ event = null } = {}) {
             /* ONE STAGE, READ BY BOTH HALVES. The note in the stage and the
                label in the dock describe the same step, so they come from the
                same value rather than from two conditions that can drift. */
-            handoverStage={joinCollision.handoverStage || 'idle'}
-            busy={handoverBusy}
+            stage={handover.stage}
+            canAskAgain={handover.canAskAgain}
             onRejoinAnyway={handleCollisionRejoin}
             onUseAnotherName={handleCollisionRename}
-            onRequestHandover={handleRequestHandover}
-            onTakeOver={handleTakeOverName}
+            onRequestHandover={handover.requestHandover}
           />
         )}
       >
@@ -3122,7 +3207,9 @@ function PlayerPage({ event = null } = {}) {
           kind={joinCollision.kind}
           playerName={joinCollision.playerName}
           message={joinCollision.message}
-          handoverStage={joinCollision.handoverStage || 'idle'}
+          stage={handover.stage}
+          agoText={formatAgo(handover.agoMs)}
+          error={handover.error}
         />
       </PlayerShell>
     );
@@ -3248,8 +3335,8 @@ function PlayerPage({ event = null } = {}) {
               Join Game
             </button>
             <p className="plr-note plr-note--after">
-              No account, nothing to install. Keep this page open — the same code and name
-              will bring you back.
+              No account, nothing to install. On this phone, the same code and name bring
+              you back. On another device? You can move your name here.
             </p>
           </>
         )}
@@ -3341,12 +3428,12 @@ function PlayerPage({ event = null } = {}) {
                    words (config/surveyNames.js — never retyped); with no value
                    in the brief, only what is true of every survey. */
                 <>
-                  Used to get you back in if you lose this page.
+                  Used to get you back in on this phone if you lose this page.
                   {surveyNamePromise(briefHere.names)}
                 </>
               ) : (
                 <>
-                  Used for the scoreboard and to get you back in if you lose this page. On rounds
+                  Used for the scoreboard and to get you back in on this phone if you lose this page. On rounds
                   where the room votes, your name is <b>not</b> shown next to your answer until
                   voting closes.
                 </>
@@ -4750,8 +4837,9 @@ function PlayerPage({ event = null } = {}) {
             </p>
           ) : (
             <p className="plr-quote">
-              Go back to the join screen, enter <b>{gameId}</b> and the same name. Your
-              answers and your score come back with you.
+              On this phone, go back to the join screen and enter <b>{gameId}</b> and the
+              same name: your answers and your score come back with you. On another device?
+              You can move your name there; the host lets you in.
             </p>
           )}
         </div>

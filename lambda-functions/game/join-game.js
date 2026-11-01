@@ -6,6 +6,7 @@ const { openSessionOr } = require('./session-gate');
 const { nowSeconds, handoverOpenFor } = require('./handover');
 const { attendeeForToken, seatName, MAX_SEATS } = require('./event-attendee');
 const { recordParticipant } = require('./platform-metrics');
+const { nameMovedFrame, nameMovedMessage, NAME_MOVED } = require('./name-holder');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -98,12 +99,14 @@ function classifyRejoin({ storedClientId, clientId, claimExisting, handoverOpen 
  * reported with. It is deliberately NOT a roster: one submitted name in, one
  * yes/no out, no listing and no endpoint that answers without a join attempt.
  */
-function nameConflictResponse(code, playerName, { handoverRefused = false } = {}) {
-  const message = handoverRefused
+function nameConflictResponse(code, playerName, { handoverRefused = false, nameMoved = false } = {}) {
+  const message = nameMoved
+    ? nameMovedMessage(playerName)
+    : handoverRefused
     ? `The host said not now. Add a last initial or pick another name so the host can tell you apart.`
     : code === 'NAME_UNVERIFIED'
     ? `Someone in this session is already answering as "${playerName}". If that was you on another device, rejoin to pick your answers and score back up. If not, choose a name the host can tell apart.`
-    : `Someone in this session is already answering as "${playerName}". Add a last initial or pick another name so the host can tell you apart.`;
+    : `Someone in this session is already answering as "${playerName}". If that is you on another device, you can move your name here. If not, add a last initial so the host can tell you apart.`;
 
   return {
     statusCode: 409,
@@ -114,7 +117,12 @@ function nameConflictResponse(code, playerName, { handoverRefused = false } = {}
       message,
       // Only ever true for the device the host refused (join-game's collision
       // branch compares clientIds); anyone else gets the plain refusal.
-      ...(handoverRefused ? { handoverRefused: true } : {})
+      ...(handoverRefused ? { handoverRefused: true } : {}),
+      // Only ever true for the browser that HELD this name until the host let
+      // it move (`MovedFromClientId`, written by the handover branch). Its
+      // page says "<name> is now on another device" instead of offering to
+      // ask for the name it has just handed on.
+      ...(nameMoved ? { nameMoved: true, reason: NAME_MOVED } : {})
     }),
     headers: { 'Access-Control-Allow-Origin': '*' }
   };
@@ -304,6 +312,9 @@ exports.handler = async (event) => {
           {
             handoverRefused: Boolean(
               clientId && existingPlayer.Item.HandoverRefusedFor === clientId
+            ),
+            nameMoved: Boolean(
+              clientId && existingPlayer.Item.MovedFromClientId === clientId
             )
           }
         );
@@ -369,15 +380,26 @@ exports.handler = async (event) => {
         // left every other test in that file green.
         //
         // `RemovedAt` goes too: taking over a name is somebody arriving.
+        //
+        // `MovedFromClientId` records the browser the name moved AWAY from, so
+        // that browser's next join is told "is now on another device" rather
+        // than "that name is taken" (nameConflictResponse). Read from the Get,
+        // so it is advisory; it is a clientId and therefore never published —
+        // get-players.js is an allow-list.
+        const previousClientId = existingPlayer.Item.ClientId || null;
         try {
           await db.send(new UpdateCommand({
             TableName: process.env.TABLE_NAME,
             Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
-            UpdateExpression: 'SET ClientId = :cid REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, HandoverRefusedFor, HandoverRefusedAt, RemovedAt',
+            UpdateExpression: `SET ClientId = :cid${previousClientId ? ', MovedFromClientId = :prev' : ''} REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, HandoverRefusedFor, HandoverRefusedAt, RemovedAt`,
             ConditionExpression: 'attribute_exists(HandoverExpiresAt) AND HandoverExpiresAt > :now AND (attribute_not_exists(HandoverForClientId) OR HandoverForClientId = :cid)',
-            ExpressionAttributeValues: { ':cid': clientId, ':now': nowSeconds() }
+            ExpressionAttributeValues: {
+              ':cid': clientId,
+              ':now': nowSeconds(),
+              ...(previousClientId ? { ':prev': previousClientId } : {})
+            }
           }));
-          console.log(`🤝 Handover spent: ${playerName} in game ${gameId} is now client ${clientId}`);
+          console.log(`🤝 Handover spent: ${playerName} in game ${gameId} moved to a new device`);
         } catch (error) {
           if (error.name === 'ConditionalCheckFailedException') {
             // Lapsed between the read and the write, or a second claimant got
@@ -388,6 +410,9 @@ exports.handler = async (event) => {
           }
           throw error;
         }
+
+        // TELL THE OLD DEVICE NOW (experience plan step 1f). Never throws.
+        await tellOldDeviceNameMoved(gameId, playerName);
       }
 
       // A JOIN UNDOES A REMOVAL, and this is a decision rather than a
@@ -573,6 +598,56 @@ async function notifyHostOfPlayerJoin(gameId, playerData) {
   } catch (error) {
     // Don't throw - this shouldn't block player joining
     console.error(`❌ Error notifying host of player join in game ${gameId}:`, error.message);
+  }
+}
+
+/**
+ * "SAM IS NOW ON ANOTHER DEVICE", PUSHED THE MOMENT THE NAME MOVES (step 1f).
+ *
+ * WHY EVERY PLAYER SOCKET UNDER THIS NAME IS THE OLD DEVICE'S. Connection rows
+ * carry `PlayerName` and no client id (connect.js stores what the handshake's
+ * query string says, and a client id must never ride in a URL). That would be
+ * too weak to aim at a device in general — but at THIS instant it is exact:
+ * the new device has no socket yet. It opens one only after this join
+ * answers, and this runs before the join answers. So every PLAYER row under
+ * this name, here, now, belongs to the browser the name just left.
+ *
+ * Each is sent `nameMoved` and its row is deleted, so the room's broadcasts
+ * stop reaching a page that has stopped. The page closes its socket and does
+ * not reconnect (PlayerPage's `nameMoved` handler). A socket that is already
+ * dead answers 410, which sendToConnection reaps as it always has.
+ *
+ * Viewer rows (the room's window, `Viewer: 'present'`) carry no name and are
+ * never touched. Best effort: a failure here leaves the old device to learn on
+ * its next answer, vote or reconnect (message.js / submit-vote.js), which is
+ * what step 1d guarantees on its own.
+ */
+async function tellOldDeviceNameMoved(gameId, playerName) {
+  try {
+    const result = await db.send(new QueryCommand({
+      TableName: process.env.TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      FilterExpression: 'ConnectionType = :type',
+      ExpressionAttributeValues: {
+        ':pk': `GAME#${gameId}`,
+        ':sk': 'CONNECTION#',
+        ':type': 'PLAYER'
+      }
+    }));
+    const oldSockets = (result.Items || []).filter((row) => row.PlayerName === playerName && !row.Viewer);
+    const frame = nameMovedFrame(gameId, playerName);
+    await Promise.all(oldSockets.map(async (row) => {
+      await sendToConnection(row.ConnectionId, frame);
+      await db.send(new DeleteCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: row.PK, SK: row.SK }
+      })).catch(() => {});
+    }));
+    if (oldSockets.length) {
+      console.log(`📵 Told ${oldSockets.length} socket(s) in game ${gameId} that a name moved`);
+    }
+  } catch (error) {
+    console.error(`❌ Could not tell the old device in game ${gameId} that a name moved:`, error.message);
   }
 }
 

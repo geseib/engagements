@@ -1,38 +1,34 @@
 /**
- * The player side of the two-Chrises defect.
+ * The player side of the two-Chrises defect, and of moving a name to a new
+ * device (experience plan §4.4).
  *
  * PlayerPage.test.jsx cannot render — it dies on the auth provider in jsdom —
  * so the join refusal lives in a component of its own and is tested here,
  * along with the two pure pieces the page leans on: the id that lets the
  * server tell a returning player from a namesake, and the reading of the
- * server's refusal.
+ * server's refusal. The wait itself (the quiet retry, Ask again, the lapse)
+ * is `useHandoverFlow`'s and is pinned in useHandoverFlow.test.jsx; the page
+ * wiring in playerNameMove.test.jsx.
  *
- * THE REFUSAL IS TWO EXPORTS NOW, and the tests follow the seam. The body
- * (heading + sentence) renders into `.plr-stage`; the actions render into
- * `.plr-dock`, which sits outside the one scrolling region so the player is
- * never asked to scroll to get unstuck — every other ACT state on this surface
- * already worked that way, and this was the exception. The button contracts
- * below are unchanged; they are simply asserted on the export that renders the
- * buttons. That the two halves are wired into the same shell, in that order, is
- * asserted where it can only be true or false in situ:
- * `playerSurface.test.jsx` › "the join refusal".
+ * THE REFUSAL IS TWO EXPORTS, and the tests follow the seam: the body renders
+ * into `.plr-stage`, the actions into `.plr-dock`.
  *
  * The behaviours pinned, and what breaks each:
- *   - NAME_TAKEN offers no way through. Add a "continue anyway" button and the
- *     first assertion fails — that button is the silent merge, restored.
+ *   - NAME_TAKEN offers no way through in ANY stage. Add a "continue anyway"
+ *     button and the stage walk fails — that button is the silent merge.
+ *   - the screen never says "Asked" for an ask that failed.
+ *   - Ask again is offered only when the flow says it may be.
  *   - NAME_UNVERIFIED asks rather than assumes, and each answer is wired to a
- *     different handler. Swap them and the click assertions fail.
- *   - the id is minted once and kept per session. Mint per call and the
- *     stability assertion fails; key it globally and the per-game assertion
- *     fails; both would break reconnection or leak a cross-session handle.
- *   - the refusal is read off `code`, not off the status. Match on 409 alone
- *     and the two 409s become one screen.
+ *     different handler.
+ *   - the id is minted once and kept per session.
+ *   - the refusal is read off `code`, not off the status.
  */
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import JoinNameCollision, {
-  JoinNameCollisionActions, handoverNote,
+  JoinNameCollisionActions, handoverCopy, HANDOVER_LABELS,
 } from '../components/JoinNameCollision';
+import NameMoved, { NameMovedActions, NAME_MOVED_LABEL } from '../components/NameMoved';
 import { getClientId, clientIdStorageKey, classifyJoinFailure } from '../components/joinResult';
 
 const memoryStorage = () => {
@@ -45,254 +41,193 @@ const memoryStorage = () => {
   };
 };
 
-describe('JoinNameCollision', () => {
-  it('refuses a taken name without offering a way to take it anyway', () => {
-    const onRejoinAnyway = jest.fn();
+const STAGES = ['idle', 'asking', 'askFailed', 'waiting', 'granted', 'declined', 'lapsed'];
+const labelsOf = () => screen.queryAllByRole('button').map((b) => b.textContent.trim());
+
+function actions(stage, extra = {}) {
+  const handlers = {
+    onRejoinAnyway: jest.fn(),
+    onUseAnotherName: jest.fn(),
+    onRequestHandover: jest.fn(),
+  };
+  const view = render(
+    <JoinNameCollisionActions kind="name-taken" playerName="Chris" stage={stage} {...handlers} {...extra} />
+  );
+  return { ...handlers, view };
+}
+
+describe('JoinNameCollision — the refusal', () => {
+  it('says the name is already here and offers to move it, or to pick another', () => {
     render(
-      <>
-        <JoinNameCollision
-          kind="name-taken"
-          playerName="Chris"
-          message='Someone in this session is already answering as "Chris".'
-        />
-        <JoinNameCollisionActions
-          kind="name-taken"
-          playerName="Chris"
-          onRejoinAnyway={onRejoinAnyway}
-          onUseAnotherName={() => {}}
-          onRequestHandover={() => {}}
-          onTakeOver={() => {}}
-        />
-      </>
+      <JoinNameCollision
+        kind="name-taken"
+        playerName="Chris"
+        message='Someone in this session is already answering as "Chris".'
+      />
     );
+    expect(screen.getByRole('heading', { name: 'Chris is already in this session.' })).toBeInTheDocument();
+    expect(screen.getByText(/already answering as "Chris"/)).toBeInTheDocument();
+    const { view } = actions('idle');
+    expect(labelsOf()).toEqual(["That's me: use my name on this device", "I'm someone else: pick another name"]);
+    view.unmount();
+  });
 
-    expect(screen.getByText('That name is taken.')).toBeInTheDocument();
-    expect(
-      screen.getByText(/already answering as "Chris"/)
-    ).toBeInTheDocument();
-
-    /* THIS USED TO COUNT ONE BUTTON, and the count was a proxy for the rule
-       rather than the rule. There are two now — ask, or rename — and the rule
-       is asserted directly: nothing here claims the name, and in particular
-       `onRejoinAnyway`, the unconditional claim the NAME_UNVERIFIED screen
-       wires up, is not reachable from this one. Wiring it here would be the
-       silent merge restored, and a button count would not have noticed. */
-    const labels = screen.getAllByRole('button').map((b) => b.textContent.trim());
-    expect(labels).toEqual(['Ask the host to hand it over', 'Pick a different name']);
-    for (const button of screen.getAllByRole('button')) fireEvent.click(button);
+  // rejects: a button that TAKES the name, in any stage, or the unconditional
+  //          claim the NAME_UNVERIFIED screen wires up leaking into this one.
+  it.each(STAGES)('stage %s: nothing here claims the name', (stage) => {
+    const { onRejoinAnyway, onRequestHandover, onUseAnotherName } = actions(stage, { canAskAgain: true });
+    for (const label of labelsOf()) {
+      expect(label).not.toMatch(/take over|take it|anyway|rejoin/i);
+    }
+    for (const button of screen.queryAllByRole('button')) fireEvent.click(button);
     expect(onRejoinAnyway).not.toHaveBeenCalled();
+    // Every press is an ask or a way out, never anything else.
+    const presses = onRequestHandover.mock.calls.length + onUseAnotherName.mock.calls.length;
+    expect(presses).toBe(screen.queryAllByRole('button').filter((b) => !b.disabled).length);
   });
 
-  it('does not offer a takeover until the person has asked for one', () => {
-    const onRequestHandover = jest.fn();
-    const onTakeOver = jest.fn();
-    const { rerender } = render(
-      <JoinNameCollisionActions
-        kind="name-taken"
-        playerName="Chris"
-        handoverStage="idle"
-        onRequestHandover={onRequestHandover}
-        onTakeOver={onTakeOver}
-        onUseAnotherName={() => {}}
-      />
-    );
+  // rejects: a person who cannot get the name being left with no way out.
+  it.each(STAGES.filter((s) => s !== 'granted'))('stage %s: a way to pick another name is always there', (stage) => {
+    actions(stage);
+    expect(labelsOf().some((l) => /pick another name/i.test(l))).toBe(true);
+  });
 
-    // The step is the guard. A person who mistyped a colleague's name is never
-    // one tap away from taking their round.
-    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+  // rejects: a double tap sending two asks.
+  it('disables the ask while it is in flight', () => {
+    const { onRequestHandover } = actions('asking');
+    const button = screen.getByRole('button', { name: HANDOVER_LABELS.asking });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onRequestHandover).not.toHaveBeenCalled();
+  });
+
+  // rejects: "Asked the host" over an ask that never arrived (audit C §3.2).
+  it('a failed ask says so, with Try again, and never says it asked', () => {
+    render(<JoinNameCollision kind="name-taken" playerName="Chris" message="m" stage="askFailed" error="Your request did not reach the host." />);
+    expect(screen.getByText('Your request did not reach the host.')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/asked|waiting/i);
+    const { onRequestHandover } = actions('askFailed');
+    fireEvent.click(screen.getByRole('button', { name: HANDOVER_LABELS.tryAgain }));
     expect(onRequestHandover).toHaveBeenCalledTimes(1);
-    expect(onTakeOver).not.toHaveBeenCalled();
-
-    rerender(
-      <JoinNameCollisionActions
-        kind="name-taken"
-        playerName="Chris"
-        handoverStage="asked"
-        onRequestHandover={onRequestHandover}
-        onTakeOver={onTakeOver}
-        onUseAnotherName={() => {}}
-      />
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /take over the name/i }));
-    expect(onTakeOver).toHaveBeenCalledTimes(1);
-    expect(onRequestHandover).toHaveBeenCalledTimes(1);
-    // Still exactly two ways out — the rename never disappears, because a
-    // person who cannot get the name back must always be able to leave.
-    expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
-  it('will not fire the same handover step twice while one is in flight', () => {
-    const onTakeOver = jest.fn();
-    render(
-      <JoinNameCollisionActions
-        kind="name-taken"
-        playerName="Chris"
-        handoverStage="asked"
-        busy
-        onTakeOver={onTakeOver}
-        onRequestHandover={() => {}}
-        onUseAnotherName={() => {}}
-      />
-    );
-    // A double tap would send two claims, and the second would try to spend a
-    // grant the first already had.
-    const takeOver = screen.getByRole('button', { name: /take over the name/i });
-    expect(takeOver).toBeDisabled();
-    fireEvent.click(takeOver);
-    expect(onTakeOver).not.toHaveBeenCalled();
+  it('while waiting it says who it is waiting for, how long ago it asked, and that it moves on by itself', () => {
+    render(<JoinNameCollision kind="name-taken" playerName="Chris" message="m" stage="waiting" agoText="0:20" />);
+    expect(screen.getByRole('heading', { name: 'Waiting for the host to let you in as Chris.' })).toBeInTheDocument();
+    expect(screen.getByText('Asked 0:20 ago.')).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByText(/moves on by itself/)).toBeInTheDocument();
   });
 
-  it('says what happened after each handover step, and never says "error"', () => {
-    const { rerender } = render(
-      <JoinNameCollision kind="name-taken" playerName="Chris" message="taken" handoverStage="idle" />
-    );
-    // Nothing narrated before the person has done anything.
-    expect(screen.queryByText(/when they say go ahead/i)).toBeNull();
-
-    rerender(
-      <JoinNameCollision kind="name-taken" playerName="Chris" message="taken" handoverStage="asked" />
-    );
-    expect(screen.getByText(/asked the host to hand/i)).toBeInTheDocument();
-
-    rerender(
-      <JoinNameCollision kind="name-taken" playerName="Chris" message="taken" handoverStage="refused" />
-    );
-    // "Not yet", not "something went wrong": the host simply has not got to it,
-    // and only one of those two readings tells the person what to do next.
-    const note = screen.getByText(/has not unlocked/i);
-    expect(note).toBeInTheDocument();
-    expect(note.textContent).toMatch(/ask them out loud/i);
-    expect(note.textContent).not.toMatch(/error|failed|sorry/i);
+  // rejects: Ask again before the minute is up (pestering) or never (stuck).
+  it('Ask again appears only when the flow allows it', () => {
+    const early = actions('waiting', { canAskAgain: false });
+    expect(labelsOf()).toEqual([HANDOVER_LABELS.pickAnother]);
+    early.view.unmount();
+    const late = actions('waiting', { canAskAgain: true });
+    expect(labelsOf()).toEqual([HANDOVER_LABELS.askAgain, HANDOVER_LABELS.pickAnother]);
+    fireEvent.click(screen.getByRole('button', { name: HANDOVER_LABELS.askAgain }));
+    expect(late.onRequestHandover).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the note and the button describing the same step', () => {
-    // Two copies of one condition is how a screen ends up asking a question
-    // its buttons do not answer, which is why both halves read `handoverStage`.
-    for (const stage of ['idle', 'asked', 'refused']) {
-      const view = render(
-        <>
-          <JoinNameCollision kind="name-taken" playerName="Chris" message="m" handoverStage={stage} />
-          <JoinNameCollisionActions kind="name-taken" playerName="Chris" handoverStage={stage} />
-        </>
-      );
-      const label = screen.getAllByRole('button')[0].textContent.trim();
-      const narrated = Boolean(handoverNote(stage, 'Chris'));
-      expect(label === 'Take over the name').toBe(narrated);
-      view.unmount();
+  it('after Not now, picking another name is the main button and Ask again waits', () => {
+    render(<JoinNameCollision kind="name-taken" playerName="Chris" message="m" stage="declined" />);
+    expect(screen.getByRole('heading', { name: 'The host said not now.' })).toBeInTheDocument();
+    expect(screen.getByText('If this is you, ask them in person.')).toBeInTheDocument();
+    const first = actions('declined', { canAskAgain: false });
+    const [main] = screen.getAllByRole('button');
+    expect(main.textContent).toBe(HANDOVER_LABELS.pickAnother);
+    expect(main).not.toHaveClass('plr-btn--ghost');
+    expect(labelsOf()).toEqual([HANDOVER_LABELS.pickAnother]);
+    first.view.unmount();
+    actions('declined', { canAskAgain: true });
+    expect(labelsOf()).toEqual([HANDOVER_LABELS.pickAnother, HANDOVER_LABELS.askAgain]);
+    expect(screen.getByRole('button', { name: HANDOVER_LABELS.askAgain })).toHaveClass('plr-btn--ghost');
+  });
+
+  it('a lapsed ask says the host has not answered, with Ask again or another name', () => {
+    render(<JoinNameCollision kind="name-taken" playerName="Chris" message="m" stage="lapsed" />);
+    expect(screen.getByRole('heading', { name: "The host hasn't answered." })).toBeInTheDocument();
+    actions('lapsed');
+    expect(labelsOf()).toEqual([HANDOVER_LABELS.askAgain, HANDOVER_LABELS.pickAnother]);
+  });
+
+  it('granted says the answers and score came along, and offers nothing to press', () => {
+    render(<JoinNameCollision kind="name-taken" playerName="Chris" message="m" stage="granted" />);
+    expect(screen.getByRole('heading', { name: "You're in as Chris." })).toBeInTheDocument();
+    expect(screen.getByText('Your answers and score came with you.')).toBeInTheDocument();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    actions('granted');
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('never narrates an "error" for the host simply not having answered', () => {
+    for (const stage of ['waiting', 'declined', 'lapsed']) {
+      const copy = handoverCopy({ stage, playerName: 'Chris', agoText: '1:00' });
+      expect(`${copy.heading} ${copy.lede} ${copy.note || ''}`).not.toMatch(/error|failed|sorry|wrong/i);
     }
   });
 
   it('leaves the ambiguous refusal exactly as it was', () => {
-    // The handover belongs to NAME_TAKEN. NAME_UNVERIFIED is a row the server
-    // cannot attribute at all, so there is nobody to take it FROM and no host
-    // decision to make — offering a handover there would be asking the host to
-    // adjudicate a question that has no second party.
     render(
       <JoinNameCollisionActions
         kind="name-unverified"
         playerName="Chris"
-        handoverStage="asked"
+        stage="waiting"
         onRejoinAnyway={() => {}}
         onUseAnotherName={() => {}}
         onRequestHandover={() => {}}
-        onTakeOver={() => {}}
       />
     );
-    expect(screen.getAllByRole('button').map((b) => b.textContent.trim())).toEqual([
-      'Yes — rejoin as Chris',
-      "No — I'm a different Chris",
-    ]);
-    expect(screen.queryByText(/hand it over/i)).toBeNull();
+    expect(labelsOf()).toEqual(['Yes — rejoin as Chris', "No — I'm a different Chris"]);
   });
 
-  it('dresses the ways out as this surface dresses every other primary action', () => {
-    // They were `.btn-primary`/`.btn-secondary`/`.btn-large` from the
-    // `styles.css` monolith — paper-theme buttons on a dusk shell, next to a
-    // sentence painted #444 at 1.79:1 on --bg. The dock vocabulary is
-    // `.plr-btn`, and the second choice is the ghost, exactly as the rejoin
-    // prompt renders the same pair of choices.
+  it('wires each ambiguous answer to its own handler', () => {
+    const onRejoinAnyway = jest.fn();
+    const onUseAnotherName = jest.fn();
     render(
-      <JoinNameCollisionActions
-        kind="name-unverified"
-        playerName="Chris"
-        onRejoinAnyway={() => {}}
-        onUseAnotherName={() => {}}
-      />
+      <JoinNameCollisionActions kind="name-unverified" playerName="Chris" onRejoinAnyway={onRejoinAnyway} onUseAnotherName={onUseAnotherName} />
     );
+    fireEvent.click(screen.getByRole('button', { name: /yes — rejoin as chris/i }));
+    expect(onRejoinAnyway).toHaveBeenCalledTimes(1);
+    expect(onUseAnotherName).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /different chris/i }));
+    expect(onUseAnotherName).toHaveBeenCalledTimes(1);
+  });
 
-    const [yes, no] = screen.getAllByRole('button');
-    expect(yes).toHaveClass('plr-btn');
-    expect(yes).not.toHaveClass('plr-btn--ghost');
-    expect(no).toHaveClass('plr-btn', 'plr-btn--ghost');
+  it('asks the ambiguous case instead of guessing', () => {
+    render(<JoinNameCollision kind="name-unverified" playerName="Chris" message="If that was you, rejoin." />);
+    expect(screen.getByText('Are you the Chris already here?')).toBeInTheDocument();
+  });
+
+  it('dresses the ways out in the dock vocabulary', () => {
+    actions('idle');
+    const [main, other] = screen.getAllByRole('button');
+    expect(main).toHaveClass('plr-btn');
+    expect(main).not.toHaveClass('plr-btn--ghost');
+    expect(other).toHaveClass('plr-btn', 'plr-btn--ghost');
     for (const button of screen.getAllByRole('button')) {
       expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
     }
   });
 
-  it('states the refusal at the ladder, not at a viewport-keyed clamp', () => {
-    // The heading was `clamp(1.3rem, 6vw, 1.9rem)` in a stylesheet of its own —
-    // a fourth ladder on a surface RATIONALE §3.3 gives exactly three literal
-    // ones, keyed to a `.join-screen` container that no longer exists.
-    render(
-      <JoinNameCollision kind="name-taken" playerName="Chris" message="taken" />
-    );
-    const heading = screen.getByText('That name is taken.');
-    expect(heading).toHaveClass('plr-h1', 'plr-h1--primary');
+  it('states the refusal at the ladder and announces it', () => {
+    const { container } = render(<JoinNameCollision kind="name-taken" playerName="Chris" message="taken" />);
+    expect(screen.getByRole('heading')).toHaveClass('plr-h1', 'plr-h1--primary');
     expect(screen.getByText('taken')).toHaveClass('plr-lede', 'plr-muted');
-  });
-
-  it('announces the refusal rather than leaving it to be noticed', () => {
-    const { container } = render(
-      <JoinNameCollision
-        kind="name-taken"
-        playerName="Chris"
-        message="taken"
-      />
-    );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
   });
+});
 
-  it('asks the ambiguous case instead of guessing', () => {
-    render(
-      <>
-        <JoinNameCollision
-          kind="name-unverified"
-          playerName="Chris"
-          message="If that was you on another device, rejoin."
-        />
-        <JoinNameCollisionActions
-          kind="name-unverified"
-          playerName="Chris"
-          onRejoinAnyway={() => {}}
-          onUseAnotherName={() => {}}
-        />
-      </>
-    );
-
-    expect(screen.getByText('Are you the Chris already here?')).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(2);
-  });
-
-  it('wires each answer to its own handler', () => {
-    const onRejoinAnyway = jest.fn();
-    const onUseAnotherName = jest.fn();
-    render(
-      <JoinNameCollisionActions
-        kind="name-unverified"
-        playerName="Chris"
-        onRejoinAnyway={onRejoinAnyway}
-        onUseAnotherName={onUseAnotherName}
-      />
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /yes — rejoin as chris/i }));
-    expect(onRejoinAnyway).toHaveBeenCalledTimes(1);
-    expect(onUseAnotherName).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: /different chris/i }));
-    expect(onUseAnotherName).toHaveBeenCalledTimes(1);
-    expect(onRejoinAnyway).toHaveBeenCalledTimes(1);
+describe('NameMoved — the old device', () => {
+  it('says the name is on another device, that the page stopped, and offers one way on', () => {
+    const onJoinAgain = jest.fn();
+    render(<><NameMoved playerName="Sam" /><NameMovedActions onJoinAgain={onJoinAgain} /></>);
+    expect(screen.getByRole('heading', { name: 'Sam is now on another device.' })).toBeInTheDocument();
+    expect(screen.getByText(/This page has stopped/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(labelsOf()).toEqual([NAME_MOVED_LABEL]);
+    fireEvent.click(screen.getByRole('button', { name: 'Join again with a different name' }));
+    expect(onJoinAgain).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -352,7 +287,16 @@ describe('classifyJoinFailure', () => {
     expect(
       'handoverRefused' in classifyJoinFailure(409, { code: 'NAME_TAKEN', playerName: 'Chris', message: 'm' })
     ).toBe(false);
-    expect(handoverNote('declined', 'Chris')).toBe('The host said not now.');
+    expect(handoverCopy({ stage: 'declined', playerName: 'Chris' }).heading).toBe('The host said not now.');
+  });
+
+  it('passes nameMoved through for the browser the name left, and only then', () => {
+    expect(
+      classifyJoinFailure(409, { code: 'NAME_TAKEN', playerName: 'Chris', message: 'm', nameMoved: true }).nameMoved
+    ).toBe(true);
+    expect(
+      'nameMoved' in classifyJoinFailure(409, { code: 'NAME_TAKEN', playerName: 'Chris', message: 'm' })
+    ).toBe(false);
   });
 
   it('still recognises the pre-existing access code refusal', () => {

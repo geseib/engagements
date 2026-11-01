@@ -625,9 +625,9 @@ const playerManagement = {
         {
           t: 'steps',
           items: [
-            { title: 'They ask', text: 'On their screen they tap **Ask the host to hand it over**. Their row on your Players tab now reads "asking to take this name", and **SESSION** on the dock shows a count.' },
+            { title: 'They ask', text: 'On their screen they tap **That\'s me: use my name on this device**. Their row on your Players tab now reads "asking to take this name", and **SESSION** on the dock shows a count.' },
             { title: 'You decide', text: 'Usually out loud: "Sam, is that you on the iPad?" Press **Let them take it**.' },
-            { title: 'The row says "unlocked for one handover"', text: 'They tap **Take over the name** and they are in, with everything that name has scored.' },
+            { title: 'The row says "unlocked for one handover"', text: 'Their phone moves on by itself with that name\'s score; the old one stops.' },
           ],
         },
         { t: 'h', text: 'Unlocking without being asked' },

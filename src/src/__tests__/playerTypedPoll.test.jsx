@@ -75,7 +75,7 @@ test('a choice poll draws its options, not a text box, and sends the pick as a v
   expect(submit()).not.toBeDisabled();
   await act(async () => { fireEvent.click(submit()); });
 
-  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: [2], answerType: 'poll' });
+  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: [2], answerType: 'poll', clientId: expect.any(String) });
   await waitFor(() => expect(screen.getByText('Answer In!')).toBeInTheDocument());
   expect(screen.getByText('Friday')).toBeInTheDocument();
 });
@@ -85,7 +85,7 @@ test('a rating poll sends the number', async () => {
   await joinAndReachQuestion();
   fireEvent.click(screen.getByRole('radio', { name: '4 of 5' }));
   await act(async () => { fireEvent.click(submit()); });
-  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 4, answerType: 'poll' });
+  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 4, answerType: 'poll', clientId: expect.any(String) });
 });
 
 test('a binary poll reads in its own labels and sends {v}', async () => {
@@ -93,7 +93,7 @@ test('a binary poll reads in its own labels and sends {v}', async () => {
   await joinAndReachQuestion();
   fireEvent.click(screen.getByRole('radio', { name: /Approve/ }));
   await act(async () => { fireEvent.click(submit()); });
-  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: { v: 'yes' }, answerType: 'poll' });
+  expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: { v: 'yes' }, answerType: 'poll', clientId: expect.any(String) });
   await waitFor(() => expect(screen.getByText('Approve')).toBeInTheDocument());
 });
 

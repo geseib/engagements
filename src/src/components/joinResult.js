@@ -72,7 +72,11 @@ export function classifyJoinFailure(status, data) {
       message: payload.message || 'That name is already in use in this session.',
       // The host answered this device's ask with Not now (join-game.js sends
       // it only to the device that asked).
-      ...(payload.handoverRefused ? { handoverRefused: true } : {})
+      ...(payload.handoverRefused ? { handoverRefused: true } : {}),
+      // THIS browser held the name until the host let it move to another
+      // device (join-game.js sends it only to that browser). The page says
+      // "<name> is now on another device" rather than offering to ask for it.
+      ...(payload.nameMoved ? { nameMoved: true } : {})
     };
   }
 

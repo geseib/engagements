@@ -247,18 +247,20 @@ const joining = {
         },
         {
           t: 'p',
-          text: 'The session knows you by this browser, not by your name alone. On a different phone, or another browser on the same phone, your name gets "That name is taken.": the next section is for you.',
+          text: 'The session knows you by this browser, not by your name alone. On a different phone, or another browser on the same phone, your screen says your name "is already in this session": the next section moves it to you.',
         },
       ],
     },
     {
       /*
-        JoinNameCollision.jsx: "That name is taken.", buttons "Ask the host to
-        hand it over" → "Take over the name", "Pick a different name"; notes
-        from handoverNote(): asked, "The host said not now." (declined, with
-        join-game.js's message "Add a last initial or pick another name…"),
-        refused ("The host has not unlocked … yet. Ask them out loud, then try
-        again."). The grant is one-shot (join-game.js handover branch).
+        JoinNameCollision.jsx + hooks/useHandoverFlow.js (experience plan
+        §4.4, 1 Nov 2026). Heading "<name> is already in this session.";
+        buttons HANDOVER_LABELS: "That's me: use my name on this device",
+        "I'm someone else: pick another name", then "Try again" (the ask
+        failed), "Ask again" (after 1 minute; after 30 s following Not now),
+        "Pick another name". The phone retries the join every few seconds while
+        it waits; the ask lapses after 10 minutes (handover.js); a grant is
+        good for one move, for 5 minutes (join-game.js handover branch).
       */
       id: 'name-taken',
       title: 'When your name is taken',
@@ -266,35 +268,56 @@ const joining = {
       blocks: [
         {
           t: 'p',
-          text: '"That name is taken." means another phone or browser is already in the session under that name. It will not simply let you in as them: that would throw away what the first person has done.',
+          text: 'Your screen says your name "is already in this session." Another phone or browser is in under that name. It will not simply let you in as them: that would throw away what the first person has done.',
         },
         {
           t: 'list',
           items: [
-            { title: 'Pick a different name', text: 'When you and someone else happened to choose the same name. Add a last initial and carry on.' },
-            { title: 'Ask the host to hand it over', text: 'When the name really is yours: you swapped phones, or your browser lost the page.' },
+            { title: "I'm someone else: pick another name", text: 'You and someone else chose the same name. Add a last initial and carry on.' },
+            { title: "That's me: use my name on this device", text: 'The name really is yours: you swapped phones, or your browser lost the page.' },
           ],
         },
         {
           t: 'steps',
           items: [
-            'Tap **Ask the host to hand it over**.',
-            'The host sees your request beside that name in their list of players. Say something out loud too.',
-            'Once they have unlocked it, tap **Take over the name**. You are in, with that name\'s answers and points.',
+            "Tap **That's me: use my name on this device**. The screen says when the host has your request; if it did not get through, tap **Try again**.",
+            'Wait on this screen. The host sees your request; say something out loud too.',
+            'When the host lets you in, this page moves on by itself, with your answers and points. Nothing to tap.',
           ],
         },
         {
           t: 'faq',
           items: [
-            { q: '"The host has not unlocked it yet"', a: 'They have not got to it. Ask them out loud, then tap **Take over the name** again.' },
-            { q: '"The host said not now."', a: 'The host turned the request down. Tap **Pick a different name** and add a last initial so the host can tell you apart.' },
+            { q: 'Nothing has happened for a minute', a: 'Tap **Ask again** to remind the host. After ten minutes the request lapses: "The host hasn\'t answered." Ask again, or pick another name.' },
+            { q: '"The host said not now."', a: 'If it really is you, ask them in person; **Ask again** comes back after half a minute. Otherwise tap **Pick another name** and add a last initial.' },
           ],
         },
         {
           t: 'note',
           tone: 'warn',
           title: 'One handover at a time',
-          text: 'An unlock is good for one handover and then closes. Need it again on another device? Ask again. Nobody can quietly walk into somebody else\'s name.',
+          text: 'The host lets a name move for one handover, and the old device stops. Need it again on another device? Ask again. Nobody can quietly walk into somebody else\'s name.',
+        },
+      ],
+    },
+    {
+      /*
+        components/NameMoved.jsx: "<name> is now on another device.", the one
+        button NAME_MOVED_LABEL. Reached by the server's nameMoved frame
+        (join-game.js), a refused answer or vote (NAME_MOVED: message.js,
+        submit-vote.js), or a rejoin refused with nameMoved.
+      */
+      id: 'name-moved',
+      title: 'Your name moved to another device',
+      icon: 'DeviceMobile',
+      blocks: [
+        {
+          t: 'p',
+          text: 'The host let your name move to another phone or browser, so this one says your name "is now on another device" and stops. Your answers and points went with the name.',
+        },
+        {
+          t: 'p',
+          text: 'If that was you, carry on on the other device. If not, tell the host, and tap **Join again with a different name** to keep playing here.',
         },
       ],
     },
@@ -831,7 +854,7 @@ const scoring = {
             },
             {
               q: 'I dropped out and came back. Did I lose my points?',
-              a: 'No. Rejoin from the same phone and browser and your score comes back with you. On another device, ask the host to hand your name over.',
+              a: 'No. Rejoin from the same phone and browser and your score comes back with you. On another device, ask the host to let your name move to it.',
             },
             {
               q: 'The host removed me from the list. Did that wipe my score?',
@@ -903,7 +926,7 @@ const trouble = {
       blocks: [
         {
           t: 'p',
-          text: 'Use the same phone and browser you joined with, and tap **Rejoin as** your name. On any other device the name is locked to keep it safe: the host has to hand it over, and if they say "The host said not now." pick a different name. All of it: Joining a session › When your name is taken.',
+          text: 'Use the same phone and browser you joined with, and tap **Rejoin as** your name. On any other device the name is locked to keep it safe: the host has to let it move, and if they say "The host said not now." pick a different name. All of it: Joining a session › When your name is taken.',
         },
       ],
     },
