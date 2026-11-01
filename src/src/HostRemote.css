@@ -945,3 +945,20 @@ a.hr-btn { text-decoration: none; color: inherit; }
 .hr-steps-list li.is-live, .hr-steps-list li.is-done { color: var(--text); }
 .hr-steps-now { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--info); }
 .hr-steps-explain { grid-column: 1 / -1; color: var(--muted); }
+
+/* ------------------------------------------------------------ needs you
+
+   The Needs-you card above the status card (experience plan §3.3, 1b). The
+   rows and buttons are components/needs/NeedsYou.css's; here only the
+   phone's own sizes: a card on the page's gutter, and 44px to tap. */
+.hr .hr-needs {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+}
+.hr .hr-needs .ui-btn,
+.hr .hr-needs .ny-link { min-height: 44px; --ui-size: 15px; }

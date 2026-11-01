@@ -262,7 +262,9 @@ describe('the panel can remove a player and hand over a name', () => {
     // already make this mistake impossible to repeat quietly.
     const removal = host.slice(host.indexOf('const setPlayerRemoved'));
     expect(removal.slice(0, 600)).toMatch(/authFetch\(/);
-    const handover = host.slice(host.indexOf('const grantNameHandover'));
+    // Grant, Not now and Lock again share one sender (experience plan 1a).
+    expect(host).toMatch(/const grantNameHandover = \(name, bindToRequester, requestedAt = null\) => sendHandover\(/);
+    const handover = host.slice(host.indexOf('const sendHandover'));
     expect(handover.slice(0, 600)).toMatch(/authFetch\(/);
     // ...and the name is escaped, because a player name is user input and it
     // is a path segment here.
@@ -276,8 +278,8 @@ describe('the panel can remove a player and hand over a name', () => {
     // to the tab that made the call.
     const removal = host.slice(host.indexOf('const setPlayerRemoved'));
     expect(removal.slice(0, 900)).toMatch(/fetchPlayers\(/);
-    const handover = host.slice(host.indexOf('const grantNameHandover'));
-    expect(handover.slice(0, 900)).toMatch(/fetchPlayers\(/);
+    const handover = host.slice(host.indexOf('const sendHandover'));
+    expect(handover.slice(0, 1600)).toMatch(/fetchPlayers\(reason\)/);
   });
 
   test('the ask arrives over the socket and is unsubscribed with the rest', () => {

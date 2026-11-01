@@ -129,7 +129,10 @@ import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import ReadPanel from './components/console/panels/ReadPanel';
-import { fetchReadCheck } from './utils/readCheckClient';
+import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
+import { needsYou, markHandoverRequested, NEEDS_ACTIONS } from './config/needsYou';
+import NeedsYouLine from './components/needs/NeedsYouLine';
+import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import CW from './config/consoleWords';
 import { consolePeopleFor } from './config/consoleRail';
@@ -1495,6 +1498,30 @@ function GameHostPage() {
   const [includeNotReviewed, setIncludeNotReviewed] = useState(true);
   const loadLateRef = useRef(() => {});
   const lateStatus = useMemo(() => lateStatusOf(lateItems), [lateItems]);
+  /*
+    NEEDS YOU (experience plan §4, Phase 1a/1b): the list itself is worked
+    out in the render from what this page already holds (config/needsYou.js);
+    these hooks are only what the list cannot derive. `needsBusy` while a
+    name answer is in flight; `needsError` the server's sentence when one is
+    refused (it used to go to the browser console); `needsDismissed` the read
+    checks the host said "It's fine" to; `needsNow` a clock that ticks only
+    while a name is asked for or open, so "0:20 ago" and "4:10 left" move and
+    a request lapses on time. `wsEverConnected`: "Not hearing the room" means
+    the socket dropped, never that it has not opened yet.
+  */
+  const [needsBusy, setNeedsBusy] = useState(false);
+  const [needsError, setNeedsError] = useState('');
+  const [needsDismissed, setNeedsDismissed] = useState([]);
+  const [needsNow, setNeedsNow] = useState(() => Date.now());
+  const anyHandover = players.some((p) => p && p.handover && (p.handover.requested || p.handover.open));
+  useEffect(() => {
+    if (!anyHandover) return undefined;
+    setNeedsNow(Date.now());
+    const timer = setInterval(() => setNeedsNow(Date.now()), 10 * 1000);
+    return () => clearInterval(timer);
+  }, [anyHandover]);
+  const wsEverConnected = useRef(false);
+  useEffect(() => { if (wsConnected) wsEverConnected.current = true; }, [wsConnected]);
   // On load, and when the room moves (a round closing makes items late; the
   // end opens Close comments). A new session starts empty.
   useEffect(() => {
@@ -2838,13 +2865,17 @@ Focus on actionable business strategy insights.`;
     });
 
     /* SOMEBODY IS LOCKED OUT OF THEIR OWN NAME AND IS ASKING FOR IT BACK.
-       Refetching is the whole handling: `get-players` carries the request as a
-       flag on the roster row, so the Players tab shows "asking to take this
-       name" beside the person's name the moment this lands. There is no toast
-       — the host is running a room, and the decision belongs where the two
-       buttons that answer it already are. */
+       The frame names them, so the flag goes on their roster row in this same
+       render (config/needsYou.js markHandoverRequested): the Needs-you line,
+       the bell and their People row show it before the network answers
+       (experience plan 1a: "within a second", never reload-only). The roster
+       refetch that follows is the authority. Still no toast — the item has
+       one home, with the buttons that answer it. */
     webSocketClient.onMessage('handoverRequested', (data) => {
       console.log('🔌 Handover requested notification:', data);
+      const asker = data && (data.playerName || (data.data && data.data.playerName));
+      const expires = data && (data.requestExpiresAt || (data.data && data.data.requestExpiresAt));
+      if (asker) setPlayers((prev) => markHandoverRequested(prev, asker, new Date().toISOString(), expires || null));
       fetchPlayers('websocket-handover-request');
     });
 
@@ -4100,25 +4131,50 @@ Focus on actionable business strategy insights.`;
    * its own row, because a client id is the secret get-answers.js accepts as
    * proof of identity and GET /players is public.
    */
-  const grantNameHandover = async (name, bindToRequester) => {
+  const sendHandover = async (name, body, reason) => {
+    setNeedsBusy(true);
+    setNeedsError('');
     try {
       const res = await authFetch(
         `${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bindToRequester: Boolean(bindToRequester) }),
+          body: JSON.stringify(body),
         }
       );
       if (!res.ok) {
-        console.error(`grantNameHandover HTTP error: ${res.status}`);
-        return;
+        // THE SERVER'S SENTENCE, ON THE ITEM (experience plan §4.4: "If the
+        // grant fails, the server's sentence shows on the item (today it goes
+        // to the browser console)"). Then re-read: whoever answered first won.
+        let said = '';
+        try { const j = await res.json(); said = (j && (j.message || j.error)) || ''; } catch (e) { /* no body */ }
+        setNeedsError(said || `That did not work (${res.status}). Look again.`);
+        await fetchPlayers('after-handover-refused');
+        return false;
       }
-      await fetchPlayers('after-grant-handover');
+      await fetchPlayers(reason);
+      return true;
     } catch (e) {
-      console.error('grantNameHandover error', e);
+      console.error('handover error', e);
+      setNeedsError('That did not reach the server. Try again.');
+      return false;
+    } finally {
+      setNeedsBusy(false);
     }
   };
+  // `requestedAt`: the request time the host was shown, so a request that
+  // changed in between is refused (grant-handover.js REQUEST_CHANGED).
+  const grantNameHandover = (name, bindToRequester, requestedAt = null) => sendHandover(
+    name,
+    { bindToRequester: Boolean(bindToRequester), ...(bindToRequester && requestedAt ? { requestedAt } : {}) },
+    'after-grant-handover',
+  );
+  /* NOT NOW and LOCK AGAIN for every round type (experience plan 1a): the
+     same host-only route the Build Room uses (grant-handover.js `refuse`,
+     `lock`). */
+  const refuseNameHandover = (name) => sendHandover(name, { refuse: true }, 'after-refuse-handover');
+  const lockNameHandover = (name) => sendHandover(name, { lock: true }, 'after-lock-handover');
 
 
   const fetchQuestionSets = async (duringRestoration = false) => {
@@ -8299,6 +8355,42 @@ Focus on actionable business strategy insights.`;
     gatheringNoun: stageGatheringNoun(gameState),
     onRetry: () => restoreGameState(),
   };
+  /*
+    NEEDS YOU, WORKED OUT (config/needsYou.js; experience plan §4.1): the
+    roster's handover flags, the late list, the read's failure and check, the
+    socket. Nothing stored, so a reload or the phone Remote reads the same.
+  */
+  const readCheckText = hostPhase === 'FIELD_NOTES' && currentAIInsights ? readCheckNote(currentAIInsights.readCheck) : '';
+  const needs = needsYou({
+    players,
+    late: lateStatus,
+    readFailure: aiSummaryFailure,
+    readCheck: readCheckText,
+    readRound: lessonNumber || null,
+    connected: wsConnected || !wsEverConnected.current,
+    dismissed: needsDismissed,
+    now: needsNow,
+  });
+  const onNeedsAct = (item, action) => {
+    switch (action) {
+      case NEEDS_ACTIONS.LET: return grantNameHandover(item.name, true, item.at);
+      case NEEDS_ACTIONS.NOT_NOW: return refuseNameHandover(item.name);
+      case NEEDS_ACTIONS.LOCK: return lockNameHandover(item.name);
+      case NEEDS_ACTIONS.REVIEW: return openLateList();
+      case NEEDS_ACTIONS.RETRY: return handleRetryAISummary();
+      case NEEDS_ACTIONS.REDO: return handleRegenerateAISummary();
+      case NEEDS_ACTIONS.FINE: return setNeedsDismissed((d) => d.concat(item.id));
+      case NEEDS_ACTIONS.SEE: {
+        // The console's People already lifts the asker; bring the row into view.
+        const row = useConsole && typeof document !== 'undefined' ? document.querySelector('[data-testid="people-asker"]') : null;
+        if (row && typeof row.scrollIntoView === 'function') { row.scrollIntoView({ block: 'nearest' }); return undefined; }
+        return openSetupAt('players');
+      }
+      default: return undefined;
+    }
+  };
+  const needsBell = { needs, onAct: onNeedsAct, busy: needsBusy, error: needsError };
+
   const consolePanel = !useConsole ? null : (() => {
     /* Drafting a question for the room: the read with the composer beside it,
        whichever beat the wall is on (the strip marks Ask while it is open,
@@ -8355,7 +8447,8 @@ Focus on actionable business strategy insights.`;
         return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
+        // A failed read is a card with Retry and Redo, never a blank (experience plan 1e).
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} failure={aiSummaryFailure} onRetry={handleRetryAISummary} onRedo={handleRegenerateAISummary} retrying={aiRetrying} loading={loadingAIInsights} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
@@ -8407,6 +8500,8 @@ Focus on actionable business strategy insights.`;
             presentHref: gameId ? presentHref(gameId) : '',
             presentDetail,
             help: consoleHelp,
+            // The bell is the Needs-you door in a live session (experience plan §4.3).
+            bellSession: needsBell,
           }}
           strip={workflow ? {
             strip: workflow,
@@ -8432,6 +8527,11 @@ Focus on actionable business strategy insights.`;
             connected: wsConnected,
             onOpenSection: openSetupAt,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
+            // Askers lifted to the top of People, with Let them / Not now on the row.
+            asking: needs.items.filter((i) => i.kind === 'name-request' || i.kind === 'name-open'),
+            onNeedsAct,
+            needsBusy,
+            needsError,
           }}
           footer={{
             // roundStep's own status: the count, said here and in the People header only.
@@ -8447,6 +8547,7 @@ Focus on actionable business strategy insights.`;
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
           }}
+          needs={<NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />}
         >
           {consolePanel}
         </HostConsole>
@@ -8562,6 +8663,23 @@ Focus on actionable business strategy insights.`;
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
             help={dockHelp}
+            /* NEEDS YOU ON THE STAGE (experience plan §3.3, 1b), just before
+               SESSION in the dock's fixed slot for a type's own item. On one
+               screen a count and never a name; the sheet starts "The room can
+               see this screen". There is no signal yet that the phone Remote
+               is open, so the sheet offers Connect your phone, never "on your
+               phone" (§3.3: only while it is connected). */
+            home={(
+              <OneScreenNeedsBell
+                needs={needs}
+                onAct={onNeedsAct}
+                busy={needsBusy}
+                error={needsError}
+                oneScreen={!twoSurfaces}
+                remoteConnected={false}
+                onConnectPhone={() => openSetupAt('settings')}
+              />
+            )}
             onAgenda={eventCode ? goToAgenda : undefined}
             present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}
@@ -9455,6 +9573,10 @@ Focus on actionable business strategy insights.`;
           onRemovePlayer={(name) => setPlayerRemoved(name, true)}
           onRestorePlayer={(name) => setPlayerRemoved(name, false)}
           onGrantHandover={grantNameHandover}
+          onRefuseHandover={refuseNameHandover}
+          onLockHandover={lockNameHandover}
+          // The room can see this panel on one screen (experience plan 1e).
+          oneScreen={!twoSurfaces}
           scoreboard={scoreboard}
           scoreboardAvailability={scoreboardAvail}
           onToggleScoreboard={(open) => publishScoreboard({ open })}
@@ -9586,7 +9708,8 @@ Focus on actionable business strategy insights.`;
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
             modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
-            // The read check's note, beside Redo: on one screen the only host-only place for it.
+            // The read check's note, beside Redo. On one screen the panel is public,
+            // so the whole Workie section waits behind Show on this screen (1e).
             readCheck: hostPhase === 'FIELD_NOTES' && currentAIInsights ? currentAIInsights.readCheck : null,
           }}
         />

@@ -6,6 +6,15 @@
 const CW = Object.freeze({
   queue: 'Round queue',
   people: 'People',
+  // Workie's read on the console when it did not arrive (experience plan §4.2 row 5).
+  readFailed: "Workie's read didn't arrive",
+  readWriting: 'Workie is reading the responses…',
+  retry: 'Retry',
+  retrying: 'Trying again…',
+  redo: 'Redo',
+  // An asker's row in People (experience plan §3.6: the host's words for a move).
+  needsYou: 'needs you',
+  wantsName: 'Wants their name on a new device',
   late: 'Late & not reviewed',
   tools: 'Session tools',
   allRounds: 'Rounds and questions',

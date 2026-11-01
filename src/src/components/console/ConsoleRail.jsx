@@ -3,6 +3,8 @@ import CW from '../../config/consoleWords';
 import { consoleRailFor, peopleSummary } from '../../config/consoleRail';
 import LW from '../../config/lateWords';
 import { canShowOnWall } from '../../utils/lateClient';
+import NeedsActions from '../needs/NeedsActions';
+import { NEEDS_ACTIONS, NEEDS_WORDS, agoText } from '../../config/needsYou';
 
 /** The rail shows the first few; "Review them" opens the whole list. */
 const LATE_SHOWN = 3;
@@ -36,6 +38,14 @@ export default function ConsoleRail({
   moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
   onLateShow = () => {}, onLateMark = () => {}, connected = true, onOpenSection = () => {},
   scoreboard = null,
+  /* NEEDS YOU, ON THE PERSON (experience plan §3.2b, §4.4): the name items
+     from config/needsYou.js. An asker's row is lifted to the top under
+     "Needs you", amber, with Let them / Not now in the row itself; an open
+     name shows Lock again. People never collapses while anyone asks. */
+  asking = [],
+  onNeedsAct = null,
+  needsBusy = false,
+  needsError = '',
 }) {
   // A refusal from the late buttons, said in the section (as LateList does).
   const [lateError, setLateError] = useState('');
@@ -55,6 +65,12 @@ export default function ConsoleRail({
   const [open, setOpen] = useState(() => consoleRailFor(moment));
   useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
   const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
+  const askers = (asking || []).filter((a) => a.kind === 'name-request');
+  const opened = (asking || []).filter((a) => a.kind === 'name-open');
+  const flagged = new Set((asking || []).map((a) => a.name));
+  // While anyone asks, People stays open whatever the moment or the host's last click.
+  const peopleOpen = askers.length > 0 || open === 'people';
+  const peopleRows = people.filter((p) => !flagged.has(p.name));
   const nowRound = rounds.find((r) => r.state === 'now');
   const waiting = Number.isFinite(Number(lateCount)) && lateCount !== null ? Number(lateCount) : late.length;
   // The session's total is the strip's ("Round 1 of 80"), never the length of
@@ -73,9 +89,42 @@ export default function ConsoleRail({
           ))}
         </ul>
       </Section>
-      <Section id="people" title={CW.people} summary={peopleSummary({ moment, ...counts })} open={open === 'people'} onToggle={toggle} link={CW.allPlayers} onLink={() => onOpenSection('players')}>
+      <Section
+        id="people"
+        title={CW.people}
+        summary={askers.length ? `${askers.length} ${CW.needsYou}` : peopleSummary({ moment, ...counts })}
+        alert={askers.length > 0}
+        open={peopleOpen}
+        onToggle={askers.length ? () => {} : toggle}
+        link={CW.allPlayers}
+        onLink={() => onOpenSection('players')}
+      >
+        {askers.length || opened.length ? (
+          <div className="ny ny-asking" data-testid="people-needs">
+            <p className="ny-k">{NEEDS_WORDS.title}</p>
+            {askers.map((a) => (
+              <div key={a.id} className="ny-asker" data-testid="people-asker">
+                <span className="ny-asker-name">
+                  <span className="ny-dot" aria-hidden="true" />
+                  {a.name}
+                  {agoText(a.at) ? <span className="ny-asker-meta">{agoText(a.at)}</span> : null}
+                </span>
+                <span className="ny-asker-flag">{CW.wantsName}</span>
+                <NeedsActions item={a} onAct={onNeedsAct} busy={needsBusy} only={[NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW]} />
+              </div>
+            ))}
+            {opened.map((a) => (
+              <div key={a.id} className="ny-asker" data-testid="people-open">
+                <span className="ny-asker-name">{a.name}</span>
+                <span className="ny-asker-flag">{a.text}</span>
+                <NeedsActions item={a} onAct={onNeedsAct} busy={needsBusy} />
+              </div>
+            ))}
+            {needsError ? <p className="ny-empty ny-error" role="alert">{needsError}</p> : null}
+          </div>
+        ) : null}
         <ul className="hc-list">
-          {people.map((p) => (
+          {peopleRows.map((p) => (
             <li key={p.name}>
               <span className={MARK[p.state] === '✓' ? 'hc-tick' : 'hc-wait'}>{MARK[p.state]}</span>
               <span>{p.name}{META[p.state] ? <span className="hc-meta">{` · ${META[p.state]}`}</span> : null}</span>

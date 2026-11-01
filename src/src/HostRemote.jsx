@@ -12,7 +12,9 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import ReadCheckNote from './components/ReadCheckNote';
-import { fetchReadCheck } from './utils/readCheckClient';
+import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
+import { needsYou, NEEDS_ACTIONS, NEEDS_WORDS } from './config/needsYou';
+import SessionNeedsList from './components/needs/SessionNeedsList';
 import { authFetch } from './auth/authFetch';
 import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
@@ -1000,6 +1002,48 @@ function HostRemote() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, access.status]);
   const lateStatus = useMemo(() => lateStatusOf(lateRounds), [lateRounds]);
+  /*
+    NEEDS YOU, ON THE PHONE (experience plan §3.3, 1b): the same list the
+    laptop works out (config/needsYou.js), from what this phone already polls:
+    the roster's handover flags every ROSTER_POLL_MS, the late count, the
+    read's check. Named, because the phone is private, with Let them / Not now
+    / Lock again on the same host-only route the laptop uses. Whoever answers
+    first wins; the other device shows the server's answer and re-reads.
+  */
+  const [needsBusy, setNeedsBusy] = useState(false);
+  const [needsError, setNeedsError] = useState('');
+  const needs = needsYou({
+    players: roster && Array.isArray(roster.players) ? roster.players : [],
+    late: lateStatus,
+    readCheck: onFieldNotes ? readCheckNote(readCheck) : '',
+    readRound: round,
+    now: Date.now(),
+  });
+  const actOnNeed = async (item, action) => {
+    const body = action === NEEDS_ACTIONS.LET ? { bindToRequester: true, ...(item.at ? { requestedAt: item.at } : {}) }
+      : action === NEEDS_ACTIONS.NOT_NOW ? { refuse: true }
+        : action === NEEDS_ACTIONS.LOCK ? { lock: true } : null;
+    if (!body || !item.name || !gameId) return;
+    setNeedsBusy(true);
+    setNeedsError('');
+    try {
+      const res = await authFetch(`${apiBase()}games/${gameId}/players/${encodeURIComponent(item.name)}/handover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let said = '';
+        try { const j = await res.json(); said = (j && (j.message || j.error)) || ''; } catch { /* no body */ }
+        setNeedsError(said || `That did not work (${res.status}). Look again.`);
+      }
+    } catch {
+      setNeedsError('That did not reach the server. Try again.');
+    } finally {
+      setNeedsBusy(false);
+      pollRoster(gameId);
+    }
+  };
   const stepExtras = useMemo(() => ({
     playerCount: rosterCount,
     answerCount: onResults || onVoting ? focusAnswers.length : undefined,
@@ -1580,6 +1624,18 @@ function HostRemote() {
           </>
         ) : (
           <>
+            {/* NEEDS YOU, above the status card (experience plan §3.3, 1b). */}
+            {needs.items.length > 0 ? (
+              <section className="ny hr-needs" aria-label={NEEDS_WORDS.title} data-testid="remote-needs">
+                <p className="ny-k" aria-live="polite">{`${NEEDS_WORDS.title} · ${needs.items.length}`}</p>
+                <SessionNeedsList
+                  needs={{ ...needs, items: needs.items.map((i) => ({ ...i, actions: i.actions.filter((a) => [NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW, NEEDS_ACTIONS.LOCK].includes(a)) })) }}
+                  onAct={actOnNeed}
+                  busy={needsBusy}
+                  error={needsError}
+                />
+              </section>
+            ) : null}
             <section className="hr-status" aria-live="polite">
               <p className="hr-status-kicker">{summary.detail}</p>
               <h1 className="hr-status-phase">{summary.headline}</h1>
