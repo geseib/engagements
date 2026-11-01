@@ -11916,9 +11916,16 @@ body {
   gap: 8px;
 }
 
+/* ONE ROW PER RESPONSE, however many children it has: number, text, then an
+   auto-sized column each for the author and (in a feedback round) the Comment
+   button. The fixed `28px 1fr auto` had three tracks for four children, so
+   the Comment button wrapped onto a row of its own, under the NEXT
+   response's number. Column flow puts every child on the one row. */
 .past-round__answers li {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
@@ -11989,6 +11996,25 @@ body {
   font-size: 0.85rem;
   opacity: 0.75;
   white-space: nowrap;
+}
+
+/* A PHONE (360px): number, text and Comment button side by side would leave
+   the text a sliver, so the author drops under the text and the number and
+   the button span both lines. The button's own placement is in
+   RoundReport.css, which owns the button. */
+@media (max-width: 480px) {
+  .past-round__answers li {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .past-round__answers li > .past-round__rank { grid-column: 1; grid-row: 1 / span 2; }
+  .past-round__answers li > .past-round__answer { grid-column: 2; grid-row: 1; }
+  .past-round__answers li > .past-round__who {
+    grid-column: 2;
+    grid-row: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 .past-round__empty {

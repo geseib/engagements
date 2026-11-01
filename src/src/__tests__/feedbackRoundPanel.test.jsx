@@ -107,15 +107,15 @@ describe('the composer', () => {
   });
 
   test('opens on the section that was clicked, and says which', () => {
-    // Scoped to the composer: "AI summary" is also the section's own heading,
+    // Scoped to the composer: "Workie’s read" is also the section's own heading,
     // and that ambiguity is the point — the composer has to name its subject
     // independently, because on a phone the heading may be scrolled off.
     const { container } = mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(screen.getByRole('textbox')).toBeInTheDocument();
     const composer = container.querySelector('.fbr__composer');
     expect(composer).toBeTruthy();
-    expect(composer.querySelector('.fbr__on-anchor').textContent).toBe('AI summary');
+    expect(composer.querySelector('.fbr__on-anchor').textContent).toBe('Workie’s read');
     expect(composer.textContent).toMatch(/Commenting on/i);
   });
 
@@ -131,7 +131,7 @@ describe('the composer', () => {
       failure here. It is stated before anyone types, not discovered afterwards.
     */
     mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(screen.getByText('Your name will be shown with this comment.')).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe('the composer', () => {
       none. rejects: the round types' disclosure left on a survey.
     */
     mount({ namesShown: false });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(screen.getByText('Your name is not shown with this comment.')).toBeInTheDocument();
     expect(screen.queryByText('Your name will be shown with this comment.')).toBeNull();
   });
@@ -175,7 +175,7 @@ describe('the composer', () => {
 
   test('will not send an empty comment', () => {
     const { props } = mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
@@ -201,7 +201,7 @@ describe('the composer', () => {
 
   test('closes and clears once the comment lands', async () => {
     mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
     fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
     await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
@@ -216,7 +216,7 @@ describe('the composer', () => {
     */
     const onSubmit = jest.fn().mockResolvedValue({ ok: false, error: 'the host has closed this round' });
     mount({ onSubmit });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Worth keeping.' } });
     fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
 
@@ -227,7 +227,7 @@ describe('the composer', () => {
   test('can be abandoned without posting', () => {
     // Every dialog needs a way out that is not the commit.
     const { props } = mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.click(screen.getByRole('button', { name: /Cancel/ }));
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(props.onSubmit).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe('the composer', () => {
 
   test('counts what has been typed, and refuses more than the ceiling', () => {
     mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     const box = screen.getByRole('textbox');
     expect(box).toHaveAttribute('maxLength', '1000');
     fireEvent.change(box, { target: { value: 'four' } });
@@ -257,7 +257,7 @@ describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
   test('reports true the moment something is typed', () => {
     const onDraftChange = jest.fn();
     mount({ onDraftChange });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
     expect(onDraftChange).toHaveBeenLastCalledWith(true);
   });
@@ -265,7 +265,7 @@ describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
   test('reports false again once the draft is sent', async () => {
     const onDraftChange = jest.fn();
     mount({ onDraftChange });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
     fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
     await waitFor(() => expect(onDraftChange).toHaveBeenLastCalledWith(false));
@@ -274,7 +274,7 @@ describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
   test('reports false again once the draft is cancelled', () => {
     const onDraftChange = jest.fn();
     mount({ onDraftChange });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'A remark.' } });
     fireEvent.click(screen.getByRole('button', { name: /Cancel/ }));
     expect(onDraftChange).toHaveBeenLastCalledWith(false);
@@ -285,7 +285,7 @@ describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
     // told there is something worth keeping when there is nothing to post.
     const onDraftChange = jest.fn();
     mount({ onDraftChange });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
     expect(onDraftChange).toHaveBeenLastCalledWith(false);
   });
@@ -293,7 +293,7 @@ describe('the lifted "has a draft" flag (fix round 1, item 6)', () => {
   test('the host-triggered caller, which passes no onDraftChange, is unaffected', () => {
     // No prop at all — must not throw when the composer opens or types.
     mount();
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(() => fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } }))
       .not.toThrow();
   });
@@ -366,9 +366,85 @@ describe('the empty-responses text and retry (fix round 2)', () => {
 describe('a moved-on round no longer disables Post (late items Task 2: comments.js keeps it as added later)', () => {
   test('the panel has no postDisabled switch and no "copy it" sentence; Post follows the draft', () => {
     mount({ postDisabled: true });
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on the AI summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Worth keeping.' } });
     expect(screen.getByRole('button', { name: /Post comment/ })).not.toBeDisabled();
     expect(screen.queryByText(/copy it/i)).toBeNull();
+  });
+});
+
+describe('one draft per section (switching target never loses what was typed)', () => {
+  const box = () => screen.getByRole('textbox');
+  const type = (value) => fireEvent.change(box(), { target: { value } });
+  const tap = (name) => fireEvent.click(screen.getByRole('button', { name }));
+
+  test('switching section keeps the first draft, and returning restores it', () => {
+    // rejects: open() clearing the box, so tapping Comment on another section
+    // silently threw away the words typed for the first.
+    mount();
+    tap('Comment on Workie’s read');
+    type('The read misses the customer.');
+    tap('Comment on response 2');
+    expect(box()).toHaveValue('');
+    type('This one is concrete.');
+    tap('Comment on Workie’s read');
+    expect(box()).toHaveValue('The read misses the customer.');
+    tap('Comment on response 2');
+    expect(box()).toHaveValue('This one is concrete.');
+  });
+
+  test('a draft left on another section still counts as a draft for the container', () => {
+    // rejects: the "has a draft" flag reading only the open section, so a
+    // container could close the panel over words kept for another one.
+    const onDraftChange = jest.fn();
+    mount({ onDraftChange });
+    tap('Comment on Workie’s read');
+    type('Kept for later.');
+    tap('Comment on the results');
+    expect(box()).toHaveValue('');
+    expect(onDraftChange).toHaveBeenLastCalledWith(true);
+  });
+
+  test('Cancel clears only the section it cancels', () => {
+    // rejects: a single shared draft, where cancelling one section wiped the
+    // words kept for another.
+    mount();
+    tap('Comment on Workie’s read');
+    type('Keep me.');
+    tap('Comment on response 1');
+    type('Drop me.');
+    tap('Cancel');
+    tap('Comment on response 1');
+    expect(box()).toHaveValue('');
+    tap('Comment on Workie’s read');
+    expect(box()).toHaveValue('Keep me.');
+  });
+
+  test('a sent comment clears its own draft and leaves the others', async () => {
+    // rejects: a send that cleared every draft, or none.
+    const onSubmit = jest.fn().mockResolvedValue({ ok: true });
+    mount({ onSubmit });
+    tap('Comment on response 2');
+    type('Still drafting.');
+    tap('Comment on Workie’s read');
+    type('Ready to go.');
+    fireEvent.click(screen.getByRole('button', { name: /Post comment/ }));
+    await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ anchorKind: 'summary', text: 'Ready to go.' }));
+    tap('Comment on Workie’s read');
+    expect(box()).toHaveValue('');
+    tap('Comment on response 2');
+    expect(box()).toHaveValue('Still drafting.');
+  });
+});
+
+describe('the summary is called Workie’s read on the phone', () => {
+  test('the section heading and its Comment button say Workie’s read, never "AI summary"', () => {
+    // rejects: the phone's "AI summary" header, the one place the product's
+    // name for Workie's output was not used.
+    const { container } = mount();
+    expect(container.querySelector('.past-round__summary h4').textContent).toBe('Workie’s read');
+    expect(screen.getByRole('button', { name: 'Comment on Workie’s read' })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/AI summary/);
   });
 });

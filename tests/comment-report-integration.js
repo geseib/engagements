@@ -311,6 +311,50 @@ const build = () => handler({
   check('and the total is zero rather than absent', () =>
     assert.strictEqual(bare.gameStats.totalComments, 0));
 
+  console.log('\n6. a points tie is broken by first-place votes, the order the phone now uses');
+
+  // Two responses tie on points. The one the room was SHOWN first has fewer
+  // first-place votes, so display order and the first-place tiebreak disagree
+  // — the case where the phone (points, then display order) and the report
+  // (points, then first places) used to number the same comment differently.
+  store.clear();
+  seed();
+  const { displayOrder } = require(path.join(REPO, 'lambda-functions/game/answer-order.js'));
+  const { rankResponses } = require(path.join(REPO, 'lambda-functions/game/response-order.js'));
+  put({ PK: `GAME#${GAME}`, SK: 'QUESTION#001#ANSWER#Bea', PlayerName: 'Bea', QuestionNumber: '001', Answer: 'Bea says' });
+  // The round's answers in SK order, as create-report reads them.
+  const skOrder = [...store.values()]
+    .filter((i) => String(i.SK).startsWith('QUESTION#001#ANSWER#'))
+    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+  const order = displayOrder(skOrder, GAME, '001');
+  const shownFirst = order[0];   // canonical index of the response shown first
+  const shownSecond = order[1];
+  // shownFirst: two second places = 4 points, 0 firsts.
+  // shownSecond: one first + one third = 4 points, 1 first.
+  put({ PK: `GAME#${GAME}`, SK: 'QUESTION#001#VOTE#v1', Votes: { [shownSecond]: 1, [shownFirst]: 2 } });
+  put({ PK: `GAME#${GAME}`, SK: 'QUESTION#001#VOTE#v2', Votes: { [shownFirst]: 2, [shownSecond]: 3 } });
+  const tied = JSON.parse((await build()).body).report;
+  const tiedRound = (tied.detailedQuestions || []).find((q) => q.questionNumber === '001');
+
+  check('the response with more first-place votes is listed first, ahead of display order', () => {
+    // rejects: ranking the tie by display order (the phone's old rule), which
+    // would list the shown-first response first.
+    const names = tiedRound.answers.map((a) => a.playerName);
+    assert.deepStrictEqual(names, [skOrder[shownSecond].PlayerName, skOrder[shownFirst].PlayerName]);
+    assert.deepStrictEqual(tiedRound.answers.map((a) => a.totalScore), [4, 4]);
+    assert.deepStrictEqual(tiedRound.answers.map((a) => a.rank), [1, 1], 'a tie still shares its placement');
+  });
+
+  check('and that is exactly the shared rule the phone ranks by (response-order.js)', () => {
+    // rejects: create-report and the phone's rule diverging on a tie.
+    const tallies = tiedRound.answers.map((a) => ({
+      playerName: a.playerName, totalScore: a.totalScore, firstPlace: a.firstPlace,
+      shownPlace: order.indexOf(a.answerIndex),
+    }));
+    const shared = rankResponses(tallies.slice().reverse());
+    assert.deepStrictEqual(shared.map((r) => r.playerName), tiedRound.answers.map((a) => a.playerName));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

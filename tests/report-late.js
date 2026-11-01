@@ -196,6 +196,14 @@ const brief = (it) => ({ text: it.text, who: it.who, arrivedDuring: it.arrivedDu
     const words = JSON.stringify(r2.late);
     for (const name of ['Grace', 'Linus', 'Sam']) assert.ok(!words.includes(name), `${name} in ${words}`);
   });
+  await check('a late comment carries its excerpt, as an on-time comment does', () => {
+    // rejects: create-report building late comments from the stored label
+    // alone, so "On Response 2" quoted nothing of what it was about. The
+    // excerpt is the response's own words, never a name, so it travels on a
+    // round that hid names too.
+    assert.strictEqual(r2.late.comments[0].anchorExcerpt, 'Re-price it.');
+    assert.strictEqual(r1.late.comments[0].anchorExcerpt, '', 'an empty excerpt is "", never undefined');
+  });
   await check('the head carries no rounds, and with the setting on nothing is left out', async () => {
     const head = await storedHead();
     assert.ok(!('detailedQuestions' in head), 'rounds in the head');

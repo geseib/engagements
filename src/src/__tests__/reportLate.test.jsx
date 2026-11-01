@@ -56,6 +56,29 @@ describe('ReportLate', () => {
     expect(idea.querySelector('.comment-author')).toBeNull();
   });
 
+  test('a late comment carries its excerpt and the mapped label, as an on-time one does', () => {
+    // rejects: create-report dropping the excerpt from late comments, so a
+    // late "On Ada's response" quoted nothing; and an older "AI summary"
+    // label printed raw.
+    const late = {
+      answers: [], askAnswers: [], leftOut: { comments: 0, answers: 0 },
+      comments: [
+        { text: 'Only this one is concrete.', who: 'Lee', arrivedDuring: 'ASK#002', arrivedAt: '2026-10-16T09:10:00.000Z',
+          label: 'Not reviewed', reviewed: null, anchorKind: 'response', anchorLabel: 'Response 2 — Ada',
+          anchorExcerpt: 'Re-price the **onboarding** package' },
+        { text: 'Sharper than before.', who: 'Lee', arrivedDuring: 'ASK#002', arrivedAt: '2026-10-16T09:11:00.000Z',
+          label: 'Not reviewed', reviewed: null, anchorKind: 'summary', anchorLabel: 'AI summary', anchorExcerpt: '' },
+      ],
+    };
+    const { container } = render(<ReportLate late={late} roundNoun="Round" />);
+    const [onResponse, onRead] = [...container.querySelectorAll('.report-late-item')];
+    expect(onResponse.querySelector('.comment-on').textContent).toMatch(/On Ada’s response/);
+    expect(onResponse.querySelector('.comment-excerpt').textContent).toBe('Re-price the onboarding package');
+    expect(onRead.querySelector('.comment-on').textContent).toMatch(/On Workie’s read/);
+    expect(onRead.querySelector('.comment-excerpt')).toBeNull();
+    expect(container.textContent).not.toMatch(/AI summary/);
+  });
+
   test('nothing late, nothing drawn', () => {
     expect(render(<ReportLate late={null} />).container.innerHTML).toBe('');
     expect(render(<ReportLate late={{ answers: [], askAnswers: [], comments: [] }} />).container.innerHTML).toBe('');

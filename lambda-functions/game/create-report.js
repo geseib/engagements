@@ -10,6 +10,7 @@ const followUpKeys = require('./followup-keys');
 const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
 const { displayOrder } = require('./answer-order');
+const { compareResponses } = require('./response-order');
 const { shapeForLog } = require('./log-shape');
 const { triviaOptionCounts } = require('./trivia-tally');
 const { reconcileReport, answersCouldHaveExpired } = require('./report-merge');
@@ -463,6 +464,10 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
             ...base,
             anchorKind: row.AnchorKind || null,
             ...(roundIsHidden(round) ? {} : { anchorLabel: row.AnchorLabel || null }),
+            // The quoted material it is about, as an on-time comment carries
+            // it. Not name-bearing (it is the response's or the read's own
+            // words), so it travels whether or not the round showed names.
+            anchorExcerpt: row.AnchorExcerpt || '',
           });
         }
       }
@@ -797,16 +802,11 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
           thirdPlace: voteData.thirdPlace,
           voteBreakdown: `${voteData.firstPlace} first, ${voteData.secondPlace} second, ${voteData.thirdPlace} third`
         }))
-        .sort((a, b) => {
-          // Sort by total score first, then by first place votes as tiebreaker
-          if (b.totalScore !== a.totalScore) {
-            return b.totalScore - a.totalScore;
-          }
-          if (b.firstPlace !== a.firstPlace) return b.firstPlace - a.firstPlace;
-          // Then the order the room voted in (answer-order.js), never the
-          // alphabetical order the rows are stored in.
-          return shownPlace.get(a.answerIndex) - shownPlace.get(b.answerIndex);
-        });
+        // Points, then first-place votes, then the order the room voted in
+        // (answer-order.js) — response-order.js, the one rule the
+        // participant's feedback panel also ranks by, so a comment anchored
+        // to "Response 2" on the phone is the second response here too.
+        .sort((a, b) => compareResponses(a, b, (row) => shownPlace.get(row.answerIndex)));
 
       // Add ranking positions
       let currentRank = 1;

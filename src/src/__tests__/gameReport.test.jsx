@@ -426,7 +426,18 @@ describe('comments in the session report', () => {
     expect(within(container.querySelector('.report-comments')).getByText('Comments')).toBeInTheDocument();
   });
 
+  test('the count says "on this round", since comments on Workie’s read are among them', () => {
+    // rejects: "2 comments on this round’s results" when one of the two is on
+    // Workie's read.
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    const block = container.querySelector('.report-comments');
+    expect(block.textContent).toMatch(/2 comments on this round(?!’s results)/);
+    expect(block.textContent).not.toMatch(/on this round’s results/);
+  });
+
   test('each states which section it is about', () => {
+    // rejects: "On AI summary" under the Workie's read heading, and the
+    // phone's "Response N" printed beside a report that numbers by placement.
     /*
       In the SESSION report a comment is read a long way from the round it
       belongs to — often on paper. "Too internal" against nothing is not a
@@ -436,8 +447,12 @@ describe('comments in the session report', () => {
     */
     const { container } = render(<ReportDocument reportData={withComments} />);
     const block = container.querySelector('.report-comments');
-    expect(block.textContent).toContain('Response 1 — Ada');
-    expect(block.textContent).toContain('AI summary');
+    // Stored labels, mapped at render: a response by its author's name (the
+    // report prints placements, never the phone's positions), and an older
+    // "AI summary" label under the name the report gives that section.
+    expect(block.textContent).toContain('On Ada’s response');
+    expect(block.textContent).toContain('On Workie’s read');
+    expect(block.textContent).not.toContain('AI summary');
   });
 
   test('one the host put on the wall says so', () => {
