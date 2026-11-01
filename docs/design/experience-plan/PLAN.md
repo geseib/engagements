@@ -242,6 +242,15 @@ list with its buttons, the trivia answer, the late list, Workie's read with Retr
 notes, End session. On two screens it is a convenience: walk the room with the main button
 in your hand. It reads the same Needs-you list as the laptop, so the two never disagree.[^14]
 
+**"On your phone" only when a phone is connected** (owner question, 1 Nov). The Needs-you
+line says "· on your phone" only while the host's Remote is open and signed in to this
+session; the item is already waiting there, named, with its buttons. With no Remote
+connected the line says "1 name request" with **Open**, and the sheet offers per item
+**Show on this screen** (one item, after "the room will see this") or **Connect your
+phone** (the Remote's QR in a host-only sheet, scanned once; the room has no use for it
+because it needs the host's sign-in). Setup on one screen offers to connect the phone before
+round 1, so most hosts never see the second case.
+
 ### 3.4 The participant's journey
 
 Join (one code entry, the word "session" throughout) → name → lobby → for each round: answer,
