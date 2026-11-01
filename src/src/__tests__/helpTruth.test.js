@@ -24,7 +24,15 @@ describe('known false help claims only ever fall', () => {
   }
   const files = [...new Set([...Object.keys(found), ...Object.keys(A.helpFalseClaims)])].sort();
   const FIX = 'rewrite the sentence to say what the screen really does (see each claim\'s reason in src/src/testing/driftScan.js FALSE_HELP_CLAIMS).';
-  test.each(files.map((f) => [f]))('%s', (r) => {
+  // Zero known false claims is the goal (Phase 1a fixed the first two): `.each` refuses an
+  // empty table, so the clean state is its own test.
+  if (!files.length) {
+    test('no known false help claims remain, and none are allowed', () => {
+      expect(Object.keys(A.helpFalseClaims)).toEqual([]);
+    });
+  }
+  test.each(files.length ? files.map((f) => [f]) : [['(none)']])('%s', (r) => {
+    if (r === '(none)') return;
     const problems = D.ratchet({
       file: r,
       found: (found[r] || []).map((f) => ({ ...f, literal: `${f.literal}: ${f.why}` })),
