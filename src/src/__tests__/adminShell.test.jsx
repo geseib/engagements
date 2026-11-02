@@ -291,7 +291,8 @@ describe('identity, and the two ways out', () => {
     // so an in-place link is a full page load, and if a host session is live in
     // another tab that is a second host WebSocket connection.
     setup();
-    const link = screen.getByRole('link', { name: /host/i });
+    // "Home ↗" since the experience plan's 4b (it said "Host").
+    const link = screen.getByRole('link', { name: /^Home ↗$/ });
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
   });

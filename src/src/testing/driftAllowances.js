@@ -35,7 +35,6 @@ module.exports = {
     "components/PlatformOrgsPanel.jsx": 1,
     "components/PollAIBuilder.jsx": 2,
     "components/QuickstartMenu.jsx": 1,
-    "components/SessionsPanel.jsx": 2,
     "components/SurveyAIBuilder.jsx": 2,
     "components/TriviaAIBuilder.jsx": 1,
     "components/UserManagement.jsx": 2
@@ -74,7 +73,6 @@ module.exports = {
     "components/QuickstartMenu.jsx": 1,
     "components/ReportsPanel.jsx": 1,
     "components/ScoreCard.jsx": 2,
-    "components/SessionHistoryPanel.jsx": 1,
     "components/SetChooser.jsx": 1,
     "components/SetTopicField.jsx": 1,
     "components/ShareSetDialog.jsx": 1,
@@ -113,7 +111,6 @@ module.exports = {
     "components/QuestionSetsPanel.css": 1,
     "components/ReportShare.css": 1,
     "components/RootPage.css": 1,
-    "components/SessionHistoryPanel.css": 1,
     "components/SetMediaPanel.css": 1,
     "components/SetReviewBanner.css": 1,
     "components/ShareSetDialog.css": 1,
@@ -255,14 +252,8 @@ module.exports = {
     "components/RoundReport.jsx": {
       "Comment": 1
     },
-    "components/SessionHistoryPanel.jsx": {
-      "Players": 1,
-      "Results": 1,
-      "Session reports": 1
-    },
     "components/SessionsPanel.jsx": {
-      "All sessions": 2,
-      "Players": 1
+      "All sessions": 2
     },
     "components/SiteSkinPanel.jsx": {
       "Presentation": 1
@@ -325,7 +316,6 @@ module.exports = {
     },
     "config/help/admin-console.js": {
       "All sessions": 2,
-      "Players & rounds": 1,
       "Settings": 2
     },
     "config/help/admin-team.js": {
@@ -535,8 +525,8 @@ module.exports = {
     "select-question-btn",
     "set-correct-btn",
     "setup-q__btn",
-    "shist__btn",
     "sks-btn",
+    "slist-btn",
     "smed-btn",
     "sp-btn",
     "srev-btn",

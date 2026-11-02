@@ -235,7 +235,7 @@ const hostSurveys = {
         },
         {
           t: 'p',
-          text: '**Back to session** returns to the stage. The results are frozen at the close, and are also on the survey\'s row in your sessions list (**Results**).',
+          text: '**Back to session** returns to the stage. The results are frozen at the close, and are also on the survey\'s row in your sessions list (**Survey results**).',
         },
       ],
     },
@@ -321,7 +321,7 @@ const hostSurveys = {
       blocks: [
         {
           t: 'p',
-          text: 'Open it from **Session report** at the top of the Session panel\'s Rounds tab, or later from **Report** on the survey\'s row in your sessions list. A closed survey\'s row also has **Results** and **Continue**, which takes you back to its stage.',
+          text: 'Open it from **Session report** at the top of the Session panel\'s Rounds tab, or later from **Report** on the survey\'s row in your sessions list. A closed survey\'s row has **Survey results** as its main button, and **Report** and **Continue** (back to its stage) under **⋯**.',
         },
         {
           t: 'p',

@@ -10,6 +10,7 @@
  * whole session row; its contract is (gameId, title).
  */
 import React from 'react';
+import { clickRowAction } from '../testUtils/sessionRows';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
@@ -111,7 +112,7 @@ describe('Your sessions: the confirmation after Create', () => {
 
     // Create engagement → Call & Answer → a set → Ctrl+Enter.
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /create engagement/i }, { timeout: 5000 }));
+      fireEvent.click(await screen.findByRole('button', { name: /new engagement/i }, { timeout: 5000 }));
     });
     const format = await screen.findByRole('radio', { name: 'Call & Answer' }, { timeout: 5000 });
     fireEvent.click(format);
@@ -127,7 +128,10 @@ describe('Your sessions: the confirmation after Create', () => {
     expect(done).toHaveTextContent(`Its code is ${GAME}`);
 
     // Open the new row's Edit, then close it without changes.
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Edit$/ })); });
+    // Edit is under the row's ⋯ since the experience plan's 4a.
+    // Not inside one act(): the menu has to render before its item is pressed.
+    clickRowAction(within(done.closest('.shist')).getByText(TITLE).closest('tr'), /^Edit/);
+    await act(async () => {});
     const cancel = await screen.findByRole('button', { name: 'Close without saving changes' }, { timeout: 5000 });
     await act(async () => { fireEvent.click(cancel); });
 

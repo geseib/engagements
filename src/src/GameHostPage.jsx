@@ -29,6 +29,8 @@ import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
+import { readSessionIntent, inviteTargetFor } from './config/sessionRows';
+import { deleteSessionRow } from './utils/sessionRowsApi';
 import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
@@ -1123,6 +1125,22 @@ function GameHostPage() {
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+  /*
+    HOME'S LISTS (experience plan 4b): Rejoin and the five recent sessions
+    read the same GET /games the sessions dialog does, each time Home comes
+    on screen. Quiet: a failed read leaves Home's lists saying they are
+    loading rather than raising an alert over the start screen.
+  */
+  const [homeSessionsLoaded, setHomeSessionsLoaded] = useState(false);
+  // Keyed on whether someone is signed in, not on the user object: a provider
+  // that hands back a fresh object each render would refetch on every render.
+  const signedIn = Boolean(currentUser);
+  useEffect(() => {
+    if (!showWelcomeScreen || !signedIn) return;
+    fetchGamesList({ quiet: true }).then((ok) => { if (ok) setHomeSessionsLoaded(true); });
+    // fetchGamesList is a plain function redeclared each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWelcomeScreen, signedIn]);
   const [continueGameId, setContinueGameId] = useState('');
   useEffect(() => {
     if (!panelLinkRef.current || !gameId || showWelcomeScreen) return;
@@ -2897,6 +2915,9 @@ Focus on actionable business strategy insights.`;
       setShowWelcomeScreen(true);
       // Load question sets for UI display (needed for set name display)
       fetchQuestionSets();
+      // A session handed over from Library & team (experience plan 4a).
+      const intent = readSessionIntent(window.location.search);
+      if (intent) runSessionIntent(intent);
     }
   }, []);
 
@@ -6292,7 +6313,7 @@ Focus on actionable business strategy insights.`;
   // authFetch sends the request unauthenticated when the session has expired
   // (authFetch.js) — which is why the 401/403 is handled rather than falling
   // into the catch as an opaque "failed to load".
-  const fetchGamesList = async () => {
+  const fetchGamesList = async ({ quiet = false } = {}) => {
     try {
       const res = await authFetch(`${API_BASE}games`);
       if (res.status === 401 || res.status === 403) {
@@ -6300,19 +6321,89 @@ Focus on actionable business strategy insights.`;
         setGamesList([]);
         // A 401 is an expired sign-in, and authFetch has already put the
         // sign-in form up (auth/sessionExpiry.js) — no alert on top of it.
-        if (res.status === 401 || isSessionExpired()) return;
+        if (quiet || res.status === 401 || isSessionExpired()) return false;
         alert('This account cannot see sessions yet. Ask an admin to approve it for hosting.');
-        return;
+        return false;
       }
       const data = await res.json();
       // Sessions and events as one list: an event is ONE row with its items,
       // and its items' sessions are under it, never listed again (2026-10-04,
       // config/engagementKinds.js).
       setGamesList(mergeSessions(data));
+      return true;
     } catch (error) {
       console.error('Error fetching games list:', error);
-      alert('Failed to load games list. Please try again.');
+      if (!quiet) alert('Failed to load games list. Please try again.');
+      return false;
     }
+  };
+
+  /*
+    DELETE FROM THE HOST'S OWN LISTS (experience plan 4a): Home's rows and the
+    sessions dialog offer it as Library & team's list does, through the same
+    call (utils/sessionRowsApi.js). SessionList asks first, inline.
+  */
+  const deleteSessionFromList = async (row, reason) => {
+    await deleteSessionRow(row, reason);
+    setGamesList((prev) => prev.filter((item) => item.gameId !== row.gameId));
+  };
+
+  /*
+    HOME'S ROW ACTIONS. Report, Survey results and Edit render over Home and
+    close back to it (their early returns now come before Home's). Continue
+    and Start take the host to the stage, so Home steps aside first.
+  */
+  const homeRowActions = {
+    onStart: async (selectedGameId, title, opts = {}) => {
+      setWelcomeNotice('');
+      const pending = (opts && opts.pending) || null;
+      const started = await startSession(selectedGameId, title);
+      if (!started.ok) {
+        if (pending) pending.cancel();
+        setWelcomeNotice(`That session did not start: ${started.error}`);
+        return;
+      }
+      setShowWelcomeScreen(false);
+      const id = String(selectedGameId).trim();
+      setWindowBlockedFor(opts && opts.blocked ? id : null);
+      if (pending) pending.go(presentHref(id));
+    },
+    onOpen: (selectedGameId, title) => {
+      setShowWelcomeScreen(false);
+      selectGameFromHistory(selectedGameId, title);
+    },
+    onEdit: (selectedGameId) => editGameFromHistory(selectedGameId),
+    onReport: (selectedGameId, title) => generateReportForGame(selectedGameId, title),
+    onResults: (selectedGameId, title) => loadSurveyResults(selectedGameId, title),
+    onInvite: (row) => setInviteTarget(inviteTargetFor(row, questionSets)),
+    onCopyPlayerUrl: copyPlayerUrl,
+    onDelete: deleteSessionFromList,
+  };
+
+  /*
+    LIBRARY & TEAM HANDS A SESSION OVER (experience plan 4a): its Start, Edit,
+    Report and Survey results open this page as /host?session=1234&do=start.
+    Run once, on Home, and take the words out of the URL so a reload does not
+    start it twice.
+  */
+  const runSessionIntent = async ({ gameId: targetId, action }) => {
+    const url = new URL(window.location);
+    url.searchParams.delete('session');
+    url.searchParams.delete('do');
+    window.history.replaceState(null, '', url);
+    const title = localStorage.getItem(`game_${targetId}_title`) || '';
+    if (action === 'start') {
+      const started = await startSession(targetId, title);
+      if (!started.ok) { setWelcomeNotice(`That session did not start: ${started.error}`); return; }
+      setShowWelcomeScreen(false);
+      // Two screens remembered: the window could not open from the console's
+      // click, so Setup opens with the room's window to open (2b's blocked path).
+      if (roomScreenChoice === 'two') setWindowBlockedFor(targetId);
+      return;
+    }
+    if (action === 'edit') { editGameFromHistory(targetId); return; }
+    if (action === 'report') { generateReportForGame(targetId, title); return; }
+    if (action === 'results') loadSurveyResults(targetId, title);
   };
 
   /**
@@ -7051,53 +7142,6 @@ Focus on actionable business strategy insights.`;
     );
   }
 
-  // Render the welcome screen if no game is selected.
-  //
-  // The surface itself is <WelcomeScreen> — extracted, like GameSetupDialog
-  // and SessionSetupPanel before it, because this file cannot be mounted in
-  // jsdom at all and an inline surface here is an untestable one.
-  //
-  // The heading used to read `currentGameType === 'trivia' ? 'Trivia' : ...`.
-  // It was always the second branch: nothing ever sets showWelcomeScreen back
-  // to true, so currentGameType is still its initial 'call-and-answer' every
-  // time this renders. The dead ternary went with the markup.
-  if (showWelcomeScreen) {
-    return (
-      <>
-        <WelcomeScreen
-          currentUser={currentUser}
-          continueGameId={continueGameId}
-          onContinueGameIdChange={setContinueGameId}
-          onContinue={handleContinueGame}
-          onQuickStart={() => setShowQuickstartMenu(true)}
-          onCreateEngagement={handleWelcomeNewGame}
-          onViewHistory={handleViewGameHistory}
-          onQuestionSets={() => setShowHostSets(true)}
-          onReports={() => setShowHostReports(true)}
-          onSignOut={handleSignOut}
-          notice={welcomeNotice}
-        />
-        {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
-            `position: fixed; inset: 0` with its own `data-theme="dark"`, so a
-            dialog nested inside it would inherit the dusk tokens under
-            `.qsets--onlight`'s white card and scroll with the page behind it.
-            The scrim is fixed and z-index 10001, which is above everything the
-            welcome screen paints, so a sibling lands exactly where it should.
-
-            NO `onSetsChanged`. That prop exists so the create screen's picker
-            can offer a set the moment it is made; here there is no picker on
-            screen, and the page re-reads `questionSets` when the create dialog
-            opens. */}
-        {showHostSets && (
-          <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
-        )}
-        {showHostReports && (
-          <HostReportsDialog onClose={() => setShowHostReports(false)} />
-        )}
-      </>
-    );
-  }
-
   // Render the report if it's being shown.
   //
   // `showReport` alone, deliberately — NOT `showReport && reportData`. The
@@ -7208,6 +7252,63 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  // Render the welcome screen if no game is selected.
+  //
+  // AFTER the report, survey results and edit branches (experience plan 4b):
+  // Home's rows open those over Home, and closing them falls back to Home.
+  // Before, Home's early return came first and would have hidden them.
+  //
+  // The surface itself is <WelcomeScreen> — extracted, like GameSetupDialog
+  // and SessionSetupPanel before it, because this file cannot be mounted in
+  // jsdom at all and an inline surface here is an untestable one.
+  //
+  // The heading used to read `currentGameType === 'trivia' ? 'Trivia' : ...`.
+  // It was always the second branch: nothing ever sets showWelcomeScreen back
+  // to true, so currentGameType is still its initial 'call-and-answer' every
+  // time this renders. The dead ternary went with the markup.
+  if (showWelcomeScreen) {
+    return (
+      <>
+        <WelcomeScreen
+          currentUser={currentUser}
+          continueGameId={continueGameId}
+          onContinueGameIdChange={setContinueGameId}
+          onContinue={handleContinueGame}
+          onQuickStart={() => setShowQuickstartMenu(true)}
+          onCreateEngagement={handleWelcomeNewGame}
+          onQuestionSets={() => setShowHostSets(true)}
+          onReports={() => setShowHostReports(true)}
+          onSignOut={handleSignOut}
+          notice={welcomeNotice}
+          sessions={homeSessionsLoaded ? gamesList : null}
+          questionSets={questionSets}
+          rowActions={homeRowActions}
+          roomScreen={roomScreenChoice}
+        />
+        {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
+            `position: fixed; inset: 0` with its own `data-theme="dark"`, so a
+            dialog nested inside it would inherit the dusk tokens under
+            `.qsets--onlight`'s white card and scroll with the page behind it.
+            The scrim is fixed and z-index 10001, which is above everything the
+            welcome screen paints, so a sibling lands exactly where it should.
+
+            NO `onSetsChanged`. That prop exists so the create screen's picker
+            can offer a set the moment it is made; here there is no picker on
+            screen, and the page re-reads `questionSets` when the create dialog
+            opens. */}
+        {showHostSets && (
+          <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
+        )}
+        {showHostReports && (
+          <HostReportsDialog onClose={() => setShowHostReports(false)} />
+        )}
+        {/* Home's rows offer Invite too (experience plan 4a); this branch is
+            an early return, so the dialog is mounted here as well. */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+      </>
+    );
+  }
+
   // Render the game history modal if it's being shown
   if (showReportsModal) {
     /*
@@ -7269,17 +7370,8 @@ Focus on actionable business strategy insights.`;
             mode={reportsModalMode}
             questionSets={questionSets}
             onCopyPlayerUrl={copyPlayerUrl}
-            onInvite={(session) => setInviteTarget({
-              gameId: session.gameId,
-              title: session.title || session.eventTitle,
-              gameType: session.gameType,
-              setName: (questionSets.find((set) => set.id === session.questionSetId) || {}).name
-                || session.questionSetId,
-              /* null, not [] — a history row carries no category data, and []
-                 would print "All categories" onto an invite nobody checked. */
-              categories: null,
-              createdAt: session.createdAt,
-            })}
+            onInvite={(session) => setInviteTarget(inviteTargetFor(session, questionSets))}
+            onDelete={deleteSessionFromList}
             onReport={generateReportForGame}
             onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}

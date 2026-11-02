@@ -10,8 +10,9 @@
  * and computed box measures zero and passes unconditionally.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import WelcomeScreen from '../components/WelcomeScreen';
+import { rowAction, clickRowAction, rowActionNames } from '../testUtils/sessionRows';
 
 const admin = {
   attributes: { name: 'Dana Whitfield', email: 'dana@example.com' },
@@ -27,7 +28,6 @@ function setup(props = {}) {
   const handlers = {
     onQuickStart: jest.fn(),
     onCreateEngagement: jest.fn(),
-    onViewHistory: jest.fn(),
     onQuestionSets: jest.fn(),
     onSignOut: jest.fn(),
     onContinue: jest.fn(),
@@ -101,20 +101,18 @@ describe('the five ways out of this screen', () => {
     expect(onQuickStart).toHaveBeenCalledTimes(1);
   });
 
-  test('Create engagement raises onCreateEngagement', () => {
+  test('New engagement raises onCreateEngagement', () => {
     const { onCreateEngagement } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new engagement/i }));
     expect(onCreateEngagement).toHaveBeenCalledTimes(1);
   });
 
-  test('Sessions raises onViewHistory', () => {
-    // The control was "Session history" until the owner asked whether that was
-    // the right name — it was not: the list's first job is sessions that have
-    // not happened yet. The handler keeps its historical name; the label the
-    // host reads is what changed.
-    const { onViewHistory } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /^sessions$/i }));
-    expect(onViewHistory).toHaveBeenCalledTimes(1);
+  test('See all opens Library & team\'s Sessions, in place', () => {
+    // Experience plan 4b: the full list is the console's; Home shows five.
+    setup({ sessions: [] });
+    const link = screen.getByRole('link', { name: /see all/i });
+    expect(link).toHaveAttribute('href', '/admin?section=games');
+    expect(link).not.toHaveAttribute('target');
   });
 
   test('Sign out raises onSignOut', () => {
@@ -148,13 +146,12 @@ describe('the library controls read as buttons', () => {
     // text on a transparent 2px border with a -12px pull to sit flush under the
     // paragraph — which is how this file draws a text LINK, and it was read as
     // one.
-    const { container } = setup();
-    for (const name of ['Question sets', 'Sessions']) {
+    setup({ onReports: jest.fn() });
+    for (const name of ['Question sets', 'Reports']) {
       const button = screen.getByRole('button', { name });
       expect(button.className).toContain('wel-btn-line');
       expect(button.className).not.toContain('wel-btn-quiet');
     }
-    expect(container.querySelector('.wel-aside-more .wel-btn-quiet')).toBeNull();
   });
 
   test('the style it carries declares a visible rule', () => {
@@ -248,16 +245,18 @@ describe('the one identity block in the product', () => {
     // "open in new tab" are the reason it is an anchor, and an onClick
     // handler would pass this if it were a <button>.
     setup();
-    const link = screen.getByRole('link', { name: /admin console/i });
-    expect(link.getAttribute('href')).toBe('/admin');
+    const links = screen.getAllByRole('link', { name: 'Library & team' });
+    expect(links.length).toBeGreaterThan(0);
+    links.forEach((link) => expect(link.getAttribute('href')).toBe('/admin'));
   });
 
-  test('a host who is not an admin is not offered the console', () => {
-    // rejects: rendering it unconditionally. The route is admin-gated in
-    // App.jsx and again in the authorizer, so this would not be an escalation
-    // — it would be an invitation to an Access Denied screen.
+  test('the console has one name, for staff and hosts alike (experience plan 4b)', () => {
+    // rejects: the two names it had — "Admin console" for staff and "Question
+    // sets & team" for everyone else (audit E S2). /admin accepts hosts.
     setup({ currentUser: host });
-    expect(screen.queryByRole('link', { name: /admin console/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Library & team' }).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/admin console/i)).toBeNull();
+    expect(screen.queryByText(/question sets & team/i)).toBeNull();
   });
 
   test('a host without the admins group is named and not badged', () => {
@@ -290,6 +289,113 @@ describe('the one identity block in the product', () => {
  * alphas, so they are the same pixels in every skin x theme. .wel-page declares
  * data-theme="dark" (WelcomeScreen.jsx), so the text it carries is dusk's.
  */
+/* ------------------------------------------------------------ Home (4b) */
+
+describe('Home: New, Rejoin, recent sessions, events and See all (experience plan 4b)', () => {
+  const NOW = Date.now();
+  const ago = (h) => new Date(NOW - h * 3600000).toISOString();
+  const rows = [
+    { gameId: '1001', title: 'Live now', gameType: 'call-and-answer', started: true, ended: false, byMe: true, createdAt: ago(2), lastPlayedAt: ago(1), questionSetId: 'a' },
+    { gameId: '1002', title: 'Someone else running', gameType: 'trivia', started: true, ended: false, byMe: false, createdAt: ago(3) },
+    { gameId: '1003', title: 'Done yesterday', gameType: 'poll', started: true, ended: true, byMe: true, createdAt: ago(20) },
+    { gameId: '1004', title: 'Not yet', gameType: 'call-and-answer', started: false, byMe: true, createdAt: ago(1) },
+    { gameId: '1005', title: 'Old unended', gameType: 'trivia', started: true, ended: false, byMe: true, createdAt: ago(80), lastPlayedAt: ago(70) },
+    { gameId: '1006', title: 'Sixth', gameType: 'trivia', started: true, byMe: true, createdAt: ago(90) },
+    { gameId: '1007', title: 'Seventh', gameType: 'trivia', started: true, byMe: true, createdAt: ago(100) },
+    { kind: 'event', gameId: '4821', gameType: 'event', title: 'An event', createdAt: ago(0.5), started: false, items: [] },
+  ];
+  const handlers = () => ({
+    onStart: jest.fn(), onEdit: jest.fn(), onOpen: jest.fn(), onReport: jest.fn(), onResults: jest.fn(),
+    onInvite: jest.fn(), onCopyPlayerUrl: jest.fn(), onDelete: jest.fn(() => Promise.resolve()),
+  });
+
+  test('New is one button: the one amber action, with Quick start and the Build Room beneath it', () => {
+    const { container } = setup({ sessions: rows });
+    expect(container.querySelectorAll('.wel-action.is-primary')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /new engagement/i })).toHaveClass('is-primary');
+    // Kept reachable until New folds them in (4c); neither is a second amber.
+    expect(screen.getByRole('button', { name: /quick start/i })).not.toHaveClass('is-primary');
+    expect(screen.getByRole('link', { name: /build room/i })).toHaveAttribute('href', '/build');
+  });
+
+  test('Rejoin lists the host\'s own running sessions, and Rejoin continues one', () => {
+    const rowActions = handlers();
+    setup({ sessions: rows, rowActions });
+    const rejoin = screen.getByTestId('wel-rejoin');
+    expect(within(rejoin).getByText('Live now')).toBeInTheDocument();
+    // Not someone else's, not an ended one, not one idle for days, not unstarted.
+    ['Someone else running', 'Done yesterday', 'Old unended', 'Not yet'].forEach((t) => {
+      expect(within(rejoin).queryByText(t)).toBeNull();
+    });
+    fireEvent.click(within(rejoin).getByRole('button', { name: /rejoin live now/i }));
+    expect(rowActions.onOpen).toHaveBeenCalledWith('1001', 'Live now');
+  });
+
+  test('with nothing running, Rejoin says so and keeps the code field', () => {
+    setup({ sessions: [rows[3]] });
+    expect(screen.queryByTestId('wel-rejoin')).toBeNull();
+    expect(screen.getByText(/nothing of yours is running/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/session code, 4 digits/i)).toBeInTheDocument();
+  });
+
+  test('Recent sessions: the five newest, events left to their own section', () => {
+    setup({ sessions: rows });
+    const recent = screen.getByRole('table', { name: 'Recent sessions' });
+    const titles = within(recent).getAllByTestId('session-row').map((r) => r.querySelector('.slist-nm').textContent);
+    expect(titles).toEqual(['Not yet', 'Live now', 'Someone else running', 'Done yesterday', 'Old unended']);
+    expect(within(recent).queryByText('An event')).toBeNull();
+  });
+
+  test('while the sessions load, Home says so rather than "no sessions"', () => {
+    setup({ sessions: null });
+    expect(screen.getByText(/loading your sessions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no sessions yet/i)).toBeNull();
+  });
+
+  test('a host with none is told how to make one', () => {
+    setup({ sessions: [] });
+    expect(screen.getByText(/no sessions yet. press new engagement/i)).toBeInTheDocument();
+  });
+
+  test('the recent rows are the list\'s rows: one primary, the rest under ⋯, each wired', () => {
+    const rowActions = handlers();
+    setup({ sessions: rows, rowActions });
+    const recent = screen.getByRole('table', { name: 'Recent sessions' });
+    const notYet = within(recent).getByText('Not yet').closest('tr');
+    expect(rowActionNames(notYet)).toEqual(['Start', 'Edit', 'Invite…', 'Copy join link', 'Delete…']);
+    clickRowAction(notYet, /^Start/);
+    expect(rowActions.onStart).toHaveBeenCalledWith('1004', 'Not yet');
+    clickRowAction(notYet, /^Edit/);
+    expect(rowActions.onEdit).toHaveBeenCalledWith('1004', 'Not yet');
+    const done = within(recent).getByText('Done yesterday').closest('tr');
+    clickRowAction(done, /^Report/);
+    expect(rowActions.onReport).toHaveBeenCalledWith('1003', 'Done yesterday');
+  });
+
+  test('Start says how the room will watch, as the full list does (2b)', () => {
+    setup({ sessions: rows, rowActions: handlers(), roomScreen: 'two' });
+    const recent = screen.getByRole('table', { name: 'Recent sessions' });
+    expect(rowAction(within(recent).getByText('Not yet').closest('tr'), /^Start/)).toHaveTextContent('Start · two screens');
+  });
+
+  test('the events section is still on Home', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'WelcomeScreen.jsx'), 'utf8');
+    expect(src).toMatch(/<WelcomeEvents \/>/);
+  });
+});
+
+describe('the brand mark stays in the app (experience plan 4b; audit E S3)', () => {
+  test('signed in, it goes Home — not to the marketing page', () => {
+    setup();
+    expect(screen.getByRole('link', { name: /engagements/i })).toHaveAttribute('href', '/');
+  });
+
+  test('signed out (previews and tests only), it keeps the marketing home', () => {
+    setup({ currentUser: null });
+    expect(screen.getByRole('link', { name: /engagements/i })).toHaveAttribute('href', '/home');
+  });
+});
+
 describe('the welcome tokens, for every skin x theme', () => {
   const H = require('../testing/skinHarness');
   const CSS = H.css('components/WelcomeScreen.css');

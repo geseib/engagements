@@ -278,7 +278,7 @@ const eventAgenda = {
           t: 'list',
           items: [
             { title: 'Start screen', text: '**Run an event** lists up to two events that are running or still to come, each with **Open** (its stage). Past events are not listed there.' },
-            { title: 'Sessions', text: 'An event is one row labelled Event, with **Edit** (the agenda), **Open** (the stage) and **Link** (copies the attendees\' join link). Click its name to see its items; a session item has **Report** and **Continue**.' },
+            { title: 'Sessions', text: 'In the sessions list (Library & team › Sessions, or the full list from a session), an event is one row labelled Event, with **Open** (the stage) and, under **⋯**, **Edit the agenda** and **Copy join link** (the attendees\' link). Press its name to see its items; a session item has **Continue** and **Report**.' },
             { title: 'The console', text: 'The Events list shows every event in the space or team: see Sessions and events.' },
           ],
         },
@@ -477,7 +477,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'Each session item\'s report is in Sessions on your start screen, under the event\'s row: see The session report.',
+          text: 'Each session item\'s report is in the sessions list (Library & team › Sessions), under the event\'s row: see The session report.',
         },
       ],
     },

@@ -126,9 +126,9 @@ describe('the host page wires the hand-over, and the front page keeps its doors'
     expect(host).toMatch(/<EventDetailsDialog\s+initial=\{\{ title: newEventTitle \}\}/);
     expect(host).toMatch(/navigateTo\(eventAgendaPath\(event\.code\)\)/);
   });
-  test('the front page still has Create engagement, the Build Room link and Run an event', () => {
+  test('the front page still has New engagement, the Build Room link and Run an event', () => {
     const welcome = read('components', 'WelcomeScreen.jsx');
-    expect(welcome).toMatch(/Create engagement/);
+    expect(welcome).toMatch(/New engagement/);
     expect(welcome).toMatch(/href="\/build"/);
     expect(welcome).toMatch(/<WelcomeEvents \/>/);
   });

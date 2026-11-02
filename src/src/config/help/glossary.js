@@ -33,7 +33,7 @@
 
   Added in Phase 2 (W11, 22 Oct 2026), for words wave 1's guides use across
   several guides:
-    the console                  components/WelcomeScreen.jsx:143 ("Question sets & team" / "Admin console")
+    the console                  config/sessionRows.js LIBRARY_NAME ("Library & team")
     your laptop console          components/console/HostConsole.jsx (two screens; host-two-screens#laptop-console)
     Your part now                config/roundWords.js:154 (yourPartLabel)
     session code                 components/stage/PresentMoments.jsx lobby, RootPage.jsx ("Session code");
@@ -64,7 +64,7 @@ const glossary = {
       title: 'Session (and "Create engagement")',
       icon: 'GameController',
       blocks: [
-        { t: 'p', text: 'A session is one run with a room: you start it, people join with its code, and it ends. The button that makes one on your start screen says Create engagement; everywhere else, including this help, it is a session.' },
+        { t: 'p', text: 'A session is one run with a room: you start it, people join with its code, and it ends. The button that makes one on your start screen says New engagement, and the dialog\'s own button Create engagement; everywhere else, including this help, it is a session.' },
       ],
     },
     {
@@ -184,7 +184,7 @@ const glossary = {
       title: 'The console',
       icon: 'Gear',
       blocks: [
-        { t: 'p', text: 'Where your question sets, sessions, reports and team live. Open it from your start screen with Question sets & team (Admin console for Engage admins).' },
+        { t: 'p', text: 'Library & team: where your question sets, every session, reports and team live. Open it from your start screen (Home) with **Library & team**, or **See all** beside your recent sessions. Home is where you start a session; the console is your library.' },
       ],
     },
     {

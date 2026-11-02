@@ -83,17 +83,20 @@ describe('the paths', () => {
 });
 
 describe('SessionsPanel (the console list)', () => {
-  test('a build session is labelled Build Room and opens on /build', async () => {
+  test('a build session is labelled Build Room and continues on /build', async () => {
+    const { clickRowAction } = require('../testUtils/sessionRows');
     authFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ games: [BUILD, POLL] }) });
-    render(<SessionsPanel />);
+    const navigate = jest.fn();
+    render(<SessionsPanel navigate={navigate} />);
     const row = (await screen.findByText('Food bank sign-up')).closest('tr');
     expect(within(row).getByText('Build Room')).toBeInTheDocument();
-    expect(within(row).getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/build?gameId=4821');
-    expect(within(row).getByRole('link', { name: 'Report' })).toHaveAttribute('href', '/build?gameId=4821&view=report');
+    clickRowAction(row, /^Continue/);
+    expect(navigate).toHaveBeenLastCalledWith('/build?gameId=4821');
+    clickRowAction(row, /^Report/);
+    expect(navigate).toHaveBeenLastCalledWith('/build?gameId=4821&view=report');
 
     const other = screen.getByText('Team pulse').closest('tr');
     expect(within(other).queryByText('Build Room')).toBeNull();
-    expect(within(other).queryByRole('link', { name: 'Open' })).toBeNull();
   });
 });
 
@@ -111,9 +114,10 @@ describe('SessionHistoryPanel (the host list)', () => {
     );
     const row = screen.getByText('Food bank sign-up').closest('tr');
     expect(within(row).getByText(/Build Room/)).toBeInTheDocument();
-    fireEvent.click(within(row).getByRole('button', { name: /Continue/ }));
+    const { clickRowAction } = require('../testUtils/sessionRows');
+    clickRowAction(row, /^Continue/);
     expect(navigate).toHaveBeenCalledWith('/build?gameId=4821');
-    fireEvent.click(within(row).getByRole('button', { name: /Report/ }));
+    clickRowAction(row, /^Report/);
     expect(navigate).toHaveBeenCalledWith('/build?gameId=4821&view=report');
     expect(onOpen).not.toHaveBeenCalled();
     expect(onReport).not.toHaveBeenCalled();

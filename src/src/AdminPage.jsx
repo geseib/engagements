@@ -2227,6 +2227,8 @@ function AdminPage() {
                   : undefined
               }
               totalSetCount={questionSets.length || undefined}
+              /* Each row's set name and its invite (experience plan 4a). */
+              questionSets={questionSets}
               /* An event's row opens its builder, in the Events place — the
                  one that already edits it (2026-10-04). Navigate first: it
                  closes any place, then this one opens. */
