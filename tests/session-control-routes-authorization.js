@@ -270,7 +270,9 @@ console.log('\n4. every caller sends a token');
 const CALLERS = [
   'src/src/GameHostPage.jsx',
   'src/src/HostRemote.jsx',
-  'src/src/components/QuickstartMenu.jsx',
+  // QuickstartMenu.jsx was deleted in experience plan 4c: Quick start is a lane
+  // inside New engagement and starts through GameHostPage's own start path.
+  'src/src/components/SetupBeforeStart.jsx',
 ];
 const ROUTE_WORDS = ['start-vote', 'next-question', 'toggle-category', '/persona', '/prompt`', '/start`'];
 
