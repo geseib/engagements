@@ -314,7 +314,7 @@ describe('the quick ballot lets a vote be switched', () => {
     expect(rankValues()).toEqual(['2', '1', '0']);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Votes/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send my votes/i }));
     });
 
     await waitFor(() => expect(server.votePosts).toHaveLength(1));

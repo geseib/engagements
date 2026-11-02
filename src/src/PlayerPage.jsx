@@ -22,10 +22,14 @@ import PlayerEnded, { PlayerEndedDock } from './components/PlayerEnded';
 import { codeFromUrl } from './hooks/useJoinCode';
 import {
   JOIN, EARLY, WAIT, SENT, RECEIPT, RESULTS, ENDED, LOOK_UP, STEP, IN_SESSION, barWhere, receiptFor,
+  SEND, HELD, SEND_FAILED,
 } from './config/playerWords';
 import {
   roundOf, pendingVerdict, savePendingAnswer, loadPendingAnswer, clearPendingAnswer,
 } from './utils/pendingAnswer';
+import {
+  pendingVoteVerdict, savePendingVote, loadPendingVote, clearPendingVote, isOfflineFailure,
+} from './utils/pendingVote';
 import './components/PlayerSurface.css';
 
 import FeedbackRoundPanel from './components/FeedbackRoundPanel';
@@ -480,6 +484,33 @@ function PlayerPage({ event = null } = {}) {
   const [missedAnswer, setMissedAnswer] = useState(false);
   // An answer the server kept, but late (session flow v3 §4.4): what to say.
   const [lateNotice, setLateNotice] = useState('');
+  /*
+    A BALLOT PRESSED WHILE OFFLINE (experience plan 3d; audit C P9), held the
+    way an answer is: `{ gameId, playerName, round, questionNumber, votes,
+    ballot }` or null, mirrored in sessionStorage (utils/pendingVote.js). The
+    flush effect below sends it once the connection is back, into its own
+    round only.
+  */
+  const [pendingVote, setPendingVote] = useState(null);
+  const pendingVoteRef = useRef(null);
+  useEffect(() => { pendingVoteRef.current = pendingVote; }, [pendingVote]);
+  const flushingVoteRef = useRef(false);
+  const [pendingVoteRetry, setPendingVoteRetry] = useState(0);
+  /*
+    WHAT THE DOCK SAYS WHEN A SEND DID NOT GO (3d): `{ round, text }` for the
+    ballot, a string for the answer. These were six window.alert() calls on
+    the player screen; a line in the dock says the same thing without a
+    system dialog over the ballot. The round keeps a vote line from following
+    the participant into the next round.
+  */
+  const [voteStatus, setVoteStatus] = useState(null);
+  /* The dock's slot for actions a component in the stage draws into the dock
+     through a portal (a question for the room's Send, experience plan 3d).
+     Set by a callback ref, so a component waits for it rather than drawing
+     its button in the stage first. */
+  const [dockSlot, setDockSlot] = useState(null);
+  const [voteSending, setVoteSending] = useState(false);
+  const [answerStatus, setAnswerStatus] = useState('');
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
   /*
     THE ROUND TIMER AS THE ROOM SEES IT (experience plan 2f; session-start D4,
@@ -1506,6 +1537,93 @@ function PlayerPage({ event = null } = {}) {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAnswer, wsConnected, gameState, hasAnswered, pendingRetry]);
+
+  // A reload while a ballot was waiting to send: bring it back, and the
+  // ballot's slots with it, so "Change my votes" has something to change.
+  useEffect(() => {
+    if (!joined || !gameId || !playerName) return;
+    if (pendingVoteRef.current) return;
+    const restored = loadPendingVote(gameId, playerName);
+    if (restored) {
+      console.log(`⏳ PLAYER: Restored an unsent ballot for round ${restored.round}`);
+      setVotes(votesFromBackend(restored.votes));
+      setPendingVote(restored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined, gameId, playerName]);
+
+  /*
+    SEND THE HELD BALLOT, ONCE, INTO ITS OWN ROUND (experience plan 3d). The
+    answer flush above, for votes: once the connection is back, ask the server
+    for the phase fresh, and send only while that round is still voting. A
+    ballot has no "late" (utils/pendingVote.js): if voting closed while the
+    phone was offline it is dropped, and the dock says it did not count.
+  */
+  useEffect(() => {
+    const pending = pendingVote;
+    if (!pending) return;
+
+    const drop = (missed) => {
+      setPendingVote(null);
+      clearPendingVote(pending.gameId, pending.playerName);
+      if (missed) setVoteStatus({ round: pending.round, text: SEND_FAILED.votesMissed });
+    };
+
+    if (pendingVoteVerdict(pending, gameState) === 'drop') {
+      console.warn(`⏳ PLAYER: Dropping unsent ballot for round ${pending.round} — room is at ${gameState}`);
+      drop(true);
+      return;
+    }
+    if (hasVoted && roundOf(gameState) === pending.round) {
+      drop(false);
+      return;
+    }
+    if (!wsConnected || flushingVoteRef.current) return;
+
+    const retryLater = () => setTimeout(() => setPendingVoteRetry((n) => n + 1), 3000);
+    flushingVoteRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}games/${pending.gameId}/state`);
+        if (!res.ok) { retryLater(); return; }
+        const { state } = await res.json();
+        if (pendingVoteRef.current !== pending) return;   // changed or sent meanwhile
+        const verdict = pendingVoteVerdict(pending, state);
+        if (verdict === 'drop') { drop(true); return; }
+        if (verdict !== 'send') return;
+        const out = await postVotes(pending.questionNumber || pending.round, pending.votes);
+        if (pendingVoteRef.current !== pending) return;
+        if (out.outcome === 'sent') {
+          console.log(`✅ PLAYER: Held ballot for round ${pending.round} sent on reconnect`);
+          drop(false);
+          setVoteStatus(null);
+          setHasVoted(true);
+        } else if (out.outcome === 'offline') {
+          retryLater();
+        } else if (out.outcome === 'moved') {
+          drop(false);
+          showNameMoved(out.playerName || pending.playerName);
+        } else if (out.outcome === 'closed') {
+          drop(false);
+          await followClosedVote(pending.round, out.currentState);
+        } else {
+          // Refused for another reason: back onto the ballot, with the line.
+          setVotes(votesFromBackend(pending.votes));
+          drop(false);
+          setVoteStatus({ round: pending.round, text: SEND_FAILED.votes });
+        }
+      } catch (error) {
+        console.warn('⏳ PLAYER: Could not check the round before sending the ballot:', error.message);
+        retryLater();
+      } finally {
+        flushingVoteRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVote, wsConnected, gameState, hasVoted, pendingVoteRetry]);
+
+  // An answer's "did not send" line is about the round it was pressed in.
+  useEffect(() => { setAnswerStatus(''); }, [gameState]);
 
   // Note: Removed auto-save localStorage functionality - now using server-side partial votes
 
@@ -2734,6 +2852,7 @@ function PlayerPage({ event = null } = {}) {
       return;
     }
 
+    setAnswerStatus('');
     try {
       // Use WebSocket to submit answer (following the ANSWER# pattern)
       let questionNumber = currentQuestion.questionNumber || currentQuestion.id;
@@ -2778,8 +2897,9 @@ function PlayerPage({ event = null } = {}) {
       markAnswerSent(receipt);
       console.log(`✅ PLAYER: Answer submitted successfully`);
     } catch (e) {
+      // A line in the dock, not a browser alert (experience plan 3d).
       console.error('handleSubmitAnswer error', e);
-      alert('Failed to submit answer. Please try again.');
+      setAnswerStatus(SEND_FAILED.answer);
     }
   };
 
@@ -2852,17 +2972,80 @@ function PlayerPage({ event = null } = {}) {
     }
   };
 
+  /** `{ [answerIndex]: rank }` (what submit-vote.js takes) back into the ballot's slots. */
+  const votesFromBackend = (backendVotes) => {
+    const slots = { first: '', second: '', third: '' };
+    const bySlot = { 1: 'first', 2: 'second', 3: 'third' };
+    Object.entries(backendVotes || {}).forEach(([idx, rank]) => {
+      if (bySlot[rank]) slots[bySlot[rank]] = String(idx);
+    });
+    return slots;
+  };
+
+  /*
+    ONE POST OF A BALLOT, and what became of it, as an outcome rather than an
+    alert (experience plan 3d):
+      'sent'     stored
+      'offline'  never reached a server (or a gateway could not): hold it
+      'moved'    NAME_MOVED: this device no longer holds the name (step 1d)
+      'closed'   the room is no longer voting on this round
+      'error'    the server refused it for another reason; `message` says why
+  */
+  const postVotes = async (questionNumber, backendVotes) => {
+    let voteRes;
+    try {
+      voteRes = await fetch(`${API_BASE}games/${gameId}/votes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerName,
+          questionNumber,
+          votes: backendVotes,
+          // Which device is voting (step 1d): one the name has moved away
+          // from is refused with NAME_MOVED rather than overwriting the
+          // ballot of the device that holds it now.
+          clientId: getClientId(gameId),
+        }),
+      });
+    } catch (error) {
+      return { outcome: isOfflineFailure(error) ? 'offline' : 'error' };
+    }
+    if (voteRes.ok) return { outcome: 'sent' };
+    if (isOfflineFailure(null, voteRes.status)) return { outcome: 'offline' };
+    let errorData = {};
+    try { errorData = (await voteRes.json()) || {}; } catch (_) { errorData = {}; }
+    if (errorData.code === 'NAME_MOVED') {
+      return { outcome: 'moved', playerName: errorData.playerName };
+    }
+    if (errorData.error === 'Invalid game state for voting'
+      && errorData.currentState && !String(errorData.currentState).startsWith('VOTE#')) {
+      return { outcome: 'closed', currentState: errorData.currentState };
+    }
+    return { outcome: 'error', message: errorData.error };
+  };
+
+  /** Voting closed under this ballot: say so in the dock and follow the room. */
+  const followClosedVote = async (round, currentState) => {
+    console.log('⏰ PLAYER: Voting has closed, following the room to', currentState);
+    setVoteStatus({ round, text: SEND_FAILED.votesClosed });
+    setGameState(currentState);
+    setHasVoted(true); // Prevent further vote attempts
+    await checkGameState();
+    await loadPlayerScoreInfo();
+  };
+
   const handleSubmitVotes = async () => {
-    if (hasVoted) return;
-    
+    if (hasVoted || voteSending) return;
+
+    const round = roundOf(gameState);
     const eligibleAnswers = answers;
     const requiredRanks = Math.min(3, eligibleAnswers.length);
-    
-    // Count non-empty votes
     const filledVotes = Object.values(votes).filter(v => v !== '').length;
-    
+
+    // The button is disabled until the ballot is full and says how many are
+    // missing; this only guards a call that bypassed it. No alert().
     if (filledVotes < requiredRanks) {
-      alert(`Please select answers for all ${requiredRanks} positions.`);
+      setVoteStatus({ round, text: SEND.pickMore(requiredRanks - filledVotes) });
       return;
     }
 
@@ -2871,84 +3054,85 @@ function PlayerPage({ event = null } = {}) {
     if (votes.first !== '') backendVotes[parseInt(votes.first)] = 1;
     if (votes.second !== '') backendVotes[parseInt(votes.second)] = 2;
     if (votes.third !== '') backendVotes[parseInt(votes.third)] = 3;
-    
-    // Validate that we have vote data
     if (Object.keys(backendVotes).length === 0) {
-      console.error('🚨 PLAYER: No votes to submit!', { votes, backendVotes });
-      alert('No votes selected. Please select your rankings first.');
+      setVoteStatus({ round, text: SEND.pickMore(requiredRanks || 1) });
       return;
     }
 
+    setVoteStatus(null);
+
+    /* HOLD IT, the way an answer is held (utils/pendingVote.js): the ballot
+       stays on this phone, the dock says so, and the flush effect sends it
+       into this round once the connection is back. */
+    const hold = (questionNumber) => {
+      const ballot = ['first', 'second', 'third']
+        .map((slot) => ({ slot, idx: votes[slot] === '' ? null : parseInt(votes[slot], 10) }))
+        .filter(({ idx }) => idx !== null && Number.isFinite(idx) && answers[idx])
+        .map(({ slot, idx }) => ({ slot, label: displayLabelFor(answers[idx], idx) }));
+      const pending = { gameId, playerName, round, questionNumber, votes: backendVotes, ballot };
+      savePendingVote(pending);
+      setPendingVote(pending);
+      console.warn(`⏳ PLAYER: Ballot not sent (offline) — held for round ${round}`);
+    };
+
+    if (round !== null && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      hold(round);
+      return;
+    }
+
+    setVoteSending(true);
     try {
       // Get current question number from game state
-      const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
-      const stateJson = await stateRes.json();
-      const currentQuestionNumber = stateJson.currentQuestion;
-
+      let currentQuestionNumber = null;
+      try {
+        const stateRes = await fetch(`${API_BASE}games/${gameId}/state`);
+        if (!stateRes.ok && isOfflineFailure(null, stateRes.status)) {
+          if (round !== null) { hold(round); return; }
+        } else {
+          const stateJson = await stateRes.json();
+          currentQuestionNumber = stateJson.currentQuestion;
+        }
+      } catch (error) {
+        if (round !== null && isOfflineFailure(error)) { hold(round); return; }
+      }
+      if (!currentQuestionNumber) currentQuestionNumber = round;
       if (!currentQuestionNumber) {
-        alert('Unable to determine current question. Please try again.');
+        setVoteStatus({ round, text: SEND_FAILED.votesUnknownRound });
         return;
       }
 
       console.log(`🗳️ PLAYER: Submitting votes via HTTP API for question ${currentQuestionNumber}`);
-      console.log(`🗳️ PLAYER: Vote data being sent:`, {
-        playerName: playerName,
-        questionNumber: currentQuestionNumber,
-        votes: backendVotes
-      });
-      
-      // Send vote via HTTP API (following design doc architecture)
-      const voteRes = await fetch(`${API_BASE}games/${gameId}/votes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerName: playerName,
-          questionNumber: currentQuestionNumber,
-          votes: backendVotes,
-          // Which device is voting (step 1d): one the name has moved away
-          // from is refused with NAME_MOVED rather than overwriting the
-          // ballot of the device that holds it now.
-          clientId: getClientId(gameId)
-        })
-      });
-      
-      if (!voteRes.ok) {
-        const errorData = await voteRes.json();
+      const out = await postVotes(currentQuestionNumber, backendVotes);
 
-        if (errorData && errorData.code === 'NAME_MOVED') {
-          showNameMoved(errorData.playerName || playerName);
-          return;
-        }
-        
-        // Check if voting has closed
-        if (errorData.error === 'Invalid game state for voting' && errorData.currentState && errorData.currentState.startsWith('RESULTS#')) {
-          console.log('⏰ PLAYER: Voting has closed, transitioning to results');
-          alert('Voting has closed. Moving to results...');
-          
-          // Update state to results
-          setGameState(errorData.currentState);
-          setHasVoted(true); // Prevent further vote attempts
-          
-          // Fetch current game state and results, including player score info
-          await checkGameState();
-          
-          // Load player score information for the results display
-          await loadPlayerScoreInfo();
-          return;
-        }
-        
-        throw new Error(errorData.error || 'Failed to submit vote');
+      if (out.outcome === 'sent') {
+        setHasVoted(true);
+        console.log(`✅ PLAYER: Vote submitted successfully`);
+      } else if (out.outcome === 'offline') {
+        if (round !== null) hold(currentQuestionNumber);
+        else setVoteStatus({ round, text: SEND_FAILED.votes });
+      } else if (out.outcome === 'moved') {
+        showNameMoved(out.playerName || playerName);
+      } else if (out.outcome === 'closed') {
+        await followClosedVote(round, out.currentState);
+      } else {
+        setVoteStatus({ round, text: SEND_FAILED.votes });
+        if (out.message) console.warn('🗳️ PLAYER: Vote refused:', out.message);
       }
-      
-      setHasVoted(true);
-      
-      // Vote submitted successfully
-      
-      console.log(`✅ PLAYER: Vote submitted successfully`);
     } catch (e) {
       console.error('handleSubmitVotes error', e);
-      alert(e.message || 'Failed to submit votes. Please try again.');
+      setVoteStatus({ round, text: SEND_FAILED.votes });
+    } finally {
+      setVoteSending(false);
     }
+  };
+
+  /** Take a held ballot back into the ballot so it can be changed before it goes. */
+  const handleEditPendingVote = () => {
+    const pending = pendingVoteRef.current;
+    if (!pending) return;
+    setVotes(votesFromBackend(pending.votes));
+    setPendingVote(null);
+    clearPendingVote(gameId, playerName);
   };
 
   /*
@@ -3854,6 +4038,16 @@ function PlayerPage({ event = null } = {}) {
   let dock = null;
   let body = null;
 
+  /* THE DOCK'S STATUS LINES (experience plan 3d). A send that did not go is
+     said here, above the button that can try again, never in a browser
+     alert. A vote line belongs to its round only. */
+  const answerStatusLine = answerStatus
+    ? <p className="plr-note plr-note--status" role="alert">{answerStatus}</p>
+    : null;
+  const voteStatusLine = voteStatus && voteStatus.round === roundOf(gameState)
+    ? <p className="plr-note plr-note--status" role="alert">{voteStatus.text}</p>
+    : null;
+
   /* ------------------------------------------------ PLAYER-OWN FEEDBACK --
      CHECKED FIRST, ahead of every gameState branch below — including ENDED —
      while there is a reason to. The round can leave RESULTS (the host
@@ -3963,10 +4157,16 @@ function PlayerPage({ event = null } = {}) {
           onRetryAnswers={myFeedbackRetryAnswers}
           playerName={playerName}
         />
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
-          {myFeedbackExitLabel}
-        </button>
       </>
+    );
+    /* THE BOTTOM EXIT, IN THE DOCK (experience plan 3d): it used to sit at the
+       foot of the stage, under a report that can run long. The composer's own
+       Post stays in its sheet, which sticks to the foot of the stage (3b D5),
+       so it is never scrolled away either. */
+    dock = (
+      <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
+        {myFeedbackExitLabel}
+      </button>
     );
 
   /* ---------------------------------------------------------------- ENDED --
@@ -3996,51 +4196,62 @@ function PlayerPage({ event = null } = {}) {
           : null}
         event={inEvent ? event : null}
         lookUp={<LookUpCue>{ENDED.lookUp}</LookUpCue>}
-      >
-        {endedComments && endedComments.open && endedComments.lastRound > 0 ? (
-          <section className="plr-ended-comments" aria-labelledby="plr-ended-comments-h">
-            <p className="plr-lab" id="plr-ended-comments-h">Something to add?</p>
-            <p className="plr-help">
-              You can still comment on a round for 24 hours, or until your host closes comments.
-            </p>
-            {/* EACH ROUND BY NUMBER AND TITLE (issue #47): "Lesson 2 · Form
-                Follows Function", shortened on the button with the whole line
-                in title=; the number alone when no title is known. A round
-                holding an unsent comment says so. */}
-            <ul className="plr-ended-rounds">
-              {Array.from({ length: endedComments.lastRound }, (_, i) => i + 1).map((n) => {
-                const padded = String(n).padStart(3, '0');
-                const label = pastRoundLabel(roundNoun, n, roundTitles[n]);
-                const unsent = Boolean(myFeedbackDrafts[padded]);
-                return (
-                  <li key={n}>
-                    <button
-                      type="button"
-                      className="plr-btn plr-btn--ghost plr-ended-round"
-                      title={label.full}
-                      aria-label={unsent ? `${label.full}, unsent comment` : label.full}
-                      onClick={() => openMyFeedback({ padded, title: label.number, knownTitle: label.title })}
-                    >
-                      <Icon name="ChatCircleText" size={18} />
-                      <span className="plr-ended-round__n">{label.number}</span>
-                      {label.short && (
-                        <>
-                          <span className="plr-ended-round__sep" aria-hidden="true">·</span>
-                          <span className="plr-ended-round__title">{label.short}</span>
-                        </>
-                      )}
-                      {unsent && <span className="plr-ended-round__draft">Unsent comment</span>}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
-      </PlayerEnded>
+      />
     );
+    /* "SOMETHING TO ADD?" IS IN THE DOCK (experience plan 3d; audit C P4). It
+       was appended to the end screen's stage, under the thanks, the score and
+       the look-up line, so on a phone it began below the fold. The rounds list
+       scrolls inside the dock when there are many (PlayerSurface.css). */
+    const endedCommentsDock = endedComments && endedComments.open && endedComments.lastRound > 0 ? (
+      <section className="plr-ended-comments" aria-labelledby="plr-ended-comments-h">
+        <p className="plr-lab" id="plr-ended-comments-h">Something to add?</p>
+        <p className="plr-note">
+          You can still comment on a round for 24 hours, or until your host closes comments.
+        </p>
+        {/* EACH ROUND BY NUMBER AND TITLE (issue #47): "Lesson 2 · Form
+            Follows Function", shortened on the button with the whole line
+            in title=; the number alone when no title is known. A round
+            holding an unsent comment says so. */}
+        <ul className="plr-ended-rounds">
+          {Array.from({ length: endedComments.lastRound }, (_, i) => i + 1).map((n) => {
+            const padded = String(n).padStart(3, '0');
+            const label = pastRoundLabel(roundNoun, n, roundTitles[n]);
+            const unsent = Boolean(myFeedbackDrafts[padded]);
+            return (
+              <li key={n}>
+                <button
+                  type="button"
+                  className="plr-btn plr-btn--ghost plr-ended-round"
+                  title={label.full}
+                  aria-label={unsent ? `${label.full}, unsent comment` : label.full}
+                  onClick={() => openMyFeedback({ padded, title: label.number, knownTitle: label.title })}
+                >
+                  <Icon name="ChatCircleText" size={18} />
+                  <span className="plr-ended-round__n">{label.number}</span>
+                  {label.short && (
+                    <>
+                      <span className="plr-ended-round__sep" aria-hidden="true">·</span>
+                      <span className="plr-ended-round__title">{label.short}</span>
+                    </>
+                  )}
+                  {unsent && <span className="plr-ended-round__draft">Unsent comment</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    ) : null;
     // AN EVENT'S ITEM (events M4): the day goes on, and the agenda is one tap.
-    if (inEvent && typeof event.onAgenda === 'function') dock = <PlayerEndedDock event={event} />;
+    const agendaDock = inEvent && typeof event.onAgenda === 'function' ? <PlayerEndedDock event={event} /> : null;
+    if (endedCommentsDock || agendaDock) {
+      dock = (
+        <>
+          {endedCommentsDock}
+          {agendaDock}
+        </>
+      );
+    }
 
   /* ------------------------------------------------------------------ ASK -- */
   } else if (gameState.startsWith('ASK#') && currentQuestion) {
@@ -4151,8 +4362,8 @@ function PlayerPage({ event = null } = {}) {
 
       body = (
         <>
-          <p className="plr-lab">Not sent yet</p>
-          <h1 className="plr-h1 plr-h1--primary">Waiting for the connection.</h1>
+          <p className="plr-lab">{HELD.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{HELD.heading}</h1>
 
           {heldWords ? (
             <div className="plr-chips">
@@ -4162,7 +4373,7 @@ function PlayerPage({ event = null } = {}) {
             </div>
           ) : (
             <div className="plr-card">
-              <p className="plr-lab">What you will send</p>
+              <p className="plr-lab">{HELD.answerCard}</p>
               <p className="plr-quote">
                 {heldLetter
                   ? `${heldLetter}. ${heldOption || ''}`.trim()
@@ -4171,16 +4382,16 @@ function PlayerPage({ event = null } = {}) {
             </div>
           )}
 
-          <p className="plr-help" role="status">
-            Not sent yet — it will send when you're back online. It is kept on this
-            phone, so a reload does not lose it.
-          </p>
         </>
       );
+      // The held line is the dock's status, above the one thing to do here.
       dock = (
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingAnswer}>
-          Change my answer
-        </button>
+        <>
+          <p className="plr-note plr-note--status" role="status">{HELD.line}</p>
+          <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingAnswer}>
+            {HELD.changeAnswer}
+          </button>
+        </>
       );
     } else if (!hasAnswered) {
       volume = 'act';
@@ -4230,10 +4441,9 @@ function PlayerPage({ event = null } = {}) {
         );
         dock = (
           <>
+            {answerStatusLine}
             <p className="plr-note">
-              {selectedTriviaAnswer
-                ? `${selectedTriviaAnswer} selected. You can change it until you submit.`
-                : 'Choose an answer. You can change it until you submit.'}
+              {selectedTriviaAnswer ? SEND.triviaPicked(selectedTriviaAnswer) : SEND.triviaPick}
             </p>
             <button
               type="button"
@@ -4241,7 +4451,7 @@ function PlayerPage({ event = null } = {}) {
               onClick={() => handleSubmitAnswer(null, selectedTriviaAnswer)}
               disabled={!selectedTriviaAnswer}
             >
-              Submit Answer
+              {SEND.answer}
             </button>
           </>
         );
@@ -4290,10 +4500,11 @@ function PlayerPage({ event = null } = {}) {
         );
         dock = (
           <>
+            {answerStatusLine}
             <p className="plr-note">
               {/* Ten asked for, fewer accepted — nobody gets stuck in front of
                   a room because they ran dry at six (spec §2.1). */}
-              {wordCount} of 10 added. Fewer is fine — submit when you run dry.
+              {SEND.wordsCount(wordCount)}
             </p>
             <button
               type="button"
@@ -4301,7 +4512,7 @@ function PlayerPage({ event = null } = {}) {
               onClick={handleSubmitAnswer}
               disabled={wordCount === 0}
             >
-              Submit Words ({wordCount}/10)
+              {SEND.words(wordCount)}
             </button>
           </>
         );
@@ -4321,9 +4532,12 @@ function PlayerPage({ event = null } = {}) {
           </>
         );
         dock = (
-          <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!pollIsAnswered(pollQ, pollValue)}>
-            Submit Answer
-          </button>
+          <>
+            {answerStatusLine}
+            <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!pollIsAnswered(pollQ, pollValue)}>
+              {SEND.answer}
+            </button>
+          </>
         );
       } else {
         /* CALL-AND-ANSWER, POLL, SURVEY, ARTWORK.
@@ -4368,9 +4582,12 @@ function PlayerPage({ event = null } = {}) {
           </>
         );
         dock = (
-          <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!answerInput.trim()}>
-            Submit Answer
-          </button>
+          <>
+            {answerStatusLine}
+            <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!answerInput.trim()}>
+              {SEND.answer}
+            </button>
+          </>
         );
       }
     } else {
@@ -4474,6 +4691,38 @@ function PlayerPage({ event = null } = {}) {
           <LookUpCue>{LOOK_UP.receiptVotes}</LookUpCue>
         </>
       );
+    } else if (pendingVote && pendingVote.round === roundOf(gameState)) {
+      /* HELD, NOT SENT (experience plan 3d; audit C P9). The ballot was
+         pressed while this phone was offline. It says what is true, exactly
+         as a held answer does: kept here, sent when the connection is back,
+         and still changeable until then. */
+      volume = 'rest';
+      phase = 'vote';
+      body = (
+        <>
+          <p className="plr-lab">{HELD.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{HELD.heading}</h1>
+          {(pendingVote.ballot || []).length > 0 && (
+            <div className="plr-card">
+              <p className="plr-lab">{HELD.ballotCard}</p>
+              {pendingVote.ballot.map(({ slot, label }) => (
+                <div key={slot} className="plr-stat">
+                  <span className="plr-k">{rankLabel(VOTE_POSITIONS[slot])}</span>
+                  <span className="plr-v">{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      );
+      dock = (
+        <>
+          <p className="plr-note plr-note--status" role="status">{HELD.line}</p>
+          <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingVote}>
+            {HELD.changeVotes}
+          </button>
+        </>
+      );
     } else if (answers.length > 0) {
       volume = 'act';
       phase = 'vote';
@@ -4501,6 +4750,7 @@ function PlayerPage({ event = null } = {}) {
               <p className="plr-detail"><b>You were still writing.</b> Send it and it is kept with this round, but it is not in the vote.</p>
               <p className="plr-quote">{answerInput.trim()}</p>
               <button type="button" className="plr-more" onClick={() => handleSubmitAnswer(null)}>Send it anyway</button>
+              {answerStatus && <p className="plr-help" role="alert">{answerStatus}</p>}
             </div>
           )}
           {currentQuestion?.image && (
@@ -4629,6 +4879,7 @@ function PlayerPage({ event = null } = {}) {
 
       dock = (
         <>
+          {voteStatusLine}
           <BallotSlots votes={votes} answers={answers} requiredVotes={requiredVotes} />
           {/* THE VALIDATION IS ON THE BUTTON, NOT IN AN alert(). "Please select
               answers for all 3 positions." was a modal system dialog standing in
@@ -4637,11 +4888,11 @@ function PlayerPage({ event = null } = {}) {
             type="button"
             className="plr-btn"
             onClick={handleSubmitVotes}
-            disabled={filledVotes < requiredVotes}
+            disabled={filledVotes < requiredVotes || voteSending}
           >
             {filledVotes < requiredVotes
-              ? `Pick ${requiredVotes - filledVotes} more to submit`
-              : 'Submit Votes'}
+              ? SEND.pickMore(requiredVotes - filledVotes)
+              : SEND.votes}
           </button>
         </>
       );
@@ -4673,6 +4924,11 @@ function PlayerPage({ event = null } = {}) {
     */
     volume = followUp.ask.status === 'live' ? 'act' : 'watch';
     ctx = barWhere(position, STEP.question);
+    /* SEND IS IN THE DOCK (experience plan 3d; audit C §2.2): the card draws
+       its Send and its status line into the dock's slot through a portal, so
+       a long question with a long answer box cannot push it below the fold.
+       Only while there is something to send; the room's answer has no dock. */
+    const followUpActs = followUp.ask.status === 'live' || Boolean(heldFor(followUp.ask));
     body = (
       <FollowUpCard
         ask={followUp.ask}
@@ -4681,8 +4937,10 @@ function PlayerPage({ event = null } = {}) {
         keptLate={Boolean(heldFor(followUp.ask) && heldFor(followUp.ask).late)}
         onSend={answerFollowUp}
         onDraft={followUpDraft(followUp.ask)}
+        actionsIn={followUpActs ? dockSlot : undefined}
       />
     );
+    if (followUpActs) dock = <div ref={setDockSlot} className="plr-dock-slot" />;
 
   } else if (gameState.startsWith('RESULTS#') && feedbackRound) {
     /*
@@ -4960,6 +5218,9 @@ function PlayerPage({ event = null } = {}) {
     */
     dock = (
       <>
+        {/* Voting closed under a ballot, or it never left an offline phone:
+            said here, on this round's result, not in a browser alert (3d). */}
+        {voteStatusLine}
         <button
           type="button"
           className="plr-btn plr-btn--ghost plr-feedback-btn"
@@ -5068,6 +5329,19 @@ function PlayerPage({ event = null } = {}) {
   }
 
   if (heldFollowUpShowing) {
+    /* A HELD QUESTION FOR THE ROOM, ABOVE ANOTHER SCREEN (3d). When that
+       screen has its own main button (an answer box, a ballot), the held
+       card's Send is drawn plain, in the card: one main button per screen.
+       Otherwise its actions join the dock, after whatever is there. */
+    const ownMain = volume === 'act' && dock !== null;
+    if (!ownMain) {
+      dock = (
+        <>
+          {dock}
+          <div ref={setDockSlot} className="plr-dock-slot" />
+        </>
+      );
+    }
     body = (
       <>
         <HeldFollowUp
@@ -5075,6 +5349,8 @@ function PlayerPage({ event = null } = {}) {
           onSend={answerFollowUp}
           onDraft={followUpDraft(heldFollowUp.ask)}
           onLeave={releaseFollowUp}
+          actionsIn={ownMain ? undefined : dockSlot}
+          plain={ownMain}
         />
         {body}
       </>

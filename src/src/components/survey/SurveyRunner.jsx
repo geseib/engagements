@@ -431,20 +431,29 @@ export default function SurveyRunner({
     ));
   }
 
-  /* ---- SENT (rest volume: no dock, no amber) ----------------------------- */
+  /* ---- SENT (rest volume, no amber: the one way back in is in the dock) -- */
   if (view.screen === 'sent') {
     /* ONE RECEIPT (experience plan 3a): the "Sent" eyebrow and "Your <thing>
-       is in." heading every type's receipt carries. */
-    return shell({ phase: 'quiet', volume: 'rest', ctx: `Survey · ${SENT}`, centre: true }, (
+       is in." heading every type's receipt carries. "Change my answers" is
+       the one thing left to do, so it is in the dock (3d, principle 8), plain
+       rather than main: the participant is done, and amber would say not. */
+    return shell({
+      phase: 'quiet',
+      volume: 'rest',
+      ctx: `Survey · ${SENT}`,
+      centre: true,
+      dock: (
+        <button type="button" className="plr-btn plr-btn--ghost" onClick={() => goTo('review')}>
+          Change my answers
+        </button>
+      ),
+    }, (
       <>
         <p className="plr-lab plr-lab--good">{SENT}</p>
         <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>{RECEIPT.answers}</h1>
         <p className="plr-lede plr-muted">
           Thanks, {playerName}. {RECEIPT.changeable}
         </p>
-        <button type="button" className="plr-linkish plr-linkish--quiet" onClick={() => goTo('review')}>
-          Change my answers
-        </button>
         <LookUpCue>{LOOK_UP.surveySent}</LookUpCue>
       </>
     ));

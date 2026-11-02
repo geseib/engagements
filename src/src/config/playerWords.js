@@ -125,6 +125,56 @@ export const RECEIPT = Object.freeze({
   changeable: 'You can change them until your host closes the survey.',
 });
 
+/* -------------------------------------------------------- the dock ---- */
+
+/**
+ * THE SEND BUTTONS (experience plan 3d). Every button that hands something
+ * to the room says "Send my <thing>", the verb the receipt's "Sent" eyebrow
+ * answers. "Submit Answer", "Submit Words" and "Submit Votes" were three
+ * spellings of the same act in a different register from everything around
+ * them.
+ */
+export const SEND = Object.freeze({
+  answer: 'Send my answer',
+  words: (n) => `Send my words (${n}/10)`,
+  votes: 'Send my votes',
+  /** The ballot's button while ranks are still empty. */
+  pickMore: (n) => `Pick ${n} more to send`,
+  /** Trivia's line above the button. */
+  triviaPicked: (letter) => `${letter} selected. You can change it until you send.`,
+  triviaPick: 'Choose an answer. You can change it until you send.',
+  wordsCount: (n) => `${n} of 10 added. Fewer is fine. Send when you run dry.`,
+});
+
+/**
+ * HELD, NOT SENT (QA 2026-09-29 #1; experience plan 3d). An answer or a
+ * ballot pressed while this phone was offline stays on the phone and goes
+ * when the connection is back. Answers and votes say it the same way.
+ */
+export const HELD = Object.freeze({
+  eyebrow: 'Not sent yet',
+  heading: 'Waiting for the connection.',
+  /** The one held line, answers and votes alike. */
+  line: 'Not sent yet. It will send when you’re back online. It is kept on this phone, so a reload does not lose it.',
+  answerCard: 'What you will send',
+  ballotCard: 'Your ballot',
+  changeAnswer: 'Change my answer',
+  changeVotes: 'Change my votes',
+});
+
+/**
+ * WHAT THE DOCK SAYS WHEN A SEND DID NOT GO (experience plan 3d; audit C P9).
+ * These used to be six browser alerts mid-round. Each is a line above the
+ * button that can be acted on, never a dialog over the ballot.
+ */
+export const SEND_FAILED = Object.freeze({
+  answer: 'That did not send. Try again.',
+  votes: 'Your votes did not send. Try again.',
+  votesUnknownRound: 'This page could not tell which round is voting. Try again in a moment.',
+  votesClosed: 'Voting closed before your votes arrived, so they are not in this round.',
+  votesMissed: 'Your votes did not reach the room. Voting closed while this phone was offline.',
+});
+
 /** Which receipt heading a game type's answer gets. */
 export function receiptFor(gameType, { artwork = false } = {}) {
   if (gameType === 'wavelength') return RECEIPT.words;

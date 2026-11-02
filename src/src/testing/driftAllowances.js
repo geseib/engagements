@@ -18,7 +18,6 @@ module.exports = {
   "dialogs": {
     "AdminPage.jsx": 1,
     "GameHostPage.jsx": 7,
-    "PlayerPage.jsx": 6,
     "buildroom/BuildCrew.jsx": 3,
     "buildroom/BuildRoomPage.jsx": 2,
     "components/AIScenarioBuilder.jsx": 1,

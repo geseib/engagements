@@ -56,7 +56,7 @@ async function joinAndReachQuestion() {
   await waitFor(() => expect(screen.getByText(/Best day to meet in person/)).toBeInTheDocument());
 }
 
-const submit = () => screen.getByRole('button', { name: /Submit Answer/i });
+const submit = () => screen.getByRole('button', { name: /Send my answer/i });
 
 beforeEach(() => {
   global.fetch.mockClear();

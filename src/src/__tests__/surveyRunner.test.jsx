@@ -634,17 +634,22 @@ describe('checking and sending', () => {
     expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('9 out of 10');
   });
 
-  test('Send marks it sent and lands on the rest-volume done screen with no dock', async () => {
+  // Experience plan 3d: the one thing left to do is in the dock, plain (no
+  // amber in REST volume), never inline in the stage.
+  test('Send marks it sent and lands on the rest-volume done screen, "Change my answers" in the dock', async () => {
     const server = threeOfFour();
     await reachReview(server);
     fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
     expect(await screen.findByRole('heading', { name: 'Your answers are in.' })).toBeInTheDocument();
     expect(server.submits).toEqual([{ respondentId: expect.stringMatching(RESPONDENT) }]);
-    expect(document.querySelector('.plr-dock')).toBeNull();
     expect(document.querySelector('.plr').getAttribute('data-volume')).toBe('rest');
     expect(screen.queryByRole('button', { name: /Send/ })).toBeNull();
-    // The way back in is on the page, not in a dock.
-    fireEvent.click(screen.getByRole('button', { name: 'Change my answers' }));
+    const dock = document.querySelector('.plr-dock');
+    const change = screen.getByRole('button', { name: 'Change my answers' });
+    expect(dock.contains(change)).toBe(true);
+    expect(change).toHaveClass('plr-btn--ghost');
+    expect(document.querySelector('.plr-stage').querySelectorAll('button')).toHaveLength(0);
+    fireEvent.click(change);
     expect(await screen.findByRole('heading', { name: 'Check your answers' })).toBeInTheDocument();
   });
 

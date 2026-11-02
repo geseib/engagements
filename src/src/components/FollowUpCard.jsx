@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import RatingInput from './survey/RatingInput';
 import ChoiceInput from './survey/ChoiceInput';
 import TextInput from './survey/TextInput';
@@ -34,6 +35,16 @@ import './FollowUpCard.css';
  *
  * Someone who already answered on time (`yours`) has no draft to keep: once
  * the ask closes, the room's answer shows as before (a change is refused).
+ *
+ * THE ACTIONS GO TO THE DOCK ON A PHONE (experience plan 3d, principle 8):
+ *   actionsIn  a DOM element (the player shell's dock slot) to draw Send, its
+ *              status line and Done into, through a portal; null while that
+ *              slot has not mounted yet (nothing is drawn rather than drawn
+ *              in the wrong place); omitted to draw them inside the card.
+ *   plain      Send is drawn plain rather than main, for a card shown above
+ *              another screen that already has its own main button.
+ * Send stays `form=`-attached to the card's form, so Enter in the box and the
+ * button in the dock submit the same form.
  */
 export function surveyQuestionOf(ask) {
   if (!ask) return null;
@@ -55,7 +66,7 @@ export function answered(ask, value) {
 
 const has = (v) => v !== null && v !== undefined;
 
-export default function FollowUpCard({ ask, yours = null, onSend, draft = null, keptLate = false, onDraft, onDone }) {
+export default function FollowUpCard({ ask, yours = null, onSend, draft = null, keptLate = false, onDraft, onDone, actionsIn, plain = false }) {
   const [value, setValue] = useState(has(yours) ? yours : draft);
   const [sent, setSent] = useState(has(yours));
   const [busy, setBusy] = useState(false);
@@ -72,6 +83,11 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
   }, [JSON.stringify(unsent)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!ask) return null;
+  /* Where the actions are drawn: in the card, or in the dock through a portal. */
+  const place = (node) => {
+    if (actionsIn === undefined) return node;
+    return actionsIn ? createPortal(node, actionsIn) : null;
+  };
   const kind = KINDS[ask.kind] || KINDS.ideas;
   // Per ask: a held card and the round's own card can be on the page together.
   const formId = `fu-form-${ask.askId}`;
@@ -113,8 +129,12 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
           <ul className="fu-ideas">{ask.picked.map((p, i) => <li key={i}>{p}</li>)}</ul>
         )}
         <p className="fu-foot">{ask.kind === 'ideas' ? FW.ideasCount(t.n || 0, (ask.picked || []).length) : FW.answered(t.n || 0)}</p>
-        {late && <p className="fu-sent" role="status">{FW.keptLate}</p>}
-        {late && onDone && <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>}
+        {late && place(
+          <>
+            <p className="fu-sent" role="status">{FW.keptLate}</p>
+            {onDone && <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>}
+          </>,
+        )}
       </section>
     );
   }
@@ -133,14 +153,23 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
           onBlur={() => {}}
         />
       </form>
-      {sent && <p className="fu-sent" role="status">{late ? FW.keptLate : FW.sent}</p>}
-      {error && <p className="fu-error" role="alert">{error}</p>}
-      {late && onDone ? (
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>
-      ) : (
-        <button type="submit" form={formId} className="plr-btn" disabled={busy || sent || !answered(ask, value)}>
-          {busy ? FW.sending : FW.send}
-        </button>
+      {place(
+        <>
+          {sent && <p className="fu-sent" role="status">{late ? FW.keptLate : FW.sent}</p>}
+          {error && <p className="fu-error" role="alert">{error}</p>}
+          {late && onDone ? (
+            <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>
+          ) : (
+            <button
+              type="submit"
+              form={formId}
+              className={`plr-btn${plain ? ' plr-btn--ghost' : ''}`}
+              disabled={busy || sent || !answered(ask, value)}
+            >
+              {busy ? FW.sending : FW.send}
+            </button>
+          )}
+        </>,
       )}
     </section>
   );
@@ -154,8 +183,11 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
  *   held     { ask, draft, late } from utils/useHeldFollowUp.js
  *   onLeave  let it go ("Leave it" with a draft, "Done" once kept late)
  */
-export function HeldFollowUp({ held, onSend, onDraft, onLeave }) {
+export function HeldFollowUp({ held, onSend, onDraft, onLeave, actionsIn, plain = false }) {
   if (!held || !held.ask) return null;
+  const leave = !held.late
+    ? <button type="button" className="plr-btn plr-btn--ghost" onClick={onLeave}>{FW.leaveDraft}</button>
+    : null;
   return (
     <section className="fu-held" aria-label={FW.questionForRoom}>
       {!held.late && <p className="fu-held-note" role="note">{FW.roomMovedOn}</p>}
@@ -166,10 +198,10 @@ export function HeldFollowUp({ held, onSend, onDraft, onLeave }) {
         onSend={onSend}
         onDraft={onDraft}
         onDone={onLeave}
+        actionsIn={actionsIn}
+        plain={plain}
       />
-      {!held.late && (
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={onLeave}>{FW.leaveDraft}</button>
-      )}
+      {leave && (actionsIn === undefined ? leave : (actionsIn ? createPortal(leave, actionsIn) : null))}
     </section>
   );
 }

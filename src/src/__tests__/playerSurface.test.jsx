@@ -277,7 +277,7 @@ describe('the volume is set by the state machine, and the player never chooses',
       target: { value: 'A definition everyone renders from.' },
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send my answer/i }));
     });
 
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'rest'));
@@ -376,7 +376,7 @@ describe('ASK', () => {
 
     fireEvent.change(composer, { target: { value: 'One definition, rendered everywhere.' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send my answer/i }));
     });
 
     expect(await screen.findByText('One definition, rendered everywhere.')).toBeInTheDocument();
@@ -453,17 +453,17 @@ describe('the ballot', () => {
   // rejects: the submit drifting back into the scrolling list, where a 20-card
   //          ballot puts it below the fold, and a second copy of it appearing in
   //          the other mode.
-  test('there is exactly one Submit Votes, and it is in the dock', async () => {
+  test('there is exactly one Send my votes, and it is in the dock', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
     await reachBallot(server);
 
-    const submits = screen.getAllByRole('button', { name: /Submit Votes|more to submit/i });
+    const submits = screen.getAllByRole('button', { name: /Send my votes|more to send/i });
     expect(submits).toHaveLength(1);
     expect(dock().contains(submits[0])).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: /Detailed Vote/i }));
-    const afterSwitch = screen.getAllByRole('button', { name: /Submit Votes|more to submit/i });
+    const afterSwitch = screen.getAllByRole('button', { name: /Send my votes|more to send/i });
     expect(afterSwitch).toHaveLength(1);
     expect(dock().contains(afterSwitch[0])).toBe(true);
   });
@@ -476,7 +476,7 @@ describe('the ballot', () => {
     installFetch(server);
     await reachBallot(server);
 
-    expect(screen.getByRole('button', { name: /Pick 3 more to submit/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Pick 3 more to send/i })).toBeDisabled();
   });
 
   // rejects: your own row losing its mark, or gaining a block on ranking it.

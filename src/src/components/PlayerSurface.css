@@ -368,6 +368,23 @@
 
 .plr-note--after { margin: 10px 0 0; }
 
+/* A DOCK STATUS LINE (experience plan 3d): a send that did not go, or one
+   held until the connection is back. In the body colour, not the muted grey,
+   because it is the thing to read before pressing again; not red, because
+   nothing was destroyed (§4.2). */
+.plr-note.plr-note--status { color: var(--text); }
+
+/* The dock's slot for a stage component's actions (a question for the room's
+   Send), drawn into it through a portal. Its buttons stack as the dock's own. */
+.plr-dock > * + .plr-dock-slot:not(:empty) { margin-top: 10px; }
+
+/* "Something to add?" on the end screen, in the dock since 3d: a session of
+   many rounds scrolls its list inside the dock rather than pushing the dock
+   up over the whole screen. */
+.plr-dock .plr-ended-comments { margin-top: 0; }
+.plr-dock .plr-ended-comments + .plr-btn { margin-top: 12px; }
+.plr-dock .plr-ended-rounds { max-height: 38dvh; overflow-y: auto; }
+
 /* ==========================================================================
    3. TYPE
    ========================================================================== */
@@ -1950,9 +1967,5 @@
 
 .plr-rev-ed:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-/* "Change my answers" on the sent screen: a way back, in REST volume, so it
-   spends no amber (p-08 draws it in the body colour). */
-.plr-linkish.plr-linkish--quiet {
-  color: var(--text);
-  font-size: var(--plr-t-body);
-}
+/* "Change my answers" on the sent screen is a plain button in the dock since
+   experience plan 3d (.plr-btn--ghost): still no amber in REST volume. */

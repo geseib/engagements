@@ -166,7 +166,7 @@ async function joinAndReachQuestion() {
   });
 }
 
-const submitButton = () => screen.getByRole('button', { name: /Submit Answer/i });
+const submitButton = () => screen.getByRole('button', { name: /Send my answer/i });
 
 describe('PlayerPage — answered state and in-flight selection survive a refresh', () => {
   let server;
@@ -200,7 +200,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await switchAwayAndBack();
 
     expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Submit Answer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my answer/i })).not.toBeInTheDocument();
   });
 
   // BUG B. Tapped but not submitted. A refresh landing in that window must not
@@ -306,7 +306,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await waitFor(() => {
       expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
-    expect(screen.queryByRole('button', { name: /Submit Answer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my answer/i })).not.toBeInTheDocument();
   });
 
   // A refresh that came back without the participation block knows nothing
@@ -480,7 +480,7 @@ describe('PlayerPage — a cast vote survives a tab switch', () => {
     await switchAwayAndBack();
 
     expect(screen.getByText(/Your votes are in\./i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Submit Votes/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my votes/i })).not.toBeInTheDocument();
   });
 
   // rejects: collapsing "I could not find out" into "you have not voted" on the

@@ -18,8 +18,8 @@ import { ENDED } from '../config/playerWords';
  *              ITEM is finished, the line says keep the page open, "Up next"
  *              names what follows when the agenda knows, and the dock (see
  *              `PlayerEndedDock`) opens the agenda. Never "close this page".
- *   children   whatever else the end offers (a game's "Something to add?"),
- *              drawn after the score, before the look-up line.
+ *   children   anything else for the stage, drawn after the score, before the look-up
+ *              line. Never an action: a game's "Something to add?" is in the dock (3d).
  *
  * Words come from config/playerWords.js ENDED and nowhere else.
  */

@@ -775,13 +775,13 @@ describe('wavelength: ten words in two columns wider than a phone', () => {
     expect(block(CSS, '.plr-words-form')).not.toMatch(/grid/);
   });
 
-  test('the labels, the ids and the sticky Submit survive the re-layout', () => {
+  test('the labels, the ids and the sticky Send survive the re-layout', () => {
     // The grid wraps; it does not re-order, rename or move anything. The
     // submit lives in the dock, outside the scrolling stage.
     expect(PLR_JSX).toMatch(/id=\{`plr-word-\$\{index\}`\}/);
     expect(PLR_JSX).toMatch(/htmlFor=\{`plr-word-\$\{index\}`\}/);
     expect(PLR_JSX).toMatch(/Word \{index \+ 1\}/);
-    expect(PLR_JSX).toMatch(/Submit Words \(\{wordCount\}\/10\)/);
+    expect(PLR_JSX).toMatch(/\{SEND\.words\(wordCount\)\}/);
     expect(PLR_JSX).toMatch(/wavelengthWords\.map/);
   });
 });

@@ -177,7 +177,7 @@ const playerSurveys = {
       Back, "Send my answers" (disabled: "Question N needs an answer before you
       can send." / "Answer at least one question to send."); sent: "Thanks,
       {name} — that's everything.", "Your answers are in. You can still change
-      them…", "Change my answers". Checked on dev.
+      them…", "Change my answers" (in the dock since experience plan 3d). Checked on dev.
     */
     {
       id: 'checking-and-sending',
@@ -194,7 +194,7 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Your phone then says your answers are in. **Change my answers** takes you back to the list until the host closes the survey. Changes save as you make them.',
+          text: 'Your phone then says your answers are in. **Change my answers**, at the bottom of the screen, takes you back to the list until the host closes the survey. Changes save as you make them.',
         },
         {
           t: 'note',

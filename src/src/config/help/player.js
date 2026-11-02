@@ -385,9 +385,12 @@ const playing = {
     {
       /*
         Every round: question, "Your task" (the instruction), the answer form,
-        Submit Answer; with the keyboard up the question folds, "Show the whole
-        question ↓". After submit: "This is locked for the round. If this page
-        reloads, it comes back." (PlayerPage ASK receipt.)
+        and in the dock at the bottom "Send my answer" (experience plan 3d:
+        every next action is in the dock, config/playerWords.js SEND); with the
+        keyboard up the question folds, "Show the whole question ↓". After
+        sending: "Locked for this round. If this page reloads, it comes back."
+        (PlayerPage ASK receipt.) A send that fails is a line above the button
+        ("That did not send. Try again."), never a pop-up.
       */
       id: 'answering',
       title: 'Answering a round',
@@ -398,26 +401,26 @@ const playing = {
           items: [
             { title: 'Read the question', text: 'It is at the top, with the round number above it. Under it, Your task says what the host wants.' },
             { title: 'Answer', text: 'The form depends on the kind of session (sections below). While you type, the question folds away to make room; **Show the whole question ↓** brings it back.' },
-            { title: 'Submit', text: 'Your screen then shows what you sent.' },
+            { title: 'Send', text: 'The button is always in the bar at the bottom of your screen, so you never scroll to find it. Your screen then shows what you sent.' },
           ],
         },
         {
           t: 'note',
           tone: 'tip',
-          title: 'Your answer is locked once you submit',
+          title: 'Your answer is locked once you send it',
           text: 'Check it before you press. Reloading the page or locking your phone does not lose it: it comes back when the page does.',
         },
         {
           t: 'p',
-          text: 'Pressed submit while offline? Your answer waits on the phone, and you can still change it. See When something goes wrong.',
+          text: 'If it did not send, the line above the button says so and you can press it again. Pressed send while offline? Your answer waits on the phone, and you can still change it. See When something goes wrong.',
         },
       ],
     },
     {
       /* PlayerPage ASK (call-and-answer): Your response, character count,
          "The room will see this response and vote on it. Your name is not
-         attached to it until voting closes.", Submit Answer; receipt "Answer
-         received." ("Title received." for a picture round). Results: "You
+         attached to it until voting closes.", Send my answer; receipt "Your
+         answer is in." ("Your title is in." for a picture round). Results: "You
          wrote response N", This round / Total / Standing. */
       id: 'call-and-answer',
       title: 'Call & Answer',
@@ -425,7 +428,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'You get a text box. Write as much or as little as you like: the interesting answers are rarely the shortest. Press **Submit Answer**; your screen says "Answer received."',
+          text: 'You get a text box. Write as much or as little as you like: the interesting answers are rarely the shortest. Press **Send my answer**; your screen says "Your answer is in."',
         },
         {
           t: 'p',
@@ -439,7 +442,7 @@ const playing = {
     },
     {
       /* Trivia ASK: options A–F (radiogroup), "X selected. You can change it
-         until you submit.", Submit Answer, then the one receipt "Sent / Your
+         until you send.", Send my answer, then the one receipt "Sent / Your
          answer is in." (config/playerWords.js RECEIPT). RESULTS:
          "Correct." / "Not this time." / "No answer recorded.", rows flagged
          "Your answer" and "Correct". */
@@ -449,7 +452,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'Usually four options, up to six, lettered A to F. Tap one. Until you press **Submit Answer** you can tap a different one; after that it is locked.',
+          text: 'Usually four options, up to six, lettered A to F. Tap one. Until you press **Send my answer** you can tap a different one; after that it is locked.',
         },
         {
           t: 'p',
@@ -459,7 +462,7 @@ const playing = {
     },
     {
       /* Poll ASK: the survey's own input per kind (ChoiceInput, RatingInput,
-         YesNoInput, TextInput), Submit Answer, "Your answer is in.", look-up
+         YesNoInput, TextInput), Send my answer, "Your answer is in.", look-up
          cue "the result fills in as the room answers, without names". RESULTS:
          "Your answer is counted." with the answer in a card, or "You didn't
          answer this one.". Polls score nobody, so no score shows at the end. */
@@ -469,7 +472,7 @@ const playing = {
       blocks: [
         {
           t: 'p',
-          text: 'One question, answered one of four ways: pick an option, tap a point on a scale (its two ends say what they mean), say yes or no, or write a short answer. Press **Submit Answer**.',
+          text: 'One question, answered one of four ways: pick an option, tap a point on a scale (its two ends say what they mean), say yes or no, or write a short answer. Press **Send my answer**.',
         },
         {
           t: 'p',
@@ -480,8 +483,8 @@ const playing = {
     {
       /* Wavelength ASK: "Aim for ten. A word counts only when everyone says it
          — go for the words the rest of the room will think of too", Word 1–10,
-         "n of 10 added. Fewer is fine — submit when you run dry.", "Submit
-         Words (n/10)", "Your words are in.", "Nothing shows until everyone is
+         "n of 10 added. Fewer is fine. Send when you run dry.", "Send my
+         words (n/10)", "Your words are in.", "Nothing shows until everyone is
          in." RESULTS: "You sent N." and your words. */
       id: 'wavelength',
       title: 'Wavelength',
@@ -493,7 +496,7 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'Aim for ten; fewer is fine. Press **Submit Words** when you run dry.',
+          text: 'Aim for ten; fewer is fine. Press **Send my words** when you run dry.',
         },
         {
           t: 'p',
@@ -578,8 +581,11 @@ const voting = {
       /*
         PlayerPage VOTE: "Rank your top three." (one/two when fewer answers:
         requiredVotes = min(3, answers)), the question repeated, the names line,
-        Quick Vote / Detailed Vote, slot bar, "Pick N more to submit" → "Submit
-        Votes". Moved here from player-playing (HELP_SECTION_MOVES).
+        Quick Vote / Detailed Vote, slot bar, "Pick N more to send" → "Send my
+        votes", in the dock (3d). A refused vote is a dock line ("Your votes
+        did not send. Try again."); voting closing first says "Voting closed
+        before your votes arrived…" on the result. Never a pop-up. Moved here
+        from player-playing (HELP_SECTION_MOVES).
       */
       id: 'voting',
       title: 'Ranking the answers',
@@ -599,7 +605,11 @@ const voting = {
         },
         {
           t: 'p',
-          text: 'An answer holds one place at a time: give it another place and it moves there. On the detailed ballot, tap the place it holds to take it off. The bar at the bottom shows your ballot so far; the button says how many more to pick, then becomes **Submit Votes**.',
+          text: 'An answer holds one place at a time: give it another place and it moves there. On the detailed ballot, tap the place it holds to take it off. The bar at the bottom shows your ballot so far; the button says how many more to pick, then becomes **Send my votes**.',
+        },
+        {
+          t: 'p',
+          text: 'If your votes did not send, the line above the button says so: press it again. If voting closed first, the result screen says your votes are not in that round.',
         },
         {
           t: 'p',
@@ -780,7 +790,7 @@ const feedback = {
         playing" with Final score and Final standing where the format scores
         (Trivia, Call & Answer); "Thanks for taking part" and no score for a
         poll, Wavelength, a survey or a Build Room; "Something to
-        add?" with a button per round while comments are open (24 hours after
+        add?" with a button per round, in the dock at the bottom (3d), while comments are open (24 hours after
         the end, or until the host closes them); the panel says "Comments stay
         open for 24 hours, or until your host closes them. Yours is marked as
         added later." Checked on dev (session 2901). Issue #47: each button is
@@ -798,7 +808,7 @@ const feedback = {
         },
         {
           t: 'p',
-          text: 'Under **Something to add?** there is a button for each round, with its number and title, for example "Lesson 2 · Form Follows Function". A long title is shortened; a round with no title shows its number alone.',
+          text: 'At the bottom of the screen, under **Something to add?**, there is a button for each round, with its number and title, for example "Lesson 2 · Form Follows Function". A long title is shortened; a round with no title shows its number alone.',
         },
         {
           t: 'p',
@@ -898,8 +908,13 @@ const trouble = {
       /*
         PlayerPage offlineBanner: "Offline. Reconnecting. This page catches up
         on its own…". Held answer: "Not sent yet", "Waiting for the
-        connection.", "What you will send", "It is kept on this phone, so a
-        reload does not lose it.", Change my answer.
+        connection.", "What you will send", and in the dock "Not sent yet. It
+        will send when you’re back online. It is kept on this phone, so a reload
+        does not lose it." (playerWords HELD.line) with Change my answer. A
+        ballot is held the same way since 3d (utils/pendingVote.js): "Your
+        ballot", the same line, Change my votes; it is dropped, never resent,
+        if voting closed meanwhile ("Your votes did not reach the room. Voting
+        closed while this phone was offline.").
       */
       id: 'offline',
       title: 'Your phone went offline',
@@ -911,7 +926,11 @@ const trouble = {
         },
         {
           t: 'p',
-          text: 'Pressed submit while offline? Your screen says "Waiting for the connection." and shows what you will send. The answer is kept on this phone, so a reload does not lose it, and it sends when you are back. Until then **Change my answer** lets you edit it.',
+          text: 'Pressed send while offline? Your screen says "Waiting for the connection." and shows what you will send. The answer is kept on this phone, so a reload does not lose it, and it sends when you are back. Until then **Change my answer** lets you edit it.',
+        },
+        {
+          t: 'p',
+          text: 'Votes work the same way. Your ballot waits on the phone and sends when you are back; until then **Change my votes** puts it back on the ballot. If voting closes before you are back online, the result screen says your votes did not reach the room.',
         },
       ],
     },

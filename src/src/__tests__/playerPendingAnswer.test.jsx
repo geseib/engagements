@@ -99,7 +99,7 @@ async function joinAndReachQuestion() {
 async function pickParisAndSubmit() {
   fireEvent.click(screen.getByText(/Paris/));
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send my answer/i }));
   });
 }
 
@@ -142,7 +142,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     expect(screen.queryByText(/Your answer is in\./i)).not.toBeInTheDocument();
     expect(screen.queryByText(/locked for the round/i)).not.toBeInTheDocument();
     expect(screen.getByText(/^Not sent yet$/)).toBeInTheDocument();
-    expect(screen.getByText(/it will send when you're back online/i)).toBeInTheDocument();
+    expect(screen.getByText(/it will send when you.re back online/i)).toBeInTheDocument();
     expect(screen.getByText(/B\. Paris/)).toBeInTheDocument();
     // Kept across a reload.
     expect(JSON.parse(sessionStorage.getItem(KEY))).toMatchObject(heldForRoundOne);
@@ -218,7 +218,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) });
     expect(screen.queryByText(/^Not sent yet$/)).not.toBeInTheDocument();
     // Round 2's form is still there: a late round-1 answer is not round 2's.
-    expect(screen.getByRole('button', { name: /Submit Answer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Send my answer/i })).toBeInTheDocument();
   });
 
   // The send that "failed" can still have landed; the server's flag wins.
@@ -243,7 +243,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     fireEvent.click(screen.getByRole('button', { name: /Change my answer/i }));
 
     expect(screen.getByText(/Paris/).closest('[role="radio"]')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('button', { name: /Submit Answer/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Send my answer/i })).not.toBeDisabled();
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 });

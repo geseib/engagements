@@ -243,7 +243,7 @@ describe('the old device', () => {
     await resync();
     const box = await screen.findByRole('textbox', { name: /Your response/i });
     fireEvent.change(box, { target: { value: 'my answer' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Send my answer/i })); });
     const sent = webSocketClient.sendCleanMessage.mock.calls.find(([type]) => type === 'ANSWER#001');
     expect(sent).toBeTruthy();
     expect(sent[1].clientId).toBe(localStorage.getItem(`playerClient_${GAME}`));
@@ -269,7 +269,7 @@ describe('the old device', () => {
     fireEvent.change(ranks[0], { target: { value: '0' } });
     fireEvent.change(ranks[1], { target: { value: '1' } });
     fireEvent.change(ranks[2], { target: { value: '2' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Submit Votes/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Send my votes/i })); });
 
     await waitFor(() => expect(screen.getByRole('heading', { name: `${ME} is now on another device.` })).toBeInTheDocument());
     expect(server.votes[0].clientId).toBeTruthy();
