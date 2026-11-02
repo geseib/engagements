@@ -27,6 +27,7 @@ import ScreensGroup from './ScreensGroup';
 import { TWO_SURFACE_TYPES } from '../../config/surfaces';
 import PrivateReveal from '../needs/PrivateReveal';
 import HW from '../../config/hostWords';
+import { EVENT_WORDS } from '../../config/eventAgenda';
 
 /** The late list's count for the room's eyes: a number, never a text or a name. */
 export function lateSummary(late) {
@@ -252,6 +253,11 @@ export default function SessionSetupPanel({
   onViewReports = () => {},
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
+  /* AN EVENT'S ITEM (experience plan §3.2a "Session menu: same + Agenda";
+     2d): `{ onAgenda, onBringHere, busy }`. Agenda is always there in an
+     event; Bring everyone here only while the room is somewhere else (a
+     preview, or the event moved on). Null outside an event. */
+  event = null,
   // Task 4, 2026-09-26 bug sweep: what pressing "End session" does. Whether
   // it is offered at all is `canEndSession(gameType, gameState)` below, from
   // the two props this panel already carries — the same pattern
@@ -571,6 +577,20 @@ export default function SessionSetupPanel({
             ✕
           </button>
         </div>
+
+        {event && typeof event.onAgenda === 'function' ? (
+          <div className="setup-panel__event" role="group" aria-label={EVENT_WORDS.menuK}>
+            <span className="setup-panel__event-k">{EVENT_WORDS.menuK}</span>
+            <button type="button" onClick={event.onAgenda} disabled={Boolean(event.busy)} title={EVENT_WORDS.agendaHint}>
+              {EVENT_WORDS.agenda}
+            </button>
+            {typeof event.onBringHere === 'function' ? (
+              <button type="button" onClick={event.onBringHere} disabled={Boolean(event.busy)} title={EVENT_WORDS.bringHereHint}>
+                {EVENT_WORDS.bringHere}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="setup-panel__tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
           {setupPanelTabs().map((t) => (

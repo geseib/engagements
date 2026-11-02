@@ -28,8 +28,9 @@
   remote. Sources, by section:
 
     when-two-screens   config/surfaces.js TWO_SURFACE_TYPES (call-and-answer,
-                       build); GameHostPage.jsx useConsole (two screens, no
-                       eventCode); config/roomScreen.js ROOM_WORDS, SCREEN_WORDS;
+                       build); config/surfaces.js consoleFor / CONSOLE_TYPES
+                       (two screens, Call & Answer, in an event too since 2d);
+                       config/roomScreen.js ROOM_WORDS, SCREEN_WORDS;
                        QuickstartMenu.jsx (the choice shows when a C&A set is
                        listed); SessionSetupPanel "Screens · applies now".
     open-room-window   present/roomWindow.js (placement on the other display,
@@ -118,7 +119,7 @@ const twoScreens = {
       blocks: [
         {
           t: 'p',
-          text: 'Two screens is for Call & Answer sessions outside events. The room watches the room\'s window on a display of its own, and your laptop shows your console: the next step, the responses, Workie\'s read and the controls, none of which the room sees. Every other kind of session, and every event, runs on one screen, where the room watches the stage on your laptop.',
+          text: 'Two screens is for Call & Answer sessions, on their own or as an item in an event. The room watches the room\'s window on a display of its own, and your laptop shows your console: the next step, the responses, Workie\'s read and the controls, none of which the room sees. Every other kind of session runs on one screen, where the room watches the stage on your laptop.',
         },
         {
           t: 'list',

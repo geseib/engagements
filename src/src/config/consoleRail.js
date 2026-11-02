@@ -44,15 +44,21 @@ export function peopleSummary({ players = 0 } = {}) {
  * per-person rows at all (the header's count still stands), never a "still
  * writing" beside someone who has answered. The laptop is private, so the
  * wall's "name the waiters" setting does not apply here.
+ *
+ * `from` (experience plan §3.2b, 2d): in an event, a latecomer's "from item N"
+ * (config/eventAgenda.js latecomersFrom), name → words. It sits in the row's
+ * doing-now slot when there is nothing being done (here), the way anyone new
+ * shows when they joined; it is never a second fact beside writing or voted.
  */
 export function consolePeopleFor({
   moment, players = [], answeredNames = [], answeredCount = 0, votedNames = [], votedCount = 0,
-  gameType, anonymousUntilReveal, authorsRevealed,
+  gameType, anonymousUntilReveal, authorsRevealed, from = null,
 } = {}) {
   const names = (players || []).map((p) => (p && (p.name || p.playerName)) || '').filter(Boolean);
   const answering = moment === 'ANSWERING';
   const voting = moment === 'VOTING' || moment === 'VOTE_RESPONSES';
-  if (!answering && !voting) return names.map((name) => ({ name, state: 'here' }));
+  const here = (name) => (from && from[name] ? { name, state: 'here', from: from[name] } : { name, state: 'here' });
+  if (!answering && !voting) return names.map(here);
   const waiting = waitingRoster({
     players,
     responded: answering ? answeredNames : votedNames,

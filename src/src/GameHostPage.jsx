@@ -61,7 +61,8 @@ import useStageNotesSync from './hooks/useStageNotesSync';
 import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, twoSurfacesFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { EVENT_WORDS, eventMovedOn, itemNumber, latecomersFrom, eventScreensSet, markEventScreens } from './config/eventAgenda';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -256,7 +257,9 @@ function GameHostPage() {
   const [eventItem, setEventItem] = useState(null);
   // The rest of the event, for the go-live ask (config/hostControls.js
   // eventGoLiveConfirm): has it started, and what is live now.
-  const [eventRun, setEventRun] = useState({ started: false, liveTitle: '' });
+  // `liveItemId` and `items` (the agenda's order) say where the event is now:
+  // "The event moved on to Item 3" and a latecomer's "from item 2" (2d).
+  const [eventRun, setEventRun] = useState({ started: false, liveTitle: '', liveItemId: '', items: [] });
   const [eventRefresh, setEventRefresh] = useState(0);
   useEffect(() => {
     if (!eventCode || !gameId) {
@@ -273,6 +276,8 @@ function GameHostPage() {
         setEventRun({
           started: eventHasStarted(view.event, items),
           liveTitle: live ? (live.title || '') : '',
+          liveItemId: live ? live.itemId : '',
+          items,
         });
       })
       .catch(() => { /* the item's own stage still works; only its event door waits */ });
@@ -530,6 +535,10 @@ function GameHostPage() {
     Setup then opens at step 2 and says so).
   */
   const [screenCheckedFor, setScreenCheckedFor] = useState(null);
+  // This browser set the screens up for this event today (2d; config/eventAgenda.js).
+  const [eventScreensOn, setEventScreensOn] = useState(() => {
+    try { return eventScreensSet(window.localStorage, eventCode); } catch (e) { return false; }
+  });
   const [windowBlockedFor, setWindowBlockedFor] = useState(null);
   // The session whose type the host door has told us: until then the type is
   // the default (call-and-answer), and Setup must not flash over a trivia
@@ -1299,10 +1308,12 @@ function GameHostPage() {
   twoSurfacesRef.current = twoSurfaces;
   /*
     THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
-    On two screens, for the round types, outside an event, the laptop renders
-    the console in place of the wall-style <Stage>: the wall is /present, so
-    this screen is private and works at laptop sizes. One screen, surveys and
-    event items keep <Stage>. The console takes data and callbacks only; every
+    On two screens, for the console types (config/surfaces.js CONSOLE_TYPES:
+    Call & Answer), the laptop renders the console in place of the wall-style
+    <Stage>: the wall is /present, so this screen is private and works at
+    laptop sizes. AN EVENT'S ITEM GETS THE SAME CONSOLE (experience plan 2d):
+    the projector-style stage on a private laptop was a third layout. One
+    screen and the other types keep <Stage>. The console takes data and callbacks only; every
     hook, fetch and handler stays here.
 
     THE SPOTLIGHT IS NOT AN OVERLAY ON THE CONSOLE. On the stage a response on
@@ -1311,7 +1322,7 @@ function GameHostPage() {
     (the response is on /present), so counting it there killed Space, →, ←
     and the clicker the moment the host put a response up.
   */
-  const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
+  const useConsole = consoleFor(twoSurfaces, normalizeGameType(currentGameType));
   // On the console a pinned join code is on the room's window only and covers
   // nothing here (experience plan 2a), so it does not hold the host's keys.
   const qrCovers = useConsole && qrMode === 'pinned' ? null : qrMode;
@@ -1341,6 +1352,22 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  /*
+    THE EVENT'S SCREENS, ONCE PER DAY (2d). Read again when the page learns
+    its event (a session reopened from history learns it from host-state), and
+    remembered the moment an item's Setup would reach step 3: the room's
+    window is up, or the one screen was checked. Setup's own rule decides, so
+    the two cannot disagree.
+  */
+  useEffect(() => {
+    try { setEventScreensOn(eventScreensSet(window.localStorage, eventCode)); } catch (e) { setEventScreensOn(false); }
+  }, [eventCode]);
+  useEffect(() => {
+    if (!eventCode || !gameId || eventScreensOn || !roomScreenChoice) return;
+    if (setupStepFor({ choice: roomScreenChoice, detail: presentDetail, checked: screenCheckedFor === gameId }) !== 'joins') return;
+    try { markEventScreens(window.localStorage, eventCode); } catch (e) { /* this visit only */ }
+    setEventScreensOn(true);
+  }, [eventCode, gameId, eventScreensOn, roomScreenChoice, presentDetail, screenCheckedFor]);
   /*
     WHO IS SIGNED IN HERE, AND FOR WHICH TEAM (owner, 16 Oct: "tell them in the
     help and on the setup remote box which team/person is logged in"). The
@@ -5677,6 +5704,18 @@ Focus on actionable business strategy insights.`;
     handleSwitchGame();
   };
 
+  /*
+    MAIN MENU IN AN EVENT (experience plan §3.6, 2d): the start screen, as
+    everywhere. Agenda is the level up, and has its own doors (the strip's
+    first crumb, the Session menu, the dock on one screen). A full navigation,
+    as the event's own stage leaves: nothing of the event lingers on this page
+    for the next session opened. The item keeps running.
+  */
+  const leaveToMainMenu = () => {
+    if (!eventCode) { requestLeave(); return; }
+    navigateTo('/host');
+  };
+
   const handleSwitchGame = () => {
     // Leaving the game the host is watching. Every per-game value goes back to
     // its initial state HERE, before the welcome screen appears, so whichever
@@ -7273,6 +7312,13 @@ Focus on actionable business strategy insights.`;
   */
   const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
   /*
+    THE EVENT MOVED ON (experience plan §4.2 row 13, 2d): this item was the
+    room's and another is live now. A Now item on the Needs-you line, and the
+    main button says the same words it does ("Bring everyone here": the room
+    is elsewhere, so "back" would be the wrong way round).
+  */
+  const eventMoved = eventCode ? eventMovedOn({ item: eventItem, items: eventRun.items, liveItemId: eventRun.liveItemId }) : null;
+  /*
     A PREVIEW'S DOOR TO ITS RUNNING ORDER (QA drive finding #4). While an
     item is only being previewed — nobody has joined, the phones are on the
     agenda — its lobby says where the order is chosen, and opens it. Not on
@@ -7302,7 +7348,7 @@ Focus on actionable business strategy insights.`;
     ? {
       ...baseHostControls,
       primary: {
-        label: eventItem.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here',
+        label: eventItem.state === 'paused' && !eventMoved ? 'Bring everyone back' : EVENT_WORDS.bringHere,
         intent: HOST_INTENTS.EVENT_GO_LIVE,
         disabled: eventBusy,
         // A PREVIEW asks before the phones move, on every route to this
@@ -7320,7 +7366,9 @@ Focus on actionable business strategy insights.`;
       secondary: null,
       tertiary: null,
       status: {
-        text: eventItem.state === 'paused'
+        text: eventMoved
+          ? `The room is on Item ${eventMoved.n}${eventMoved.title ? `, ${eventMoved.title}` : ''}`
+          : eventItem.state === 'paused'
           ? 'Paused — the phones are waiting on the agenda'
           : 'Preview — the phones are not here yet',
         tone: 'info',
@@ -7349,10 +7397,19 @@ Focus on actionable business strategy insights.`;
     lobby itself, so the join code goes up only once the host has checked
     the room can read this screen.
   */
-  const setupOn = hostPhase === 'LOBBY' && Boolean(gameId) && !eventCode
+  /*
+    IN AN EVENT, SCREENS ARE SET ONCE PER DAY (experience plan §7 decision 8,
+    2d). The first item's Setup asks; once it reaches step 3 this browser
+    remembers the event's day (config/eventAgenda.js), and every later item
+    that day opens past the check without asking again. On two screens the
+    room's window is a window per session, so a later item still opens at
+    step 2 until its own window is up, with that one button and no question.
+  */
+  const eventScreensReady = Boolean(eventCode) && eventScreensOn;
+  const setupOn = hostPhase === 'LOBBY' && Boolean(gameId)
     && normalizeGameType(currentGameType) === 'call-and-answer' && typeKnownFor === gameId;
   const setupStep = setupOn
-    ? setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: screenCheckedFor === gameId })
+    ? setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: screenCheckedFor === gameId || eventScreensReady })
     : null;
   const setupFrame = setupOn && (twoSurfaces || setupStep !== 'joins');
   // The console's frame draws Setup on one screen too (A5), until step 3.
@@ -8353,6 +8410,10 @@ Focus on actionable business strategy insights.`;
     gameType: currentGameType,
     anonymousUntilReveal,
     authorsRevealed,
+    // In an event, a latecomer reads "from item N" (experience plan §3.2b, 2d).
+    from: eventCode && eventItem
+      ? latecomersFrom({ players, item: eventItem, n: itemNumber(eventRun.items, eventItem.itemId) })
+      : null,
   });
   /*
     THE PULSE (session-start D3; experience plan 2c). The round opened at the
@@ -8473,6 +8534,7 @@ Focus on actionable business strategy insights.`;
     connected: wsConnected || !wsEverConnected.current,
     dismissed: needsDismissed,
     now: needsNow,
+    eventMoved,
   });
   const onNeedsAct = (item, action) => {
     switch (action) {
@@ -8483,6 +8545,8 @@ Focus on actionable business strategy insights.`;
       case NEEDS_ACTIONS.RETRY: return handleRetryAISummary();
       case NEEDS_ACTIONS.REDO: return handleRegenerateAISummary();
       case NEEDS_ACTIONS.FINE: return setNeedsDismissed((d) => d.concat(item.id));
+      // The event moved on: this item goes live for the room again (2d).
+      case NEEDS_ACTIONS.BRING: return goLiveHere();
       case NEEDS_ACTIONS.SEE: {
         // The console's People already lifts the asker; bring the row into view.
         const row = useConsole && typeof document !== 'undefined' ? document.querySelector('[data-testid="people-asker"]') : null;
@@ -8522,7 +8586,7 @@ Focus on actionable business strategy insights.`;
       onProfileChange={setProfile}
       players={players}
       title={eventTitle || 'Engagements'}
-      code={gameId}
+      code={eventCode || gameId}
       joinUrl={playUrl}
       firstUp={setupFirst ? [RW.stripRound(getHostRoundNoun(), setupFirst.n, null), setupFirst.title].filter(Boolean).join(' · ') : ''}
       onRunningOrder={mid ? null : openRunningOrder}
@@ -8544,9 +8608,19 @@ Focus on actionable business strategy insights.`;
     return runHostAction(control);
   };
   const setupStartLabel = (hostControls.primary && hostControls.primary.label) || 'Start round 1';
-  const setupWords = setupFrame
+  const setupWordsRaw = setupFrame
     ? setupPartFor(setupStep, { choice: roomScreenChoice, detail: presentDetail, startLabel: setupStartLabel })
     : null;
+  /* AN EVENT'S ITEM AT STEP 3 WHILE THE ROOM IS ELSEWHERE (2d): the main
+     button is Bring everyone here, so Your part now says that, and the status
+     says where the phones are (the event's own words), never "people can
+     join" while they are on another item. */
+  const setupWords = setupWordsRaw && eventWaiting && setupStep === 'joins'
+    ? {
+      part: { before: '', action: setupStartLabel, after: EVENT_WORDS.bringAfter },
+      status: (hostControls.status && hostControls.status.text) || '',
+    }
+    : setupWordsRaw;
   const setupControls = !setupFrame ? null
     : setupStep === 'screen'
       ? {
@@ -8556,6 +8630,10 @@ Focus on actionable business strategy insights.`;
         status: { text: '', tone: '' },
       }
       : setupStep === 'joins' ? dockControls : null;
+
+  /* "‹ AGENDA" (experience plan §3.6, 2d): in an event, the strip's first
+     crumb, up one level. Only navigates; the phones stay where they are. */
+  const consoleAgenda = eventCode ? { onClick: goToAgenda, disabled: eventBusy } : null;
 
   const consolePanel = !consoleOn ? null : (() => {
     if (setupFrame) return setupPanelFor(setupStep);
@@ -8590,7 +8668,7 @@ Focus on actionable business strategy insights.`;
     }
     switch (consoleMoment) {
       case 'LOBBY':
-        return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
+        return <LobbyPanel code={eventCode || gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
         return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
       case 'VOTING':
@@ -8652,7 +8730,8 @@ Focus on actionable business strategy insights.`;
         <HostConsole
           top={{
             title: eventTitle || 'Engagements',
-            code: gameId,
+            // In an event people join the day, never the item: the event's code.
+            code: eventCode || gameId,
             // THE ONE JOIN TOGGLE (experience plan §3.6, 2a): the code on the
             // room's window, or not; J does the same. During Setup on one
             // screen it is step 2's own move (the code goes up only at step 3),
@@ -8673,7 +8752,7 @@ Focus on actionable business strategy insights.`;
             // The bell is the Needs-you door in a live session (experience plan §4.3).
             bellSession: needsBell,
             // Main menu, always (2a): the step's leave control when it has one, else this.
-            onLeave: requestLeave,
+            onLeave: leaveToMainMenu,
             // The connection, on the top bar only when it is broken.
             connected: wsConnected || !wsEverConnected.current,
             // The Session menu, top right: a sheet over the content area.
@@ -8692,7 +8771,8 @@ Focus on actionable business strategy insights.`;
             onView: stripOnView,
             viewingWhere: liveWhere(workflow),
             onBack: () => { setViewingStep(null); setAskComposer(null); },
-          } : null}
+            agenda: consoleAgenda,
+          } : (consoleAgenda ? { strip: null, agenda: consoleAgenda } : null)}
           rail={{
             moment: consoleMoment,
             rounds: consoleRounds,
@@ -9851,7 +9931,15 @@ Focus on actionable business strategy insights.`;
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
-          onSwitchGame={requestLeave}
+          onSwitchGame={leaveToMainMenu}
+          // An event's item (2d): Agenda, and Bring everyone here while the room is elsewhere.
+          event={eventCode ? {
+            onAgenda: goToAgenda,
+            onBringHere: eventWaiting && eventItem && (eventItem.state === 'planned' || eventMoved)
+              ? () => runHostAction(hostControls.primary)
+              : null,
+            busy: eventBusy,
+          } : null}
           /*
             Task 4 fix round 1, item 1: CLOSE THE PANEL FIRST. `runHostAction`
             closes every side panel only AFTER `showConfirmation` resolves — it

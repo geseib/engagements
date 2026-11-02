@@ -28,6 +28,22 @@ export const SURFACES_KEY = 'engage.surfaces';
 */
 export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
 
+/*
+  WHICH TYPES GET THE HOST CONSOLE on two screens (experience plan 2d; audit A
+  §0). Call & Answer only, standalone or inside an event: an event's item gets
+  the same console as a standalone session (PLAN §3.2a "Event item"), never the
+  projector-style stage on a private laptop. Trivia and Poll join in 2g; the
+  Build Room has its own page (BuildConsole). The list used to sit in
+  GameHostPage beside `!eventCode`, naming trivia, poll and wavelength that
+  twoSurfacesFor had already ruled out.
+*/
+export const CONSOLE_TYPES = ['call-and-answer'];
+
+/** True when the host page renders the console: two screens and a console type. */
+export function consoleFor(twoSurfaces, gameType) {
+  return Boolean(twoSurfaces) && CONSOLE_TYPES.includes(gameType || 'call-and-answer');
+}
+
 function overrideFrom(search) {
   try {
     const v = new URLSearchParams(search || '').get('surfaces');

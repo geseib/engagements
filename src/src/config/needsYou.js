@@ -18,10 +18,10 @@
  * `kindText`, by kind and never a name, for a screen the room can see
  * (principle 3: "count only" — "A name request", "2 late answers").
  *
- * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5, 7 and 14 — the ones
- * whose data the host page already holds. Rows 8 (room's window) and 13 (the
- * event moved on) keep their own top-line and dock signals until Phase 2 gives
- * them a slot. Row 14 (Build Room, experience plan 2e, §3.2a): the Build
+ * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5, 7, 13 (the event
+ * moved on, since Phase 2 step 2d) and 14 — the ones whose data the host page
+ * already holds. Row 8 (room's window) keeps its top-line signal until Phase 2
+ * gives it a slot. Row 14 (Build Room, experience plan 2e, §3.2a): the Build
  * Room's "Waiting for you" feeds this list through `build` — Claude's asks
  * and its mockups are Now (Claude is waiting on them), the room's ideas and
  * Claude's held posts are Soon. The queue itself stays where the work is done.
@@ -48,6 +48,7 @@ export const NEEDS_ACTIONS = Object.freeze({
   FINE: 'fine',
   // Build Room (PLAN §4.2 row 14): open the ask in Waiting for you.
   DECIDE: 'decide',
+  BRING: 'bring',
 });
 
 /** The words on each action's button (PLAN §3.6, §4.2). */
@@ -62,6 +63,7 @@ export const ACTION_WORDS = Object.freeze({
   redo: 'Redo',
   fine: "It's fine",
   decide: 'Decide',
+  bring: 'Bring everyone here',
 });
 
 export const NEEDS_WORDS = Object.freeze({
@@ -168,14 +170,17 @@ function lateText({ notReviewed = 0, answers = 0 } = {}) {
  *   build         the Build Room's waiting work (buildroom/buildConsole.js
  *                 buildNeedsOf): { asks: [{ askId, title }], mockups:
  *                 [{ askId, title }], ideas: n, posts: n }, or null
+ *   eventMoved    config/eventAgenda.js eventMovedOn: { n, title } when this
+ *                 event item was the room's and another is live now, else null
  *
  * Returns { items, nowCount, soonCount, top }: Now items first (the
- * connection, then name requests newest first, then a failed read), then
+ * connection, the event moving on, then name requests newest first, then a
+ * failed read), then
  * Soon items. `top` is what the Needs-you line shows.
  */
 export function needsYou({
   players = [], late = null, readFailure = null, readCheck = '', readRound = null,
-  connected = true, dismissed = [], now = Date.now(), build = null,
+  connected = true, dismissed = [], now = Date.now(), build = null, eventMoved = null,
 } = {}) {
   const gone = new Set(dismissed || []);
   const nowItems = [];
@@ -189,6 +194,19 @@ export function needsYou({
       text: 'Not hearing the room · Reconnecting',
       kindText: 'Not hearing the room · Reconnecting',
       actions: [],
+    });
+  }
+
+  // The room left this item: the first thing to know, after the connection.
+  if (eventMoved && eventMoved.n) {
+    nowItems.push({
+      id: `event-moved:${eventMoved.n}`,
+      kind: 'event-moved-on',
+      level: NEEDS_LEVELS.NOW,
+      text: `The event moved on to Item ${eventMoved.n}`,
+      detail: eventMoved.title || '',
+      kindText: 'The event moved on',
+      actions: [NEEDS_ACTIONS.BRING],
     });
   }
 

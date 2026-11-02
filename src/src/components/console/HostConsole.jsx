@@ -95,7 +95,7 @@ export default function HostConsole({
   return (
     <div className={cls} data-theme="dark" onClick={releasePointerFocus}>
       <ConsoleTop {...top} onLeave={onLeave}>{topExtra}</ConsoleTop>
-      <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
+      <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && (strip.strip || strip.agenda) ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
       {noRail ? null : (railSlot || <ConsoleRail {...rail} />)}
       <ConsoleFooter {...footer} controls={controls} />
       {needs ? <div className="hc-needs">{needs}</div> : null}

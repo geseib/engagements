@@ -67,6 +67,22 @@
   padding: 0 .3em;
 }
 .wfs-sep { opacity: .7; }
+/* "‹ Agenda" (2d): the first crumb in an event's item, up one level. The
+   strip's own text colour and size, a link's affordance; never amber, which
+   is the main button's. */
+.wfs-crumb {
+  font: inherit;
+  font-size: calc(var(--t-meta) * .82);
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: .05em .2em;
+  cursor: pointer;
+}
+.wfs-crumb:hover { text-decoration: underline; }
+.wfs-crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wfs-crumb:disabled { cursor: default; opacity: .6; text-decoration: none; }
 
 .wfs-step {
   display: inline-flex;

@@ -128,7 +128,7 @@ export default function ConsoleRail({
           {peopleRows.map((p) => (
             <li key={p.name}>
               <span className={MARK[p.state] === '✓' ? 'hc-tick' : 'hc-wait'}>{MARK[p.state]}</span>
-              <span>{p.name}{META[p.state] ? <span className="hc-meta">{` · ${META[p.state]}`}</span> : null}</span>
+              <span>{p.name}{(META[p.state] || p.from) ? <span className="hc-meta">{` · ${META[p.state] || p.from}`}</span> : null}</span>
             </li>
           ))}
         </ul>

@@ -600,6 +600,25 @@ body {
   cursor: pointer;
 }
 
+/* AN EVENT'S ITEM (experience plan 2d): Agenda, and Bring everyone here while
+   the room is elsewhere, above the tabs so they are there whichever tab is
+   open. The buttons take the panel's own button paint. */
+.setup-panel__event {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgb(var(--glow-rgb) / .16);
+}
+.setup-panel__event-k {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
 /* Wraps: at 660px and below the panel is its 320px minimum and the four tabs
    need ~430px, so SETTINGS sat past the screen's edge, unreachable (walk of
    dev 92f8b24d, 16 Oct 2026). */
