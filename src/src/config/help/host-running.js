@@ -236,7 +236,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The dock holds the one button that moves the room on; Space or → presses it. A grey button says why it cannot act yet. Late items add a count to the status line. Before **SESSION**, a bell counts what waits on you (**Needs you**): never a name on one screen, gone when nothing waits.',
+          text: 'The dock holds the one button that moves the room on; Space or → presses it. A grey button says why it cannot act yet. Late items add a count to the status line. Before **SESSION**, a bell with a number counts what waits on you (**Needs you**): never a name on one screen.',
         },
         {
           t: 'p',
