@@ -50,7 +50,17 @@ const S = require('../../../lambda-functions/game/build-store');
 
 const API = 'https://api.example.test/dev/';
 const GAME = '4821';
-const NOW = new Date().toISOString();
+/*
+  ONE CLOCK FOR THE FIXTURE AND THE PAGE. The server's `now` (what hostView
+  judges connected / listening / stale / doing against) is read at the moment
+  a fixture is built, exactly as `ago()` is, and the page reads Date.now().
+  It used to be a NOW frozen at module load: under a loaded parallel run this
+  file reaches its later tests minutes after loading, so the server half saw
+  every `ago(n)` as minutes newer than the page did, and a judgment near a
+  window's edge (20s listening, 2 min connected, 90s building) came out
+  differently on the two halves — "Claude is building" read "Claude is ready".
+*/
+const nowIso = () => new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
@@ -74,7 +84,7 @@ function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], l
     sessionState: 'STARTED',
     room: S.roomFromRows(rows),
     players: ['Ana', 'Dee', 'Priya', 'Sam'],
-    now: NOW,
+    now: nowIso(),
   });
 }
 
@@ -856,7 +866,7 @@ describe('Connect Claude Code', () => {
   });
 
   test('which window: first time, connected now, coming back, out of date, all the steps', () => {
-    const now = Date.parse(NOW);
+    const now = Date.now();
     expect(connectCase({ agent: {} }, now)).toBe('first');
     expect(connectCase({ agent: { lastSeenAt: ago(10) } }, now)).toBe('now');
     // The plugin's background report counts as checking in.
@@ -927,7 +937,7 @@ describe('after Claude wraps up, and what next', () => {
     links: [{ label: 'Demo', url: 'http://localhost:5173/' }, { label: 'Repository', url: 'https://github.com/x/y' }],
     nextSteps: ['Send a confirmation text'],
     by: 'agent',
-    updatedAt: NOW,
+    updatedAt: nowIso(),
   };
 
   test('the stage says what we built, with the demo one click away', async () => {
@@ -1811,7 +1821,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
   test('where it landed fills in the direction, which the host can still change', async () => {
     await openRoom(hostState({
       st: { CurrentAskId: '003' },
-      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     }));
     // Settle stays open with the wheel (H3): spin again, or go with where it landed.
@@ -1826,7 +1836,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
     current = hostState({
       st: { CurrentAskId: '003' },
-      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     });
     await act(async () => { handler({}); });
@@ -3339,7 +3349,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
   test('Space while the wheel turns does nothing; once it stops, Space sends', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIED }));
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
-    current = hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED });
+    current = hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED });
     await act(async () => { handler({}); });
     expect(await screen.findByRole('button', { name: 'The wheel is turning…' })).toBeDisabled();
     space();
@@ -3379,7 +3389,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     'results with a winner': () => resultsState(),
     'results with a tie': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: TIED }),
     'a wheel not yet spun': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIED }),
-    'a wheel that landed': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED }),
+    'a wheel that landed': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED }),
     'results of a rating': () => hostState({ st: { CurrentAskId: '005' }, asks: [{ AskId: '005', Kind: 'rating', Prompt: 'How close?', Options: [], Status: 'results' }], answers: [{ AskId: '005', PlayerName: 'Ana', Rating: 4 }] }),
     'a proposed ask waiting': () => hostState({ asks: [{ ...CHOICE, Status: 'proposed' }], ideas: [{ PlayerName: 'Jordan', Text: 'A map link' }] }),
     'the opening': () => hostState({ st: { Phase: undefined } }),
@@ -3440,7 +3450,10 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
 
 describe('what Claude is doing, in one line (docs/design/build-room-doing)', () => {
   const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
-  const COMMANDS = [
+  // A function, built inside each test: `ago()` read at collection time is
+  // minutes old by the time a loaded run reaches the test, and 'Ran git push'
+  // (20s ago) falls out of the 90s building window ("Claude is ready").
+  const COMMANDS = () => [
     run(300, 'Ran git status'), run(200, 'Ran git remote'), run(150, 'Ran git remote'), run(120, 'Ran git remote'),
     run(60, 'Ran gh repo'), run(20, 'Ran git push'),
   ];
@@ -3453,7 +3466,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   beforeEach(() => { try { window.localStorage.clear(); } catch (e) { /* none */ } });
 
   test('D1: the header chip is the line and how long, and the panel leads with it', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is mocking up 3 graph options · 4 min');
     expect(screen.getByTestId('brm-agentchip')).toHaveAttribute('data-state', 'building');
     const p = panel();
@@ -3464,7 +3477,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D1: a to-do line says where it came from, and a helper sits under it', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: { ActiveAt: ago(10), DoingA: { text: 'Setting up the repository', source: 'todo', startedAt: ago(130), at: ago(10) }, Helper: { text: 'Researching contrast rules', at: ago(40) } },
     }));
     const p = panel();
@@ -3473,7 +3486,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   });
 
   test('D1: the commands are one folded row; opened, repeats are grouped, and the fold is remembered', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     const fold = within(panel()).getByRole('button', { name: /^Steps 6/ });
     expect(fold).toHaveTextContent('Steps 6 · last: Ran git push');
     expect(fold).toHaveAttribute('aria-expanded', 'false');
@@ -3487,7 +3500,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D1: an opened fold stays open on the next visit', async () => {
     window.localStorage.setItem('brm-steps-open', '1');
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     expect(within(panel()).getByText('Ran git remote, 3 times')).toBeInTheDocument();
   });
 
@@ -3495,14 +3508,14 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     const spy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const set = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     try {
-      await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+      await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
       fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));
       expect(within(panel()).getByText('Ran git status')).toBeInTheDocument();
     } finally { spy.mockRestore(); set.mockRestore(); }
   });
 
   test('D1: with no line, the panel is as it was: the newest command leads', async () => {
-    await openRoom(hostState({ activity: COMMANDS }));
+    await openRoom(hostState({ activity: COMMANDS() }));
     expect(within(panel()).getByTestId('brm-activity-now')).toHaveTextContent('Ran git push');
     expect(within(panel()).queryByTestId('brm-doing')).toBeNull();
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
@@ -3512,7 +3525,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   // under the line ("Ran git push"); still never where the line came from.
   test('D2: the Stage says the line and how long, the helper beneath, and the tool lines only in their own list', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }),
     }));
     fireEvent.keyDown(window, { key: '2' });
@@ -3530,7 +3543,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   test('D5: a stale line is Claude was, the chip says when it was last seen, the Stage tells the room', async () => {
     await openRoom(hostState({
       st: { AgentSeenAt: ago(240) },
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: LINE({ ActiveAt: ago(240), DoingB: { text: 'Scaffolding the site', source: 'claude', startedAt: ago(700), at: ago(240) } }),
     }));
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude was scaffolding the site · last seen 4 min ago');
@@ -3543,7 +3556,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D4: History shows a finished step with its time and what it produced; commands never', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: { ActiveAt: ago(10), DoingA: { text: 'Building the bar chart', source: 'todo', startedAt: ago(125), at: ago(10) } },
       logs: [
         {
@@ -3564,7 +3577,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   });
 
   test('D1-D5: one orange on the Host screen with a line, folded or open', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
     const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
     const before = oranges().length;
     expect(before).toBeLessThanOrEqual(1);
@@ -3575,11 +3588,12 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
 describe('a helper alone, and what a step holds (docs/design/build-room-doing)', () => {
   const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
-  const ACTS = [run(60, 'Ran npm install'), run(20, 'Ran npm test')];
+  // Built per test, like COMMANDS above.
+  const ACTS = () => [run(60, 'Ran npm install'), run(20, 'Ran npm test')];
   const helperOnly = () => ({ text: '', past: '', source: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: ago(10) });
 
   test('the panel, chip and Stage keep today\'s words and show the helper', async () => {
-    await openRoom({ ...hostState({ activity: ACTS }), doing: helperOnly() });
+    await openRoom({ ...hostState({ activity: ACTS() }), doing: helperOnly() });
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
     const panel = screen.getByRole('region', { name: 'Claude now' });
     expect(within(panel).getByText('A helper is researching contrast rules')).toBeInTheDocument();

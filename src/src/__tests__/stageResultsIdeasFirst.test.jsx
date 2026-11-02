@@ -68,7 +68,7 @@ function installFetch(overrides) {
     for (const [pattern, body] of Object.entries(overrides)) {
       const hit = pattern.endsWith('$') ? u.endsWith(pattern.slice(0, -1)) : u.includes(pattern);
       if (hit) {
-        if (pattern === 'games/get-results') await new Promise((r) => setTimeout(r, 50));
+        // Instant, on purpose: see resultsRankOrder.test.jsx installFetch.
         return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
       }
     }

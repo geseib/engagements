@@ -356,11 +356,27 @@ function GameHostPage() {
   const [pollTally, setPollTally] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
-  // Debug wrapper for setGameState
-  const setGameState = (newState) => {
-    console.log(`🚨 DEBUG: setGameState called - changing from "${gameState}" to "${newState}"`);
+  /*
+    EVERY STATE CHANGE GOES THROUGH HERE, AND IT MOVES gameStateRef AT ONCE.
+
+    The ref used to follow `gameState` only from an effect, i.e. once React had
+    COMMITTED the render. restoreGameState sets the state and then awaits the
+    round's rows; when they land it asks the ref "is the stage still on this
+    round?" before filing them. If the response came back before the commit (a
+    fast network, a slow device, a loaded CI box: GameHostPage is a big render),
+    the ref still held the previous state, the rows were judged stale and
+    dropped, and nothing asked again: the stage sat on "Gathering responses…"
+    for good. Updating the ref here, synchronously, makes it mean "the state
+    this page has decided on", which is what every reader of it wants.
+    Functional updates are resolved against the ref so a later reader sees the
+    same value React will settle on.
+  */
+  const setGameState = (next) => {
+    const resolved = typeof next === 'function' ? next(gameStateRef.current) : next;
+    console.log(`🚨 DEBUG: setGameState called - changing from "${gameStateRef.current}" to "${resolved}"`);
     console.trace('🚨 DEBUG: setGameState call stack');
-    setGameStateRaw(newState);
+    gameStateRef.current = resolved;
+    setGameStateRaw(resolved);
   };
 
   /**
@@ -372,8 +388,10 @@ function GameHostPage() {
    * which round is on screen (`stageBeatChanged`) would otherwise compare every
    * announcement against 'CREATED' and silently ignore all of them.
    */
+  // Written by setGameState above, the only writer of `gameState`; no effect
+  // syncs it, because an effect runs after the commit and could put back a
+  // state that a later setGameState has already replaced.
   const gameStateRef = useRef(gameState);
-  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   /*
     THE ROUND'S ANSWERS, FOR THE FROZEN CLOSURES — same reason as the line above.
 

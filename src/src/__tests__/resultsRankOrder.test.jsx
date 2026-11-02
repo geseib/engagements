@@ -116,11 +116,12 @@ function installFetch(overrides) {
     for (const [pattern, body] of Object.entries(overrides)) {
       const hit = pattern.endsWith('$') ? u.endsWith(pattern.slice(0, -1)) : u.includes(pattern);
       if (hit) {
-        // The results read lands a beat after host-state, as it does over a
-        // network: the page files rows under the state it has rendered
-        // (stageAnswersKey against gameStateRef), and an instant mock beats
-        // that render.
-        if (pattern === 'games/get-results') await new Promise((r) => setTimeout(r, 50));
+        // Instant, on purpose: the results land before GameHostPage has
+        // committed the RESULTS render. The page used to file rows only under
+        // the state it had COMMITTED (gameStateRef followed an effect), so a
+        // response that beat the render was dropped for good, and under a
+        // loaded parallel run a 50ms head start was not enough. setGameState
+        // now moves the ref at once; an instant mock pins that.
         return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
       }
     }
