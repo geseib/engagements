@@ -896,13 +896,14 @@ describe('round 2: focus home, the sessions dialog, icons', () => {
   });
 
   test('N1/N3: on a phone the sessions list is cards; names wrap with their full text in title=', () => {
-    const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'SessionHistoryPanel.css'), 'utf8');
+    // The rows are SessionList's since the experience plan's 4a.
+    const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'SessionList.css'), 'utf8');
     const phone = css.slice(css.lastIndexOf('@media (max-width: 600px)'));
-    expect(phone).toMatch(/\.shist \.shist__tbl tr \{[^}]*display:\s*flex/);
-    expect(phone).toMatch(/\.shist \.shist__btn \{[^}]*min-height:\s*44px/);
-    expect(css).toMatch(/\.shist \.shist__nm \{[^}]*white-space:\s*normal/);
+    expect(phone).toMatch(/\.slist \.slist-tbl tr \{[^}]*display:\s*flex/);
+    expect(phone).toMatch(/\.slist \.slist-btn,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
+    expect(phone).toMatch(/\.slist \.slist-nm \{[^}]*white-space:\s*normal/);
     render(<SessionHistoryPanel sessions={[{ gameId: '7158', title: 'UX QA — Round 2 speed run', gameType: 'trivia', byMe: true, createdAt: '2026-10-30T09:00:00Z' }]} questionSets={[]} mode="select" />);
-    expect(screen.getByText('UX QA — Round 2 speed run').closest('.shist__nm')).toHaveAttribute('title', 'UX QA — Round 2 speed run');
+    expect(screen.getByText('UX QA — Round 2 speed run').closest('.slist-nm')).toHaveAttribute('title', 'UX QA — Round 2 speed run');
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
   });
 

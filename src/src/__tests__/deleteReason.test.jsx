@@ -18,6 +18,7 @@ import SessionsPanel from '../components/SessionsPanel';
 import EventBuilder from '../components/EventBuilder';
 import DeleteReasonField, { needsReason } from '../components/DeleteReasonField';
 import { authFetch } from '../auth/authFetch';
+import { rowAction, clickRowAction } from '../testUtils/sessionRows';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 jest.mock('../utils/eventsApi', () => ({
@@ -65,22 +66,22 @@ const rowOf = (title) => screen.getByText(title).closest('tr');
 const clearGameCalls = () => authFetch.mock.calls.filter(([u, o]) => u.includes('/admin/clear-game/') && o.method === 'POST');
 
 describe("the console's Sessions list", () => {
-  test('a row the caller created: the browser confirm as before, no reason asked, none sent', async () => {
-    window.confirm = jest.fn(() => true);
+  /* Since the experience plan's 4a the confirm is SessionList's, inline on
+     the row for everyone (it was a browser confirm for hosts and owners). */
+  test('a row the caller created: the row asks, no reason asked, none sent', async () => {
     await mount();
-    fireEvent.click(within(rowOf('Mine')).getByRole('button', { name: 'Delete' }));
-    expect(window.confirm).toHaveBeenCalled();
-    expect(screen.queryByTestId('delete-reason')).toBeNull();
+    clickRowAction(rowOf('Mine'), /^Delete/);
+    const ask = screen.getByTestId('delete-confirm');
+    expect(within(ask).queryByTestId('delete-reason')).toBeNull();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(clearGameCalls()).toHaveLength(1));
     expect(clearGameCalls()[0][1].body).toBeUndefined();
   });
 
   test("Engage staff on another team's row: the inline confirm asks why, Delete waits for it, and the reason is sent", async () => {
-    window.confirm = jest.fn(() => true);
     await mount();
-    fireEvent.click(within(rowOf('Their offsite')).getByRole('button', { name: 'Delete' }));
-    expect(window.confirm).not.toHaveBeenCalled();
-    const row = screen.getByTestId('reason-row');
+    clickRowAction(rowOf('Their offsite'), /^Delete/);
+    const row = screen.getByTestId('delete-confirm');
     const go = within(row).getByRole('button', { name: 'Delete' });
     expect(go).toBeDisabled();
     fireEvent.change(within(row).getByLabelText('Why are you deleting this?'), { target: { value: 'Owner asked by email' } });
@@ -91,18 +92,20 @@ describe("the console's Sessions list", () => {
     await waitFor(() => expect(screen.queryByText('Their offsite')).toBeNull());
   });
 
-  test('a caller who may not delete it: the button is disabled and says who may', async () => {
+  test('a caller who may not delete it: Delete is there, does nothing, and says who may', async () => {
     await mount();
-    const button = within(rowOf('Someone else')).getByRole('button', { name: 'Delete' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', expect.stringMatching(/host who created it/));
+    const item = rowAction(rowOf('Someone else'), /^Delete/);
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveTextContent(/host who created it/);
+    fireEvent.click(item);
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
   });
 
-  test('if the server still asks for a reason, the same inline confirm opens', async () => {
-    window.confirm = jest.fn(() => true);
+  test('if the server still asks for a reason, the same inline confirm asks for it', async () => {
     await mount({ firstDelete: json(400, { code: 'reason_required', error: 'Engage staff must say why' }) });
-    fireEvent.click(within(rowOf('Mine')).getByRole('button', { name: 'Delete' }));
-    expect(await screen.findByTestId('reason-row')).toBeInTheDocument();
+    clickRowAction(rowOf('Mine'), /^Delete/);
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByTestId('delete-reason')).toBeInTheDocument();
   });
 
   test('delete all, as Engage staff: the modal asks why and sends it', async () => {

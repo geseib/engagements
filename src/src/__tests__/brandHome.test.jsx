@@ -5,8 +5,9 @@ import { render, screen } from '@testing-library/react';
  * THE MARK IS THE WAY HOME — where that is safe.
  *
  * Clicking the mountain and the wordmark goes to the marketing home from every
- * marketing page, from /join, from the host's main screen and from the admin
- * console. It does NOT on the player page or on a live session's stage: one
+ * marketing page and from /join. Inside the app — the host's start screen
+ * (Home) and the console (Library & team) — it goes to Home, `/`, and stays
+ * in the app (experience plan 4b; audit E S3). It does NOT on the player page or on a live session's stage: one
  * stray tap there takes a participant out of their round or the projector off
  * the session.
  *
@@ -30,14 +31,15 @@ describe('the mark links home where that is safe', () => {
     expect(screen.getByRole('link', { name: /engagements/i })).toHaveAttribute('href', '/home');
   });
 
-  test('on the host main screen', () => {
+  test('on the host start screen it goes Home when signed in', () => {
     const src = read('components', 'WelcomeScreen.jsx');
-    expect(src).toMatch(/<a className="wel-brand" href="\/home"/);
+    expect(src).toMatch(/<a className="wel-brand" href=\{currentUser \? HOME_PATH : '\/home'\}>/);
+    expect(read('config', 'sessionRows.js')).toMatch(/export const HOME_PATH = '\/';/);
   });
 
-  test('on the admin console', () => {
+  test('in the console (Library & team) it goes Home', () => {
     const src = read('components', 'AdminShell.jsx');
-    expect(src).toMatch(/<a className="adm-home" href="\/home"/);
+    expect(src).toMatch(/<a className="adm-home" href="\/" aria-label="Home">/);
     expect(read('components', 'AdminShell.css')).toMatch(/\.adm-home\s*\{[^}]*text-decoration:\s*none/);
   });
 

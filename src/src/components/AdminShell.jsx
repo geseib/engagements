@@ -158,11 +158,13 @@ export default function AdminShell({
        in the chrome resolves to the paper set. Same move as WelcomeScreen. */
     <div className={`adm-shell${scopeBar ? ' adm-shell--scoped' : ''}`} data-theme="dark">
       <header className="adm-brand">
-        {/* The mark is the way back to the marketing home. `/home`, because `/`
-            is the host's main screen for anybody signed in — and the "Host"
-            link in the bar already goes there. A page load, like every other
-            navigation in this app (App.jsx routes on pathname). */}
-        <a className="adm-home" href="/home" aria-label={`${brand} home`}>
+        {/* THE MARK GOES HOME — the host's start screen, `/` — and stays in
+            the app (experience plan 4b; audit E S3: it used to leave for the
+            marketing page at /home). This console is Library & team; Home is
+            where a session is started. Nobody reaches this console signed
+            out. A page load, like every navigation here (App.jsx routes on
+            pathname). */}
+        <a className="adm-home" href="/" aria-label="Home">
           <BrandMark size={22} />
           <span className="adm-word">{brand}</span>
         </a>
@@ -217,6 +219,8 @@ export default function AdminShell({
             <span className="adm-avatar" aria-hidden="true">{initials}</span>
             <span className="adm-name">{name}</span>
             {/*
+              "Home", the one name for the start screen (experience plan 4b;
+              it said "Host").
               THE WAY BACK, AND IT OPENS A NEW TAB ON PURPOSE — carried over
               verbatim in intent from AdminPage.jsx:946. App.jsx is a pathname
               switch with no client-side navigation, so an in-place link is a
@@ -230,7 +234,7 @@ export default function AdminShell({
               target="_blank"
               rel="noopener noreferrer"
             >
-              Host ↗
+              Home ↗
             </a>
             <button type="button" className="adm-linkbtn" onClick={onSignOut}>
               Sign out

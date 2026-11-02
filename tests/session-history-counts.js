@@ -379,6 +379,32 @@ const byId = (games, id) => games.find((g) => g.gameId === id);
     assert.strictEqual(byId(await list(), '4821').surveyClosed, false);
   });
 
+  /*
+    §6 ended — experience plan 4b. Home's Rejoin offers started sessions the
+    host has not ended; the list says which, off the same STATE read. Absent,
+    never false, when STATE was not read: an unread session must not look live.
+  */
+  console.log('\n§6  ended: read off the same STATE batch, absent when unread');
+
+  await check('a session at ENDED says ended: true', async () => {
+    store.clear();
+    seedSession('4821', { players: [], rounds: 4 });
+    store.get(table.keyOf('GAME#4821', 'STATE')).State = 'ENDED';
+    assert.strictEqual(byId(await list(), '4821').ended, true);
+  });
+
+  await check('a session mid-round says ended: false', async () => {
+    store.clear();
+    seedSession('4821', { players: [], rounds: 2 });
+    assert.strictEqual(byId(await list(), '4821').ended, false);
+  });
+
+  await check('a session with no STATE row carries no ended at all', async () => {
+    store.clear();
+    surveySession('4821', null, false);
+    assert.strictEqual('ended' in byId(await list(), '4821'), false);
+  });
+
   console.log(`\n${pass} passed, ${fail} failed\n`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

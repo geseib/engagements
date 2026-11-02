@@ -189,7 +189,7 @@ const reporting = {
       blocks: [
         {
           t: 'p',
-          text: 'Open it from **Session report** under Rounds so far in the Session menu\'s Rounds section, from **Open session report** when the session ends, or from Sessions on your start screen. It is built fresh each time, so you can open it during the session as often as you like; opening it ends nothing.',
+          text: 'Open it from **Session report** under Rounds so far in the Session menu\'s Rounds section, from **Open session report** when the session ends, or from **Report** on its row in your sessions list (Home\'s recent sessions, or Library & team › Sessions). It is built fresh each time, so you can open it during the session as often as you like; opening it ends nothing.',
         },
         {
           t: 'p',

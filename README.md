@@ -36,6 +36,13 @@ Build Room and Event are named in `src/src/config/engagementKinds.js`. After eac
 the AI (named Workie on screen) writes a summary of what the room said. Every session
 produces a report; a saved report is kept 90 days or a year.
 
+Signed in, a host lands on **Home** (`/`, `src/src/components/WelcomeScreen.jsx`): New
+engagement, Rejoin (their running sessions), the five most recent sessions and their events.
+The console at `/admin` is **Library & team**, not a second home: question sets, every
+session, saved reports, people and plan. Both draw sessions with one component,
+`src/src/components/SessionList.jsx`, and every row's actions come from
+`src/src/config/sessionRows.js`, so a row offers the same thing in both places.
+
 ## Environments
 
 | Tier | Site | Stack |

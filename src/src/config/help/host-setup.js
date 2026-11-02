@@ -39,7 +39,7 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            { title: 'Create the session', text: 'On the start screen choose **Create engagement**: a title, a format and a question set. Nobody can join yet.' },
+            { title: 'Create the session', text: 'On the start screen (Home) choose **New engagement**: a title, a format and a question set. Nobody can join yet.' },
             { title: 'Start it', text: 'Your sessions list opens. Press **Start** on the new session: the join code and QR go up, and people join from their phones.' },
             { title: 'Run the rounds', text: 'You move the room on from your own screen; every phone follows. The Running the room guide covers this.' },
             { title: 'Read what the room said', text: 'Results after each round, What we heard from Workie, and the session report. See What we heard and Ask the room, and The session report.' },
@@ -60,32 +60,35 @@ const quickStart = {
       ],
     },
     /*
-      components/WelcomeScreen.jsx: "Start an engagement" (h1), Create
-      engagement / Quick start / Build Room (:205-236), WelcomeEvents
-      ("Run an event", New event, See how; draws nothing without events),
-      "Rejoin a session" (:249), "Your library": Question sets / Sessions /
-      Reports (:291-330). Top line: ActiveOrgSwitcher (null with one space),
-      HostNotificationsBell, name, "Admin console" | "Question sets & team"
-      (:131), Sign out, HelpButton. PendingInvites above the split (Accept).
-      Checked on dev 22 Oct 2026 (QA host, one space: switcher shows it).
+      components/WelcomeScreen.jsx (Home, experience plan 4b): "Home" kicker,
+      "Start an engagement" (h1), New engagement, then "Or go straight in:"
+      Quick start / Build Room; "Rejoin" (the host's live sessions with
+      Rejoin, "Nothing of yours is running right now.", "Or type a session
+      code" + Continue); "Recent sessions" (five SessionList rows) with "See
+      all in Library & team" (/admin?section=games); WelcomeEvents; "Your
+      library": Question sets / Reports / Library & team. Top line:
+      ActiveOrgSwitcher, HostNotificationsBell, name, "Library & team",
+      Sign out, HelpButton. The brand mark goes to / (Home) when signed in.
     */
     {
       id: 'start-screen',
       title: 'What is on the start screen',
       icon: 'House',
       blocks: [
-        { t: 'p', text: 'The start screen is where you land when no session is open. It has three parts.' },
+        { t: 'p', text: 'The start screen is Home: where you land when no session is open, and where the mark at the top left takes you. It has five parts.' },
         {
           t: 'list',
           items: [
-            { title: 'Start an engagement', text: '**Create engagement** sets one up field by field. **Quick start** launches a ready-made set straight into a live room. **Build Room** opens the Build Room\'s own setup. Below them, **Run an event** lists your team\'s events when your plan includes them; otherwise it says which plan does.' },
-            { title: 'Rejoin a session', text: 'Type a running session\'s four-digit code and press **Continue** to get back to it, for example after a reload.' },
-            { title: 'Your library', text: '**Question sets** opens your question sets, **Sessions** every session you have created or run, and **Reports** the reports you saved, which stay after the session has expired.' },
+            { title: 'Start an engagement', text: '**New engagement** sets one up field by field. Under it, **Quick start** launches a ready-made set straight into a live room and **Build Room** opens the Build Room\'s own setup.' },
+            { title: 'Rejoin', text: 'Your sessions running now (started in the last day, not ended), each with **Rejoin**. For any other, type its code and press **Continue**.' },
+            { title: 'Recent sessions', text: 'Your five newest, as rows of the list Library & team shows in full: one main button each, the rest under **⋯**. **See all** opens the full list.' },
+            { title: 'Run an event', text: 'Your team\'s events when your plan includes them; otherwise it says which plan does.' },
+            { title: 'Your library', text: '**Question sets**, and **Reports** (saved reports outlive their session). **Library & team** holds the rest: every session, your team and your plan.' },
           ],
         },
         {
           t: 'p',
-          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Question sets & team** (**Admin console** if you are Engage staff), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
+          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Library & team** (the console, called that for everyone), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
         },
         {
           t: 'note',
@@ -111,7 +114,7 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            'Choose **Create engagement** on the start screen.',
+            'Choose **New engagement** on the start screen.',
             'Under **Name it**, type the session\'s name. The room sees it, so make it the name of the meeting.',
             'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Compare formats** to see how each one runs.',
             'Every topic in the set starts on. Switch off any you want to skip.',
@@ -153,7 +156,7 @@ const quickStart = {
           t: 'list',
           items: [
             'People scan the QR, or go to the address on screen and type the four-digit code.',
-            'People on a video call use the join link: **Link** on the session\'s row copies it.',
+            'People on a video call use the join link: **Copy join link**, under **⋯** on the session\'s row, copies it.',
             'Once chosen, Start says so: **Start · two screens** opens the room\'s window in the same click. If the browser blocks it, Setup opens at step 2. **One screen this time**, under the list, switches.',
             'A survey opens on its lobby with the code up.',
           ],
@@ -214,7 +217,7 @@ const quickStart = {
             { q: 'How many people can play?', a: 'Plenty. The discussion works best somewhere between 5 and 50; past that, reading answers out stops being possible.' },
             { q: 'Can I run the same set again?', a: 'Yes. Each session is a fresh room, and playing a set does not change it.' },
             { q: 'Can I go back to a round we already did?', a: 'Yes. The Rounds tab of the Session panel holds every round played, with its answers and What we heard.' },
-            { q: 'I closed the tab mid-session.', a: 'Open the start screen, type the session\'s code under **Rejoin a session** and press **Continue**, or press **Continue** on its row in **Sessions**.' },
+            { q: 'I closed the tab mid-session.', a: 'Open the start screen (Home): your running session is under **Rejoin**; press **Rejoin**. Or type its code there and press **Continue**.' },
           ],
         },
       ],
@@ -311,7 +314,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The button is **Create engagement**, or **Open the survey**, which opens a survey to answers at once. Pressed while the topics load, it reads **Waiting for topics…** and creates when they arrive. On Build Room or Event, Ctrl+Enter moves to the button; Enter there goes on. Afterwards Your sessions shows the new session\'s code and **Start it now**.',
+          text: 'The button is **Create engagement**, or **Open the survey**, which opens a survey to answers at once. Pressed while the topics load, it reads **Waiting for topics…** and creates when they arrive. On Build Room or Event, Ctrl+Enter moves to the button; Enter there goes on. Afterwards Your sessions shows the new session\'s code and **Start it now**; its row also has **Start**, and **Edit** under **⋯**.',
         },
       ],
     },
@@ -661,14 +664,15 @@ const gameSetup = {
       ],
     },
     /*
-      SessionHistoryPanel.jsx: "Your sessions" / "Edit one to set it up, or
-      start it when the room is ready."; Search sessions ("Title, code, host
-      or set…"), Type; columns Session, Code, Type, State (Played / Not
-      started), Players, Rounds, Created, Last played; flags On stage /
-      Latest; rowActions (:109-140): not started Edit + Start; started Report
-      + Continue; closed survey Report + Results + Continue; Build Room
-      Continue + Report; event Edit agenda / Open; every row Link, Invite….
-      Checked on dev 22 Oct 2026.
+      One list, components/SessionList.jsx (experience plan 4a), in Home's
+      recent rows, the "Your sessions" dialog and Library & team › Sessions.
+      Columns Session (title; set · code), Format, Status (Not started /
+      Running / Ended / Closed / Played, with people · rounds), Date. Actions
+      from config/sessionRows.js sessionActions: not started Start · Edit,
+      Invite…, Copy join link, Delete…; running Continue · Report…; ended
+      Report · Continue…; closed survey Survey results · Report, Continue…;
+      Build Room Continue · Report; event Open · Edit the agenda. Search
+      sessions, Type, State, Sort. Delete asks inline ("Keep it" / "Delete").
     */
     {
       id: 'sessions-list',
@@ -677,21 +681,21 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Sessions** on the start screen lists every session you have created or run, newest first, with its code, type, state (Not started or Played), players, rounds and dates. Search by title, code, host or set, or filter by **Type**.',
+          text: 'Your sessions are one list wherever you meet them: five rows under **Recent sessions** on Home, and every session in Sessions, in **Library & team** (**See all** on Home opens it). Each row shows the session\'s title, its set and code, its format, its status (Not started, Running, Ended) with how many people and rounds, and a date. In the full list, search by title, code, host or set, and filter by type and state.',
         },
         {
           t: 'table',
-          head: ['The session', 'Its buttons'],
+          head: ['The session', 'Its main button', 'Under ⋯'],
           rows: [
-            ['Not started', '**Edit** to change it, **Start** to open it to the room.'],
-            ['Played', '**Continue** to go back to it, **Report** to read its report.'],
-            ['A closed survey', '**Results** as well, for its answers.'],
-            ['Every row', '**Link** copies the join link; **Invite…** opens an invitation to send.'],
+            ['Not started', '**Start** (or **Start · two screens**) opens it to the room.', '**Edit** to change it first; **Invite…**; **Copy join link**; **Delete…**'],
+            ['Running', '**Continue** goes back to it.', '**Report**; **Invite…**; **Copy join link**; **Delete…**'],
+            ['Ended', '**Report** reads its report.', '**Continue**; **Invite…**; **Copy join link**; **Delete…**'],
+            ['A closed survey', '**Survey results**, for its answers.', '**Report**; **Continue**; **Invite…**; **Copy join link**; **Delete…**'],
           ],
         },
         {
           t: 'p',
-          text: 'A Build Room continues on its own page. An event has one row; open it to see its items. Saved reports are under **Reports** on the start screen: see The session report › Saving and sharing a report.',
+          text: 'A Build Room continues on its own page. An event has one row: **Open** goes to its stage and **Edit the agenda** is under **⋯**; press its name to see its items, each with **Continue** and, once played, **Report**, or **Session expired** when its session has gone. **Delete…** asks on the row itself and says what goes with it; **Delete** is only offered to the session\'s host or a team owner or admin. Saved reports are under **Reports** on Home: see The session report › Saving and sharing a report.',
         },
       ],
     },

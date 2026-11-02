@@ -206,7 +206,9 @@
 /* Mobile first, and the DOM order is the priority order at both widths: start
    a session, then resume one. The wide layout is a media query, not a
    reordering, so tab order and screen-reader order come out right for free. */
-.wel-split { display: grid; gap: 0; }
+/* minmax(0, 1fr): a long running-session title in Rejoin must truncate, not
+   widen the one column past a 390 phone. */
+.wel-split { display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
 .wel-start { padding-block: 8px 30px; }
 .wel-resume {
   padding-block: 26px 8px;
@@ -427,19 +429,54 @@
 }
 .wel-btn-line:hover { border-color: var(--muted); background: var(--surface); }
 
-.wel-aside-more {
+/* ------------------------------------------------------------- Home (4b) --
+   Home's other three blocks (experience plan 4b): Quick start and the Build
+   Room one press under New, Rejoin's live sessions, the recent sessions and
+   the library strip. Every rule and rhythm is the events block's below, so
+   the page reads as one column of sections with one hairline between each. */
+
+/* Quick start and the Build Room until New folds them in (4c): outlined, on
+   one line under the one amber button, never a second amber. */
+.wel-also {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.wel-also .wel-btn-line { text-decoration: none; }
+
+.wel-live { list-style: none; margin: 12px 0 0; padding: 0; }
+.wel-live-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--wel-rule);
+}
+.wel-live-row .wel-btn-line { flex: none; gap: 6px; }
+.wel-live-none { margin-top: 10px; }
+
+.wel-recent,
+.wel-library {
   margin-top: 26px;
   padding-top: 20px;
   border-top: 1px solid var(--wel-rule);
-  max-width: 23rem;
 }
-.wel-aside-more .wel-meta { margin-top: 6px; max-width: 34ch; }
-
-/* Two entries, each its own control and its own sentence. Stacked rather than
-   set side by side: this column is `minmax(16rem, 1fr)` at 900px, and two
-   outlined buttons on one line there would either wrap mid-label or force the
-   split's wide column narrower. */
-.wel-links { margin-top: 14px; display: grid; gap: 18px; }
+.wel-recent .wel-evhead { margin-bottom: 10px; }
+.wel-recent .wel-evhead .wel-btn-line { text-decoration: none; gap: 6px; }
+.wel-seeall-in { font-weight: 600; }
+.wel-recent-wait { padding: 10px 0; }
+.wel-library-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.wel-library-row .wel-btn-quiet { margin-left: 0; text-decoration: none; }
+.wel-library { padding-bottom: 28px; }
 
 /* ---------------------------------------------------------------------------
    THE `?` IN THE TOP BAR — help, and the three ways to tell us something.
@@ -585,8 +622,8 @@
   .wel-split { padding-block: 10px; }
   .wel-stack { margin-top: 18px; }
   .wel-events,
-  .wel-aside-more { margin-top: 18px; padding-top: 14px; }
-  .wel-links { gap: 12px; }
+  .wel-recent,
+  .wel-library { margin-top: 18px; padding-top: 14px; }
 }
 
 /* Why the host landed here (a session that no longer exists, 31 Oct 2026). */

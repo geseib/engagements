@@ -38,23 +38,32 @@ describe('§1 the dialog is mounted where each opener can see it', () => {
     Asserting only "it is rendered somewhere" is exactly the assertion that
     lets a dead history button ship.
   */
-  test('it is mounted inside the session-history early return AND in the main tree', () => {
+  test('it is mounted inside Home\'s and the session-history early returns AND in the main tree', () => {
+    // Home's rows offer Invite too since the experience plan's 4a, and Home is
+    // an early return of its own: three mounts, one per place that can open it.
+    const home = HOST.indexOf('if (showWelcomeScreen) {');
     const guard = HOST.indexOf('if (showReportsModal) {');
     const mounts = [...HOST.matchAll(/<InviteDialog/g)].map((m) => m.index);
+    expect(home).toBeGreaterThan(-1);
     expect(guard).toBeGreaterThan(-1);
-    expect(mounts).toHaveLength(2);
-    // One before the early return closes, one after it.
+    expect(mounts).toHaveLength(3);
+    const homeEnd = HOST.indexOf('\n  }\n', home);
     const historyEnd = HOST.indexOf('\n  }\n', guard);
-    expect(mounts[0]).toBeGreaterThan(guard);
-    expect(mounts[0]).toBeLessThan(historyEnd);
-    expect(mounts[1]).toBeGreaterThan(historyEnd);
+    expect(mounts[0]).toBeGreaterThan(home);
+    expect(mounts[0]).toBeLessThan(homeEnd);
+    expect(mounts[1]).toBeGreaterThan(guard);
+    expect(mounts[1]).toBeLessThan(historyEnd);
+    expect(mounts[2]).toBeGreaterThan(historyEnd);
   });
 });
 
 describe('§2 both buttons open the one dialog', () => {
   test('the history list and the setup panel both set the same state', () => {
     // "identical mech" is this: two openers, one piece of state, one component.
-    expect([...HOST.matchAll(/setInviteTarget\(\{/g)]).toHaveLength(2);
+    // The lists' rows (Home's and the dialog's) build the target with the
+    // one helper Library & team uses too (config/sessionRows.js).
+    expect([...HOST.matchAll(/setInviteTarget\(\{/g)]).toHaveLength(1);
+    expect([...HOST.matchAll(/setInviteTarget\(inviteTargetFor\(/g)]).toHaveLength(2);
     expect(HOST).toMatch(/onInvite=\{\(session\) =>/);
     expect(HOST).toMatch(/onInvite=\{\(\) =>/);
   });
