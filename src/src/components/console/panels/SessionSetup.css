@@ -1,0 +1,201 @@
+/* ============================================================================
+   SETUP IS THE LOBBY — components/console/panels/SessionSetup.jsx
+   (docs/design/session-start D1, frames A1-A8; experience plan 2b). The
+   console's main area before round 1, in both modes, full width (no rail
+   until round 1, F7). Three steps on the left, the room's preview on the
+   right; at 390 the steps stack and the preview folds under them (C4).
+
+   Dusk only: HostConsole's root declares data-theme="dark". Roles only, no
+   literal (sessionSetupPalette.test.js). Laptop ladder 12 / 13 / 15 / 19 /
+   24 / 30px: the room's count at step 3 is the panel's one 30px numeral.
+
+   Measured on dusk --surface #1B2942 over --bg #0F1A2E
+   (sessionSetupPalette.test.js, classic and present skins):
+     --text on --surface          12.53:1
+     --muted on --surface          6.06:1
+     --success-text on --surface   7.79:1
+     --info on --surface           (links: Change, Running order) >= 4.5:1
+   ========================================================================== */
+.hsetup {
+  --hsetup-t-floor: 12px;
+  --hsetup-t-label: 13px;
+  --hsetup-t-body: 15px;
+  --hsetup-t-head: 19px;
+  --hsetup-t-title: 24px;
+  --hsetup-t-numeral: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 400px);
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+  font-size: var(--hsetup-t-body);
+  color: var(--text);
+}
+.hsetup .hsetup-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+.hsetup .hsetup-step {
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid rgb(var(--glow-rgb) / .14);
+}
+.hsetup .hsetup-step.is-now { border-color: rgb(var(--glow-rgb) / .32); }
+.hsetup .hsetup-step.is-later { background: transparent; border-style: dashed; }
+.hsetup .hsetup-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+.hsetup .hsetup-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: var(--hsetup-t-label);
+  font-weight: 800;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.hsetup .hsetup-num.is-now { background: var(--info); color: var(--bg); }
+.hsetup .hsetup-num.is-done { color: var(--success-text); }
+.hsetup .hsetup-h { margin: 0; font-size: var(--hsetup-t-body); font-weight: 800; color: var(--text); }
+.hsetup .hsetup-step.is-later .hsetup-h { color: var(--muted); }
+.hsetup .hsetup-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hsetup .hsetup-val { font-size: var(--hsetup-t-label); font-weight: 700; color: var(--text); }
+.hsetup .hsetup-note { font-size: var(--hsetup-t-label); color: var(--muted); }
+.hsetup .hsetup-change {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--hsetup-t-label);
+  font-weight: 700;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.hsetup .hsetup-p .hsetup-change, .hsetup .hsetup-hint .hsetup-change, .hsetup .hsetup-first .hsetup-change { margin-left: 0; }
+.hsetup .hsetup-body { display: grid; gap: 10px; margin: 10px 0 0 38px; min-width: 0; }
+.hsetup .hsetup-k { margin: 0; font-size: var(--hsetup-t-label); font-weight: 700; color: var(--text); }
+.hsetup .hsetup-hint { margin: 0; font-size: var(--hsetup-t-label); color: var(--muted); }
+.hsetup .hsetup-p { margin: 0; font-size: var(--hsetup-t-label); color: var(--muted); line-height: 1.5; }
+.hsetup .hsetup-p b { color: var(--text); }
+.hsetup .hsetup-inline { color: var(--accent-text); font-weight: 700; }
+.hsetup .hsetup-warn {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: var(--hsetup-t-label);
+  color: var(--text);
+  border: 1px solid var(--warn);
+  background: rgb(var(--warn-rgb) / .14);
+}
+
+/* Step 1: the chooser, at the laptop ladder (it is drawn on the stage ladder
+   elsewhere; these are its own custom properties, re-pointed in this scope). */
+.hsetup .rsc--embedded { display: flex; --t-meta: var(--hsetup-t-body); --t-body: var(--hsetup-t-body); --hair: 1px; }
+
+/* Step 2 on two screens: the checklist of what the app can verify. */
+.hsetup .hsetup-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hsetup .hsetup-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.hsetup .hsetup-mark { display: inline-flex; color: var(--muted); }
+.hsetup .hsetup-check.is-done .hsetup-mark { color: var(--success-text); }
+.hsetup .hsetup-check.is-wait .hsetup-mark { color: var(--warn); }
+.hsetup .hsetup-check-l { font-size: var(--hsetup-t-body); font-weight: 700; }
+.hsetup .hsetup-size { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.hsetup .hsetup-select {
+  font: inherit;
+  font-size: var(--hsetup-t-body);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid rgb(var(--glow-rgb) / .22);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-height: 36px;
+}
+
+/* Step 2 on one screen: the plain banner (an outline, not a wash). */
+.hsetup .hsetup-banner {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: var(--hsetup-t-body);
+  color: var(--text);
+  border: 1px solid var(--warn);
+}
+.hsetup .hsetup-banner svg { color: var(--warn); flex: none; }
+
+/* Step 3: the count is the panel's one numeral; names as chips. */
+.hsetup .hsetup-joins { display: grid; gap: 8px; min-width: 0; }
+.hsetup .hsetup-count { margin: 0; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.hsetup .hsetup-numeral { font-size: var(--hsetup-t-numeral); font-weight: 800; line-height: 1; color: var(--text); }
+.hsetup .hsetup-count-l { font-size: var(--hsetup-t-label); color: var(--muted); flex: none; }
+.hsetup .hsetup-recent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--hsetup-t-label);
+  font-weight: 700;
+  color: var(--text);
+}
+.hsetup .hsetup-names { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow: auto; }
+.hsetup .hsetup-names li {
+  font-size: var(--hsetup-t-label);
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--glow-rgb) / .22);
+  color: var(--text);
+}
+.hsetup .hsetup-names li.is-new { border-color: var(--success); }
+.hsetup .hsetup-first { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.hsetup .hsetup-first-t { font-size: var(--hsetup-t-head); color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The preview column: what the room sees, dimmed until step 3. */
+.hsetup .hsetup-side { display: grid; gap: 10px; min-width: 0; }
+.hsetup .hsetup-preview { display: grid; gap: 8px; min-width: 0; }
+.hsetup .hsetup-preview-k { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hsetup .hsetup-stat {
+  font-size: var(--hsetup-t-floor);
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--glow-rgb) / .22);
+  color: var(--text);
+}
+.hsetup .hsetup-stat.is-success { border-color: var(--success); }
+.hsetup .hsetup-stat.is-warn { border-color: var(--warn); }
+.hsetup .hsetup-stat.is-muted { color: var(--muted); }
+.hsetup .hsetup-room {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 150px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid rgb(var(--glow-rgb) / .14);
+  min-width: 0;
+}
+.hsetup .hsetup-room.is-dim { border-style: dashed; opacity: .6; }
+.hsetup .hsetup-room.is-live { border-color: var(--info); }
+.hsetup .hsetup-room.is-whole { display: grid; align-content: center; border-color: var(--accent); }
+.hsetup .hsetup-room-about { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.hsetup .hsetup-room-t { margin: 0; font-size: var(--hsetup-t-head); font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hsetup .hsetup-qr { flex: none; display: grid; justify-items: center; gap: 4px; }
+.hsetup .hsetup-qr svg { padding: 6px; border-radius: 8px; background: var(--text); }
+.hsetup .hsetup-qr.is-blank { width: 112px; height: 112px; border-radius: 8px; border: 2px dashed rgb(var(--glow-rgb) / .3); }
+.hsetup .hsetup-qr-code { font-size: var(--hsetup-t-floor); color: var(--muted); letter-spacing: .06em; }
+
+/* Mid-session: the same panel, read as a look, not a lobby. */
+.hsetup.is-mid .hsetup-step.is-done { background: transparent; }
+
+/* A phone (C4): the steps stack, the preview folds under them. */
+@media (max-width: 760px) {
+  .hsetup { grid-template-columns: minmax(0, 1fr); }
+  .hsetup .hsetup-body { margin-left: 0; }
+  .hsetup .hsetup-room { min-height: 0; }
+}

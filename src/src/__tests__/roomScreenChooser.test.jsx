@@ -99,8 +99,19 @@ describe('the chooser', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  // Setup is the lobby (experience plan 2b): step 1 is this chooser whenever
+  // the browser has not chosen, or Change reopened it (config/sessionSetup.js).
   test('the host page asks in the lobby until this browser has chosen', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(page).toMatch(/hostPhase === 'LOBBY'[\s\S]{0,200}roomScreenChoice === null \|\| roomScreenOpen/);
+    expect(page).toMatch(/const setupOn = hostPhase === 'LOBBY'/);
+    expect(page).toMatch(/setupStepFor\(\{ choice: roomScreenChoice, choosing: roomScreenOpen/);
+  });
+
+  test('embedded in Setup: no second heading, and Keep this choice only when there is one', () => {
+    const { rerender } = render(<RoomScreenChooser embedded onChoose={() => {}} />);
+    expect(screen.queryByRole('heading', { name: ROOM_WORDS.heading })).toBeNull();
+    expect(screen.queryByRole('button', { name: ROOM_WORDS.keepChoice })).toBeNull();
+    rerender(<RoomScreenChooser embedded current="two" onChoose={() => {}} onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: ROOM_WORDS.keepChoice })).toBeInTheDocument();
   });
 });

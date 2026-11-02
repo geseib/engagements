@@ -77,23 +77,26 @@ export function splitLeave(controls) {
                 plan §3.2b): a box over the content area (the pulse and the
                 main area), never over Your part now or the Needs-you line.
                 The page portals the Session menu into it.
+    noRail      no left rail (Setup is the lobby, session-start F7; experience
+                plan 2b): before round 1 the rail only repeats Setup's count
+                and names, so Setup takes the full width. `hc--setup`.
 */
 export default function HostConsole({
   top, strip, rail, footer, children,
   variant = '', railSlot = null, side = null, topExtra = null, onLeave: leaveTo = null, stripIdle = false, mainLabel = undefined,
-  needs = null, pulse = null, sheetRef = null,
+  needs = null, pulse = null, sheetRef = null, noRail = false,
 }) {
   const { controls, leave } = splitLeave(footer && footer.controls);
   // Main menu is always on the top bar (§2 principle 2): the step's own leave
   // control when it has one, else the page's way out.
   const pageLeave = leaveTo || (top && top.onLeave) || null;
   const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : pageLeave;
-  const cls = ['hc', variant, side ? 'hc--side' : ''].filter(Boolean).join(' ');
+  const cls = ['hc', variant, side ? 'hc--side' : '', noRail ? 'hc--setup' : ''].filter(Boolean).join(' ');
   return (
     <div className={cls} data-theme="dark" onClick={releasePointerFocus}>
       <ConsoleTop {...top} onLeave={onLeave}>{topExtra}</ConsoleTop>
       <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
-      {railSlot || <ConsoleRail {...rail} />}
+      {noRail ? null : (railSlot || <ConsoleRail {...rail} />)}
       <ConsoleFooter {...footer} controls={controls} />
       {needs ? <div className="hc-needs">{needs}</div> : null}
       {pulse ? <div className="hc-pulse">{pulse}</div> : null}

@@ -41,7 +41,6 @@ import Rail from './components/stage/Rail';
 import WorkflowStrip from './components/stage/WorkflowStrip';
 import { workflowStrip, liveWhere } from './config/workflowStrip';
 import StepView from './components/stage/StepView';
-import RoomScreenChooser from './components/stage/RoomScreenChooser';
 import { storedRoomScreen, storeRoomScreen } from './config/roomScreen';
 import { setupPanelTabs } from './config/setupPanel';
 import RoomMeter from './components/stage/RoomMeter';
@@ -137,6 +136,9 @@ import ConsolePulse from './components/console/ConsolePulse';
 import { arrivalsSince, withoutRoomCount } from './config/consolePulse';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
+import SessionSetup from './components/console/panels/SessionSetup';
+import { setupStepFor, setupPartFor, SETUP_WORDS } from './config/sessionSetup';
+import { openRoomWindow, willPlace, ROOM_WINDOW_NAME } from './present/roomWindow';
 import CW from './config/consoleWords';
 import { consolePeopleFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
@@ -519,6 +521,20 @@ function GameHostPage() {
     try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
   });
   const [roomScreenOpen, setRoomScreenOpen] = useState(false);
+  /*
+    SETUP IS THE LOBBY (session-start D1; experience plan 2b). Per session, so
+    a reload or another session starts the check again: `screenCheckedFor`, the
+    session whose one screen the host said the room can read (step 2 on one
+    screen, then the join code goes up); `windowBlockedFor`, the session whose
+    Start tried to open the room's window and the browser stopped it (F5:
+    Setup then opens at step 2 and says so).
+  */
+  const [screenCheckedFor, setScreenCheckedFor] = useState(null);
+  const [windowBlockedFor, setWindowBlockedFor] = useState(null);
+  // The session whose type the host door has told us: until then the type is
+  // the default (call-and-answer), and Setup must not flash over a trivia
+  // or poll session that is still loading.
+  const [typeKnownFor, setTypeKnownFor] = useState(null);
   const chooseRoomScreen = useCallback((choice) => {
     try { storeRoomScreen(window.localStorage, choice); } catch (e) { /* private mode: this visit only */ }
     // A ?surfaces= left in the address would override the choice on the next
@@ -3604,6 +3620,7 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          setTypeKnownFor(forGameId);
           // The retention deadline is creation + 90 days, and the invite dialog
           // cannot check a chosen date without this. Already in the payload.
           setGameCreatedAt(gameStateData.gameMetadata.createdAt || null);
@@ -5817,10 +5834,25 @@ Focus on actionable business strategy insights.`;
     return { ok: true };
   };
 
-  const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
+  /*
+    A RETURNING HOST IS ONE CLICK FASTER (session-start D2, F5; experience plan
+    2b). The row's "Start · two screens" opened a blank room's window inside
+    its own click (SessionHistoryPanel, openPendingRoomWindow); once the
+    session has started it goes to the room's window and onto the other
+    display. Blocked: Setup opens at step 2 with the Open button and says so.
+  */
+  const startGameFromHistory = async (selectedGameId, selectedEventTitle, opts = {}) => {
     setHistoryNotice('');
+    const pending = (opts && opts.pending) || null;
     const started = await startSession(selectedGameId, selectedEventTitle);
-    if (!started.ok) setHistoryNotice(`That session did not start: ${started.error}`);
+    if (!started.ok) {
+      if (pending) pending.cancel();
+      setHistoryNotice(`That session did not start: ${started.error}`);
+      return;
+    }
+    const id = String(selectedGameId).trim();
+    setWindowBlockedFor(opts && opts.blocked ? id : null);
+    if (pending) pending.go(presentHref(id));
   };
 
   /**
@@ -7031,6 +7063,8 @@ Focus on actionable business strategy insights.`;
             onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
+            roomScreen={roomScreenChoice}
+            onRoomScreen={chooseRoomScreen}
             onEdit={editGameFromHistory}
             notice={historyNotice}
             done={historyDone}
@@ -7306,11 +7340,23 @@ Focus on actionable business strategy insights.`;
   // 14 Oct, open question 10). Pressing the live step is the way back.
   const viewing = twoSurfaces && workflow && viewingStep && viewingStep !== workflow.live ? viewingStep : null;
   const viewStep = viewing ? workflow.steps.find((st) => st.id === viewing) : null;
-  // The lobby asks where the room will watch until this browser has chosen
-  // (Call & Answer: the type two screens cover), and again when reopened.
-  const showRoomScreen = hostPhase === 'LOBBY' && Boolean(gameId) && !eventCode
-    && normalizeGameType(currentGameType) === 'call-and-answer'
-    && (roomScreenChoice === null || roomScreenOpen);
+  /*
+    SETUP IS THE LOBBY (session-start D1, F1, F6; experience plan 2b). A Call &
+    Answer session before round 1, in both modes: Start opens Setup, and its
+    step 1 asks where the room watches whenever this browser has not chosen,
+    on every tier (no dev-only default, config/surfaces.js). On two screens
+    Setup stays the lobby through step 3; on one screen step 3 is the stage
+    lobby itself, so the join code goes up only once the host has checked
+    the room can read this screen.
+  */
+  const setupOn = hostPhase === 'LOBBY' && Boolean(gameId) && !eventCode
+    && normalizeGameType(currentGameType) === 'call-and-answer' && typeKnownFor === gameId;
+  const setupStep = setupOn
+    ? setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: screenCheckedFor === gameId })
+    : null;
+  const setupFrame = setupOn && (twoSurfaces || setupStep !== 'joins');
+  // The console's frame draws Setup on one screen too (A5), until step 3.
+  const consoleOn = useConsole || setupFrame;
   /*
     WHILE LOOKING, the one main button is "Back to the room" and nothing else
     is offered: every act stays in this bar, and none of them may fire from a
@@ -8204,9 +8250,9 @@ Focus on actionable business strategy insights.`;
     dock and the console's loop and footer run the one same handler each.
   */
   const stripOnView = (id) => {
-    // In the lobby, Setup is live: pressing it reopens the choice
-    // of room screen rather than a view of itself.
-    if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
+    // In the lobby, Setup is live: pressing it reopens Setup (on one screen
+    // the stage lobby goes back to the check, step 2, where Change is).
+    if (id === 'setup' && workflow.live === 'setup') { setScreenCheckedFor(null); return; }
     // Ask opens the composer on Workie's ready questions (external
     // review of test, 15 Oct: "Ask · 1 ready" led to a generic view
     // and the host had to go back to page 4 of the read). Opening
@@ -8452,14 +8498,76 @@ Focus on actionable business strategy insights.`;
     in HostConsole's sheet host: over the content area, never over Your part
     now or the Needs-you line. On one screen, the fixed panel as before.
   */
-  const sessionMenuWhere = (panel) => (useConsole && consoleSheetHost ? createPortal(panel, consoleSheetHost) : panel);
+  const sessionMenuWhere = (panel) => (consoleOn && consoleSheetHost ? createPortal(panel, consoleSheetHost) : panel);
 
-  const consolePanel = !useConsole ? null : (() => {
+  /*
+    SETUP'S PANEL (session-start D1): the lobby before round 1, and the same
+    panel when Setup is pressed in the strip mid-session (`mid`, step 3 folded).
+  */
+  const setupFirst = consoleRounds.find((r) => r.state === 'next' || r.state === 'now');
+  const setupPanelFor = (step, mid = false) => (
+    <SessionSetup
+      step={step}
+      mid={mid}
+      choice={roomScreenChoice}
+      choosing={roomScreenOpen}
+      onChoose={(choice) => { setScreenCheckedFor(null); chooseRoomScreen(choice); }}
+      onChange={() => setRoomScreenOpen(true)}
+      onKeep={() => setRoomScreenOpen(false)}
+      onRecheck={() => setScreenCheckedFor(null)}
+      presentHref={gameId ? presentHref(gameId) : ''}
+      presentDetail={presentDetail}
+      blocked={windowBlockedFor === gameId}
+      profile={profile}
+      onProfileChange={setProfile}
+      players={players}
+      title={eventTitle || 'Engagements'}
+      code={gameId}
+      joinUrl={playUrl}
+      firstUp={setupFirst ? [RW.stripRound(getHostRoundNoun(), setupFirst.n, null), setupFirst.title].filter(Boolean).join(' · ') : ''}
+      onRunningOrder={mid ? null : openRunningOrder}
+      remoteAddr={`${window.location.host}/remote`}
+      onUseTwo={() => chooseRoomScreen('two')}
+    />
+  );
+  /* Setup's own main button (steps 1 and 2): opening the room's window must
+     happen inside the press, so it is handled here, never through a round
+     action. Step 3's Start round 1 is roundStep's own control. */
+  const openSetupWindow = () => {
+    const href = presentHref(gameId);
+    const opened = willPlace() ? openRoomWindow(href).window : window.open(href, ROOM_WINDOW_NAME);
+    setWindowBlockedFor(opened ? null : gameId);
+  };
+  const setupOnAction = (control) => {
+    if (control && control.id === 'setup-open-window') return openSetupWindow();
+    if (control && control.id === 'setup-show-code') return setScreenCheckedFor(gameId);
+    return runHostAction(control);
+  };
+  const setupStartLabel = (hostControls.primary && hostControls.primary.label) || 'Start round 1';
+  const setupWords = setupFrame
+    ? setupPartFor(setupStep, { choice: roomScreenChoice, detail: presentDetail, startLabel: setupStartLabel })
+    : null;
+  const setupControls = !setupFrame ? null
+    : setupStep === 'screen'
+      ? {
+        primary: roomScreenChoice === 'two'
+          ? { id: 'setup-open-window', label: SETUP_WORDS.openWindow, icon: 'ArrowSquareOut' }
+          : { id: 'setup-show-code', label: SETUP_WORDS.showCode, icon: 'QrCode' },
+        status: { text: '', tone: '' },
+      }
+      : setupStep === 'joins' ? dockControls : null;
+
+  const consolePanel = !consoleOn ? null : (() => {
+    if (setupFrame) return setupPanelFor(setupStep);
     /* Drafting a question for the room: the read with the composer beside it,
        whichever beat the wall is on (the strip marks Ask while it is open,
        and the room still sees what it saw). */
     if (consoleComposer) {
       return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
+    }
+    // Setup pressed in the strip mid-session: the lobby's own panel (D1).
+    if (viewStep && viewStep.id === 'setup' && normalizeGameType(currentGameType) === 'call-and-answer') {
+      return setupPanelFor(setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: true }), true);
     }
     if (viewStep) {
       return (
@@ -8477,20 +8585,6 @@ Focus on actionable business strategy insights.`;
           }}
           onAllSettings={() => setSetupPanelOpen(true)}
           screens={setupScreens}
-        />
-      );
-    }
-    if (showRoomScreen) {
-      return (
-        <LobbyPanel
-          chooser={(
-            <RoomScreenChooser
-              current={roomScreenChoice}
-              presentHref={gameId ? presentHref(gameId) : ''}
-              onChoose={chooseRoomScreen}
-              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
-            />
-          )}
         />
       );
     }
@@ -8554,16 +8648,24 @@ Focus on actionable business strategy insights.`;
       {/* TWO SCREENS, A ROUND TYPE, NOT AN EVENT ITEM: the host console instead
           of the stage (host console spec §4.1). Every sibling below — the
           Session panel, the dialogs, the QR, the spotlight — still renders. */}
-      {useConsole ? (
+      {consoleOn ? (
         <HostConsole
           top={{
             title: eventTitle || 'Engagements',
             code: gameId,
             // THE ONE JOIN TOGGLE (experience plan §3.6, 2a): the code on the
-            // room's window, or not; J does the same.
-            onJoin: () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
-            joinPressed: qrMode === 'pinned',
-            presentHref: gameId ? presentHref(gameId) : '',
+            // room's window, or not; J does the same. During Setup on one
+            // screen it is step 2's own move (the code goes up only at step 3),
+            // and before a choice there is nowhere for it to go yet.
+            onJoin: setupFrame && !twoSurfaces
+              ? () => { if (roomScreenChoice) setScreenCheckedFor(gameId); }
+              : () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
+            joinPressed: setupFrame && !twoSurfaces ? undefined : qrMode === 'pinned',
+            codeProps: setupFrame && !roomScreenChoice
+              ? { disabled: true, title: SETUP_WORDS.part.where.after.trim() }
+              : null,
+            // One screen has no room's window (it IS the room's screen).
+            presentHref: gameId && twoSurfaces ? presentHref(gameId) : '',
             presentDetail,
             // The state alone beside "Room's window ↗", as the Build Room's bar does, so the bar fits at 1280.
             short: true,
@@ -8578,7 +8680,9 @@ Focus on actionable business strategy insights.`;
             onSessionMenu: () => setSetupPanelOpen((isOpen) => !isOpen),
             sessionMenuOpen: setupPanelOpen,
           }}
-          pulse={consolePulse}
+          // No pulse and no rail during Setup (F7): step 3 holds the count.
+          pulse={setupFrame ? null : consolePulse}
+          noRail={setupFrame}
           sheetRef={setConsoleSheetHost}
           strip={workflow ? {
             strip: workflow,
@@ -8609,7 +8713,20 @@ Focus on actionable business strategy insights.`;
             needsBusy,
             needsError,
           }}
-          footer={{
+          footer={setupFrame ? {
+            // SETUP'S "YOUR PART NOW" moves with the step (QA, 1 Nov: after
+            // choosing two screens it still said "Choose where the room
+            // watches"), with the step's one main button, or the held slot.
+            status: sessionActionError ? { text: sessionActionError, tone: 'error' } : { text: setupWords.status, tone: '' },
+            part: setupWords.part,
+            controls: setupControls,
+            emptyLabel: SETUP_WORDS.afterSetup(setupStartLabel),
+            onAction: setupOnAction,
+            shortcutsEnabled: !anyOverlayOpen,
+            interceptAdvance: consoleInterceptAdvance,
+            onBackKey: consoleOnBackKey,
+            onReviewLate: openLateList,
+          } : {
             // roundStep's own status, without the room's count: the pulse says it (one fact, once).
             status: viewing
               ? { text: RW.viewingNothingMoves, tone: 'info' }
@@ -8670,16 +8787,7 @@ Focus on actionable business strategy insights.`;
             />
           )
           : null}
-        view={showRoomScreen
-          ? (
-            <RoomScreenChooser
-              current={roomScreenChoice}
-              presentHref={gameId ? presentHref(gameId) : ''}
-              onChoose={chooseRoomScreen}
-              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
-            />
-          )
-          : viewStep
+        view={viewStep
           ? (
             <StepView
               step={viewStep}

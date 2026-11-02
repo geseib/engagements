@@ -545,3 +545,28 @@
   box-shadow: none;
 }
 .shist .shist__title:focus { outline: none; box-shadow: none; }
+
+/* LIKE LAST TIME (session-start A7, experience plan 2b): what Start will do. */
+.shist__mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--shist-t-body);
+}
+.shist__mode > svg { flex: none; color: var(--success); }
+.shist__mode b { color: var(--text); }
+.shist__mode-switch {
+  font: inherit;
+  font-weight: 700;
+  color: var(--info);
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shist__mode-switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }

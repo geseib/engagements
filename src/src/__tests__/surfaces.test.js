@@ -6,11 +6,10 @@ const memory = (init = {}) => {
 };
 
 describe('twoSurfacesOn (two-surface D6)', () => {
-  it('on in development for Call & Answer', () => {
-    expect(twoSurfacesOn({ env: 'development', search: '', storage: memory(), gameType: 'call-and-answer' })).toBe(true);
-  });
-  it('off on test and prod', () => {
-    for (const env of ['test', 'production', undefined]) {
+  // NO TIER DEFAULT (session-start F6, experience plan 2b): with nothing
+  // stored, every tier is one screen while Setup's step 1 asks.
+  it('nothing stored: off on every tier, dev included (Setup asks)', () => {
+    for (const env of ['development', 'test', 'production', undefined]) {
       expect(twoSurfacesOn({ env, search: '', storage: memory(), gameType: 'call-and-answer' })).toBe(false);
     }
   });
@@ -33,7 +32,7 @@ describe('twoSurfacesOn (two-surface D6)', () => {
     expect(twoSurfacesOn({ env: 'test', search: '', storage: bad, gameType: 'call-and-answer' })).toBe(false);
   });
   it('a missing game type reads as Call & Answer (the default type)', () => {
-    expect(twoSurfacesOn({ env: 'development', search: '', storage: memory() })).toBe(true);
+    expect(twoSurfacesOn({ env: 'test', search: '?surfaces=two', storage: memory() })).toBe(true);
   });
 });
 

@@ -124,9 +124,12 @@ const quickStart = {
       ],
     },
     /*
-      Start: SessionHistoryPanel.jsx (Start, title "puts it on the stage and
-      players can join"); chooser: GameHostPage.jsx:7075 showRoomScreen (C&A,
-      not events, until this browser has chosen); join URL under Settings,
+      Start: SessionHistoryPanel.jsx (Start, or "Start · two screens" /
+      "Start · one screen" from the stored choice, config/sessionStart.js;
+      two screens opens the room's window in the click, openPendingRoomWindow).
+      Setup is the lobby (experience plan 2b): GameHostPage.jsx setupOn /
+      setupStepFor, components/console/panels/SessionSetup.jsx, words in
+      config/sessionSetup.js (C&A, not events). Join URL under Settings,
       "Players join at" (SessionSetupPanel.jsx Joining group).
     */
     {
@@ -136,14 +139,23 @@ const quickStart = {
       blocks: [
         {
           t: 'p',
-          text: 'A created session waits in your sessions list. Press **Start** on its row when the room is ready: the session opens with its join code and QR on screen.',
+          text: 'A created session waits in your sessions list. Press **Start** on its row when the room is ready. A Call & Answer session opens on **Setup**, the lobby: three steps, each folding to one line when done, with **Your part now** naming the next move.',
+        },
+        {
+          t: 'steps',
+          items: [
+            { title: 'Where the room watches', text: 'One screen or two, asked until this browser has chosen. **Change** asks again.' },
+            { title: 'Put the room\'s screen up', text: 'Two screens: **Open the room\'s window ↗**, then **Open** and **Full screen** tick. One screen: check the room can read it, and your phone\'s Remote address; then **Show the join code**.' },
+            { title: 'The room joins', text: 'Only now does the join code go up, with how many are in, who just arrived and what round 1 is. Then **Start round 1**.' },
+          ],
         },
         {
           t: 'list',
           items: [
             'People scan the QR, or go to the address on screen and type the four-digit code.',
             'People on a video call use the join link: **Link** on the session\'s row copies it.',
-            'Call & Answer asks once where the room will watch: one screen or two. See Choosing one or two screens.',
+            'Once chosen, Start says so: **Start · two screens** opens the room\'s window in the same click. If the browser blocks it, Setup opens at step 2. **One screen this time**, under the list, switches.',
+            'Other formats open on their lobby with the join code up. See Choosing one or two screens.',
           ],
         },
         {
@@ -567,9 +579,10 @@ const gameSetup = {
       ],
     },
     /*
-      config/surfaces.js:26 TWO_SURFACE_TYPES (call-and-answer, build);
-      GameHostPage.jsx:7075 chooser in the lobby, C&A only, not events, until
-      this browser has chosen; config/roomScreen.js ROOM_WORDS (Where will the
+      config/surfaces.js TWO_SURFACE_TYPES (call-and-answer, build), no tier
+      default (F6); Setup's step 1 (SessionSetup.jsx, GameHostPage.jsx
+      setupStepFor), C&A only, not events, until this browser has chosen or
+      Change reopens it; config/roomScreen.js ROOM_WORDS (Where will the
       room watch?, Two screens, One screen, Help me pick and its three
       questions, Keep this choice, "This browser remembers your choice.");
       SCREEN_WORDS (Screens, Where the room watches) in Settings.
@@ -592,7 +605,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The first time you start a Call & Answer session, the lobby asks **Where will the room watch?** Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice. Quick start asks the same question as **Where the room watches**. To change it later, use Screens at the top of the Session panel\'s Settings tab.',
+          text: 'The first time you start a Call & Answer session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use Screens in the Session menu\'s Settings tab.',
         },
         { t: 'p', text: 'Running on two screens, and placing the room\'s window, is in Two screens and your phone.' },
       ],

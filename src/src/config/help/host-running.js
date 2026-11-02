@@ -60,8 +60,9 @@ const running = {
       GameHostPage.jsx ~8515 (LOBBY: "Scan to join · no app, no account", QR,
       address, "Session code"/"Event code"); meter heading "In the room" (~7411)
       and its list "Already joined"; lobby primary RW.startFirst with hint
-      RW.someoneMustJoin; secondary RW.backToMenu. The "Where will the room
-      watch?" chooser (C&A, until chosen) is W4's. J on one screen toggles the
+      RW.someoneMustJoin; secondary RW.backToMenu. Call & Answer's lobby is
+      Setup (experience plan 2b, SessionSetup.jsx); on one screen its step 3
+      is this stage lobby. The chooser is W4's. J on one screen toggles the
       QR side panel during a round (~1325, StageJoinPanel). Settings › Joining:
       SessionSetupPanel.jsx ~1211.
     */
@@ -72,7 +73,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The lobby shows **Scan to join · no app, no account**, the QR, the join address and the four-digit code. People scan or type the code on any phone, laptop or tablet; nobody needs an account. On a Call & Answer session the lobby may first ask where the room will watch (one screen or two).',
+          text: 'The lobby shows **Scan to join · no app, no account**, the QR, the join address and the four-digit code. People scan or type the code on any phone, laptop or tablet; nobody needs an account. A Call & Answer session opens on **Setup** first: where the room watches, then a check that the room can read this screen, then **Show the join code** brings up this lobby. **Setup** on the strip goes back to the check.',
         },
         {
           t: 'list',

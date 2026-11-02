@@ -60,8 +60,14 @@ function Choice({ value, picked, onPick }) {
  * the two Use buttons step back to the quiet style, so the screen's one
  * orange button is the move that matters first.
  */
-export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null, type = '', quiet = false }) {
+/*
+ * `embedded` (Setup is the lobby, experience plan 2b): drawn as Setup's step 1,
+ * whose own heading already asks the question. No overlay placement (.wfs-view)
+ * and no second heading; "Keep this choice" stays when there is one to keep.
+ */
+export default function RoomScreenChooser({ current = null, presentHref = '', onChoose, onClose = null, type = '', quiet = false, embedded = false }) {
   const useCls = `rsc-btn${quiet ? ' rsc-btn--quiet' : ''}`;
+  const shell = embedded ? 'rsc rsc--embedded' : 'wfs-view rsc';
   const W = roomWordsFor(type);
   const [helping, setHelping] = useState(false);
   const [answers, setAnswers] = useState({});
@@ -72,7 +78,7 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
     const asked = answers.connected === 'no' ? 1 : 3;
     const done = ['connected', 'picture', 'private'].filter((k) => answers[k]).length;
     return (
-      <section className="wfs-view rsc" aria-label={W.helpHeading}>
+      <section className={shell} aria-label={W.helpHeading}>
         <div className="rsc-head">
           <h2 className="rsc-h">{W.helpHeading}</h2>
           <button type="button" className="rsc-link" onClick={() => setHelping(false)}>{W.backToChoices}</button>
@@ -115,11 +121,13 @@ export default function RoomScreenChooser({ current = null, presentHref = '', on
   }
 
   return (
-    <section className="wfs-view rsc" aria-label={W.heading}>
-      <div className="rsc-head">
-        <h2 className="rsc-h">{W.heading}</h2>
-        {onClose ? <button type="button" className="rsc-link" onClick={onClose}>{W.keepChoice}</button> : null}
-      </div>
+    <section className={shell} aria-label={W.heading}>
+      {embedded && !onClose ? null : (
+        <div className="rsc-head">
+          {embedded ? null : <h2 className="rsc-h">{W.heading}</h2>}
+          {onClose ? <button type="button" className="rsc-link" onClick={onClose}>{W.keepChoice}</button> : null}
+        </div>
+      )}
       <div className="rsc-cards">
         <div className={`rsc-card${current === 'two' ? ' is-chosen' : ''}`}>
           <TwoScreensDrawing />

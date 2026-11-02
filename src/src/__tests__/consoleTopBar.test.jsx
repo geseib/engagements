@@ -163,7 +163,7 @@ describe('the Session menu', () => {
 
   test('the host page portals the Session menu into the console\'s sheet', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(page).toMatch(/const sessionMenuWhere = \(panel\) => \(useConsole && consoleSheetHost \? createPortal\(panel, consoleSheetHost\) : panel\)/);
+    expect(page).toMatch(/const sessionMenuWhere = \(panel\) => \(consoleOn && consoleSheetHost \? createPortal\(panel, consoleSheetHost\) : panel\)/);
     expect(page).toMatch(/\{setupPanelOpen && sessionMenuWhere\(\s*<SessionSetupPanel/);
     expect(page).toMatch(/sheetRef=\{setConsoleSheetHost\}/);
   });
@@ -200,6 +200,6 @@ describe('the pulse and the one count', () => {
     expect(page).toMatch(/const pulseOpenedAt = \(currentQuestion && currentQuestion\.startedAt\) \|\| seenFor\('ASK'\)/);
     expect(page).toMatch(/arrivals=\{arrivalsSince\(players, pulseOpenedAt\)\}/);
     expect(page).toMatch(/withoutRoomCount\(hostControls\.status, consoleMoment\)/);
-    expect(page).toMatch(/pulse=\{consolePulse\}/);
+    expect(page).toMatch(/pulse=\{setupFrame \? null : consolePulse\}/);
   });
 });

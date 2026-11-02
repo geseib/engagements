@@ -397,7 +397,7 @@ module.exports = {
     },
     "config/help/host-setup.js": {
       "Main screen": 1,
-      "Session panel": 8
+      "Session panel": 7
     },
     "config/help/host-surveys.js": {
       "Back to Menu": 1,
