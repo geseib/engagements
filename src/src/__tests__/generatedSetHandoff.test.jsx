@@ -5,7 +5,7 @@
  * Leaders", was told *"Close — this keeps running"*, left, and came back to no
  * set. Nothing had crashed: the worker wrote ITEMS into the job record, and the
  * SET was only ever created here, in the browser, when a human returned and
- * pressed "Load N into System". The panel's promise was true about the job and
+ * pressed "Save N as a new set". The panel's promise was true about the job and
  * false about the outcome.
  *
  * The worker creates the set itself now, as an inactive draft, and writes it on
@@ -150,13 +150,13 @@ describe('the poll response says whether a set already exists', () => {
 
 describe('the review step does not create what already exists', () => {
   test('the primary action opens the set instead of loading it', async () => {
-    // rejects: leaving "Load N into System" live over a set the worker already
+    // rejects: leaving "Save N as a new set" live over a set the worker already
     // wrote. Pressing it posts the whole batch to /admin/upload-questions,
     // which refuses to overwrite an existing set — so the operator would be
     // shown a failure about a set that is sitting right there.
     await generate(jobPayload({ createdSet: CREATED }));
     expect(await screen.findByRole('button', { name: /Open .World Leaders./ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Load .* into System/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save .* as a new set/i })).not.toBeInTheDocument();
   });
 
   test('opening it hands the page a pointer and no questions to write', async () => {
@@ -207,7 +207,7 @@ describe('the review step does not create what already exists', () => {
     // or one whose creation was refused, has items and no set — and the only
     // way those items become a set is this button.
     const { onScenariosGenerated } = await generate(jobPayload());
-    fireEvent.click(await screen.findByRole('button', { name: /Load 2 into System/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save 2 as a new set/i }));
     await waitFor(() => expect(onScenariosGenerated).toHaveBeenCalled());
     const payload = onScenariosGenerated.mock.calls[0][0];
     expect(payload.scenarios).toHaveLength(2);

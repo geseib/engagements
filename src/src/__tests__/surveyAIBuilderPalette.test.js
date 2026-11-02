@@ -12,12 +12,12 @@
  * measured contract has not been reverted", not "this looks right in a
  * browser" — only a browser can say that.
  *
- * DERIVED ON WHITE. Mockups 02 and 03 draw the generator on the console's
- * dusk field; it renders inside the builder modal, which is white
- * (BuilderPage.css), exactly as GenerationJobPanel.css and
- * GeneratedItemsTable.css already record for their own mockups. The first
- * test holds that premise, so the day the modal changes colour this file says
- * every number below it is measured against the wrong ground.
+ * MEASURED ON DUSK. Mockups 02 and 03 draw the generator on the console's
+ * dusk field, and since experience plan 5e it renders there: the builders
+ * open in one dusk dialog (components/AIBuilderDialog.jsx, `theme="dark"`, a
+ * `ui-dialog` on --surface). The sheet's tokens are roles, resolved per skin
+ * in theme 'dark'. The first block holds that premise, so the day the window
+ * changes colour this file says every number below it is on the wrong ground.
  */
 const fs = require('fs');
 const path = require('path');
@@ -41,21 +41,15 @@ function block(css, selector) {
   return match[2];
 }
 
-/** A `.sab`/`.git` token, every var() it reads resolved for one skin x theme. This
- *  sheet is a paper-era light sheet on the white modal, so its default is
- *  Classic / light; its literals are its own and resolve the same in every skin. */
-const CLASSIC_PAPER = { skin: 'classic', theme: 'light' };
-function token(css, selector, name, opts = CLASSIC_PAPER) {
+/** A `.sab`/`.git` token, every var() it reads resolved for one skin x theme. The
+ *  builders' window is dusk, so the default is Classic / dark. */
+const CLASSIC_DUSK = { skin: 'classic', theme: 'dark' };
+function token(css, selector, name, opts = CLASSIC_DUSK) {
   block(css, selector);                       // the rule exists — renamed?
   return H.scopeVar(stripComments(css), `${selector} {`, name, opts);
 }
-/** Colour equality tolerant to spelling: rgb channels, alpha to 3 dp. */
-const norm = (c) => {
-  const p = H.parseColor(c);
-  return { rgb: p.rgb.map((n) => Math.round(n)), a: Math.round(p.a * 1000) / 1000 };
-};
 
-const WHITE = '#FFFFFF';
+const DIALOG_JSX = read('components', 'AIBuilderDialog.jsx');
 const palette = (opts) => ({
   text: token(SAB_CSS, '.sab', '--sab-text', opts),
   muted: token(SAB_CSS, '.sab', '--sab-muted', opts),
@@ -66,40 +60,45 @@ const palette = (opts) => ({
   chipBg: token(SAB_CSS, '.sab', '--sab-chip-bg', opts),
   chipFg: token(SAB_CSS, '.sab', '--sab-chip-fg', opts),
   primary: H.role('--primary', opts),
+  surface: H.role('--surface', opts),
   gitChipBg: token(GIT_CSS, '.git', '--git-chip-bg', opts),
   gitChipFg: token(GIT_CSS, '.git', '--git-chip-fg', opts),
 });
-const T = palette(CLASSIC_PAPER);
-// The modal is white paper, so every skin is measured on its light theme.
-const PAPER_CASES = H.CASES.filter(([, t]) => t === 'light');
+const T = palette(CLASSIC_DUSK);
+const DUSK_CASES = H.CASES.filter(([, t]) => t === 'dark');
 
 const AA = H.AA;
 const on = (fg, bg) => H.ratio(fg, bg);
+/** A translucent ground (the hover wash) laid over the dialog's card. */
+const over = (P, layer) => H.composite([P.surface, layer]);
 
 describe('the ground this is measured on', () => {
-  test('the survey builder modal is white, as every number below assumes', () => {
-    expect(block(BUILDER_CSS, '.survey-ai-builder-modal .modal-content')).toMatch(/background:\s*white/);
+  test('the survey builder opens in the dusk dialog, as every number below assumes', () => {
+    expect(DIALOG_JSX).toMatch(/theme="dark"/);
+    expect(DIALOG_JSX).toMatch(/ui-dialog ui-dialog--full/);
+    expect(BUILDER_CSS).not.toMatch(/\.survey-ai-builder-modal/);
   });
 
-  test('the inputs are filled with the field token, and it is white', () => {
-    expect(T.field.toUpperCase()).toBe(WHITE);
+  test('the inputs are filled with the field token, the one surface lighter than the card', () => {
+    expect(block(SAB_CSS, '.sab')).toMatch(/--sab-field:\s*var\(--surface-2\)/);
     expect(block(SAB_CSS, '.sab-input')).toMatch(/background:\s*var\(--sab-field\)/);
   });
 });
 
-describe('Classic stays pinned', () => {
-  test('--sab-on-accent in Classic resolves to the #1b2942 it used to spell out', () => {
-    expect(norm(T.onAccent)).toEqual(norm('#1b2942'));
+describe('the pressed toggle keeps the role for ink on amber', () => {
+  test('--sab-on-accent is --on-accent', () => {
+    expect(block(SAB_CSS, '.sab')).toMatch(/--sab-on-accent:\s*var\(--on-accent\)/);
   });
 });
 
-describe.each(PAPER_CASES)('every pairing the generator paints clears AA — %s / %s', (skin, theme) => {
+describe.each(DUSK_CASES)('every pairing the generator paints clears AA — %s / %s', (skin, theme) => {
   const P = palette({ skin, theme });
   const pairs = [
-    ['labels, answers and toggle words on the modal', () => on(P.text, WHITE)],
-    ['help lines, the minutes and "Mix:" on the modal', () => on(P.muted, WHITE)],
-    ['a hovered toggle word', () => on(P.text, P.quiet)],
-    ['the details summary, hovered', () => on(P.muted, P.quiet)],
+    ['labels, answers and toggle words on the dialog', () => on(P.text, P.surface)],
+    ['help lines, the minutes and "Mix:" on the dialog', () => on(P.muted, P.surface)],
+    ['a toggle word on its field', () => on(P.text, P.field)],
+    ['a hovered toggle word', () => on(P.text, over(P, P.quiet))],
+    ['the details summary, hovered', () => on(P.muted, over(P, P.quiet))],
     ['a pressed toggle — its word on the amber fill', () => on(P.onAccent, P.primary)],
     ['a kind chip in the mix line', () => on(P.chipFg, P.chipBg)],
     ['a kind chip in the review table', () => on(P.gitChipFg, P.gitChipBg)],
@@ -108,27 +107,22 @@ describe.each(PAPER_CASES)('every pairing the generator paints clears AA — %s 
     expect(measure()).toBeGreaterThanOrEqual(AA);
   });
 
-  test('the premise: --primary on the white modal is under AA', () => {
-    expect(on(P.primary, WHITE)).toBeLessThan(AA);
-  });
-
-  test('a toggle\'s edge clears 3:1 on the modal', () => {
-    expect(on(P.edge, WHITE)).toBeGreaterThanOrEqual(3);
+  test('a toggle\'s edge clears 3:1 on its field', () => {
+    expect(on(P.edge, P.field)).toBeGreaterThanOrEqual(3);
   });
 });
 
 describe('every pairing the generator paints clears AA', () => {
-  test('amber never carries text on the white modal', () => {
-    // The premise: #F6A94C on white is under 2:1. So it may FILL a pressed
-    // toggle (dark words on it), and nothing here may use it as a text colour.
-    expect(on(T.primary, WHITE)).toBeLessThan(AA);
+  test('amber never carries text', () => {
+    // It may FILL a pressed toggle (dark words on it, and a tick); nothing
+    // here may use it as a text colour.
     const offenders = stripComments(SAB_CSS).split('\n')
       .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--primary\)/.test(l));
     expect(offenders).toEqual([]);
   });
 
   test('a toggle is findable by its edge, not only its words (3:1 for a control boundary)', () => {
-    expect(on(T.edge, WHITE)).toBeGreaterThanOrEqual(3);
+    expect(on(T.edge, T.field)).toBeGreaterThanOrEqual(3);
     expect(block(SAB_CSS, '.sab-opt')).toMatch(/border:\s*1px solid var\(--sab-edge\)/);
   });
 

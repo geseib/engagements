@@ -56,7 +56,7 @@ async function toReview(items = POLLS) {
   completeJob(items);
   const utils = renderBuilder();
   fireEvent.change(screen.getByPlaceholderText(/Team Preferences/i), { target: { value: 'Release process' } });
-  fireEvent.click(screen.getByRole('button', { name: /Generate Poll Questions/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Generate poll questions/i }));
   await screen.findByRole('button', { name: /Export CSV/i });
   return utils;
 }
@@ -84,7 +84,7 @@ describe('the form asks which kinds of poll question to write', () => {
     fireEvent.click(screen.getByRole('button', { name: /Pick from choices/ }));
     fireEvent.click(screen.getByRole('button', { name: /Pick from choices/ }));   // back on: order is the contract's
     fireEvent.change(screen.getByPlaceholderText(/Team Preferences/i), { target: { value: 'Release process' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Poll Questions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate poll questions/i }));
     await screen.findByRole('button', { name: /Export CSV/i });
 
     const body = startGenerationJob.mock.calls[0][1];
@@ -105,7 +105,7 @@ describe('the form asks which kinds of poll question to write', () => {
     renderBuilder();
     fireEvent.click(screen.getByRole('button', { name: /Open answer/ }));
     fireEvent.change(screen.getByPlaceholderText(/Team Preferences/i), { target: { value: 'Release process' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Poll Questions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate poll questions/i }));
     await screen.findByRole('button', { name: /Export CSV/i });
 
     const { setMetadata } = startGenerationJob.mock.calls[0][1];
@@ -132,14 +132,16 @@ describe('the review shows each question\'s kind and what the room will see', ()
   test('a choice left without options is flagged and holds back the load, in the importer\'s words', async () => {
     await toReview([...POLLS.slice(0, 2), { ...POLLS[0], title: 'Too thin', options: ['Only one'] }]);
     expect(screen.getByText('needs at least two options')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Load 3 into System/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Save 3 as a new set/ })).toBeDisabled();
   });
 
   test('switching a kind in the table asks before it throws the options away', async () => {
     await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind of poll question 1' }), { target: { value: 'rating' } });
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/Make question 1 Rate\? It would lose 3 options/));
+    // The app's small confirm (experience plan 5e), naming what would go.
+    const ask = await screen.findByRole('dialog', { name: /Make question 1 Rate\?/ });
+    expect(ask).toHaveTextContent(/It would lose 3 options/);
+    fireEvent.click(within(ask).getByRole('button', { name: /Keep it as it is/ }));
     expect(screen.getByRole('combobox', { name: 'Kind of poll question 1' })).toHaveValue('choice');
   });
 });
@@ -159,7 +161,7 @@ describe('editing a poll uses the set editor\'s question form', () => {
 
     fireEvent.change(screen.getByLabelText('Yes reads'), { target: { value: 'Ship it' } });
     fireEvent.click(screen.getByRole('button', { name: /Back to all 3 poll questions/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Load 3 into System/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Save 3 as a new set/ }));
 
     const { questions } = onPollGenerated.mock.calls[0][0];
     expect(questions[1]).toMatchObject({ kind: 'yesno', yesLabel: 'Ship it', noLabel: 'Decline' });

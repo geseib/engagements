@@ -226,7 +226,7 @@ describe('2. the plan the panel shows before anything is spent', () => {
     render(<Host />);
     openPanel();
     expect(screen.getByRole('button', { name: /Fill in the rest/i })).toBeDisabled();
-    expect(screen.getByText(/Type something into/i)).toHaveTextContent('Context/Background');
+    expect(screen.getByText(/Type something into/i)).toHaveTextContent('Context or background');
     expect(authFetch).not.toHaveBeenCalled();
   });
 
@@ -255,7 +255,7 @@ describe('3. fill, refine and hold, on screen', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/Filled in/));
     expect(latest.customTitle).toBe(DRAFT.customTitle);
     expect(latest.audience).toBe(DRAFT.audience);
-    expect(screen.getByRole('status')).toHaveTextContent('Question Set Title');
+    expect(screen.getByRole('status')).toHaveTextContent('Set title');
     expect(screen.getByTestId('assist-provenance')).toHaveTextContent(/AI wrote/);
   });
 
@@ -331,7 +331,7 @@ describe('3. fill, refine and hold, on screen', () => {
     pressDraft();
 
     // The operator types an audience while the job is in flight.
-    const audienceBox = screen.getByLabelText('Target Audience');
+    const audienceBox = screen.getByLabelText('Audience');
     fireEvent.change(audienceBox, { target: { value: 'Only the support leads' } });
     resolvePoll();
 
@@ -339,7 +339,7 @@ describe('3. fill, refine and hold, on screen', () => {
     expect(latest.audience).toBe('Only the support leads');
     // Dropped, and said out loud — a proposal that vanishes with no account of
     // itself is indistinguishable from one that was never made.
-    expect(screen.getByRole('status')).toHaveTextContent(/You changed Target Audience while this was running/);
+    expect(screen.getByRole('status')).toHaveTextContent(/You changed Audience while this was running/);
     // The fields they did NOT touch still land.
     expect(latest.customTitle).toBe(DRAFT.customTitle);
   });
@@ -401,7 +401,7 @@ describe('4. the padlocks in the real builder', () => {
     // The custom card is withheld from the folded deck — the blank-canvas
     // continue button is that route now.
     fireEvent.click(screen.getByTestId('scenario-continue-blank'));
-    await screen.findByText(/Configure Your Scenarios/i);
+    await screen.findByText(/Describe the scenarios you want/i);
   }
 
   test('every drafted field carries a padlock, and only those', async () => {
@@ -426,10 +426,10 @@ describe('4. the padlocks in the real builder', () => {
     await openBuilder();
     const lock = screen.getByTestId('field-lock-context');
     expect(lock).toHaveAttribute('aria-pressed', 'false');
-    expect(lock).toHaveAccessibleName(/Context\/Background is unlocked/i);
+    expect(lock).toHaveAccessibleName(/Context or background is unlocked/i);
     fireEvent.click(lock);
     expect(lock).toHaveAttribute('aria-pressed', 'true');
-    expect(lock).toHaveAccessibleName(/Context\/Background is locked/i);
+    expect(lock).toHaveAccessibleName(/Context or background is locked/i);
   });
 
   test('the padlock changes shape, not only colour, when it is locked', async () => {
@@ -470,7 +470,7 @@ describe('4. the padlocks in the real builder', () => {
     // The custom card is withheld from the folded deck — the blank-canvas
     // continue button is that route now.
     fireEvent.click(screen.getByTestId('scenario-continue-blank'));
-    await screen.findByText(/Configure Your Scenarios/i);
+    await screen.findByText(/Describe the scenarios you want/i);
 
     fireEvent.change(screen.getByPlaceholderText(/Describe the context, industry/i), {
       target: { value: 'Refund ownership disputes at BillingCo.' },

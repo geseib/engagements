@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import HelpButton from './HelpButton';
-import { helpFor } from '../config/help/screens';
+import AIBuilderDialog from './AIBuilderDialog';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -51,6 +52,8 @@ function PollAIBuilder({
 }) {
   /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
   const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  // The small confirm dialog, not the browser's (experience plan 5b/5e).
+  const [askConfirm, confirmDialog] = useConfirm();
   const runRef = useRef(run);
   runRef.current = run;
   const appendMode = appendTo?.mode;
@@ -322,16 +325,19 @@ function PollAIBuilder({
    * survives, and a switch that would throw something away is asked about
    * first, naming it, exactly as the survey builder asks.
    */
-  const changeKind = (index, toKind) => {
+  const changeKind = async (index, toKind) => {
     const current = generatedPolls[index];
     if (!current) return;
     const typed = { ...current, kind: pollKindOf(current) };
     if (typed.kind === toKind) return;
     const { row, loses } = convertKind(typed, toKind);
     if (loses.length > 0) {
-      const ok = window.confirm(
-        `Make question ${index + 1} ${POLL_KINDS.find((k) => k.id === toKind).label}? It would lose ${loses.join(', ')}.`
-      );
+      const ok = await askConfirm({
+        title: `Make question ${index + 1} ${POLL_KINDS.find((k) => k.id === toKind).label}?`,
+        message: `It would lose ${loses.join(', ')}.`,
+        confirmText: 'Change it',
+        cancelText: 'Keep it as it is',
+      });
       if (!ok) return;
     }
     setGeneratedPolls((prev) => prev.map((poll, i) => (i === index ? row : poll)));
@@ -441,9 +447,15 @@ function PollAIBuilder({
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
   /** See TriviaAIBuilder.requestClose — same contract, same reasons. */
-  const requestClose = () => {
+  const requestClose = async () => {
     if (isAppend(appendTo) && reviewing && keptPolls.length > 0
-      && !window.confirm('Close without adding these poll questions? They have not been added and will be lost.')) {
+      && !(await askConfirm({
+        title: 'Close without adding these poll questions?',
+        message: 'They have not been added and will be lost.',
+        confirmText: 'Close and lose them',
+        cancelText: 'Keep reviewing',
+        danger: true,
+      }))) {
       return;
     }
     onClose();
@@ -454,21 +466,48 @@ function PollAIBuilder({
   // and only a skipped-row count would say so.
   const keptFlagged = keptPolls.filter((poll) => pollItemProblem(poll)).length;
 
-  return (
-    <div className="poll-ai-builder-modal">
-      <div className="modal-overlay" onClick={requestClose}></div>
-      <div className="modal-content poll-builder" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Icon name="ChartBar" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add polls to “${appendTo.setName}”` : 'AI Poll Builder'}</h2>
-          {/* The AI builders' guide (Help Phase 3), beside the X. */}
-          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
-          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
-        </div>
+  /* The window's foot (AIBuilderDialog draws it): the way back on the left, the action on the right. */
+  const footCancel = step === 1 ? (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      ) : step === 2 && reviewing ? (
+        <Button size={44} onClick={backToConfiguration}>
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to the form
+        </Button>
+      ) : null;
+  const footActions = (
+    <>
+      {step === 1 && (
+        <Button
+          variant="primary"
+          size={44}
+          onClick={handleConfigSubmit}
+          disabled={!pollConfig.topic.trim() || kindGaps.length > 0}
+        >
+          <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" /> Generate poll questions
+        </Button>
+      )}
+      {step === 2 && reviewing && (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      )}
+    </>
+  );
 
-        <div className="modal-body">
+  return (
+    <AIBuilderDialog
+      kind="poll"
+      className="poll-builder"
+      titleId="poll-builder-title"
+      title={isAppend(appendTo) ? `Add polls to “${appendTo.setName}”` : 'Generate poll questions'}
+      icon={<Icon name="ChartBar" weight="duotone" size={20} color="var(--primary)" />}
+      onClose={requestClose}
+      closeLabel="Close the poll generator"
+      cancel={footCancel}
+      actions={footActions}
+    >
+        {confirmDialog}
           {step === 1 && (
             <div className="poll-configuration">
-              <h3>Configure Your Poll Questions</h3>
+              <h3 className="aib-step">Describe the poll questions you want</h3>
               <AppendModeSwitch appendTo={appendTo} />
               <DestinationField
                 libraries={run.libraries}
@@ -521,7 +560,7 @@ function PollAIBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Topic/Subject *</label>
+                      <label>Topic or subject *</label>
                       {lockFor('topic')}
                     </div>
                     <input
@@ -560,7 +599,7 @@ function PollAIBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Target Audience</label>
+                      <label>Audience</label>
                       {lockFor('audience')}
                     </div>
                     <input
@@ -571,7 +610,7 @@ function PollAIBuilder({
                     />
                   </div>
                   <div className="form-group">
-                    <label>Complexity Level</label>
+                    <label>Complexity</label>
                     <select
                       value={pollConfig.difficulty}
                       onChange={(e) => setPollConfig(prev => ({ ...prev, difficulty: e.target.value }))}
@@ -625,7 +664,7 @@ function PollAIBuilder({
 
                 <div className="form-group">
                   <div className="label-row">
-                    <label>Additional Requirements (Optional)</label>
+                    <label>Anything else it should know (optional)</label>
                     {lockFor('customPrompt')}
                   </div>
                   <textarea
@@ -708,25 +747,24 @@ function PollAIBuilder({
                   ]}
                   actions={(
                     <>
-                      <button className="btn-secondary" onClick={handleExportCSV}>
+                      <Button size={36} onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
-                      </button>
+                      </Button>
                       {interpreted.createdSet ? (
-                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                        <Button variant="primary" size={36} onClick={handleOpenCreatedSet}>
                           <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
                           Open &ldquo;{interpreted.createdSet.setName}&rdquo;
-                        </button>
+                        </Button>
                       ) : (
-                        <button
-                          className="btn-primary"
+                        <Button variant="primary" size={36}
                           onClick={handleLoadIntoSystem}
                           disabled={keptPolls.length === 0 || keptFlagged > 0}
                           title={keptFlagged > 0
                             ? `${keptFlagged === 1 ? 'One poll' : `${keptFlagged} polls`} could not be imported as ${keptFlagged === 1 ? 'it stands' : 'they stand'} — edit ${keptFlagged === 1 ? 'it' : 'them'}, or leave ${keptFlagged === 1 ? 'it' : 'them'} out.`
                             : undefined}
                         >
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptPolls.length} to “${appendTo.setName}”` : `Load ${keptPolls.length} into System`}
-                        </button>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptPolls.length} to “${appendTo.setName}”` : `Save ${keptPolls.length} as a new set`}
+                        </Button>
                       )}
                     </>
                   )}
@@ -734,13 +772,14 @@ function PollAIBuilder({
               ) : (
                 <div className="poll-review">
                   <div className="poll-navigation">
-                    <button
-                      className="nav-button prev"
+                    <Button
+                      size={36}
+                      className="aib-nav-prev"
                       onClick={() => navigatePoll('prev')}
                       disabled={currentPollIndex === 0}
                     >
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
-                    </button>
+                    </Button>
 
                     {/* Where you are, not what the question says: the question
                         is in the form below, and stating it twice is noise. */}
@@ -748,13 +787,14 @@ function PollAIBuilder({
                       <span>Poll {currentPollIndex + 1} of {generatedPolls.length}</span>
                     </div>
 
-                    <button
-                      className="nav-button next"
+                    <Button
+                      size={36}
+                      className="aib-nav-next"
                       onClick={() => navigatePoll('next')}
                       disabled={currentPollIndex === generatedPolls.length - 1}
                     >
                       Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
-                    </button>
+                    </Button>
                   </div>
 
                   {currentPoll && (
@@ -833,50 +873,20 @@ function PollAIBuilder({
                   )}
 
                   <div className="poll-actions">
-                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setRefusedKind(null); setEditingItem(false); }}>
+                    <Button size={36} onClick={() => { setTagDraft(null); setRefusedKind(null); setEditingItem(false); }}>
                       <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedPolls.length} poll questions
-                    </button>
-                    <button
-                      className="btn-secondary"
+                    </Button>
+                    <Button size={36}
                       onClick={() => toggleExcluded(currentPollIndex)}
                     >
                       {excluded.has(currentPollIndex) ? 'Put this one back' : 'Leave this one out'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {step === 1 && (
-            <>
-              <button className="btn-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleConfigSubmit}
-                disabled={!pollConfig.topic.trim() || kindGaps.length > 0}
-              >
-                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Poll Questions
-              </button>
-            </>
-          )}
-          {step === 2 && reviewing && (
-            <>
-              <button className="btn-secondary" onClick={backToConfiguration}>
-                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-              </button>
-              <button className="btn-secondary" onClick={requestClose}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </AIBuilderDialog>
   );
 }
 

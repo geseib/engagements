@@ -166,6 +166,7 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | Host question-set shelf | `components/HostQuestionSetsDialog.jsx` | ok `.qsets--onlight` | ok | ok | ok | ok | ok `:193` + footer | ok | ok `hostQuestionSetsPalette` |
 | Host remote (phone) | `HostRemote.{jsx,css}`, `RemoteCategoryList`, `RemoteQuestionBrowser`, `RemoteSessionPanel` | ok `.hr-/.hrc-/.hrq-/.hrs-` | ok | ok `HostRemote.jsx`³⁰ | ok — one phone ladder, **not** a stage profile³¹ | ok | ok³² | part³⁰ — no palette test; every pairing is a measured `styles.css` token | ok `hostRemote`, `hostRemoteScreen`, `hostRemoteBrowser`, `hostRemoteSession` |
 | Game report | `components/GameReport.{jsx,css}` | ok `.report-` | part | ok `:208` paper by design | ok | part | part | n/a | part `gameReport.test.jsx` |
+| A set's page `/sets/<id>` (5e) | `components/QuestionSetPage.{jsx,css}` (+ the editor) | ok `.qsp` | ok (roles) | ok `data-theme="dark"` on its root | ok — 12/15/24 | ok — a place, not a dialog; Back through the editor's `requestClose` | ok | ok | ok `questionSetPage`, `questionSetPagePalette`, `hostQuestionSets` |
 
 ### Admin console
 
@@ -190,7 +191,8 @@ is scoped, themed and tested with it. It was listed here as `ok .join-` / theme
 | Surface | Files | A | B | C | D | E | F | G | H |
 |---|---|---|---|---|---|---|---|---|---|
 | Builder page `/builder` | `BuilderPage.{jsx,css}` | FAIL²² | FAIL²² | FAIL | FAIL²³ | FAIL⁷ | FAIL | FAIL | FAIL |
-| AI builders (Trivia / Poll / Survey / Scenario / Assistant / FormAssist) | `components/*AIBuilder.jsx`, `AIAssistant.jsx`, `AIFormAssist.jsx` | part | part | FAIL | part | **FAIL⁷** | FAIL | part | part `aiScenarioBuilderKind`, `formAssistPanel` |
+| AI builders (Trivia / Poll / Survey / Scenario) — one window since 5e | `components/AIBuilderDialog.{jsx,css}`, `components/*AIBuilder.jsx` | ok `.aib` | ok (roles; `.asb/.pab/.sab/.git/.gjp` re-pointed) | ok `theme="dark"` on the overlay | ok — 12px floor | ok (Modal + DialogParts, Icon X, foot Cancel) | ok (useConfirm) | ok | ok `aiBuilderDialog`, `aiBuilderDialogPalette`, `builderStacking` |
+| AI Assistant / FormAssist | `AIAssistant.jsx`, `AIFormAssist.jsx` | part | part | FAIL | part | **FAIL⁷** | FAIL | part | part `formAssistPanel` |
 | Generation job + generated items | `GenerationJobPanel.{jsx,css}`, `GeneratedItemsTable.{jsx,css}` | ok `.gjp-/.git-` | part | inherited | ok | ok | ok | n/a — no palette test | ok `generationJobPanel`, `generatedItemsTable` |
 | CSV upload + preflight | `QuestionSetUploadPanel.jsx` (`.qsets`), `FileUploadPrompt.{jsx,css}` | part²⁴ | part | ok / FAIL | ok | ok | ok | ok (qsets half) | ok `questionSetUploadPanel`, `csvPreflight` |
 | Help system | `HelpSystem.{jsx,css}`, `HelpButton.{jsx,css}` | part | FAIL | FAIL | ok | FAIL⁷ | part | FAIL | FAIL |

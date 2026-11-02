@@ -296,7 +296,7 @@ describe('PollAIBuilder Export CSV → real importer', () => {
     fireEvent.change(screen.getByPlaceholderText(/Team Preferences/i), {
       target: { value: 'Meeting policy' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Poll Questions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate poll questions/i }));
 
     const exportButton = await screen.findByRole('button', { name: /Export CSV/i });
     fireEvent.click(exportButton);

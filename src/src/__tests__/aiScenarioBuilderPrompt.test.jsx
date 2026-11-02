@@ -152,7 +152,7 @@ describe('4 · the host is told what is happening and what is next', () => {
     await openOnStep2({ job: completeJob(2, { warnings: ['A generation pass produced only duplicates; stopping early.'] }) });
     fireEvent.click(screen.getByRole('button', { name: /Generate/i }));
     const done = await screen.findByTestId('asb-done', {}, { timeout: 4000 });
-    expect(done).toHaveTextContent(/Check each scenario below, then press Load 2 into System/);
+    expect(done).toHaveTextContent(/Check each scenario below, then press Save 2 as a new set/);
     expect(within(done).getByTestId('asb-warnings')).toHaveTextContent(/only duplicates/);
   });
 });

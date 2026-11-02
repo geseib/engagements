@@ -531,6 +531,48 @@ const gameSetup = {
       ],
     },
     /*
+      The set as a place (experience plan 5e): components/QuestionSetPage.jsx.
+      From the shelf, Edit questions / Copy and edit / Review replace the shelf
+      with the set's page and move the address to /sets/<id>; App.jsx routes a
+      reload or a pasted link there. Bar: "← Your question sets" (or "← Back"
+      opened directly), eyebrow "Question set · <format>", the set's name, ?.
+      Body: QuestionSetEditor with inPlace (Details, Questions, Images; no
+      Versions, Download or AI drafting for a host). Back, the browser's Back,
+      Escape and Close all go through the editor's requestClose, which asks
+      "You have unsaved questions" first. The AI builders open in one dusk
+      window (components/AIBuilderDialog.jsx), and a builder or a draft's
+      review also replaces the shelf rather than opening over it.
+    */
+    {
+      id: 'editing-a-set',
+      title: 'Editing a set',
+      icon: 'PencilSimple',
+      blocks: [
+        {
+          t: 'p',
+          text: '**Edit questions** (or **Copy and edit**, or **Review** on a draft) opens the set on a page of its own, in place of Your question sets. The set\'s name is at the top, and the page has its own address, so you can bookmark it or send the link to someone who can edit it.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Details', text: 'The name, description, format, categories and the set\'s Workie. **Save Changes** saves these.' },
+            { title: 'Questions', text: 'Add, edit, delete and reorder questions, pull some from another set, or **Add questions** with Workie. **Save** saves the questions as a new version.' },
+            { title: 'Images', text: 'The pictures the set\'s questions use.' },
+          ],
+        },
+        {
+          t: 'p',
+          text: '**Your question sets** at the top (the arrow back), your browser\'s Back, Esc and **Close** at the foot all return you to the list, where your search is as you left it. If you have unsaved questions, you are asked first.',
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'One thing at a time',
+          text: 'The set\'s page, Workie\'s generators and a draft\'s review each take the place of the list while they are open, rather than opening on top of it. Closing one brings the list back.',
+        },
+      ],
+    },
+    /*
       HostQuestionSetsDialog.jsx: New question set / Hide new set (:847) ->
       QuestionSetUploadPanel ("How do you want to make it?": Generate with AI,
       Start from a template, Use your own chatbot, artwork template, Manual

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=17 font=0 primary=2 */
+/* skin-allowance: colour=0 font=0 primary=0 */
 /* ============================================================================
    THE GENERATED-ITEMS REVIEW TABLE — components/GeneratedItemsTable.jsx
 
@@ -7,9 +7,9 @@
    mockups' `.tbl`, `.chip`, `.btn`, `.seg` and `.filters` are the mockup
    shell's names and collide with styles.css.
 
-   Re-derived on white rather than the console's dusk field, because this table
-   renders inside the AI builder modal (`.modal-content { background: white }`,
-   styles.css:5431). Measured against the surfaces it is actually composited on:
+   Drawn on white until experience plan 5e, inside the old paper builder modal;
+   the builders now open in one dusk dialog, so the tokens below are roles and
+   the figures that follow are the paper era's, kept for history:
 
      --git-text   #2c3e50 on #ffffff  10.98:1   on #f8f9fa  10.42:1
      --git-muted  #5b6b7c on #ffffff   5.47:1   on #f8f9fa   5.19:1
@@ -19,15 +19,21 @@
    ========================================================================== */
 
 .git {
-  --git-text: #2c3e50;
-  --git-muted: #5b6b7c;
-  --git-warn: #8a5300;
-  --git-warn-bg: #fdf5e3;
-  --git-danger: #b3261e;
-  --git-rule: #e3e8ee;
-  --git-quiet: #f8f9fa;
-  --git-chip-bg: #eef2f7;
-  --git-chip-fg: #35506b;
+  /* ROLES, so the table follows its window's theme. The builders open in a
+     dusk dialog (components/AIBuilderDialog.jsx, experience plan 5e); these
+     were paper literals measured on the old white `.modal-content`. Measured on
+     dusk in __tests__/aiBuilderDialogPalette.test.js. */
+  --git-text: var(--text);
+  --git-muted: var(--muted);
+  --git-warn: var(--accent-text);
+  --git-warn-bg: rgb(var(--warn-rgb) / .10);
+  --git-warn-rule: rgb(var(--warn-rgb) / .35);
+  --git-danger: var(--danger-text);
+  --git-rule: var(--rule);
+  --git-quiet: var(--row-hover);
+  --git-field: var(--surface-2);
+  --git-chip-bg: var(--bg);
+  --git-chip-fg: var(--text);
 
   color: var(--git-text);
   font-size: 15px;
@@ -80,7 +86,7 @@
   align-items: flex-start;
   margin: 0 0 14px;
   padding: 11px 14px;
-  border: 1px solid rgba(138, 83, 0, .3);
+  border: 1px solid var(--git-warn-rule);
   border-left: 3px solid var(--git-warn);
   border-radius: 6px;
   background: var(--git-warn-bg);
@@ -126,7 +132,7 @@
   padding: 6px 10px;
   border: 1px solid var(--git-rule);
   border-radius: 6px;
-  background: #fff;
+  background: var(--git-field);
 }
 
 .git-search input {
@@ -143,7 +149,7 @@
   padding: 7px 10px;
   border: 1px solid var(--git-rule);
   border-radius: 6px;
-  background: #fff;
+  background: var(--git-field);
   font: inherit;
   color: inherit;
 }
@@ -158,7 +164,7 @@
 .git-seg button {
   border: 0;
   padding: 7px 12px;
-  background: #fff;
+  background: var(--git-field);
   color: var(--git-muted);
   font: 600 13px/1.2 inherit;
   cursor: pointer;
@@ -183,7 +189,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  color: var(--primary, #1B2942);
+  color: var(--accent-text);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -211,7 +217,7 @@
   text-align: left;
   padding: 9px 10px;
   border-bottom: 1px solid var(--git-rule);
-  background: #fff;
+  background: var(--surface);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: .05em;
@@ -241,7 +247,7 @@
   border-radius: 11px;
   background: var(--git-chip-bg);
   color: var(--git-chip-fg);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -261,9 +267,9 @@
   padding: 5px 9px;
   border: 1px solid var(--git-rule);
   border-radius: 5px;
-  background: #fff;
+  background: var(--git-field);
   color: var(--git-text);
-  font: 600 12.5px/1.2 inherit;
+  font: 600 13px/1.2 inherit;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -272,7 +278,7 @@
 .git-ghost { color: var(--git-muted); }
 .git-ghost:hover { color: var(--git-danger); border-color: var(--git-danger); }
 
-.git :focus-visible { outline: 2px solid var(--primary, #1B2942); outline-offset: 2px; border-radius: 4px; }
+.git :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
 
 .git-fine {
   margin: 10px 0 0;

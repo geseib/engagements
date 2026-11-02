@@ -1,0 +1,306 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   THE AI BUILDERS' WINDOW — components/AIBuilderDialog.jsx, `.aib`
+   (experience plan Phase 5 step 5e; audit E §1.5 Q2, §3.3)
+
+   The four builders (TriviaAIBuilder, PollAIBuilder, SurveyAIBuilder,
+   AIScenarioBuilder) used to paint a raw `.modal-content` — white paper — inside
+   the dusk console and the dusk host shelf, each from its own block in
+   BuilderPage.css, with literal paper colours (#2c3e50 headings, #3498db nav
+   buttons, #f8f9fa wells). They now open in one `Modal` with the shared
+   `ui-scrim` / `ui-dialog ui-dialog--full` look (ui/Dialog.css), declared dusk on
+   the overlay. This sheet holds only what the builders draw beyond that:
+
+     - the scrim's rung, ABOVE the host shelf. The builders are opened from the
+       set editor's Add questions, which portals them to document.body, so their
+       root stacks against the root context — beside `.new-game-overlay` (10000)
+       and the shelf's `.qsets-scrim--over` (10001), not inside them
+       (__tests__/builderStacking.test.js).
+     - the builder-only pieces that BuilderPage.css used to paint on paper (the
+       template cards, the one-at-a-time editor, the trivia option rows and
+       preview), moved here and written in roles.
+
+   The form controls themselves (`.form-group`, the round-kind picker, the
+   status banner, the sub-components' `.btn-*`) are re-inked by
+   QuestionSetEditor.css — the card carries `.qs-editor` for that reason — and
+   the four builders' own sheets (`.asb`, `.pab`, `.sab`) and the two shared
+   panels (`.git`, `.gjp`) point their tokens at roles.
+
+   ROLES ONLY: no literal colour in this file. The ground stack, in every skin
+   (measured in __tests__/aiBuilderDialogPalette.test.js, AA 4.5):
+
+     --surface   the card (ui-dialog)                 --text 12.53  --muted 6.06
+     --bg        a well cut into it (nav, actions)    --text 14.97  --muted 7.24
+     --surface-2 a field, a card to choose            --text 10.37  --muted 4.93
+
+   Amber never carries words here. A correct option is marked with the success
+   rule AND the "Correct" word in --success-text, never the tint alone.
+   ========================================================================== */
+
+.aib-scrim { --ui-scrim-z: 10010; }
+
+.aib {
+  --aib-t-floor: 12px;
+  --aib-t-label: 13px;
+  --aib-t-body: 15px;
+  --aib-t-head: 19px;
+  --aib-row-h: 36px;
+
+  --aib-rule: var(--rule);
+  --aib-rule-strong: var(--rule-strong);
+  --aib-well: var(--bg);
+  --aib-field: var(--surface-2);
+  --aib-ok-tint: rgb(var(--success-rgb) / .12);
+
+  --ui-dialog-radius: 12px;
+}
+
+.aib .aib-body { padding-bottom: 12px; }
+
+/* ------------------------------------------------------- step headings -- */
+
+.aib .aib-step {
+  margin: 0 0 14px;
+  font-size: var(--aib-t-head);
+  line-height: 1.25;
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- fields -- */
+
+/* Mirrors QuestionSetEditor.css's own shape, one class deeper than the
+   AIPromptManager.css global (`.form-group input[type="text"]`, 0,2,1) that
+   draws every field's border in the product. A field is the one surface
+   lighter than the card it sits on; its words are body size (RATIONALE §3.2). */
+.aib .form-group input[type="text"],
+.aib .form-group input[type="number"],
+.aib .form-group textarea,
+.aib .form-group select,
+.aib .option-editor input {
+  background: var(--aib-field);
+  color: var(--text);
+  border: 1px solid var(--aib-rule-strong);
+  border-radius: 6px;
+  font-size: var(--aib-t-body);
+}
+
+.aib .form-group input::placeholder,
+.aib .form-group textarea::placeholder { color: var(--muted); }
+
+.aib .form-group label { color: var(--muted); font-size: var(--aib-t-label); }
+
+.aib .config-form { display: flex; flex-direction: column; gap: 18px; }
+
+.aib .field-hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: var(--aib-t-floor);
+}
+
+.aib .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.aib .tag-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--aib-well);
+  border: 1px solid var(--aib-rule);
+  color: var(--text);
+  font-size: var(--aib-t-floor);
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------- the scenario templates -- */
+
+.aib .scenario-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.aib .scenario-type-card {
+  padding: 14px 16px;
+  border: 1px solid var(--aib-rule-strong);
+  border-radius: 10px;
+  background: var(--aib-field);
+  color: var(--text);
+  cursor: pointer;
+}
+.aib .scenario-type-card:hover { border-color: var(--action); }
+.aib .scenario-type-card h4 {
+  margin: 0 0 6px;
+  font-size: var(--aib-t-body);
+  color: var(--text);
+}
+.aib .scenario-type-card p {
+  margin: 0;
+  font-size: var(--aib-t-label);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.aib .scenario-continue-row { display: flex; margin-top: 14px; }
+.aib .scenario-continue-row > :first-child { margin-left: auto; }
+
+/* ------------------------------------------- one at a time: the editor -- */
+
+/* Previous · "Question 3 of 12" · Next, in a well. The two arrows are
+   ui/Button now (secondary, 36px), so nothing here paints a button. */
+.aib .scenario-navigation,
+.aib .trivia-navigation,
+.aib .poll-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--aib-rule);
+  border-radius: 10px;
+  background: var(--aib-well);
+}
+
+.aib .scenario-counter,
+.aib .trivia-counter,
+.aib .poll-counter {
+  flex: 1 1 200px;
+  min-width: 0;
+  text-align: center;
+}
+.aib .scenario-counter span,
+.aib .trivia-counter span,
+.aib .poll-counter span {
+  display: block;
+  font-size: var(--aib-t-label);
+  color: var(--muted);
+}
+.aib .scenario-counter h3,
+.aib .trivia-counter h3,
+.aib .poll-counter h3 {
+  margin: 4px 0 0;
+  font-size: var(--aib-t-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.aib .scenario-editor {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--aib-rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.aib .scenario-actions,
+.aib .trivia-actions,
+.aib .poll-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--aib-rule);
+}
+
+/* ---------------------------------------------- trivia: options, preview -- */
+
+.aib .trivia-options-editor { margin: 16px 0; }
+.aib .trivia-options-editor h4,
+.aib .trivia-preview h4 {
+  margin: 0 0 8px;
+  font-size: var(--aib-t-label);
+  color: var(--muted);
+}
+
+.aib .option-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--aib-rule);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--aib-well);
+}
+.aib .option-editor > label {
+  display: flex;
+  flex: 1 1 260px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.aib .option-editor input { flex: 1 1 auto; min-width: 0; padding: 6px 8px; }
+.aib .option-editor.correct-option {
+  border-left-color: var(--success);
+  background: var(--aib-ok-tint);
+}
+.aib .option-editor input.correct-answer { border-color: var(--success); }
+.aib .option-letter { font-weight: 700; color: var(--text); }
+.aib .correct-indicator {
+  color: var(--success-text);
+  font-weight: 700;
+  font-size: var(--aib-t-label);
+}
+
+.aib .trivia-preview-display {
+  padding: 14px 16px;
+  border: 1px solid var(--aib-rule);
+  border-radius: 10px;
+  background: var(--aib-well);
+  color: var(--text);
+}
+.aib .trivia-preview-display .question-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.aib .trivia-preview-display .question-header h3 {
+  margin: 0;
+  font-size: var(--aib-t-body);
+  color: var(--text);
+}
+.aib .trivia-preview-display .field-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--aib-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--aib-t-floor);
+  font-weight: 600;
+}
+.aib .trivia-preview-display .question-text { color: var(--text); margin-bottom: 10px; }
+.aib .trivia-preview-display .trivia-options { display: flex; flex-direction: column; gap: 6px; }
+.aib .trivia-preview-display .trivia-option {
+  padding: 8px 12px;
+  border: 1px solid var(--aib-rule);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.aib .trivia-preview-display .trivia-option.correct {
+  border-left-color: var(--success);
+  background: var(--aib-ok-tint);
+}
+.aib .trivia-preview-display .category-name { color: var(--text); }
+.aib .trivia-preview-display .option-letter { margin-right: 6px; }
+
+/* ------------------------------------------- the round-kind step's frame --
+   RoundKindPicker.css paints the step around the picker (its rule, its lede,
+   the "Or start from a saved template" disclosure) in the paper literals it
+   was measured with, and declares only its own `--rkp-*` (its test forbids a
+   borrowed role there). The picker itself is re-pointed by `.qs-editor`; its
+   frame, which only the builders draw, is re-inked here. */
+.aib .round-kind-step { border-bottom-color: var(--aib-rule); }
+.aib .round-kind-step .step-lede { color: var(--muted); }
+.aib .scenario-tpl-disclosure { color: var(--muted); }
+.aib .scenario-tpl-disclosure:hover,
+.aib .scenario-tpl-disclosure:focus-visible { color: var(--text); background: var(--row-hover); }
+
+@media (max-width: 640px) {
+  .aib .scenario-types-grid { grid-template-columns: minmax(0, 1fr); }
+}

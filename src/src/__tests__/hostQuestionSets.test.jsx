@@ -477,26 +477,38 @@ describe('a host edits the questions in a set they own', () => {
     // and QuestionsPanel's own testid, rendered from the real components.
     await openDialog();
     await openEditor();
-    expect(screen.getByRole('heading', { name: /edit question set/i })).toBeTruthy();
+    // The set's page names the set (experience plan 5e).
+    expect(screen.getByRole('heading', { level: 1, name: 'Ivy Retro' })).toBeTruthy();
+    expect(screen.getByTestId('set-place')).toContainElement(screen.getByTestId('questions-panel'));
     expect(screen.getByText('WHAT WENT WRONG')).toBeTruthy();
     expect(screen.getByText('WHAT WOULD YOU CHANGE')).toBeTruthy();
   });
 
-  test('the editor stays inside the host dialog’s scrim subtree', async () => {
-    // NOT A GEOMETRIC ASSERTION — jsdom has no layout engine. This is DOM
-    // CONTAINMENT, which is what the stacking actually depends on:
-    // `.qsets-scrim--over` is fixed with z-index 10001 and so is its own
-    // stacking context, which is the only reason a z-index-60 scrim and a
-    // z-index-9999 `.modal-overlay` paint ABOVE it rather than behind.
-    // rejects: hoisting the editor out through `afterContent` or a portal, which
-    // would drop `.modal-overlay`'s 9999 beside `.new-game-overlay`'s 10000 —
-    // and would also degrade `Modal.topmostEntry()`, which decides by
-    // containment, to its mount-order tiebreak.
+  test('the set is a place: it replaces the shelf, at its own address', async () => {
+    // EXPERIENCE PLAN 5e (audit E §1.5 Q1). The editor used to open INSIDE the
+    // shelf, which was inside the start screen — four layers to one question.
+    // rejects: the editor stacked over the shelf again, and an editor with no
+    // address of its own (no deep link, and Back leaving the page).
     await openDialog();
     const panel = await openEditor();
-    const over = document.querySelector('.qsets-scrim--over');
-    expect(over).not.toBeNull();
-    expect(over.contains(panel)).toBe(true);
+    expect(screen.queryByRole('dialog', { name: /your question sets/i })).toBeNull();
+    expect(document.querySelector('.qsets-scrim--over')).toBeNull();
+    expect(screen.getByTestId('set-place')).toContainElement(panel);
+    expect(window.location.pathname).toBe('/sets/ivy-retro');
+    // A question dialog opens inside the place, one layer deep.
+    fireEvent.click(within(screen.getByTestId('question-0')).getByRole('button', { name: /^edit$/i }));
+    const form = await screen.findByRole('dialog', { name: /^edit question$/i });
+    expect(screen.getByTestId('set-place').closest('.qsp-scrim').contains(form)).toBe(true);
+  });
+
+  test('the browser\'s Back returns to the shelf, and the address with it', async () => {
+    await openDialog();
+    await openEditor();
+    expect(window.location.pathname).toBe('/sets/ivy-retro');
+    window.history.back();
+    await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
+    expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
+    expect(window.location.pathname).not.toMatch(/^\/sets\//);
   });
 
   test('the three admins-only controls are absent, and their routes untouched', async () => {
@@ -581,13 +593,13 @@ describe('a host edits the questions in a set they own', () => {
     // rejects: adding them to the console mount only.
     await openDialog();
     await openEditor();
-    expect(screen.getByRole('button', { name: /close the editor/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /back to your question sets/i })).toBeTruthy();
     // "Close", not "Cancel": with nothing unsaved, leaving abandons nothing,
     // and the owner read Cancel-after-a-landed-CSV-import as "undo that".
     expect(screen.getByTestId('qs-editor-cancel')).toHaveTextContent('Close');
   });
 
-  test('the × closes the editor and leaves the shelf standing', async () => {
+  test('the bar\'s Back closes the set and leaves the shelf standing', async () => {
     // rejects: an × wired to the shelf's own onClose, which would drop the host
     // all the way back to the create screen from a control that says "close the
     // editor" — and rejects the Modal's Escape handling reaching past the
@@ -596,10 +608,11 @@ describe('a host edits the questions in a set they own', () => {
     await openDialog({ onClose });
     await openEditor();
 
-    fireEvent.click(screen.getByRole('button', { name: /close the editor/i }));
+    fireEvent.click(screen.getByRole('button', { name: /back to your question sets/i }));
     await waitFor(() => expect(screen.queryByTestId('questions-panel')).toBeNull());
     expect(screen.getByRole('dialog', { name: /your question sets/i })).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.location.pathname).not.toMatch(/^\/sets\//));
   });
 
   test('the footer Cancel closes the editor and leaves the shelf standing', async () => {
@@ -628,7 +641,7 @@ describe('a host edits the questions in a set they own', () => {
     await screen.findByTestId('unsaved-bar');
 
     for (const press of [
-      () => fireEvent.click(screen.getByRole('button', { name: /close the editor/i })),
+      () => fireEvent.click(screen.getByRole('button', { name: /back to your question sets/i })),
       () => fireEvent.click(screen.getByTestId('qs-editor-cancel')),
     ]) {
       press();
@@ -836,7 +849,8 @@ describe('create', () => {
     // rejects: the button being wired to nothing. The builder names itself in a
     // heading; a dialog that never opened has none.
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /AI .* builder/i })).toBeInTheDocument();
+      // The builders name what they write, in sentence case (experience plan 5e).
+      expect(screen.getByRole('heading', { name: /^Generate scenarios$/ })).toBeInTheDocument();
     });
   });
 

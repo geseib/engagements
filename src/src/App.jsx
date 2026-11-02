@@ -19,6 +19,7 @@ import PendingInvites, { NOT_APPROVAL_NOTE } from './components/PendingInvites';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
 import SharedReportPage from './components/SharedReportPage';
+import QuestionSetPage, { setFromLocation } from './components/QuestionSetPage';
 import SkinProvider from './components/SkinProvider';
 
 // Marketing is lazy so that a player on /play and a host on the stage never
@@ -461,6 +462,19 @@ function AppRouter() {
     return (
       <ProtectedRoute>
         <EventStage code={eventStage[1]} />
+      </ProtectedRoute>
+    );
+  }
+
+  // A QUESTION SET'S PAGE (experience plan 5e): the set editor as a place with
+  // its own address. The host's shelf opens it in place and pushes this
+  // address; a reload or a pasted link lands here. Behind ProtectedRoute: the
+  // list it reads is the signed-in person's own (GET /admin/question-sets).
+  const setPage = setFromLocation(window.location);
+  if (setPage) {
+    return (
+      <ProtectedRoute>
+        <QuestionSetPage setId={setPage.id} scope={setPage.scope} />
       </ProtectedRoute>
     );
   }
