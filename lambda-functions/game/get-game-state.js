@@ -10,6 +10,7 @@ const { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll 
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 const { lateWindow } = require('./late-window');
+const { timerView } = require('./round-timer');
 
 /**
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
@@ -442,6 +443,16 @@ exports.handler = async (event) => {
         A yes/no only, so it is safe on the public door.
       */
       commentsOpen: lateWindow({ meta: gameMetadata.Item, state: stateItem }).open,
+      /*
+        THE ROUND TIMER, as the room sees it (round-timer.js): words and a bar
+        on the wall and the phones, so only { phase, startedAt, limitMs,
+        extendedMs }, only while its phase is on, and only when the host left
+        "show the time" on. Whether it closes at zero is the host's
+        (`hostTime`, below). `serverNow` is this server's clock at the read:
+        every screen measures time left against it, never its own clock alone.
+      */
+      time: timerView(stateItem),
+      serverNow: Date.now(),
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,
@@ -613,6 +624,13 @@ exports.handler = async (event) => {
         console.error('present detail failed (reporting none):', detailError);
         response.presentDetail = null;
       }
+
+      // The whole timer, for the console's Time tile and the Remote's time
+      // card: with or without the wall, whether it closes at zero, and still
+      // there once its phase has closed ("Took 2:14 · 2:00 given"). With it,
+      // when this phase opened, timed or not (round-timer.js PhaseStartedAt).
+      response.hostTime = timerView(stateItem, { host: true });
+      response.phaseStartedAt = (stateItem && stateItem.PhaseStartedAt) || null;
 
       // The host's own notes for the question (host console spec §3.4): the
       // set's Background, on the host door only. /state never carries it

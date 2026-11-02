@@ -307,6 +307,8 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
   });
   await check('and everything the public round carries, in the same read (one request per poll)', () => {
     for (const k of Object.keys(plain.body)) {
+      // serverNow is the server's clock at each read (round-timer.js), not a field of the round.
+      if (k === 'serverNow') continue;
       assert.deepStrictEqual(own.body[k], plain.body[k], `field ${k} differs from the public round`);
     }
   });

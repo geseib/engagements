@@ -133,6 +133,12 @@ import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
 import { needsYou, markHandoverRequested, NEEDS_ACTIONS } from './config/needsYou';
 import NeedsYouLine from './components/needs/NeedsYouLine';
 import ConsolePulse from './components/console/ConsolePulse';
+import TimeChip from './components/console/TimeChip';
+import RoomTimeLine from './components/RoomTimeLine';
+import {
+  loadTimeChoices, saveTimeChoices, chipKindFor, timerOnPhase, mergeTimer, timeLeft, basePhase, TIMER_WORDS,
+} from './config/roundTimer';
+import { noteServerNow, serverNowMs } from './utils/serverClock';
 import { arrivalsSince, withoutRoomCount } from './config/consolePulse';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
@@ -488,6 +494,32 @@ function GameHostPage() {
   */
   const [phaseSeenAt, setPhaseSeenAt] = useState({});
   useEffect(() => { setPhaseSeenAt({}); }, [gameId]);
+  /*
+    THE ROUND TIMER (experience plan 2f; config/roundTimer.js, server half
+    lambda-functions/game/round-timer.js). `timeChoices` is what the time
+    chips beside the opening moves say ({ ask, vote }), remembered in this
+    browser for the next round and the next session. `roundTime` is the
+    server's timer as the host sees it (hostTime: phase, startedAt, limitMs,
+    extendedMs, onWall, closes), from the opening call's reply, the host's
+    door and roundTimeChanged frames. Time left is always worked out on the
+    SERVER's clock (utils/serverClock.js), never this laptop's alone.
+  */
+  const [timeChoices, setTimeChoices] = useState(() => loadTimeChoices());
+  const setTimeChoice = useCallback((kind, value) => {
+    setTimeChoices((cur) => {
+      const next = { ...cur, [kind]: value };
+      saveTimeChoices(next);
+      return next;
+    });
+  }, []);
+  const [roundTime, setRoundTime] = useState(null);
+  useEffect(() => { setRoundTime(null); }, [gameId]);
+  /** A reply or read that may carry the host's timer and the server's clock. */
+  const takeHostTime = useCallback((data, sentAt = null) => {
+    if (!data || typeof data !== 'object') return;
+    noteServerNow(data.serverNow, sentAt);
+    if (Object.prototype.hasOwnProperty.call(data, 'hostTime')) setRoundTime(data.hostTime || null);
+  }, []);
   useEffect(() => {
     if (!gameState) return;
     setPhaseSeenAt((seen) => (seen[gameState] ? seen : { ...seen, [gameState]: Date.now() }));
@@ -1380,6 +1412,7 @@ function GameHostPage() {
         if (!res.ok || !live) return;
         const data = await res.json();
         if (!live) return;
+        takeHostTime(data);
         setPresenting(Number(data.presenting) || 0);
         setPresentDetail(data.presentDetail || null);
         setHostNotes(data.hostNotes || null);
@@ -1393,7 +1426,7 @@ function GameHostPage() {
     const timer = setInterval(read, 10000);
     return () => { live = false; clearInterval(timer); readHostStateRef.current = () => {}; };
   // `lessonNumber`: a new round reads its own host notes now, not 10 s late.
-  }, [twoSurfaces, gameId, lessonNumber]);
+  }, [twoSurfaces, gameId, lessonNumber, takeHostTime]);
 
   /*
     THE JOIN CODE ON THE WALL (owner, 2026-10-13: "when presenting i still need
@@ -3031,6 +3064,9 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('votingStarted', (data) => {
       console.log('🔌 Voting started notification:', data);
+      // The voting timer as the room sees it, and the server's clock (2f).
+      noteServerNow(data && data.serverNow);
+      if (data && data.time) setRoundTime((held) => mergeTimer(held, data.time));
 
       // Move the phase immediately when the frame says so — it avoids a beat of
       // stale header while the restore is in flight.
@@ -3113,6 +3149,14 @@ Focus on actionable business strategy insights.`;
     webSocketClient.onMessage('scoreboardChanged', (data) => {
       if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
       applyServerBoard(data);
+    });
+
+    // THE ROUND TIMER moved (+1 min from here or the Remote, or a phase opened
+    // with a time): the frame carries the timer, applied as it stands (2f).
+    webSocketClient.onMessage('roundTimeChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      noteServerNow(data && data.serverNow);
+      if (data && data.time) setRoundTime((held) => mergeTimer(held, data.time));
     });
 
     // THE SESSION'S DISPLAY PROFILE, chosen on another surface (two-surface D2).
@@ -3357,6 +3401,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('scoreboardChanged');
       webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('stageProfileChanged');
+      webSocketClient.offMessage('roundTimeChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
@@ -3473,10 +3518,13 @@ Focus on actionable business strategy insights.`;
       // authFetch, because it carries the Cognito authorizer; the public
       // /state stopped returning the host's half on 2026-09-26
       // (get-game-state.js).
+      const restoreSentAt = Date.now();
       const stateRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (superseded()) return false;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
+        // The round's timer and the server's clock (experience plan 2f).
+        takeHostTime(gameStateData, restoreSentAt);
         console.log(`📊 HOST: Found existing game state:`, gameStateData);
 
         // Which beat of RESULTS this round is on, per the ROUND# record. The
@@ -4848,7 +4896,9 @@ Focus on actionable business strategy insights.`;
       // Include skip action if we're forcing advancement from ASK/VOTE states (same logic as handleNextQuestion)
       const requestBody = {
         questionId: selectedQuestion.id,
-        action: 'select_specific'
+        action: 'select_specific',
+        // The answering time the chip says (experience plan 2f).
+        time: timeChoices.ask
       };
       if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
         requestBody.action = 'skip_to_specific';
@@ -4870,6 +4920,7 @@ Focus on actionable business strategy insights.`;
       
       const nextQuestionData = await nextQuestionRes.json();
       console.log(`📝 HOST: Selected question response:`, nextQuestionData);
+      takeHostTime(nextQuestionData);
       
       const questionId = nextQuestionData.questionId;
       const lessonNumber = nextQuestionData.lessonNumber;
@@ -5018,8 +5069,9 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`🎯 HOST: Requesting next question, forceSkip: ${forceSkip}, current state: ${gameState}`);
       
-      // Include skip action if we're forcing advancement from ASK/VOTE states
-      const requestBody = {};
+      // Include skip action if we're forcing advancement from ASK/VOTE states.
+      // `time`: what the chip beside the opening move says (experience plan 2f).
+      const requestBody = { time: timeChoices.ask };
       if ((gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) && forceSkip) {
         requestBody.action = 'skip';
       }
@@ -5050,6 +5102,7 @@ Focus on actionable business strategy insights.`;
          It shipped as a 401 on the main control of the host page: start a
          quickstart, press next, "Unauthorized". __tests__/closedRoutesUseAuthFetch
          now scans for both shapes. */
+      const nextSentAt = Date.now();
       const attempt = await requestNextQuestion({
         fetchFn: authFetch, apiBase: API_BASE, gameId, body: requestBody,
       });
@@ -5070,6 +5123,7 @@ Focus on actionable business strategy insights.`;
 
       const nextQuestionData = attempt.data;
       console.log(`📝 HOST: Next question selected:`, nextQuestionData);
+      takeHostTime(nextQuestionData, nextSentAt);
       
       const questionId = nextQuestionData.questionId;
       const lessonNumber = nextQuestionData.lessonNumber;
@@ -5248,7 +5302,14 @@ Focus on actionable business strategy insights.`;
   };
 
   const openingVoteRef = useRef(false);
-  const handleFinishQuestion = async () => {
+  /*
+    `timeUp`: the opt-in close at zero (experience plan 2f), fired by the timer
+    effect below rather than by the host. The server checks it against its own
+    clock and STATE (start-vote.js), so it answers "not yet" (409 with the time
+    left), "already moved" (another screen closed it), or opens voting. Neither
+    refusal is the host's error, so neither is said in the dock.
+  */
+  const handleFinishQuestion = async ({ timeUp = false } = {}) => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
       // Skip voting phase for both trivia and wavelength
@@ -5267,7 +5328,7 @@ Focus on actionable business strategy insights.`;
       VOTE (its own response below, or the `votingStarted` frame, whichever
       lands first); the VOTE stage then waits for its rows (stageAnswers.js).
     */
-    if (openingVoteRef.current) return;
+    if (openingVoteRef.current) return null;
     openingVoteRef.current = true;
     setManualStateChange(true);
     setSessionActionError('');
@@ -5277,16 +5338,27 @@ Focus on actionable business strategy insights.`;
       const questionNumber = lessonNumber; // Current question number
       
       // Start the voting process using the dedicated endpoint
+      const voteSentAt = Date.now();
       const startVoteRes = await authFetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          questionNumber: questionNumber
+          questionNumber: questionNumber,
+          // The voting time the chip says (experience plan 2f; No limit by default).
+          time: timeChoices.vote,
+          ...(timeUp ? { timeUp: true } : {})
         })
       });
-      
+
+      if (timeUp && !startVoteRes.ok) {
+        const refusal = await startVoteRes.json().catch(() => ({}));
+        noteServerNow(refusal.serverNow, voteSentAt);
+        return refusal;
+      }
       if (startVoteRes.ok) {
         const voteData = await startVoteRes.json();
+        if (voteData.alreadyMoved) return voteData;
+        takeHostTime(voteData, voteSentAt);
         console.log(`🗳️ HOST: Vote started successfully:`, voteData);
         
         // The start-vote endpoint should return the answers
@@ -6804,6 +6876,78 @@ Focus on actionable business strategy insights.`;
   // On every surface this page draws — the main screen, the stage, a report —
   // because it only asks the browser, and Esc always leaves.
   useFullscreenKey();
+
+  /*
+    THE ROUND TIMER'S MOMENTS (experience plan 2f; session-start D4). Above
+    the early returns for hook order.
+
+    `phaseTimer` is the timer of the phase that is on, or null. `timeIsUp`
+    flips once, at zero by the server's clock (one timeout, not a page-wide
+    tick: the pulse ticks itself), so Your part now can say "Time's up".
+
+    THE CLOSE AT ZERO is opt-in ("Close answering at zero" on the chip). It is
+    done from here and from the phone Remote, never by a server scheduler: the
+    same start-vote the host presses, sent with `timeUp`, which the server
+    checks against its own clock and STATE (so a skewed laptop cannot close
+    early, and two screens open voting once). It does not fire on a room with
+    no answers, and a vote-less type has nothing to close into.
+  */
+  const phaseTimer = timerOnPhase(roundTime, gameState);
+  const phaseTimerKey = phaseTimer
+    ? [phaseTimer.phase, phaseTimer.startedAt, phaseTimer.limitMs, phaseTimer.extendedMs].join('|')
+    : '';
+  const phaseTimerRef = useRef(phaseTimer);
+  phaseTimerRef.current = phaseTimer;
+  const [timeUpFor, setTimeUpFor] = useState('');
+  useEffect(() => {
+    const t = phaseTimerRef.current;
+    if (!t) return undefined;
+    const tl = timeLeft(t, serverNowMs());
+    if (!tl) return undefined;
+    if (tl.up) { setTimeUpFor(phaseTimerKey); return undefined; }
+    const timer = setTimeout(() => setTimeUpFor(phaseTimerKey), tl.leftMs + 50);
+    return () => clearTimeout(timer);
+  }, [phaseTimerKey]);
+  const timeIsUp = Boolean(phaseTimerKey) && timeUpFor === phaseTimerKey;
+  const closesIntoVote = !['trivia', 'wavelength', 'poll', 'survey'].includes(currentGameType);
+  const closeAtZeroRef = useRef('');
+  const [closeRetry, setCloseRetry] = useState(0);
+  useEffect(() => {
+    const t = phaseTimerRef.current;
+    if (!timeIsUp || !t || !t.closes || !closesIntoVote) return undefined;
+    if (!String(t.phase).startsWith('ASK#') || answeredCount === 0) return undefined;
+    if (closeAtZeroRef.current === phaseTimerKey) return undefined;
+    closeAtZeroRef.current = phaseTimerKey;
+    let retry = null;
+    handleFinishQuestion({ timeUp: true }).then((reply) => {
+      // The server's clock said not yet (this laptop runs fast): try again then.
+      if (reply && reply.notDue && Number(reply.remainingMs) >= 0) {
+        retry = setTimeout(() => { closeAtZeroRef.current = ''; setCloseRetry((n) => n + 1); }, Number(reply.remainingMs) + 250);
+      }
+    }).catch(() => {});
+    return () => { if (retry) clearTimeout(retry); };
+  }, [timeIsUp, phaseTimerKey, answeredCount, closesIntoVote, closeRetry]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** +1 min: one more minute on the timer that is on, timed by the server (stage-beat.js addMinute). */
+  const addMinute = useCallback(async () => {
+    const t = phaseTimerRef.current;
+    if (!t || !gameId) return;
+    const sentAt = Date.now();
+    try {
+      // authFetch: /stage-beat carries the Cognito authorizer.
+      const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addTime: true, phase: t.phase }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) takeHostTime(data, sentAt);
+      // 409: the room moved on as the key was pressed; the next frame says so.
+      else if (res.status !== 409) hostActionFailed(`Another minute was not added: ${data.error || `HTTP ${res.status}`}`);
+    } catch (e) {
+      hostActionFailed('Another minute was not added: no connection.');
+    }
+  }, [gameId, takeHostTime, hostActionFailed]);
 
   // Render the quickstart menu if it's being shown
   if (showQuickstartMenu) {
@@ -8369,6 +8513,32 @@ Focus on actionable business strategy insights.`;
     return ts.length ? Math.min(...ts) : null;
   };
   const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
+  const pulseTimer = phaseTimer
+    || (roundTime && pulseRound && /^RESULTS#/.test(basePhase(gameState)) && String(roundTime.phase || '').endsWith(`#${pulseRound}`) ? roundTime : null);
+  /*
+    THE TIME CHIP beside the opening move (2f, D4): Start round N takes the
+    answering chip, Start voting the voting chip. `timeChipFor` builds it for
+    whichever bar draws the primary; `placement` 'up' in the one-screen dock,
+    which sits at the stage's foot.
+  */
+  const timeChipFor = (controls, placement = 'down') => {
+    const kind = chipKindFor(controls && controls.primary);
+    if (!kind) return null;
+    const nextRound = (Number(lessonNumber) || 0) + 1;
+    return (
+      <TimeChip
+        kind={kind}
+        round={kind === 'ask' ? nextRound : null}
+        value={timeChoices[kind]}
+        onChange={(v) => setTimeChoice(kind, v)}
+        placement={placement}
+      />
+    );
+  };
+  // At zero, Your part now says so (D4): "Time's up. Start voting, or give them another minute."
+  const timesUpPart = timeIsUp && /^ASK#/.test(basePhase(gameState))
+    ? (closesIntoVote ? TIMER_WORDS.timesUpPart : TIMER_WORDS.timesUpPartNoVote)
+    : null;
   const consolePulse = useConsole ? (
     <ConsolePulse
       moment={consoleMoment}
@@ -8383,6 +8553,10 @@ Focus on actionable business strategy insights.`;
       late={lateCounts.notReviewed}
       // The late count is the Needs-you item's own Review (one home for the late list).
       onLate={openLateList}
+      // The round timer (2f): the phase's own while it is on; after the round,
+      // the last phase's, for "2:00 given".
+      timer={pulseTimer}
+      onAddMinute={phaseTimer ? addMinute : null}
     />
   ) : null;
   /*
@@ -8720,6 +8894,7 @@ Focus on actionable business strategy insights.`;
             status: sessionActionError ? { text: sessionActionError, tone: 'error' } : { text: setupWords.status, tone: '' },
             part: setupWords.part,
             controls: setupControls,
+            timeChip: timeChipFor(setupControls),
             emptyLabel: SETUP_WORDS.afterSetup(setupStartLabel),
             onAction: setupOnAction,
             shortcutsEnabled: !anyOverlayOpen,
@@ -8732,8 +8907,10 @@ Focus on actionable business strategy insights.`;
               ? { text: RW.viewingNothingMoves, tone: 'info' }
               : (sessionActionError ? { text: sessionActionError, tone: 'error' } : withoutRoomCount(hostControls.status, consoleMoment)),
             nextOnWall: consoleNext,
-            part: workflow ? workflow.part : null,
+            part: !viewing && timesUpPart ? timesUpPart : (workflow ? workflow.part : null),
             controls: dockControls,
+            timeChip: viewing ? null : timeChipFor(dockControls),
+            onAddTime: phaseTimer && !viewing ? addMinute : null,
             onAction: runHostAction,
             shortcutsEnabled: !anyOverlayOpen,
             interceptAdvance: consoleInterceptAdvance,
@@ -8768,6 +8945,8 @@ Focus on actionable business strategy insights.`;
           wavelengthFitKey, surveyFitKey,
           // The QR side panel narrows the content's column: re-measure.
           joinPanelLive ? 'join' : '',
+          // The round timer's line under the meter (2f) adds a row: re-measure.
+          phaseTimer && phaseTimer.onWall !== false ? 'time' : '',
         ].join('|')}
         strip={workflow
           ? (
@@ -8829,12 +9008,19 @@ Focus on actionable business strategy insights.`;
         )}
         meter={meter
           ? (
-            <RoomMeter
-              phase={hostPhase} heading={meter.heading} body={meter.body}
-              complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
-              rows={meter.rows}
-              compose={meterCompose}
-            />
+            <>
+              <RoomMeter
+                phase={hostPhase} heading={meter.heading} body={meter.body}
+                complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
+                rows={meter.rows}
+                compose={meterCompose}
+              />
+              {/* ONE SCREEN IS THE ROOM'S SCREEN (experience plan 2f, F3): the
+                  round timer in words and a bar under the meter, never
+                  seconds, only when "show the time" is on. The seconds and
+                  +1 min live in the dock's chip and the + key. */}
+              {phaseTimer && phaseTimer.onWall !== false ? <RoomTimeLine time={phaseTimer} className="stage-time" /> : null}
+            </>
           )
           : null}
         dock={(
@@ -8887,6 +9073,9 @@ Focus on actionable business strategy insights.`;
               onAction={runHostAction}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
+              // The time chip and +1 min (experience plan 2f), as on the console.
+              timeChip={viewing ? null : timeChipFor(dockControls, 'up')}
+              onAddTime={phaseTimer && !viewing ? addMinute : null}
               /*
                 → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
                 extra pages of the workie response by hitting the right

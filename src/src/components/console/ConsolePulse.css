@@ -98,3 +98,43 @@
   justify-self: start;
   --ui-size: var(--cpulse-t-label);
 }
+/* THE TIMER (experience plan 2f; session-start D3 row 2, D4): a draining
+   ring beside time left of time given, and +1 min. Info blue while it runs;
+   amber (--warn, "a status, not the accent") only once time is up, counting
+   over. Never red. --warn #F6A94C on --surface #1B2942 measures 7.92:1
+   (consolePulsePalette.test.js). */
+.cpulse .cpulse-timer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cpulse .cpulse-timer-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cpulse .cpulse-ring {
+  width: 40px;
+  height: 40px;
+}
+.cpulse .cpulse-ring .tring-track {
+  stroke: var(--surface-2);
+}
+.cpulse .cpulse-ring .tring-fill {
+  stroke: var(--info);
+}
+.cpulse .cpulse-ring.is-up .tring-track {
+  stroke: rgb(var(--warn-rgb) / .45);
+}
+.cpulse .cpulse-time.is-up {
+  border-color: var(--warn);
+}
+.cpulse .cpulse-time.is-up .cpulse-val {
+  color: var(--warn);
+}
+.cpulse .cpulse-plus {
+  --ui-size: var(--cpulse-t-label);
+  white-space: nowrap;
+}
