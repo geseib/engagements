@@ -362,6 +362,9 @@ function momentModel(snapshot, reads = {}) {
         task: taskOf(q, snapshot),
         story: storyOf(q),
         counts: countsOf(snapshot, 'answered'),
+        // The round timer as words and a bar (experience plan 2f), only when
+        // the host left "show the time" on; /state carries none otherwise.
+        ...(snapshot.time ? { time: snapshot.time } : {}),
       };
     case 'VOTING': {
       const answered = int(snapshot.roomCounts && snapshot.roomCounts.answered);
@@ -372,6 +375,7 @@ function momentModel(snapshot, reads = {}) {
         ...contextOf(q, snapshot),
         lead: RW.answersOnDevices(answered),
         counts: countsOf(snapshot, 'voted'),
+        ...(snapshot.time ? { time: snapshot.time } : {}),
       };
     }
     case 'RESULTS': {

@@ -5,9 +5,12 @@
  *
  *   1 · the room   Answered 9 of 12 + bar → Everyone's in (Voted during voting;
  *                  "This round" with both counts once the round has closed)
- *   2 · time       no timer yet (2f): "Open 1:24", elapsed since the round
- *                  opened (currentQuestion.startedAt, else when this page saw
- *                  the phase change); voting from when voting opened
+ *   2 · time       with a timer (2f, config/roundTimer.js): "0:47 left of
+ *                  2:00" with a draining ring, +1 min; amber "Time's up ·
+ *                  0:18 over 2:00" at zero, counting over. With no limit:
+ *                  "Open 1:24", elapsed since the round opened
+ *                  (currentQuestion.startedAt, else when this page saw the
+ *                  phase change); voting from when voting opened
  *   3 · since      +N joined since this round opened, with the names; the late
  *                  count, a link to the Needs-you item that reviews them
  *
@@ -16,6 +19,7 @@
  * says "N here", and the Your-part-now status drops the count, withoutRoomCount).
  */
 import LW from './lateWords';
+import { timeLeft, clock as timerClock, TIMER_WORDS } from './roundTimer';
 
 export const PULSE_WORDS = Object.freeze({
   answered: 'Answered',
@@ -101,6 +105,12 @@ export function pulseFor({
   moment, players = 0, answered = 0, voted = 0, everyoneIn = null,
   openedAt = null, voteAt = null, resultsAt = null, now = Date.now(),
   arrivals = [], late = 0,
+  // The round timer (config/roundTimer.js): during answering or voting, the
+  // timer of the phase that is on; after the round, the last phase's, for
+  // "2:00 given". null with No limit. `now` is the SERVER's time then.
+  timer = null,
+  // Under reduced motion the ring moves in steps (D3: 10 s), not every second.
+  ringStepMs = 0,
 } = {}) {
   const phase = pulsePhase(moment);
   const n = Math.max(0, Number(players) || 0);
@@ -152,6 +162,30 @@ export function pulseFor({
     };
   } else {
     time = { eyebrow: PULSE_WORDS.time, value: PULSE_WORDS.notOpen, sub: PULSE_WORDS.opensWithRound };
+  }
+  time.state = 'none';
+  time.ring = null;
+  const tl = timer ? timeLeft(timer, now) : null;
+  if (tl && (phase === 'answer' || phase === 'vote')) {
+    const given = timerClock(tl.givenMs);
+    const step = Number(ringStepMs) > 0 ? Number(ringStepMs) : 0;
+    const ringNow = step ? Math.floor(Number(now) / step) * step : now;
+    const ringTl = timeLeft(timer, ringNow) || tl;
+    const added = Math.round(tl.extendedMs / 60000);
+    if (tl.up) {
+      time = { eyebrow: PULSE_WORDS.time, value: TIMER_WORDS.timesUp, sub: TIMER_WORDS.overOf(timerClock(tl.overMs), given), state: 'up', ring: 0 };
+    } else {
+      time = {
+        eyebrow: PULSE_WORDS.time,
+        value: timerClock(tl.leftMs),
+        sub: TIMER_WORDS.leftOf(given) + (added > 0 ? ` · ${TIMER_WORDS.added(added)}` : ''),
+        state: added > 0 ? 'extended' : 'running',
+        ring: ringTl.fraction,
+      };
+    }
+  } else if (tl && phase === 'after') {
+    const rest = time.sub ? ` · ${time.sub.charAt(0).toLowerCase()}${time.sub.slice(1)}` : '';
+    time = { ...time, sub: `${TIMER_WORDS.given(timerClock(tl.givenMs))}${rest}` };
   }
 
   // 3 · SINCE THIS ROUND OPENED

@@ -332,6 +332,8 @@ html.present-locked body {
   margin: -10px auto 18px;
 }
 .present .present-foot-count { color: var(--text); font-weight: 600; }
+/* The round timer's words and bar (experience plan 2f, frame 1-b7): the right end of the foot. */
+.present .present-time { margin-left: auto; color: var(--text); }
 .present .present-nav {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;

@@ -263,7 +263,7 @@ const twoScreens = {
             ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup is the lobby\'s own panel: where the room watches, the room\'s window and its size.'],
             ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
             ['The Needs-you line', 'Under Your part now: calm, or amber with what needs you and its buttons.'],
-            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning to **Everyone\'s in**; **Time**, how long the round has been open; **Since this round opened**, who joined since, and any late items to review.'],
+            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning to **Everyone\'s in**; **Time**, time left with **+1 min**, or time open; **Since this round opened**, who joined since, and any late items to review.'],
             ['Left rail', 'From round 1: round queue, People and Late & not reviewed (see The left rail).'],
             ['Main area', 'What the step needs, from the lobby to the report (see The main area).'],
           ],

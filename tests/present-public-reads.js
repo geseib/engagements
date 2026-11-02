@@ -152,13 +152,18 @@ const HOST_ONLY = ['questionQueue', 'categoryCounts', 'categoryState', 'answerPr
     assert.strictEqual(plain.body.hostNotes, undefined);
   });
   await check('the room view is the public body plus roomCounts, key for key', () => {
-    const { roomCounts, ...rest } = room.body;
+    // serverNow is the server's clock at each read (the round timer), not a field of the round.
+    const { roomCounts, serverNow: roomNow, ...rest } = room.body;
+    const { serverNow: plainNow, ...plainRest } = plain.body;
     assert.ok(roomCounts);
-    assert.deepStrictEqual(rest, plain.body);
+    assert.ok(Number.isFinite(roomNow) && Number.isFinite(plainNow), 'both reads carry serverNow');
+    assert.deepStrictEqual(rest, plainRest);
   });
   await check('an unknown view is the plain body', async () => {
     const odd = await stateRead('7105', { view: 'host' });
-    assert.deepStrictEqual(odd.body, plain.body);
+    const { serverNow: a, ...oddRest } = odd.body; // eslint-disable-line no-unused-vars
+    const { serverNow: b, ...plainRest } = plain.body; // eslint-disable-line no-unused-vars
+    assert.deepStrictEqual(oddRest, plainRest);
   });
   await check('the set\'s own round noun travels with the question (the public get-question already gives it)', () =>
     assert.strictEqual(plain.body.currentQuestionData && plain.body.currentQuestionData.setRoundNoun, 'Lesson'));

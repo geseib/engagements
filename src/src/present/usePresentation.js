@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import webSocketClient from '../WebSocketClient';
 import { startPresentStatus } from './presentStatusReporter';
+import { noteServerNow } from '../utils/serverClock';
 
 // The window's own report (PRESENT_STATUS) is shared with the Build Room wall.
 export { presentStatusPayload, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from './presentStatusReporter';
@@ -46,6 +47,8 @@ export const FOLLOW_FRAMES = [
   'gameEnded', 'playerJoined', 'playerAnswered', 'playerVoted', 'stageBeatChanged',
   'stageFocusChanged', 'stageProfileChanged', 'scoreboardChanged', 'aiSummaryReady',
   'commentFeatured', 'authorsRevealed', 'playerRemoved', 'followUpChanged',
+  // +1 min on the round timer (experience plan 2f): /state carries the new time.
+  'roundTimeChanged',
 ];
 
 const VIEWER_KEY = 'engage.presentViewerId';
@@ -187,9 +190,14 @@ export default function usePresentation(gameId) {
     const seq = seqRef.current;
     let snap = null;
     try {
+      const sentAt = Date.now();
       const res = await fetch(`${apiBase()}games/${gameId}/state?view=room`);
       if (res.status === 404) snap = { notFound: true };
-      else if (res.ok) snap = await readJson(res);
+      else if (res.ok) {
+        snap = await readJson(res);
+        // The server's clock: the time line measures time left against it (2f).
+        if (snap) noteServerNow(snap.serverNow, sentAt);
+      }
       else return;
     } catch (e) {
       return; // offline: the next poll, `online` or a reconnect tries again

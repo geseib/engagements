@@ -2,7 +2,19 @@ import React, { useEffect, useState } from 'react';
 import Eyebrow from '../ui/Eyebrow';
 import Button from '../ui/Button';
 import { pulseFor, pulsePhase } from '../../config/consolePulse';
+import { TIMER_WORDS } from '../../config/roundTimer';
+import { serverNowMs } from '../../utils/serverClock';
+import TimeRing from './TimeRing';
 import './ConsolePulse.css';
+
+/** Reduced motion: the ring moves in 10 s steps (session-start D3). */
+function prefersReducedMotion() {
+  try {
+    return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  } catch (e) {
+    return false;
+  }
+}
 
 /**
  * THE PULSE (session-start D3; experience plan Phase 2 step 2c): three tiles
@@ -15,22 +27,29 @@ import './ConsolePulse.css';
  *
  * aria-live: only on tile 1's sub line, polite, so a screen reader hears
  * "Everyone's in" when it happens; the time is never announced every second.
+ *
+ * THE TIMER (experience plan 2f): `timer` is the round timer of the phase that
+ * is on (config/roundTimer.js), and the clock is the SERVER's
+ * (utils/serverClock.js), never this laptop's alone. `onAddMinute` draws +1 min
+ * on the tile while a timer runs or is over.
  */
 export default function ConsolePulse({
   moment, players = 0, answered = 0, voted = 0, everyoneIn = null,
   openedAt = null, voteAt = null, resultsAt = null, arrivals = [], late = 0,
-  onLate = null, now: fixedNow = null,
+  onLate = null, now: fixedNow = null, timer = null, onAddMinute = null,
 }) {
   const ticking = fixedNow === null && ['answer', 'vote'].includes(pulsePhase(moment));
-  const [tick, setTick] = useState(() => Date.now());
+  const [tick, setTick] = useState(() => serverNowMs());
   useEffect(() => {
     if (!ticking) return undefined;
-    setTick(Date.now());
-    const timer = setInterval(() => setTick(Date.now()), 1000);
-    return () => clearInterval(timer);
+    setTick(serverNowMs());
+    const interval = setInterval(() => setTick(serverNowMs()), 1000);
+    return () => clearInterval(interval);
   }, [ticking]);
   const now = fixedNow !== null ? fixedNow : tick;
-  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late });
+  const ringStepMs = prefersReducedMotion() ? 10000 : 0;
+  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late, timer, ringStepMs });
+  const timed = time.state !== 'none';
   return (
     <section className="cpulse" aria-label="The room this round" data-phase={phase}>
       <div className={`cpulse-tile cpulse-room${room.everyoneIn ? ' is-in' : ''}`} data-tile="room">
@@ -44,10 +63,27 @@ export default function ConsolePulse({
           {room.sub}
         </p>
       </div>
-      <div className="cpulse-tile cpulse-time" data-tile="time">
+      <div className={`cpulse-tile cpulse-time${time.state === 'up' ? ' is-up' : ''}`} data-tile="time" data-time-state={time.state}>
         <Eyebrow tone="muted">{time.eyebrow}</Eyebrow>
-        <p className="cpulse-val" data-testid="pulse-time">{time.value}</p>
-        {time.sub ? <p className="cpulse-sub">{time.sub}</p> : null}
+        {timed ? (
+          <div className="cpulse-timer">
+            <TimeRing fraction={time.ring} up={time.state === 'up'} className="cpulse-ring" />
+            <div className="cpulse-timer-text">
+              <p className="cpulse-val" data-testid="pulse-time">{time.value}</p>
+              {time.sub ? <p className="cpulse-sub" data-testid="pulse-time-sub">{time.sub}</p> : null}
+            </div>
+            {onAddMinute ? (
+              <Button variant="quiet" size="sm" className="cpulse-plus" onClick={onAddMinute} title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`} aria-keyshortcuts="+ =">
+                {TIMER_WORDS.plusOne}
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <p className="cpulse-val" data-testid="pulse-time">{time.value}</p>
+            {time.sub ? <p className="cpulse-sub">{time.sub}</p> : null}
+          </>
+        )}
       </div>
       <div className="cpulse-tile cpulse-since" data-tile="since">
         <Eyebrow tone="muted">{since.eyebrow}</Eyebrow>

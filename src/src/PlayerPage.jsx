@@ -40,6 +40,9 @@ import { stateRank, SURVEY_CLOSED } from './utils/playerPhase';
 import { resolveJoinCode, joinPathFor } from './utils/joinCode';
 import { navigateTo } from './auth/navigate';
 import { rankResponses } from './config/responseOrder';
+import RoomTimeLine from './components/RoomTimeLine';
+import { timerOnPhase } from './config/roundTimer';
+import { noteServerNow } from './utils/serverClock';
 
 const API_BASE = window.API_BASE;
 
@@ -455,6 +458,13 @@ function PlayerPage({ event = null } = {}) {
   // An answer the server kept, but late (session flow v3 §4.4): what to say.
   const [lateNotice, setLateNotice] = useState('');
   const [gameState, setGameState] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001
+  /*
+    THE ROUND TIMER AS THE ROOM SEES IT (experience plan 2f; session-start D4,
+    F3): { phase, startedAt, limitMs, extendedMs } from /state and the phase
+    frames, or null (No limit, or the host turned "show the time" off). Drawn
+    as words and a bar under the answer, never seconds, on the SERVER's clock.
+  */
+  const [roomTime, setRoomTime] = useState(null);
   // The latest state for socket handlers registered once (answerReceived).
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
@@ -1017,6 +1027,8 @@ function PlayerPage({ event = null } = {}) {
 
     webSocketClient.onMessage('questionStarted', (data) => {
       console.log('🔌 Player received question started notification:', data);
+      noteServerNow(data && data.serverNow);
+      setRoomTime((data && data.time) || null);
       // Parse the state message to extract question number
       const stateMessage = data.state; // e.g., "GAME#9402 ASK#001"
       if (stateMessage && stateMessage.includes('ASK#')) {
@@ -1033,6 +1045,8 @@ function PlayerPage({ event = null } = {}) {
 
     webSocketClient.onMessage('votingStarted', (data) => {
       console.log('🔌 Player received voting started notification:', data);
+      noteServerNow(data && data.serverNow);
+      setRoomTime((data && data.time) || null);
       // Parse the state message to extract question number
       const stateMessage = data.state; // e.g., "GAME#9402 VOTE#001"
       if (stateMessage && stateMessage.includes('VOTE#')) {
@@ -1051,6 +1065,12 @@ function PlayerPage({ event = null } = {}) {
         // Fallback to checkGameState
         checkGameState();
       }
+    });
+
+    // +1 min (experience plan 2f): the frame carries the timer as it now stands.
+    webSocketClient.onMessage('roundTimeChanged', (data) => {
+      noteServerNow(data && data.serverNow);
+      if (data && data.time) setRoomTime(data.time);
     });
 
     webSocketClient.onMessage('playerAnswered', (data) => {
@@ -1245,6 +1265,7 @@ function PlayerPage({ event = null } = {}) {
       webSocketClient.offMessage('gameStateChanged');
       webSocketClient.offMessage('questionStarted');
       webSocketClient.offMessage('votingStarted');
+      webSocketClient.offMessage('roundTimeChanged');
       webSocketClient.offMessage('playerAnswered');
       webSocketClient.offMessage('playerVoted');
       // Registered above for the feedback round. A handler that outlives its
@@ -2056,9 +2077,15 @@ function PlayerPage({ event = null } = {}) {
     
     try {
       // Get game state from the database
+      const stateSentAt = Date.now();
       const stateRes = await fetch(`${API_BASE}games/${currentGameId}/state`);
       const stateJson = await stateRes.json();
       console.log('🔍 PLAYER: Raw state API response:', stateJson);
+      // The round timer and the server's clock (experience plan 2f).
+      if (stateRes.ok) {
+        noteServerNow(stateJson.serverNow, stateSentAt);
+        setRoomTime(stateJson.time || null);
+      }
       const serverGameState = stateJson.state || 'CREATED';
       // The type, when this response says one. get-game-state.js always names
       // it (falling back to 'call-and-answer' itself), so an OK answer without
@@ -4865,6 +4892,22 @@ function PlayerPage({ event = null } = {}) {
           Everything the room shares — the questions, the results, the discussion — is on
           the main screen. This page is only ever <b>your</b> half.
         </LookUpCue>
+      </>
+    );
+  }
+
+  /*
+    THE TIME LINE under the answer or the ballot (session-start D4, frame
+    1-c3; experience plan 2f): words and a bar, only while this phase's timer
+    is the room's to see. After a player has answered it stays: "Nearly time"
+    is still worth knowing while the host waits.
+  */
+  const roomTimer = timerOnPhase(roomTime, gameState);
+  if (roomTimer && /^(ASK|VOTE)#/.test(String(gameState || ''))) {
+    body = (
+      <>
+        {body}
+        <RoomTimeLine time={roomTimer} className="plr-time" />
       </>
     );
   }

@@ -120,6 +120,49 @@ const running = {
       ],
     },
     /*
+      THE ROUND TIMER (experience plan 2f; session-start D4, F2-F4):
+      components/console/TimeChip.jsx before the opening move (presets
+      config/roundTimer.js TIME_PRESETS, remembered in localStorage); the
+      pulse's Time tile (config/consolePulse.js); +1 min button, + / = key
+      (HostActionBar onAddTime), Remote card (components/RemoteTimeCard.jsx);
+      wall and phone words (components/RoomTimeLine.jsx, roomTimeWords);
+      close at zero opt-in through start-vote { timeUp } (round-timer.js).
+    */
+    {
+      id: 'round-timer',
+      title: 'Giving the room a time',
+      icon: 'Timer',
+      blocks: [
+        {
+          t: 'p',
+          text: 'Beside **Start round** and **Start voting** sits a small time button. It says **No limit** until you choose otherwise. Press it (or Tab to it and press Enter) to pick **No limit**, **1 min**, **2 min**, **3 min** or **5 min** for the round you are about to open. Voting has its own button, and it starts at No limit. What you pick is remembered on this browser for your next round and your next session.',
+        },
+        {
+          t: 'list',
+          items: [
+            'The time is a guide, not a lock. At zero nothing closes: the **Time** tile turns amber and counts over ("Time\'s up · 0:18 over 2:00"), and Your part now says "Time\'s up. Start voting, or give them another minute."',
+            '**+1 min** on the Time tile, the **+** or **=** key, or **+1 min** on your phone Remote gives the room another minute. Once time is up it is a minute from now.',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'round-timer-room',
+      title: 'What the room sees of the time',
+      icon: 'Timer',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            '**Show the time on the room\'s window** is ticked at first. The room\'s window and everyone\'s phone then show words and a thin bar, never seconds: "About 2 minutes left", "About a minute left", "Nearly time", "Time\'s up". Untick it to keep the time to yourself.',
+            '**Close answering at zero** is off unless you tick it. With it on, voting opens by itself when time is up, as long as this page or your phone Remote is open and someone has answered. Start voting still works at any moment.',
+            'With **No limit** the Time tile shows how long the round has been open, as before.',
+            'The time is kept by the server, so a laptop or phone whose clock is wrong still shows the right time left.',
+          ],
+        },
+      ],
+    },
+    /*
       VOTE (Call & Answer only: hostControls TYPES_THAT_SKIP_VOTE). GameHostPage
       ~8622: kicker "Vote for the best response" ("Vote for the best title"
       with a picture), question recap, every answer numbered, no name or points
@@ -207,6 +250,7 @@ const running = {
             { keys: '↑ ↓', text: 'Page through the answers when they do not all fit.' },
             { keys: 'U', text: 'Show or hide the names on the room meter.' },
             { keys: 'J', text: 'Show or hide the join QR and code.' },
+            { keys: '+  =', text: 'One more minute on the round\'s time, while a time is set.' },
             { keys: 'S', text: 'Show or hide the scoreboard (Trivia and Call & Answer).' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up.' },
             { keys: '\\', text: 'Open and close the Session panel.' },

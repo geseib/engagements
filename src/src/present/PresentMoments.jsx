@@ -21,6 +21,7 @@ import Heading from '../components/ui/Heading';
 import Pips from '../components/ui/Pips';
 import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
+import RoomTimeLine from '../components/RoomTimeLine';
 import TallyRow from '../components/ui/TallyRow';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 import {
@@ -61,11 +62,17 @@ export function Meter({ done, of }) {
   return <Pips variant="meter" done={done} of={of} className="present-meter" />;
 }
 
-function CountsFoot({ counts }) {
+/*
+  THE TIME LINE sits in the foot beside the pips (session-start D4, frame
+  1-b7): words and a draining bar, never seconds, only when the host left
+  "show the time" on (experience plan 2f).
+*/
+function CountsFoot({ counts, time = null }) {
   return (
     <div className="present-foot">
       <Meter done={counts.done} of={counts.of} />
       <span>{counts.line}</span>
+      {time ? <RoomTimeLine time={time} className="present-time" /> : null}
     </div>
   );
 }
@@ -212,7 +219,7 @@ export function PresentAnswering({ model }) {
       <div className="present-main">
         <RoomQuestion model={model} />
       </div>
-      <CountsFoot counts={model.counts} />
+      <CountsFoot counts={model.counts} time={model.time} />
     </div>
   );
 }
@@ -250,6 +257,7 @@ export function PresentVoting({ model }) {
           <Meter done={model.counts.done} of={model.counts.of} />
           <span className="present-foot-count">{model.counts.line}</span>
           {shows(rc, 'cue') ? <span {...rcAttrs(rc, 'cue')}>{model.lead}</span> : null}
+          {model.time ? <RoomTimeLine time={model.time} className="present-time" /> : null}
         </div>
       </div>
     );
@@ -263,7 +271,7 @@ export function PresentVoting({ model }) {
         <TaskLine task={model.task} rc={rc} />
         <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(rc, 'cue')}>{model.lead}</p>
       </div>
-      <CountsFoot counts={model.counts} />
+      <CountsFoot counts={model.counts} time={model.time} />
     </div>
   );
 }

@@ -52,6 +52,9 @@ import { workflowStrip } from './config/workflowStrip';
 import RemoteStepDots from './components/RemoteStepDots';
 import { scoreboardRequest } from './config/scoreboard';
 import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
+import RemoteTimeCard from './components/RemoteTimeCard';
+import { timerOnPhase, timeLeft } from './config/roundTimer';
+import { noteServerNow, serverNowMs } from './utils/serverClock';
 
 /**
  * The host's phone.
@@ -410,6 +413,7 @@ function HostRemote() {
       // answer/vote progress, and it computes that progress with the same
       // player deduplication the roster uses, so the remote and the host
       // screen cannot disagree about whether the room is finished.
+      const sentAt = Date.now();
       const res = await authFetch(`${apiBase()}games/${id}/host-state`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
@@ -433,7 +437,10 @@ function HostRemote() {
         if (res.status === 401 || res.status === 403 || res.status === 404) checkAccess(id);
         return;
       }
-      setSnapshot(await res.json());
+      const body = await res.json();
+      // The server's clock, for the time card (experience plan 2f).
+      noteServerNow(body && body.serverNow, sentAt);
+      setSnapshot(body);
       setConnected(true);
     } catch {
       if (activeGameRef.current === id) setConnected(false);
@@ -515,6 +522,71 @@ function HostRemote() {
   // Its own fact since 18 Oct (stageFocus.join): a panel beside what is up, not a takeover.
   const joinOnWall = joinShown(stageFocus);
   const round = snapshot?.currentQuestion || null;
+
+  /*
+    THE ROUND TIMER ON THE PHONE (experience plan 2f; session-start D5 C2):
+    the time card beside the meter, +1 min, and the opt-in close at zero. The
+    phone holds no socket, so the timer comes off the two-second /host-state
+    poll (hostTime), measured on the server's clock. The close at zero fires
+    from here too, so it works with the laptop shut: the server opens voting
+    once however many screens ask, and only when ITS clock says zero.
+  */
+  const remoteTimer = timerOnPhase(snapshot && snapshot.hostTime, snapshot && snapshot.state);
+  const remoteTimerKey = remoteTimer
+    ? [remoteTimer.phase, remoteTimer.startedAt, remoteTimer.limitMs, remoteTimer.extendedMs, remoteTimer.closes].join('|')
+    : '';
+  const remoteTimerRef = useRef(remoteTimer);
+  remoteTimerRef.current = remoteTimer;
+  const [timeBusy, setTimeBusy] = useState(false);
+  const postTimer = useCallback(async (which) => {
+    const t = remoteTimerRef.current;
+    const timed = requestFor(which, { gameId, round, phase: t && t.phase });
+    if (!timed) return null;
+    const sentAt = Date.now();
+    try {
+      const res = await authFetch(`${apiBase()}${timed.path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timed.body),
+      });
+      const payload = await res.json().catch(() => ({}));
+      noteServerNow(payload.serverNow, sentAt);
+      if (res.ok) pollState(gameId);
+      return { ok: res.ok, status: res.status, payload };
+    } catch {
+      return null;
+    }
+  }, [gameId, round, pollState]);
+  const addMinuteHere = useCallback(async () => {
+    setTimeBusy(true);
+    const reply = await postTimer('add-time');
+    setTimeBusy(false);
+    if (!reply) setError('No connection. Check signal and try again.');
+    else if (!reply.ok && reply.status !== 409) setError('Another minute was not added. Try again.');
+  }, [postTimer]);
+  const answeredSoFar = Number(snapshot && snapshot.answerProgress && snapshot.answerProgress.answersReceived) || 0;
+  const closedAtZeroRef = useRef('');
+  const [closeTick, setCloseTick] = useState(0);
+  useEffect(() => {
+    const t = remoteTimerRef.current;
+    if (!t || !t.closes || !String(t.phase).startsWith('ASK#') || answeredSoFar === 0) return undefined;
+    if (closedAtZeroRef.current === remoteTimerKey) return undefined;
+    const tl = timeLeft(t, serverNowMs());
+    if (!tl) return undefined;
+    let retry = null;
+    const fireClose = () => {
+      closedAtZeroRef.current = remoteTimerKey;
+      postTimer('close-at-zero').then((reply) => {
+        const p = reply && reply.payload;
+        if (p && p.notDue && Number(p.remainingMs) >= 0) {
+          retry = setTimeout(() => { closedAtZeroRef.current = ''; setCloseTick((n) => n + 1); }, Number(p.remainingMs) + 250);
+        }
+      });
+    };
+    const wait = tl.up ? null : setTimeout(fireClose, tl.leftMs + 50);
+    if (tl.up) fireClose();
+    return () => { if (wait) clearTimeout(wait); if (retry) clearTimeout(retry); };
+  }, [remoteTimerKey, answeredSoFar, postTimer, closeTick]);
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
 
@@ -1666,7 +1738,11 @@ function HostRemote() {
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : null}
+              {remoteTimer ? (
+                <RemoteTimeCard timer={remoteTimer} onAddMinute={addMinuteHere} busy={timeBusy} />
+              ) : null}
+              {progress.applicable ? null : (
                 <p className="hr-roster">
                   <Icon name="UsersThree" weight="bold" size={18} color="var(--muted)" />
                   {rosterCount === null ? 'Counting the room…'

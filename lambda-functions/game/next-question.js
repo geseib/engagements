@@ -5,6 +5,7 @@ const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { timerForOpening, openingClauses, stateAfterOpening, timerView } = require('./round-timer');
 const { endSession } = require('./session-end');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
@@ -1231,24 +1232,32 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Step 2: Update game state
+    // Step 2: Update game state, with the round's timer (round-timer.js):
+    // PhaseStartedAt always, the time given when the host chose one (the
+    // body's `time`, else this session's last choice), and a previous
+    // round's timer removed when this one has No limit.
+    const roundTimer = openingClauses(newState, now, timerForOpening(body, gameState.Item, 'ask'), 'ask');
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #updatedAt = :updatedAt',
+      UpdateExpression: `SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #updatedAt = :updatedAt, ${roundTimer.set.join(', ')}`
+        + (roundTimer.remove.length ? ` REMOVE ${roundTimer.remove.join(', ')}` : ''),
       ExpressionAttributeNames: {
         '#state': 'State',
         '#currentQuestionId': 'CurrentQuestionId',
         '#lessonNumber': 'LessonNumber',
-        '#updatedAt': 'UpdatedAt'
+        '#updatedAt': 'UpdatedAt',
+        ...roundTimer.names
       },
       ExpressionAttributeValues: {
         ':state': newState,
         ':questionId': nextQuestion.questionId,
         ':lessonNumber': newLessonNumber,
-        ':updatedAt': now
+        ':updatedAt': now,
+        ...roundTimer.values
       }
     }));
+    const timedState = stateAfterOpening(gameState.Item, newState, now, roundTimer.timer);
 
     // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
     // The usage stats ride the same guard: by type for the platform, the team and
@@ -1349,8 +1358,20 @@ exports.handler = async (event) => {
       state: `GAME#${gameId} ASK#${questionNumber}`,
       questionNumber: questionNumber,
       lessonNumber: newLessonNumber,
-      timestamp: now
+      timestamp: now,
+      // The room's view of the timer (words and a bar), or null; the server's
+      // clock so every screen measures time left against the same reference.
+      time: timerView(timedState),
+      serverNow: Date.now()
     });
+    // The host's screens get the whole timer (whether it closes at zero, and
+    // the time when the room is not shown it), so a round opened from the
+    // phone Remote is timed on the laptop too.
+    if (timedState.TimeLimitMs) {
+      await broadcastToGame(gameId, {
+        type: 'roundTimeChanged', gameId, time: timerView(timedState, { host: true }), serverNow: Date.now()
+      }, { hostsOnly: true });
+    }
 
     // The list is one shorter than it was. Told separately, and never folded
     // into questionStarted: the stage's queue panel must follow it now, not at
@@ -1384,6 +1405,8 @@ exports.handler = async (event) => {
         lessonNumber: newLessonNumber,
         categoryId: nextQuestion.categoryId,
         message: 'Next question selected successfully',
+        hostTime: timerView(timedState, { host: true }),
+        serverNow: Date.now(),
         // Whether this round came off the host's running order, and what is
         // left of it. The surface that pressed the button re-renders from this
         // rather than guessing which entry was consumed.

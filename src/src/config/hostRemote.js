@@ -194,10 +194,21 @@ export function needsConfirmation(action) {
  * could resolve the wrong one; passing null for those is treated as "not ready"
  * rather than defaulting to 1.
  */
-export function requestFor(actionId, { gameId, round } = {}) {
+export function requestFor(actionId, { gameId, round, phase } = {}) {
   if (!gameId) return null;
 
   switch (actionId) {
+    // THE ROUND TIMER (experience plan 2f). +1 min names the phase it was
+    // pressed on, so a press that lands after the room moved adds nothing to
+    // the next phase (stage-beat.js addMinute). The close at zero is the same
+    // start-vote, with `timeUp`: the server checks its own clock and STATE.
+    case 'add-time':
+      if (!phase) return null;
+      return { path: `games/${gameId}/stage-beat`, body: { addTime: true, phase } };
+    case 'close-at-zero':
+      if (!round) return null;
+      return { path: `games/${gameId}/start-vote`, body: { questionNumber: round, timeUp: true } };
+
     // `start` is round 1 (roundStep's LOBBY primary); next-question accepts
     // CREATED and STARTED, so the endpoint that advances also opens.
     case 'start':

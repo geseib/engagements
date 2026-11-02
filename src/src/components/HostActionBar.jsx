@@ -99,6 +99,19 @@ export default function HostActionBar({
     page does not track (a dialog of a child component) can still be seen.
   */
   ignoreKey = null,
+  /*
+    THE TIME CHIP (experience plan 2f; session-start D4): a node drawn BEFORE
+    the primary on an opening move (Start round N, Start voting), so the time
+    is chosen where the phase is opened. The page decides when; the bar only
+    places it. Space still presses the primary, even with the chip focused.
+  */
+  timeChip = null,
+  /*
+    +1 MIN ON THE KEYBOARD (`+` or `=`), with the same guard set as the advance
+    keys: never while typing, never under an overlay, never on a held key.
+    null while no timer runs, so the keys stay the browser's.
+  */
+  onAddTime = null,
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
@@ -221,6 +234,25 @@ export default function HostActionBar({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [shortcutsEnabled, onBackKey, ignoreKey]);
 
+  // + / = — one more minute on the round's timer.
+  useEffect(() => {
+    if (!shortcutsEnabled || typeof onAddTime !== 'function') return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key !== '+' && event.key !== '=') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.repeat) return;
+      if (isTypingTarget(event.target)) return;
+      if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
+      if (event.target?.closest?.('.setup-panel')) return;
+      event.preventDefault();
+      onAddTime();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcutsEnabled, onAddTime, ignoreKey]);
+
   if (!primary) return null;
 
   return (
@@ -269,6 +301,7 @@ export default function HostActionBar({
               <span>{labelOf(tertiary)}</span>
             </button>
           )}
+          {timeChip}
           <button
             type="button"
             className={`btn-primary host-action-bar__primary${armClass(primary)}`}

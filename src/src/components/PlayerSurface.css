@@ -451,6 +451,13 @@
   color: var(--plr-muted);
 }
 
+/* The round timer's words and bar under the answer (experience plan 2f, frame 1-c3). */
+.plr-time {
+  display: flex;
+  margin: 14px 0 0;
+  font-size: var(--plr-t-body);
+}
+
 .plr-count {
   margin: 7px 0 0;
   font-size: var(--plr-t-meta);
