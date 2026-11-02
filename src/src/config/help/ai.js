@@ -34,11 +34,14 @@ const aiBuilders = {
       QuestionSetUploadPanel.jsx:451-462 ("Generate with AI", button "AI <type>
       builder"); :729 survey "Write it from my material". AdminPage.jsx and
       HostQuestionSetsDialog.jsx:175-180 pick the builder: trivia, poll, survey,
-      else the scenario builder (Call & Answer, Wavelength). Footer buttons:
-      TriviaAIBuilder "Generate Trivia Questions", PollAIBuilder "Generate Poll
-      Questions", AIScenarioBuilder "Generate Scenarios" (its Wavelength form
-      too), SurveyAIBuilder "Write the survey". useDraftRun hands a finished run
-      to DraftReview.
+      else the scenario builder (Call & Answer, Wavelength). Since experience
+      plan 5e all four open in one dusk window (AIBuilderDialog.jsx: Modal, the
+      shared head and foot, sentence case). Foot buttons: TriviaAIBuilder
+      "Generate trivia questions", PollAIBuilder "Generate poll questions",
+      AIScenarioBuilder "Generate scenarios" (or "Generate wavelength prompts",
+      "Generate trivia questions", "Generate poll questions" for its other
+      formats), SurveyAIBuilder "Write the survey"; review "Save N as a new set".
+      useDraftRun hands a finished run to DraftReview.
     */
     {
       id: 'what-builders-do',
@@ -51,7 +54,7 @@ const aiBuilders = {
             { title: 'Open New question set', text: 'In the console\'s Question sets (or Your question sets on the host side), start a new set and pick the engagement type. Under **Generate with AI**, press the AI builder button for that type. For a survey the button is **Write it from my material**.' },
             { title: 'Check Save into', text: 'It is at the top of the form. See Choosing where it is saved, below.' },
             { title: 'Describe it', text: 'Fill in the form for that type (What each builder asks, below). Building with AI, in the builder guides, has advice on describing it well.' },
-            { title: 'Generate', text: 'Press the button at the foot, for example **Generate Trivia Questions**. It runs on the server; you can close the builder straight away. In the Call & Answer and Wavelength builder a line above the button says what will be written, and while it runs, what is being written and that closing is safe.' },
+            { title: 'Generate', text: 'Press the button at the foot, for example **Generate trivia questions**. It runs on the server; you can close the builder straight away (the X, **Cancel** or Esc). In the Call & Answer and Wavelength builder a line above the button says what will be written, and while it runs, what is being written and that closing is safe.' },
             { title: 'Review the draft', text: 'When it is done, the review opens, or the bell tells you it is ready. Nothing is saved until you accept. See Drafts and the bell.' },
           ],
         },
@@ -106,16 +109,15 @@ const aiBuilders = {
       ],
     },
     /*
-      Labels read on dev 22 Oct 2026 and in code: TriviaAIBuilder (Topic/Subject *,
-      Target Audience, Difficulty Level, Categories / Questions in each
-      category (CountField SetSizeField, max 100), Number of Answer Choices
-      4-6, Number of Correct Answers 1-3, Must Have Categories, Additional
-      Requirements); PollAIBuilder (RoundKindPicker "What will the room do with
-      each one?", Topic/Subject, Category, Target Audience, Complexity Level,
-      count, "Kinds of poll question"); AIScenarioBuilder (direction + ideas or
-      "Or start from a saved template", then Question Set Title,
-      Context/Background, Target Audience, Categories, Must Have Categories,
-      Level of Detail (Brief — 1 sentence / Standard — 2 sentences /
+      Labels in code since experience plan 5e (sentence case): TriviaAIBuilder
+      (Topic or subject *, Audience, Difficulty, Categories / Questions in each
+      category (CountField SetSizeField, max 100), Answer choices 4-6, Correct
+      answers 1-3, Categories it must include, Anything else it should know);
+      PollAIBuilder (RoundKindPicker "What will the room do with each one?",
+      Topic or subject, Category, Audience, Complexity, count, "Kinds of poll
+      question"); AIScenarioBuilder (direction + ideas or "Or start from a saved
+      template", then Set title, Context or background, Audience, Categories,
+      Categories it must include, Level of detail (Brief — 1 sentence / Standard — 2 sentences /
       Detailed — up to 3 sentences), "What the AI is asked" (the card's base
       prompt, read-only, "Tuned in your library" or "Built in", "Change
       card"), "Your additions" (empty, sent separately); the status line
@@ -973,8 +975,8 @@ const ai = {
       "locked — left alone", "empty — will be filled in", "yours — will be
       refined"; "Fill in the rest"; held proposals "These came back rewritten,
       not refined." with "Keep mine"; per-field "Undo <field>"; "AI wrote …".
-      FieldLock.jsx padlock beside the label. Seed field: Topic/Subject
-      (trivia, poll), Context/Background (scenario). Not in SurveyAIBuilder.
+      FieldLock.jsx padlock beside the label. Seed field: Topic or subject
+      (trivia, poll), Context or background (scenario). Not in SurveyAIBuilder.
     */
     {
       id: 'field-locks',
@@ -984,7 +986,7 @@ const ai = {
         {
           t: 'steps',
           items: [
-            { title: 'Write the one field it works from', text: 'Topic/Subject in Trivia and Poll, Context/Background in Call & Answer and Wavelength.' },
+            { title: 'Write the one field it works from', text: '**Topic or subject** in Trivia and Poll, **Context or background** in Call & Answer and Wavelength.' },
             { title: 'Lock what you have decided', text: 'Press the padlock beside a field\'s label. A locked field is never changed.' },
             { title: 'Press Let AI fill this in', text: 'The panel lists each field: locked (left alone), empty (will be filled in) or yours (will be refined). Press **Fill in the rest**.' },
             { title: 'Check what it wrote', text: 'It says which fields it wrote, with an undo for each. If it rewrote something of yours rather than refining it, it changes nothing and shows both: choose **Keep mine** or the AI\'s.' },

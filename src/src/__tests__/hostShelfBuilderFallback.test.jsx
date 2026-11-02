@@ -399,10 +399,11 @@ describe('the worker already made the set: unchanged', () => {
     // rejects: uploading a second copy. The importer refuses to write over a
     // set that exists, and would report that as a failure over a set that is
     // sitting on the list.
-    await screen.findByRole('dialog', { name: /^edit fresh draft$/i });
+    // The set's page (experience plan 5e), named for the set.
+    const place = await screen.findByRole('dialog', { name: /^fresh draft$/i });
     expect(uploads()).toHaveLength(0);
-    const shelf = screen.getByRole('dialog', { name: /your question sets/i });
-    expect(within(shelf).getByRole('status')).toHaveTextContent(
+    // The shelf's sentence travels onto the set's page, which replaced it.
+    expect(within(place).getAllByRole('status')[0]).toHaveTextContent(
       '“Fresh Draft” was created while the generator ran. It is switched off until you review it and turn it on.'
     );
   });

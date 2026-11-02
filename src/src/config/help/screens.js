@@ -33,6 +33,7 @@ export const HELP_FOR_SCREEN = {
   'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // GameSetupDialog's Quick start lane
   'host-before-start': { guide: 'host-quick-start', section: 'step-2-start' },   // SetupBeforeStart (where a created session lands)
   'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' }, // HostQuestionSetsDialog header
+  'host-set-editor': { guide: 'host-game-setup', section: 'editing-a-set' },     // QuestionSetPage bar (/sets/<id>)
   'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },       // SessionHistoryPanel header
   'host-reports': { guide: 'host-reporting', section: 'saving-report' },         // HostReportsDialog header; AdminPage Reports
   'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' }, // RoomScreenChooser head

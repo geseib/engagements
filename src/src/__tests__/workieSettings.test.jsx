@@ -146,7 +146,7 @@ describe('the editor shows Workie as one setting with two plain rows', () => {
     renderEditor();
     expect(screen.getByTestId('workie-group-help').textContent).toMatch(/after each round/i);
     expect(screen.getByTestId('workie-voice-help').textContent).toMatch(/register/i);
-    expect(screen.getByTestId('workie-prompt-help').textContent).toMatch(/summary approach/i);
+    expect(screen.getByTestId('workie-prompt-help').textContent).toMatch(/how workie reads each round/i);
   });
 });
 
@@ -332,7 +332,7 @@ describe('the picker never offers a scope the writer would refuse', () => {
     mockEditorApi();
     renderEditor();
     const help = screen.getByTestId('workie-prompt-help').textContent;
-    expect(help).toMatch(/1 prompt for other game types are hidden/);
+    expect(help).toMatch(/1 prompt for other formats are hidden/);
     expect(help).not.toMatch(/2 prompts/);
   });
 

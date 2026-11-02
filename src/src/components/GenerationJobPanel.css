@@ -1,4 +1,4 @@
-/* skin-allowance: colour=13 font=0 primary=1 */
+/* skin-allowance: colour=0 font=0 primary=1 */
 /* ============================================================================
    THE GENERATION JOB PANEL — components/GenerationJobPanel.jsx
 
@@ -27,15 +27,21 @@
    ========================================================================== */
 
 .gjp {
-  --gjp-text: #2c3e50;
-  --gjp-muted: #5b6b7c;
-  --gjp-danger: #b3261e;
-  --gjp-danger-bg: #fdeceb;
-  --gjp-warn: #8a5300;
-  --gjp-warn-bg: #fdf5e3;
-  --gjp-ok: #1b6b4a;
-  --gjp-rule: #e3e8ee;
-  --gjp-quiet: #f8f9fa;
+  /* ROLES, so the panel follows its window's theme: the builders open in a
+     dusk dialog since experience plan 5e (components/AIBuilderDialog.jsx).
+     Measured on dusk in __tests__/aiBuilderDialogPalette.test.js. */
+  --gjp-text: var(--text);
+  --gjp-muted: var(--muted);
+  --gjp-danger: var(--danger-text);
+  --gjp-danger-bg: rgb(var(--danger-rgb) / .10);
+  --gjp-danger-rule: rgb(var(--danger-rgb) / .35);
+  --gjp-warn: var(--accent-text);
+  --gjp-warn-bg: rgb(var(--warn-rgb) / .10);
+  --gjp-warn-rule: rgb(var(--warn-rgb) / .35);
+  --gjp-ok: var(--success-text);
+  --gjp-rule: var(--rule);
+  --gjp-quiet: var(--bg);
+  --gjp-sheen: rgb(var(--glow-rgb) / .22);
   --gjp-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   color: var(--gjp-text);
@@ -111,7 +117,7 @@
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: var(--primary, #1B2942);
+  background: var(--primary);
   transition: width .35s ease;
 }
 
@@ -120,7 +126,7 @@
   inset: 0 auto 0 0;
   width: 34%;
   border-radius: 3px;
-  background: linear-gradient(90deg, transparent, rgba(27, 41, 66, .28), transparent);
+  background: linear-gradient(90deg, transparent, var(--gjp-sheen), transparent);
   animation: gjp-sweep 1.9s linear infinite;
 }
 
@@ -196,7 +202,7 @@
 .gjp-badbox {
   margin: 0 0 14px;
   padding: 12px 15px;
-  border: 1px solid rgba(179, 38, 30, .35);
+  border: 1px solid var(--gjp-danger-rule);
   border-left: 3px solid var(--gjp-danger);
   border-radius: 6px;
   background: var(--gjp-danger-bg);
@@ -210,7 +216,7 @@
   background: var(--gjp-danger-bg);
   color: var(--gjp-danger);
   font-family: var(--gjp-mono);
-  font-size: 13.5px;
+  font-size: 13px;
   word-break: break-word;
 }
 
@@ -232,7 +238,7 @@
   align-items: flex-start;
   padding: 9px 12px;
   margin-bottom: 6px;
-  border: 1px solid rgba(138, 83, 0, .3);
+  border: 1px solid var(--gjp-warn-rule);
   border-radius: 6px;
   background: var(--gjp-warn-bg);
   font-size: 14px;

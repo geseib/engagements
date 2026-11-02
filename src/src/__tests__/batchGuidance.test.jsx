@@ -86,7 +86,7 @@ describe('the trivia builder', () => {
   test('making a new set shows no guidance box', () => {
     mockApi('admin/ai-generate-trivia', []);
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} />);
-    expect(screen.getByText('Configure Your Trivia Questions')).toBeInTheDocument();
+    expect(screen.getByText('Describe the trivia you want')).toBeInTheDocument();
     expect(screen.queryByLabelText(LABEL)).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe('the trivia builder', () => {
     const posted = mockApi('admin/ai-generate-trivia', triviaItems(2));
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
     fireEvent.change(screen.getByLabelText(LABEL), { target: { value: `  ${GW}  ` } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].batchGuidance).toBe(GW);
     expect(posted[0].customPrompt).not.toContain('Washington');
@@ -118,7 +118,7 @@ describe('the trivia builder', () => {
     const posted = mockApi('admin/ai-generate-trivia', triviaItems(2));
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
     fireEvent.change(screen.getByLabelText(LABEL), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).not.toHaveProperty('batchGuidance');
   });
@@ -127,7 +127,7 @@ describe('the trivia builder', () => {
     mockApi('admin/ai-generate-trivia', triviaItems(2));
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
     fireEvent.change(screen.getByLabelText(LABEL), { target: { value: GW } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     const note = await screen.findByTestId('git-guidance');
     expect(note).toHaveTextContent(`Your guidance: “${GW}”`);
     await screen.findByRole('button', { name: /Add 2 to “Historic Figures”/ });
@@ -154,7 +154,7 @@ describe('the call-and-answer builder', () => {
     render(<AIScenarioBuilder onClose={() => {}} onScenariosGenerated={() => {}} engagementType="call-and-answer" {...props} />);
     await waitFor(() => expect(authFetch).toHaveBeenCalled());
     fireEvent.click(await screen.findByTestId('scenario-continue-blank'));
-    return screen.getByRole('button', { name: /Generate Scenarios/ });
+    return screen.getByRole('button', { name: /Generate scenarios/ });
   }
 
   test('making a new set shows no guidance box', async () => {
@@ -169,7 +169,7 @@ describe('the call-and-answer builder', () => {
     const box = screen.getByLabelText(LABEL);
     expect(box).toHaveAttribute('maxLength', '500');
     expect(screen.getByText('Applies to this batch only.')).toBeInTheDocument();
-    const context = screen.getByText('Context/Background');
+    const context = screen.getByText('Context or background');
     expect(box.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -214,7 +214,7 @@ describe('the call-and-answer builder', () => {
 const fs = require('fs');
 const path = require('path');
 
-describe('the two stylesheets, measured on the white builder modal', () => {
+describe('the two stylesheets, measured on the builders\' dusk window', () => {
   const read = (file) => fs.readFileSync(path.join(__dirname, '..', 'components', file), 'utf8');
   const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
   const lum = (hex) => {
@@ -223,19 +223,24 @@ describe('the two stylesheets, measured on the white builder modal', () => {
   };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const token = (css, name) => new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css)[1];
+  /* Since experience plan 5e the builders open in one dusk dialog
+     (components/AIBuilderDialog.jsx), so both sheets point at roles; resolved
+     per skin through the harness, on the dialog's --surface. */
+  const H = require('../testing/skinHarness');
+  const SKIN_IDS = [...new Set(H.CASES.map(([skin]) => skin))];
 
-  test('the hint clears AA on white, and outranks the modal\'s `.modal-content p`', () => {
+  test.each(SKIN_IDS)('%s: the hint clears AA on the dusk dialog, one class deeper than a bare hint', (skin) => {
     const css = read('BatchGuidanceField.css');
-    expect(ratio(token(css, '--bgf-muted'), '#ffffff')).toBeGreaterThanOrEqual(4.5);
-    // `.modal-content p` (styles.css) is one class and one element; a lone
-    // `.bgf-hint` loses to it and the hint renders #666 with a 25px margin.
+    const dusk = { skin, theme: 'dark' };
+    expect(H.ratio(H.scopeVar(css, '.bgf {', '--bgf-muted', dusk), H.role('--surface', dusk))).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/^\.bgf \.bgf-hint \{[^}]*color: var\(--bgf-muted\)/m);
     expect(css).not.toMatch(/^\.bgf-hint \{/m);
   });
 
-  test('the guidance note clears AA and outranks `.modal-content p` too', () => {
+  test.each(SKIN_IDS)('%s: the guidance note clears AA on its chip ground', (skin) => {
     const css = read('GeneratedItemsTable.css');
-    expect(ratio(token(css, '--git-text'), token(css, '--git-chip-bg'))).toBeGreaterThanOrEqual(4.5);
+    const dusk = { skin, theme: 'dark' };
+    expect(H.ratio(H.scopeVar(css, '.git {', '--git-text', dusk), H.scopeVar(css, '.git {', '--git-chip-bg', dusk))).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/^\.git \.git-guidance \{[^}]*color: var\(--git-text\)/m);
   });
 
@@ -263,7 +268,7 @@ describe('a resumed job still says what guidance it was made with', () => {
     mockApi('admin/ai-generate-trivia', triviaItems(2));
     const first = render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
     fireEvent.change(screen.getByLabelText(LABEL), { target: { value: GW } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     await screen.findByTestId('git-guidance');
     expect(recallGenerationJob(TRIVIA)).toMatchObject({ jobId: 'job-g', batchGuidance: GW });
     first.unmount();
@@ -285,7 +290,7 @@ describe('a resumed job still says what guidance it was made with', () => {
     const TRIVIA = `${window.API_BASE}admin/ai-generate-trivia`;
     mockApi('admin/ai-generate-trivia', triviaItems(2));
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} appendTo={appendTo()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     await screen.findByRole('table');
     expect(recallGenerationJob(TRIVIA)).not.toHaveProperty('batchGuidance');
   });

@@ -14,25 +14,21 @@
  * Not named *token*: .gitignore has an unanchored `*token*`.
  */
 module.exports = {
-  "buttonFamilies": 107,
+  "buttonFamilies": 102,
   "dialogs": {
     "GameHostPage.jsx": 6,
     "buildroom/BuildCrew.jsx": 3,
     "buildroom/BuildRoomPage.jsx": 2,
-    "components/AIScenarioBuilder.jsx": 1,
     "components/AddQuestionsDialog.jsx": 1,
     "components/EventDetailsDialog.jsx": 1,
     "components/EventItemDialog.jsx": 1,
     "components/GameReport.jsx": 1,
     "components/NewSetDialog.jsx": 1,
-    "components/PlanRequestDialog.jsx": 1,
-    "components/PollAIBuilder.jsx": 2,
-    "components/SurveyAIBuilder.jsx": 2,
-    "components/TriviaAIBuilder.jsx": 1
+    "components/PlanRequestDialog.jsx": 1
   },
   "closeGlyphs": {},
   "primaryButtons": {
-    "BuilderPage.css": 2,
+    "BuilderPage.css": 1,
     "auth/auth.css": 1,
     "buildroom/BuildRoom.css": 1,
     "components/AIPromptManager.css": 1,
@@ -178,10 +174,6 @@ module.exports = {
       "projector": 1
     },
     "components/PromptPreflightPanel.jsx": {
-      "the summary": 1
-    },
-    "components/QuestionSetEditor.jsx": {
-      "game": 2,
       "the summary": 1
     },
     "components/QuestionSetUploadPanel.jsx": {
@@ -367,7 +359,6 @@ module.exports = {
   },
   "helpFalseClaims": {},
   "buttonFamilyNames": [
-    "add-option-btn",
     "add-set-buttons",
     "adjl-btn",
     "adm-sections-btn",
@@ -419,7 +410,6 @@ module.exports = {
     "mobile-submit-btn",
     "mode-btn",
     "modq-btn",
-    "nav-button",
     "nbell-btn",
     "obill-btn",
     "ovw-btn",
@@ -433,7 +423,6 @@ module.exports = {
     "porgs-head-btn",
     "preq-btn",
     "present-strip-btn",
-    "preset-btn",
     "primary-action-btn",
     "priv-btn",
     "prompt-buttons",
@@ -445,7 +434,6 @@ module.exports = {
     "quickstart-nav-btn",
     "quickstart-welcome-btn",
     "regenerate-ai-btn",
-    "remove-option-btn",
     "revert-btn",
     "rp-btn",
     "rsc-btn",
@@ -454,7 +442,6 @@ module.exports = {
     "schs-btn",
     "scr-seg-btn",
     "select-question-btn",
-    "set-correct-btn",
     "setup-q__btn",
     "sks-btn",
     "slist-btn",

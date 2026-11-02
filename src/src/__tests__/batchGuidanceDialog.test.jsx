@@ -179,7 +179,7 @@ describe('end to end: the panel, the dialog, the builder, the wire', () => {
     expect(await screen.findByTestId('git-guidance')).toHaveTextContent(`Your guidance: “${GW}”`);
 
     // Back to the form: the builder's own box holds the same text, to edit.
-    fireEvent.click(screen.getByRole('button', { name: /Back to Configuration/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Back to the form/ }));
     expect(screen.getByLabelText(LABEL)).toHaveValue(GW);
   });
 });

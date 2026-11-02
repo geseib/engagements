@@ -340,7 +340,7 @@ const questionSets = {
       ],
     },
     /*
-      QuestionSetEditor.jsx ("Edit Question Set"): Details (Save Changes /
+      QuestionSetEditor.jsx ("Edit question set"): Details (Save Changes /
       Save details as my copy; saved in place, the AI banner says edits "are
       live for anyone hosting from it"), Workie ("Its voice", "How it sums up
       each round"), Questions (QuestionsPanel.jsx), Versions, Images
