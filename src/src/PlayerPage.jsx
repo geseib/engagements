@@ -229,9 +229,13 @@ export const rankHolding = (votes, answerIndex) =>
  * redacts correctly rather than printing nothing.
  */
 export function rankedResultsFrom(data) {
+  // `ballot` (phone-comments B1) is the 1-based place the room voted under,
+  // the stable anchor a reply stores; carried only when the server sent one,
+  // so a payload from before Phase 3c keeps its position anchor.
+  const withBallot = (n) => (Number.isInteger(Number(n)) && Number(n) > 0 ? { ballot: Number(n) } : {});
   if (data && Array.isArray(data.leaderboard)) {
     return data.leaderboard.map((row) => ({
-      answer: row.answer, playerName: row.playerName, rank: row.rank,
+      answer: row.answer, playerName: row.playerName, rank: row.rank, ...withBallot(row.ballot),
     }));
   }
   if (data && data.voteTallies && typeof data.voteTallies === 'object'
@@ -246,14 +250,18 @@ export function rankedResultsFrom(data) {
       totalScore: Number(t.totalScore) || 0,
       firstPlace: Number(t.firstPlace) || 0,
       shownPlace: Number(key),
+      // The key is the display position, so its ballot is key + 1; a tally
+      // from 3c on also says so itself.
+      ballot: Number(t.ballot) || Number(key) + 1,
+      votes: (Number(t.firstPlace) || 0) + (Number(t.secondPlace) || 0) + (Number(t.thirdPlace) || 0),
     }));
     return rankResponses(rows).map((row) => ({
-      answer: row.answer, playerName: row.playerName, rank: row.rank,
+      answer: row.answer, playerName: row.playerName, rank: row.rank, ballot: row.ballot, votes: row.votes,
     }));
   }
   if (data && Array.isArray(data.answers)) {
     return data.answers.map((row, i) => ({
-      answer: row.answer, playerName: row.playerName, rank: i + 1,
+      answer: row.answer, playerName: row.playerName, rank: i + 1, ...withBallot(row.ballot),
     }));
   }
   return [];
@@ -1690,6 +1698,7 @@ function PlayerPage({ event = null } = {}) {
       questionNumber: draft.questionNumber || feedbackNumber,
       anchorKind: draft.anchorKind,
       anchorRef: draft.anchorRef,
+      anchorBasis: draft.anchorBasis,
       anchorLabel: draft.anchorLabel,
       anchorExcerpt: draft.anchorExcerpt,
       text: draft.text,
@@ -1972,6 +1981,7 @@ function PlayerPage({ event = null } = {}) {
       questionNumber: draft.questionNumber || myFeedbackNumber,
       anchorKind: draft.anchorKind,
       anchorRef: draft.anchorRef,
+      anchorBasis: draft.anchorBasis,
       anchorLabel: draft.anchorLabel,
       anchorExcerpt: draft.anchorExcerpt,
       text: draft.text,
@@ -3621,13 +3631,14 @@ function PlayerPage({ event = null } = {}) {
      the composer says so. */
   if (gameType === 'survey' && gameState === 'SURVEY#CLOSED' && feedbackRound) {
     return (
-      <PlayerShell phase="quiet" volume="act" ctx="Feedback" who={playerName} online={wsConnected} banner={offlineBanner} help="player-survey-comments">
+      <PlayerShell phase="quiet" volume="act" ctx="Comments" who={playerName} online={wsConnected} banner={offlineBanner} help="player-survey-comments">
         <FeedbackRoundPanel
           round={feedbackRound}
           questionNumber={feedbackNumber}
           comments={feedbackComments}
           onSubmit={submitComment}
           namesShown={false}
+          playerName={playerName}
         />
       </PlayerShell>
     );
@@ -3723,7 +3734,7 @@ function PlayerPage({ event = null } = {}) {
     : myFeedbackAnswersStatus === 'error'
       ? 'The responses could not be loaded.'
       : myFeedbackAnswersStatus === 'no-data'
-        ? 'Nobody voted on this round.'
+        ? 'No responses came in for this round.'
         : undefined;
   const myFeedbackRetryAnswers = myFeedbackAnswersStatus === 'error'
     ? () => loadMyFeedbackAnswers(myFeedbackNumber)
@@ -3743,7 +3754,9 @@ function PlayerPage({ event = null } = {}) {
     // The round the panel is about, not the one the session stopped on: from
     // the end screen a player may open round 1 of 3.
     const panelRound = myFeedbackAfterEnd && myFeedbackSnapshot ? (myFeedbackSnapshot.roundLabel || myFeedbackSnapshot.title) : position;
-    ctx = panelRound ? `${panelRound} · Feedback` : 'Feedback';
+    // "Comments" on the phone; "Feedback" stays the host's word for the
+    // whole-room switch (phone-comments D9).
+    ctx = panelRound ? `${panelRound} · Comments` : 'Comments';
     body = (
       <>
         {/* A TOP EXIT, NOT ONLY A BOTTOM ONE (minor, fix round 1) — the report
@@ -3782,6 +3795,7 @@ function PlayerPage({ event = null } = {}) {
           onDraftSave={saveMyFeedbackDraft(myFeedbackNumber)}
           answersEmptyText={myFeedbackAnswersEmptyText}
           onRetryAnswers={myFeedbackRetryAnswers}
+          playerName={playerName}
         />
         <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
           {myFeedbackExitLabel}
@@ -4545,7 +4559,7 @@ function PlayerPage({ event = null } = {}) {
       `volume` stays 'act', not 'watch': there is something to do.
     */
     volume = 'act';
-    ctx = position ? `${position} · Feedback` : 'Feedback';
+    ctx = position ? `${position} · Comments` : 'Comments';
 
     body = (
       <FeedbackRoundPanel
@@ -4553,6 +4567,7 @@ function PlayerPage({ event = null } = {}) {
         questionNumber={feedbackNumber}
         comments={feedbackComments}
         onSubmit={submitComment}
+        playerName={playerName}
       />
     );
 
@@ -4785,26 +4800,28 @@ function PlayerPage({ event = null } = {}) {
     }
 
     /*
-      THE FEEDBACK BUTTON — every ordinary RESULTS screen gets one, trivia,
+      THE WAY INTO COMMENTS — every ordinary RESULTS screen gets one, trivia,
       wavelength and call-and-answer alike. The owner's ruling, 26 Sep 2026:
       it works on ANY round whose results are showing, without the host
-      opening feedback mode first — `comments.js`'s write gate now accepts a
-      comment whenever the session is on this round's RESULTS, and this is
-      the button that reaches it. Appended to whichever `body` the game-type
-      branch above built, rather than duplicated inside each of the three, so
-      the three cannot drift on whether they offer it.
+      opening feedback mode first. Set once here, after whichever `body` the
+      game-type branch above built, so the three cannot drift on whether they
+      offer it.
+
+      "COMMENT ON THIS ROUND", IN THE DOCK (phone-comments D9; experience plan
+      principle 8: the action lives in the dock). It names what it does, and
+      the line under it names the two things a comment can be about.
     */
-    body = (
+    dock = (
       <>
-        {body}
         <button
           type="button"
           className="plr-btn plr-btn--ghost plr-feedback-btn"
           onClick={openMyFeedback}
         >
           <Icon name="ChatCircleText" size={18} />
-          {' '}Feedback
+          {' '}Comment on this round
         </button>
+        <p className="plr-note plr-note--after">Reply to a response, or comment on Workie’s read.</p>
       </>
     );
 

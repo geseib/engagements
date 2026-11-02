@@ -6,6 +6,7 @@ const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
 const { parseCommentSk } = require('./comment-keys');
+const { placeComment } = require('./comment-placement');
 const followUpKeys = require('./followup-keys');
 const followUpKinds = require('./followup-kinds');
 const { decryptItem, decryptItems, encryptItem } = require('./tenant-crypto');
@@ -348,6 +349,9 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
         commentId: parsed.commentId,
         anchorKind: row.AnchorKind,
         anchorRef: row.AnchorRef,
+        // A reply anchored by ballot number (phone-comments B1); absent on an
+        // older row, which is placed by its quote instead.
+        ...(row.AnchorBasis === 'ballot' ? { anchorBasis: 'ballot' } : {}),
         anchorLabel: row.AnchorLabel,
         anchorExcerpt: row.AnchorExcerpt,
         text: row.Text,
@@ -463,6 +467,7 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
           late.comments.push({
             ...base,
             anchorKind: row.AnchorKind || null,
+            ...(row.AnchorBasis === 'ballot' ? { anchorRef: row.AnchorRef, anchorBasis: 'ballot' } : {}),
             ...(roundIsHidden(round) ? {} : { anchorLabel: row.AnchorLabel || null }),
             // The quoted material it is about, as an on-time comment carries
             // it. Not name-bearing (it is the response's or the read's own
@@ -793,6 +798,10 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
       const rankedAnswers = Object.entries(voteTallies)
         .map(([index, voteData]) => ({
           answerIndex: parseInt(index),
+          // THE BALLOT NUMBER (phone-comments B1): the 1-based place the room
+          // voted under (answer-order.js), the number the results screen
+          // prints, and the stable anchor a reply to this response stores.
+          ballot: shownPlace.get(parseInt(index)) + 1,
           // Absent on an unrevealed round — voteTallies omitted it above.
           ...(hideAuthors ? {} : { playerName: voteData.playerName }),
           answerText: voteData.answerText,
@@ -929,7 +938,12 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
           comments" from "the field is missing" will get it wrong on one of the
           two surfaces that draw this.
         */
-        comments: commentsByRound.get(questionNumber) || [],
+        // Each carries `placement` ({section, ballot}, comment-placement.js):
+        // which response it sits under, by ballot number, or the whole round.
+        comments: (commentsByRound.get(questionNumber) || []).map((c) => {
+          const at = placeComment(c, rankedAnswers);
+          return { ...c, placement: { section: at.section, ballot: at.ballot } };
+        }),
         // Questions for the room sent after this round's read (always an array).
         followUps: followUpsByRound.get(questionNumber) || [],
         // "Arrived late": always present, so a renderer has one shape.

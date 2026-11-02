@@ -450,7 +450,8 @@ describe('comments in the session report', () => {
     // Stored labels, mapped at render: a response by its author's name (the
     // report prints placements, never the phone's positions), and an older
     // "AI summary" label under the name the report gives that section.
-    expect(block.textContent).toContain('On Ada’s response');
+    expect(block.textContent).toContain('On the responses');
+    expect(block.textContent).toContain('Ada’s response');
     expect(block.textContent).toContain('On Workie’s read');
     expect(block.textContent).not.toContain('AI summary');
   });
@@ -471,7 +472,8 @@ describe('comments in the session report', () => {
   test('each is attributed', () => {
     const { container } = render(<ReportDocument reportData={withComments} />);
     const authors = [...container.querySelectorAll('.comment-author')].map((n) => n.textContent);
-    expect(authors).toEqual(['Lee Chen', 'Dana']);
+    // Grouped as the phone is: Workie's read first, then the responses.
+    expect(authors).toEqual(['Dana', 'Lee Chen']);
   });
 
   test('each carries the excerpt of what it is about, not just the label', () => {

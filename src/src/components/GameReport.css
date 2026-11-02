@@ -916,6 +916,15 @@
   overflow-wrap: anywhere;
 }
 
+/* A group's head inside a round's comments (phone-comments §5): On Workie's
+   read, On the responses, On the whole round. */
+.report-doc .comment-group-head {
+  margin: 0.9em 0 0;
+  font-size: max(var(--rpt-floor), 0.8em);
+  font-weight: 700;
+  color: var(--rpt-ink);
+}
+
 .report-doc .comment-excerpt {
   margin: 0 0 0.3em;
   font-size: max(var(--rpt-floor), 0.8em);

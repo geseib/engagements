@@ -54,7 +54,7 @@ async function describeFailure(response) {
 export async function postComment({
   fetchFn = fetch, apiBase, gameId,
   questionNumber, playerName, clientId,
-  anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
+  anchorKind, anchorRef, anchorBasis, anchorLabel, anchorExcerpt, text,
 }) {
   let response;
   try {
@@ -64,6 +64,8 @@ export async function postComment({
       body: JSON.stringify({
         questionNumber, playerName, clientId,
         anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
+        // 'ballot' when the ref is the response's ballot number (B1).
+        ...(anchorBasis === 'ballot' ? { anchorBasis } : {}),
       }),
     });
   } catch (e) {

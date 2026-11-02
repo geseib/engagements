@@ -155,7 +155,6 @@ module.exports = {
     },
     "PlayerPage.jsx": {
       "Back to the agenda": 1,
-      "Feedback": 6,
       "Game ID": 1,
       "Join Game": 2,
       "Main screen": 14,
@@ -214,10 +213,6 @@ module.exports = {
     "components/EventDetailsDialog.jsx": {
       "Main screen": 1
     },
-    "components/FeedbackRoundPanel.jsx": {
-      "Comment": 1,
-      "the summary": 1
-    },
     "components/FormatWalkthrough.jsx": {
       "stage": 1
     },
@@ -267,7 +262,7 @@ module.exports = {
       "the summary": 2
     },
     "components/RoundReport.jsx": {
-      "Comment": 2
+      "Comment": 1
     },
     "components/SessionHistoryPanel.jsx": {
       "Players": 1,
@@ -331,8 +326,7 @@ module.exports = {
       "game": 3
     },
     "config/comments.js": {
-      "Results": 1,
-      "the summary": 1
+      "Results": 1
     },
     "config/consoleSections.js": {
       "Settings": 2
