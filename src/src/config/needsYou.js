@@ -18,10 +18,10 @@
  * `kindText`, by kind and never a name, for a screen the room can see
  * (principle 3: "count only" — "A name request", "2 late answers").
  *
- * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5 and 7 — the ones whose
- * data the host page already holds. Rows 8 (room's window) and 13 (the event
- * moved on) keep their own top-line and dock signals until Phase 2 gives them
- * a slot; row 14 (Build Room) has its own queue.
+ * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5, 7 and 13 (the event
+ * moved on, since Phase 2 step 2d) — the ones whose data the host page already
+ * holds. Row 8 (room's window) keeps its top-line signal until Phase 2 gives
+ * it a slot; row 14 (Build Room) has its own queue.
  */
 
 /* The lapse and the two readings live in setupPanel.js, which the roster
@@ -43,6 +43,7 @@ export const NEEDS_ACTIONS = Object.freeze({
   RETRY: 'retry',
   REDO: 'redo',
   FINE: 'fine',
+  BRING: 'bring',
 });
 
 /** The words on each action's button (PLAN §3.6, §4.2). */
@@ -56,6 +57,7 @@ export const ACTION_WORDS = Object.freeze({
   retry: 'Retry',
   redo: 'Redo',
   fine: "It's fine",
+  bring: 'Bring everyone here',
 });
 
 export const NEEDS_WORDS = Object.freeze({
@@ -159,14 +161,17 @@ function lateText({ notReviewed = 0, answers = 0 } = {}) {
  *   connected     the host's socket (false only once it had connected)
  *   dismissed     ids the host has said "It's fine" to
  *   now           ms, for lapse and countdowns
+ *   eventMoved    config/eventAgenda.js eventMovedOn: { n, title } when this
+ *                 event item was the room's and another is live now, else null
  *
  * Returns { items, nowCount, soonCount, top }: Now items first (the
- * connection, then name requests newest first, then a failed read), then
+ * connection, the event moving on, then name requests newest first, then a
+ * failed read), then
  * Soon items. `top` is what the Needs-you line shows.
  */
 export function needsYou({
   players = [], late = null, readFailure = null, readCheck = '', readRound = null,
-  connected = true, dismissed = [], now = Date.now(),
+  connected = true, dismissed = [], now = Date.now(), eventMoved = null,
 } = {}) {
   const gone = new Set(dismissed || []);
   const nowItems = [];
@@ -180,6 +185,19 @@ export function needsYou({
       text: 'Not hearing the room · Reconnecting',
       kindText: 'Not hearing the room · Reconnecting',
       actions: [],
+    });
+  }
+
+  // The room left this item: the first thing to know, after the connection.
+  if (eventMoved && eventMoved.n) {
+    nowItems.push({
+      id: `event-moved:${eventMoved.n}`,
+      kind: 'event-moved-on',
+      level: NEEDS_LEVELS.NOW,
+      text: `The event moved on to Item ${eventMoved.n}`,
+      detail: eventMoved.title || '',
+      kindText: 'The event moved on',
+      actions: [NEEDS_ACTIONS.BRING],
     });
   }
 

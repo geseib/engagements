@@ -53,8 +53,18 @@
                        (moving on finishes the live item; an open survey
                        pauses), End confirm ("End it", "Keep it"), survey refusal.
     session-on-the-day GameHostPage eventCode: lobby shows the event code,
-                       Dock AGENDA, "Back to the agenda" as the leave primary,
-                       no two-screen console or room-screen chooser in events.
+                       Dock AGENDA (one screen), "Back to the agenda" as the
+                       leave primary. Since experience plan 2d: a Call & Answer
+                       item on two screens gets the console (config/surfaces.js
+                       consoleFor), with "‹ Agenda" as the strip's first crumb
+                       (WorkflowStrip `agenda`), Agenda and Bring everyone here
+                       in the Session menu (SessionSetupPanel `event`), the
+                       Needs-you item "The event moved on to Item N" with Bring
+                       everyone here (config/needsYou.js eventMoved,
+                       config/eventAgenda.js eventMovedOn), a latecomer's
+                       "from item N" in People (latecomersFrom), Main menu to
+                       the start screen (leaveToMainMenu), and Setup once per
+                       event day (eventScreensSet / markEventScreens).
     talks-on-the-day   EventStage deck: ← → PageUp PageDown, Full screen / F,
                        Space and click while full screen, Esc; the "Just
                        arrived? Open" join block and "Coming up".
@@ -325,7 +335,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'When you are ready, press **Bring everyone here** on that item\'s dock (**Bring everyone back** on a paused one), or **Go live** on its row.',
+          text: 'When you are ready, press **Bring everyone here** on that item\'s main button (**Bring everyone back** on one you paused), or **Go live** on its row.',
         },
         {
           t: 'p',
@@ -363,19 +373,29 @@ const eventDay = {
       blocks: [
         {
           t: 'p',
-          text: 'A session item opens on its own stage and runs like any session: see Running the room. In an event it differs in three ways.',
+          text: 'A session item runs like any session: see Running the room. A Call & Answer item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the pulse and People. Other items run on their stage. In an event it differs in these ways.',
         },
         {
           t: 'list',
           items: [
-            { title: 'The event\'s code', text: 'Its lobby shows the event code, not a session code. Late arrivals join the event and land in this session.' },
-            { title: '**AGENDA** on the dock', text: 'Back to the event\'s stage. It does not pause anything: the phones stay where they are.' },
-            { title: 'At the end', text: 'When the session ends, the dock offers **Back to the agenda**.' },
+            { title: 'The event\'s code', text: 'Its lobby and **Join** show the event code, not a session code. Late arrivals join the event and land in this session; in People a latecomer reads **from item 2** (the item they arrived in) where others show what they are doing.' },
+            { title: '**‹ Agenda**', text: 'On two screens, the first step on the steps strip; on one screen, **AGENDA** on the dock. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Agenda** is in the Session menu too. **Main menu** still goes to your start screen.' },
+            { title: 'At the end', text: 'When the session ends, the main button is **Back to the agenda**.' },
           ],
         },
+      ],
+    },
+    {
+      id: 'event-item-setup',
+      title: 'Setup once a day, and when the event moves on',
+      icon: 'Monitor',
+      blocks: [
         {
-          t: 'p',
-          text: 'In an event every item runs on its stage; the two-screen console is not used.',
+          t: 'list',
+          items: [
+            { title: 'Setup, once a day', text: 'The first Call & Answer item of the day opens on Setup and asks where the room watches. Later items that day skip the question and the check: on one screen they open on the lobby, on two screens at the room joining once the room\'s window shows the item.' },
+            { title: 'When the event moves on', text: 'If another item goes live while you are on this one, the Needs-you line says **The event moved on to Item 3**, with **Bring everyone here**, which brings the phones back to this item. The same button is in the Session menu.' },
+          ],
         },
       ],
     },

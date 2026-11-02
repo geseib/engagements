@@ -129,7 +129,7 @@ const quickStart = {
       two screens opens the room's window in the click, openPendingRoomWindow).
       Setup is the lobby (experience plan 2b): GameHostPage.jsx setupOn /
       setupStepFor, components/console/panels/SessionSetup.jsx, words in
-      config/sessionSetup.js (C&A, not events). Join URL under Settings,
+      config/sessionSetup.js (C&A, events included since 2d). Join URL under Settings,
       "Players join at" (SessionSetupPanel.jsx Joining group).
     */
     {
@@ -581,7 +581,8 @@ const gameSetup = {
     /*
       config/surfaces.js TWO_SURFACE_TYPES (call-and-answer, build), no tier
       default (F6); Setup's step 1 (SessionSetup.jsx, GameHostPage.jsx
-      setupStepFor), C&A only, not events, until this browser has chosen or
+      setupStepFor), C&A only (events too since 2d, once per event day:
+      config/eventAgenda.js eventScreensSet), until this browser has chosen or
       Change reopens it; config/roomScreen.js ROOM_WORDS (Where will the
       room watch?, Two screens, One screen, Help me pick and its three
       questions, Keep this choice, "This browser remembers your choice.");
@@ -594,7 +595,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A Call & Answer session can run on one screen or two. Every other format, and every session inside an event, runs on one screen.',
+          text: 'A Call & Answer session can run on one screen or two, on its own or inside an event. Every other format runs on one screen.',
         },
         {
           t: 'list',
