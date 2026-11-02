@@ -1047,7 +1047,7 @@
   border-radius: 12px;
   background: var(--bpl-good-tint);
 }
-.bpl .bpl-open .bpl-open-btn {
+.bpl .bpl-open .bpl-open-go {
   display: flex;
   align-items: center;
   justify-content: center;

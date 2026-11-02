@@ -79,6 +79,7 @@ import SentStage from './SentStage';
 import { buildMomentOf, buildRoomContent } from '../roomContentData';
 import { optionPageSizeFor } from '../../config/stagePaging';
 import { textOf } from '../../config/roomContent';
+import Button from '../../components/ui/Button';
 
 const none = () => undefined;
 
@@ -265,9 +266,9 @@ export default function BuildStageScreen({
         {pickable && current.wheel.landed && !wheelTurning && (
           <div className="brm-wheelpicks" role="group" aria-label="Pick">
             {(current.wheel.slices || []).map((sl) => (
-              <button key={sl.id} type="button" className={`brm-btn${sl.id === current.wheel.landed ? ' is-landed' : ''}`} onClick={() => boardPick(sl.id)}>
+              <Button key={sl.id} type="button" size={36} className={`brm-ctl${sl.id === current.wheel.landed ? ' is-landed' : ''}`} onClick={() => boardPick(sl.id)}>
                 {sl.label ? `${sl.label} · ` : ''}{sl.text}
-              </button>
+              </Button>
             ))}
           </div>
         )}

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=11 font=7 primary=142 */
+/* skin-allowance: colour=11 font=7 primary=135 */
 /* ==========================================================================
    BUILD ROOM — the host's page and the wall (buildroom/BuildRoomPage.jsx).
 
@@ -109,32 +109,24 @@
   border-left: 3px solid var(--primary); padding-left: 10px;
 }
 
-/* ---- buttons ------------------------------------------------------------ */
-.brm .brm-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: var(--brm-row-h);
-  font: 600 var(--brm-t-body)/1.1 var(--font-ui);
-  border-radius: 8px; padding: 8px 14px;
-  border: 1px solid var(--brm-rule);
-  background: var(--surface-2); color: var(--text);
-  cursor: pointer; text-decoration: none; white-space: nowrap;
-}
-.brm .brm-btn:hover:not(:disabled) { border-color: var(--muted); }
-.brm .brm-btn:disabled { opacity: .55; cursor: not-allowed; }
-.brm .brm-btn:focus-visible, .brm .brm-input:focus-visible, .brm .brm-fold:focus-visible, .brm .brm-x:focus-visible {
+/* ---- buttons: components/ui/Button (experience plan Phase 5 step 5d) ----
+   Every Build Room action is ui/Button: the one orange primary per screen,
+   the outlined secondary, the tertiary text link, the filled danger for the
+   answer to a destructive confirm; 36px in rows and bars, 44px in a dialog's
+   foot. The library owns the look; this sheet keeps only the room's TYPE, on
+   the button itself (never inherited from .brm, so a shared control mounted
+   in the room, the Stage dock's HostActionBar or the Needs-you line, keeps
+   its own): `brm-ctl` the laptop body, `brm-tight` the label (the old small
+   button). A red-ink secondary (`brm-danger`) is a destructive TRIGGER, never
+   the confirm; it keeps the red outline. `is-on` is a pressed toggle. */
+.brm .ui-btn.brm-ctl { --ui-size: var(--brm-t-body); }
+.brm .ui-btn.brm-tight { --ui-size: var(--brm-t-label); }
+.brm .ui-btn--quiet.brm-danger { color: var(--danger-text); border-color: var(--brm-line-red); }
+.brm .ui-btn--tertiary.brm-danger { color: var(--danger-text); }
+.brm .ui-btn--quiet.is-on { border-color: var(--primary); color: var(--primary); }
+.brm .brm-input:focus-visible, .brm .brm-fold:focus-visible, .brm .brm-x:focus-visible {
   outline: 2px solid var(--secondary); outline-offset: 2px;
 }
-.brm .brm-btn--sm { min-height: 30px; font-size: var(--brm-t-label); padding: 5px 10px; }
-.brm .brm-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--bg); }
-.brm .brm-btn--ghost { background: transparent; }
-.brm .brm-btn--ghost.is-on { border-color: var(--primary); color: var(--primary); }
-.brm .brm-btn--ghostdanger { background: transparent; color: var(--danger-text); border-color: var(--brm-line-red); }
-.brm .brm-btn--dangersolid { background: var(--danger-deep); border-color: var(--danger-deep); color: var(--text); }
-.brm .brm-btn--link {
-  background: transparent; border: 0; padding: 2px 4px; min-height: 0;
-  color: var(--secondary); text-decoration: underline; font-weight: 600;
-}
-.brm .brm-btn--link.brm-danger { color: var(--danger-text); }
 .brm .brm-x {
   margin-left: auto; width: 32px; height: 32px; flex: none;
   display: grid; place-items: center; border-radius: 8px;
@@ -577,7 +569,7 @@
 .brm .brm-pt { font-weight: 700; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .brm .brm-slash { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--secondary); font-weight: 400; }
 .brm .brm-pq { margin: 0; color: var(--muted); font-size: var(--brm-t-label); line-height: 1.45; }
-.brm .brm-pcard .brm-btn { align-self: flex-start; margin-top: auto; }
+.brm .brm-pcard .ui-btn { align-self: flex-start; margin-top: auto; }
 .brm .brm-seg { display: flex; gap: 6px; margin: 0 0 14px; }
 .brm .brm-segbtn {
   flex: 1; min-height: var(--brm-row-h); cursor: pointer;
@@ -713,7 +705,7 @@
   background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 12px;
   box-shadow: 0 16px 40px var(--brm-scrim);
 }
-.brm .brm-more-panel .brm-btn { justify-content: flex-start; width: 100%; }
+.brm .brm-more-panel .ui-btn { justify-content: flex-start; width: 100%; }
 
 /* ---- the room's window on the header, and "The room sees" (owner, 19 Oct 2026) ----
    The shared part (components/stage/RoomWindowStatus.jsx) with this page's
@@ -1089,7 +1081,7 @@
    edge (owner, 2026-10-06: it opened off screen to the left). */
 .brm .brm-split { display: inline-flex; align-items: stretch; position: relative; }
 .brm .brm-split > .brm-more { position: static; }
-.brm .brm-split > .brm-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.brm .brm-split > .ui-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .brm .brm-split .brm-split-caret { border-top-left-radius: 0; border-bottom-left-radius: 0; padding-left: 6px; padding-right: 6px; margin-left: 1px; }
 .brm .brm-split .brm-more-panel { min-width: 300px; left: 0; right: auto; }
 .brm .brm-kindopt { display: grid; gap: 2px; text-align: left; white-space: normal; }
@@ -1320,7 +1312,7 @@
 .brm .brm-wifipanel-where { color: var(--muted); font-weight: 400; }
 .brm .brm-wifipanel-people li.brm-wifipanel-note { color: var(--muted); font-size: var(--brm-t-label); min-height: 0; padding-top: 4px; }
 .brm .brm-wifipanel-people li { flex-wrap: wrap; }
-.brm .brm-wifipanel-people li > .brm-btn { margin-left: auto; }
+.brm .brm-wifipanel-people li > .ui-btn { margin-left: auto; }
 .brm .brm-wifipanel-more { color: var(--muted); }
 
 .brm .brm-wifioffer {
@@ -1419,7 +1411,7 @@
 }
 .brm .brm-arow.is-pinned { position: sticky; bottom: 0; margin-top: auto; z-index: 1; }
 .brm .brm-say { flex: 1 1 auto; min-width: 0; margin-right: auto; font-size: var(--brm-t-floor); color: var(--muted); overflow-wrap: anywhere; }
-.brm .brm-arow > .brm-btn { flex: none; }
+.brm .brm-arow > .ui-btn { flex: none; }
 @media (pointer: coarse) { .brm .brm-say.is-keys { display: none; } }
 /* "Sent to Claude as Do now: ..." for six seconds after a decision goes. */
 .brm .brm-sentline {
@@ -1480,7 +1472,7 @@
 .brm .brm-decided .brm-qbulk { margin: 0; }
 @media (max-width: 560px) {
   .brm .brm-wn { grid-template-columns: 36px minmax(0, 1fr); }
-  .brm .brm-wn .brm-btn { grid-column: 2; justify-self: start; }
+  .brm .brm-wn .ui-btn { grid-column: 2; justify-self: start; }
 }
 
 /* ---- History: a past ask's window, and the mockup viewer ----------------
@@ -1572,7 +1564,7 @@
 @media (max-width: 480px) {
   .brm .brm-modal--sd { padding: 16px; }
   .brm .brm-sd-opt { grid-template-columns: minmax(0, 1fr) auto; }
-  .brm .brm-sd-opt .brm-btn--link { grid-column: 1; justify-self: start; }
+  .brm .brm-sd-opt .ui-btn--tertiary { grid-column: 1; justify-self: start; }
 }
 
 /* The live build, always in the header (and the Stage dock); the viewer's full-size link. */
@@ -1656,7 +1648,7 @@
 
 /* The vote from points (T5): picks per person is a stepper, 1 to 5. */
 .brm .brm-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.brm .brm-stepper .brm-btn { min-width: 36px; }
+.brm .brm-stepper .ui-btn { min-width: 36px; }
 .brm .brm-stepper-n { min-width: 2ch; text-align: center; font: 800 var(--brm-t-head) var(--font-display); }
 .brm .brm-modal--vote { width: min(600px, 100%); }
 .brm .brm-modal--vote .brm-reviewopt-t { overflow-wrap: anywhere; }
@@ -1751,12 +1743,11 @@
   font: 600 13px/1.4 var(--font-ui); letter-spacing: 0; text-align: left; text-transform: none; white-space: normal;
 }
 .brm .brm-sess-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--primary); }
-.brm .brm-chip--btn { cursor: pointer; font-family: var(--font-ui); color: inherit; }
-.brm .brm-chip--btn:hover, .brm .brm-chip--btn:focus-visible { border-color: var(--primary); }
+.brm .brm-chip--tap { cursor: pointer; font-family: var(--font-ui); color: inherit; }
+.brm .brm-chip--tap:hover, .brm .brm-chip--tap:focus-visible { border-color: var(--primary); }
 /* SESSION lit while someone asks to take a name: the shared dock's lit edge, in the alert amber. */
 .brm .dock-more.dock-more--lit { border-color: var(--rule); box-shadow: inset 0 0 0 2px var(--brm-alert-amber); }
 .brm .dock-more .dock-more-n { margin-left: 6px; }
-.brm .brm-btn--solid { background: var(--secondary); border-color: var(--secondary); color: var(--bg); font-weight: 700; }
 
 /* The request strip (S6a). */
 .brm .brm-strip {
@@ -1963,8 +1954,6 @@
 .brm .brm-halist li.lead .t { font-weight: 800; }
 .brm .brm-halist-line .go { color: var(--secondary); font-weight: 700; white-space: nowrap; }
 .brm .brm-halist-ft { display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--brm-rule); color: var(--muted); }
-.brm .brm-halist-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--secondary); font-weight: 700; cursor: pointer; }
-.brm .brm-halist-btn:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
 .brm .brm-halist-push { margin-left: auto; color: var(--muted); font-weight: 600; }
 /* under the header: laptop ladder; drops under the Host tab */
 .brm .brm-halist--header { top: calc(100% + 8px); left: 0; width: min(500px, calc(100vw - 32px)); }

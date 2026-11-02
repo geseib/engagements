@@ -24,6 +24,7 @@ import Icon from '../components/Icon';
 import { W } from './words';
 import { MARK_WORDS } from './sentMarks';
 import { SendExtras, useMirror } from './BuildSendOptions';
+import Button from '../components/ui/Button';
 
 export const ConsiderContext = createContext(null);
 
@@ -67,9 +68,9 @@ export function ItemTools({ item, consider = true }) {
     <span className="brm-itools">
       <SentMark mark={mark} onOpen={c.openHistory} />
       {consider && !c.ended && (
-        <button type="button" className="brm-btn brm-btn--sm brm-consider" aria-label={`${W.consider}: ${item.words}`} onClick={(e) => { e.stopPropagation(); c.open(item); }}>
+        <Button type="button" size={36} className="brm-tight brm-consider" aria-label={`${W.consider}: ${item.words}`} onClick={(e) => { e.stopPropagation(); c.open(item); }}>
           {W.consider}
-        </button>
+        </Button>
       )}
     </span>
   );
@@ -161,19 +162,18 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
         </>
       )}
       {error && <p className="brm-alert" role="alert">{error}</p>}
-      <DialogFoot className="brm-sd-foot">
+      <DialogFoot className="brm-sd-foot" cancel={<Button size={44} className="brm-ctl" onClick={onClose}>Close</Button>}>
+        <span className="brm-hint">{W.considerEsc}</span>
         {d.door === 'claude' ? (
           <>
-            <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !d.text.trim()} onClick={() => send(false)}>
+            <Button size={44} className="brm-ctl" disabled={busy || !d.text.trim()} onClick={() => send(true)}>{W.later}</Button>
+            <Button variant="primary" size={44} className="brm-ctl" disabled={busy || !d.text.trim()} onClick={() => send(false)}>
               <Icon name="PaperPlaneTilt" size={16} /> {W.sendNow}
-            </button>
-            <button type="button" className="brm-btn" disabled={busy || !d.text.trim()} onClick={() => send(true)}>{W.later}</button>
+            </Button>
           </>
         ) : (
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={queue}>{W.considerQueue}</button>
+          <Button variant="primary" size={44} className="brm-ctl" disabled={busy} onClick={queue}>{W.considerQueue}</Button>
         )}
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
-        <span className="brm-hint brm-push">{W.considerEsc}</span>
       </DialogFoot>
     </Modal>
   );

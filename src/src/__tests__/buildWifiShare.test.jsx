@@ -47,8 +47,8 @@ describe('the panel (D1 B, D2, D2 quiet)', () => {
     expect(within(d).getByText("People on this Wi-Fi can open this laptop's app. No one else can.")).toBeInTheDocument();
     const foot = [...d.querySelectorAll('.brm-wifipanel-foot button')];
     expect(foot.map((b) => b.textContent)).toEqual(['Not now', 'Share demo']);
-    expect(foot[1]).toHaveClass('brm-btn--primary');
-    expect(d.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(foot[1]).toHaveClass('ui-btn--action');
+    expect(d.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(foot[1]);
     expect(api.share).toHaveBeenCalledWith({ on: true });
     fireEvent.click(foot[0]);
@@ -79,7 +79,7 @@ describe('the panel (D1 B, D2, D2 quiet)', () => {
     expect(d.querySelector('.brm-wifipanel-u').textContent).not.toMatch(/k=/);
     const foot = [...d.querySelectorAll('.brm-wifipanel-foot button')];
     expect(foot.map((b) => b.textContent)).toEqual(['Stop sharing', 'Show on the Stage']);
-    expect(foot[1]).toHaveClass('brm-btn--primary');
+    expect(foot[1]).toHaveClass('ui-btn--action');
     fireEvent.click(foot[1]);
     expect(onShowWall).toHaveBeenCalled();
     fireEvent.click(foot[0]);
@@ -102,7 +102,7 @@ describe('the panel (D1 B, D2, D2 quiet)', () => {
     expect(within(d).getByText('If it fails for you, it fails for the room. Use screenshots.')).toBeInTheDocument();
     const foot = [...d.querySelectorAll('.brm-wifipanel-foot button')];
     expect(foot.map((b) => b.textContent)).toEqual(['Keep sharing', 'Stop sharing']);
-    expect(foot[1]).toHaveClass('brm-btn--primary');
+    expect(foot[1]).toHaveClass('ui-btn--action');
     fireEvent.click(foot[1]);
     expect(api.share).toHaveBeenCalledWith({ on: false });
   });
@@ -158,7 +158,7 @@ test('the nudge on the Host screen (D1 A): the words, the picture, Not now, Shar
   expect(within(card).getByText("People on this Wi-Fi can open this laptop's app. No one else can.")).toBeInTheDocument();
   const buttons = within(card).getAllByRole('button');
   expect(buttons.map((b) => b.textContent)).toEqual(['Not now', 'Share demo']);
-  expect(buttons[1]).toHaveClass('brm-btn--primary');
+  expect(buttons[1]).toHaveClass('ui-btn--action');
   fireEvent.click(buttons[1]);
   expect(api.share).toHaveBeenCalledWith({ on: true });
   fireEvent.click(buttons[0]);
@@ -189,7 +189,7 @@ describe('the Demo tile (two codes, Settings)', () => {
     expect(within(slot).getByText('When Claude runs the app, you can share it here.')).toBeInTheDocument();
     expect(within(t).getByText("The room sees Claude's screenshots.")).toBeInTheDocument();
     expect(within(t).queryByRole('button')).toBeNull();
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(0);
   });
 
   test('runnable, not shared: Not shared, who can reach it, Share demo is the orange and starts it', () => {
@@ -201,8 +201,8 @@ describe('the Demo tile (two codes, Settings)', () => {
     expect(within(t).getByText('Only this laptop can open it.')).toBeInTheDocument();
     expect(within(t).getByText("People on this Wi-Fi can open this laptop's app. No one else can.")).toBeInTheDocument();
     const go = within(t).getByRole('button', { name: 'Share demo' });
-    expect(go).toHaveClass('brm-btn--primary');
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(go).toHaveClass('ui-btn--action');
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(go);
     expect(api.share).toHaveBeenCalledWith({ on: true });
   });
@@ -212,8 +212,8 @@ describe('the Demo tile (two codes, Settings)', () => {
     const t = tileEl();
     expect(within(t).getByRole('status')).toHaveTextContent('Starting…');
     expect(within(t).getByText('The code appears here when the laptop is reachable.')).toBeInTheDocument();
-    expect(within(t).getByRole('button', { name: 'Stop sharing' })).not.toHaveClass('brm-btn--primary');
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+    expect(within(t).getByRole('button', { name: 'Stop sharing' })).not.toHaveClass('ui-btn--action');
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(0);
   });
 
   test('waiting: Claude Code has not answered, and what to do', () => {
@@ -234,7 +234,7 @@ describe('the Demo tile (two codes, Settings)', () => {
     expect([...t.querySelectorAll('h4, p, .brm-codes-u')].map((e) => e.textContent).join(' ')).not.toMatch(/k=/);
     expect(within(t).getByText('11 of 18 opened it')).toBeInTheDocument();
     expect(within(t).getAllByRole('button').map((b) => b.textContent)).toEqual(['Copy', 'Stop sharing']);
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(0);
     fireEvent.click(within(t).getByRole('button', { name: 'Stop sharing' }));
     expect(api.share).toHaveBeenCalledWith({ on: false });
   });
@@ -245,7 +245,7 @@ describe('the Demo tile (two codes, Settings)', () => {
     expect(t).toHaveClass('is-quiet');
     expect(within(t).getByRole('img', { name: 'QR code to open the demo' })).toBeInTheDocument();
     expect(within(t).getByText('None opened yet')).toBeInTheDocument();
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(0);
   });
 
   test("failed: It didn't start, the reason, Try again the orange, Stop sharing beside", () => {
@@ -255,8 +255,8 @@ describe('the Demo tile (two codes, Settings)', () => {
     expect(within(t).getByText("It didn't start.")).toBeInTheDocument();
     expect(within(t).getByText('No Wi-Fi address on this laptop.')).toBeInTheDocument();
     const again = within(t).getByRole('button', { name: 'Try again' });
-    expect(again).toHaveClass('brm-btn--primary');
-    expect(t.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(again).toHaveClass('ui-btn--action');
+    expect(t.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(again);
     expect(api.share).toHaveBeenCalledWith({ on: true });
     fireEvent.click(within(t).getByRole('button', { name: 'Stop sharing' }));

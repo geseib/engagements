@@ -45,6 +45,7 @@ import { W } from './words';
 import { DISPLAY_PROFILES, ScreenChoiceRow, RoomWindowRow } from '../components/stage/ScreensGroup';
 import { SCREEN_WORDS, screenWordsFor } from '../config/roomScreen';
 import { presentHref } from '../config/surfaces';
+import Button from '../components/ui/Button';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -162,9 +163,9 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
         )}
       </div>
       <div className="brm-strip-acts">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onSee}>{W.seeInPlayers}</button>
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</button>}
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
+        <Button type="button" size={36} className="brm-tight" onClick={onSee}>{W.seeInPlayers}</Button>
+        {one && <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</Button>}
+        {one && <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</Button>}
       </div>
     </section>
   );
@@ -236,7 +237,7 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
           </p>
           {!ended && (
             <div className="brm-codes-acts">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={copyLink}>Copy join link</button>
+              <Button type="button" size={36} className="brm-tight" onClick={copyLink}>Copy join link</Button>
               {copied && <span className="brm-hint" role="status">{copied}</span>}
             </div>
           )}
@@ -248,12 +249,12 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
       {(st === 'on' || st === 'quiet') && <AppList map={lan.map || []} />}
       {!ended && (
         <div className="brm-sp-row">
-          <button type="button" className={`brm-btn${stageLeads ? ' brm-btn--primary' : ''}`} onClick={onShowCodes}>
+          <Button type="button" variant={stageLeads ? 'primary' : 'secondary'} size={36} className="brm-ctl" onClick={onShowCodes}>
             {both ? W.showBothOnStage : W.shareShowOnStage}
-          </button>
+          </Button>
           {(st === 'starting' || st === 'waiting') && <span className="brm-hint">{W.demoJoinsWhenLive}</span>}
           {st === 'quiet' && (
-            <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={() => run(() => api.share({ on: false }))}>{W.stopSharing}</button>
+            <Button type="button" variant="primary" size={36} className="brm-ctl brm-push" disabled={busy} onClick={() => run(() => api.share({ on: false }))}>{W.stopSharing}</Button>
           )}
         </div>
       )}
@@ -323,7 +324,7 @@ export function WallScreens({ room, busy, run, api, ended, choice = null, onChoo
               <span className="scr-label">{W.wallNewLinkLabel}</span>
               <span className="scr-hint" role={armed || said ? 'status' : undefined}>{armed ? W.wallNewLinkWhy : (said || W.wallNewLinkHint)}</span>
             </div>
-            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</button>
+            <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</Button>
           </div>
         )}
       </div>
@@ -537,8 +538,8 @@ export default function BuildSessionPanel({
                   // LOOK HERE, PRIVATELY (from the console's old Session slot, 2e): Build or History on this laptop alone.
                   <div className="brm-sp-row brm-sp-look">
                     <span className="brm-sp-lab">{W.lookHere}</span>
-                    <button type="button" className="brm-btn brm-btn--sm" data-capability="build-screen" onClick={pick(() => onLook('build'))}>{W.lookBuild}</button>
-                    <button type="button" className="brm-btn brm-btn--sm" data-capability="history" onClick={pick(() => onLook('history'))}>{W.lookHistory}</button>
+                    <Button type="button" size={36} className="brm-tight" data-capability="build-screen" onClick={pick(() => onLook('build'))}>{W.lookBuild}</Button>
+                    <Button type="button" size={36} className="brm-tight" data-capability="history" onClick={pick(() => onLook('history'))}>{W.lookHistory}</Button>
                   </div>
                 ) : null}
               />
@@ -562,9 +563,9 @@ export default function BuildSessionPanel({
                 <div className="brm-sp-row">
                   {slots.agentChip}
                   {!ended && (
-                    <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={pick(onConnect)}>
+                    <Button type="button" size={36} className="brm-tight brm-push" onClick={pick(onConnect)}>
                       <Icon name="Lock" size={14} /> Connect Claude Code
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {/* Which plugin Claude runs, always (owner, 18 Oct): the version, and whether it is the latest. */}
@@ -573,7 +574,7 @@ export default function BuildSessionPanel({
                 {!ended && room.plugin && room.plugin.outdated && (
                   <p className="brm-hint brm-sp-note" data-testid="brm-plugin-out">
                     {W.pluginOutdated}{' '}
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</button>
+                    <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</Button>
                   </p>
                 )}
                 {/* Claude is away: the prompt that brings it back (from the console's old Session slot, 2e). */}
@@ -601,14 +602,14 @@ export default function BuildSessionPanel({
                     <div className="brm-sp-row">
                       <span className="brm-sp-lab">{`${(crew.builders || []).filter((b) => !b.closed).length} ${plural((crew.builders || []).filter((b) => !b.closed).length, 'builder', 'builders')}`}</span>
                       <span className="brm-hint">{(crew.builders || []).filter((b) => !b.closed).map((b) => b.name).join(', ')}</span>
-                      {!ended && <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={pick(onCrew)}>Crew</button>}
+                      {!ended && <Button type="button" size={36} className="brm-tight brm-push" onClick={pick(onCrew)}>Crew</Button>}
                     </div>
                     {!ended && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
                   </>
                 ) : (
                   <>
                     <p className="brm-hint brm-sp-note">{W.crewNote}</p>
-                    {!ended && <div className="brm-sp-row"><button type="button" className="brm-btn brm-btn--sm" onClick={pick(onCrew)}>Open to a crew</button></div>}
+                    {!ended && <div className="brm-sp-row"><Button type="button" size={36} className="brm-tight" onClick={pick(onCrew)}>Open to a crew</Button></div>}
                   </>
                 )}
               </div>
@@ -618,17 +619,17 @@ export default function BuildSessionPanel({
                 <div className="brm-sp-gh"><h3>{HW.endSession}</h3><span>Going back, finishing, stopping</span></div>
                 {!ended && opening && (
                   <div className="brm-sp-row" data-capability="opening">
-                    <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
+                    <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</Button>
                     <span className="brm-hint">{W.startUndoNote}</span>
                   </div>
                 )}
                 <div className="brm-sp-row">
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onWrap)}>Wrap up</button>
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onReport)}><Icon name="FileText" size={14} /> Report</button>
+                  <Button type="button" size={36} className="brm-tight" onClick={pick(onWrap)}>Wrap up</Button>
+                  <Button type="button" size={36} className="brm-tight" onClick={pick(onReport)}><Icon name="FileText" size={14} /> Report</Button>
                 </div>
                 {!ended && (
                   <div className="brm-sp-row brm-sp-end">
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" title={HW.endSessionHint} onClick={pick(onEnd)}>{HW.endSession}</button>
+                    <Button type="button" size={36} className="brm-tight brm-danger" title={HW.endSessionHint} onClick={pick(onEnd)}>{HW.endSession}</Button>
                     <span className="brm-hint">{W.endsForAll}</span>
                   </div>
                 )}
@@ -643,7 +644,7 @@ export default function BuildSessionPanel({
 
         <div className="brm-sp-foot">
           <span className="brm-hint"><kbd>\</kbd> opens and closes this panel</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Close</button>
+          <Button type="button" size={36} className="brm-tight brm-push" onClick={onClose}>Close</Button>
         </div>
       </aside>
     </div>

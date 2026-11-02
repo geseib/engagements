@@ -146,8 +146,8 @@ describe('the card\'s two moves', () => {
     expect(card.textContent).toContain(W.mockupsCardHead);
     expect(card.textContent).toContain('Which look should the sign-up page have?');
     expect(card.querySelectorAll('.brm-mocktiles li').length).toBe(3);
-    expect(within(card).getByRole('button', { name: W.nextAfterThis })).toHaveClass('brm-btn--primary');
-    expect(within(card).getByRole('button', { name: W.putToRoomNow })).not.toHaveClass('brm-btn--primary');
+    expect(within(card).getByRole('button', { name: W.nextAfterThis })).toHaveClass('ui-btn--action');
+    expect(within(card).getByRole('button', { name: W.putToRoomNow })).not.toHaveClass('ui-btn--action');
   });
   test('Next, after this ask lines it up with the existing open-next action', async () => {
     const askAction = mount(game2550());
@@ -168,7 +168,7 @@ describe('the card\'s two moves', () => {
   test('with nothing open it opens at once, and leads', async () => {
     const askAction = mount(game2550({ st: { CurrentAskId: '', Phase: 'building' } }));
     expect(screen.queryByRole('button', { name: W.nextAfterThis })).toBeNull();
-    expect(screen.getByRole('button', { name: W.putToRoomNow })).toHaveClass('brm-btn--primary');
+    expect(screen.getByRole('button', { name: W.putToRoomNow })).toHaveClass('ui-btn--action');
     fireEvent.click(screen.getByRole('button', { name: W.putToRoomNow }));
     await waitFor(() => expect(askAction).toHaveBeenCalledWith('004', { action: 'open' }));
   });

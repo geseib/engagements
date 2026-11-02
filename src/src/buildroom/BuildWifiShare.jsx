@@ -18,6 +18,7 @@ import {
 } from './wifiShare';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 const LOOPBACK = /^(localhost|[^.]+\.localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i;
 const originOf = (u) => {
@@ -75,9 +76,9 @@ function CopyLink({ link }) {
     setTimeout(() => setSaid(''), 2500);
   };
   return (
-    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={copy}>
+    <Button type="button" size={36} className="brm-tight" onClick={copy}>
       {said || 'Copy'}
-    </button>
+    </Button>
   );
 }
 
@@ -125,23 +126,23 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     );
     foot = (
       <>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={notNow}>{W.notNow}</button>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={notNow}>{W.notNow}</Button>
+        <Button type="button" variant="primary" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</Button>
       </>
     );
   } else if (s.state === 'failed') {
     body = <div className="brm-wifipanel-err"><b>It didn&apos;t start.</b> {lan.error}</div>;
     foot = (
       <>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</Button>
+        <Button type="button" variant="primary" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</Button>
       </>
     );
   } else if (s.state === 'starting' || s.state === 'waiting') {
     body = s.state === 'waiting'
       ? <div className="brm-wifipanel-warn"><b>Claude Code has not answered.</b> {W.wifiWaiting}</div>
       : <p className="brm-wifipanel-say" role="status">{W.shareStarting}</p>;
-    foot = <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>;
+    foot = <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</Button>;
   } else if (s.state === 'quiet') {
     body = (
       <>
@@ -152,9 +153,9 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     );
     foot = (
       <>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onClose}>{W.keepSharing}</button>
+        <Button type="button" size={36} className="brm-tight" onClick={onClose}>{W.keepSharing}</Button>
         {/* Sharing that reaches nobody only exposes the laptop: Stop is the move (D2 quiet). */}
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
+        <Button type="button" variant="primary" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</Button>
       </>
     );
   } else {
@@ -172,8 +173,8 @@ export function SharePanel({ lan, link, here = 0, now, busy, run, api, onClose, 
     );
     foot = (
       <>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={!link} onClick={onShowWall}>{W.shareShowOnStage}</button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</Button>
+        <Button type="button" variant="primary" size={36} className="brm-tight brm-push" disabled={!link} onClick={onShowWall}>{W.shareShowOnStage}</Button>
       </>
     );
   }
@@ -246,9 +247,9 @@ export function RemotePeople({ people, busy, run, api }) {
           <span className="brm-wifipanel-dev">{W.remoteDevices(p.devices)}</span>
           {personWhere(p) && <span className={`brm-wifipanel-place${p.near > 0 ? ' is-near' : ''}`}>{personWhere(p)}</span>}
           {p.devices > 1 && (
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(p.name)}>
+            <Button type="button" size={36} className="brm-tight brm-danger" disabled={busy} onClick={() => remove(p.name)}>
               {sure === p.name ? W.remoteRemoveSure(p.name) : W.remoteRemove}
-            </button>
+            </Button>
           )}
         </li>
       ))}
@@ -338,8 +339,8 @@ export function DemoNudge({ busy, run, api, picture = null, lead = true }) {
       {picture && <div className="brm-wifioffer-pic">{picture}</div>}
       <p className="brm-wifioffer-who">{W.shareWho}</p>
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>{W.notNow}</button>
-        <button type="button" className={`brm-btn${lead ? ' brm-btn--primary' : ''} brm-push`} disabled={busy} onClick={() => run(() => api.share({ on: true }))}>{W.shareDemo}</button>
+        <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => run(() => api.share({ dismissOffer: true }))}>{W.notNow}</Button>
+        <Button type="button" variant={lead ? 'primary' : 'secondary'} size={36} className="brm-ctl brm-push" disabled={busy} onClick={() => run(() => api.share({ on: true }))}>{W.shareDemo}</Button>
       </div>
     </section>
   );
@@ -403,7 +404,7 @@ export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
   const st = demoSlotOf(room, now);
   const lan = (room && room.lan) || {};
   const share = (on) => run(() => api.share({ on }));
-  const stop = <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</button>;
+  const stop = <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => share(false)}>{W.stopSharing}</Button>;
   const open = Number(lan.open) || 0;
   let visual;
   let sub = '';
@@ -419,7 +420,7 @@ export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
       <DemoSlot>
         <b>{W.notShared}</b>
         <span>{W.onlyThisLaptop}</span>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</button>
+        <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={() => share(true)}>{W.shareDemo}</Button>
       </DemoSlot>
     );
     line = <p className="brm-codes-m">{W.shareWho}</p>;
@@ -429,7 +430,7 @@ export function DemoTile({ room, now, link, here = 0, busy, run, api }) {
       <DemoSlot bad>
         <b>It didn&apos;t start.</b>
         {lan.error && <span>{lan.error}</span>}
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</button>
+        <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={() => share(true)}>{W.tryAgain}</Button>
       </DemoSlot>
     );
     acts = stop;

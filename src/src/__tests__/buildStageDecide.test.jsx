@@ -191,7 +191,7 @@ describe('R3: the Stage at results', () => {
     expect(link).toHaveAttribute('href', 'http://localhost:5173/');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.closest('.status')).not.toBeNull();
-    expect(link.className).not.toMatch(/\bbtn\b|brm-btn/);
+    expect(link.className).not.toMatch(/\bbtn\b|ui-btn/);
     expect(within(footer).queryByRole('button', { name: /live build/i })).toBeNull();
   });
 
@@ -205,7 +205,7 @@ describe('R3: the Stage at results', () => {
     await openStage(mk());
     // The Stage's orange is the shared bar's main button (D1), or a Build Room primary; count the whole Stage.
     const orange = [...document.querySelectorAll('.brm-room button')]
-      .filter((b) => b.classList.contains('host-action-bar__primary') || b.classList.contains('brm-btn--primary') || (b.classList.contains('btn') && !b.classList.contains('ghost')));
+      .filter((b) => b.classList.contains('host-action-bar__primary') || b.classList.contains('ui-btn--action') || (b.classList.contains('btn') && !b.classList.contains('ghost')));
     expect(orange.map((b) => b.textContent.trim())).toHaveLength(1);
     expect(dock().queryByRole('button', { name: 'Edit' })).toBeNull();
   });
@@ -296,10 +296,10 @@ describe('R4: the Change before sending window', () => {
     const win = await openEdit();
     expect(within(win).getByRole('heading', { name: 'Change before sending' })).toBeInTheDocument();
     expect(within(win).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
-    const foot = [...win.querySelectorAll('.brm-sd-foot > button')].map((b) => b.textContent.trim());
+    const foot = [...win.querySelectorAll('.brm-sd-foot button')].map((b) => b.textContent.trim());
     expect(foot).toEqual(['Close', 'Discard', 'Ask again…', 'Save for later', 'Send B to Claude']);
-    expect(win.querySelectorAll('.brm-sd-foot .brm-btn--primary')).toHaveLength(1);
-    expect(win.querySelector('.brm-sd-foot .brm-btn--primary').textContent.trim()).toBe('Send B to Claude');
+    expect(win.querySelectorAll('.brm-sd-foot .ui-btn--action')).toHaveLength(1);
+    expect(win.querySelector('.brm-sd-foot .ui-btn--action').textContent.trim()).toBe('Send B to Claude');
   });
 
   test('Send to Claude posts the kind chosen; Save for later posts kind later', async () => {

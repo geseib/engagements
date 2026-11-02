@@ -46,14 +46,10 @@
 .brr *, .brr *::before, .brr *::after { box-sizing: border-box; }
 
 .brr .brr-printbar { max-width: 820px; margin: 0 auto 12px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.brr .brr-btn {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 36px;
-  font: 600 var(--brr-t-label)/1 var(--font-ui); border-radius: 8px; padding: 8px 12px; cursor: pointer;
-  background: var(--text); color: var(--surface); border: 1px solid var(--text);
-}
-.brr .brr-btn--ghost { background: transparent; color: var(--text); border-color: var(--brr-rule); }
-.brr .brr-btn:focus-visible { outline: 2px solid var(--brr-link); outline-offset: 2px; }
-.brr .brr-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* The bar's buttons are components/ui/Button (experience plan 5d): Save report
+   the one orange, Back and Print the outlined secondary. The report's label
+   rung only; the library owns the look. */
+.brr .ui-btn { --ui-size: var(--brr-t-label); }
 
 /* SAVE REPORT's keep choice (2026-10-04): inline under the bar, never a dialog
    over the report it is about. The same two terms as the session report's,

@@ -17,6 +17,7 @@ import { DialogClose, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import BuildImage, { useImageUrl } from './BuildImage';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 /** `(askId, label, from) => void`, or null where a surface has no viewer. */
 export const ViewerContext = createContext(null);
@@ -45,9 +46,9 @@ function PictureViewer({ image, backLabel, onBack }) {
   return (
     <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Picture viewer">
       <div className="brm-viewer-top">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={onBack}>
+        <Button type="button" size={36} className="brm-tight" onClick={onBack}>
           <Icon name="CaretLeft" size={14} /> {backLabel}
-        </button>
+        </Button>
         {image.caption ? <b className="brm-viewer-q">{image.caption}</b> : null}
         <DialogClose className="brm-viewer-x brm-push" onClose={onBack} />
       </div>
@@ -96,9 +97,9 @@ function ChoiceViewer({ ask, startLabel, backLabel, onBack }) {
   return (
     <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Mockup viewer">
       <div className="brm-viewer-top">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={onBack}>
+        <Button type="button" size={36} className="brm-tight" onClick={onBack}>
           <Icon name="CaretLeft" size={14} /> {backLabel}
-        </button>
+        </Button>
         <b className="brm-viewer-q">{ask.prompt}</b>
         <div className="brm-viewer-tabs" role="tablist" aria-label="Choices">
           {pics.map((o) => (

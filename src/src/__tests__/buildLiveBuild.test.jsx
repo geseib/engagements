@@ -132,10 +132,10 @@ describe('Share demo', () => {
     expect(b.getByText('http://localhost:5173/')).toBeInTheDocument();
     const link = b.getByRole('link', { name: 'Open the build' });
     expect(link).toHaveAttribute('href', 'http://localhost:5173/');
-    expect(link).not.toHaveClass('brm-btn--primary');
+    expect(link).not.toHaveClass('ui-btn--action');
     const share = b.getByRole('button', { name: 'Share demo' });
-    expect(share).toHaveClass('brm-btn--primary');
-    expect(buildScreen().querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(share).toHaveClass('ui-btn--action');
+    expect(buildScreen().querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(share);
     await waitFor(() => expect(posted('/build/share')).toEqual([{ on: true }]));
   });
@@ -145,7 +145,7 @@ describe('Share demo', () => {
     const b = within(buildScreen());
     const link = b.getByRole('link', { name: 'Open the build' });
     expect(link).toHaveAttribute('href', `http://192.168.1.20:4900/?k=${KEY}`);
-    expect(link).toHaveClass('brm-btn--primary');
+    expect(link).toHaveClass('ui-btn--action');
     expect(b.getByText('Anyone on this Wi-Fi')).toBeInTheDocument();
     expect(b.getByText('192.168.1.20:4900')).toBeInTheDocument();
     expect(b.queryByText('Only this laptop can open it.')).toBeNull();

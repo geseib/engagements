@@ -174,7 +174,7 @@ afterEach(() => window.confirm.mockRestore());
 describe('one orange button on the crew stage (batch 2-3)', () => {
   test('the crew board and the Host screen together show exactly one primary', async () => {
     await openCrew();
-    const n = [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')].filter((b) => !b.closest('[role="dialog"], .brm-modal'));
+    const n = [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')].filter((b) => !b.closest('[role="dialog"], .brm-modal'));
     expect(n.map((b) => b.textContent.trim())).toHaveLength(1);
   });
 });
@@ -414,10 +414,16 @@ describe('an early look', () => {
     const d = await openLook();
     fireEvent.click(within(d).getByRole('button', { name: /Write feedback/ }));
     fireEvent.change(within(d).getByRole('textbox', { name: 'Feedback' }), { target: { value: 'Changed' } });
-    window.confirm.mockReturnValue(false);
+    // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
     fireEvent.click(within(d).getAllByRole('button', { name: 'Close' })[0]);
-    expect(window.confirm).toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
+    const ask = await screen.findByRole('dialog', { name: 'Discard what you wrote?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep writing' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard what you wrote?' })).toBeNull());
     expect(screen.getByRole('dialog', { name: 'Early look: Parking map' })).toBeTruthy();
+    fireEvent.click(within(d).getAllByRole('button', { name: 'Close' })[0]);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard what you wrote?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Early look: Parking map' })).toBeNull());
   });
 });
 

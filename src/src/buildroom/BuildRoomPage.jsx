@@ -24,6 +24,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { createPortal } from 'react-dom';
 import Modal from '../components/Modal';
 import { DialogHead as SharedDialogHead, DialogFoot } from '../components/ui/DialogParts';
+import { useConfirm } from '../components/ConfirmDialog';
 import { getAuthToken } from '../auth/authFetch';
 import { rememberReturnPath } from '../auth/returnPath';
 import reloadPage from '../utils/reloadPage';
@@ -124,6 +125,7 @@ import {
   KIND_LABEL, pluginCommand, askNumber, askById, clockTime, agoText, byLabel, OpenLink,
   continueCommand, liveBuildLink, WALL_COMMENT_MS, freshWallComment,
 } from './screens/common';
+import Button from '../components/ui/Button';
 
 // Moved to screens/ in B6; still exported from here, where their importers look.
 export {
@@ -335,10 +337,10 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
         </label>
         {error && <div className="brm-alert" role="alert">{error}</div>}
         <div className="brm-row">
-          <a className="brm-btn brm-btn--ghost" href="/">Cancel</a>
-          <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy}>
+          <Button as="a" size={36} className="brm-ctl" href="/">Cancel</Button>
+          <Button type="submit" variant="primary" size={36} className="brm-ctl brm-push" disabled={busy}>
             {busy ? 'Creating…' : 'Create room'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -1361,7 +1363,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {freshWallComment(room, now) && (
           <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
             <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
-            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</button>
+            <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</Button>
           </div>
         )}
       </>
@@ -1370,7 +1372,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       <section className="bc-inmain" aria-label={title}>
         <div className="bc-inmain-h">
           <h2 className="hc-h">{title}</h2>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setCentre(null)}>{BCW.backToNow}</button>
+          <Button type="button" size={36} className="brm-tight" onClick={() => setCentre(null)}>{BCW.backToNow}</Button>
         </div>
         {body}
       </section>
@@ -1483,15 +1485,15 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           <div className="brm-alert brm-alert--bar" role="alert">
             {error}
             {['network', 'auth'].includes(errorKind.current) && (
-              <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>{errorKind.current === 'auth' ? 'Sign in again' : 'Reconnect'}</button>
+              <Button type="button" size={36} className="brm-tight brm-push" onClick={reconnect}>{errorKind.current === 'auth' ? 'Sign in again' : 'Reconnect'}</Button>
             )}
-            <button type="button" className={`brm-btn brm-btn--sm brm-btn--ghost${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</button>
+            <Button type="button" size={36} className={`brm-tight${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</Button>
           </div>
         )}
         {loadError && (
           <div className="brm-alert brm-alert--bar" role="alert">
             {loadError}
-            <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>Reconnect</button>
+            <Button type="button" size={36} className="brm-tight brm-push" onClick={reconnect}>Reconnect</Button>
           </div>
         )}
         {ended && <div className="brm-notice brm-row brm-gap" data-testid="brm-endedbar"><span>{W.endedEdit}</span></div>}
@@ -1499,7 +1501,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         {windowBlocked && (
           <div className="brm-notice brm-row brm-gap" role="alert">
             <span>{SCREEN_WORDS.quickBlocked}</span>
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</button>
+            <Button type="button" size={36} className="brm-tight brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</Button>
           </div>
         )}
         {setupNode}
@@ -1658,17 +1660,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         <div className="brm-alert brm-alert--bar" role="alert">
           {error}
           {['network', 'auth'].includes(errorKind.current) && (
-            <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>
+            <Button type="button" size={36} className="brm-tight brm-push" onClick={reconnect}>
               {errorKind.current === 'auth' ? 'Sign in again' : 'Reconnect'}
-            </button>
+            </Button>
           )}
-          <button type="button" className={`brm-btn brm-btn--sm brm-btn--ghost${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</button>
+          <Button type="button" size={36} className={`brm-tight${['network', 'auth'].includes(errorKind.current) ? '' : ' brm-push'}`} onClick={() => { errorKind.current = ''; setError(''); }}>Dismiss</Button>
         </div>
       )}
       {host && loadError && (
         <div className="brm-alert brm-alert--bar" role="alert">
           {loadError}
-          <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={reconnect}>Reconnect</button>
+          <Button type="button" size={36} className="brm-tight brm-push" onClick={reconnect}>Reconnect</Button>
         </div>
       )}
       {host && ended && (
@@ -1690,7 +1692,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           {windowBlocked && (
             <div className="brm-notice brm-row brm-gap" role="alert">
               <span>{SCREEN_WORDS.quickBlocked}</span>
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</button>
+              <Button type="button" size={36} className="brm-tight brm-push" onClick={() => setWindowBlocked(false)}>Dismiss</Button>
             </div>
           )}
           {/* BEFORE THE ROOM STARTS (simplify PLAN item 10): Connect, the code and the room's
@@ -1783,7 +1785,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           {freshWallComment(room, now) && (
             <div className="brm-notice brm-row brm-gap brm-onwall" role="status">
               <span><b>On the wall now:</b> &ldquo;{room.wallComment.text}&rdquo;</span>
-              <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</button>
+              <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => run(() => api.clearWall())}>Take it down</Button>
             </div>
           )}
           {onCrew ? (
@@ -1848,7 +1850,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           onRoomChoice={chooseRoom}
           // From the console's old Session slot (2e): Look here, privately, and the Continue prompt.
           onLook={(k) => setScreen(k)}
-          continueSlot={!(room.agent && (room.agent.connected || room.agent.listening)) && CONTINUE_PROMPT ? <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" className="brm-btn brm-btn--sm" /> : null}
+          continueSlot={!(room.agent && (room.agent.connected || room.agent.listening)) && CONTINUE_PROMPT ? <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" /> : null}
           inSheet={Boolean(consoleOn && sheetHost)}
         />,
       )}
@@ -2079,7 +2081,7 @@ export function ClaudeNow({ room, now, onConnect = null }) {
       {/* Never connected, Before the room starts gone (QA walk on test, 31 Oct 2026): Connect is here. */}
       {onConnect && agentNeverCame(agent) && (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--sm" data-capability="claude-status" onClick={onConnect}>{W.connectClaude}</button>
+          <Button type="button" size={36} className="brm-tight" data-capability="claude-status" onClick={onConnect}>{W.connectClaude}</Button>
         </div>
       )}
       {latest && (
@@ -2171,7 +2173,7 @@ export function UnheardNotice({ room, onConnect = null }) {
         <p className="brm-unheard-t"><b>{W.neverCameBefore(waiting.length)}</b></p>
         {onConnect && (
           <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--sm" onClick={onConnect}>{W.connectClaude}</button>
+            <Button type="button" size={36} className="brm-tight" onClick={onConnect}>{W.connectClaude}</Button>
           </div>
         )}
       </div>
@@ -2189,7 +2191,7 @@ export function UnheardNotice({ room, onConnect = null }) {
         <b>{W.stoppedBefore(n)}</b> Run <code>{continueCommand()}</code> in it.
       </p>
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={copy}>Copy {continueCommand()}</button>
+        <Button type="button" size={36} className="brm-tight" onClick={copy}>Copy {continueCommand()}</Button>
         {copied && <span className="brm-hint">{copied}</span>}
       </div>
     </div>
@@ -2260,7 +2262,7 @@ export function ConnectionChip({ connection = 'live', onReconnect }) {
  * focus on its first move, and Escape closes it with the focus back on the button, so the
  * moves under More are as near to the keyboard as they were on the card.
  */
-function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-btn brm-btn--sm brm-btn--ghost', placeKey, focusFirst = false }) {
+function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLabel, buttonClass = 'brm-tight', variant = 'secondary', placeKey, focusFirst = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const panelRef = useRef(null);
@@ -2292,9 +2294,9 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
   }, [open, focusFirst]);
   return (
     <div className="brm-more" ref={ref}>
-      <button type="button" ref={buttonRef} className={buttonClass} aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((o) => !o)}>
+      <Button ref={buttonRef} variant={variant} size={36} className={buttonClass} aria-expanded={open} aria-label={ariaLabel} onClick={() => setOpen((o) => !o)}>
         {label}{label ? ' ' : ''}<Icon name="CaretDown" size={14} />
-      </button>
+      </Button>
       {open && (
         <div className="brm-more-panel" role="group" aria-label={groupLabel} ref={panelRef}>
           {children(() => setOpen(false))}
@@ -2309,10 +2311,10 @@ function SessionMenu({ children, label = 'More', groupLabel = 'Session', ariaLab
  * PLAN item 18, F17): with no link yet there is nothing to open, so the header
  * leaves it out rather than showing it disabled.
  */
-function LiveBuildButton({ link, className = 'brm-btn brm-btn--sm brm-livebuild', onPick }) {
+function LiveBuildButton({ link, className = 'brm-tight brm-livebuild', onPick }) {
   const href = safeHref(link);
   if (!href) return null;
-  return <a className={className} href={href} target="_blank" rel="noopener noreferrer" title={`Opens ${href} in a new tab`} onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></a>;
+  return <Button as="a" size={36} className={className} href={href} target="_blank" rel="noopener noreferrer" title={`Opens ${href} in a new tab`} onClick={onPick}>{W.openBuild} <Icon name="ArrowSquareOut" size={14} /></Button>;
 }
 
 /** True at 480px and narrower. No matchMedia (jsdom, an old browser) reads as wide. */
@@ -2397,7 +2399,7 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
       {host && !ended && !inHeader && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
       {!inHeader && <JoinChip room={room} ended={ended} codesUp={codesUp} bothCodes={bothCodes} onQr={onQr} />}
       {/* N joined: not a top-bar slot (2e). On the header, People is the Session menu's Players tab, its count on the tab. */}
-      {!inHeader && <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>}
+      {!inHeader && <button type="button" className="brm-chip brm-chip--tap" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>}
     </>
   );
 }
@@ -2439,9 +2441,9 @@ function RoomHeader({
     <header className="brm-hbar">
       {/* MAIN MENU (B5, 2026-10-08; hostWords): always the first control, on every host
           screen and in every state. Leaving does not end the session. */}
-      <a className="brm-btn brm-btn--sm brm-btn--ghost brm-mainmenu" href="/" data-slot="main-menu" title={HW.mainMenuHint}>
+      <Button as="a" size={36} className="brm-tight brm-mainmenu" href="/" data-slot="main-menu" title={HW.mainMenuHint}>
         <Icon name="House" size={14} /> {HW.mainMenu}
-      </a>
+      </Button>
       <div className="brm-hbar-title" data-slot="name">
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
@@ -2453,7 +2455,7 @@ function RoomHeader({
           The Stage carries it in its dock. One screen with no window up
           (simplify PLAN item 18): the link alone. */}
       {rw.href && !rw.open && !rw.two && (
-        <RoomWindowLink className="brm-btn brm-btn--sm brm-btn--ghost brm-rwlink" href={rw.href} data-capability="room-window" data-slot="room-screen">{W.wallOpen}</RoomWindowLink>
+        <Button as={RoomWindowLink} size={36} className="brm-tight brm-rwlink" href={rw.href} data-capability="room-window" data-slot="room-screen">{W.wallOpen}</Button>
       )}
       {rw.href && (rw.open || rw.two) && (
         <RoomWindowStatus
@@ -2463,7 +2465,7 @@ function RoomHeader({
           detail={rw.detail}
           short
           linkLabel={W.wallOpen}
-          classes={{ link: 'brm-btn brm-btn--sm brm-btn--ghost brm-rwlink', stat: 'brm-winstat', dot: 'brm-windot' }}
+          classes={{ link: 'ui-btn ui-btn--quiet ui-btn--h36 brm-tight brm-rwlink', stat: 'brm-winstat', dot: 'brm-windot' }}
         />
       )}
       {/* THE BUILD ROOM'S OWN PARTS, after the room's screen (2a: a type adds, never moves). */}
@@ -2540,12 +2542,12 @@ function RoomHeader({
         </span>
         {/* THE SESSION MENU (§3.2b, §3.6): one labelled button, top right, the
             same word on every format. \ opens and closes it. */}
-        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} data-slot="session-menu" aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
+        <Button type="button" size={36} className={`brm-tight brm-sess${panelOpen ? ' is-on' : ''}`} data-slot="session-menu" aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
           <Icon name="List" size={14} /> {HW.sessionMenu} <kbd>\</kbd>
           {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
           {/* The plugin is out of date: a dot, on the Host screen only (never on the Stage, Build or History the room sees). */}
           {host && pluginOutdated && <span className="brm-sess-dot" data-testid="brm-plugin-dot"><span className="brm-sr">{W.pluginDotSr}</span></span>}
-        </button>
+        </Button>
       </div>
     </header>
   );
@@ -2665,7 +2667,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
       {!ended && (
         <form className="brm-row brm-gap" onSubmit={(e) => { e.preventDefault(); add(list); }}>
           <input className="brm-input brm-input--sm" aria-label={`Add to ${title}`} placeholder={`Add to ${title}`} value={adding[list]} maxLength={300} onChange={(e) => setAdding((a) => ({ ...a, [list]: e.target.value }))} />
-          <button type="submit" className="brm-btn brm-btn--sm" disabled={busy || !adding[list].trim()}>Add</button>
+          <Button type="submit" size={36} className="brm-tight" disabled={busy || !adding[list].trim()}>Add</Button>
         </form>
       )}
     </div>
@@ -2678,7 +2680,7 @@ export function BriefPanel({ brief, busy, ended, run, api }) {
         {ended ? <p>{b.forWhom || 'Not set.'}</p> : (
           <form className="brm-row brm-gap" onSubmit={(e) => { e.preventDefault(); save({ forWhom: forWhom.trim() }); }}>
             <input className="brm-input brm-input--sm" aria-label="Who it is for" placeholder="e.g. busy volunteers, often on an old phone" value={forWhom} maxLength={300} onChange={(e) => setForWhom(e.target.value)} />
-            {forWhom.trim() !== (b.forWhom || '') && <button type="submit" className="brm-btn brm-btn--sm" disabled={busy}>Save</button>}
+            {forWhom.trim() !== (b.forWhom || '') && <Button type="submit" size={36} className="brm-tight" disabled={busy}>Save</Button>}
           </form>
         )}
       </div>
@@ -2938,7 +2940,7 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
             </span>
           )}
           {connected && !askedMockups && (
-            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={askForMockups}>Ask Claude for mockups</button>
+            <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={askForMockups}>Ask Claude for mockups</Button>
           )}
         </div>
       )}
@@ -2967,16 +2969,16 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
                 {/* Only the LAST option can go: the server letters options by
                     position, and Claude has already stamped "Choice A" and "B". */}
                 {i === options.length - 1 && options.length > 2 ? (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={`Remove ${letter(i)}`} onClick={() => setOptions((l) => l.slice(0, -1))}>
+                  <Button type="button" size={36} className="brm-tight" aria-label={`Remove ${letter(i)}`} onClick={() => setOptions((l) => l.slice(0, -1))}>
                     <Icon name="X" size={14} />
-                  </button>
+                  </Button>
                 ) : <span />}
               </div>
             ))}
             {options.length < 6 && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOptions((l) => [...l, { title: '', detail: '', url: '' }])}>
+              <Button type="button" size={36} className="brm-tight" onClick={() => setOptions((l) => [...l, { title: '', detail: '', url: '' }])}>
                 <Icon name="Plus" size={14} /> Add option
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -2984,25 +2986,25 @@ function ReviewCard({ ask, openAsk = null, busy, ended, run, api, connected }) {
       </details>
       {!ended && (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} title={ask.fromIdeas ? 'The ideas go back to the queue' : undefined} onClick={discard}>{ask.fromIdeas ? 'Cancel the vote' : 'Discard'}</button>
-          {dirty && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={save}>Save edits</button>}
+          <Button type="button" size={36} className="brm-ctl brm-danger" disabled={busy} title={ask.fromIdeas ? 'The ideas go back to the queue' : undefined} onClick={discard}>{ask.fromIdeas ? 'Cancel the vote' : 'Discard'}</Button>
+          {dirty && <Button type="button" size={36} className="brm-ctl brm-push" disabled={busy} onClick={save}>Save edits</Button>}
           {!answering && (
-            <button type="button" className={`brm-btn brm-btn--ghost${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</button>
+            <Button type="button" size={36} className={`brm-ctl${dirty ? '' : ' brm-push'}`} disabled={busy || !prompt.trim()} onClick={() => setAnswering(true)}>Answer for the room</Button>
           )}
           {blocking && (ask.next
-            ? <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} title={W.tipWaitsHere} onClick={() => lineUp('notNext')}>Not next</button>
-            : <button type="button" className="brm-btn" disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</button>)}
+            ? <Button type="button" size={36} className="brm-ctl" disabled={busy} title={W.tipWaitsHere} onClick={() => lineUp('notNext')}>Not next</Button>
+            : <Button type="button" size={36} className="brm-ctl" disabled={busy || !prompt.trim()} title={`Opens as soon as ask ${askNumber(blocking.askId)} closes`} onClick={() => lineUp('openNext')}>Open next</Button>)}
           {ask.fromRequest && !remocking && (
-            <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setRemocking(true)}>{W.newMockups}</button>
+            <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => setRemocking(true)}>{W.newMockups}</Button>
           )}
-          <button type="button" className={`brm-btn${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</button>
+          <Button type="button" size={36} className={`brm-ctl${answering && !dirty ? ' brm-push' : ''}`} disabled={busy || !prompt.trim()} onClick={open}>{openLabel}</Button>
         </div>
       )}
       {remocking && !ended && (
         <div className="brm-row brm-gap brm-remock">
           <input className="brm-input brm-input--sm" aria-label={W.newMockupsChange} placeholder={W.newMockupsChange} value={change} maxLength={120} onChange={(e) => setChange(e.target.value)} />
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={remock}>{W.newMockups}</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setRemocking(false)}>Cancel</button>
+          <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={remock}>{W.newMockups}</Button>
+          <Button type="button" size={36} className="brm-tight" onClick={() => setRemocking(false)}>Cancel</Button>
         </div>
       )}
       {answering && !ended && (
@@ -3045,8 +3047,8 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
           <p className="brm-notice"><b>{W.tieOf(tied.map(nameOf).join(' and '))}</b></p>
         ) : null}
         <div className="brm-row brm-gap">
-          <button type="button" className={`brm-btn${primary ? ' brm-btn--primary' : ''}`} disabled={busy} onClick={() => act('wheel')}>{W.spin}</button>
-          {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</button>}
+          <Button type="button" variant={primary ? 'primary' : 'secondary'} size={36} className="brm-ctl" disabled={busy} onClick={() => act('wheel')}>{W.spin}</Button>
+          {tied.length >= 2 && <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => act('revote')}>{W.voteAgain}</Button>}
         </div>
         <p className="brm-hint">{W.spinsToo}</p>
       </section>
@@ -3057,7 +3059,7 @@ export function WheelPanel({ ask, busy, run, api, primary = false, spinInRow = f
     <section className="brm-panel brm-wheelpanel" aria-label="The wheel">
       <BuildWheel wheel={w} size="sm" busy={busy} onSpin={spinInRow ? null : () => act('spin')} spinLabel={w.landed ? W.spinAgain : W.spin} spinPrimary={primary} spinSecondary={!primary} onSettled={onSettled} />
       <div className="brm-row brm-gap brm-wheelacts">
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('pass')}>Someone else spins</button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => act('pass')}>Someone else spins</Button>
       </div>
     </section>
   );
@@ -3084,10 +3086,10 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
       <DialogHead id="brm-pick-title" title={v.isPreferred ? W.pickRoomChoice : W.pickAlternate} onClose={onClose} />
       <p data-testid="brm-pick-body">{body}</p>
       {open && <p className="brm-hint">This closes the vote.</p>}
-      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>}>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onConfirm}>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={onClose}>Cancel</Button>}>
+        <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy} onClick={onConfirm}>
           {W.pick(short(v.pick))}
-        </button>
+        </Button>
       </DialogFoot>
     </Modal>
   );
@@ -3306,13 +3308,13 @@ export function DecidePanel({ ask, busy, run, api, playerCount, spoken = false, 
       </div>
       <SendExtras hide={hide} setHide={setHide} disabled={busy} />
       <ActionRow pinned={next} space={next} hint={next ? <span title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span> : ''}>
-        {onCancel && <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { mirror.done(); onCancel(); }}>Cancel</button>}
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={cannot} onClick={() => decide({ send: false })}>{W.recordOnly}</button>
-        <button type="button" className="brm-btn" disabled={cannot} onClick={() => decide({ kind: 'later' })}>{W.saveLater}</button>
+        {onCancel && <Button type="button" size={36} className="brm-ctl" onClick={() => { mirror.done(); onCancel(); }}>Cancel</Button>}
+        <Button type="button" size={36} className="brm-ctl" disabled={cannot} onClick={() => decide({ send: false })}>{W.recordOnly}</Button>
+        <Button type="button" size={36} className="brm-ctl" disabled={cannot} onClick={() => decide({ kind: 'later' })}>{W.saveLater}</Button>
         {!sendRef && (
-          <button type="button" className={`brm-btn${next ? ' brm-btn--primary' : ''}`} data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={() => decide()}>
+          <Button type="button" variant={next ? 'primary' : 'secondary'} size={36} className="brm-ctl" data-next-primary={next || undefined} data-no-space={next || undefined} disabled={cannot} onClick={() => decide()}>
             <Icon name="PaperPlaneTilt" size={16} /> {sendLabel}
-          </button>
+          </Button>
         )}
       </ActionRow>
     </section>
@@ -3353,11 +3355,11 @@ function ShotsPanel({ images, busy, run, api, deleteAs }) {
                     {asStaff && (
                       <DeleteReasonField id={`brm-reason-${im.imageId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
                     )}
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirm(null)}>Keep</button>
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.deleteImage(im.imageId, asStaff ? reason.trim() : ''))}>Remove</button>
+                    <Button type="button" size={36} className="brm-tight" onClick={() => setConfirm(null)}>Keep</Button>
+                    <Button type="button" variant="danger" size={36} className="brm-tight" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.deleteImage(im.imageId, asStaff ? reason.trim() : ''))}>Remove</Button>
                   </>
                 ) : (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirm(im.imageId); }}>Remove</button>
+                  <Button type="button" variant="tertiary" size={36} className="brm-tight brm-danger brm-push" aria-label={`Remove ${im.caption || 'screenshot'}`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirm(im.imageId); }}>Remove</Button>
                 )}
               </div>
             </div>
@@ -3430,7 +3432,7 @@ function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = nul
       {framed && !ended && (
         <div className="brm-notice brm-row brm-gap" data-testid="brm-backtoopening">
           <span>{W.startedTooSoon}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.openingAction('resume', {}))}>Back to the opening</button>
+          <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => run(() => api.openingAction('resume', {}))}>Back to the opening</Button>
         </div>
       )}
       {starter && (
@@ -3438,12 +3440,12 @@ function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = nul
           <p className="brm-nowline">Start with the room: {STARTER_PROMPT}</p>
           <div className="brm-row brm-gap">
             {/* Outlined while another move holds the one orange (Connect first, host review 25 Oct 2026). */}
-            <button type="button" className={`brm-btn${leadOutline ? '' : ' brm-btn--primary'}`} onClick={() => onCompose('choice', { prompt: STARTER_PROMPT, detail: 'Pick the one you most want to see built today.' })}>
+            <Button type="button" variant={leadOutline ? 'secondary' : 'primary'} size={36} className="brm-ctl" onClick={() => onCompose('choice', { prompt: STARTER_PROMPT, detail: 'Pick the one you most want to see built today.' })}>
               I&apos;ll list the options
-            </button>
-            <button type="button" className="brm-btn" onClick={() => onCompose('suggest', { prompt: STARTER_PROMPT, detail: 'Say what you would build, in a few words. Then everyone votes.' })}>
+            </Button>
+            <Button type="button" size={36} className="brm-ctl" onClick={() => onCompose('suggest', { prompt: STARTER_PROMPT, detail: 'Say what you would build, in a few words. Then everyone votes.' })}>
               The room suggests
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -3459,15 +3461,15 @@ function NowBuilding({ room, now, ended, busy, run, api, onCompose, ticked = nul
       {!ended && (!built || (quiet && CONTINUE_PROMPT)) && (
         <div className="brm-row brm-gap">
           {!built && (
-            <button
+            <Button
               type="button"
-              className="brm-btn"
+              size={36} className="brm-ctl"
               disabled={busy || quiet}
               title={quiet ? 'Connect Claude Code first' : W.tipPreview}
               onClick={async () => { const ok = await run(() => api.postDirection(PREVIEW_PROMPT.text, 'do-now', null, { hideFromRoom: true, engagePrompt: 'preview' })); if (ok !== undefined) setSent(true); }}
             >
               Preview the work
-            </button>
+            </Button>
           )}
           {quiet && CONTINUE_PROMPT && <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" />}
         </div>
@@ -3489,23 +3491,23 @@ const LOG_KINDS = [
  * what Claude will do with it.
  */
 export function SendToClaude({ onSend, busy, disabled = false, small = false, primary = false, submit = false }) {
-  const size = small ? ' brm-btn--sm' : '';
+  const tight = small ? 'brm-tight' : 'brm-ctl';
   return (
     <span className="brm-split">
-      <button
+      <Button
         type={submit ? 'submit' : 'button'}
-        className={`brm-btn${size}${primary ? ' brm-btn--primary' : ''}`}
+        variant={primary ? 'primary' : 'secondary'} size={36} className={tight}
         disabled={busy || disabled}
         title="Do now: the next thing Claude builds"
         onClick={submit ? undefined : () => onSend('do-now')}
       >
         <Icon name="PaperPlaneTilt" size={16} /> {W.sendPlain}
-      </button>
-      <SessionMenu label="" groupLabel="Send to Claude as" ariaLabel="Send to Claude as" buttonClass={`brm-btn${size}${primary ? ' brm-btn--primary' : ''} brm-split-caret`}>
+      </Button>
+      <SessionMenu label="" groupLabel="Send to Claude as" ariaLabel="Send to Claude as" variant={primary ? 'primary' : 'secondary'} buttonClass={`${tight} brm-split-caret`}>
         {(close) => HOST_KINDS.map((k) => (
-          <button key={k.key} type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-kindopt" disabled={busy || disabled} onClick={() => { close(); onSend(k.key); }}>
+          <Button key={k.key} type="button" size={36} className="brm-tight brm-kindopt" disabled={busy || disabled} onClick={() => { close(); onSend(k.key); }}>
             <b>{k.label}</b><span>{k.hint}</span>
-          </button>
+          </Button>
         ))}
       </SessionMenu>
     </span>
@@ -3584,7 +3586,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
       <section className="brm-composer brm-composer--line" aria-label={W.tellClaudeHead} data-capability="composer">
         <div className="brm-composeline">
           <button type="button" className="brm-composeline-box" onClick={() => { setOpen(true); setFocusNow((n) => n + 1); }}>{kept || W.tellClaudeLine}</button>
-          <button type="button" className="brm-btn brm-btn--sm" onClick={() => onCompose('suggest')}>{W.askRoom}</button>
+          <Button type="button" size={36} className="brm-tight" onClick={() => onCompose('suggest')}>{W.askRoom}</Button>
         </div>
         {said && <p className="brm-hint" role="status">{said}</p>}
       </section>
@@ -3594,7 +3596,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
     <section className="brm-panel brm-composer" aria-labelledby="brm-compose-h" data-capability="composer">
       <div className="brm-row brm-gap">
         <h2 className="brm-h5" id="brm-compose-h">{W.tellClaudeHead}</h2>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={() => setOpen(false)}>{W.composeClose}</button>
+        <Button type="button" size={36} className="brm-tight brm-push" onClick={() => setOpen(false)}>{W.composeClose}</Button>
       </div>
       <form onSubmit={tell}>
         <label className="brm-sr" htmlFor="brm-compose">Tell Claude, or log what the room said</label>
@@ -3613,7 +3615,7 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
           {/* The one orange button is the step's or What's next's lead; Send is outline while one shows. */}
           <SendToClaude onSend={tellAs} busy={busy} disabled={!words} primary={!leadShows} submit />
           {/* The way into Later while the list is empty and not drawn (simplify PLAN item 18). */}
-          <button type="button" className="brm-btn" data-capability="later" disabled={busy || !words} title="Keep it on your Later list" onClick={queue}>{W.saveLater}</button>
+          <Button type="button" size={36} className="brm-ctl" data-capability="later" disabled={busy || !words} title="Keep it on your Later list" onClick={queue}>{W.saveLater}</Button>
           <span className="brm-row brm-push">
             <select className="brm-input brm-input--sm brm-select" aria-label="Log it as" value={logKind} onChange={(e) => setLogKind(e.target.value)}>
               {LOG_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -3622,14 +3624,14 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
               <input type="checkbox" checked={logKind !== 'note' && alsoTell} disabled={logKind === 'note'} onChange={(e) => setAlsoTell(e.target.checked)} />
               Also tell Claude
             </label>
-            <button type="button" className="brm-btn" disabled={busy || !words} onClick={log}>Log it</button>
+            <Button type="button" size={36} className="brm-ctl" disabled={busy || !words} onClick={log}>Log it</Button>
           </span>
         </div>
         <div className="brm-row brm-gap">
           <span className="brm-label">{W.askRoom}</span>
-          <button type="button" className="brm-btn brm-btn--sm" title="Everyone suggests, then votes" onClick={() => onCompose('suggest')}>Ideas</button>
-          <button type="button" className="brm-btn brm-btn--sm" title="A, B or C" onClick={() => onCompose('choice')}>Choose</button>
-          <button type="button" className="brm-btn brm-btn--sm" title="A 1 to 5 pulse" onClick={() => onCompose('rating')}>Rate</button>
+          <Button type="button" size={36} className="brm-tight" title="Everyone suggests, then votes" onClick={() => onCompose('suggest')}>Ideas</Button>
+          <Button type="button" size={36} className="brm-tight" title="A, B or C" onClick={() => onCompose('choice')}>Choose</Button>
+          <Button type="button" size={36} className="brm-tight" title="A 1 to 5 pulse" onClick={() => onCompose('rating')}>Rate</Button>
           {(onRequest || onPreview) && (
             <span className="brm-push" data-capability="points">
               <SessionMenu label={W.composeMore} groupLabel={W.composeMoreHead} focusFirst>
@@ -3638,19 +3640,19 @@ function Composer({ agent, busy, run, api, onCompose, text, setText, fromAskIds 
                     <span className="brm-more-k">{W.composeMoreHead}</span>
                     {onRequest && (
                       <>
-                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.researchTip} onClick={() => { close(); onRequest('research'); }}>{W.research}</button>
-                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.ideasTip} onClick={() => { close(); onRequest('ideas'); }}>{W.ideasAsk}</button>
-                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.mockupsTip} onClick={() => { close(); onRequest('mockups'); }}>{W.mockupsAsk}</button>
-                        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" title={W.walkthroughTip} onClick={() => { close(); onRequest('walkthrough'); }}>{W.walkthroughAsk}</button>
+                        <Button type="button" size={36} className="brm-tight" title={W.researchTip} onClick={() => { close(); onRequest('research'); }}>{W.research}</Button>
+                        <Button type="button" size={36} className="brm-tight" title={W.ideasTip} onClick={() => { close(); onRequest('ideas'); }}>{W.ideasAsk}</Button>
+                        <Button type="button" size={36} className="brm-tight" title={W.mockupsTip} onClick={() => { close(); onRequest('mockups'); }}>{W.mockupsAsk}</Button>
+                        <Button type="button" size={36} className="brm-tight" title={W.walkthroughTip} onClick={() => { close(); onRequest('walkthrough'); }}>{W.walkthroughAsk}</Button>
                       </>
                     )}
                     {onPreview && (
-                      <button
-                        type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipPreview}
+                      <Button
+                        type="button" size={36} className="brm-tight" disabled={busy} title={W.tipPreview}
                         onClick={async () => { close(); const ok = await onPreview(); if (ok !== undefined) setSaid(W.askedPreview); }}
                       >
                         Preview the work
-                      </button>
+                      </Button>
                     )}
                   </>
                 )}
@@ -3696,9 +3698,9 @@ function AskList({ asks, host, busy, ended, run, api, currentAskId }) {
               {host && !ended && (
                 <td>
                   <div className="brm-rowact">
-                    {a.status === 'proposed' && <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'open' }))}>Open</button>}
-                    {['live', 'voting'].includes(a.status) && <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'close' }))}>Close</button>}
-                    {['results', 'decided'].includes(a.status) && <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'reopen' }))}>Reopen</button>}
+                    {a.status === 'proposed' && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'open' }))}>Open</Button>}
+                    {['live', 'voting'].includes(a.status) && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'close' }))}>Close</Button>}
+                    {['results', 'decided'].includes(a.status) && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.askAction(a.askId, { action: 'reopen' }))}>Reopen</Button>}
                   </div>
                 </td>
               )}
@@ -3786,22 +3788,22 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
       {!ended && tickedLive.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked ideas">
           <b>{tickedLive.length} ticked</b>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || tickedLive.length < 2 || tickedLive.length > 6} title={tickedLive.length < 2 ? 'Tick at least 2' : tickedLive.length > 6 ? 'A vote takes at most 6' : undefined} onClick={() => toVote(tickedLive)}>
+          <Button type="button" size={36} className="brm-tight" disabled={busy || tickedLive.length < 2 || tickedLive.length > 6} title={tickedLive.length < 2 ? 'Tick at least 2' : tickedLive.length > 6 ? 'A vote takes at most 6' : undefined} onClick={() => toVote(tickedLive)}>
             Put {tickedLive.length} to a vote
-          </button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('direct')}><Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.tipSavedLater} onClick={() => bulk('later')}>{W.saveLater}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
+          </Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => bulk('direct')}><Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}</Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipSavedLater} onClick={() => bulk('later')}>{W.saveLater}</Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => bulk('acknowledge')}>Acknowledge</Button>
+          <Button type="button" variant="tertiary" size={36} className="brm-tight brm-push" onClick={() => setTicked([])}>Clear</Button>
         </div>
       )}
 
       {/* A burst of reactions after Claude shows something: clear them in one go. */}
       {!ended && freshRoom.length >= 2 && !tickedLive.length && (
         <div className="brm-row brm-gap brm-ackall">
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} title={W.tipMarkAll} onClick={() => run(() => api.acknowledgeAll())}>
+          <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} title={W.tipMarkAll} onClick={() => run(() => api.acknowledgeAll())}>
             Acknowledge all {freshRoom.length}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -3853,7 +3855,7 @@ function Queue({ startFilter = 'all', room, current, busy, ended, run, api, late
               <ItemMark itemKey={itemKeys.idea(idea.ideaId)} />
               <div className="brm-who">{ideaWho(idea)} · {idea.walled ? 'on the wall' : idea.promotedTo ? `in ask ${askNumber(idea.promotedTo)}` : HANDLED[idea.status] || idea.status}</div>
               {!ended && ['dismissed', 'acknowledged'].includes(idea.status) && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</button>
+                <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} onClick={() => act(idea, 'restore')}>Restore</Button>
               )}
               <IdeaThread idea={idea} busy={busy} ended={ended} run={run} api={api} />
             </div>
@@ -3902,48 +3904,48 @@ function QueueIdea({ idea, busy, ended, ticked, onTick, onAct, canSuggest, onVot
       <div className={`brm-idea-text${consider ? ' is-door' : ''}`} title={consider ? W.ideaWordsTip : undefined} onClick={consider || undefined}>{idea.text}</div>
       {!ended && (
         <div className="brm-idea-acts">
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Do now: the next thing Claude builds" onClick={() => onAct('direct', {})}>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} title="Do now: the next thing Claude builds" onClick={() => onAct('direct', {})}>
             <Icon name="PaperPlaneTilt" size={14} /> {W.sendPlain}
-          </button>
+          </Button>
           <SessionMenu label={W.askRoom} groupLabel={W.askRoom}>
             {(close) => (
               <>
                 {/* NOTHING GREYED OUT (owner, 18 Oct): a vote opens from one idea and adds others in its dialog;
                     with no Ideas ask open, the card offers to open one about it instead. */}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || voteCount > 6} onClick={() => { close(); onVote(); }}>
+                <Button type="button" size={36} className="brm-tight" disabled={busy || voteCount > 6} onClick={() => { close(); onVote(); }}>
                   {voteCount < 2 ? W.putToAVoteMore : `Put ${voteCount} ideas to a vote`}
-                </button>
+                </Button>
                 {canSuggest ? (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</button>
+                  <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => { close(); onAct('suggest'); }}>Add to the open Ideas ask</Button>
                 ) : (
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => { close(); onAskIdeas(idea); }}>{W.askIdeasAbout}</button>
+                  <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => { close(); onAskIdeas(idea); }}>{W.askIdeasAbout}</Button>
                 )}
                 {/* WALL (owner, 2026-10-05): on the Stage for 20 seconds, no name. */}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</button>
+                <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipWall} onClick={() => { close(); onAct('wall'); }}>Show on the wall</Button>
                 {/* ASK CLAUDE (ideas flow E, I7): 2 or 3 ways to do it, back to the host first. */}
-                {onMockups && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.mockupsTip} onClick={() => { close(); onMockups(idea); }}>{W.mockupsOfThis}</button>}
+                {onMockups && <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.mockupsTip} onClick={() => { close(); onMockups(idea); }}>{W.mockupsOfThis}</Button>}
               </>
             )}
           </SessionMenu>
           <SessionMenu label={W.ideaMore} groupLabel={W.ideaMore} ariaLabel={W.ideaMoreLabel(idea.text)} focusFirst>
             {(close) => (
               <>
-                {consider && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { close(); consider(); }}>{W.considerItem}</button>}
+                {consider && <Button type="button" size={36} className="brm-tight" onClick={() => { close(); consider(); }}>{W.considerItem}</Button>}
                 {/* SEND TO CLAUDE AS (step 7c, C14): the kinds, each saying what Claude does with it. */}
                 <div className="brm-more-grp" role="group" aria-label={W.sendAsHead}>
                   <span className="brm-more-k" aria-hidden="true">{W.sendAsHead}</span>
                   {HOST_KINDS.map((k) => (
-                    <button key={k.key} type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-kindopt" disabled={busy} onClick={() => { close(); onAct('direct', asField(k.key)); }}>
+                    <Button key={k.key} type="button" size={36} className="brm-tight brm-kindopt" disabled={busy} onClick={() => { close(); onAct('direct', asField(k.key)); }}>
                       <b>{k.label}</b><span>{k.hint}</span>
-                    </button>
+                    </Button>
                   ))}
                 </div>
                 {/* SAVE FOR LATER (owner, 2026-10-08): the host's "not now", onto the one Later list. Nothing goes to Claude. */}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipSavedLater} onClick={() => { close(); onAct('later'); }}>{W.saveLater}</button>
+                <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipSavedLater} onClick={() => { close(); onAct('later'); }}>{W.saveLater}</Button>
                 {/* ACKNOWLEDGE (owner, 2026-10-05): heard, not a job for Claude. */}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipSeen} onClick={() => { close(); onAct('acknowledge'); }}>Acknowledge</button>
-                {canReply && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { close(); setReplying(true); }}>{W.replyTo(idea.playerName)}</button>}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => { close(); onAct('dismiss'); }}>Dismiss</button>
+                <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipSeen} onClick={() => { close(); onAct('acknowledge'); }}>Acknowledge</Button>
+                {canReply && <Button type="button" size={36} className="brm-tight" onClick={() => { close(); setReplying(true); }}>{W.replyTo(idea.playerName)}</Button>}
+                <Button type="button" size={36} className="brm-tight brm-danger" disabled={busy} onClick={() => { close(); onAct('dismiss'); }}>Dismiss</Button>
               </>
             )}
           </SessionMenu>
@@ -3993,9 +3995,9 @@ function IdeaThread({ idea, busy, ended, run, api, open: heldOpen, setOpen: setH
     if (!doorOnCard && !thread.length) return null;
     return (
       <div className="brm-row brm-gap brm-thread-door">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen(true)}>
+        <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={() => setOpen(true)}>
           {thread.length ? W.threadOpen(name, thread.length) : W.replyTo(name)}
-        </button>
+        </Button>
         {answered && <span className="brm-thread-new" data-testid="brm-thread-new">{W.threadAnswered(name)}</span>}
       </div>
     );
@@ -4004,7 +4006,7 @@ function IdeaThread({ idea, busy, ended, run, api, open: heldOpen, setOpen: setH
     <section className="brm-thread" aria-label={W.threadLabel(name)}>
       <div className="brm-row brm-gap">
         <b className="brm-lbl">{W.threadOnly(name)}</b>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setOpen(false)}>{W.threadHide}</button>
+        <Button type="button" variant="tertiary" size={36} className="brm-tight brm-push" onClick={() => setOpen(false)}>{W.threadHide}</Button>
       </div>
       <ol className="brm-thread-list">
         <li className="brm-thread-msg brm-thread-msg--player"><span className="brm-who">{name} · {clockTime(idea.createdAt)}</span> {idea.text}</li>
@@ -4023,8 +4025,8 @@ function IdeaThread({ idea, busy, ended, run, api, open: heldOpen, setOpen: setH
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(draft); } }}
           />
           <div className="brm-row brm-gap">
-            {!thread.length && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => send(W.gotItThanks)}>{W.gotItThanks}</button>}
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" disabled={busy || !draft.trim()} onClick={() => send(draft)}>{W.threadSend}</button>
+            {!thread.length && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => send(W.gotItThanks)}>{W.gotItThanks}</Button>}
+            <Button type="button" variant="primary" size={36} className="brm-tight brm-push" disabled={busy || !draft.trim()} onClick={() => send(draft)}>{W.threadSend}</Button>
           </div>
         </>
       )}
@@ -4110,14 +4112,14 @@ export function VoteFromIdeasDialog({ ideas: chosen, more = [], picks: startPick
         <div className="brm-notice brm-unheard">{W.hiddenUntilMockups}</div>
       )}
       {!connected && <p className="brm-hint">{W.offlineNoMockups}</p>}
-      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>}>
-        {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: false })}>{W.saveDraft}</button>}
+      <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={onClose}>Cancel</Button>}>
+        {!mockups && <Button type="button" size={44} className="brm-ctl brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: false })}>{W.saveDraft}</Button>}
         {mockups ? (
-          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
+          <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</Button>
         ) : (
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: true })}>
+          <Button type="button" variant="primary" size={44} className="brm-ctl" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: true })}>
             {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : W.openVoting}
-          </button>
+          </Button>
         )}
       </DialogFoot>
     </Modal>
@@ -4137,7 +4139,7 @@ function DialogHead({ id, title, onClose, help = '' }) {
   );
 }
 
-function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' }) {
+function CopyButton({ text, label = 'Copy', variant = 'secondary', className = 'brm-tight' }) {
   const [said, setSaid] = useState('');
   const copy = async () => {
     const ok = await copyText(text);
@@ -4145,9 +4147,9 @@ function CopyButton({ text, label = 'Copy', className = 'brm-btn brm-btn--sm' })
     setTimeout(() => setSaid(''), 2500);
   };
   return (
-    <button type="button" className={className} onClick={copy}>
+    <Button variant={variant} size={36} className={className} onClick={copy}>
       <Icon name="ClipboardText" size={14} /> {said || label}
-    </button>
+    </Button>
   );
 }
 
@@ -4226,7 +4228,7 @@ function ReturnStep({ room, folder, update, install }) {
           <span className="brm-step-title">{update ? W.pasteUpdateReturn : W.pasteToReturn}</span>
           <pre className="brm-cmd" data-testid="brm-return">{cmd}</pre>
           <div className="brm-row brm-gap">
-            <CopyButton text={cmd} label="Copy" className="brm-btn brm-btn--sm brm-btn--primary" />
+            <CopyButton text={cmd} label="Copy" variant="primary" />
             <span className="brm-hint">{update ? W.closeFirst : (shellFolder(folder) ? W.reopens : W.reopensNoFolder(guess))}</span>
           </div>
           {!update && <p className="brm-hint">{W.typeInsteadKick(kick)}</p>}
@@ -4271,7 +4273,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
     <>
       <pre className="brm-cmd" data-testid="brm-install">{install}</pre>
       <div className="brm-row brm-gap">
-        <CopyButton text={install} label="Copy" className={`brm-btn brm-btn--sm${ver === 'old' ? ' brm-btn--primary' : ''}`} />
+        <CopyButton text={install} label="Copy" variant={ver === 'old' ? 'primary' : 'secondary'} />
         <span className="brm-hint">{ver === 'old' ? W.pluginRerun : W.installNote}</span>
       </div>
       {ver !== 'old' && <p className="brm-hint">{W.macAllow}<InfoTip text={W.tipMacAllow} label="Why?" /></p>}
@@ -4314,7 +4316,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
   const showAllRow = (
     <p className="brm-hint brm-otherlaptop">
       {W.otherLaptop}{' '}
-      <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setShowAll(true)}>{W.showAllSteps}</button>
+      <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={() => setShowAll(true)}>{W.showAllSteps}</Button>
     </p>
   );
 
@@ -4367,16 +4369,16 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
             {confirmMint ? (
               <>
                 <span className="brm-hint">{W.oldKeyStops}</span>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirmMint(false)}>Keep it</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={mint}>{mintLabel}</button>
+                <Button type="button" size={36} className="brm-tight" onClick={() => setConfirmMint(false)}>Keep it</Button>
+                <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={mint}>{mintLabel}</Button>
               </>
             ) : !minted && (
               // One orange: the update's Copy when the plugin is out of date, otherwise Mint.
-              <button type="button" className={`brm-btn brm-btn--sm${ver === 'old' ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
+              <Button type="button" variant={ver === 'old' ? 'secondary' : 'primary'} size={36} className="brm-tight" disabled={busy} onClick={() => (liveKey ? setConfirmMint(true) : mint())}>
                 {mintLabel}
-              </button>
+              </Button>
             )}
-            {liveKey && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={revoke}>Revoke key</button>}
+            {liveKey && <Button type="button" size={36} className="brm-tight brm-danger brm-push" disabled={busy} onClick={revoke}>Revoke key</Button>}
           </div>
         </div>
       </li>
@@ -4462,7 +4464,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
         {which === 'all' && showAll && (
           <div className="brm-notice brm-unheard" data-testid="brm-connect-elsewhere">
             <b>{W.filesElsewhereHead}</b> {W.filesElsewhereBody}
-            {!minted && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setShowAll(false)}>{W.backToReturn}</button>}
+            {!minted && <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={() => setShowAll(false)}>{W.backToReturn}</Button>}
           </div>
         )}
         {allSteps}
@@ -4508,7 +4510,7 @@ export function ConnectPanel({ room, gameId, api, run, busy, onClose, atInstall 
       )}
 
       <p className="brm-hint">Game {gameId}.</p>
-      <div className="brm-row"><button type="button" className={`brm-btn brm-push${usedMinted ? ' brm-btn--primary' : ''}`} onClick={onClose}>Done</button></div>
+      <DialogFoot className="brm-row"><Button variant={usedMinted ? 'primary' : 'secondary'} size={44} className="brm-ctl" onClick={onClose}>Done</Button></DialogFoot>
     </Modal>
   );
 }
@@ -4543,8 +4545,10 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
   // the build. One link at most is the build; the header's Open the build and the room's window open it.
   const setDemo = (i) => (e) => setForm((f) => ({ ...f, links: f.links.map((l, j) => ({ ...l, demo: j === i ? e.target.checked : false })) }));
   const removeLink = (i) => setForm((f) => ({ ...f, links: f.links.filter((_, j) => j !== i) }));
-  const requestClose = () => {
-    if (dirty && !window.confirm('Discard your changes to the wrap-up?')) return;
+  const [askConfirm, confirmDialog] = useConfirm();
+  // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
+  const requestClose = async () => {
+    if (dirty && !(await askConfirm({ title: 'Discard your changes to the wrap-up?', message: 'What you changed here is not saved.', confirmText: 'Discard', cancelText: 'Keep editing' }))) return;
     onClose();
   };
   const save = async () => {
@@ -4570,7 +4574,7 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
       {!o && connected && !(room && wrapAsked(room)) && (
         <div className="brm-notice brm-row brm-gap">
           <span>{W.wrapOrClaude}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} data-capability="report" onClick={askClaude}>{W.wrapClaudeBtn}</button>
+          <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} data-capability="report" onClick={askClaude}>{W.wrapClaudeBtn}</Button>
         </div>
       )}
       <div className="brm-field">
@@ -4589,17 +4593,18 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
             <input className="brm-input brm-input--sm" aria-label={W.wrapLinkUrl(i + 1)} placeholder="https://…" value={l.url} maxLength={500} onChange={setLink(i, 'url')} />
             <label className="brm-wraplink-demo" title={W.wrapIsBuildTip}><input type="checkbox" aria-label={W.wrapIsBuildLabel(i + 1)} checked={Boolean(l.demo)} onChange={setDemo(i)} /> {W.wrapIsBuild}</label>
             {form.links.length > 1
-              ? <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={W.wrapRemoveLink(i + 1)} onClick={() => removeLink(i)}><Icon name="X" size={14} /></button>
+              ? <Button type="button" size={36} className="brm-tight" aria-label={W.wrapRemoveLink(i + 1)} onClick={() => removeLink(i)}><Icon name="X" size={14} /></Button>
               : <span />}
           </div>
         ))}
         {from(fill && fill.from.link, W.wrapFromBuild)}
-        {form.links.length < LINK_MAX && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-selfstart" onClick={addLink}><Icon name="Plus" size={14} /> {W.wrapAddLink}</button>}
+        {form.links.length < LINK_MAX && <Button type="button" size={36} className="brm-tight brm-selfstart" onClick={addLink}><Icon name="Plus" size={14} /> {W.wrapAddLink}</Button>}
       </div>
       <label className="brm-field"><span className="brm-lbl">Next steps (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.nextSteps} onChange={set('nextSteps')} /></label>
-      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>}>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !form.summary.trim()} onClick={save}>Save wrap-up</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={requestClose}>Cancel</Button>}>
+        <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy || !form.summary.trim()} onClick={save}>Save wrap-up</Button>
       </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }
@@ -4613,8 +4618,8 @@ function EndDialog({ api, run, busy, onClose }) {
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-end-title">
       <DialogHead id="brm-end-title" title="End this session?" onClose={onClose} />
       <p>{W.endBody}</p>
-      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep it running</button>}>
-        <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={end}>End session</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={onClose}>Keep it running</Button>}>
+        <Button type="button" variant="danger" size={44} className="brm-ctl brm-push" disabled={busy} onClick={end}>End session</Button>
       </DialogFoot>
     </Modal>
   );
@@ -4657,9 +4662,9 @@ function AskClaudeForQuestions({ api, run, busy, buildKind, writing }) {
   if (writing) return <p className="brm-hint" role="status">{W.claudeWritingSet}</p>;
   if (!open) {
     return (
-      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy || !run} onClick={() => setOpen(true)}>
+      <Button type="button" size={36} className="brm-tight" disabled={busy || !run} onClick={() => setOpen(true)}>
         <Icon name="Sparkle" size={14} /> {W.askClaudeForQuestions}
-      </button>
+      </Button>
     );
   }
   const send = async () => {
@@ -4670,8 +4675,8 @@ function AskClaudeForQuestions({ api, run, busy, buildKind, writing }) {
   return (
     <div className="brm-row brm-gap brm-askclaude">
       <input className="brm-input brm-input--sm" aria-label={W.askClaudeWhat} placeholder={W.askClaudeWhat} value={what} maxLength={200} onChange={(e) => setWhat(e.target.value)} />
-      <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={send}>{W.askClaudeSend}</button>
-      <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setOpen(false)}>Cancel</button>
+      <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={send}>{W.askClaudeSend}</Button>
+      <Button type="button" size={36} className="brm-tight" onClick={() => setOpen(false)}>Cancel</Button>
     </div>
   );
 }
@@ -4765,7 +4770,7 @@ function ReadyLibrary({
           {claudeActive.savedAt ? W.claudeSetSaved : W.fromClaudeUnsaved}
           {claudeActive.file && <span className="brm-hint brm-block">{W.claudeSetFile(claudeActive.file)}</span>}
           {!claudeActive.savedAt && run && (
-            <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => saveClaudeSet(claudeActive)}>{W.saveClaudeSet}</button>
+            <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => saveClaudeSet(claudeActive)}>{W.saveClaudeSet}</Button>
           )}
         </div>
       )}
@@ -4867,8 +4872,10 @@ export function AskComposer({
   const [claudeNote, setClaudeNote] = useState('');
   const [from, setFrom] = useState(null);
   const dirty = Boolean(prompt || detail || options.some((o) => o.title));
-  const requestClose = () => {
-    if (dirty && !window.confirm('Discard this question?')) return;
+  const [askConfirm, confirmDialog] = useConfirm();
+  // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
+  const requestClose = async () => {
+    if (dirty && !(await askConfirm({ title: 'Discard this question?', message: 'The room has not seen it yet.', confirmText: 'Discard', cancelText: 'Keep writing' }))) return;
     onClose();
   };
   const pickReady = (it) => {
@@ -4933,11 +4940,11 @@ export function AskComposer({
                   <span className={`brm-letter brm-letter--${i % 3}`} aria-hidden="true">{letter(i)}</span>
                   <input className="brm-input" aria-label={`Option ${letter(i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, 'title', e.target.value)} />
                   {i === options.length - 1 && options.length > 2 ? (
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label="Remove option" onClick={() => setOptions((l) => l.slice(0, -1))}><Icon name="X" size={14} /></button>
+                    <Button type="button" size={36} className="brm-tight" aria-label="Remove option" onClick={() => setOptions((l) => l.slice(0, -1))}><Icon name="X" size={14} /></Button>
                   ) : <span />}
                 </div>
               ))}
-              {options.length < 6 && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-selfstart" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</button>}
+              {options.length < 6 && <Button type="button" size={36} className="brm-tight brm-selfstart" onClick={() => setOptions((l) => [...l, { title: '', url: '' }])}><Icon name="Plus" size={14} /> Add option</Button>}
             </div>
           )}
           {kind === 'yesno' && (
@@ -4980,12 +4987,12 @@ export function AskComposer({
             </label>
             <label className="brm-check brm-field"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> {W.saveDraft}</label>
           </details>
-          <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
-            <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</button>
-          </div>
+          <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={requestClose}>Cancel</Button>}>
+            <Button type="submit" variant="primary" size={44} className="brm-ctl" disabled={busy || !ready}>{draft ? 'Save draft' : 'Ask the room'}</Button>
+          </DialogFoot>
         </form>
       </div>
+      {confirmDialog}
     </Modal>
   );
 }

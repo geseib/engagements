@@ -453,12 +453,12 @@ describe('someone asks to take a name (S6)', () => {
 
   test('the strip is never orange, and the screen keeps exactly the primary it had', async () => {
     await openRoom(hostState());
-    const had = document.querySelectorAll('.brm-host .brm-btn--primary').length;
+    const had = document.querySelectorAll('.brm-host .ui-btn--action').length;
     roster = ASKING();
     await act(async () => { onMessage('handoverRequested')({}); });
     const strip = await screen.findByRole('region', { name: 'Someone is asking to take a name' });
-    expect(strip.querySelectorAll('.brm-btn--primary')).toHaveLength(0);
-    expect(document.querySelectorAll('.brm-host .brm-btn--primary')).toHaveLength(had);
+    expect(strip.querySelectorAll('.ui-btn--action')).toHaveLength(0);
+    expect(document.querySelectorAll('.brm-host .ui-btn--action')).toHaveLength(had);
     expect(had).toBe(1);
   });
 
@@ -548,7 +548,7 @@ describe('Settings, in the Session menu\'s sections (experience plan 2e, PLAN §
       ...over,
     });
     const group = () => panel().querySelector('[data-group="room"]');
-    const oranges = () => [...group().querySelectorAll('.brm-btn--primary')].map((b) => b.textContent);
+    const oranges = () => [...group().querySelectorAll('.ui-btn--action')].map((b) => b.textContent);
     test.each([
       ['no demo yet', null, false, 'Show on the Stage'],
       ['not shared', lanOf('off'), true, 'Share demo'],

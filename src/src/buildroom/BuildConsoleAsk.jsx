@@ -27,6 +27,7 @@ import { askPathStep } from './buildScreens';
 import { KIND_LABEL, askNumber } from './screens/common';
 import { W, LOOP } from './words';
 import { BCW } from './buildConsole';
+import Button from '../components/ui/Button';
 
 // The strip's words (simplify PLAN item 13): the kicker names the step the strip lights.
 const STEP_WORD = { collect: LOOP.collect, settle: LOOP.settle, send: LOOP.send };
@@ -91,14 +92,14 @@ export default function BuildConsoleAsk({
           {host && (
             <div className="bc-askrow" role="group" aria-label="More for this ask">
               {open && <AskWording key={ask.prompt} ask={ask} busy={busy} run={run} api={api} />}
-              {!answering && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>{BCW.askAnswerForRoom}</button>}
+              {!answering && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => setAnswering(true)}>{BCW.askAnswerForRoom}</Button>}
               {open && ask.status === 'live' && ask.kind === 'suggest' && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('close')}>Close without a vote</button>
+                <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={act('close')}>Close without a vote</Button>
               )}
               {settle && tied.length >= 2 && !wheel && !ask.revotedAs && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('revote')}>{W.voteAgain}</button>
+                <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={act('revote')}>{W.voteAgain}</Button>
               )}
-              {settle && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('reopen')}>Reopen</button>}
+              {settle && <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={act('reopen')}>Reopen</Button>}
             </div>
           )}
         </div>

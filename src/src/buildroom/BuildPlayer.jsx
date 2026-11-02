@@ -860,7 +860,7 @@ function OpenDemo({ lan, who = null }) {
     }
     return (
       <section className="bpl-open" aria-label={W.openDemo}>
-        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+        <a className="bpl-send bpl-open-go" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
       </section>
     );
   }
@@ -879,7 +879,7 @@ function OpenDemo({ lan, who = null }) {
     }
     return (
       <section className="bpl-open" aria-label={W.openDemo}>
-        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+        <a className="bpl-send bpl-open-go" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
         <p className="plr-help bpl-open-note">{remote === 'starting' ? `${W.sameWifiOnly} ${W.remoteSoon}` : W.sameWifiOnly}</p>
       </section>
     );

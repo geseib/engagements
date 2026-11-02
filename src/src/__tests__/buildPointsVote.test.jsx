@@ -150,7 +150,7 @@ async function openRoom(state) {
 }
 
 /** The orange buttons on the Host screen, outside any dialog (the existing counting rule). */
-const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
+const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
   .filter((b) => !b.closest('[role="dialog"], .brm-modal'));
 const panel = () => screen.getByRole('region', { name: 'Points' });
 const tick = (text) => {
@@ -252,7 +252,7 @@ describe('T5 the vote dialog', () => {
     const dlg = await screen.findByRole('dialog', { name: 'Put 2 to a vote' });
     expect(within(dlg).getByRole('button', { name: 'Close ask 3 and open the vote' })).toBeInTheDocument();
     // The ask's step held the orange; with the window over it, the window holds it alone.
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     expect(oranges()).toHaveLength(0);
     fireEvent.click(within(dlg).getAllByRole('button', { name: 'Close' }).pop());
     expect(oranges()).toHaveLength(1);
@@ -266,7 +266,7 @@ describe('T5 the vote dialog', () => {
     expect(oranges().map((b) => b.textContent)).toEqual(['Put 2 to a vote']);
     fireEvent.click(within(panel()).getByRole('button', { name: 'Put 2 to a vote' }));
     const dlg = await screen.findByRole('dialog', { name: 'Put 2 to a vote' });
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     expect(oranges()).toHaveLength(0);
     fireEvent.click(within(dlg).getAllByRole('button', { name: 'Close' }).pop());
     expect(oranges().map((b) => b.textContent)).toEqual(['Put 2 to a vote']);
@@ -312,7 +312,7 @@ describe('T6 results: highlight what moves forward', () => {
   test('three moves, the main one right-most and the only orange; Work through needs two', async () => {
     await openRoom(RESULTS());
     const bar = rows().closest('.brm-path-body');
-    const btns = [...bar.querySelectorAll('.brm-arow > .brm-btn')];
+    const btns = [...bar.querySelectorAll('.brm-arow > .ui-btn')];
     const bar2 = within(bar);
     expect(btns.map((b) => b.textContent)).toEqual(['Save the rest for later', 'Work through in turn', 'Send these 3 to Claude']);
     expect(oranges().map((b) => b.textContent)).toEqual(['Send these 3 to Claude']);
@@ -320,7 +320,7 @@ describe('T6 results: highlight what moves forward', () => {
     fireEvent.click(row(TEXTS[1]));
     fireEvent.click(row(TEXTS[4]));
     expect(screen.getByRole('button', { name: 'Work through in turn' })).toBeDisabled();
-    expect(bar2.getByRole('button', { name: 'Send to Claude' }).className).toMatch('brm-btn--primary');
+    expect(bar2.getByRole('button', { name: 'Send to Claude' }).className).toMatch('ui-btn--action');
   });
 
   test('Send these 3 posts forward/send with the ids in vote order, and that is the only post (the server settles the vote)', async () => {
@@ -430,7 +430,7 @@ describe('T7 the run list on the Host', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Points/ }));
     tick(TEXTS[5]);
     expect(oranges().map((b) => b.textContent)).toEqual([W.nextItem(3, TEXTS[3])]);
-    expect(within(panel()).getByRole('button', { name: 'Send to Claude' }).className).not.toMatch('brm-btn--primary');
+    expect(within(panel()).getByRole('button', { name: 'Send to Claude' }).className).not.toMatch('ui-btn--action');
   });
 
   test('Claude still on it: Space does nothing and Next asks first; Wait for Claude sends nothing', async () => {
@@ -442,7 +442,7 @@ describe('T7 the run list on the Host', () => {
     const dlg = await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" });
     expect(dlg.textContent).toMatch('2 may be left half done.');
     expect(oranges()).toHaveLength(0);
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(within(dlg).getByRole('button', { name: 'Wait for Claude' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postsTo('run/next')).toHaveLength(0);
@@ -460,7 +460,7 @@ describe('T7 the run list on the Host', () => {
   test('Claude has reported: the row says so, Space presses Next, and no confirm', async () => {
     await openRoom(RUNNING(true));
     expect(screen.getByText('Claude finished 2 · Press Space to send 3')).toBeInTheDocument();
-    expect(oranges().map((b) => b.className.includes('brm-btn--primary') && b.hasAttribute('data-next-primary'))).toEqual([true]);
+    expect(oranges().map((b) => b.className.includes('ui-btn--action') && b.hasAttribute('data-next-primary'))).toEqual([true]);
     fireEvent.keyDown(window, { key: ' ' });
     await waitFor(() => expect(postsTo('run/next')).toHaveLength(1));
     expect(postsTo('run/next')[0].body).toEqual({ from: 2, runId: 'r1' });
@@ -524,7 +524,7 @@ describe('T7 the run list on the Host', () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'live' }], points: runPoints(), run: RUN({}, false) }));
     fireEvent.click(screen.getByRole('button', { name: /^Next: 3/ }));
     const dlg = await screen.findByRole('dialog', { name: "Claude hasn't finished 2. Send 3 anyway?" });
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     expect(oranges()).toHaveLength(0);
     fireEvent.click(within(dlg).getByRole('button', { name: 'Wait for Claude' }));
     expect(oranges()).toHaveLength(1);
@@ -569,7 +569,7 @@ describe('T7 the run list on the Host', () => {
     const before = oranges().map((b) => b.textContent);
     expect(before).toHaveLength(1);
     expect(before[0]).not.toMatch(/^Next/);
-    expect(screen.getByRole('button', { name: /^Next: 3/ }).className).not.toMatch('brm-btn--primary');
+    expect(screen.getByRole('button', { name: /^Next: 3/ }).className).not.toMatch('ui-btn--action');
     expect(screen.getByRole('button', { name: /^Next: 3/ }).hasAttribute('data-next-primary')).toBe(false);
   });
 

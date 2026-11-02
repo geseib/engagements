@@ -15,6 +15,7 @@ import { wifiState } from '../wifiShare';
 import { wifiLink } from '../BuildWifiShare';
 import { latestBuild } from '../buildScreens';
 import { W } from '../words';
+import Button from '../../components/ui/Button';
 
 export const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate' };
 
@@ -85,9 +86,9 @@ export function SafeLink({ href, children, className }) {
 export function OpenLink({ href, label, primary = false }) {
   if (!safeHref(href)) return null;
   return (
-    <a className={`brm-btn brm-openbtn${primary ? ' brm-btn--primary' : ''}`} href={href} target="_blank" rel="noopener noreferrer" title={href}>
+    <Button as="a" variant={primary ? 'primary' : 'secondary'} size={36} className="brm-ctl brm-openbtn" href={href} target="_blank" rel="noopener noreferrer" title={href}>
       <Icon name="ArrowSquareOut" size={16} /> {label}
-    </a>
+    </Button>
   );
 }
 

@@ -13,6 +13,7 @@ import Modal from '../components/Modal';
 import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 const SUBJECT_MAX = 200;
 
@@ -68,10 +69,9 @@ export default function BuildPointRequest({ kind, initial = '', ideaId = '', con
       <p className="brm-hint">{mockups ? W.mockupsNote : walk ? W.walkthroughNote : ideas ? W.ideasNote : W.researchNote}</p>
       {old && <p className="brm-hint brm-hint--warn" role="status">{W.updatePluginFor(MOCKUPS_PLUGIN)}</p>}
       {!connected && <p className="brm-hint brm-hint--warn" role="status">{W.claudeAway}</p>}
-      <DialogFoot className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>{W.close}</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={onClose}>{W.close}</Button>}>
         <span className="brm-say is-keys brm-push" title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span>
-        <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !ready} onClick={send}>{W.sendToClaudeNow}</button>
+        <Button type="button" variant="primary" size={44} className="brm-ctl" disabled={busy || !ready} onClick={send}>{W.sendToClaudeNow}</Button>
       </DialogFoot>
     </Modal>
   );
