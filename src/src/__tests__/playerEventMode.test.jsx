@@ -66,7 +66,7 @@ beforeEach(() => {
 test('joins the item with the attendee\'s token and no form: nothing to type', async () => {
   serve();
   render(<PlayerPage event={eventProps()} />);
-  expect(screen.queryByPlaceholderText(/Game ID/i)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/Session code/i)).not.toBeInTheDocument();
 
   await waitFor(() => {
     const post = global.fetch.mock.calls.find(([u, o]) => String(u).includes(`games/${GAME}/players`) && o && o.method === 'POST');
@@ -89,7 +89,7 @@ test('a token the event does not know sends the attendee back to the event\'s na
 });
 
 test('any other refusal is said, with Try again', async () => {
-  serve({ join: { status: 403, body: { error: 'Game not started' } } });
+  serve({ join: { status: 500, body: { error: 'Internal server error' } } });
   render(<PlayerPage event={eventProps()} />);
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
@@ -108,7 +108,7 @@ test('the end screen of an event\'s item offers the way back to the agenda', asy
   serve({ state: 'ENDED' });
   const props = eventProps();
   render(<PlayerPage event={props} />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Back to the agenda' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Open the agenda' }));
   expect(props.onAgenda).toHaveBeenCalled();
   expect(screen.getByText(/the next item starts here by itself/)).toBeInTheDocument();
 });

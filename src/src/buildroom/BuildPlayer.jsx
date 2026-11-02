@@ -14,6 +14,7 @@ import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
 import { MARK_WORDS } from './sentMarks';
+import { ENDED } from '../config/playerWords';
 
 /**
  * A BUILD ROOM, ON THE PHONE OF SOMEBODY WHO HAS JOINED ONE.
@@ -1411,11 +1412,16 @@ export default function BuildPlayer({
 
   /* ENDED: the wrap-up, and nothing to send — the server refuses every write. */
   if (isEnded) {
+    /* THE SAME ENDED GRAMMAR AS EVERY OTHER TYPE (experience plan 3a): the
+       "That's a wrap" eyebrow, the unscored thanks, the green strip. What
+       was built follows, as before. */
     return page({
       volume: 'rest',
+      phase: 'done',
       body: (
         <>
-          <h1 className="plr-h1 plr-h1--primary">That's a wrap</h1>
+          <p className="plr-lab">{ENDED.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{ENDED.unscored(playerName)}</h1>
           {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : <p className="plr-lede">The session has ended. Thanks for building.</p>}
           <Feed view={view} />
         </>

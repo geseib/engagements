@@ -24,9 +24,10 @@ const playerSurveys = {
   sections: [
     /*
       PlayerPage join form, survey brief: "Used to get you back in if you lose
-      this page." + the Names phone promise. SurveyRunner not-started: "You're
-      in", "Joined as {name}.", "The survey opens when your host is ready.
-      This page will change on its own."; loading "Loading the survey…";
+      this page." + the Names phone promise. SurveyRunner not-started (the one
+      wait, config/playerWords.js WAIT): "You're in as {name}", "Waiting for
+      the host.", "The survey opens when your host is ready. This page changes
+      on its own."; loading "Loading the survey…";
       error "The survey did not load." + Try again. Checked on dev.
     */
     {
@@ -210,9 +211,12 @@ const playerSurveys = {
       closed: "The survey is closed." + "Thanks, {name}. Everything you
       answered counts, whether or not you pressed Send." / "Your host has
       closed it, so there is nothing more to answer.", "Your host may put the
-      results on the main screen. Nobody's name is shown there."; ended:
-      "That's a wrap", "Thanks for taking part, {name}.", "The session is
-      over. You can close this page." Checked on dev.
+      results on the room’s screen. Nobody's name is shown there."; ended:
+      the one ended screen (components/PlayerEnded.jsx, experience plan
+      3a/3e): "That's a wrap", "Thanks for taking part, {name}.", "You can
+      close this page. …"; inside an event instead "This item is finished",
+      "Up next …", "Keep this page open: the next item starts here by itself."
+      and Open the agenda in the dock, never "close this page".
     */
     {
       id: 'when-it-closes',
@@ -225,11 +229,11 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Once it closes, your phone says "The survey is closed." and nothing more can be answered or changed. Everything you answered counts, whether or not you pressed Send. The host may show the results on the main screen, without names.',
+          text: 'Once it closes, your phone says "The survey is closed." and nothing more can be answered or changed. Everything you answered counts, whether or not you pressed Send. The host may show the results on the room’s screen, without names.',
         },
         {
           t: 'p',
-          text: 'When the host ends the session your phone thanks you and says the session is over. You can close the page.',
+          text: 'When the host ends the session your phone thanks you for taking part. On its own you can close the page. Inside an event it says what is up next instead: keep the page open, and **Open the agenda** shows the day so far.',
         },
       ],
     },

@@ -25,9 +25,9 @@ function routeFetch({ engagementInfo = '', gameOk = true } = {}) {
       json: async () => body,
     });
 
-    if (u === `${API}games/TEST123?role=player`) {
+    if (u === `${API}games/7123?role=player`) {
       return gameOk
-        ? reply({ gameId: 'TEST123', gameType: 'call-and-answer', engagementInfo })
+        ? reply({ gameId: '7123', gameType: 'call-and-answer', engagementInfo })
         : reply({ error: 'Game not found' }, false);
     }
     if (u.endsWith('/players') && opts.method === 'POST') {
@@ -40,10 +40,10 @@ function routeFetch({ engagementInfo = '', gameOk = true } = {}) {
 
 async function joinAs(name = 'Ada') {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: 'TEST123' } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: '7123' } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: name } });
-  fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
-  await screen.findByText(/Waiting for the game to start/i);
+  fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
+  await screen.findByText(/Waiting for the host/i);
 }
 
 describe('what a participant sees when they join', () => {
@@ -73,7 +73,7 @@ describe('what a participant sees when they join', () => {
   test('still reaches the lobby when the lookup fails', async () => {
     global.fetch = routeFetch({ gameOk: false });
     await joinAs();
-    expect(screen.getByText(/Waiting for the game to start/i)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the host/i)).toBeInTheDocument();
     expect(screen.queryByText(/about this session/i)).toBeNull();
   });
 
@@ -83,7 +83,7 @@ describe('what a participant sees when they join', () => {
     global.fetch = routeFetch({ engagementInfo: 'Anything.' });
     await joinAs();
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(`${API}games/TEST123?role=player`);
+      expect(global.fetch).toHaveBeenCalledWith(`${API}games/7123?role=player`);
     });
     const hostCalls = global.fetch.mock.calls.filter(([u]) => String(u).includes('role=host'));
     expect(hostCalls).toEqual([]);
@@ -102,9 +102,9 @@ describe('what a participant sees when they join', () => {
 */
 describe('the join screens speak the session\'s own terms', () => {
   const CODE = '4821';
-  const GAME_HELP = 'Used for the scoreboard and to get you back in on this phone if you lose this page. On rounds '
+  const GAME_HELP = 'Used for the scoreboard and to get you back in on this device if you lose this page. On rounds '
     + 'where the room votes, your name is not shown next to your answer until voting closes.';
-  const GAME_REJOIN = `This phone joined session ${CODE} as Ada. Rejoining brings your answers and your score back with you.`;
+  const GAME_REJOIN = `This device joined session ${CODE} as Ada. Rejoining brings your answers and your score back with you.`;
   const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
   const nameHelp = () => text(document.getElementById('plr-name-help'));
   const briefUrl = `${API}games/${CODE}?role=player`;
@@ -136,7 +136,7 @@ describe('the join screens speak the session\'s own terms', () => {
   // rejects: a survey told its name is for a scoreboard and for voting rounds.
   test.each(NAMES_MODES.map((m) => [m.label, m]))('a survey (%s): what the name is for, in the Names value\'s own words', async (_label, mode) => {
     openFromLink({ gameType: 'survey', names: mode.id });
-    const expected = `Used to get you back in on this phone if you lose this page. ${mode.phoneLead ? `${mode.phoneLead} ` : ''}${mode.phoneLine}`;
+    const expected = `Used to get you back in on this device if you lose this page. ${mode.phoneLead ? `${mode.phoneLead} ` : ''}${mode.phoneLine}`;
     await waitFor(() => expect(nameHelp()).toBe(expected));
     expect(nameHelp()).not.toMatch(/scoreboard|round|score/i);
   });
@@ -144,15 +144,15 @@ describe('the join screens speak the session\'s own terms', () => {
   // rejects: guessing a Names value the brief did not carry.
   test('a survey whose brief carries no Names value: neutral, nothing claimed', async () => {
     openFromLink({ gameType: 'survey', names: null });
-    await waitFor(() => expect(nameHelp()).toBe('Used to get you back in on this phone if you lose this page.'));
+    await waitFor(() => expect(nameHelp()).toBe('Used to get you back in on this device if you lose this page.'));
   });
 
   test('a typed four-digit code reads the brief too', async () => {
     global.fetch = briefFetch({ gameType: 'survey', names: 'finished' });
     render(<PlayerPage />);
     expect(nameHelp()).toBe(GAME_HELP);
-    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: CODE } });
-    await waitFor(() => expect(nameHelp()).toMatch(/^Used to get you back in on this phone if you lose this page\. Your host sees that you finished/));
+    fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: CODE } });
+    await waitFor(() => expect(nameHelp()).toMatch(/^Used to get you back in on this device if you lose this page\. Your host sees that you finished/));
   });
 
   // rejects: rewording every type's join screen to fit the survey.
@@ -180,7 +180,7 @@ describe('the join screens speak the session\'s own terms', () => {
     test('a survey: your answers come back — no score', async () => {
       returnTo({ gameType: 'survey', names: 'anonymous' });
       await screen.findByRole('button', { name: /Rejoin as Ada/ });
-      await waitFor(() => expect(rejoinLine()).toBe(`This phone joined session ${CODE} as Ada. Rejoining brings your answers back with you.`));
+      await waitFor(() => expect(rejoinLine()).toBe(`This device joined session ${CODE} as Ada. Rejoining brings your answers back with you.`));
       expect(rejoinLine()).not.toMatch(/score/i);
     });
 

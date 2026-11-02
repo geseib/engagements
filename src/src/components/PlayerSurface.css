@@ -654,16 +654,50 @@
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
-.plr-inp--code {
-  min-height: 80px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--plr-t-hero);
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: .3em;
-  text-indent: .3em;
-  text-align: center;
+/* THE ONE CODE WIDGET (experience plan 3a; components/SessionCodeField.jsx):
+   four cells drawn over one real input, as /join (RootPage.css .entry-cells)
+   and the marketing hero (.jce-cells) draw it. The input stays focusable and
+   pasteable; it is transparent, never display:none. */
+.plr-codewrap { position: relative; }
+.plr-codein {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0;
+  font-size: var(--plr-t-secondary);   /* >=16px so iOS does not zoom on focus */
+  border: 0; background: transparent; color: transparent;
+  padding: 0;
 }
+.plr-codein[readonly] { cursor: default; }
+.plr-cells {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  pointer-events: none;
+}
+.plr-cell {
+  min-height: 72px; display: grid; place-items: center;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 2px solid var(--plr-rule-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800; font-size: var(--plr-t-hero); line-height: 1;
+  color: var(--text);
+}
+.plr-cell--next { border-color: var(--accent); }
+/* A still caret, not a blinking one: nothing on this surface animates
+   (playerSurfacePalette.test.js), because nothing here means "wait". */
+.plr-codewrap--focused .plr-cell--next::after {
+  content: ""; width: 2px; height: 36px; background: var(--accent);
+}
+.plr-codewrap--focused .plr-cells { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 14px; }
+.plr-codewrap--bad .plr-cell { border-color: var(--accent); }
+
+/* THE ENDED SCREEN'S TAIL (components/PlayerEnded.jsx): "Up next" in an
+   event, then the one line about the page. */
+.plr-ended-next {
+  margin-top: 18px;
+  font-size: var(--plr-t-body);
+  color: var(--text);
+}
+.plr-ended-next .plr-k { color: var(--plr-muted); margin-right: 6px; }
+.plr-ended-line { margin-top: 18px; }
 
 .plr-inp--area {
   min-height: 148px;

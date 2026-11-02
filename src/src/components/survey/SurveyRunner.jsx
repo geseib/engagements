@@ -15,6 +15,10 @@ import ChoiceInput from './ChoiceInput';
 import YesNoInput from './YesNoInput';
 import RankInput from './RankInput';
 import TextInput from './TextInput';
+import PlayerEnded, { PlayerEndedDock } from '../PlayerEnded';
+import {
+  ENDED, LOOK_UP, RECEIPT, SENT, WAIT,
+} from '../../config/playerWords';
 
 /**
  * A SURVEY, ON THE PHONE OF SOMEBODY WHO HAS JOINED ONE.
@@ -134,6 +138,8 @@ export default function SurveyRunner({
   online = true,
   banner = null,
   storage,
+  // AN EVENT'S ITEM (experience plan 3e): `{ onAgenda, nextTitle }`, or null.
+  event = null,
 }) {
   const doFetch = fetchFn || ((...args) => fetch(...args));
   const [load, setLoad] = useState({ status: 'loading', error: null });
@@ -352,17 +358,25 @@ export default function SurveyRunner({
   );
 
   /* ---- ENDED: every session type ends; a survey's shows no score ---------- */
+  /* ONE ENDED SCREEN (experience plan 3a/3e): the game's end draws the same
+     component. A survey scores nothing; inside an event the item is finished,
+     the page stays open for the next one and the agenda is in the dock (audit
+     C P5: it used to say "You can close this page" mid-event). */
   if (current === 'ENDED' || current === 'END') {
-    return shell({ phase: 'done', volume: 'watch', ctx: 'Session complete', centre: true }, (
-      <>
-        <p className="plr-lab">That&apos;s a wrap</p>
-        <h1 className="plr-h1">Thanks for taking part, {playerName}.</h1>
-        <p className="plr-lede plr-muted">The session is over. You can close this page.</p>
-        <LookUpCue>
-          If your host shares what the room said, it will be on the main screen — they will send
-          anything more themselves.
-        </LookUpCue>
-      </>
+    const inEvent = Boolean(event);
+    return shell({
+      phase: 'done',
+      volume: 'watch',
+      ctx: inEvent ? ENDED.itemCtx : ENDED.ctx,
+      centre: true,
+      dock: inEvent && typeof event.onAgenda === 'function' ? <PlayerEndedDock event={event} /> : null,
+    }, (
+      <PlayerEnded
+        name={playerName}
+        scored={false}
+        event={inEvent ? event : null}
+        lookUp={<LookUpCue>{ENDED.lookUp}</LookUpCue>}
+      />
     ));
   }
 
@@ -377,9 +391,7 @@ export default function SurveyRunner({
             ? `Thanks, ${playerName}. Everything you answered counts, whether or not you pressed Send.`
             : 'Your host has closed it, so there is nothing more to answer.'}
         </p>
-        <LookUpCue>
-          Your host may put the results on the main screen. Nobody’s name is shown there.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.surveyClosed}</LookUpCue>
       </>
     ));
   }
@@ -389,11 +401,10 @@ export default function SurveyRunner({
     if (load.status === 'not-started') {
       return shell({ phase: 'quiet', volume: 'rest', ctx: 'Survey', centre: true }, (
         <>
-          <p className="plr-lab">You&apos;re in</p>
-          <h1 className="plr-h1 plr-h1--primary">Joined as {playerName}.</h1>
-          <p className="plr-lede plr-muted">
-            The survey opens when your host is ready. This page will change on its own.
-          </p>
+          {/* ONE WAY TO SAY WAIT (experience plan 3a). */}
+          <p className="plr-lab">{WAIT.lobbyEyebrow(playerName)}</p>
+          <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
+          <p className="plr-lede plr-muted">{WAIT.surveyLede} {WAIT.line}</p>
         </>
       ));
     }
@@ -422,18 +433,19 @@ export default function SurveyRunner({
 
   /* ---- SENT (rest volume: no dock, no amber) ----------------------------- */
   if (view.screen === 'sent') {
-    return shell({ phase: 'quiet', volume: 'rest', ctx: 'Sent', centre: true }, (
+    /* ONE RECEIPT (experience plan 3a): the "Sent" eyebrow and "Your <thing>
+       is in." heading every type's receipt carries. */
+    return shell({ phase: 'quiet', volume: 'rest', ctx: `Survey · ${SENT}`, centre: true }, (
       <>
-        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>Thanks, {playerName} — that’s everything.</h1>
+        <p className="plr-lab plr-lab--good">{SENT}</p>
+        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>{RECEIPT.answers}</h1>
         <p className="plr-lede plr-muted">
-          Your answers are in. You can still change them from here until the host closes the survey.
+          Thanks, {playerName}. {RECEIPT.changeable}
         </p>
         <button type="button" className="plr-linkish plr-linkish--quiet" onClick={() => goTo('review')}>
           Change my answers
         </button>
-        <LookUpCue>
-          When the survey closes, your host may put the results on the main screen.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.surveySent}</LookUpCue>
       </>
     ));
   }
@@ -557,7 +569,8 @@ export default function SurveyRunner({
   return shell({
     phase: 'ask',
     volume: 'act',
-    ctx: `${index + 1} of ${total}`,
+    // The bar says where you are (§3.4): "Question 3 of 8".
+    ctx: `Question ${index + 1} of ${total}`,
     progress: (index * 100) / total,
     dock: (
       <>

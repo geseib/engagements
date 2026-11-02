@@ -154,13 +154,7 @@ module.exports = {
       "projector": 1
     },
     "PlayerPage.jsx": {
-      "Back to the agenda": 1,
-      "Feedback": 6,
-      "Game ID": 1,
-      "Join Game": 2,
-      "Main screen": 14,
-      "Results": 3,
-      "game": 4
+      "Feedback": 6
     },
     "PresentPage.jsx": {
       "Presentation": 1,
@@ -284,9 +278,6 @@ module.exports = {
     "components/SkinGallery.jsx": {
       "Results": 1
     },
-    "components/event/EventAttendeePage.jsx": {
-      "Main screen": 1
-    },
     "components/event/EventStage.jsx": {
       "Back to the agenda": 2,
       "Back to the console": 1
@@ -321,9 +312,6 @@ module.exports = {
     "components/stage/WorkieSettings.jsx": {
       "the summary": 1
     },
-    "components/survey/SurveyRunner.jsx": {
-      "Main screen": 3
-    },
     "components/ui/fixtures/Chip.jsx": {
       "Results": 1
     },
@@ -356,9 +344,7 @@ module.exports = {
       "Session panel": 1
     },
     "config/help/build-room-participant.js": {
-      "Join Game": 1,
-      "Main screen": 2,
-      "game": 1
+      "Main screen": 2
     },
     "config/help/build-room.js": {
       "Players": 1,
@@ -404,26 +390,13 @@ module.exports = {
       "Session panel": 1,
       "Show QR": 1
     },
-    "config/help/player-events.js": {
-      "Back to the agenda": 1,
-      "Main screen": 2
-    },
-    "config/help/player-surveys.js": {
-      "Main screen": 1
-    },
     "config/help/player.js": {
-      "Join Game": 3,
-      "Main screen": 18,
-      "Results": 1,
-      "game": 5
+      "Results": 1
     },
     "config/help/technical.js": {
-      "Join Game": 1,
-      "Main screen": 1,
       "Players": 1,
       "Session panel": 3,
       "Session tools": 1,
-      "game": 3,
       "the summary": 3
     },
     "config/hostControls.js": {

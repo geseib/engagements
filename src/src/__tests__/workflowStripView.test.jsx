@@ -132,9 +132,13 @@ describe('the external review of test (15 Oct)', () => {
   test('the voice note says "active this round" once the next round starts', () => {
     expect(page).toMatch(/is active this round\./);
   });
-  test('the phone says "Answer received." for a Call & Answer response', () => {
+  // Plain words, as the review asked; since experience plan 3a every type's
+  // receipt is the word list's one sentence (config/playerWords.js RECEIPT).
+  test('the phone says "Your answer is in." for a Call & Answer response', () => {
     const player = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
-    expect(player).toMatch(/'Answer received\.'/);
+    const words = fs.readFileSync(path.join(__dirname, '..', 'config', 'playerWords.js'), 'utf8');
+    expect(words).toMatch(/answer: 'Your answer is in\.'/);
+    expect(player).toMatch(/receiptFor\(gameType/);
     expect(player).not.toMatch(/Application Submitted!/);
   });
 });

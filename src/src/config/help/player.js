@@ -12,7 +12,7 @@
  * explanation. Every quoted label was read in the code (PlayerPage.jsx and the
  * components cited per section) and on dev (session 2901, 22 Oct 2026).
  *
- * The phone calls the room's display "the main screen" (PlayerPage's look-up
+ * The phone calls the room's display "the room’s screen" (PlayerPage's look-up
  * cues), so these guides do too: a player never needs to know whether the
  * host runs one screen or two.
  */
@@ -34,7 +34,7 @@ const gettingStarted = {
           t: 'features',
           items: [
             { icon: 'DeviceMobile', title: 'Any device', text: 'Phone, tablet or laptop. Whatever is in your hand.' },
-            { icon: 'LinkSimple', title: 'A link or a code', text: 'Scan the QR code on the main screen, or type the four digits under it.' },
+            { icon: 'LinkSimple', title: 'A link or a code', text: 'Scan the QR code on the room’s screen, or type the four digits under it.' },
             { icon: 'UserCircle', title: 'No account', text: 'Players never sign in. Only hosts and admins do.' },
             { icon: 'Broadcast', title: 'A network', text: 'Anything that loads a web page will do.' },
           ],
@@ -63,15 +63,15 @@ const gettingStarted = {
         {
           t: 'steps',
           items: [
-            { title: 'You wait in the lobby', text: 'Your phone says "Joined as" your name until the host starts the first round.' },
+            { title: 'You wait in the lobby', text: 'Your phone says "Waiting for the host.", with "You’re in as" your name above it, until the host starts the first round.' },
             { title: 'A question appears', text: 'Write an answer, pick an option, or send some words, depending on the kind of session. How each kind works: Playing.' },
             { title: 'Sometimes the room votes', text: 'Only on Call & Answer: you rank the room\'s answers. See Voting.' },
-            { title: 'Results', text: 'Your phone shows your own part: what you sent and what it earned. The room\'s results, and What we heard, are on the main screen.' },
+            { title: 'Results', text: 'Your phone shows your own part: what you sent and what it earned. The room\'s results, and What we heard, are on the room’s screen.' },
           ],
         },
         {
           t: 'p',
-          text: 'Your phone is only ever your half. Everything the room shares (the question large, the answers, the results, the discussion) is on the main screen, so look up when your phone tells you to.',
+          text: 'Your phone is only ever your half. Everything the room shares (the question large, the answers, the results, the discussion) is on the room’s screen, so look up when your phone tells you to.',
         },
         { t: 'gameTypes' },
       ],
@@ -98,7 +98,7 @@ const gettingStarted = {
           t: 'list',
           items: [
             { title: 'Your answers, while the room votes', text: 'Shown as numbers: Response 1, Response 2. Nobody, the host included, sees who wrote what until voting closes. Then names go up with the results.' },
-            { title: 'If the host shows names from the start', text: 'Some hosts turn names on for the whole session. Then answers and ballots on phones carry names from the first moment. The main screen still shows no names while the room votes.' },
+            { title: 'If the host shows names from the start', text: 'Some hosts turn names on for the whole session. Then answers and ballots on phones carry names from the first moment. The room’s screen still shows no names while the room votes.' },
             { title: 'Your comments', text: 'A comment on a round carries your name, and the composer says so before you post.' },
           ],
         },
@@ -153,7 +153,7 @@ const joining = {
       /*
         PlayerPage join form: "Join the session.", Session code ("Read from the
         link you followed. Nothing to type." + "Use a different code" when it
-        came in a link), Your name, Join Game. RootPage (/join): "Enter the
+        came in a link), Your name, Join (config/playerWords.js JOIN; the code is the one four-cell widget, components/SessionCodeField.jsx). RootPage (/join): "Enter the
         4-digit code", Join. The code sits under the QR, labelled Session code
         (PresentMoments, the stage lobby).
       */
@@ -164,10 +164,10 @@ const joining = {
         {
           t: 'steps',
           items: [
-            { title: 'Scan the QR code', text: 'It is on the main screen. Your camera app offers the link, and the code is filled in for you.' },
+            { title: 'Scan the QR code', text: 'It is on the room’s screen. Your camera app offers the link, and the code is filled in for you.' },
             { title: 'Or type the code', text: 'Four digits, under the QR code, labelled Session code. No letters.' },
             { title: 'Type your name', text: 'Whatever the room will recognise you by.' },
-            { title: 'Join', text: 'Press **Join Game**. No password, no email, no account.' },
+            { title: 'Join', text: 'Press **Join**. No password, no email, no account.' },
           ],
         },
         {
@@ -178,7 +178,7 @@ const joining = {
     },
     {
       /* PlayerPage needsAccessCode: "This session is private.", Access code,
-         Join Game / Back (Back keeps the typed name). session-gate.js:
+         Join / Back (Back keeps the typed name). session-gate.js:
          "The access code you entered is incorrect. Please try again." */
       id: 'private-session',
       title: 'A private session',
@@ -186,7 +186,7 @@ const joining = {
       blocks: [
         {
           t: 'p',
-          text: 'If your screen says "This session is private.", the host has set an access code. Ask the host, or read it off the main screen if they put it up. Type it under Access code and press **Join Game** again.',
+          text: 'If your screen says "This session is private.", the host has set an access code. Ask the host, or read it off the room’s screen if they put it up. Type it under Access code and press **Join** again.',
         },
         {
           t: 'p',
@@ -347,11 +347,12 @@ const joining = {
     },
     {
       /*
-        Wording from lambda-functions/game/session-gate.js (not started: 403
-        message; not found: 404 "Game not found"), RootPage.jsx (/join:
-        "Nothing is running under {code}", Try again) and joinResult.js. The
-        gate never refuses an ended session. Not started is shown as a form
-        error with no retry (PlayerPage applyJoinFailure).
+        Wording from config/playerWords.js (experience plan 3a/3e): JOIN.wrongCode
+        "Nothing is running under {code}. …" on every join screen, since
+        joinResult.js no longer shows the server's 404 text; EARLY "Waiting for
+        the host." with "Holding your place as {name}", a lobby that retries
+        the join every 4 seconds (PlayerPage EARLY_RETRY_MS) until the host
+        starts. The gate never refuses an ended session.
       */
       id: 'other-things-join-screen',
       title: 'Other things the join screen might say',
@@ -360,8 +361,8 @@ const joining = {
         {
           t: 'faq',
           items: [
-            { q: 'This game has not been started yet', a: 'The host has made the session but not opened it. Wait until they do, then press **Join Game** again. The page does not retry by itself.' },
-            { q: 'Game not found, or Nothing is running under …', a: 'Check the four digits against the main screen: a 0 and an 8 look alike across a room. Every session has its own code, so an old link or an old code will not work.' },
+            { q: 'Waiting for the host (Holding your place)', a: 'The host has made the session but not started it yet. Nothing to tap: the page holds your code and name and lets you in by itself the moment they start. **Change the code or name** takes you back to the form with both kept.' },
+            { q: 'Nothing is running under …', a: 'Check the four digits against the room’s screen: a 0 and an 8 look alike across a room. Every session has its own code, so an old link or an old code will not work.' },
             { q: 'The access code you entered is incorrect', a: 'See A private session, above.' },
             { q: 'The session has already ended', a: 'It still lets you in. You land on its closing screen, where you can comment on its rounds for a while.' },
           ],
@@ -432,13 +433,14 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'Then the room votes on the answers (see Voting). At results your phone says which response was yours, for example "You wrote response 3", and shows the points it earned this round, your total and your standing. Who wrote what, and the room\'s top answers, are on the main screen.',
+          text: 'Then the room votes on the answers (see Voting). At results your phone says which response was yours, for example "You wrote response 3", and shows the points it earned this round, your total and your standing. Who wrote what, and the room\'s top answers, are on the room’s screen.',
         },
       ],
     },
     {
       /* Trivia ASK: options A–F (radiogroup), "X selected. You can change it
-         until you submit.", Submit Answer, "Answer Submitted!". RESULTS:
+         until you submit.", Submit Answer, then the one receipt "Sent / Your
+         answer is in." (config/playerWords.js RECEIPT). RESULTS:
          "Correct." / "Not this time." / "No answer recorded.", rows flagged
          "Your answer" and "Correct". */
       id: 'trivia',
@@ -451,15 +453,16 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'When the round closes, your phone says "Correct." or "Not this time.", shows your answer and the right one, and what you scored. Faster right answers score more (see Scoring). How the whole room answered, and why, is on the main screen.',
+          text: 'When the round closes, your phone says "Correct." or "Not this time.", shows your answer and the right one, and what you scored. Faster right answers score more (see Scoring). How the whole room answered, and why, is on the room’s screen.',
         },
       ],
     },
     {
       /* Poll ASK: the survey's own input per kind (ChoiceInput, RatingInput,
-         YesNoInput, TextInput), Submit Answer, "Answer In!", look-up cue "the
-         result fills in as the room answers, without names". RESULTS: "Your
-         answer", or "You didn't answer this one". Polls score nobody. */
+         YesNoInput, TextInput), Submit Answer, "Your answer is in.", look-up
+         cue "the result fills in as the room answers, without names". RESULTS:
+         "Your answer is counted." with the answer in a card, or "You didn't
+         answer this one.". Polls score nobody, so no score shows at the end. */
       id: 'poll',
       title: 'Poll',
       icon: 'ChartBar',
@@ -470,7 +473,7 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'There is no right answer and no score. The room\'s result fills in on the main screen as people answer, without names. Your phone shows your own answer.',
+          text: 'There is no right answer and no score. The room\'s result fills in on the room’s screen as people answer, without names. Your phone shows your own answer.',
         },
       ],
     },
@@ -478,7 +481,7 @@ const playing = {
       /* Wavelength ASK: "Aim for ten. A word counts only when everyone says it
          — go for the words the rest of the room will think of too", Word 1–10,
          "n of 10 added. Fewer is fine — submit when you run dry.", "Submit
-         Words (n/10)", "Words Submitted!", "Nothing shows until everyone is
+         Words (n/10)", "Your words are in.", "Nothing shows until everyone is
          in." RESULTS: "You sent N." and your words. */
       id: 'wavelength',
       title: 'Wavelength',
@@ -494,7 +497,7 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'Nothing shows until everyone is in. Then the words the room shares light up on the main screen, and your phone lists the words you sent. Wavelength has no winners: nobody scores.',
+          text: 'Nothing shows until everyone is in. Then the words the room shares light up on the room’s screen, and your phone lists the words you sent. Wavelength has no winners: nobody scores.',
         },
       ],
     },
@@ -520,7 +523,7 @@ const playing = {
     },
     {
       /* A question's "Reveal (shown only after the round)" field (TriviaBuilder,
-         the set editor): Workie's read and the main screen show it after
+         the set editor): Workie's read and the room’s screen show it after
          answers are in. */
       id: 'held-back',
       title: 'Some rounds hold something back',
@@ -532,29 +535,31 @@ const playing = {
         },
         {
           t: 'p',
-          text: 'That is not the site being slow. Your answer is worth more when it was not shaped by the thing you were guessing at. The withheld detail goes up on the main screen with the results.',
+          text: 'That is not the site being slow. Your answer is worth more when it was not shaped by the thing you were guessing at. The withheld detail goes up on the room’s screen with the results.',
         },
       ],
     },
     {
-      /* PlayerPage: lobby "Joined as {name}. Waiting for the game to start.",
-         About this session, If you lose this page; between rounds "Nothing to
-         do here.", Your total, Standing; VOTE before the ballot "The
-         responses are coming up."; "Loading the session…". */
+      /* PlayerPage, experience plan 3a: ONE way to say wait, every type
+         (config/playerWords.js WAIT). The heading is always "Waiting for the
+         host." and the small line above it says why: lobby "You're in as
+         {name}", between rounds "The round is closed" (your total and
+         standing only where the format scores), VOTE before the ballot
+         "Voting next" with the question; "Loading the session…". */
       id: 'between-rounds',
       title: 'When there is nothing to do',
       icon: 'Pause',
       blocks: [
         {
           t: 'p',
-          text: 'Some screens just wait. You do not need to refresh any of them: each changes on its own when the host moves on.',
+          text: 'Some screens just wait. They all say "Waiting for the host." in the same place, with a small line above saying why. You do not need to refresh any of them: each changes on its own when the host moves on.',
         },
         {
           t: 'list',
           items: [
-            { title: '"Joined as" your name', text: 'The lobby, before the first round. It may show what the session is about, and how to get back in if you lose the page.' },
-            { title: '"Nothing to do here."', text: 'Between rounds. Your total and standing are shown; the discussion is on the main screen, and it is the part the session is for.' },
-            { title: '"The responses are coming up."', text: 'Voting has started and your ballot is on its way.' },
+            { title: '"You’re in as" your name', text: 'The lobby, before the first round. It may show what the session is about, and how to get back in if you lose the page.' },
+            { title: '"The round is closed"', text: 'Between rounds. In a scored session your total and standing are shown; the discussion is on the room’s screen, and it is the part the session is for.' },
+            { title: '"Voting next"', text: 'Voting has started and your ballot is on its way. The question being voted on is shown so you know what is coming.' },
             { title: '"Loading the session…"', text: 'Your phone is finding out what kind of session this is. It takes a moment.' },
           ],
         },
@@ -582,7 +587,7 @@ const voting = {
       blocks: [
         {
           t: 'p',
-          text: 'On Call & Answer rounds, once the host opens voting your phone says "Rank your top three." and lists every answer, numbered: Response 1, Response 2, and so on. The numbers match the main screen, so the host can say "look at six" and everyone finds it.',
+          text: 'On Call & Answer rounds, once the host opens voting your phone says "Rank your top three." and lists every answer, numbered: Response 1, Response 2, and so on. The numbers match the room’s screen, so the host can say "look at six" and everyone finds it.',
         },
         { t: 'h', text: 'Two ways to rank' },
         {
@@ -644,7 +649,7 @@ const voting = {
       ],
     },
     {
-      /* "Votes Submitted!", Your ballot, "This is locked for the round."
+      /* "Sent / Your votes are in.", Your ballot, "Locked for this round."
          Still writing when voting starts: "You were still writing. Send it and
          it is kept with this round, but it is not in the vote." + "Send it
          anyway". */
@@ -654,7 +659,7 @@ const voting = {
       blocks: [
         {
           t: 'p',
-          text: 'Your phone says "Votes Submitted!" and shows your ballot. It is locked for the round. Who wrote what, and how the room ranked them, goes up on the main screen when the host shows results.',
+          text: 'Your phone says "Your votes are in." and shows your ballot. It is locked for the round. Who wrote what, and how the room ranked them, goes up on the room’s screen when the host shows results.',
         },
         {
           t: 'note',
@@ -721,7 +726,7 @@ const feedback = {
         },
         {
           t: 'p',
-          text: 'Then it works exactly like Commenting on a round, above. The host chooses which comments go up on the main screen.',
+          text: 'Then it works exactly like Commenting on a round, above. The host chooses which comments go up on the room’s screen.',
         },
       ],
     },
@@ -762,7 +767,10 @@ const feedback = {
     },
     {
       /*
-        ENDED: "Thanks for playing", Final score, Final standing; "Something to
+        ENDED (components/PlayerEnded.jsx, experience plan 3a): "Thanks for
+        playing" with Final score and Final standing where the format scores
+        (Trivia, Call & Answer); "Thanks for taking part" and no score for a
+        poll, Wavelength, a survey or a Build Room; "Something to
         add?" with a button per round while comments are open (24 hours after
         the end, or until the host closes them); the panel says "Comments stay
         open for 24 hours, or until your host closes them. Yours is marked as
@@ -777,7 +785,7 @@ const feedback = {
       blocks: [
         {
           t: 'p',
-          text: 'Your phone says "Thanks for playing", with your final score and standing. They stay there if you reload or rejoin.',
+          text: 'Your phone says "Thanks for playing", with your final score and standing, after a scored session (Trivia, Call & Answer). They stay there if you reload or rejoin. A poll or Wavelength scores nobody, so it ends with "Thanks for taking part" and no score.',
         },
         {
           t: 'p',
@@ -843,7 +851,7 @@ const scoring = {
       blocks: [
         {
           t: 'p',
-          text: 'Scores add up across the whole session and update at the end of each round, so a round in progress does not tip off the room about who is winning it. Your phone shows your own total and standing; the full board, when the host shows it, is on the main screen. Only Trivia and Call & Answer are scored: in a Poll or Wavelength your phone shows no points.',
+          text: 'Scores add up across the whole session and update at the end of each round, so a round in progress does not tip off the room about who is winning it. Your phone shows your own total and standing; the full board, when the host shows it, is on the room’s screen. Only Trivia and Call & Answer are scored: in a Poll or Wavelength your phone shows no points.',
         },
         {
           t: 'faq',
@@ -915,7 +923,7 @@ const trouble = {
         },
         {
           t: 'p',
-          text: 'Missed a round completely? You score nothing for it and lose nothing either. Its results are on the main screen, and after the session you can still read it and comment (Comments and quick questions › After the session ends).',
+          text: 'Missed a round completely? You score nothing for it and lose nothing either. Its results are on the room’s screen, and after the session you can still read it and comment (Comments and quick questions › After the session ends).',
         },
       ],
     },

@@ -67,9 +67,9 @@ const buildGets = () => global.fetch.mock.calls.map(([u]) => String(u)).filter((
 
 async function join() {
   const utils = render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Join Game/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Join$/i })); });
   return utils;
 }
 
@@ -87,7 +87,7 @@ test('a joined phone in a build session lands in BuildPlayer, not the lobby', as
   await waitFor(() => expect(screen.getByText('Claude is building')).toBeInTheDocument());
   expect(container.querySelector('.bpl')).not.toBeNull();
   expect(screen.getByText('Claude Code is connected')).toBeInTheDocument();
-  expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+  expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
 
   // Identity is the one the join sent.
   const joinCall = global.fetch.mock.calls.find(([u, o]) => String(u).endsWith(`games/${GAME}/players`) && o && o.method === 'POST');

@@ -70,9 +70,9 @@ beforeEach(() => {
 test('the next round starts with a draft: the held card and the new answer box are both on the page', async () => {
   installServer();
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Join Game/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Join$/i })); });
   await waitFor(() => expect(screen.getByText('Who pushes back first?')).toBeInTheDocument());
 
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'The finance team' } });

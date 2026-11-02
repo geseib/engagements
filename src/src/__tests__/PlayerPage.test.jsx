@@ -49,7 +49,7 @@ describe('joining a session', () => {
   // a code read aloud in a room is the fallback when a camera will not focus.
   test('a player with no link gets a form to type into', () => {
     render(<PlayerPage />);
-    expect(screen.getByPlaceholderText(/Game ID/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Session code/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Your Name/i)).toBeInTheDocument();
   });
 
@@ -58,18 +58,18 @@ describe('joining a session', () => {
   test('a player arriving by link has the game already filled in', () => {
     window.history.pushState({}, '', '/play?gameId=4821');
     render(<PlayerPage />);
-    expect(screen.getByPlaceholderText(/Game ID/i)).toHaveValue('4821');
+    expect(screen.getByLabelText(/Session code/i)).toHaveValue('4821');
   });
 
   // rejects: a join that posts nothing, or posts to the wrong place. This is
   // the only request a player makes before they can take part at all.
   test('joining posts the name to the game', async () => {
     render(<PlayerPage />);
-    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: '4821' } });
+    fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: '4821' } });
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     });
 
     await waitFor(() => {
@@ -85,14 +85,14 @@ describe('joining a session', () => {
   test('a join that fails leaves the form usable', async () => {
     global.fetch.mockRejectedValue(new Error('network down'));
     render(<PlayerPage />);
-    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: '4821' } });
+    fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: '4821' } });
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     });
 
-    expect(screen.getByPlaceholderText(/Game ID/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Session code/i)).toBeInTheDocument();
   });
 });
 
@@ -133,19 +133,19 @@ describe('a code that arrived in a link can be replaced', () => {
     first in the document.
   */
   const codeHelp = () => {
-    const field = screen.getByPlaceholderText(/Game ID/i);
+    const field = screen.getByLabelText(/Session code/i);
     return document.getElementById(field.getAttribute('aria-describedby'));
   };
 
   test('the code is locked by default, so a scanned link still reads as settled', () => {
     arriveByLink();
-    expect(screen.getByPlaceholderText(/Game ID/i)).toHaveAttribute('readonly');
+    expect(screen.getByLabelText(/Session code/i)).toHaveAttribute('readonly');
     expect(codeHelp()).toHaveTextContent(/Nothing to type/i);
   });
 
   test('a typed code is not locked, and never was', () => {
     render(<PlayerPage />);
-    expect(screen.getByPlaceholderText(/Game ID/i)).not.toHaveAttribute('readonly');
+    expect(screen.getByLabelText(/Session code/i)).not.toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: /Use a different code/i })).toBeNull();
   });
 
@@ -157,7 +157,7 @@ describe('a code that arrived in a link can be replaced', () => {
   test('taking it unlocks the field for typing', () => {
     arriveByLink();
     fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
-    expect(screen.getByPlaceholderText(/Game ID/i)).not.toHaveAttribute('readonly');
+    expect(screen.getByLabelText(/Session code/i)).not.toHaveAttribute('readonly');
   });
 
   /*
@@ -169,7 +169,7 @@ describe('a code that arrived in a link can be replaced', () => {
   test('the code that arrived is still there, not wiped', () => {
     arriveByLink();
     fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
-    expect(screen.getByPlaceholderText(/Game ID/i)).toHaveValue('4821');
+    expect(screen.getByLabelText(/Session code/i)).toHaveValue('4821');
   });
 
   test('the help line stops saying there is nothing to type', () => {
@@ -190,11 +190,11 @@ describe('a code that arrived in a link can be replaced', () => {
   test('the new code is what gets joined, and the URL follows it', async () => {
     arriveByLink();
     fireEvent.click(screen.getByRole('button', { name: /Use a different code/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: '9137' } });
+    fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: '9137' } });
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     });
 
     await waitFor(() => {

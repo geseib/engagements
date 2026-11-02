@@ -14,16 +14,23 @@
                         "Nothing is running with {code}." for an unknown code.
     the-agenda          EventAttendeePage.jsx agenda (state words from
                         eventDisplay.stateWord: Not started, Next, Now, Paused,
-                        Done), "Nothing to do here.", "Back to live · …",
+                        Done), "Waiting for the host." (the one wait,
+                        config/playerWords.js WAIT), "Back to live · …",
                         the bar's "Agenda" (components/PlayerShell.jsx, eventBar.js).
     when-an-item-starts EventAttendeePage switch beat ("You're in as … No code
-                        needed."), PlayerPage `event` ("Getting you in…", "Not
-                        in yet." + Try again), end screen ("Keep this page
-                        open: the next item starts here by itself.", "Back to
-                        the agenda").
+                        needed."), PlayerPage `event` ("Getting you in…",
+                        not started: "Waiting for the host." retrying by
+                        itself; "Not in yet." + Try again; a name held by
+                        another attendee: JoinNameCollision with
+                        "I'm someone else: add a number to my name",
+                        join-game.js joinAsAttendee `newSeat`), the one
+                        item-ended screen (components/PlayerEnded.jsx: "This
+                        item is finished", "Up next", "Keep this page open:
+                        the next item starts here by itself.", Open the
+                        agenda) for a session and a survey alike.
     talks-breaks-pauses EventAttendeePage talk ("Look up", "Show the slides
                         here", "Hide the slides"), break ("Back at …"), paused
-                        ("The host will be back.", "Open the agenda").
+                        ("Waiting for the host.", "Open the agenda").
     coming-back         PlayerPage lobby card in an event ("Open the join screen
                         and enter {code} again. This phone is remembered…"),
                         attendeeApi token per event, "Not you?".
@@ -44,7 +51,7 @@ const playerEvents = {
         {
           t: 'steps',
           items: [
-            { title: 'Scan or type the code', text: 'Scan the QR code on the main screen, or type its four-digit code on the join screen. An event\'s code takes you to the event; there is nothing else to choose.' },
+            { title: 'Scan or type the code', text: 'Scan the QR code on the room’s screen, or type its four-digit code on the join screen. An event\'s code takes you to the event; there is nothing else to choose.' },
             { title: 'Type your name, once', text: 'Under **Your name**, then press **Join the event**. No account and nothing to install. Your name is used for the scoreboard in scored items.' },
           ],
         },
@@ -60,7 +67,7 @@ const playerEvents = {
           t: 'note',
           tone: 'info',
           title: '"Nothing is running with" the code',
-          text: 'Check the code on the main screen, or ask the host for the link. **Type a different code** takes you back to the join screen.',
+          text: 'Check the code on the room’s screen, or ask the host for the link. **Type a different code** takes you back to the join screen.',
         },
       ],
     },
@@ -106,14 +113,14 @@ const playerEvents = {
         {
           t: 'list',
           items: [
-            { title: 'A session', text: 'Trivia, Call & Answer, a poll, Wavelength or a survey plays just as it does on its own: see Playing. You are already in under your event name. If it shows **Not in yet.**, press **Try again**.' },
+            { title: 'A session', text: 'Trivia, Call & Answer, a poll, Wavelength or a survey plays just as it does on its own: see Playing. You are already in under your event name. If the host has not quite started it, your phone says "Waiting for the host." and joins by itself a moment later. If it shows **Not in yet.**, press **Try again**.' },
             { title: 'A talk or an activity', text: 'Your phone says what it is and who leads it, and asks you to look up.' },
             { title: 'A break', text: 'Your phone says when to be back.' },
           ],
         },
         {
           t: 'p',
-          text: 'When a session ends, keep the page open: the next item starts there by itself. **Back to the agenda** shows the day so far.',
+          text: 'When a session or a survey ends, your phone says "This item is finished", thanks you (with your score only where the session scores), and names what is **Up next**. Keep the page open: the next item starts there by itself. **Open the agenda** shows the day so far.',
         },
       ],
     },
@@ -127,7 +134,7 @@ const playerEvents = {
           items: [
             { title: 'A talk with slides', text: 'Your phone says which slide is up ("Slide 3 of 12"). Tap **Show the slides here** to see the same slide on your phone, following each turn within a few seconds; **Hide the slides** puts them away. They load only when you tap, to spare the venue\'s wifi.' },
             { title: 'A break', text: '**Back at** and the time.' },
-            { title: 'A pause', text: '"The host will be back." Anything you already sent is kept, and the page picks up where it left off when the host resumes. **Open the agenda** shows the day meanwhile.' },
+            { title: 'A pause', text: '"Waiting for the host." under Paused and the item\'s name. Anything you already sent is kept, and the page picks up where it left off when the host resumes. **Open the agenda** shows the day meanwhile.' },
           ],
         },
       ],
@@ -144,7 +151,7 @@ const playerEvents = {
         {
           t: 'list',
           items: [
-            { title: 'On a different phone', text: 'Join again with the code and your name. It counts as a new arrival.' },
+            { title: 'On a different phone', text: 'Join again with the code and your name. When an item starts, your phone sees your name is already in it and asks first, rather than making you "Sam 2": **That\'s me: use my name on this device** asks the host to move your name, answers and score here (the old device is told), and **I\'m someone else: add a number to my name** joins you as a second Sam.' },
             { title: '**Not you?**', text: 'At the foot of the agenda. Forgets the name on this phone so someone else can join with their own.' },
             { title: 'Offline', text: 'The page keeps what it has and catches up when the connection comes back: see When something goes wrong.' },
           ],

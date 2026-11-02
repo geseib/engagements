@@ -75,18 +75,18 @@ afterEach(() => { jest.useRealTimers(); });
 
 async function joinAs() {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Join Game/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Join$/i })); });
   await tick(0);
 }
 
 test('Ask again appears thirty seconds after Not now, not before, and asks', async () => {
   const server = makeServer();
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Join Game/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Join$/i })); });
   await tick(0);
 
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: "That's me: use my name on this device" })); });

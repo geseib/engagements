@@ -81,6 +81,10 @@ export const HANDOVER_LABELS = Object.freeze({
   tryAgain: 'Try again',
   askAgain: 'Ask again',
   pickAnother: 'Pick another name',
+  // IN AN EVENT (experience plan 3e) there is no name form to go back to: the
+  // name is the event's, so "someone else" sits beside it with a number.
+  someoneElseEvent: "I'm someone else: add a number to my name",
+  numberEvent: 'Add a number to my name',
 });
 
 /**
@@ -153,6 +157,7 @@ export function JoinNameCollisionActions({
   onRejoinAnyway,
   onUseAnotherName,
   onRequestHandover,
+  inEvent = false,
 }) {
   const ambiguous = isAmbiguousCollision(kind);
 
@@ -188,28 +193,31 @@ export function JoinNameCollisionActions({
     </button>
   );
 
+  const someoneElse = inEvent ? HANDOVER_LABELS.someoneElseEvent : HANDOVER_LABELS.someoneElse;
+  const pickAnother = inEvent ? HANDOVER_LABELS.numberEvent : HANDOVER_LABELS.pickAnother;
+
   switch (stage) {
     case 'asking':
       return (
         <>
           <button type="button" className="plr-btn" disabled>{HANDOVER_LABELS.asking}</button>
-          {leave(HANDOVER_LABELS.someoneElse)}
+          {leave(someoneElse)}
         </>
       );
     case 'askFailed':
-      return <>{ask(HANDOVER_LABELS.tryAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+      return <>{ask(HANDOVER_LABELS.tryAgain)}{leave(pickAnother)}</>;
     case 'waiting':
-      return <>{canAskAgain && ask(HANDOVER_LABELS.askAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+      return <>{canAskAgain && ask(HANDOVER_LABELS.askAgain)}{leave(pickAnother)}</>;
     case 'lapsed':
-      return <>{ask(HANDOVER_LABELS.askAgain)}{leave(HANDOVER_LABELS.pickAnother)}</>;
+      return <>{ask(HANDOVER_LABELS.askAgain)}{leave(pickAnother)}</>;
     case 'declined':
       // §4.4 step 7: Pick another name becomes the main button.
-      return <>{leave(HANDOVER_LABELS.pickAnother, false)}{canAskAgain && ask(HANDOVER_LABELS.askAgain, true)}</>;
+      return <>{leave(pickAnother, false)}{canAskAgain && ask(HANDOVER_LABELS.askAgain, true)}</>;
     case 'granted':
       return null;
     case 'idle':
     default:
-      return <>{ask(HANDOVER_LABELS.claim)}{leave(HANDOVER_LABELS.someoneElse)}</>;
+      return <>{ask(HANDOVER_LABELS.claim)}{leave(someoneElse)}</>;
   }
 }
 

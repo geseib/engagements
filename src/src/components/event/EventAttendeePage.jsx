@@ -10,6 +10,7 @@ import {
   TYPE_ICONS, typeLabel, typeLine, positionOf, wallClock, nextAfter, firstPlanned, stateWord,
   isEngagement, isBreak, rules,
 } from './eventDisplay';
+import { WAIT } from '../../config/playerWords';
 import '../PlayerSurface.css';
 import './EventAttendeePage.css';
 
@@ -54,6 +55,15 @@ const FULL_READ_MS = 60000;
 const BEAT_MS = 1200;
 
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || '';
+
+// p-06 / p-09: an engagement is named by its kind ("Trivia · How well…"),
+// a talk or an activity by who leads it ("The FY27 plan · Marcus Oyelaran").
+const itemName = (n) => {
+  if (!n) return '';
+  if (isEngagement(n.type)) return `${typeLabel(n.type)} · ${n.title}`;
+  if (isBreak(n.type)) return n.title || typeLabel(n.type);
+  return n.ledBy ? `${n.title} · ${n.ledBy}` : n.title;
+};
 
 function ItemTypeIcon({ type }) {
   return <Icon name={TYPE_ICONS[type] || 'Circle'} weight="bold" size={15} color="currentColor" />;
@@ -284,9 +294,14 @@ export default function EventAttendeePage({ code }) {
   const playing = current && isEngagement(current.type) && current.gameId
     && (current.state !== 'done' || shownView === 'item') ? current : null;
   const showPlaying = Boolean(playing && shownView === 'item' && !beat && playing.state !== 'paused');
+  /* WHAT'S NEXT, for the item's end screen (experience plan 3e): one item-
+     ended screen for every type (components/PlayerEnded.jsx) says "Up next"
+     with the agenda in the dock. */
+  const upNext = playing ? nextAfter(items, playing.itemId) : null;
+  const nextTitle = upNext ? itemName(upNext) : '';
   const sessionEvent = useMemo(() => (playing && attendee ? {
-    code, token: attendee.token, gameId: playing.gameId, onAgenda: toAgenda, onFrame, onNotJoined,
-  } : null), [playing && playing.gameId, attendee && attendee.token, code, toAgenda, onFrame, onNotJoined]); // eslint-disable-line react-hooks/exhaustive-deps
+    code, token: attendee.token, gameId: playing.gameId, onAgenda: toAgenda, onFrame, onNotJoined, nextTitle,
+  } : null), [playing && playing.gameId, attendee && attendee.token, code, toAgenda, onFrame, onNotJoined, nextTitle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const session = sessionEvent ? (
     <div hidden={!showPlaying}>
@@ -330,7 +345,7 @@ export default function EventAttendeePage({ code }) {
           </h1>
           <p className="plr-lede plr-muted">
             {phase === 'missing'
-              ? 'Check the code on the main screen, or ask the host for the link.'
+              ? 'Check the code on the room’s screen, or ask the host for the link.'
               : 'Check your connection and try again.'}
           </p>
           <p className="evp-foot">
@@ -429,15 +444,9 @@ export default function EventAttendeePage({ code }) {
   if (shownView === 'item' && current) {
     const state = current.state || 'planned';
     const next = nextAfter(items, current.itemId);
-    // p-06 / p-09: an engagement is named by its kind ("Trivia · How well…"),
-    // a talk or an activity by who leads it ("The FY27 plan · Marcus Oyelaran").
-    const nextName = (n) => {
-      if (isEngagement(n.type)) return `${typeLabel(n.type)} · ${n.title}`;
-      return n.ledBy ? `${n.title} · ${n.ledBy}` : n.title;
-    };
     const nextLine = next ? (
       <p className="evp-next">
-        Next <b>{nextName(next)}</b>
+        Next <b>{itemName(next)}</b>
       </p>
     ) : null;
 
@@ -457,7 +466,7 @@ export default function EventAttendeePage({ code }) {
         >
           <div className="evp">
             <p className="evp-when">Paused · {current.title}</p>
-            <h1 className="plr-h1">The host will be back.</h1>
+            <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
             <p className="plr-lede plr-muted">
               Anything you have already sent is kept. This page picks up where it left off when the
               host resumes.
@@ -527,7 +536,9 @@ export default function EventAttendeePage({ code }) {
   const kicker = started
     ? [rules.formatEventDay(event.startsAt).replace(/ \d{4}$/, ''), event.place].filter(Boolean).join(' · ')
     : `${rules.formatEventDay(event.startsAt)} · ${rules.formatStartTime(event.startsAt)}–${event.endsAt || ''}`;
-  const heading = ended ? 'That’s the day.' : started ? (backToLive ? title : 'Nothing to do here.') : title;
+  // ONE WAY TO SAY WAIT (experience plan 3a): between items, the same heading
+  // every other participant wait carries.
+  const heading = ended ? 'That’s the day.' : started ? (backToLive ? title : WAIT.heading) : title;
   let lede;
   if (ended) lede = 'Thanks for taking part. Everything below has finished.';
   else if (!started) lede = `${event.place ? `${event.place}. ` : ''}Nothing opens before the day: each item starts when the host starts it, and this page follows along.`;

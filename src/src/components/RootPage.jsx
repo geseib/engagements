@@ -4,6 +4,7 @@ import { rememberReturnPath } from '../auth/returnPath';
 import useJoinCode, { CODE_LENGTH } from '../hooks/useJoinCode';
 import './RootPage.css';
 import BrandMark from './BrandMark';
+import SessionCodeField from './SessionCodeField';
 
 /**
  * The signed-out door at `/`.
@@ -81,49 +82,24 @@ export default function RootPage() {
                 Session code
               </label>
 
-              <div
-                className={[
-                  'entry-codewrap',
-                  focused ? 'is-focused' : '',
-                  missing ? 'is-bad' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <div className="entry-cells" aria-hidden="true">
-                  {cells.map((index) => (
-                    <div
-                      key={index}
-                      className={[
-                        'entry-cell',
-                        code[index] ? 'is-filled' : '',
-                        index === code.length ? 'is-next' : '',
-                      ].filter(Boolean).join(' ')}
-                    >
-                      {code[index] || ''}
-                    </div>
-                  ))}
-                </div>
-                <input
-                  id="entry-code"
-                  name="code"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={CODE_LENGTH}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck="false"
-                  // Declarative, so each platform does the right thing: Chrome
-                  // on Android raises the keyboard, iOS Safari declines without
-                  // a gesture. A script forcing focus would fight both.
-                  autoFocus
-                  aria-label="Session code, 4 digits"
-                  value={code}
-                  onChange={handleChange}
-                  onPaste={handlePaste}
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                />
-              </div>
+              {/* THE ONE CODE WIDGET (experience plan 3a): the same cells
+                  and input as the marketing hero and the play page. */}
+              <SessionCodeField
+                skin="entry"
+                id="entry-code"
+                value={code}
+                length={cells.length || CODE_LENGTH}
+                onChange={handleChange}
+                onPaste={handlePaste}
+                bad={Boolean(missing)}
+                // Declarative, so each platform does the right thing: Chrome
+                // on Android raises the keyboard, iOS Safari declines without
+                // a gesture. A script forcing focus would fight both.
+                autoFocus
+                ariaLabel="Session code, 4 digits"
+                focused={focused}
+                onFocusChange={setFocused}
+              />
 
               <p className="entry-hint" role="status" aria-live="polite">{note}</p>
 

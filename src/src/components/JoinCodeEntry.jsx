@@ -1,5 +1,7 @@
 import React from 'react';
 import useJoinCode, { CODE_LENGTH } from '../hooks/useJoinCode';
+import SessionCodeField from './SessionCodeField';
+import { JOIN } from '../config/playerWords';
 import './JoinCodeEntry.css';
 
 /**
@@ -23,40 +25,20 @@ export default function JoinCodeEntry({ label = 'Have a code?' }) {
           j.missing ? 'jce-bad' : '',
         ].filter(Boolean).join(' ')}
       >
-        <div className="jce-codewrap">
-          <div className="jce-cells" aria-hidden="true">
-            {j.cells.map((index) => (
-              <div
-                key={index}
-                className={[
-                  'jce-cell',
-                  index === j.code.length ? 'jce-next' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                {j.code[index] || ''}
-              </div>
-            ))}
-          </div>
-          <input
-            id="jce-code"
-            className="jce-input"
-            name="code"
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={CODE_LENGTH}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck="false"
-            aria-label="Session code, 4 digits"
-            value={j.code}
-            onChange={j.handleChange}
-            onPaste={j.handlePaste}
-            onFocus={() => j.setFocused(true)}
-            onBlur={() => j.setFocused(false)}
-          />
-        </div>
-        <button type="submit" className="jce-go" disabled={!j.canSubmit}>Join</button>
+        {/* THE ONE CODE WIDGET (experience plan 3a): the same cells and
+            input as /join and the play page; this row draws its focus. */}
+        <SessionCodeField
+          skin="jce"
+          id="jce-code"
+          value={j.code}
+          length={j.cells.length || CODE_LENGTH}
+          onChange={j.handleChange}
+          onPaste={j.handlePaste}
+          ariaLabel="Session code, 4 digits"
+          focused={j.focused}
+          onFocusChange={j.setFocused}
+        />
+        <button type="submit" className="jce-go" disabled={!j.canSubmit}>{JOIN.button}</button>
       </div>
       {j.missing ? (
         <p className="jce-missing" role="alert">
