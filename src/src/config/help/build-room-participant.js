@@ -28,7 +28,7 @@ const playerBuildRoom = {
       blocks: [
         {
           t: 'p',
-          text: 'Join as for any session: the four-digit code and your name, then **Join Game**. A Build Room works on a phone, a tablet or a laptop. Your screen has three tabs:',
+          text: 'Join as for any session: the four-digit code and your name, then **Join**. A Build Room works on a phone, a tablet or a laptop. Your screen has three tabs:',
         },
         {
           t: 'list',
@@ -150,7 +150,7 @@ const playerBuildRoom = {
         {
           t: 'list',
           items: [
-            'When the host ends the session, your screen shows what was built, the latest decision and the build so far.',
+            'When the host ends the session, your screen thanks you for taking part (a Build Room scores nobody) and shows what was built, the latest decision and the build so far.',
             'If the host takes you out of the session, your screen says so. Your ideas and votes stay in the report.',
             'If the host let another device take your name, this one says the name is on another device now. Join again with another name if you need to.',
           ],

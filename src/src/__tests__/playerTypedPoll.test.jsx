@@ -50,9 +50,9 @@ function installServer(poll) {
 
 async function joinAndReachQuestion() {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Join Game/i })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Join$/i })); });
   await waitFor(() => expect(screen.getByText(/Best day to meet in person/)).toBeInTheDocument());
 }
 
@@ -76,7 +76,7 @@ test('a choice poll draws its options, not a text box, and sends the pick as a v
   await act(async () => { fireEvent.click(submit()); });
 
   expect(ws.sendCleanMessage).toHaveBeenCalledWith('ANSWER#001', { answer: [2], answerType: 'poll', clientId: expect.any(String) });
-  await waitFor(() => expect(screen.getByText('Answer In!')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText('Your answer is in.')).toBeInTheDocument());
   expect(screen.getByText('Friday')).toBeInTheDocument();
 });
 
@@ -107,7 +107,7 @@ test('a poll answer that could not be sent is held in words, never shown as in',
   fireEvent.click(screen.getByRole('radio', { name: /Friday/ }));
   await act(async () => { fireEvent.click(submit()); });
 
-  expect(screen.queryByText('Answer In!')).not.toBeInTheDocument();
+  expect(screen.queryByText('Your answer is in.')).not.toBeInTheDocument();
   expect(screen.getByText(/^Not sent yet$/)).toBeInTheDocument();
   expect(screen.getByText('Friday')).toBeInTheDocument();
 

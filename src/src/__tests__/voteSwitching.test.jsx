@@ -40,7 +40,7 @@ jest.mock('../WebSocketClient', () => ({
   },
 }));
 
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 
 /** The three responses on the ballot, in ballot order — index IS the vote value. */
@@ -146,10 +146,10 @@ async function switchAwayAndBack() {
 async function reachTheBallot(server) {
   render(<PlayerPage />);
 
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
   await waitFor(() => {
     expect(screen.getByText(/What is the capital of France/i)).toBeInTheDocument();

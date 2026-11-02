@@ -37,7 +37,7 @@ jest.mock('../WebSocketClient', () => ({
   },
 }));
 
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 
 /* A REDACTED ballot, which is what an unattributed round actually sends: the
@@ -128,10 +128,10 @@ async function resync() {
 
 async function join() {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
 }
 
@@ -171,7 +171,7 @@ describe('the shell', () => {
     // Node.DOCUMENT_POSITION_FOLLOWING — a relationship jsdom does model,
     // unlike every offset on the page.
     expect(stage().compareDocumentPosition(dock()) & 4).toBeTruthy();
-    expect(within(dock()).getByRole('button', { name: /Join Game/i })).toBeInTheDocument();
+    expect(within(dock()).getByRole('button', { name: /^Join$/i })).toBeInTheDocument();
   });
 
   // rejects: the parallax hero coming back. Three cross-origin .webp layers,
@@ -194,7 +194,7 @@ describe('the join screen', () => {
   test('both fields have real labels tied to them', () => {
     installFetch(makeServer());
     render(<PlayerPage />);
-    expect(screen.getByLabelText(/Session code/i)).toBe(screen.getByPlaceholderText(/Game ID/i));
+    expect(screen.getByLabelText(/Session code/i)).toBe(screen.getByLabelText(/Session code/i));
     expect(screen.getByLabelText(/Your name/i)).toBe(screen.getByPlaceholderText(/Your Name/i));
   });
 
@@ -228,7 +228,7 @@ describe('the join screen', () => {
 
     await join();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/not found/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Nothing is running under 7123/i);
     expect(alertSpy).not.toHaveBeenCalled();
     // And the form is still usable, which is the whole point of not navigating.
     expect(screen.getByPlaceholderText(/Your Name/i)).toBeInTheDocument();
@@ -245,7 +245,7 @@ describe('the volume is set by the state machine, and the player never chooses',
     await join();
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'rest'));
     expect(dock()).toBeNull();
-    expect(screen.getByText(/Waiting for the game to start/i)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the host/i)).toBeInTheDocument();
   });
 
   // rejects: ASK losing its dock — the one state where the phone legitimately
@@ -723,7 +723,7 @@ describe('the join refusal', () => {
     fireEvent.click(screen.getByRole('button', { name: /pick another name/i }));
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Someone Else' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     });
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -741,8 +741,8 @@ describe('results shows the personal half and points at the room for the rest', 
               runs that game type. */
   test.each([
     ['call-and-answer', /You didn’t send a response this round/i],
-    ['trivia', /You answered/i],
-    ['wavelength', /Your words/i],
+    ['trivia', /Your result/i],
+    ['wavelength', /Your result/i],
     ['poll', /You didn’t send a response this round/i],
   ])('%s results renders and carries the look-up cue', async (gameType, heading) => {
     const server = makeServer({ state: 'CREATED', gameType });
@@ -766,10 +766,10 @@ describe('results shows the personal half and points at the room for the rest', 
               writes no scores and a poll is not scored, so the line read as a
               wrong answer; the scored types keep it. */
   test.each([
-    ['wavelength', /Your words/i, false],
+    ['wavelength', /Your result/i, false],
     ['poll', /You didn’t send a response this round/i, false],
     ['call-and-answer', /You didn’t send a response this round/i, true],
-    ['trivia', /You answered/i, true],
+    ['trivia', /Your result/i, true],
   ])('%s results: the score lines only where the type scores', async (gameType, heading, scored) => {
     const server = makeServer({ state: 'CREATED', gameType });
     installFetch(server);
@@ -797,7 +797,7 @@ describe('the states that did not exist', () => {
     await resync();
 
     await waitFor(() => expect(screen.getByText(/Thanks for playing/i)).toBeInTheDocument());
-    expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Report/i })).toBeNull();
     expect(shell()).toHaveAttribute('data-volume', 'watch');
   });

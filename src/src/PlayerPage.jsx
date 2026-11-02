@@ -17,6 +17,12 @@ import useHandoverFlow from './hooks/useHandoverFlow';
 import { formatAgo } from './config/handoverWait';
 import AnswerSpotlight from './components/AnswerSpotlight';
 import { getClientId, classifyJoinFailure } from './components/joinResult';
+import SessionCodeField from './components/SessionCodeField';
+import PlayerEnded, { PlayerEndedDock } from './components/PlayerEnded';
+import { codeFromUrl } from './hooks/useJoinCode';
+import {
+  JOIN, EARLY, WAIT, SENT, RECEIPT, RESULTS, ENDED, LOOK_UP, STEP, IN_SESSION, barWhere, receiptFor,
+} from './config/playerWords';
 import {
   roundOf, pendingVerdict, savePendingAnswer, loadPendingAnswer, clearPendingAnswer,
 } from './utils/pendingAnswer';
@@ -81,6 +87,9 @@ function surveyNamePromise(names) {
  * is honoured here rather than answered.
  */
 const FEEDBACK_REFETCH_MS = 900;
+
+/** How often the not-started lobby tries the join again (experience plan 3e). */
+export const EARLY_RETRY_MS = 4000;
 
 const LookUpCue = ({ children }) => (
   <div className="plr-lookup">
@@ -321,7 +330,13 @@ function PlayerPage({ event = null } = {}) {
   eventRef.current = event;
   const inEvent = Boolean(event && event.gameId);
   const [eventJoinError, setEventJoinError] = useState(null);
-  
+  /* JOINED BEFORE THE HOST STARTED (experience plan 3a/3e, audit C P8).
+     `earlyJoin` is `{ gid, name, accessCode }` while the page holds a place
+     and retries the join by itself; `eventWaiting` is the same for an event's
+     item, joined by token. */
+  const [earlyJoin, setEarlyJoin] = useState(null);
+  const [eventWaiting, setEventWaiting] = useState(false);
+
   // Helper function to check if game is in waiting state
   const isWaitingState = (state) => {
     if (!state) return true; // Default to waiting state if no state
@@ -720,7 +735,7 @@ function PlayerPage({ event = null } = {}) {
    * (see components/joinResult.js). `claimExisting` is only ever true when the
    * person has said so out loud.
    */
-  const performJoin = async (gid, name, { accessCode = null, claimExisting = false, attendeeToken = null, waitStatus = false } = {}) => {
+  const performJoin = async (gid, name, { accessCode = null, claimExisting = false, attendeeToken = null, waitStatus = false, newSeat = false } = {}) => {
     const trimmed = String(name || '').trim();
     const clientId = getClientId(gid);
 
@@ -740,7 +755,10 @@ function PlayerPage({ event = null } = {}) {
           ...(waitStatus ? { waitStatus: true } : {}),
           // An event's attendee (events M4): the server takes the name from
           // the event, so `playerName` is empty here.
-          ...(attendeeToken ? { attendeeToken } : {})
+          ...(attendeeToken ? { attendeeToken } : {}),
+          // "I'm someone else" in an event (experience plan 3e): a new seat
+          // ("Sam 2") rather than a refusal over a name somebody else holds.
+          ...(newSeat ? { newSeat: true } : {})
         }),
       });
     } catch (error) {
@@ -766,14 +784,14 @@ function PlayerPage({ event = null } = {}) {
       return {
         ok: false,
         status: response.status,
-        failure: classifyJoinFailure(response.status, data)
+        failure: classifyJoinFailure(response.status, data, gid)
       };
     }
 
     // "Still waiting" (join-game.js `waiting`): the same refusal the 409
     // carried, so the handover flow cannot tell the two apart.
     if (data && data.waiting === true) {
-      return { ok: false, status: 409, failure: classifyJoinFailure(409, data) };
+      return { ok: false, status: 409, failure: classifyJoinFailure(409, data, gid) };
     }
 
     return { ok: true, data: data || {} };
@@ -809,7 +827,17 @@ function PlayerPage({ event = null } = {}) {
    * ambush someone with a modal the instant the page loads — that case falls
    * through to the join form, as it always has.
    */
-  const applyJoinFailure = (failure, name, { quiet = false } = {}) => {
+  const applyJoinFailure = (failure, name, { quiet = false, gid = null, accessCode = null } = {}) => {
+    /* NOT STARTED YET IS A LOBBY, NOT A DEAD END (experience plan 3a/3e,
+       audit C P8). The code and the name are held and the join is tried
+       again by itself until the host starts; nothing to tap. Quiet or not:
+       a lobby ambushes nobody. */
+    if (failure.kind === 'not-started' && gid && String(name || '').trim()) {
+      setJoinError(null);
+      setEarlyJoin({ gid: String(gid), name: String(name).trim(), accessCode: accessCode || null });
+      return;
+    }
+
     if (failure.kind === 'access-code') {
       console.log(`🔐 PLAYER: Game requires access code - showing access code input`);
       setNeedsAccessCode(true);
@@ -854,12 +882,13 @@ function PlayerPage({ event = null } = {}) {
    * sends the attendee back to the event's name step; anything else is shown
    * with a way to try again.
    */
-  const attemptEventJoin = async (gid) => {
+  const attemptEventJoin = async (gid, { newSeat = false } = {}) => {
     const ev = eventRef.current || {};
     setEventJoinError(null);
-    const result = await performJoin(gid, '', { attendeeToken: ev.token });
+    const result = await performJoin(gid, '', { attendeeToken: ev.token, newSeat });
     if (result.ok) {
       const name = String((result.data && result.data.playerName) || '').trim();
+      setEventWaiting(false);
       enterSession(gid, name, result.data);
       return;
     }
@@ -867,9 +896,22 @@ function PlayerPage({ event = null } = {}) {
       ev.onNotJoined();
       return;
     }
-    setEventJoinError(result.failure && result.failure.message
-      ? result.failure.message
-      : 'Could not get you into this item. Try again.');
+    const failure = result.failure || {};
+    // NOT STARTED YET (experience plan 3e): a lobby that joins by itself.
+    if (failure.kind === 'not-started') {
+      setEventWaiting(true);
+      return;
+    }
+    setEventWaiting(false);
+    /* THE NAME IS SOMEBODY ELSE'S IN THIS ITEM (experience plan 3e, audit C
+       P5). A new device in an event is a second attendee, and used to become
+       "Chris 2" without a word. The server now asks first, and this is the
+       same screen a typed name gets: move my name here, or someone else. */
+    if (failure.kind === 'name-taken') {
+      applyJoinFailure(failure, failure.playerName || '');
+      return;
+    }
+    setEventJoinError(failure.message || 'Could not get you into this item. Try again.');
   };
 
   // 🔄 Attempt to automatically join the game
@@ -881,7 +923,7 @@ function PlayerPage({ event = null } = {}) {
     if (!result.ok) {
       console.log(`❌ PLAYER: Auto-join refused (${result.failure.kind})`);
       setNameInput(trimmed);
-      applyJoinFailure(result.failure, trimmed, { quiet: true });
+      applyJoinFailure(result.failure, trimmed, { quiet: true, gid: gameId, accessCode });
       return;
     }
 
@@ -892,6 +934,62 @@ function PlayerPage({ event = null } = {}) {
     const url = new URL(window.location);
     url.searchParams.set('name', trimmed);
     window.history.replaceState(null, '', url);
+  };
+
+  /*
+    THE LOBBY THAT JOINS BY ITSELF (experience plan 3a/3e, audit C P8). The
+    server answers "not started" until the host starts; the page used to show
+    that as an error and leave the participant to guess when to tap Join
+    again. Now it holds the code and the name and tries every few seconds:
+    in → the session; still not started → keep waiting; anything else (a
+    name clash, a wrong code) → that refusal's own screen. `performJoin` and
+    friends are read through a ref so the timer never calls a stale closure.
+  */
+  const earlyRetryRef = useRef(null);
+  earlyRetryRef.current = async () => {
+    if (earlyJoin) {
+      const { gid, name, accessCode } = earlyJoin;
+      const result = await performJoin(gid, name, { accessCode });
+      if (result.ok) {
+        setEarlyJoin(null);
+        enterSession(gid, name, result.data);
+        try {
+          const url = new URL(window.location);
+          url.searchParams.set('gameId', gid);
+          url.searchParams.set('name', name);
+          window.history.replaceState(null, '', url);
+        } catch (_) { /* a URL the browser will not rewrite is not a failed join */ }
+        return;
+      }
+      if (result.failure && result.failure.kind === 'not-started') return;
+      setEarlyJoin(null);
+      if (result.failure) applyJoinFailure(result.failure, name);
+      return;
+    }
+    if (eventWaiting && eventRef.current && eventRef.current.gameId) {
+      await attemptEventJoin(String(eventRef.current.gameId));
+    }
+  };
+  const lobbyRetrying = Boolean(earlyJoin) || (eventWaiting && !joined);
+  useEffect(() => {
+    if (!lobbyRetrying) return undefined;
+    let stopped = false;
+    let timer = null;
+    const tick = async () => {
+      try { await earlyRetryRef.current(); } catch (_) { /* the next tick tries again */ }
+      if (!stopped) timer = setTimeout(tick, EARLY_RETRY_MS);
+    };
+    timer = setTimeout(tick, EARLY_RETRY_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [lobbyRetrying]);
+
+  /** "Change the code or name": back to the form, both kept. */
+  const leaveEarlyJoin = () => {
+    setEarlyJoin(null);
+    setJoinError(null);
   };
 
   // REMOVED: Partial vote system - not needed with simplified flow
@@ -2542,7 +2640,7 @@ function PlayerPage({ event = null } = {}) {
 
     if (!result.ok) {
       console.log(`❌ PLAYER: Join refused (${result.failure.kind})`);
-      applyJoinFailure(result.failure, trimmed);
+      applyJoinFailure(result.failure, trimmed, { gid: gameId, accessCode: accessCodeInput.trim() || null });
       return;
     }
 
@@ -2569,7 +2667,7 @@ function PlayerPage({ event = null } = {}) {
     });
 
     if (!result.ok) {
-      applyJoinFailure(result.failure, trimmed);
+      applyJoinFailure(result.failure, trimmed, { gid: gameId, accessCode: accessCodeInput.trim() });
       return;
     }
 
@@ -2924,6 +3022,9 @@ function PlayerPage({ event = null } = {}) {
     setJoinCollision(null);
     setNameInput('');
     setPlayerName('');
+    // IN AN EVENT there is no name form: "someone else" is the same name with
+    // a number after it ("Sam 2"), a seat of their own (experience plan 3e).
+    if (inEvent) attemptEventJoin(String(event.gameId), { newSeat: true });
   };
 
   /**
@@ -2972,6 +3073,15 @@ function PlayerPage({ event = null } = {}) {
    */
   const claimNameIfGranted = () => {
     if (!joinCollision) return Promise.resolve({ ok: false, failure: { kind: 'network' } });
+    // AN EVENT'S ITEM (experience plan 3e): the claim is the attendee's token,
+    // and the server moves the seat to this attendee on the host's grant.
+    if (inEvent) {
+      return performJoin(gameId, '', {
+        attendeeToken: (eventRef.current || {}).token,
+        claimExisting: true,
+        waitStatus: true,
+      });
+    }
     return performJoin(gameId, joinCollision.playerName, {
       accessCode: accessCodeInput.trim() || null,
       claimExisting: true,
@@ -3008,6 +3118,13 @@ function PlayerPage({ event = null } = {}) {
 
   /** "Join again with a different name": the join form, code kept, name empty. */
   const handleJoinAgainAfterMove = () => {
+    // In an event the name is the event's: back to its name step.
+    const ev = eventRef.current;
+    if (ev && ev.gameId && typeof ev.onNotJoined === 'function') {
+      setNameMoved(null);
+      ev.onNotJoined();
+      return;
+    }
     setNameMoved(null);
     setPlayerName('');
     setNameInput('');
@@ -3174,41 +3291,6 @@ function PlayerPage({ event = null } = {}) {
     </div>
   );
 
-  // AN EVENT'S ITEM, NOT YET IN (events M4). No form: the join is by the
-  // attendee's token and needs nothing typed. Either it is on its way, or it
-  // was refused and says why, with a way to try again and a way back.
-  if (inEvent && !joined) {
-    return (
-      <PlayerShell
-        phase="join"
-        volume="rest"
-        ctx="Joining"
-        help={eventJoinError ? 'player-join-errors' : 'player-event'}
-        centre
-        dock={eventJoinError ? (
-          <button type="button" className="plr-btn" onClick={() => attemptEventJoin(String(event.gameId))}>
-            Try again
-          </button>
-        ) : null}
-      >
-        {eventJoinError ? (
-          <>
-            <h1 className="plr-h1">Not in yet.</h1>
-            <p className="plr-err" role="alert">
-              <Icon name="WarningCircle" weight="bold" size={16} />
-              {eventJoinError}
-            </p>
-          </>
-        ) : (
-          <>
-            <h1 className="plr-h1">Getting you in…</h1>
-            <p className="plr-lede plr-muted">No code and no name to type: you joined the event already.</p>
-          </>
-        )}
-      </PlayerShell>
-    );
-  }
-
   // THIS DEVICE'S NAME MOVED TO ANOTHER ONE (experience plan §4.4, step 1d).
   // Ahead of everything: the page has stopped, and nothing else it could show
   // is true for this device any more.
@@ -3226,48 +3308,92 @@ function PlayerPage({ event = null } = {}) {
     );
   }
 
+  const collisionScreen = !joined && joinCollision ? (
+    <PlayerShell
+      phase="join"
+      volume="act"
+      ctx={JOIN.ctx}
+      help="player-name-taken"
+      /* The refusal's two ways out belong in the dock, exactly as the rejoin
+         prompt's do twenty lines below. They rendered inside `.plr-stage`
+         until now, which is the one screen on this surface where a player is
+         already stuck being the one screen that asked them to scroll to get
+         unstuck. */
+      dock={(
+        <JoinNameCollisionActions
+          kind={joinCollision.kind}
+          playerName={joinCollision.playerName}
+          /* ONE STAGE, READ BY BOTH HALVES. The note in the stage and the
+             label in the dock describe the same step, so they come from the
+             same value rather than from two conditions that can drift. */
+          stage={handover.stage}
+          canAskAgain={handover.canAskAgain}
+          onRejoinAnyway={handleCollisionRejoin}
+          onUseAnotherName={handleCollisionRename}
+          onRequestHandover={handover.requestHandover}
+          inEvent={inEvent}
+        />
+      )}
+    >
+      <JoinNameCollision
+        kind={joinCollision.kind}
+        playerName={joinCollision.playerName}
+        message={joinCollision.message}
+        stage={handover.stage}
+        agoText={formatAgo(handover.agoMs)}
+        error={handover.error}
+      />
+    </PlayerShell>
+  ) : null;
+
+  // AN EVENT'S ITEM, NOT YET IN (events M4). No form: the join is by the
+  // attendee's token and needs nothing typed. Either it is on its way, or the
+  // item has not started and the page joins by itself when it does (3e), or
+  // it was refused and says why, with a way to try again and a way back. A
+  // name somebody else holds in this item is the collision screen above.
+  if (inEvent && !joined && !joinCollision) {
+    return (
+      <PlayerShell
+        phase="join"
+        volume="rest"
+        ctx="Joining"
+        help={eventJoinError ? 'player-join-errors' : 'player-event'}
+        centre
+        dock={eventJoinError ? (
+          <button type="button" className="plr-btn" onClick={() => attemptEventJoin(String(event.gameId))}>
+            Try again
+          </button>
+        ) : null}
+      >
+        {eventJoinError ? (
+          <>
+            <h1 className="plr-h1 plr-h1--primary">Not in yet.</h1>
+            <p className="plr-err" role="alert">
+              <Icon name="WarningCircle" weight="bold" size={16} />
+              {eventJoinError}
+            </p>
+          </>
+        ) : eventWaiting ? (
+          <div data-testid="early-lobby">
+            <p className="plr-lab">{EARLY.eyebrow('')}</p>
+            <h1 className="plr-h1 plr-h1--primary">{EARLY.heading}</h1>
+            <p className="plr-lede plr-muted" role="status">{EARLY.itemLede}</p>
+          </div>
+        ) : (
+          <>
+            <h1 className="plr-h1 plr-h1--primary">Getting you in…</h1>
+            <p className="plr-lede plr-muted">No code and no name to type: you joined the event already.</p>
+          </>
+        )}
+      </PlayerShell>
+    );
+  }
+
   // The name is already answering in this session. Shown ahead of everything
   // else on the join side: it is the only screen that tells the second Chris
   // they are the second Chris, and it used to not exist — the server merged
   // them into the first Chris and said "Reconnected".
-  if (!joined && joinCollision) {
-    return (
-      <PlayerShell
-        phase="join"
-        volume="act"
-        ctx="Join a session"
-        help="player-name-taken"
-        /* The refusal's two ways out belong in the dock, exactly as the rejoin
-           prompt's do twenty lines below. They rendered inside `.plr-stage`
-           until now, which is the one screen on this surface where a player is
-           already stuck being the one screen that asked them to scroll to get
-           unstuck. */
-        dock={(
-          <JoinNameCollisionActions
-            kind={joinCollision.kind}
-            playerName={joinCollision.playerName}
-            /* ONE STAGE, READ BY BOTH HALVES. The note in the stage and the
-               label in the dock describe the same step, so they come from the
-               same value rather than from two conditions that can drift. */
-            stage={handover.stage}
-            canAskAgain={handover.canAskAgain}
-            onRejoinAnyway={handleCollisionRejoin}
-            onUseAnotherName={handleCollisionRename}
-            onRequestHandover={handover.requestHandover}
-          />
-        )}
-      >
-        <JoinNameCollision
-          kind={joinCollision.kind}
-          playerName={joinCollision.playerName}
-          message={joinCollision.message}
-          stage={handover.stage}
-          agoText={formatAgo(handover.agoMs)}
-          error={handover.error}
-        />
-      </PlayerShell>
-    );
-  }
+  if (collisionScreen) return collisionScreen;
 
   /*
     Rejoin prompt (B2) — shown before the join screen when a saved identity is
@@ -3297,15 +3423,48 @@ function PlayerPage({ event = null } = {}) {
           </>
         )}
       >
-        <h1 className="plr-h1">Welcome back.</h1>
+        <h1 className="plr-h1 plr-h1--primary">Welcome back.</h1>
         <p className="plr-lede plr-muted">
-          This phone joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
+          This device joined session <strong>{rejoinPrompt.gameId}</strong> as{' '}
           <strong>{rejoinPrompt.name}</strong>.{' '}
           {/* A survey has answers and no score (the brief says which this is). */}
           {briefSaysSurvey
             ? 'Rejoining brings your answers back with you.'
             : 'Rejoining brings your answers and your score back with you.'}
         </p>
+      </PlayerShell>
+    );
+  }
+
+  /*
+    JOINED BEFORE THE HOST STARTED (experience plan 3a/3e, audit C P8). Not an
+    error under the Join button but a lobby: the code and the name are held,
+    the page tries again every few seconds (EARLY_RETRY_MS) and moves on by
+    itself the moment the host starts. The one way out keeps both.
+  */
+  if (!joined && earlyJoin) {
+    return (
+      <PlayerShell
+        phase="join"
+        volume="act"
+        ctx={JOIN.ctx}
+        help="player-join"
+        centre
+        dock={(
+          <button type="button" className="plr-btn plr-btn--ghost" onClick={leaveEarlyJoin}>
+            {EARLY.change}
+          </button>
+        )}
+      >
+        <div data-testid="early-lobby">
+          <p className="plr-lab">{EARLY.eyebrow(earlyJoin.name)}</p>
+          <h1 className="plr-h1 plr-h1--primary">{EARLY.heading}</h1>
+          <p className="plr-lede plr-muted" role="status">{EARLY.lede}</p>
+          <div className="plr-card">
+            <p className="plr-lab">{JOIN.codeLabel}</p>
+            <p className="plr-quote">{earlyJoin.gid}</p>
+          </div>
+        </div>
       </PlayerShell>
     );
   }
@@ -3322,12 +3481,12 @@ function PlayerPage({ event = null } = {}) {
         <PlayerShell
           phase="join"
           volume="act"
-          ctx="Private session"
+          ctx={JOIN.privateCtx}
           help="player-join-errors"
           dock={(
             <>
               <button type="submit" form="plr-access-form" className="plr-btn">
-                Join Game
+                {JOIN.button}
               </button>
               <button
                 type="button"
@@ -3346,10 +3505,8 @@ function PlayerPage({ event = null } = {}) {
             </>
           )}
         >
-          <h1 className="plr-h1 plr-h1--primary">This session is private.</h1>
-          <p className="plr-lede plr-muted">
-            The host has an access code for it. Ask them, or read it off the main screen.
-          </p>
+          <h1 className="plr-h1 plr-h1--primary">{JOIN.privateHeading}</h1>
+          <p className="plr-lede plr-muted">{JOIN.privateLede}</p>
           <form id="plr-access-form" onSubmit={handleAccessCodeSubmit}>
             <div className="plr-field">
               <label className="plr-lab" htmlFor="plr-access">Access code</label>
@@ -3381,44 +3538,50 @@ function PlayerPage({ event = null } = {}) {
       <PlayerShell
         phase="join"
         volume="act"
-        ctx="Join a session"
+        ctx={JOIN.ctx}
         help={joinError ? 'player-join-errors' : 'player-join'}
         dock={(
           <>
             <button type="submit" form="plr-join-form" className="plr-btn">
-              Join Game
+              {JOIN.button}
             </button>
             <p className="plr-note plr-note--after">
-              No account, nothing to install. On this phone, the same code and name bring
+              No account, nothing to install. On this device, the same code and name bring
               you back. On another device? You can move your name here.
             </p>
           </>
         )}
       >
-        <h1 className="plr-h1">Join the session.</h1>
-        <p className="plr-lede plr-muted">Type the four digits on the main screen.</p>
+        <h1 className="plr-h1 plr-h1--primary">{JOIN.heading}</h1>
+        <p className="plr-lede plr-muted">{JOIN.lede}</p>
 
         <form id="plr-join-form" onSubmit={handleJoinGame}>
           <div className="plr-field">
-            <label className="plr-lab" htmlFor="plr-code">Session code</label>
-            <input
+            <label className="plr-lab" htmlFor="plr-code">{JOIN.codeLabel}</label>
+            {/* THE ONE CODE WIDGET (experience plan 3a, audit C P7): the
+                same four cells over one input as /join and the marketing
+                hero, never a plain field with a "Game ID" placeholder. */}
+            <SessionCodeField
+              skin="plr"
               id="plr-code"
-              type="text"
               value={gameId}
-              onChange={(e) => setGameId(e.target.value)}
-              placeholder="Game ID"
-              className={`plr-inp plr-inp--code${joinError ? ' plr-inp--bad' : ''}`}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              aria-describedby="plr-code-help"
+              onChange={(e) => setGameId(String(e.target.value || '').replace(/\D+/g, '').slice(0, 4))}
+              onPaste={(e) => {
+                const clip = e.clipboardData || window.clipboardData;
+                const raw = (clip && clip.getData('text')) || '';
+                const code = codeFromUrl(raw) || raw.replace(/\D+/g, '');
+                if (code.length > 4) return; // more than four: let the browser keep what it has
+                e.preventDefault();
+                setGameId(code);
+              }}
+              bad={Boolean(joinError)}
+              describedBy="plr-code-help"
               required
               readOnly={codeLocked}
-              ref={codeInputRef}
+              inputRef={codeInputRef}
             />
             <p className="plr-help" id="plr-code-help">
-              {codeLocked
-                ? 'Read from the link you followed. Nothing to type.'
-                : 'Four digits. Not case-sensitive, because there are no letters.'}
+              {codeLocked ? JOIN.codeFromLink : JOIN.codeHelp}
             </p>
             {/*
               THE WAY OUT OF A CODE THAT IS NO LONGER THE RIGHT ONE.
@@ -3482,12 +3645,12 @@ function PlayerPage({ event = null } = {}) {
                    words (config/surveyNames.js — never retyped); with no value
                    in the brief, only what is true of every survey. */
                 <>
-                  Used to get you back in on this phone if you lose this page.
+                  Used to get you back in on this device if you lose this page.
                   {surveyNamePromise(briefHere.names)}
                 </>
               ) : (
                 <>
-                  Used for the scoreboard and to get you back in on this phone if you lose this page. On rounds
+                  Used for the scoreboard and to get you back in on this device if you lose this page. On rounds
                   where the room votes, your name is <b>not</b> shown next to your answer until
                   voting closes.
                 </>
@@ -3584,7 +3747,7 @@ function PlayerPage({ event = null } = {}) {
     <div className="plr-banner" role="status">
       <Icon name="WifiSlash" weight="bold" size={16} />
       <div>
-        <b>Your last answer did not reach the room.</b> The round closed while this phone
+        <b>Your last answer did not reach the room.</b> The round closed while this device
         was offline, so it was not sent.{' '}
         <button type="button" className="plr-more" onClick={() => setMissedAnswer(false)}>
           OK
@@ -3603,7 +3766,7 @@ function PlayerPage({ event = null } = {}) {
       <PlayerShell
         phase="quiet"
         volume="rest"
-        ctx="In the session"
+        ctx={IN_SESSION}
         who={playerName}
         online={wsConnected}
         banner={offlineBanner}
@@ -3676,13 +3839,16 @@ function PlayerPage({ event = null } = {}) {
         warning={surveyWarning}
         online={wsConnected}
         banner={offlineBanner}
+        /* AN EVENT'S ITEM (experience plan 3e, audit C P5): the survey's end
+           says keep the page open and offers the agenda, never "close". */
+        event={inEvent ? event : null}
       />
     );
   }
 
   let phase = 'quiet';
   let volume = 'rest';
-  let ctx = position || 'In the session';
+  let ctx = position || IN_SESSION;
   let barCategory = null;
   let centre = false;
   let dock = null;
@@ -3809,28 +3975,28 @@ function PlayerPage({ event = null } = {}) {
      rendered "✅ You're in! / Waiting for the game to start… / ● Ready to
      play" and left the player there permanently (INVENTORY §7.2). */
   } else if (gameState === 'ENDED') {
+    /* ONE ENDED SCREEN (experience plan 3a/3e; audit C P6): components/
+       PlayerEnded.jsx, which the survey's end draws too. Score only where
+       the format scores — Final score 0 on a poll or Wavelength read as a
+       wrong answer, the fix the results screen already had (#43) — and the
+       strip goes green ('done') as the survey's always did. In an event the
+       item is finished, the agenda is in the dock and "Up next" says what
+       follows. */
     volume = 'watch';
-    ctx = 'Session complete';
+    phase = 'done';
+    ctx = inEvent ? ENDED.itemCtx : ENDED.ctx;
     centre = true;
     body = (
-      <>
-        <p className="plr-lab">That&apos;s a wrap</p>
-        <h1 className="plr-h1">Thanks for playing, {playerName}.</h1>
-
-        <hr className="plr-sep" />
-        <div className="plr-stat">
-          <span className="plr-k">Final score</span>
-          <span className="plr-v">{playerScoreInfo?.totalScore ?? playerScore}</span>
-        </div>
-        {playerScoreInfo?.rankDisplay && (
-          <div className="plr-stat">
-            <span className="plr-k">Final standing</span>
-            <span className="plr-v">
-              {playerScoreInfo.rankDisplay} of {playerScoreInfo.totalPlayers}
-            </span>
-          </div>
-        )}
-
+      <PlayerEnded
+        name={playerName}
+        scored={hasScoreboard(gameType)}
+        score={playerScoreInfo?.totalScore ?? playerScore}
+        standing={playerScoreInfo?.rankDisplay
+          ? `${playerScoreInfo.rankDisplay} of ${playerScoreInfo.totalPlayers}`
+          : null}
+        event={inEvent ? event : null}
+        lookUp={<LookUpCue>{ENDED.lookUp}</LookUpCue>}
+      >
         {endedComments && endedComments.open && endedComments.lastRound > 0 ? (
           <section className="plr-ended-comments" aria-labelledby="plr-ended-comments-h">
             <p className="plr-lab" id="plr-ended-comments-h">Something to add?</p>
@@ -3871,31 +4037,16 @@ function PlayerPage({ event = null } = {}) {
             </ul>
           </section>
         ) : null}
-
-        <LookUpCue>
-          The room summary — the top responses, and what the host wants everyone to take
-          away — is on the main screen.
-        </LookUpCue>
-        <p className="plr-help" style={{ marginTop: '18px' }}>
-          {inEvent
-            ? 'Keep this page open: the next item starts here by itself.'
-            : 'You can close this page. If your host publishes a session summary, they will share the link themselves.'}
-        </p>
-      </>
+      </PlayerEnded>
     );
     // AN EVENT'S ITEM (events M4): the day goes on, and the agenda is one tap.
-    if (inEvent && typeof event.onAgenda === 'function') {
-      dock = (
-        <button type="button" className="plr-btn" onClick={() => event.onAgenda()}>
-          Back to the agenda
-        </button>
-      );
-    }
+    if (inEvent && typeof event.onAgenda === 'function') dock = <PlayerEndedDock event={event} />;
 
   /* ------------------------------------------------------------------ ASK -- */
   } else if (gameState.startsWith('ASK#') && currentQuestion) {
     barCategory = category;
-    ctx = position || 'This round';
+    // THE BAR SAYS WHERE YOU ARE (experience plan §3.4): "Round 3 · Answer".
+    ctx = barWhere(position, STEP.answer);
 
     /* THE QUESTION, BY GAME TYPE. Poll and survey used to fall into an `else`
        that rendered `title` only, so a poll question's `detail` — the
@@ -4242,14 +4393,13 @@ function PlayerPage({ event = null } = {}) {
 
       body = (
         <>
-          <p className="plr-lab plr-lab--good">Submitted</p>
+          {/* ONE RECEIPT (experience plan 3a; audit C counted six headings:
+              "Answer Submitted!", "Words Submitted!", "Answer In!", "Answer
+              received.", "Title received.", "Votes Submitted!"). The eyebrow
+              is always "Sent"; the heading is always "Your <thing> is in." */}
+          <p className="plr-lab plr-lab--good">{SENT}</p>
           <h1 className="plr-h1 plr-h1--primary">
-            {gameType === 'trivia' ? 'Answer Submitted!'
-              : gameType === 'wavelength' ? 'Words Submitted!'
-                : gameType === 'poll' ? 'Answer In!'
-                  // Plain words (external review of test, 15 Oct: "Application
-                  // Submitted!" read as a form, not an answer).
-                  : currentQuestion?.image ? 'Title received.' : 'Answer received.'}
+            {receiptFor(gameType, { artwork: gameType === 'call-and-answer' && Boolean(currentQuestion?.image) })}
           </h1>
 
           {submittedWords ? (
@@ -4260,7 +4410,7 @@ function PlayerPage({ event = null } = {}) {
             </div>
           ) : (submittedLetter || mySubmittedAnswer) ? (
             <div className="plr-card plr-card--good">
-              <p className="plr-lab">What you sent</p>
+              <p className="plr-lab">{RECEIPT.card}</p>
               <p className="plr-quote">
                 {submittedLetter
                   ? `${submittedLetter}. ${submittedOption || ''}`.trim()
@@ -4269,20 +4419,18 @@ function PlayerPage({ event = null } = {}) {
             </div>
           ) : null}
 
-          <p className="plr-help">
-            This is locked for the round. If this page reloads, it comes back.
-          </p>
+          <p className="plr-help">{RECEIPT.locked}</p>
 
           <LookUpCue>
             {gameType === 'trivia'
-              ? 'The room’s answers go up on the main screen when the round closes.'
+              ? LOOK_UP.receiptTrivia
               : gameType === 'wavelength'
                 /* Nothing is revealed until everyone is in — a player watching
                    words accumulate would change what they wrote (spec §5). */
-                ? 'Nothing shows until everyone is in. When the round closes, the words the whole room shares light up on the main screen.'
+                ? LOOK_UP.receiptWavelength
                 : gameType === 'poll' && currentQuestion?.poll
-                  ? 'Your answer is counted. Watch the main screen — the result fills in as the room answers, without names.'
-                  : 'The host will bring every response up on the main screen when the round closes, without names.'}
+                  ? LOOK_UP.receiptPoll
+                  : LOOK_UP.receiptCall}
           </LookUpCue>
         </>
       );
@@ -4290,7 +4438,8 @@ function PlayerPage({ event = null } = {}) {
 
   /* ----------------------------------------------------------------- VOTE -- */
   } else if (gameState.startsWith('VOTE#')) {
-    ctx = position ? `Voting · ${position}` : 'Voting';
+    // "Round 3 · Vote", the same grammar as every other step (§3.4).
+    ctx = barWhere(position, STEP.vote);
 
     if (hasVoted) {
       /* `|| hasVoted` IS THE OTHER HALF OF THE TAB-SWITCH REPORT, and it used
@@ -4306,12 +4455,12 @@ function PlayerPage({ event = null } = {}) {
 
       body = (
         <>
-          <p className="plr-lab plr-lab--good">Submitted</p>
-          <h1 className="plr-h1 plr-h1--primary">Votes Submitted!</h1>
+          <p className="plr-lab plr-lab--good">{SENT}</p>
+          <h1 className="plr-h1 plr-h1--primary">{RECEIPT.votes}</h1>
 
           {ranked.length > 0 && (
             <div className="plr-card plr-card--good">
-              <p className="plr-lab">Your ballot</p>
+              <p className="plr-lab">{RECEIPT.ballotCard}</p>
               {ranked.map(({ slot, idx }) => (
                 <div key={slot} className="plr-stat">
                   <span className="plr-k">{rankLabel(VOTE_POSITIONS[slot])}</span>
@@ -4321,13 +4470,8 @@ function PlayerPage({ event = null } = {}) {
             </div>
           )}
 
-          <p className="plr-help">
-            This is locked for the round. If this page reloads, it comes back.
-          </p>
-          <LookUpCue>
-            Who wrote what, and how the room ranked them, goes up on the main screen when
-            voting closes.
-          </LookUpCue>
+          <p className="plr-help">{RECEIPT.locked}</p>
+          <LookUpCue>{LOOK_UP.receiptVotes}</LookUpCue>
         </>
       );
     } else if (answers.length > 0) {
@@ -4503,14 +4647,17 @@ function PlayerPage({ event = null } = {}) {
       );
     } else {
       volume = 'rest';
+      /* ONE WAY TO SAY WAIT (3a). The question being voted on is named, so a
+         late joiner knows what is coming (audit C §2.4). */
+      const comingQuestion = currentQuestion?.image
+        ? (currentQuestion.title || currentQuestion.question)
+        : (currentQuestion?.detail || currentQuestion?.title || currentQuestion?.question);
       body = (
         <>
-          <p className="plr-lab">Voting</p>
-          <h1 className="plr-h1 plr-h1--primary">The responses are coming up.</h1>
-          <p className="plr-lede plr-muted">
-            This page will change on its own when the ballot is ready — you do not need to
-            refresh it.
-          </p>
+          <p className="plr-lab">{WAIT.voteEyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
+          {comingQuestion && <p className="plr-detail plr-muted">{comingQuestion}</p>}
+          <p className="plr-lede plr-muted">{WAIT.voteLede} {WAIT.line}</p>
         </>
       );
     }
@@ -4525,7 +4672,7 @@ function PlayerPage({ event = null } = {}) {
       late send, so a Done would do nothing. Only the held card has one.
     */
     volume = followUp.ask.status === 'live' ? 'act' : 'watch';
-    ctx = position ? `${position} · Question` : 'Question';
+    ctx = barWhere(position, STEP.question);
     body = (
       <FollowUpCard
         ask={followUp.ask}
@@ -4573,7 +4720,7 @@ function PlayerPage({ event = null } = {}) {
 
   } else if (gameState.startsWith('RESULTS#')) {
     volume = 'watch';
-    ctx = position ? `${position} · Results` : 'Results';
+    ctx = barWhere(position, STEP.results);
 
     /* THE PERSONAL HALF ONLY. The stage may never name a person, so the
        distribution of answers, the word cloud, the winning responses, the AI
@@ -4674,7 +4821,7 @@ function PlayerPage({ event = null } = {}) {
 
       body = (
         <>
-          <p className="plr-lab">You answered</p>
+          <p className="plr-lab">{RESULTS.eyebrow}</p>
           <h1 className="plr-h1 plr-h1--primary">
             {mine ? `${mine.letter}. ` : ''}
             {mine ? (gotIt ? 'Correct.' : 'Not this time.') : 'No answer recorded.'}
@@ -4699,10 +4846,7 @@ function PlayerPage({ event = null } = {}) {
           ))}
 
           {scoreRows}
-          <LookUpCue>
-            How the whole room answered, and why{correct ? ` ${correct.letter}` : ''}, is on
-            the main screen.
-          </LookUpCue>
+          <LookUpCue>{LOOK_UP.resultsTrivia(correct ? correct.letter : '')}</LookUpCue>
         </>
       );
 
@@ -4720,7 +4864,7 @@ function PlayerPage({ event = null } = {}) {
          screen in the building. */
       body = (
         <>
-          <p className="plr-lab">Your words</p>
+          <p className="plr-lab">{RESULTS.eyebrow}</p>
           <h1 className="plr-h1 plr-h1--primary">
             {words.length ? `You sent ${words.length}.` : 'No words recorded.'}
           </h1>
@@ -4730,10 +4874,7 @@ function PlayerPage({ event = null } = {}) {
             </div>
           )}
           {scoreRows}
-          <LookUpCue>
-            What the room shared — the cloud, and the words more than one of you reached
-            for — is on the main screen.
-          </LookUpCue>
+          <LookUpCue>{LOOK_UP.resultsWavelength}</LookUpCue>
         </>
       );
 
@@ -4744,11 +4885,20 @@ function PlayerPage({ event = null } = {}) {
          there is no row to find and no rank to earn. */
       body = (
         <>
-          <p className="plr-lab">Your answer</p>
-          <h1 className="plr-h1">{mySubmittedAnswer || 'You didn’t answer this one'}</h1>
-          <LookUpCue>
-            The room’s result is on the main screen — how everyone answered, without names.
-          </LookUpCue>
+          {/* ONE HEADING AT ONE SIZE (3a): a typed paragraph used to be the
+              34px hero heading here. It is the card now, under a heading
+              the same size as every other type's result. */}
+          <p className="plr-lab">{RESULTS.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">
+            {mySubmittedAnswer ? 'Your answer is counted.' : 'You didn’t answer this one.'}
+          </h1>
+          {mySubmittedAnswer && (
+            <div className="plr-card">
+              <p className="plr-lab">{RECEIPT.card}</p>
+              <p className="plr-quote">{mySubmittedAnswer}</p>
+            </div>
+          )}
+          <LookUpCue>{LOOK_UP.resultsPoll}</LookUpCue>
         </>
       );
     } else {
@@ -4783,18 +4933,15 @@ function PlayerPage({ event = null } = {}) {
             : 'You didn’t send a response this round';
       body = (
         <>
-          <p className="plr-lab">Results</p>
-          <h1 className="plr-h1">{resultHeading}</h1>
+          <p className="plr-lab">{RESULTS.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{resultHeading}</h1>
           {(mySubmittedAnswer || myRow?.answer) && (
             <div className="plr-card">
               <p className="plr-quote">{mySubmittedAnswer || myRow.answer}</p>
             </div>
           )}
           {scoreRows}
-          <LookUpCue>
-            Names are on the main screen now. The top responses and the discussion prompts
-            are up there too — <b>this page will not repeat them</b>.
-          </LookUpCue>
+          <LookUpCue>{LOOK_UP.resultsCall}</LookUpCue>
         </>
       );
     }
@@ -4838,13 +4985,12 @@ function PlayerPage({ event = null } = {}) {
 
     body = betweenRounds ? (
       <>
-        <p className="plr-lab">The round is closed</p>
-        <h1 className="plr-h1 plr-h1--primary">Nothing to do here.</h1>
-        <p className="plr-lede plr-muted">
-          The next round starts when the host is ready. This page will change on its own —
-          you do not need to refresh it.
-        </p>
-        {(playerScoreInfo || playerScore > 0) && (
+        {/* ONE WAY TO SAY WAIT (experience plan 3a): the eyebrow says why. */}
+        <p className="plr-lab">{WAIT.betweenEyebrow}</p>
+        <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
+        <p className="plr-lede plr-muted">{WAIT.betweenLede} {WAIT.line}</p>
+        {/* Score only where the format scores, as on the results and the end. */}
+        {hasScoreboard(gameType) && (playerScoreInfo || playerScore > 0) && (
           <>
             <hr className="plr-sep" />
             <div className="plr-stat">
@@ -4861,23 +5007,18 @@ function PlayerPage({ event = null } = {}) {
             )}
           </>
         )}
-        <LookUpCue>
-          The discussion is on the main screen. <b>Join in</b> — this is the part the
-          session is actually for.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.between}</LookUpCue>
       </>
     ) : (
       <>
-        <p className="plr-lab">You&apos;re in</p>
-        <h1 className="plr-h1 plr-h1--primary">Joined as {playerName}.</h1>
+        <p className="plr-lab">{WAIT.lobbyEyebrow(playerName)}</p>
+        <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
         {/* ONE STATEMENT OF "NOTHING IS HAPPENING", NOT THREE. The lobby said it
             as a heading, as a paragraph AND as an animated status pill — and the
             only moving element on the screen was the one that meant "do
             nothing", in the peripheral vision of a room that is supposed to be
             listening to somebody. */}
-        <p className="plr-lede plr-muted">
-          Waiting for the game to start. The host will begin the first round.
-        </p>
+        <p className="plr-lede plr-muted">{WAIT.lobbyLede} {WAIT.line}</p>
 
         {engagementInfo.trim() && (
           <div className="plr-card">
@@ -4893,22 +5034,19 @@ function PlayerPage({ event = null } = {}) {
               seat a stranger (found driving the day in Chromium, 27 Sep 2026). */}
           {inEvent ? (
             <p className="plr-quote">
-              Open the join screen and enter <b>{event.code}</b> again. This phone is
+              Open the join screen and enter <b>{event.code}</b> again. This device is
               remembered, so no name is needed, and your answers come back with you.
             </p>
           ) : (
             <p className="plr-quote">
-              On this phone, go back to the join screen and enter <b>{gameId}</b> and the
-              same name: your answers and your score come back with you. On another device?
+              On this device, go back to the join screen and enter <b>{gameId}</b> and the
+              same name: your answers come back with you. On another device?
               You can move your name there; the host lets you in.
             </p>
           )}
         </div>
 
-        <LookUpCue>
-          Everything the room shares — the questions, the results, the discussion — is on
-          the main screen. This page is only ever <b>your</b> half.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.lobby}</LookUpCue>
       </>
     );
   }

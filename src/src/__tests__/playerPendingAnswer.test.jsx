@@ -28,7 +28,7 @@ jest.mock('../WebSocketClient', () => ({
   },
 }));
 
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 const KEY = pendingAnswerKey(GAME, ME);
 
@@ -88,10 +88,10 @@ async function setConnected(up) {
 
 async function joinAndReachQuestion() {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
   await screen.findByText(/What is the capital of France/i);
 }
@@ -139,7 +139,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith(
       'ANSWER#001', expect.objectContaining({ answer: 'B', answerType: 'trivia' })
     );
-    expect(screen.queryByText(/Answer Submitted!/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is in\./i)).not.toBeInTheDocument();
     expect(screen.queryByText(/locked for the round/i)).not.toBeInTheDocument();
     expect(screen.getByText(/^Not sent yet$/)).toBeInTheDocument();
     expect(screen.getByText(/it will send when you're back online/i)).toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     webSocketClient.sendCleanMessage.mockReturnValue(true);
     await setConnected(true);
 
-    await screen.findByText(/Answer Submitted!/i);
+    await screen.findByText(/Your answer is in\./i);
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(2);
     expect(webSocketClient.sendCleanMessage).toHaveBeenLastCalledWith(
       'ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) }
@@ -194,7 +194,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
 
     await setConnected(true);
 
-    await screen.findByText(/Answer Submitted!/i);
+    await screen.findByText(/Your answer is in\./i);
     expect(webSocketClient.sendCleanMessage).toHaveBeenCalledWith(
       'ANSWER#001', { answer: 'B', answerType: 'trivia', clientId: expect.any(String) }
     );
@@ -228,7 +228,7 @@ describe('PlayerPage — an answer submitted while offline is held, not lost', (
     webSocketClient.sendCleanMessage.mockReturnValue(true);
 
     await rejoinAfterReload();
-    await screen.findByText(/Answer Submitted!/i);
+    await screen.findByText(/Your answer is in\./i);
     await setConnected(true);
 
     expect(webSocketClient.sendCleanMessage).not.toHaveBeenCalled();

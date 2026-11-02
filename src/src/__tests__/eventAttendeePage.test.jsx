@@ -189,7 +189,7 @@ describe('following the day', () => {
     api.getAgenda.mockResolvedValue(agenda({ state: 'LIVE', liveItemId: '', rev: 'r1' }, [DAY[0], DAY[1], { ...liveTrivia, state: 'paused' }, DAY[3]]));
     await act(async () => { await global.__playerEvent.onFrame('eventItemPaused', { itemId: liveTrivia.itemId }); });
 
-    await screen.findByText('The host will be back.');
+    await screen.findByText('Waiting for the host.');
     expect(screen.getByRole('button', { name: 'Open the agenda' })).toBeInTheDocument();
     // Still mounted, behind the paused screen: nothing is lost.
     expect(screen.getByTestId('player').closest('[hidden]')).not.toBeNull();

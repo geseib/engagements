@@ -236,17 +236,67 @@ async function makeEvent() {
     assert.strictEqual(bodyOf(res).isReconnection, true);
     assert.strictEqual([...table.store.values()].filter((r) => r.PK === `GAME#${trivia}` && /^PLAYER#[^#]+$/.test(r.SK)).length, 1);
   });
-  await check('two attendees called Sam get "Sam" and "Sam 2", each always the same one', async () => {
+  // rejects (experience plan 3e, audit C P5): a second attendee with a held
+  // name silently seated as "Sam 2". A new device in an event is a second
+  // attendee, so the old way lost its answers and score without a word.
+  await check('a second attendee called Sam is asked first (NAME_TAKEN, attendee), never silently "Sam 2"', async () => {
     assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: sam1.token })).playerName, 'Sam');
-    assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: sam2.token })).playerName, 'Sam 2');
+    const asked = await playerJoin(trivia, { attendeeToken: sam2.token, clientId: 'cl_sam2' });
+    assert.strictEqual(asked.statusCode, 409, asked.body);
+    assert.strictEqual(bodyOf(asked).code, 'NAME_TAKEN');
+    assert.strictEqual(bodyOf(asked).attendee, true);
+    assert.strictEqual(bodyOf(asked).playerName, 'Sam');
+    assert.ok(/another device/.test(bodyOf(asked).message), bodyOf(asked).message);
+    assert.ok(!table.get(`GAME#${trivia}`, 'PLAYER#Sam 2'), 'no seat was made');
+  });
+  await check('"I\'m someone else" (newSeat) gets "Sam 2", and each always comes back to the same one', async () => {
+    assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: sam2.token, newSeat: true })).playerName, 'Sam 2');
     assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: sam2.token })).playerName, 'Sam 2');
     assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: sam1.token })).playerName, 'Sam');
   });
-  await check('a seat typed by hand is never taken over by a token', async () => {
+  await check('a seat typed by hand is never taken over by a token: asked first, then "Ada 2"', async () => {
     await playerJoin(trivia, { playerName: 'Ada', clientId: 'cl_ada' });
     const ada = bodyOf(await join(code, 'Ada'));
-    const res = await playerJoin(trivia, { attendeeToken: ada.token });
+    assert.strictEqual((await playerJoin(trivia, { attendeeToken: ada.token })).statusCode, 409);
+    const res = await playerJoin(trivia, { attendeeToken: ada.token, newSeat: true });
     assert.strictEqual(bodyOf(res).playerName, 'Ada 2');
+    assert.strictEqual(table.get(`GAME#${trivia}`, 'PLAYER#Ada').ClientId, 'cl_ada');
+  });
+  // Chris on a phone, then Chris on a laptop that joined the event again.
+  const chrisPhone = bodyOf(await join(code, 'Chris'));
+  const chrisLaptop = bodyOf(await join(code, 'Chris'));
+  const chrisOther = bodyOf(await join(code, 'Chris'));
+  await check('a claim without the host\'s grant is refused, and waits quietly with waitStatus', async () => {
+    assert.strictEqual((await playerJoin(trivia, { attendeeToken: chrisPhone.token, clientId: 'cl_chris_phone' })).statusCode, 200);
+    const res = await playerJoin(trivia, { attendeeToken: chrisLaptop.token, clientId: 'cl_chris_laptop', claimExisting: true });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    const quiet = await playerJoin(trivia, { attendeeToken: chrisLaptop.token, clientId: 'cl_chris_laptop', claimExisting: true, waitStatus: true });
+    assert.strictEqual(quiet.statusCode, 200, quiet.body);
+    assert.strictEqual(bodyOf(quiet).waiting, true);
+    assert.strictEqual(table.get(`GAME#${trivia}`, 'PLAYER#Chris').ClientId, 'cl_chris_phone');
+  });
+  await check('with the host\'s grant, the claim moves "Chris" to the new device and attendee, once', async () => {
+    const seat = table.get(`GAME#${trivia}`, 'PLAYER#Chris');
+    table.put({ ...seat, HandoverExpiresAt: Math.floor(Date.now() / 1000) + 300, HandoverForClientId: 'cl_chris_laptop' });
+    // A grant bound to the laptop is not anyone else's.
+    assert.strictEqual((await playerJoin(trivia, { attendeeToken: chrisOther.token, clientId: 'cl_other', claimExisting: true })).statusCode, 409);
+    const res = await playerJoin(trivia, { attendeeToken: chrisLaptop.token, clientId: 'cl_chris_laptop', claimExisting: true });
+    assert.strictEqual(res.statusCode, 200, res.body);
+    assert.strictEqual(bodyOf(res).playerName, 'Chris');
+    assert.strictEqual(bodyOf(res).handedOver, true);
+    const moved = table.get(`GAME#${trivia}`, 'PLAYER#Chris');
+    assert.strictEqual(moved.ClientId, 'cl_chris_laptop');
+    assert.strictEqual(moved.AttendeeId, chrisLaptop.token.split('.')[0]);
+    assert.strictEqual(moved.MovedFromClientId, 'cl_chris_phone');
+    assert.ok(!moved.HandoverExpiresAt, 'the grant is spent');
+    assert.ok(!table.get(`GAME#${trivia}`, 'PLAYER#Chris 2'), 'no second seat');
+    assert.strictEqual(bodyOf(await playerJoin(trivia, { attendeeToken: chrisLaptop.token, clientId: 'cl_chris_laptop' })).isReconnection, true);
+  });
+  await check('the old device, coming back with its token, is told the name moved (not offered to ask)', async () => {
+    const res = await playerJoin(trivia, { attendeeToken: chrisPhone.token, clientId: 'cl_chris_phone' });
+    assert.strictEqual(res.statusCode, 409, res.body);
+    assert.strictEqual(bodyOf(res).nameMoved, true);
+    assert.ok(!table.get(`GAME#${trivia}`, 'PLAYER#Chris 2'));
   });
   await check('a forged, malformed or other event\'s token is 401 NOT_JOINED', async () => {
     const forged = `${priya.token.slice(0, -2)}AA`;

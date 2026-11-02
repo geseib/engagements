@@ -99,9 +99,11 @@ function classifyRejoin({ storedClientId, clientId, claimExisting, handoverOpen 
  * reported with. It is deliberately NOT a roster: one submitted name in, one
  * yes/no out, no listing and no endpoint that answers without a join attempt.
  */
-function nameConflictResponse(code, playerName, { handoverRefused = false, nameMoved = false } = {}) {
+function nameConflictResponse(code, playerName, { handoverRefused = false, nameMoved = false, attendee = false } = {}) {
   const message = nameMoved
     ? nameMovedMessage(playerName)
+    : attendee && !handoverRefused
+    ? `Someone in this event is already answering as "${playerName}". If that is you on another device, you can move your name here. If not, join under your name with a number after it.`
     : handoverRefused
     ? `The host said not now. Add a last initial or pick another name so the host can tell you apart.`
     : code === 'NAME_UNVERIFIED'
@@ -122,7 +124,10 @@ function nameConflictResponse(code, playerName, { handoverRefused = false, nameM
       // it move (`MovedFromClientId`, written by the handover branch). Its
       // page says "<name> is now on another device" instead of offering to
       // ask for the name it has just handed on.
-      ...(nameMoved ? { nameMoved: true, reason: NAME_MOVED } : {})
+      ...(nameMoved ? { nameMoved: true, reason: NAME_MOVED } : {}),
+      // An event's item, joined by token: "I'm someone else" is a new seat
+      // (`newSeat`), not a name form, so the phone needs to know which.
+      ...(attendee ? { attendee: true } : {})
     }),
     headers: { 'Access-Control-Allow-Origin': '*' }
   };
@@ -145,14 +150,25 @@ const reply = (statusCode, body) => ({ statusCode, body: JSON.stringify(body), h
  * slept, "Back to live" — finds the seat by that id and reconnects to it,
  * score and answers intact. Two attendees with one name get "Sam" and
  * "Sam 2", tried in order, so each always lands on the same one. A seat typed
- * by hand (no AttendeeId) is never taken over: it is somebody else's.
+ * by hand (no AttendeeId) is never taken over silently: it is somebody else's.
+ *
+ * A NEW DEVICE IS NOT SILENTLY "SAM 2" (experience plan 3e, audit C P5). A
+ * phone that joined the event again by name is a second attendee, and used to
+ * be seated as "Sam 2" without a word, its earlier answers and score left on
+ * "Sam". Now, when the attendee's own name is held by someone else and this
+ * attendee has no seat of their own yet, the join is refused NAME_TAKEN
+ * (`attendee: true`), exactly as a typed name is, and the phone shows the
+ * same screen (JoinNameCollision): "Use my name on this device" asks the
+ * host, whose grant this route spends with `claimExisting` (the seat moves to
+ * this attendee and this browser, and the old device is told); "I'm someone
+ * else" sends `newSeat: true` and takes "Sam 2" as before.
  *
  * The session's own gate still runs first (openSessionOr): it must exist and
  * have started. The token is then the whole identity; a missing, forged,
  * expired or other-event token is 401 NOT_JOINED, and the phone goes back to
  * the event's name step.
  */
-async function joinAsAttendee(gameId, token, clientId) {
+async function joinAsAttendee(gameId, token, clientId, { claimExisting = false, newSeat = false } = {}) {
   const TABLE = process.env.TABLE_NAME;
   const gate = await openSessionOr(db, TABLE, gameId, undefined);
   if (!gate.ok) return gate.response;
@@ -163,13 +179,55 @@ async function joinAsAttendee(gameId, token, clientId) {
   const attendee = await attendeeForToken(db, TABLE, { eventRef: String(meta.EventRef), orgId: meta.orgId, token });
   if (!attendee) return reply(401, { error: 'You have not joined this event yet.', code: 'NOT_JOINED' });
 
+  // Whether the attendee's OWN name (seat 1) is held by somebody else. Read
+  // before a new seat is made: a returning "Sam 2" finds their own seat
+  // further along and is never asked again.
+  let ownNameHeld = null;
   for (let n = 1; n <= MAX_SEATS; n += 1) {
     const name = seatName(attendee.name, n);
     const key = { PK: `GAME#${gameId}`, SK: `PLAYER#${name}` };
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const existing = await db.send(new GetCommand({ TableName: TABLE, Key: key, ConsistentRead: true }));
       const seat = existing && existing.Item;
-      if (seat && seat.AttendeeId !== attendee.attendeeId) break; // somebody else's: try the next name
+      if (seat && seat.AttendeeId !== attendee.attendeeId) {
+        if (n === 1) {
+          // THE HOST LET THIS BROWSER HAVE THE NAME: spend the grant, as the
+          // typed-name handover branch below does, in one conditional write.
+          if (claimExisting === true && handoverOpenFor(seat, clientId)) {
+            const previousClientId = seat.ClientId || null;
+            try {
+              await db.send(new UpdateCommand({
+                TableName: TABLE,
+                Key: key,
+                UpdateExpression: `SET ClientId = :cid, AttendeeId = :aid${previousClientId ? ', MovedFromClientId = :prev' : ''} REMOVE HandoverExpiresAt, HandoverForClientId, HandoverRequestedBy, HandoverRequestedAt, HandoverRefusedFor, HandoverRefusedAt, RemovedAt`,
+                ConditionExpression: 'attribute_exists(HandoverExpiresAt) AND HandoverExpiresAt > :now AND (attribute_not_exists(HandoverForClientId) OR HandoverForClientId = :cid)',
+                ExpressionAttributeValues: {
+                  ':cid': clientId,
+                  ':aid': attendee.attendeeId,
+                  ':now': nowSeconds(),
+                  ...(previousClientId ? { ':prev': previousClientId } : {}),
+                },
+              }));
+            } catch (error) {
+              if (error && error.name === 'ConditionalCheckFailedException') {
+                return nameConflictResponse('NAME_TAKEN', name, { attendee: true });
+              }
+              throw error;
+            }
+            await tellOldDeviceNameMoved(gameId, name);
+            await notifyHostOfPlayerJoin(gameId, {
+              playerId: name, playerName: name, totalScore: 0,
+              joinedAt: seat.joinedAt || seat.JoinedAt, isReconnection: true,
+            });
+            return reply(200, {
+              success: true, message: 'Reconnected to existing player', playerId: name, playerName: name,
+              totalScore: 0, isReconnection: true, attendee: true, handedOver: true,
+            });
+          }
+          ownNameHeld = { name, seat };
+        }
+        break; // somebody else's: try the next name
+      }
       if (seat) {
         // THIS attendee's seat. A removal is undone, as any rejoin undoes it
         // (see the handler below); the browser becomes the seat's ClientId,
@@ -193,6 +251,16 @@ async function joinAsAttendee(gameId, token, clientId) {
         return reply(200, {
           success: true, message: 'Reconnected to existing player', playerId: name, playerName: name,
           totalScore: 0, isReconnection: true, attendee: true,
+        });
+      }
+      // A NEW SEAT WHILE THE OWN NAME IS SOMEBODY ELSE'S: ask first, unless
+      // the person has said "I'm someone else".
+      if (ownNameHeld && newSeat !== true) {
+        const held = ownNameHeld.seat;
+        return nameConflictResponse('NAME_TAKEN', ownNameHeld.name, {
+          attendee: true,
+          handoverRefused: Boolean(clientId && held.HandoverRefusedFor === clientId),
+          nameMoved: Boolean(clientId && held.MovedFromClientId === clientId),
         });
       }
       const now = new Date().toISOString();
@@ -289,7 +357,12 @@ async function joinHandler(event) {
 
     // An event's attendee, by token and not by name (events M4).
     const attendeeToken = typeof body.attendeeToken === 'string' ? body.attendeeToken.trim() : '';
-    if (gameId && attendeeToken) return await joinAsAttendee(gameId, attendeeToken, clientId);
+    if (gameId && attendeeToken) {
+      return await joinAsAttendee(gameId, attendeeToken, clientId, {
+        claimExisting: claimExisting === true,
+        newSeat: body.newSeat === true,
+      });
+    }
 
     if (!gameId || !playerName) {
       return {
