@@ -384,7 +384,7 @@ module.exports = {
     "config/help/host-running.js": {
       "Back to Menu": 2,
       "SESSION": 3,
-      "Session panel": 6,
+      "Session panel": 5,
       "Unlock name": 2
     },
     "config/help/host-setup.js": {

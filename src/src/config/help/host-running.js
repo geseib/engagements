@@ -236,7 +236,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. Before **SESSION**, a bell with a number counts what waits on you (**Needs you**); never a name on one screen, gone when nothing waits.',
+          text: 'The dock holds the one button that moves the room on; Space or → presses it. A grey button says why it cannot act yet. Late items add a count to the status line. Before **SESSION**, a bell counts what waits on you (**Needs you**): never a name on one screen, gone when nothing waits.',
         },
         {
           t: 'p',
@@ -262,7 +262,7 @@ const running = {
           t: 'note',
           tone: 'tip',
           title: 'Presenter clickers work',
-          text: 'A clicker sends → and ←, so it advances, turns the read\'s pages and steps back. Keys never fire while you are typing in a box or working in the Session panel.',
+          text: 'A clicker sends → and ←: it advances, turns pages and steps back. Keys never fire while you type in a box.',
         },
       ],
     },
