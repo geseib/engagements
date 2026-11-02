@@ -17,7 +17,11 @@ import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
   limit fires for a hung test, never a slow one, and stays under its 30s
   testTimeout: 15s is both.
 */
-const LOAD_WAIT = 15000;
+// 30s, not 15s (2 Nov): alone each test loads in ~0.3s, but under the full suite's
+// parallel load the whole host page (now with the pulse's ticking clock) has twice
+// missed 15s. The assertion is unchanged; only the patience is.
+const LOAD_WAIT = 30000;
+jest.setTimeout(60000);
 
 jest.mock('../auth/AuthContext', () => ({
   __esModule: true,
