@@ -217,7 +217,9 @@
   color: var(--muted); font-size: var(--brm-t-label);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.brm .brm-hbar-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* margin-left: auto keeps the bell, ? and Session menu at the right edge when the header
+   wraps to a second row (experience plan 2e: Session menu top right). */
+.brm .brm-hbar-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 .brm .brm-codewrap { display: inline-flex; align-items: baseline; gap: 6px; }
 .brm .brm-code { font-family: var(--font-display); font-weight: 800; font-size: var(--brm-t-num); color: var(--primary); letter-spacing: .06em; line-height: 1; }
 
@@ -1770,6 +1772,11 @@
 
 /* The panel. Root: below the header, above the Stage's dock (placed in JS). */
 .brm .brm-sp-root { --brm-sp-top: 0px; --brm-sp-bottom: 0px; position: fixed; left: 0; right: 0; top: var(--brm-sp-top, 0px); bottom: var(--brm-sp-bottom, 0px); z-index: 800; }
+/* THE SESSION MENU AS A SHEET ON THE CONSOLE (experience plan 2e, §3.2b): portalled into
+   HostConsole's sheet host, a box over the pulse and the main area, so it fills that box and
+   never covers Your part now or the Needs-you line. */
+.brm .brm-sp-root.is-sheet { position: absolute; inset: 0; z-index: 1; }
+.brm .brm-sp-root.is-sheet .brm-sp { max-width: 100%; }
 .brm .brm-sp-scrim { position: absolute; inset: 0; background: var(--brm-scrim); }
 .brm .brm-sp {
   position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 100vw);
@@ -1804,6 +1811,10 @@
 .brm .brm-sp-gh { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
 .brm .brm-sp-gh h3 { margin: 0; font: 800 var(--brm-t-label)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--text); }
 .brm .brm-sp-gh span { font-size: var(--brm-t-label); color: var(--muted); }
+/* Build settings holds two parts, each under its own small head (2e). */
+.brm .brm-sp-sub { display: flex; flex-direction: column; gap: 9px; }
+.brm .brm-sp-sub + .brm-sp-sub { padding-top: 6px; }
+.brm .brm-sp-sh { margin: 4px 0 0; font: 700 var(--brm-t-label)/1.2 var(--font-ui); color: var(--muted); }
 .brm .brm-sp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: var(--brm-row-h); }
 .brm .brm-sp-lab { font: 600 var(--brm-t-body)/1.3 var(--font-ui); }
 .brm .brm-sp-note { margin: 0; }

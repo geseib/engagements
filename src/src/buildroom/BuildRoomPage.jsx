@@ -21,6 +21,7 @@
  * http(s) (`safeHref`).
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Modal from '../components/Modal';
 import { getAuthToken } from '../auth/authFetch';
 import { rememberReturnPath } from '../auth/returnPath';
@@ -61,6 +62,12 @@ import { ShareDemo, DemoNudge, wifiLink, demoOnStage } from './BuildWifiShare';
 import { shouldOfferDemo, demoRunnable } from './wifiShare';
 import BuildSessionPanel, { HandoverStrip } from './BuildSessionPanel';
 import PendingInvites from '../components/PendingInvites';
+import HostNotificationsBell from '../components/HostNotificationsBell';
+import OneScreenNeedsBell from '../components/needs/OneScreenNeedsBell';
+import NeedsYouLine from '../components/needs/NeedsYouLine';
+import { needsYou, NEEDS_ACTIONS } from '../config/needsYou';
+import HW from '../config/hostWords';
+import { PERSON_WORDS } from '../components/people/PersonRow';
 import useBuildPlayers, { askingOf } from './useBuildPlayers';
 import useSessionPanelKey from '../components/stage/useSessionPanelKey';
 import RoomWindowStatus from '../components/stage/RoomWindowStatus';
@@ -81,7 +88,7 @@ import {
   whatsNextMoves, CLAUDE_KINDS, HOST_KINDS, claudeKindLabel, asField, pickVerdict, combineText, defaultSubject,
   shownPointIdeas, takeDownIdeas, shownPointOf, nowFlags, POINT_OPEN, isPointsVote, highlightOf, highlightedPointIds,
   rowIsLive, pointVoteRows, runOf, runRunning, roomSees, heldPosts, roomStory, contributionsOf, doingLine,
-  wheelPossible, WRAP_UP_TEXT, wrapPrefill, wrapAsked, briefRows,
+  wheelPossible, WRAP_UP_TEXT, wrapPrefill, wrapAsked, briefRows, buildNeedsOf,
 } from './buildScreens';
 import { QueuePost, ReleaseAll } from './BuildHeldPosts';
 import { ConsiderContext, ConsiderPanel, ItemTools, ItemMark } from './BuildConsider';
@@ -94,7 +101,7 @@ import useStageMoves from './useStageMoves';
 import BuildSetup from './BuildSetup';
 import { buildControls } from './buildControls';
 import BuildConsole, {
-  PeopleList, SessionSlot, ConsolePoint,
+  PeopleList, ConsolePoint,
 } from './BuildConsole';
 import BuildConsoleAsk from './BuildConsoleAsk';
 import {
@@ -465,6 +472,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // into the main area; the moves the card presses, kept current every render.
   const consoleSend = useRef(null);
   const [centre, setCentre] = useState(null); // 'queue' | 'later' | null
+  // THE SESSION MENU'S SHEET HOST on the console (experience plan 2e, §3.2b): HostConsole's box
+  // over the content area. The Session menu is portalled into it, never over Your part now.
+  const [sheetHost, setSheetHost] = useState(null);
+  // A refusal from a Needs-you action (a grant that failed): the server's sentence, on the item (PLAN §4.4).
+  const [needsError, setNeedsError] = useState('');
   const consoleHandlers = useRef({});
   // THE ROOM'S WINDOW FOLLOWS (parity PLAN §2.6, B7): what the room is shown
   // goes to the server too, fire and forget, so a window on the projector
@@ -976,6 +988,58 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // The request strip's two answers: one handover to the device that asked, or Not now.
   const grantAsker = (name) => run(async () => { await api.playerHandover(name, { bindToRequester: true }); await loadPlayers(); });
   const refuseAsker = (name) => run(async () => { await api.playerHandover(name, { refuse: true }); await loadPlayers(); });
+  /*
+    NEEDS YOU, WORKED OUT (config/needsYou.js; experience plan 2e, §3.2a): the
+    Build Room's Waiting for you (Claude's asks and mockups, the room's ideas,
+    Claude's held posts) and the roster's name requests, in the one list the
+    Needs-you line, the bell and the person rows all read. Nothing stored: it
+    clears the moment its cause does, whichever screen answered it.
+  */
+  const needs = needsYou({
+    players: roster.players || [],
+    connected: !['disconnected', 'offline', 'signin'].includes(connection),
+    build: ended ? null : buildNeedsOf(room),
+    now,
+  });
+  // Waiting for you, opened at what the item names: on the console in the main area, else the Host screen.
+  const openWaiting = (target, filter) => {
+    setAlertFocus({ target, filter });
+    setScreen('host');
+    if (twoRef.current && !narrow) setCentre('queue');
+  };
+  const needsAct = (fn) => run(async () => {
+    setNeedsError('');
+    try { await fn(); } catch (e) { setNeedsError((e && e.message) || 'That did not work.'); throw e; }
+    await loadPlayers();
+  });
+  const onNeedsAct = (item, action) => {
+    switch (action) {
+      case NEEDS_ACTIONS.LET: return needsAct(() => api.playerHandover(item.name, { bindToRequester: true }));
+      case NEEDS_ACTIONS.NOT_NOW: return needsAct(() => api.playerHandover(item.name, { refuse: true }));
+      case NEEDS_ACTIONS.LOCK: return needsAct(() => api.playerHandover(item.name, { lock: true }));
+      case NEEDS_ACTIONS.SEE: {
+        const row = typeof document !== 'undefined' ? document.querySelector('[data-testid="person-asking"]') : null;
+        if (row && typeof row.scrollIntoView === 'function') { row.scrollIntoView({ block: 'nearest' }); return undefined; }
+        return openPanel('players');
+      }
+      case NEEDS_ACTIONS.DECIDE: return openWaiting({ kind: 'ask', id: item.askId }, 'all');
+      case NEEDS_ACTIONS.REVIEW: return openWaiting({ kind: 'waiting' }, item.kind === 'ideas' ? 'room' : 'claude');
+      default: return undefined;
+    }
+  };
+  const needsBell = { needs, onAct: onNeedsAct, busy, error: needsError };
+  // ⋯ on a person row (PLAN §3.2b): what the Build Room can do to a person, in the row's order. No Rename here.
+  const personMenu = (p) => {
+    if (ended) return [];
+    const h = p.handover || {};
+    const builder = Boolean(p.builder);
+    return [
+      h.open
+        ? { id: 'lock', label: PERSON_WORDS.lock, onSelect: () => needsAct(() => api.playerHandover(p.name, { lock: true })) }
+        : { id: 'move', label: PERSON_WORDS.move, onSelect: () => needsAct(() => api.playerHandover(p.name, { bindToRequester: Boolean(h.requested) })) },
+      { id: 'remove', label: PERSON_WORDS.remove, danger: true, onSelect: () => needsAct(() => (builder ? api.removeBuilder(p.name) : api.playerRemoved(p.name, true))) },
+    ];
+  };
   // A dialog opened from the panel shows on the Host screen, whichever screen the panel was opened over.
   const dialogFromPanel = (d) => { setScreen('host'); setDialog(d); };
   const showCodes = () => { showRoom('stage'); codesAsked.current = true; setCodesUp(true); postWall({ codes: demoOnStage(room, now, wifiLink(room)) ? 'both' : 'join' }); };
@@ -1202,6 +1266,8 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   // are exactly as before. Every panel below is the Host screen's own.
   const consoleOn = twoRef.current && screen === 'host' && !narrow;
   escCodesRef.current = consoleOn && codesUp && !ended && !panel ? hideCodes : null;
+  // WHERE THE SESSION MENU OPENS (2e): on the console, in its sheet host; elsewhere, the fixed panel as before.
+  const sessionMenuWhere = (node) => (consoleOn && sheetHost ? createPortal(node, sheetHost) : node);
   let consoleNode = null;
   if (consoleOn) {
     const pickNow = pick && current && pick.askId === current.askId ? pick.id : null;
@@ -1247,7 +1313,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       return e.key === ' ' && Boolean(t.closest('button, a, [role="button"]'));
     };
     const stripNow = consoleStrip(room, current, { pickId: pickNow, answering, moment });
-    const people = peopleRows(room, current);
+    const people = peopleRows(room, current, roster);
     const later = laterItems(room);
     const ptsCount = ((room.points && room.points.items) || []).length;
     const waiting = waitingCount(room);
@@ -1316,8 +1382,17 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
     consoleNode = (
       <BuildConsole
         moment={moment}
-        top={{ title: room.title || 'Build Room', code: room.gameId, onJoin: onJoinCode, joinHint: joinChipWords(ended, codesUp, demoLive), joinPressed: ended ? undefined : codesUp, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' }, leaveLabel: W.mainMenu }}
+        top={{
+          title: room.title || 'Build Room', code: room.gameId, onJoin: onJoinCode, joinHint: joinChipWords(ended, codesUp, demoLive), joinPressed: ended ? undefined : codesUp, presentHref: wallHref, presentDetail: windowDetail, short: true, codeProps: { 'data-capability': 'share-demo' },
+          // THE SHARED TOP BAR (experience plan 2a, 2e): the bell is the session's Needs you, and the
+          // Session menu is the labelled button top right, a sheet over the content area.
+          bellSession: needsBell,
+          onSessionMenu: () => (panel ? closePanel() : openPanel('settings')),
+          sessionMenuOpen: Boolean(panel),
+        }}
         onLeave={() => window.location.assign('/')}
+        needs={<NeedsYouLine needs={needs} onAct={onNeedsAct} busy={busy} error={needsError} />}
+        sheetRef={setSheetHost}
         topExtra={(
           <div className="bc-topx">
             {!ended && demoRunnable(room) && (
@@ -1342,7 +1417,12 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
               ))}
               <button type="button" className="bc-chip" title={W.wallSeeHereHint} onClick={() => setScreen(wallScreen)}>{W.wallSeeHere}</button>
             </div>
-            {ended ? <EndedChip /> : <ConnectionChip connection={connection} onReconnect={reconnect} />}
+            {/* The connection, only when it is broken (PLAN §4.2 row 7): the top bar's own slot, with the
+                Build Room's Reconnect or Sign in again on it. Ended reads ended, never Live. */}
+            {ended ? <EndedChip /> : null}
+            {!ended && connectionBroken(connection) ? (
+              <span data-slot="connection"><ConnectionChip connection={connection} onReconnect={reconnect} /></span>
+            ) : null}
           </div>
         )}
         strip={{ strip: stripNow.strip, mode: 'full' }}
@@ -1369,35 +1449,23 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           },
           people: {
             title: BCW.people, summary: people.summary, capability: 'players',
-            body: <PeopleList people={people} onPlayers={(g) => openPanel('players', g)} />,
+            body: (
+              <PeopleList
+                people={people}
+                onPlayers={(g) => openPanel('players', g)}
+                menuFor={personMenu}
+                asking={needs.items.filter((i) => i.kind === 'name-request')}
+                onNeedsAct={onNeedsAct}
+                needsBusy={busy}
+              />
+            ),
+            // While anyone asks, the summary says so (C&A's rail does the same).
+            ...(askingNow.length ? { summary: `${askingNow.length} ${HW.needsYou.toLowerCase()}`, alert: true } : {}),
           },
           later: {
             title: BCW.later, summary: `${later.length}${ptsCount ? ` · ${BCW.pointsInside}` : ''}`, capability: 'later',
             body: centre === 'later' ? <p className="hc-muted">{BCW.inMainNote}</p> : laterNode,
             link: centre === 'later' ? null : BCW.openLaterInMain, onLink: () => setCentre('later'),
-          },
-          session: {
-            title: BCW.session, summary: agentLive ? `● ${BCW.claudeConnected}` : BCW.claudeOffline, capability: 'settings',
-            body: (
-              <SessionSlot
-                s={{
-                  busy,
-                  onConnect: () => setDialog('connect'),
-                  keyLine: agentChipText(room.agent, now),
-                  onPlugin: () => setDialog('connect-install'),
-                  pluginOld: Boolean(room.plugin && room.plugin.outdated) && !ended,
-                  continueSlot: !agentLive && !ended && CONTINUE_PROMPT ? <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" className="hc-link" /> : null,
-                  onCrew: () => setDialog('crew'),
-                  crewLine: crew ? `${builders} ${builders === 1 ? 'builder' : 'builders'}` : '',
-                  onLook: (k) => setScreen(k),
-                  onPanel: (tab, group) => openPanel(tab, group),
-                  onBackToOpening: !ended && room.opening && room.opening.phase === 'building' ? () => run(() => api.openingAction('resume', {})) : null,
-                  onWrap: () => setDialog('wrap'),
-                  onReport: () => goView('report'),
-                  onEnd: ended ? null : () => setDialog('end'),
-                }}
-              />
-            ),
           },
         }}
         side={(
@@ -1414,7 +1482,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         )}
       >
         <PendingInvites variant="bar" stay />
-        {!ended && <HandoverStrip asking={askingNow} busy={busy} onGrant={grantAsker} onRefuse={refuseAsker} onSee={() => openPanel('players')} />}
+        {/* A name request is the Needs-you line's and the person row's on the console (2e), not a strip. */}
         {error && (
           <div className="brm-alert brm-alert--bar" role="alert">
             {error}
@@ -1581,6 +1649,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         bothCodes={demoLive}
         codesUp={codesUp && !ended}
         share={{ ...share, nudge: demoOffered && !narrow && (screen === 'build' || screen === 'history') }}
+        needsBell={needsBell}
       />
       {/* A TEAM INVITATION (owner, 2026-10-10, option A): a slim bar on the Host
           screen only. Never Stage, Build or History: the room sees those. */}
@@ -1760,7 +1829,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       )}
 
       {joinZoom && <QrZoom playUrl={`${window.location.origin}/play?gameId=${room.gameId}`} gameId={room.gameId} onClose={() => setJoinZoom(false)} />}
-      {panel && (
+      {panel && sessionMenuWhere(
         <BuildSessionPanel
           room={room} now={now} ended={ended} busy={busy} run={run} api={api} connected={connection === 'live'}
           roster={roster} reloadPlayers={loadPlayers}
@@ -1781,7 +1850,11 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           wifiLink={wifiLink(room)}
           roomChoice={roomChoice}
           onRoomChoice={chooseRoom}
-        />
+          // From the console's old Session slot (2e): Look here, privately, and the Continue prompt.
+          onLook={(k) => setScreen(k)}
+          continueSlot={!(room.agent && (room.agent.connected || room.agent.listening)) && CONTINUE_PROMPT ? <CopyButton text={CONTINUE_PROMPT.text} label="Copy the Continue prompt" className="brm-btn brm-btn--sm" /> : null}
+          inSheet={Boolean(consoleOn && sheetHost)}
+        />,
       )}
 
       {host && (dialog === 'connect' || dialog === 'connect-install') && (
@@ -2164,6 +2237,9 @@ export function EndedChip() {
   return <span className="brm-conn brm-conn--ended" data-testid="brm-ended">{W.wallEnded}</span>;
 }
 
+/** The top bar draws the connection only when it is broken (experience plan 2a; PLAN §4.2 row 7). */
+export const connectionBroken = (connection) => connection !== 'live' && connection !== 'connecting';
+
 export function ConnectionChip({ connection = 'live', onReconnect }) {
   const c = CONNECTION[connection] || CONNECTION.live;
   if (connection === 'live' || connection === 'connecting') {
@@ -2278,7 +2354,31 @@ function joinChipWords(ended, codesUp, both) {
   return both ? 'Show both codes on the Stage' : 'Show the join code on the Stage';
 }
 
-function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes = false, codesUp = false, withPill = true }) {
+/** The header's Join, one toggle (§3.6): the code on the Stage and the room's window, or not. */
+function JoinChip({ room, ended, codesUp, bothCodes, onQr, slot = false }) {
+  return (
+    <button
+      type="button"
+      className="brm-codewrap brm-codebtn"
+      data-capability="share-demo"
+      data-slot={slot ? 'join' : undefined}
+      title={joinChipWords(ended, codesUp, bothCodes)}
+      aria-label={`${HW.join} code ${room.gameId}. ${joinChipWords(ended, codesUp, bothCodes)}`}
+      aria-pressed={ended ? undefined : codesUp}
+      onClick={onQr}
+    >
+      <span className="brm-muted brm-small">{HW.join}</span> <span className="brm-code">{room.gameId}</span>
+    </button>
+  );
+}
+
+/*
+ * `inHeader` (experience plan 2e): on the header the top bar's own slots draw
+ * Join and the connection, in the shared order, so the tools leave them out.
+ * Tucked into the Session menu's top line (narrow, or over the Stage) they
+ * carry both, as before.
+ */
+function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, onPlayers, pill, onScreen, share, bothCodes = false, codesUp = false, withPill = true, inHeader = false }) {
   // Share demo appears once there is a running app to share (owner, 2026-10-11).
   const showWifi = !ended && Boolean(share) && demoRunnable(room);
   return (
@@ -2297,19 +2397,11 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
       )}
       {/* ENDED READS ENDED (QA walk on test, 31 Oct 2026): no Live, no Queued for Claude after End session. */}
       {!ended && <span className="brm-agentwrap" data-capability="claude-status"><AgentChip room={room} now={now} /></span>}
-      {host && (ended ? <EndedChip /> : <ConnectionChip connection={connection} onReconnect={onReconnect} />)}
-      <button
-        type="button"
-        className="brm-codewrap brm-codebtn"
-        data-capability="share-demo"
-        title={joinChipWords(ended, codesUp, bothCodes)}
-        aria-label={`Join code ${room.gameId}. ${joinChipWords(ended, codesUp, bothCodes)}`}
-        aria-pressed={ended ? undefined : codesUp}
-        onClick={onQr}
-      >
-        <span className="brm-muted brm-small">Join</span> <span className="brm-code">{room.gameId}</span>
-      </button>
-      <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>
+      {host && ended && <EndedChip />}
+      {host && !ended && !inHeader && <ConnectionChip connection={connection} onReconnect={onReconnect} />}
+      {!inHeader && <JoinChip room={room} ended={ended} codesUp={codesUp} bothCodes={bothCodes} onQr={onQr} />}
+      {/* N joined: not a top-bar slot (2e). On the header, People is the Session menu's Players tab, its count on the tab. */}
+      {!inHeader && <button type="button" className="brm-chip brm-chip--btn" title="Who is in the room" onClick={onPlayers} data-capability="players">{room.playerCount || 0} joined</button>}
     </>
   );
 }
@@ -2318,15 +2410,25 @@ function HeaderTools({ room, now, host, ended, connection, onReconnect, onQr, on
 export const SCREEN_HELP = { host: 'build-host', build: 'build-build', history: 'build-history' };
 
 /**
- * THE HEADER, the same on all four screens: the title, the screens, the open
- * ask, Claude's status, the join code. On the Host screen it adds the live
- * connection and the session menu; on a screen the room sees, nothing in it
- * is host-only (the Host tab's count is a number, never content).
+ * THE HEADER, the same on all four screens, on THE SHARED TOP BAR'S SLOTS
+ * (experience plan 2a, 2e; PLAN §3.2, §3.2a): the same words, in the same
+ * order, as Call & Answer's console, each slot marked `data-slot`
+ * (config/hostWords.js TOP_SLOTS):
+ *
+ *   Main menu · the session's name · Join · the room's screen ·
+ *   [the Build Room's own: the four screens, The room sees, the open ask,
+ *    Open the build, Share demo, Claude's status, N joined] ·
+ *   the connection (only when broken) · the bell (Needs you) · ? · Session menu
+ *
+ * On the Host screen the bell is the session's Needs you, named and
+ * labelled. On Build and History the room sees this header, so nothing in it
+ * names anyone: the bell is a count, its sheet by kind (OneScreenNeedsBell),
+ * and the Session menu's badge is a number.
  */
 function RoomHeader({
   room, now, host, screen, onScreen, ended, connection, onReconnect, narrow,
   onSession, panelOpen, askingCount, onPlayers, onQr, bothCodes = false, codesUp = false, pluginOutdated = false,
-  alert, onAlertGo, onAlertAll, share, roomWindow = null,
+  alert, onAlertGo, onAlertAll, share, roomWindow = null, needsBell = null,
 }) {
   const pill = askPill(room);
   const tucked = narrow;
@@ -2339,15 +2441,36 @@ function RoomHeader({
   const tabs = twoUp ? SCREENS.filter((s) => s.key === 'host' || s.key === screen) : SCREENS;
   return (
     <header className="brm-hbar">
-      {/* MAIN MENU (B5, 2026-10-08): always the first control, on every host
+      {/* MAIN MENU (B5, 2026-10-08; hostWords): always the first control, on every host
           screen and in every state. Leaving does not end the session. */}
-      <a className="brm-btn brm-btn--sm brm-btn--ghost brm-mainmenu" href="/">
-        <Icon name="House" size={14} /> {W.mainMenu}
+      <a className="brm-btn brm-btn--sm brm-btn--ghost brm-mainmenu" href="/" data-slot="main-menu" title={HW.mainMenuHint}>
+        <Icon name="House" size={14} /> {HW.mainMenu}
       </a>
-      <div className="brm-hbar-title">
+      <div className="brm-hbar-title" data-slot="name">
         <span className="brm-t" title={room.title}>{room.title || 'Build Room'}</span>
         {room.goal && <span className="brm-goal" title={room.goal}>{room.goal}</span>}
       </div>
+      {/* JOIN, the one toggle, in the top bar's third slot (2e). Tucked at 480px with the tools. */}
+      {!tucked && <JoinChip room={room} ended={ended} codesUp={codesUp} bothCodes={bothCodes} onQr={onQr} slot />}
+      {/* The room's window and whether it is really up, on Host, Build and
+          History (owner, 19 Oct 2026; C&A's console top line, the same part).
+          The Stage carries it in its dock. One screen with no window up
+          (simplify PLAN item 18): the link alone. */}
+      {rw.href && !rw.open && !rw.two && (
+        <RoomWindowLink className="brm-btn brm-btn--sm brm-btn--ghost brm-rwlink" href={rw.href} data-capability="room-window" data-slot="room-screen">{W.wallOpen}</RoomWindowLink>
+      )}
+      {rw.href && (rw.open || rw.two) && (
+        <RoomWindowStatus
+          className="rws brm-rws"
+          data-slot="room-screen"
+          href={rw.href}
+          detail={rw.detail}
+          short
+          linkLabel={W.wallOpen}
+          classes={{ link: 'brm-btn brm-btn--sm brm-btn--ghost brm-rwlink', stat: 'brm-winstat', dot: 'brm-windot' }}
+        />
+      )}
+      {/* THE BUILD ROOM'S OWN PARTS, after the room's screen (2a: a type adds, never moves). */}
       <nav className="brm-screens" aria-label={twoUp ? 'This laptop' : 'Screens'}>
         {tabs.map((s) => (s.key === 'host' && screen !== 'host' && alert ? (
           // The Host tab carries the Host alert on Build and History (owner, 2026-10-10); on the Host screen Waiting for you does.
@@ -2383,49 +2506,46 @@ function RoomHeader({
           <button type="button" className="brm-seehere" disabled={screen === rw.sees} title={W.wallSeeHereHint} onClick={rw.onSeeHere}>{W.wallSeeHere}</button>
         </div>
       )}
-      {/* The room's window and whether it is really up, on Host, Build and
-          History (owner, 19 Oct 2026; C&A's console top line, the same part).
-          The Stage carries it in its dock. */}
-      {/* One screen with no window up (simplify PLAN item 18): the link alone. Its state and
-          Open as a tab say nothing until the host uses two screens or a window is up. */}
-      {rw.href && !rw.open && !rw.two && (
-        <RoomWindowLink className="brm-btn brm-btn--sm brm-btn--ghost brm-rwlink" href={rw.href} data-capability="room-window">{W.wallOpen}</RoomWindowLink>
-      )}
-      {rw.href && (rw.open || rw.two) && (
-        <RoomWindowStatus
-          className="rws brm-rws"
-          href={rw.href}
-          detail={rw.detail}
-          short
-          linkLabel={W.wallOpen}
-          classes={{ link: 'brm-btn brm-btn--sm brm-btn--ghost brm-rwlink', stat: 'brm-winstat', dot: 'brm-windot' }}
-        />
-      )}
       {/* THE ROOM SEES THIS HEADER on Build and History, so the cue there names
-          nobody: an amber pill and the count on SESSION (S6b). The Host screen
-          has the named strip instead. */}
+          nobody: an amber pill and the count on the Session menu (S6b). The
+          Host screen has the named strip instead. */}
       {askingCount > 0 && !host && (
         <button type="button" className="brm-askpill" onClick={onPlayers}>{W.askingToTake(askingCount)}</button>
       )}
       <div className="brm-hbar-tools">
-        {!tucked && <HeaderTools {...tools} />}
+        {!tucked && <HeaderTools {...tools} inHeader />}
+        {/* THE CONNECTION, ONLY WHEN IT IS BROKEN (PLAN §4.2 row 7), with its Reconnect. */}
+        {host && !tucked && !ended && connectionBroken(connection) && (
+          <span data-slot="connection"><ConnectionChip connection={connection} onReconnect={onReconnect} /></span>
+        )}
+        {/* THE BELL (§4.3): the session's Needs you. Named on the Host screen; on a
+            screen the room sees, a count and a sheet by kind, never a name. */}
+        {needsBell && (
+          <span className="brm-bell" data-slot="needs-you">
+            {host
+              ? <HostNotificationsBell session={needsBell} labelled />
+              : <OneScreenNeedsBell needs={needsBell.needs} onAct={needsBell.onAct} busy={needsBell.busy} error={needsBell.error} oneScreen />}
+          </span>
+        )}
         {/* HELP (Help Phase 3): the section for the screen that is showing,
-            beside SESSION as on the other engagements' panels. It names
-            nobody and shows nothing of the session, so it may sit in the
-            header the room sees on Build and History; it opens on this
+            beside the Session menu as on the other engagements' panels. It
+            names nobody and shows nothing of the session, so it may sit in
+            the header the room sees on Build and History; it opens on this
             laptop, never the room's window. */}
-        <HelpButton
-          {...helpFor(SCREEN_HELP[screen] || 'build-host')}
-          variant="inline"
-          size="small"
-          tooltip="Help and feedback"
-          className="help-button-quiet brm-help"
-          reports={{ context: 'host', gameId: room.gameId }}
-        />
-        {/* SESSION (owner, 2026-10-09): the same word and key as the other
-            engagements, last on the right where the three-dot menu was. */}
-        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
-          SESSION <kbd>\</kbd>
+        <span className="brm-helpslot" data-slot="help">
+          <HelpButton
+            {...helpFor(SCREEN_HELP[screen] || 'build-host')}
+            variant="inline"
+            size="small"
+            tooltip={HW.help}
+            className="help-button-quiet brm-help"
+            reports={{ context: 'host', gameId: room.gameId }}
+          />
+        </span>
+        {/* THE SESSION MENU (§3.2b, §3.6): one labelled button, top right, the
+            same word on every format. \ opens and closes it. */}
+        <button type="button" className={`brm-btn brm-btn--sm brm-sess${panelOpen ? ' is-on' : ''}`} data-slot="session-menu" aria-haspopup="dialog" aria-expanded={panelOpen} onClick={onSession} data-capability="settings">
+          <Icon name="List" size={14} /> {HW.sessionMenu} <kbd>\</kbd>
           {askingCount > 0 && <span className="brm-sess-n">{askingCount}<span className="brm-sr"> asking to take a name</span></span>}
           {/* The plugin is out of date: a dot, on the Host screen only (never on the Stage, Build or History the room sees). */}
           {host && pluginOutdated && <span className="brm-sess-dot" data-testid="brm-plugin-dot"><span className="brm-sr">{W.pluginDotSr}</span></span>}

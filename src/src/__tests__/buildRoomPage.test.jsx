@@ -127,8 +127,8 @@ const lastPost = () => posts()[posts().length - 1];
 const path = (c) => c.url.slice(API.length);
 /** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
 const openMore = () => {
-  fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
 };
 /** The host's pick asks first (owner, 2026-10-06): confirm it. */
 const confirmPick = () => fireEvent.click(within(screen.getByRole('dialog', { name: /Choose the room's pick\?|Choose an alternate\?/ })).getByRole('button', { name: /^Choose / }));
@@ -792,7 +792,7 @@ describe('Connect Claude Code', () => {
   test('revoke, the review setting, and the prompt cards with their slash commands (all the steps)', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     openMore();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('button', { name: /Connect Claude Code/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
@@ -1163,13 +1163,15 @@ describe('create', () => {
 describe('the connection (owner, 2026-10-04: a long wait left only "refresh the page")', () => {
   const socketSays = (up) => act(() => { webSocketClient.onConnectionStatusChange.mock.calls.slice(-1)[0][0](up); });
 
-  test('Connecting, then Live, then Disconnected with one click to reconnect', async () => {
+  test('the top bar draws the connection only when it is broken (experience plan 2a, 2e): Disconnected, with one click to reconnect', async () => {
     await openRoom(hostState());
-    expect(screen.getByTestId('brm-conn').textContent).toBe('Connecting…');
+    // Connecting and Live are the calm states: no chip (PLAN §4.2 row 7, "connection only when broken").
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
     socketSays(true);
-    expect(screen.getByTestId('brm-conn').textContent).toBe('Live');
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
     socketSays(false);
     const chip = screen.getByRole('button', { name: 'Disconnected · Reconnect' });
+    expect(chip.closest('[data-slot="connection"]')).not.toBeNull();
     const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
     fireEvent.click(chip);
     await waitFor(() => expect(webSocketClient.ensureConnected).toHaveBeenCalled());
@@ -1371,13 +1373,13 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     await openRoom(busy());
     expect(screen.queryByRole('button', { name: 'End session' })).toBeNull();
     openMore();
-    const menu = screen.getByRole('dialog', { name: 'Session' });
+    const menu = screen.getByRole('dialog', { name: 'Session menu' });
     ['Connect Claude Code', 'Open to a crew', 'Wrap up', 'Report', 'End session'].forEach((name) => {
       expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
     expect(within(menu).getByRole('switch', { name: /Review Claude's questions/ })).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('the join code in the header puts the code on the Stage', async () => {
@@ -2804,7 +2806,7 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(link.querySelector('svg')).not.toBeNull();
     expect(header().querySelector('a, button')).toBe(link);
     openMore();
-    expect(within(screen.getByRole('dialog', { name: 'Session' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
+    expect(within(screen.getByRole('dialog', { name: 'Session menu' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
     expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(1);
   });
 
@@ -2847,8 +2849,8 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
   test('375px: pressing the join code in the panel\'s top line opens the QR', async () => {
     asNarrow(true);
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session menu' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
     expect(screen.getByTestId('stage-join-panel')).toBeInTheDocument();
   });
 
@@ -2867,8 +2869,8 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeNull();
     expect(within(h).queryByText(/Open the build/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    const top = within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top');
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    const top = within(screen.getByRole('dialog', { name: 'Session menu' })).getByTestId('brm-sp-top');
     expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
     expect(within(top).getByText(/Open the build/)).toBeInTheDocument();
     expect(top.querySelector('.brm-wifi')).not.toBeNull();
@@ -3028,7 +3030,7 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     fireEvent.click(within(back).getByRole('button', { name: 'Back to the opening' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/resume`));
     openMore();
-    expect(screen.getByRole('dialog', { name: 'Session' }).textContent).toMatch('Back to the opening');
+    expect(screen.getByRole('dialog', { name: 'Session menu' }).textContent).toMatch('Back to the opening');
   });
 });
 
@@ -3634,9 +3636,9 @@ describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => 
 
   test('Show codes posts the codes up (and the Stage); hiding them posts none', async () => {
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('button', { name: 'Show on the Stage' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: 'Show on the Stage' }));
     await waitFor(() => expect(wallPosts()).toEqual(expect.arrayContaining([{ screen: 'stage' }, { codes: 'join' }])));
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(wallPosts()).toContainEqual({ codes: 'none' }));

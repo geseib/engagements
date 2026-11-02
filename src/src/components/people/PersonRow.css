@@ -1,0 +1,87 @@
+/* ============================================================================
+   ONE PERSON ROW — components/people/PersonRow.jsx
+   (docs/design/experience-plan/PLAN.md §3.2b; frame p-7).
+
+   Five slots in a fixed order with fixed widths, so the columns line up in
+   every list: status dot · name · doing now · the format's one fact · ⋯.
+   The name is the only flexible slot. Sized to fit at 15px in the 340px
+   People column (HostConsole.css): 8 + 10 + flexible + 10 + 92 + 10 + 64 +
+   10 + 32 = the column less its padding, with ~90px left for a name.
+
+   Dusk only: every caller sits under data-theme="dark" (HostConsole, the
+   Session menu). ROLES ONLY (styles/roles.css): --text, --muted, --surface-2,
+   --accent (the amber "needs you" edge), --success (here), --danger-text for
+   Remove, --rule-strong for borders. No literal, no --primary.
+
+   Laptop ladder 12 / 13 / 15 px; rows 36px. Measured on dusk --surface
+   (personRowPalette.test.js reads this file):
+     --text on --surface           12.53:1
+     --muted on --surface           5.43:1
+     --muted on --surface-2         4.93:1  (the open ⋯ menu)
+     --danger-text on --surface-2   4.94:1
+   ========================================================================== */
+
+.prow {
+  --prow-t-floor: 12px;
+  --prow-t-label: 13px;
+  --prow-t-body: 15px;
+  --prow-row-h: 36px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 92px 64px 32px;
+  column-gap: 10px;
+  align-items: center;
+  min-height: var(--prow-row-h);
+  padding: 0 12px 0 16px;
+  list-style: none;
+  font-size: var(--prow-t-body);
+  color: var(--text);
+  border-left: 3px solid transparent;
+}
+.prow.is-asking {
+  border-left-color: var(--accent);
+  background: linear-gradient(rgb(var(--warn-rgb) / .08), rgb(var(--warn-rgb) / .08)), var(--surface);
+}
+
+/* The status dot: here, away, left. */
+.prow .prow-dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; }
+.prow .prow-dot.is-here { background: var(--success); }
+.prow .prow-dot.is-away { background: var(--muted); }
+.prow .prow-dot.is-left { border: 1px solid var(--muted); background: transparent; }
+.prow.is-asking .prow-dot { background: var(--accent); }
+
+/* The name: one text node, so text-overflow works (hard rule 8). */
+.prow .prow-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.prow .prow-doing { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--prow-t-label); }
+.prow .prow-fact { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--prow-t-label); text-align: right; }
+
+/* ⋯ and its menu. */
+.prow .prow-more { position: relative; display: inline-flex; justify-content: flex-end; }
+/* The primitive Button (quiet, sm) keeps its outline and ink; only its shape is set here. */
+.prow .prow-more-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+}
+.prow .prow-more-toggle[aria-expanded="true"] { background: var(--surface-2); }
+.prow .prow-menu {
+  position: absolute; top: 100%; right: 0; z-index: 30;
+  display: flex; flex-direction: column; min-width: 200px; padding: 6px;
+  background: var(--surface-2); border: 1px solid var(--rule-strong); border-radius: 10px;
+}
+.prow .prow-item {
+  font: inherit; font-size: var(--prow-t-body); text-align: left;
+  min-height: var(--prow-row-h); padding: 0 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.prow .prow-item:hover:not(:disabled) { background: var(--surface); }
+.prow .prow-item.is-danger { color: var(--danger-text); }
+.prow .prow-item:disabled { color: var(--muted); cursor: default; }
+
+/* A name request: one line inside the row, with Let them / Not now. */
+.prow .prow-needs {
+  grid-column: 2 / -1;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding: 2px 0 8px;
+}
+.prow .prow-flag { color: var(--text); font-size: var(--prow-t-label); }
+.prow .prow-ago { color: var(--muted); font-size: var(--prow-t-floor); }
+.prow .prow-needs .ny-acts { margin-left: auto; }

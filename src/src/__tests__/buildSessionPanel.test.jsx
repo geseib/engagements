@@ -125,8 +125,8 @@ async function openRoom(state, players) {
 }
 
 // With a room's window up the laptop is the console (B8): its rail's Session slot opens the same panel.
-const sessionButton = () => screen.queryByRole('button', { name: /^SESSION/i }) || document.querySelector('.hc--build .bc-sess');
-const panel = () => screen.getByRole('dialog', { name: 'Session' });
+const sessionButton = () => document.querySelector('[data-slot="session-menu"]');
+const panel = () => screen.getByRole('dialog', { name: 'Session menu' });
 const openPanel = () => { fireEvent.click(sessionButton()); return panel(); };
 const openSettings = () => {
   const p = openPanel();
@@ -165,23 +165,23 @@ describe('opening and closing', () => {
 
   test('the panel opens by the button and the backslash key; Esc, the X and Close put it away', async () => {
     await openRoom(hostState());
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
     openPanel();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
 
     fireEvent.keyDown(document, { key: '\\' });
     expect(panel()).toBeInTheDocument();
     fireEvent.keyDown(document, { key: '\\' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
 
     openPanel();
-    fireEvent.click(within(panel()).getByRole('button', { name: 'Close the session panel' }));
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Close the Session menu' }));
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
 
     openPanel();
     fireEvent.click(within(panel()).getAllByRole('button', { name: /^Close$/ }).pop());
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('backslash while typing in a box does not open it', async () => {
@@ -190,7 +190,7 @@ describe('opening and closing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tell Claude…' }));
     const box = document.querySelector('textarea');
     fireEvent.keyDown(box, { key: '\\' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('while it is open, Space and the screen keys are held', async () => {
@@ -222,11 +222,13 @@ describe('opening and closing', () => {
     expect(panel()).toBeInTheDocument();
   });
 
-  test('the joined count is a button into Players', async () => {
+  test('the joined count is not a top-bar slot (experience plan 2e): it is on the Session menu\'s Players tab', async () => {
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /4 here|4 joined/ }));
-    const p = panel();
-    expect(within(p).getByRole('tab', { name: /^Players/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(document.querySelector('.brm-hbar')).queryByRole('button', { name: /4 here|4 joined/ })).toBeNull();
+    const p = openPanel();
+    const tab = within(p).getByRole('tab', { name: /^Players/ });
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(tab.textContent).toMatch('4');
   });
 });
 
@@ -367,7 +369,7 @@ describe('the panel\'s controls', () => {
     expect(panel()).toBeInTheDocument();
     expect(dockButton()).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(dockButton());
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('arrow keys move between the tabs; only the selected tab points at a mounted pane', async () => {
@@ -496,13 +498,15 @@ describe('someone asks to take a name (S6)', () => {
   });
 });
 
-describe('Settings, in four groups', () => {
-  test('The room, Claude, Crew, This session, in that order; End session last and alone', async () => {
+describe('Settings, in the Session menu\'s sections (experience plan 2e, PLAN §3.2a)', () => {
+  test('Screens, Joining, Build settings (Claude, then Crew), End session, in that order; End session last and alone', async () => {
     await openRoom(hostState({ crew: CREW_ON }));
     openSettings();
     const heads = within(panel()).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    // Screens first (parity PLAN §2.7; standards §4: most used first).
-    expect(heads).toEqual(['Screens', 'The room', 'Claude', 'Crew', 'This session']);
+    // Screens first (parity PLAN §2.7; standards §4: most used first). No Phone remote and no Rounds: the Build Room has neither.
+    expect(heads).toEqual(['Screens', 'Joining', 'Build settings', 'End session']);
+    const build = panel().querySelector('[data-group="build"]');
+    expect(within(build).getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Claude', 'Crew']);
     const buttons = within(panel()).getAllByRole('button').map((b) => b.textContent.trim());
     expect(buttons[buttons.indexOf('End session') + 1]).toMatch(/Close/);
     const end = within(panel()).getByRole('button', { name: 'End session' });
@@ -564,7 +568,7 @@ describe('Settings, in four groups', () => {
       openSettings();
       expect(within(group()).getByText(/^2 of \d+ opened it$/)).toBeInTheDocument();
       fireEvent.click(within(group()).getByRole('button', { name: 'Show both on the Stage' }));
-      expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
       // Both codes as a side panel beside the Stage's moment (owner, 18 Oct 2026).
       const card = screen.getByTestId('stage-join-panel');
       expect(card).toHaveClass('is-two');
@@ -600,7 +604,7 @@ describe('Settings, in four groups', () => {
     fireEvent.click(screen.getByTestId('brm-wifi'));
     const d = screen.getByRole('dialog', { name: 'Share demo' });
     expect(d.closest('.brm-wifiwrap')).not.toBeNull();
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('Claude: Connect Claude Code opens its dialog and puts the panel away', async () => {
@@ -608,7 +612,7 @@ describe('Settings, in four groups', () => {
     openSettings();
     fireEvent.click(within(panel()).getByRole('button', { name: /^Connect Claude Code/ }));
     expect(screen.getByRole('dialog', { name: 'Connect Claude Code' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('no crew: one line and Open to a crew; a crew: Crew and the Run crew code switch', async () => {
@@ -740,7 +744,7 @@ describe('the plugin update notice (owner, 2026-10-10): the Host screen only', (
     openSettings();
     fireEvent.click(within(within(panel()).getByTestId('brm-plugin-out')).getByRole('button', { name: 'Update' }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
     const step = dialog.querySelector('[data-step="return"]');
     expect(step).not.toBeNull();
     expect(step.contains(document.activeElement)).toBe(true);

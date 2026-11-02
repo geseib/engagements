@@ -46,7 +46,7 @@ const claude = {
       title: 'Connecting the first time',
       icon: 'Terminal',
       blocks: [
-        { t: 'p', text: 'Open **Connect Claude Code** (on the Host screen, or the Session panel, Settings, Claude). Claude Code runs on this laptop and joins the room. The commands are written for a Mac or Linux terminal. Three steps:' },
+        { t: 'p', text: 'Open **Connect Claude Code** (on the Host screen, or the Session menu, Settings, Build settings). Claude Code runs on this laptop and joins the room. The commands are written for a Mac or Linux terminal. Three steps:' },
         {
           t: 'steps',
           items: [
@@ -125,7 +125,7 @@ const claude = {
           items: [
             'When Claude\'s plugin is older than the latest, the Host screen says so, with **Update**. Only you see it.',
             'Update opens Connect Claude Code at the update: one paste that updates the plugin, then opens Claude Code in the project folder. Close Claude Code first if it is open, so the new plugin loads.',
-            'Connect, and the Session panel, Settings, Claude, show which plugin Claude is running and whether it is the latest.',
+            'Connect, and the Session menu, Settings, Build settings, show which plugin Claude is running and whether it is the latest.',
             'Installing on another laptop: the same install command, under **Install on another laptop**.',
           ],
         },

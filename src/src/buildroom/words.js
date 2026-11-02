@@ -775,6 +775,13 @@ export const W = Object.freeze({
   // The Screens group in Settings (parity PLAN §2.7, B9 in part)
   screensGroup: 'Screens',
   screensScope: 'Applies now',
+  // The Session menu's sections where they apply (experience plan 2e, PLAN §3.2a: "same + Build settings").
+  joiningGroup: 'Joining',
+  buildSettingsGroup: 'Build settings',
+  buildSettingsScope: 'Claude, then the crew',
+  lookHere: 'Look here, privately',
+  lookBuild: 'Build',
+  lookHistory: 'History',
   wallOpen: "Room's window ↗",
   /** The Stage dock's door to the same window, in the dock's capitals (it said PRESENT, a retired word). */
   dockWindow: "ROOM'S WINDOW",

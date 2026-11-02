@@ -1,8 +1,12 @@
 /**
- * THE BUILD ROOM'S SESSION PANEL (docs/design/build-room-sidebar, S1-S6).
+ * THE BUILD ROOM'S SESSION MENU (docs/design/build-room-sidebar, S1-S6;
+ * experience plan 2e, §3.2a, §3.2b: "same + Build settings").
  *
- * The same side panel the other engagements open from SESSION or the backslash
- * key (components/stage/SessionSetupPanel.jsx), with two tabs and no more:
+ * The Session menu every format opens from the top bar's labelled button, top
+ * right, or the backslash key (components/stage/SessionSetupPanel.jsx), named
+ * and closed in the same words (config/hostWords.js). On the two-screen
+ * console it opens as a sheet over the content area (HostConsole's sheet
+ * host), never over Your part now or the Needs-you line. Two tabs and no more:
  *
  *   Players   everyone in the room, one list shared with the other engagements
  *             (components/stage/PlayersList.jsx): Unlock name / Let them take
@@ -10,8 +14,12 @@
  *             column differs: ideas sent here, a lane for a builder.
  *   Settings  everything that used to hide in the header's three-dot menu, in
  *             groups that answer one question each, in the order a host
- *             meets them: Screens (the room's window, parity PLAN §2.7), The
- *             room, Claude, Crew, This session. End session is last and alone.
+ *             meets them, the plan's Session menu sections where they apply
+ *             (PLAN §3.2a): Screens (the room's window, parity PLAN §2.7, and
+ *             Look here, privately), Joining (the codes), Build settings
+ *             (Claude, then the crew), End session (going back, Wrap up,
+ *             Report, End session last and alone). No Phone remote and no
+ *             Rounds: the Build Room has neither; its asks are in the console.
  *
  * It holds nothing of its own but which tab is up. The page owns the roster
  * (useBuildPlayers) and every action; this draws them. A button that opens a
@@ -26,6 +34,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import HelpButton from '../components/HelpButton';
+import HW from '../config/hostWords';
 import { helpFor } from '../config/help/screens';
 import PlayersList from '../components/stage/PlayersList';
 import { copyText } from '../utils/copyText';
@@ -270,7 +279,7 @@ export const ARM_MS = 6000;
  * a laptop with no second display read as Call & Answer's do (B9, 19 Oct).
  * The window's row is drawn whichever is chosen: it is never taken away.
  */
-export function WallScreens({ room, busy, run, api, ended, choice = null, onChoose = null }) {
+export function WallScreens({ room, busy, run, api, ended, choice = null, onChoose = null, extra = null }) {
   const [armed, setArmed] = useState(false);
   const [said, setSaid] = useState('');
   useEffect(() => {
@@ -318,6 +327,7 @@ export function WallScreens({ room, busy, run, api, ended, choice = null, onChoo
           </div>
         )}
       </div>
+      {extra}
     </div>
   );
 }
@@ -332,6 +342,7 @@ export default function BuildSessionPanel({
   listNames, onListNames,
   onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowCodes, wifiLink = '',
   roomChoice = null, onRoomChoice = null,
+  onLook = null, continueSlot = null, inSheet = false,
 }) {
   const panelRef = useRef(null);
   const rootRef = useRef(null);
@@ -449,11 +460,11 @@ export default function BuildSessionPanel({
   ];
 
   return (
-    <div className="brm-sp-root" ref={rootRef}>
+    <div className={`brm-sp-root${inSheet ? ' is-sheet' : ''}`} ref={rootRef}>
       <div className="brm-sp-scrim" onClick={onClose} aria-hidden="true" />
-      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
+      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label={HW.sessionMenu} tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
         <div className="brm-sp-head">
-          <h2 className="brm-sp-title">Session</h2>
+          <h2 className="brm-sp-title">{HW.sessionMenu}</h2>
           <span className={`brm-sp-ws${connected ? ' is-up' : ''}`} aria-live="polite">{connected ? 'Connected' : 'Connecting…'}</span>
           {/* Help and close, the two things you reach for when lost, as on the
               other engagements' Session panel (Help Phase 3). */}
@@ -465,12 +476,12 @@ export default function BuildSessionPanel({
             className="help-button-quiet"
             reports={{ context: 'host', gameId: room.gameId }}
           />
-          <button type="button" className="brm-sp-x" aria-label="Close the session panel" onClick={onClose}><Icon name="X" size={16} /></button>
+          <button type="button" className="brm-sp-x" aria-label={HW.closeSessionMenu} onClick={onClose}><Icon name="X" size={16} /></button>
         </div>
 
         {topLine && <div className="brm-sp-top" data-testid="brm-sp-top">{topLine}</div>}
 
-        <div className="brm-sp-tabs" role="tablist" aria-label="Session sections">
+        <div className="brm-sp-tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -520,10 +531,20 @@ export default function BuildSessionPanel({
 
           {tab === 'settings' && (
             <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
-              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} choice={roomChoice} onChoose={onRoomChoice} />
+              <WallScreens
+                room={room} busy={busy} run={run} api={api} ended={ended} choice={roomChoice} onChoose={onRoomChoice}
+                extra={typeof onLook === 'function' ? (
+                  // LOOK HERE, PRIVATELY (from the console's old Session slot, 2e): Build or History on this laptop alone.
+                  <div className="brm-sp-row brm-sp-look">
+                    <span className="brm-sp-lab">{W.lookHere}</span>
+                    <button type="button" className="brm-btn brm-btn--sm" data-capability="build-screen" onClick={pick(() => onLook('build'))}>{W.lookBuild}</button>
+                    <button type="button" className="brm-btn brm-btn--sm" data-capability="history" onClick={pick(() => onLook('history'))}>{W.lookHistory}</button>
+                  </div>
+                ) : null}
+              />
 
               <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
-                <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
+                <div className="brm-sp-gh"><h3>{W.joiningGroup}</h3><span>Who can get in, and what they can open</span></div>
                 <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
                 <Switch
                   label="List names on the room meter"
@@ -534,8 +555,10 @@ export default function BuildSessionPanel({
                 />
               </div>
 
-              <div className="brm-sp-grp" data-group="claude" data-capability="claude-status">
-                <div className="brm-sp-gh"><h3>Claude</h3></div>
+              <div className="brm-sp-grp" data-group="build">
+              <div className="brm-sp-gh"><h3>{W.buildSettingsGroup}</h3><span>{W.buildSettingsScope}</span></div>
+              <div className="brm-sp-sub" data-group="claude" data-capability="claude-status">
+                <h4 className="brm-sp-sh">Claude</h4>
                 <div className="brm-sp-row">
                   {slots.agentChip}
                   {!ended && (
@@ -553,6 +576,8 @@ export default function BuildSessionPanel({
                     <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</button>
                   </p>
                 )}
+                {/* Claude is away: the prompt that brings it back (from the console's old Session slot, 2e). */}
+                {!ended && continueSlot}
                 {!ended && slots.autoSwitch}
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
                 {/* THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts and screenshots wait for the host. */}
@@ -569,8 +594,8 @@ export default function BuildSessionPanel({
                 )}
               </div>
 
-              <div className="brm-sp-grp" data-group="crew" data-capability="crew">
-                <div className="brm-sp-gh"><h3>Crew</h3></div>
+              <div className="brm-sp-sub" data-group="crew" data-capability="crew">
+                <h4 className="brm-sp-sh">Crew</h4>
                 {crew ? (
                   <>
                     <div className="brm-sp-row">
@@ -587,9 +612,10 @@ export default function BuildSessionPanel({
                   </>
                 )}
               </div>
+              </div>
 
               <div className="brm-sp-grp" data-group="session" data-capability="report">
-                <div className="brm-sp-gh"><h3>This session</h3><span>Going back, finishing, stopping</span></div>
+                <div className="brm-sp-gh"><h3>{HW.endSession}</h3><span>Going back, finishing, stopping</span></div>
                 {!ended && opening && (
                   <div className="brm-sp-row" data-capability="opening">
                     <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
@@ -602,7 +628,7 @@ export default function BuildSessionPanel({
                 </div>
                 {!ended && (
                   <div className="brm-sp-row brm-sp-end">
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(onEnd)}>End session</button>
+                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" title={HW.endSessionHint} onClick={pick(onEnd)}>{HW.endSession}</button>
                     <span className="brm-hint">{W.endsForAll}</span>
                   </div>
                 )}

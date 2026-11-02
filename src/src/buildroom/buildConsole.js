@@ -33,7 +33,6 @@ export const BCW = Object.freeze({
   people: 'People',
   later: 'Later',
   pointsInside: 'Points inside',
-  session: 'Session',
   openInMain: 'Open the queue in the main area',
   openLaterInMain: 'Open Later and Points in the main area',
   backToNow: 'Back to the moment',
@@ -48,24 +47,9 @@ export const BCW = Object.freeze({
   voted: 'voted',
   suggested: 'suggested',
   notYet: 'not yet',
+  awayNow: 'away',
+  building: 'building',
   nobodyHere: 'Nobody has joined yet.',
-  claudeConnected: 'Claude connected',
-  claudeOffline: 'Claude not connected',
-  connectClaude: 'Connect Claude',
-  pluginLatest: 'Claude\'s plugin',
-  pluginOld: 'Claude\'s plugin is out of date: update it',
-  crew: 'Crew',
-  lookHere: 'Look here, privately:',
-  build: 'Build',
-  history: 'History',
-  sessionPanel: 'Session panel',
-  screens: 'Screens',
-  players: 'Players',
-  settings: 'Settings',
-  backToOpening: 'Back to the opening',
-  wrapUp: 'Wrap up',
-  report: 'Report',
-  endSession: 'End session',
   forYou: 'For you · note for Claude',
   claudeAsked: 'Claude asked this.',
   askAnswerForRoom: 'Answer for the room',
@@ -199,7 +183,7 @@ const part = (before, action = '', after = '') => ({ before, action, after });
  */
 export function consolePart(moment, controls, room, current, { answering = false } = {}) {
   const p = controls && controls.primary;
-  if (moment === 'ended') return part('The session has ended. The report and the wrap-up are in Session.');
+  if (moment === 'ended') return part('The session has ended. The report and the wrap-up are in the Session menu.');
   if (moment === 'codes' && p) return part('', p.label, ' once the room has joined.');
   if (moment === 'crew') return part('The crew board is up. Open an early look, or go back to the room\'s asks.');
   if (moment === 'opening') return part('Frame the build with the room: the brief, then Start building.');
@@ -242,35 +226,71 @@ export function nextOnWall(moment, current) {
 
 // ── The rail (answer (d)) ───────────────────────────────────────────────────
 
-/** The four slots, in order: C&A's rail with the Build Room's sections. */
-export const RAIL_SLOTS = Object.freeze(['waiting', 'people', 'later', 'session']);
+/**
+ * The three slots, in order: C&A's rail with the Build Room's sections. The
+ * fourth, Session, moved into the Session menu (experience plan 2e, §3.2b):
+ * its doors (Connect Claude, the plugin, the crew, Look here, Wrap up,
+ * Report, End session) are set-once settings, opened from the top bar's
+ * Session menu button like every other format's.
+ */
+export const RAIL_SLOTS = Object.freeze(['waiting', 'people', 'later']);
 
 /** The slot that opens by itself for the moment. The host's own choice holds until the moment changes. */
 export function railOpenFor(moment) {
   if (moment === 'collect' || moment === 'settle') return 'people';
   if (moment === 'run') return 'later';
-  if (moment === 'ended') return 'session';
   return 'waiting';
 }
 
 // ── People (answer (e)) ────────────────────────────────────────────────────
 
+/** "1 idea", "3 ideas": the Build Room's one fact on a person row (PLAN §3.2b). */
+export const ideasGiven = (n) => `${n} ${n === 1 ? 'idea' : 'ideas'}`;
+
 /**
  * Who is in the room, and while the room answers or votes, who has: names
  * only (the laptop is private), never what anyone chose. `answeredBy` is the
  * host's read of the open ask (build-store.js askView, host only).
+ *
+ * THE PERSON ROW (experience plan 2e, §3.2b): each row also carries the
+ * shared row's slots: `status` (here / away, from the roster's open page),
+ * `doing` (answered, voted, suggested, not yet; building for a crew builder
+ * between asks; away), and `fact`, the ideas they have given. `roster` is
+ * the host's /players read (useBuildPlayers): its rows carry `handover`, so
+ * the same rows feed the Needs-you list.
  */
-export function peopleRows(room, current) {
+export function peopleRows(room, current, roster = null) {
   const names = ((room && room.players) || []).map((p) => (typeof p === 'string' ? p : (p && (p.name || p.playerName)) || '')).filter(Boolean);
   const builders = new Set((((room && room.crew && room.crew.enabled && room.crew.builders) || [])).filter((b) => !b.closed).map((b) => b.name));
   const open = Boolean(current && OPEN.includes(current.status));
   const done = new Set(open ? (current.answeredBy || []) : []);
   const verb = !open ? '' : current.status === 'voting' ? BCW.voted : current.kind === 'suggest' ? BCW.suggested : BCW.answered;
-  const rows = names.map((name) => ({
-    name,
-    builder: builders.has(name),
-    state: !open ? 'here' : done.has(name) ? 'answered' : 'not-yet',
-  }));
+  const byName = new Map(((roster && roster.players) || []).map((p) => [p.playerName || p.name || '', p]));
+  const ideas = new Map();
+  ((room && room.ideas) || []).forEach((i) => {
+    if (!i.playerName || i.source === 'host') return;
+    ideas.set(i.playerName, (ideas.get(i.playerName) || 0) + 1);
+  });
+  const rows = names.map((name) => {
+    const r = byName.get(name);
+    // The page that is open under the name (get-players deviceConnected), else the join flag; no roster read yet reads as here.
+    const away = Boolean(r && (r.deviceConnected === false || (r.deviceConnected === undefined && r.isConnected === false)));
+    const state = !open ? 'here' : done.has(name) ? 'answered' : 'not-yet';
+    const builder = builders.has(name);
+    let doing = '';
+    if (open) doing = state === 'answered' ? verb : BCW.notYet;
+    else if (away) doing = BCW.awayNow;
+    else if (builder) doing = BCW.building;
+    return {
+      name,
+      builder,
+      state,
+      status: away ? 'away' : 'here',
+      doing,
+      fact: ideasGiven(ideas.get(name) || 0),
+      handover: r ? r.handover || null : null,
+    };
+  });
   const n = rows.filter((r) => r.state === 'answered').length;
   const here = (room && room.playerCount) || names.length;
   const summary = open ? `${n} of ${here} ${verb}` : `${here} here`;

@@ -176,10 +176,10 @@ describe('1. the console on two screens, never on one', () => {
 });
 
 describe('2. each moment: the card, the strip, the rail, the folds', () => {
-  test('the rail has four slots, in order (answer (d))', async () => {
+  test('the rail has three slots, in order (answer (d)); Session moved into the Session menu (experience plan 2e)', async () => {
     await openRoom(MOMENTS['a · between asks']());
     const titles = [...rail().querySelectorAll(':scope > details > summary')].map((s) => s.firstChild.textContent);
-    expect(titles).toEqual(['Waiting for you', 'People', 'Later', 'Session']);
+    expect(titles).toEqual(['Waiting for you', 'People', 'Later']);
   });
 
   // THE RIGHT COLUMN (owner, 28 Oct 2026: "go on the right column, and fold Decided"): the
@@ -337,12 +337,15 @@ describe('4. People ticks who has answered, by name, never what they chose (answ
     const sec = rail().querySelector('[data-section="people"]');
     expect(sec).toHaveAttribute('open');
     expect(sec.querySelector('summary').textContent).toMatch('3 of 4 answered');
-    const rows = [...sec.querySelectorAll('.bc-people li')].map((li) => [li.textContent.replace('…', '').trim(), li.getAttribute('data-state')]);
+    // The shared person row (experience plan 2e, §3.2b): name, doing now, the ideas given.
+    const rows = [...sec.querySelectorAll('.bc-people li')].map((li) => [
+      li.querySelector('.prow-name').textContent, li.querySelector('.prow-doing').textContent, li.querySelector('.prow-fact').textContent, li.getAttribute('data-state'),
+    ]);
     expect(rows).toEqual([
-      ['Ana · answered', 'answered'],
-      ['Dee · not yet', 'not-yet'],
-      ['Priya · answered', 'answered'],
-      ['Sam · answered', 'answered'],
+      ['Ana', 'answered', '0 ideas', 'answered'],
+      ['Dee', 'not yet', '0 ideas', 'not-yet'],
+      ['Priya', 'answered', '0 ideas', 'answered'],
+      ['Sam', 'answered', '0 ideas', 'answered'],
     ]);
     // Never a choice: no option letter or title beside a name.
     const text = sec.textContent;
@@ -375,9 +378,11 @@ describe('5. the keys and the way out', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && /asks\/003/.test(c.url) && c.body && c.body.action === 'close')).toBe(true));
   });
 
-  test('Look here, privately: Build opens on the laptop; 1 comes back to the console', async () => {
+  test('Look here, privately (in the Session menu since 2e): Build opens on the laptop; 1 comes back to the console', async () => {
     await openRoom(MOMENTS['a · between asks']());
-    fireEvent.click(within(rail()).getByRole('button', { name: 'Build' }));
+    fireEvent.click(consoleEl().querySelector('[data-slot="session-menu"]'));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: 'Build' }));
     expect(consoleEl()).toBeNull();
     expect(document.querySelector('[data-capability="build-screen"]')).not.toBeNull();
     fireEvent.keyDown(window, { key: '1' });
@@ -405,10 +410,19 @@ describe('5. the keys and the way out', () => {
     expect(posts('/build/wall').filter((b) => b.codes === 'none').length).toBe(before + 1);
   });
 
-  test('the Session slot opens the Session panel; \\ does too', async () => {
+  test('the top bar\'s Session menu opens the Session menu as a sheet over the content area, never over Your part now', async () => {
     await openRoom(MOMENTS['a · between asks']());
-    fireEvent.click(within(rail()).getByRole('button', { name: 'Settings' }));
-    expect(screen.getByRole('dialog', { name: 'Session' })).toBeInTheDocument();
+    const button = within(consoleEl().querySelector('.hc-top')).getByRole('button', { name: /^Session menu/ });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(button);
+    const menu = screen.getByRole('dialog', { name: 'Session menu' });
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    // In HostConsole's sheet host (grid rows pulse to main), so Your part now and the Needs-you line stay in sight.
+    expect(menu.closest('[data-testid="hc-sheet"]')).not.toBeNull();
+    expect(card().contains(menu)).toBe(false);
+    expect(consoleEl().querySelector('.hc-needs').contains(menu)).toBe(false);
+    fireEvent.click(button);
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
     cleanup();
   });
 });

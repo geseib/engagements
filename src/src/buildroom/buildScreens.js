@@ -196,6 +196,30 @@ export function hostAlert(room, local, { demoReady = false } = {}) {
   };
 }
 
+/**
+ * WAITING FOR YOU, AS THE NEEDS-YOU LIST READS IT (experience plan 2e, §3.2a;
+ * PLAN §4.2 row 14). Worked out from the room, never stored, so it clears the
+ * moment the host decides, on whichever screen: Claude's questions and its
+ * ready mockups (each a decision Claude waits on), the room's new ideas and
+ * Claude's held posts (counts). config/needsYou.js turns it into items. The
+ * host alert above stays the "new since you looked" mark; this is everything
+ * still waiting.
+ */
+export function buildNeedsOf(room) {
+  const none = { asks: [], mockups: [], ideas: 0, posts: 0 };
+  if (!room) return none;
+  const proposed = (room.asks || []).filter((a) => a.status === 'proposed' && !mockupsPending(a));
+  const at = (a) => a.createdAt || '';
+  const byAt = (x, y) => (at(x) < at(y) ? -1 : at(x) > at(y) ? 1 : 0);
+  const titled = (a) => ({ askId: a.askId, title: String(a.prompt || '').trim() });
+  return {
+    asks: proposed.filter((a) => a.source === 'agent' && !mockupsDone(a) && !isMockupAsk(a)).sort(byAt).map(titled),
+    mockups: proposed.filter((a) => mockupsDone(a)).sort(byAt).map(titled),
+    ideas: (room.ideas || []).filter((i) => i.status === 'new' && i.source !== 'host').length,
+    posts: heldPosts(room).length,
+  };
+}
+
 /** The queue's filter chips (C1), with counts. */
 export const QUEUE_FILTERS = Object.freeze([
   { key: 'all', label: 'All' },
