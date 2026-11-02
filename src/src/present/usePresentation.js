@@ -91,12 +91,12 @@ async function readJson(res) {
 
 export default function usePresentation(gameId) {
   const [snapshot, setSnapshot] = useState(null);
-  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
   const seqRef = useRef(0);
   const appliedRef = useRef(0);
   const debounceRef = useRef(null);
   const snapshotRef = useRef(null);
-  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
 
   /** The reads the moment needs, each fetched once per round unless a frame says otherwise. */
   const refreshReads = useCallback(async (snap, force) => {
@@ -114,6 +114,24 @@ export default function usePresentation(gameId) {
             const body = await readJson(res);
             next.answers = Array.isArray(body && body.answers) ? body.answers : [];
             readsKeyRef.current.answers = key;
+          }
+        } catch (e) { /* the next poll tries again */ }
+      }
+    }
+    /*
+      A POLL'S BOARD (experience plan 2g): the public ?view=room aggregate,
+      counts only (get-answers.js). Live during ASK, on every look, since the
+      viewer socket hears no frame for an answer; once per round at RESULTS.
+    */
+    if (round && snap && snap.gameType === 'poll' && (round.phase === 'ASK' || round.phase === 'RESULTS')) {
+      const key = `${round.phase}${round.padded}`;
+      if (round.phase === 'ASK' || force || readsKeyRef.current.poll !== key) {
+        try {
+          const res = await fetch(`${base}games/${gameId}/answers?questionNumber=${round.padded}&view=room`);
+          if (res.ok) {
+            const body = await readJson(res);
+            next.poll = body && body.poll ? { ...body.poll, round: round.padded } : null;
+            readsKeyRef.current.poll = key;
           }
         } catch (e) { /* the next poll tries again */ }
       }
@@ -209,8 +227,8 @@ export default function usePresentation(gameId) {
     // The end is one moment: its standings stay while it is up, read again only when forced.
     const stillEnded = snapshotRef.current && snapshotRef.current.state === 'ENDED' && snap.state === 'ENDED';
     if (!stillEnded && (!prevRound || !nowRound || prevRound.padded !== nowRound.padded)) {
-      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null, players: null };
-      setReads({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null };
+      setReads({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
     }
     snapshotRef.current = snap;
     setSnapshot(snap);

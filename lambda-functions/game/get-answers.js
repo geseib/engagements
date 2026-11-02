@@ -311,6 +311,20 @@ exports.handler = async (event) => {
           timestamp: new Date().toISOString()
         };
 
+        /*
+          A POLL'S BOARD ON THE ROOM'S WINDOW (experience plan 2g). The
+          one-screen stage fills a poll's board in live in front of the room,
+          so the room's window may show the same thing: the aggregate, counts
+          and nameless open answers only (poll-round.js pollTally), on
+          `?view=room` only. Never the answer rows, never a name; and a trivia
+          round gets nothing here (its split is the host's until the reveal).
+        */
+        if (roomView && String((metaRes.Item && metaRes.Item.GameType) || '') === 'poll'
+          && /^(ASK|RESULTS)#/.test(currentState)) {
+          const read = await readPollQuestion(db, process.env.TABLE_NAME, gameId, targetQuestionId);
+          if (read) result.poll = { question: read.question, tally: pollTally(read.question, decryptedAnswers) };
+        }
+
         console.log(`✅ Returning player answer info for ${gameId}: ${answers.length} answers (count only)`);
         return {
           statusCode: 200,
