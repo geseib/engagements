@@ -167,7 +167,7 @@ describe('the setting, in Settings', () => {
   const board = { open: false, style: 'departure', page: 0, openedAt: null };
   const renderSettings = (props = {}) => render(
     <SessionSetupPanel
-      initialTab="settings"
+      initialTab="rounds"
       gameType="call-and-answer"
       gameState="RESULTS#002"
       scoreboard={board}

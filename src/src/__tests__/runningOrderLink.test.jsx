@@ -197,18 +197,19 @@ describe('the event board, arriving with ?order=', () => {
 describe('the Session panel', () => {
   const categories = [{ name: 'MTV & the Video Age' }, { name: 'Headlines' }];
 
-  test('opens on Players as it always has', () => {
+  // rejects: dev QA 2 Nov — the menu opened on Players; it opens on its first set-once section.
+  test('opens on Screens, the first section', () => {
     render(<SessionSetupPanel categories={categories} />);
-    expect(screen.getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Screens' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('asked for the running order, it opens on Questions and brings the running order into view', () => {
+  test('asked for the running order, it opens on Rounds and brings the running order into view', () => {
     const scrolled = [];
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function scrollIntoView() { scrolled.push(this); };
     try {
       render(<SessionSetupPanel categories={categories} initialTab="questions" focusRunningOrder />);
-      expect(screen.getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: 'Rounds' })).toHaveAttribute('aria-selected', 'true');
       expect(scrolled.length).toBeGreaterThan(0);
       expect(scrolled[0]).toHaveClass('setup-q');
       expect(within(scrolled[0]).getByText('Running order')).toBeInTheDocument();
@@ -217,21 +218,21 @@ describe('the Session panel', () => {
     }
   });
 
-  test('Questions chosen by hand does not jump to the running order', () => {
+  test('Rounds chosen by hand does not jump to the running order', () => {
     const scrolled = [];
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function scrollIntoView() { scrolled.push(this); };
     try {
       render(<SessionSetupPanel categories={categories} />);
-      fireEvent.click(screen.getByRole('tab', { name: 'Questions' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
       expect(scrolled).toHaveLength(0);
     } finally {
       Element.prototype.scrollIntoView = original;
     }
   });
 
-  test('an unknown initial tab falls back to Players', () => {
+  test('an unknown initial section falls back to the first', () => {
     render(<SessionSetupPanel initialTab="nonsense" />);
-    expect(screen.getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Screens' })).toHaveAttribute('aria-selected', 'true');
   });
 });

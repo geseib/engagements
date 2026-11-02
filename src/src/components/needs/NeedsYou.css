@@ -85,6 +85,21 @@
   flex: none;
 }
 .ny .ny-acts .ui-btn { --ui-size: var(--ny-t-label); }
+/* The armed Let them's reason, on its own line under the buttons (dev QA
+   2 Nov). Empty, it takes no room but stays in the tree as a live region. */
+.ny-acts .ny-armed {
+  flex-basis: 100%;
+  font-size: var(--ny-t-label, 13px);
+  font-weight: 700;
+  color: var(--text);
+}
+.ny-acts .ny-armed:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
 .ny .ny-link {
   font: inherit;
   font-size: var(--ny-t-label);

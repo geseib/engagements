@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 import KeyCap from './stage/KeyCap';
+import { TIMER_WORDS } from '../config/roundTimer';
 
 /**
  * The host's one and only "move the room forward" control.
@@ -112,6 +113,13 @@ export default function HostActionBar({
     null while no timer runs, so the keys stay the browser's.
   */
   onAddTime = null,
+  /*
+    +1 MIN AS A BUTTON, BESIDE THE MAIN ONE (dev QA 2 Nov: on one screen a
+    timed round showed no way to add time, only the room's words). The
+    console's pulse tile carries its own, so only a bar with no pulse asks for
+    it. Quiet, never orange: the main button keeps the one orange.
+  */
+  showAddTime = false,
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
@@ -302,6 +310,19 @@ export default function HostActionBar({
             </button>
           )}
           {timeChip}
+          {showAddTime && typeof onAddTime === 'function' ? (
+            <button
+              type="button"
+              className="btn-secondary host-action-bar__addtime"
+              onClick={() => onAddTime()}
+              title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`}
+              aria-keyshortcuts="+ ="
+              data-testid="bar-add-minute"
+            >
+              <Icon name="Plus" weight="bold" size={16} />
+              <span>{TIMER_WORDS.plusOne}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className={`btn-primary host-action-bar__primary${armClass(primary)}`}

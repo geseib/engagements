@@ -363,7 +363,7 @@ module.exports = {
     },
     "config/help/glossary.js": {
       "Main screen": 1,
-      "Session panel": 2
+      "Session panel": 1
     },
     "config/help/host-events.js": {
       "Back to the agenda": 1,
@@ -376,16 +376,16 @@ module.exports = {
     },
     "config/help/host-running.js": {
       "Back to Menu": 1,
-      "Session panel": 4,
+      "Session panel": 3,
       "Unlock name": 2
     },
     "config/help/host-setup.js": {
       "Main screen": 1,
-      "Session panel": 7
+      "Session panel": 6
     },
     "config/help/host-surveys.js": {
       "Back to Menu": 1,
-      "Session panel": 2
+      "Session panel": 1
     },
     "config/help/host-two-screens.js": {
       "Back to Menu": 1,
@@ -413,7 +413,7 @@ module.exports = {
       "Join Game": 1,
       "Main screen": 1,
       "Players": 1,
-      "Session panel": 3,
+      "Session panel": 2,
       "Session tools": 1,
       "game": 3,
       "the summary": 3
@@ -442,10 +442,6 @@ module.exports = {
     },
     "config/setTopics.js": {
       "game": 3
-    },
-    "config/setupPanel.js": {
-      "Players": 1,
-      "Settings": 1
     },
     "config/skins.js": {
       "Presentation": 1

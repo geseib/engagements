@@ -62,13 +62,15 @@ function renderPanel(props = {}) {
   return { ...utils, onToggleScoreboard, onScoreboardStyle, onClose };
 }
 
-describe('the Players tab', () => {
-  test('the button sits above the roster and opens the board', () => {
+// The button moved from Players to Screens (dev QA 2 Nov): the scoreboard is
+// what the room's screen shows, and Screens is where the menu opens.
+describe('the Screens section', () => {
+  test('the button sits above its look and opens the board', () => {
     const { onToggleScoreboard, container } = renderPanel();
     const button = screen.getByRole('button', { name: 'Show scoreboard on screen' });
-    const roster = container.querySelector('.setup-roster');
+    const look = container.querySelector('.setup-group--scoreboard select');
     // eslint-disable-next-line no-bitwise
-    expect(button.compareDocumentPosition(roster) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.compareDocumentPosition(look) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(button);
     expect(onToggleScoreboard).toHaveBeenCalledWith(true);
   });
@@ -108,7 +110,7 @@ describe('the Players tab', () => {
 describe('the Settings tab', () => {
   test('a Scoreboard section with the three looks, the current one chosen', () => {
     renderPanel({ scoreboard: { ...closed, style: 'olympic' } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
     const select = screen.getByLabelText('Scoreboard style');
     expect(select.value).toBe('olympic');
     expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
@@ -118,14 +120,14 @@ describe('the Settings tab', () => {
 
   test('choosing a look sends it', () => {
     const { onScoreboardStyle } = renderPanel();
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
     fireEvent.change(screen.getByLabelText('Scoreboard style'), { target: { value: 'tote' } });
     expect(onScoreboardStyle).toHaveBeenCalledWith('tote');
   });
 
   test('no Scoreboard section for a Poll', () => {
     renderPanel({ gameType: 'poll', scoreboardAvailability: none });
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
     expect(screen.queryByLabelText('Scoreboard style')).toBeNull();
   });
 });

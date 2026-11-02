@@ -144,8 +144,8 @@ const DEBUG_INFO = {
 };
 
 /** A round at ASK — mid-round, the case the finding is about. */
-async function seedSession(gameId, { orgId, cached }) {
-  put({ PK: `GAME#${gameId}`, SK: 'STATE', State: 'ASK#001', CurrentQuestionId: '001' });
+async function seedSession(gameId, { orgId, cached, state = 'ASK#001' }) {
+  put({ PK: `GAME#${gameId}`, SK: 'STATE', State: state, CurrentQuestionId: state.split('#')[1] || '001' });
   put({ PK: `GAME#${gameId}`, SK: 'METADATA', GameType: 'trivia', ...(orgId ? { orgId } : {}) });
   if (!cached) return;
   const row = {
@@ -190,6 +190,7 @@ function assertNoSecrets(r) {
 (async () => {
   await seedSession('4101', { orgId: ORG, cached: true });   // org session, summary stored with DebugInfo
   await seedSession('4102', { orgId: ORG, cached: false });  // org session, nothing generated yet
+  await seedSession('4103', { orgId: ORG, cached: true, state: 'RESULTS#002' }); // round 1's read stored, on round 2
   await seedSession('4103', { cached: true });               // orgless session
 
   say('\n1. the template: the public read stays public, the host door is closed');
@@ -273,6 +274,21 @@ function assertNoSecrets(r) {
     assert.strictEqual(notReady.status, 404, notReady.raw);
     assert.strictEqual(notReady.body.status, 'not_ready');
     assert.deepStrictEqual(notReady.invoked, []);
+  });
+
+  // rejects: dev QA 2 Nov — the host's console logged a 404 on every
+  // not-yet-written read, and asked for "1" beside "001".
+  const quietNotReady = await call(PUBLIC_ROUTE, '4102', { quiet: '1' });
+  await check('asked quietly, no summary yet is a 200 not_ready, and nothing is started', () => {
+    assert.strictEqual(quietNotReady.status, 200, quietNotReady.raw);
+    assert.strictEqual(quietNotReady.body.status, 'not_ready');
+    assert.ok(!quietNotReady.body.summary, 'a not-ready answer carried a summary');
+    assert.deepStrictEqual(quietNotReady.invoked, []);
+  });
+  const bare = await call(PUBLIC_ROUTE, '4103', { questionId: '1' });
+  await check('?questionId=1 is round 001, not the round on screen (002)', () => {
+    assert.strictEqual(bare.status, 200, bare.raw);
+    assert.strictEqual(bare.body.summary, SUMMARY);
   });
 
   say('\n5. the host door, for the owning team');

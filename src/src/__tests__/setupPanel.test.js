@@ -8,11 +8,11 @@
  * here as pure data, and the panel renders it.
  */
 import {
-  setupPanelTabs, categoryRows, questionsRemaining,
+  setupPanelTabs, sessionMenuSection, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows, questionKey,
 } from '../config/setupPanel';
 
-describe('setupPanelTabs — four tabs, none of them empty', () => {
+describe('setupPanelTabs — the Session menu\'s sections, none of them empty', () => {
   /**
    * THIS SAID THREE, AND THE OWNER ADDED THE FOURTH.
    *
@@ -25,12 +25,35 @@ describe('setupPanelTabs — four tabs, none of them empty', () => {
    * `toContain`, because "a tab arriving unnoticed" is the thing worth
    * catching and a fifth one should come past this line too.
    */
-  test('the four tabs are Players, Questions, Rounds and Settings, in that order', () => {
-    // rejects: reordering, renaming, or a fifth tab arriving unnoticed.
-    expect(setupPanelTabs({}).map((t) => t.id))
-      .toEqual(['players', 'questions', 'history', 'settings']);
+  // rejects: dev QA 2 Nov — the menu was still Players / Questions / Rounds /
+  // Settings; PLAN §3.2a names its set-once sections, in this order.
+  test('Screens, Phone remote, Rounds, Joining, End session, in that order, beside a People column', () => {
+    expect(setupPanelTabs({ peopleColumn: true }).map((t) => t.label))
+      .toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'End session']);
+  });
+  test('an event adds Agenda first', () => {
+    expect(setupPanelTabs({ event: true, peopleColumn: true }).map((t) => t.label))
+      .toEqual(['Agenda', 'Screens', 'Phone remote', 'Rounds', 'Joining', 'End session']);
+  });
+  test('a survey: Screens, Joining, Close survey, End session (no Phone remote, no Rounds)', () => {
+    expect(setupPanelTabs({ survey: true, peopleColumn: true }).map((t) => t.label))
+      .toEqual(['Screens', 'Joining', 'Close survey', 'End session']);
+  });
+  test('with no People column, the full list keeps a section of its own, before End session', () => {
+    // One screen, a survey's stage, Setup: removing it would lose Remove,
+    // Bring back and the handover for a host without the phone Remote.
     expect(setupPanelTabs({}).map((t) => t.label))
-      .toEqual(['Players', 'Questions', 'Rounds', 'Settings']);
+      .toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']);
+  });
+  test('the old names still land: players is the people view, questions and history are Rounds', () => {
+    const tabs = setupPanelTabs({ peopleColumn: true });
+    expect(sessionMenuSection('players', tabs)).toBe('people');
+    expect(sessionMenuSection('questions', tabs)).toBe('rounds');
+    expect(sessionMenuSection('history', tabs)).toBe('rounds');
+    expect(sessionMenuSection('running-order', tabs)).toBe('rounds');
+    expect(sessionMenuSection('settings', tabs)).toBe('screens');
+    expect(sessionMenuSection('', tabs)).toBe('screens');
+    expect(sessionMenuSection('', setupPanelTabs({ event: true }))).toBe('agenda');
   });
 
   test('no tab is ever emitted empty', () => {

@@ -110,11 +110,11 @@ const post = (gameId, body) => handler({
   body: JSON.stringify(body),
 });
 
-const feedbackRound = (gameId) => handler({
+const feedbackRound = (gameId, qs) => handler({
   requestContext: { http: { method: 'GET' }, routeKey: 'GET /games/{gameId}/feedback-round' },
   routeKey: 'GET /games/{gameId}/feedback-round',
   pathParameters: { gameId },
-  queryStringParameters: {},
+  queryStringParameters: qs || {},
 });
 
 const get = (gameId, qs) => handler({
@@ -526,6 +526,13 @@ const aComment = (over = {}) => ({
   await post('4010', aComment({ text: 'Only one touches the customer.' }));
 
   const fr = JSON.parse((await feedbackRound('4010')).body);
+  // rejects: dev QA 2 Nov — phones logged a 409 on every poll of /feedback-round.
+  const quietOpen = JSON.parse((await feedbackRound('4010', { quiet: '1' })).body);
+  check('asked quietly, an open round still comes back whole, with open: true', () => {
+    assert.strictEqual(quietOpen.open, true);
+    assert.strictEqual(quietOpen.questionNumber, '003');
+  });
+
 
   check('it returns the round the host actually opened', () =>
     assert.strictEqual(fr.round.questionNumber, '003', `got ${fr.round && fr.round.questionNumber}`));
@@ -562,6 +569,15 @@ const aComment = (over = {}) => ({
   const closed = await feedbackRound('4011');
   check('no open feedback round is a 409, not a report', () =>
     assert.strictEqual(closed.statusCode, 409, `got ${closed.statusCode}`));
+  // rejects: dev QA 2 Nov — the same answer, asked quietly, is a 200.
+  const quietClosed = await feedbackRound('4011', { quiet: '1' });
+  check('asked quietly, no open round is a 200 that says open: false', () => {
+    assert.strictEqual(quietClosed.statusCode, 200, `got ${quietClosed.statusCode}`);
+    const body = JSON.parse(quietClosed.body);
+    assert.strictEqual(body.open, false);
+    assert.strictEqual(body.reason, 'not-open');
+    assert.ok(!('round' in body), 'a closed answer carried a round');
+  });
 
   seedGame('4012');
   const noReport = await feedbackRound('4012');
@@ -571,6 +587,11 @@ const aComment = (over = {}) => ({
     // error the participant has to interpret.
     assert.strictEqual(noReport.statusCode, 409, `got ${noReport.statusCode}`);
     assert.match(JSON.parse(noReport.body).error, /report/i);
+  });
+  const quietNoReport = await feedbackRound('4012', { quiet: '1' });
+  check('asked quietly, a report not built yet is a 200 that says not-ready', () => {
+    assert.strictEqual(quietNoReport.statusCode, 200, `got ${quietNoReport.statusCode}`);
+    assert.strictEqual(JSON.parse(quietNoReport.body).reason, 'not-ready');
   });
 
   // ---------- 8. a closed survey: its one pseudo-round, 000 ----------

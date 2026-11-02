@@ -183,6 +183,10 @@ export default function SessionSetup({
   players = [], title = '', code = '', joinUrl = '',
   firstUp = '', onRunningOrder = null,
   remoteAddr = '', onUseTwo = null,
+  /* A type that runs on one screen only (Wavelength): its reason, said in
+     step 1 where the chooser would be (§7 decision 10; dev QA 2 Nov). The
+     page passes choice 'classic' with it; there is no Change. */
+  oneOnly = '',
   now: fixedNow = null,
 }) {
   const nowMs = useMinuteClock(fixedNow);
@@ -209,8 +213,9 @@ export default function SessionSetup({
             state={where}
             title={where === 'done' ? W.whereDone : W.whereOpen}
             value={where === 'done' ? (two ? W.twoScreens : W.oneScreen) : ''}
-            onChange={where === 'done' ? onChange : null}
+            onChange={where === 'done' && !oneOnly ? onChange : null}
           />
+          {oneOnly ? <p className="hsetup-p hsetup-oneonly" data-testid="setup-one-only">{oneOnly}</p> : null}
           {where === 'now' ? (
             <div className="hsetup-body">
               {/* `quiet`: Your part now holds the one orange move (D1); the two
@@ -293,7 +298,7 @@ export default function SessionSetup({
             <p className="hsetup-hint">{W.nothingYet}</p>
           </aside>
         )}
-        {!two && choice === 'classic' && onUseTwo && step !== 'joins' ? (
+        {!two && choice === 'classic' && onUseTwo && !oneOnly && step !== 'joins' ? (
           <p className="hsetup-hint">
             {W.useTwoInstead}{' '}
             <button type="button" className="hsetup-change" onClick={onUseTwo}>{W.useTwo}</button>

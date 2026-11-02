@@ -41,6 +41,8 @@ export default function ConsolePulse({
   correct = null,
   /* Trivia and Poll have no vote: after the round tile 1 says "N here", not "0 voted". */
   noVote = false,
+  /* The answers are options (consolePulse answersAreChoices): "still answering". */
+  choice = false,
 }) {
   const ticking = fixedNow === null && ['answer', 'vote'].includes(pulsePhase(moment));
   const [tick, setTick] = useState(() => serverNowMs());
@@ -52,7 +54,7 @@ export default function ConsolePulse({
   }, [ticking]);
   const now = fixedNow !== null ? fixedNow : tick;
   const ringStepMs = prefersReducedMotion() ? 10000 : 0;
-  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late, timer, ringStepMs, noVote });
+  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late, timer, ringStepMs, noVote, choice });
   const timed = time.state !== 'none';
   return (
     <section className="cpulse" aria-label="The room this round" data-phase={phase}>

@@ -55,7 +55,7 @@ const renderPanel = (props = {}) => render(
   />,
 );
 
-const openQuestions = () => fireEvent.click(screen.getByRole('tab', { name: /questions/i }));
+const openQuestions = () => fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
 
 /** The browser row whose title contains `text`. */
 const browserRow = (text) => screen.getAllByTestId('browser-row')

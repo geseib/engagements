@@ -30,6 +30,8 @@ const RW = Object.freeze({
   startVoting: 'Start voting',
   showResults: 'Show results',
   whatWeHeard: 'What we heard',
+  /** Trivia's and Poll's RESULTS primary: they have no "What we heard" step (dev QA 2 Nov). */
+  workiesRead: 'Workie\'s read',
   /** RESULTS, ideas first (owner, 16 Oct 2026): the heading over the tally. */
   whatTheRoomBacked: 'What the room backed',
   /** The small credit under an idea: "8 points", then " — Ada" when the round shows names. */
@@ -118,6 +120,7 @@ const RW = Object.freeze({
     ANSWERING_NO_VOTE: 'The results',
     VOTING: 'The results',
     RESULTS: 'What we heard',
+    RESULTS_READ: 'Workie\'s read',
     RESPONSES_NEXT: 'The next response',
     RESPONSES_PART: 'The next part of this response',
     READ_PAGE: 'The next page of the read',
@@ -181,6 +184,20 @@ const RW = Object.freeze({
     /** A Choose or a Rate result (or a kind not known yet): nothing to pick. */
     ROOM_RESULTS_ANSWER: (a) => `The room's answer is up. Talk it through, then ${a}, or ask another question.`,
     ENDED: (a) => `The session is over. ${a}.`,
+  }),
+  /**
+   * The same, where a format's own words differ (dev QA 2 Nov: Trivia after
+   * the reveal said "Talk them through, then What we heard"). Trivia: Reveal,
+   * then Scores (optional, S), then the next question. Poll: Results.
+   */
+  yourPartFor: Object.freeze({
+    trivia: Object.freeze({
+      RESULTS: (a) => `The answer is up. Talk it through, then ${a}.`,
+      READ_LAST: (a) => `The read is done. Show the scoreboard if you like, then ${a}.`,
+    }),
+    poll: Object.freeze({
+      RESULTS: (a) => `The room's answer is up. Talk it through, then ${a}.`,
+    }),
   }),
   /** What each step is, for hover on the laptop and a long press on the Remote. */
   stepExplain: Object.freeze({

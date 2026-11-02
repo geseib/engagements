@@ -98,10 +98,10 @@ async function renderLiveGame(hostState, { restoredText } = {}) {
   }
 }
 
-/** The Questions tab's own progress line, opened the way a host would: `\`. */
+/** The Rounds section's own progress line, opened the way a host would: `\`. */
 async function openGoalProgress() {
   await act(async () => { fireEvent.keyDown(document.body, { key: '\\' }); });
-  fireEvent.click(await screen.findByRole('tab', { name: 'Questions' }, { timeout: 5000 }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Rounds' }, { timeout: 5000 }));
   return screen.findByTestId('goal-progress', {}, { timeout: 5000 });
 }
 

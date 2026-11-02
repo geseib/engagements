@@ -53,24 +53,65 @@ export function openNow(handover, now = Date.now()) {
 
 
 /**
- * Three tabs, named by the owner: Players · Questions · Settings.
+ * THE SESSION MENU'S SECTIONS (experience plan §3.2, §3.2a; dev QA 2 Nov:
+ * they were still Players · Questions · Rounds · Settings). The menu holds
+ * set-once things, in this order:
  *
- * A function rather than a constant because the panel's siblings in this
- * codebase are all phase-aware and the next change to this file will be too —
- * but nothing yet varies by phase, and inventing a variation nothing asks for
- * would be a fourth tab nobody ruled on. It takes the argument and ignores it,
- * visibly.
+ *   Screens · Phone remote · Rounds · Joining · End session
+ *
+ * An event's item adds Agenda first. A survey has no rounds and no phone
+ * remote: Screens · Joining · Close survey · End session. (The Build Room's
+ * own panel adds Build settings; it is buildroom/BuildSessionPanel.jsx.)
+ *
+ * PEOPLE IS NOT A SECTION WHERE THERE IS A PEOPLE COLUMN. Mid-round people
+ * actions (name requests, removing someone) belong to People and Needs you,
+ * which are on screen without opening anything; the whole list, with who
+ * left, opens from People's "All N, and who left" link as a view of this
+ * menu, not a tab. Where the frame has NO People column (one screen, a
+ * survey's stage, Setup before round 1) the list keeps a section of its own,
+ * before End session: removing it there would lose Remove, Bring back and the
+ * name handover for a host without the phone Remote.
+ *
+ * `peopleColumn`: the frame draws People (the console mid-session).
  */
-export function setupPanelTabs() {
-  return [
-    { id: 'players', label: 'Players' },
-    { id: 'questions', label: 'Questions' },
-    // GOING BACK THROUGH WHAT ALREADY HAPPENED. Third rather than last because
-    // it is read mid-session — "what did they say in round two" — while
-    // Settings is set once and left alone.
-    { id: 'history', label: 'Rounds' },
-    { id: 'settings', label: 'Settings' },
-  ];
+export function setupPanelTabs({ survey = false, event = false, peopleColumn = false } = {}) {
+  const tabs = [];
+  if (event) tabs.push({ id: 'agenda', label: 'Agenda' });
+  tabs.push({ id: 'screens', label: 'Screens' });
+  if (!survey) {
+    tabs.push({ id: 'remote', label: 'Phone remote' });
+    tabs.push({ id: 'rounds', label: 'Rounds' });
+  }
+  tabs.push({ id: 'joining', label: 'Joining' });
+  if (survey) tabs.push({ id: 'close', label: 'Close survey' });
+  if (!peopleColumn) tabs.push({ id: 'people', label: 'People' });
+  tabs.push({ id: 'end', label: 'End session' });
+  return tabs;
+}
+
+/*
+  THE OLD NAMES, STILL ASKED FOR (a link, a key, ?panel=, the Needs-you line's
+  See in People): where each one lives now. 'players' is the people view;
+  'questions' and 'history' are in Rounds; 'settings' opened on Screens.
+  'running-order' is the page's own landing, in Rounds.
+*/
+const LEGACY_SECTIONS = Object.freeze({
+  players: 'people',
+  questions: 'rounds',
+  history: 'rounds',
+  'running-order': 'rounds',
+  settings: 'screens',
+});
+
+/**
+ * Which section the menu opens at, for a place asked for. The people view
+ * opens even where People is not a tab (from People's own link); any other
+ * name that is not a section here opens the first section.
+ */
+export function sessionMenuSection(asked, tabs = setupPanelTabs()) {
+  const id = LEGACY_SECTIONS[asked] || asked;
+  if (id === 'people') return 'people';
+  return tabs.some((t) => t.id === id) ? id : (tabs[0] && tabs[0].id) || 'screens';
 }
 
 /**

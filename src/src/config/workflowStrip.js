@@ -177,7 +177,8 @@ export function workflowStrip(step, rawCtx = {}) {
 
   // The line is written around the main button's own label, so the two can
   // never disagree (a disabled primary still names what it will do).
-  const words = RW.yourPart[partKey(moment, step, ctx)];
+  const key = partKey(moment, step, ctx);
+  const words = (RW.yourPartFor[ctx.gameType] && RW.yourPartFor[ctx.gameType][key]) || RW.yourPart[key];
   let part = null;
   if (words) {
     const MARK = '\u0000';

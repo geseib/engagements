@@ -137,7 +137,9 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
   it('offers the read first on RESULTS, for every round type', () => {
     for (const type of ALL_TYPES) {
       if (type === 'survey') continue;
-      expect(stepOf('RESULTS#001', type).primary).toMatchObject({ id: 'field-notes', label: 'What we heard' });
+      // Trivia and Poll have no "What we heard" step: the read is named as that (dev QA 2 Nov).
+      const label = ['trivia', 'poll'].includes(type) ? "Workie's read" : 'What we heard';
+      expect(stepOf('RESULTS#001', type).primary).toMatchObject({ id: 'field-notes', label });
     }
   });
 

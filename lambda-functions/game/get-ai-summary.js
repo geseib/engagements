@@ -972,7 +972,7 @@ const handle = async (event, context) => {
   // persist, and broadcast the result over WebSocket.
   const workerMode = event.__workerMode === true;
   try {
-    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps, redo;
+    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps, redo, quiet;
     // The follow-up suggestions alone, from the read already stored (the
     // host's "make them again"). Never the read itself.
     const followUpsOnly = workerMode && event.followUpsOnly === true;
@@ -988,7 +988,7 @@ const handle = async (event, context) => {
     } else {
       ({ gameId } = event.pathParameters || {});
       const queryParams = event.queryStringParameters || {};
-      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps, redo } = queryParams);
+      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps, redo, quiet } = queryParams);
     }
 
     if (!gameId) {
@@ -1066,9 +1066,13 @@ const handle = async (event, context) => {
     // Extract the question number from questionId (e.g., "002" from questionId or from current state)
     let paddedQuestionNumber = targetQuestionId;
     
-    // If questionId looks like a sequential number, use it directly
-    if (/^\d{3}$/.test(targetQuestionId)) {
-      paddedQuestionNumber = targetQuestionId;
+    // If questionId looks like a sequential number, use it directly. A bare
+    // round number ("1") is the same round as "001" (dev QA 2 Nov: the host
+    // asked for both, and "1" fell through to the CURRENT round below, which
+    // on a later round is the wrong one).
+    if (/^\d{1,3}$/.test(String(targetQuestionId))) {
+      paddedQuestionNumber = String(targetQuestionId).padStart(3, '0');
+      targetQuestionId = paddedQuestionNumber;
     } else {
       // Try to extract from current state if it's in RESULTS#002 format
       const currentState = gameState.Item.State;
@@ -1224,8 +1228,14 @@ const handle = async (event, context) => {
         // Cache miss (non-generateNew, no item): tell the client it's not ready
         // yet. The client already treats 404 as "not ready" and will fire generateNew.
         console.log(`ℹ️ AI SUMMARY: cache miss for ${gameId}:${paddedQuestionNumber} — returning 404 (not generating inline)`);
+        /*
+          THE QUIET FORM (dev QA 2 Nov): "not written yet" is the expected
+          answer while Workie writes, so a caller that sends `?quiet=1` hears
+          it as a 200 with the same body and nothing lands in its console.
+          Without the flag, the 404 stands for every older reader.
+        */
         return {
-          statusCode: 404,
+          statusCode: quiet === '1' || quiet === 'true' ? 200 : 404,
           body: JSON.stringify({ status: 'not_ready', gameId, questionId: targetQuestionId }),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };

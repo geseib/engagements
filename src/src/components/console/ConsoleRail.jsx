@@ -9,8 +9,8 @@ import { NEEDS_ACTIONS, NEEDS_WORDS } from '../../config/needsYou';
 /** The rail shows the first few; "Review them" opens the whole list. */
 const LATE_SHOWN = 3;
 
-const MARK = { answered: '✓', voted: '✓', here: '✓', writing: '…', 'not-yet': '…' };
-const META = { answered: CW.answered, voted: CW.voted, writing: CW.stillWriting, 'not-yet': CW.notYet, here: '' };
+const MARK = { answered: '✓', voted: '✓', here: '✓', writing: '…', answering: '…', 'not-yet': '…' };
+const META = { answered: CW.answered, voted: CW.voted, writing: CW.stillWriting, answering: CW.stillAnswering, 'not-yet': CW.notYet, here: '' };
 
 /*
   A <details> whose `open` React owns. The summary's click is taken (no native

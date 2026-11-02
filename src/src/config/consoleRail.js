@@ -81,6 +81,8 @@ export function personFactsFor({ gameType, players = [], marks = null } = {}) {
 function peopleRows({
   moment, players = [], answeredNames = [], answeredCount = 0, votedNames = [], votedCount = 0,
   gameType, anonymousUntilReveal, authorsRevealed, from = null,
+  // The answers are options (consolePulse answersAreChoices): 'answering', never 'writing'.
+  choice = false,
 } = {}) {
   const names = (players || []).map((p) => (p && (p.name || p.playerName)) || '').filter(Boolean);
   const answering = moment === 'ANSWERING';
@@ -100,6 +102,6 @@ function peopleRows({
   const still = new Set(waiting);
   return names.map((name) => ({
     name,
-    state: still.has(name) ? (answering ? 'writing' : 'not-yet') : (answering ? 'answered' : 'voted'),
+    state: still.has(name) ? (answering ? (choice ? 'answering' : 'writing') : 'not-yet') : (answering ? 'answered' : 'voted'),
   }));
 }

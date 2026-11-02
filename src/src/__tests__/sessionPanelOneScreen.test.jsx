@@ -70,7 +70,7 @@ const PRIVATE = [/Asking to take this name/, /We never write the handoff down/, 
 test('one screen: no tab renders a private part until it is shown', () => {
   renderPanel({ oneScreen: true });
   const seen = [];
-  for (const name of ['Players', 'Questions', 'Rounds', 'Settings']) {
+  for (const name of ['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']) {
     tab(name);
     seen.push(document.body.textContent);
   }
@@ -107,7 +107,6 @@ test('two screens (a private laptop): everything as it was, plus Not now and the
   expect(within(asking).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
   tab('Rounds');
   expect(document.body.textContent).toMatch(/We never write the handoff down/);
-  tab('Questions');
   expect(document.body.textContent).toMatch(/The secret next question/);
 });
 

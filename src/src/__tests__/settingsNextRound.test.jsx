@@ -7,7 +7,7 @@
 import React from 'react';
 import fs from 'fs';
 import path from 'path';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import SessionSetupPanel from '../components/stage/SessionSetupPanel';
 
 const board = { open: false, style: 'departure', page: 0, openedAt: null };
@@ -15,7 +15,7 @@ const board = { open: false, style: 'departure', page: 0, openedAt: null };
 function renderSettings(props = {}) {
   return render(
     <SessionSetupPanel
-      initialTab="settings"
+      initialTab="rounds"
       gameType="call-and-answer"
       gameState="RESULTS#002"
       scoreboard={board}
@@ -34,7 +34,8 @@ describe('the panel', () => {
     expect(screen.getByRole('heading', { name: /^Names · From the next round/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Feedback · From the next round/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Pace · Applies now/ })).toBeInTheDocument();
-    // Display is now "Room screen size" inside the Screens group (16 Oct regroup); the group carries its scope.
+    // Display is "Room screen size" in the Screens section (16 Oct regroup; its own section since dev QA 2 Nov).
+    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
     expect(screen.getByRole('heading', { name: /^Screens · Applies now/ })).toBeInTheDocument();
   });
 
