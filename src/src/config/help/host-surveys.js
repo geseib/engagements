@@ -157,7 +157,7 @@ const hostSurveys = {
           items: [
             { title: 'Finished', text: 'How many people have sent their answers, out of everyone who joined. It says **All in** when everyone has.' },
             { title: 'Answered, by question', text: 'A bar per question: how far through the survey the room has got.' },
-            { title: 'The dock', text: 'How many have finished, are partway, or have not started.' },
+            { title: 'Your part now', text: 'Under the top bar: how many have finished, are partway, or have not started, beside **Close the survey**.' },
           ],
         },
         {
@@ -187,7 +187,7 @@ const hostSurveys = {
       blocks: [
         {
           t: 'p',
-          text: '**Two-minute warning** puts a banner on every phone counting down the minutes and saying that everything already answered counts. It closes nothing: the survey stays open until you close it, and the dock adds "warning sent".',
+          text: '**Two-minute warning** puts a banner on every phone counting down the minutes and saying that everything already answered counts. It closes nothing: the survey stays open until you close it, and Your part now adds "warning sent".',
         },
         {
           t: 'p',

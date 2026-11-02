@@ -141,9 +141,74 @@ body, .stage-ladder-table{
      the whole stage past the viewport. */
   grid-template-columns:minmax(0,1fr);
   display:grid;
-  grid-template-rows:auto auto auto minmax(0,1fr) auto;
-  grid-template-areas:"rail" "bar" "strip" "main" "dock";
+  /* THE HOST'S FRAME FIRST (experience plan 2h): top bar, Your part now and
+     the Needs-you line are three auto rows above the rail. A stage that draws
+     none of them (the Build Room's, an event's agenda wall, the survey
+     walk-through) leaves them empty and they collapse to 0px. */
+  grid-template-rows:auto auto auto auto auto auto minmax(0,1fr) auto;
+  grid-template-areas:"top" "now" "needs" "rail" "bar" "strip" "main" "dock";
 }
+
+/* ------------------------------------------------- THE FRAME (2h, one screen)
+   The same top bar as the console (components/console/ConsoleTop.jsx, styled
+   by its own `.hc-top` rules at the laptop ladder, 13/15px) and, directly
+   under it, Your part now: the room's one orange button in the same place on
+   one screen as on two (PLAN §2 principle 4, §3.3). Then the Needs-you line,
+   public-safe, at one fixed height. All three are HOST CHROME at fixed laptop
+   sizes, never the profile ladder: they are not the room's content, and the
+   stage's own ladder (the rail, the meter, .content) is untouched. None of
+   them is inside `.main`, so the fitter's box is simply what they leave.
+   Each wrapper carries data-theme="dark" (<html> is paper). */
+.stage-top{grid-area:top;position:relative;z-index:14;min-width:0;background:var(--bg)}
+/* SLIM, MEASURED. The first cut (49 + 58 + 46px) cost Call & Answer's vote
+   and answer states their clean fit at 1280x720 and 1366x768 in TV and Call
+   (Chromium, every phase of the five one-screen types); these paddings and
+   the steps strip leaving one screen (§3.3) gave that height back. */
+.stage-top > .hc-top{padding:4px calc(1.2vw + 8px)}
+.stage-now{grid-area:now;position:relative;z-index:12;min-width:0;padding:6px calc(1.2vw + 8px) 0}
+.stage-needs{grid-area:needs;position:relative;z-index:12;min-width:0;padding:4px calc(1.2vw + 8px) 0}
+/* The line keeps ONE height, calm or waiting (owner O1), slimmer than the
+   console's 56px: the room's screen gives the content every row it can. */
+.stage-needs .ny{--ny-line-h:36px}
+.stage-needs .ny.ny-line{padding:0 12px 0 14px;border-radius:10px}
+
+/* YOUR PART NOW — Dock.jsx with `lead`. Slim: a card with the amber edge the
+   console's .hc-now carries, one line, the main button at its right. The
+   .dock rules above still apply (one line, the crowded steps, the fixed
+   slots); these undo what made the bottom dock a 13vh band and set the host
+   chrome's own sizes: label 12px, status 15px, hint 13px. */
+.dock.dock--part{min-height:0;padding:4px 6px 4px 14px;gap:14px;border-top:0;
+  border-left:4px solid var(--accent);border-radius:10px;background:var(--surface)}
+.dock.dock--part .dock-k{flex:none;font-size:12px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap}
+/* ONE LINE, SO THE BUTTON NEVER MOVES (measured: a closed survey's
+   "14 finished · 4 partway · 0 not started" beside two buttons and the count
+   ran to four lines at TV 1280x720 and pushed the main button 18px down).
+   The status keeps one line and ellipsizes, its full words in its title
+   (Dock.jsx), and the label gives way first when the row is crowded. */
+.dock.dock--part .status{font-size:15px;max-width:none;min-width:0;flex:0 1 auto;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-weight:600}
+.dock.dock--part[data-crowded="4"] .status{min-width:0}
+.dock.dock--part[data-crowded="2"] .dock-k,
+.dock.dock--part[data-crowded="3"] .dock-k,
+.dock.dock--part[data-crowded="4"] .dock-k{display:none}
+.dock.dock--part .status.go{color:var(--success-text)}
+.dock.dock--part .status.notice{font-size:15px;padding:.2em .7em}
+.dock.dock--part .hint{font-size:13px;max-width:44ch;line-height:1.2}
+.dock.dock--part .dock-progress .lbl{font-size:12px}
+.dock.dock--part .dock-progress .val{font-size:19px}
+/* The count's ALL IN pill at the bar's size, not the meter's (it drew at
+   TV's 39px and stood the bar 86px tall). */
+.dock.dock--part .dock-progress .flag{font-size:12px;align-self:center;padding:.2em .6em}
+.dock.dock--part .host-action-bar.big-screen-mode{padding-bottom:0}
+.dock.dock--part .host-action-bar__primary,
+.dock.dock--part .host-action-bar__secondary,
+.dock.dock--part .host-action-bar__tertiary{font-size:15px;padding:7px 16px;border-radius:10px}
+.dock.dock--part .host-action-bar__primary .keycap{font-size:12px}
+.dock.dock--part .host-action-bar__actions{gap:10px}
+/* The key legend sits BEFORE the buttons, so a phase that has one never
+   slides the main button off its place at the right edge. */
+.dock.dock--part .host-action-bar__keyhint{order:-1;font-size:12px;margin-top:0;max-width:36ch;line-height:1.2}
 
 /* Photo field. Flat in Call: wide low-frequency gradients band badly under
    video compression and eat the bitrate the text needs. */
@@ -299,6 +364,37 @@ body, .stage-ladder-table{
 .meter .count{font-family:var(--font-display);font-weight:800;line-height:1.06;
   font-size:max(var(--floor),calc(var(--L-primary) * .9));color:var(--text);
   white-space:nowrap}
+
+/* THE ROOM'S TIME LINE ON ONE SCREEN (experience plan 2f, placed for 2h's
+   frame). RoomTimeLine has no size of its own; here it takes the label tier
+   (--t-meta, the profile's floor or above: 16px on its own, it was under every
+   profile's floor). Unplaced, it was a third grid item that wrapped into a row
+   of its own under .content and took that row's height and the 2vw row gap
+   from the fitter, clamping TV's Call & Answer prompt at 1280x720 and
+   1440x900 (Chromium, merge of 2h). So: under the meter, in the meter's
+   column, costing the content nothing; `contain: inline-size` keeps its words
+   and bar from widening that auto column.
+   WHEN THE FITTER TAKES THE COLUMN the time goes with it to the rail, the
+   same move the count makes into Your part now (.dock-progress below): the
+   rail's copy (.rail-time, Rail `time`) shows only then, so exactly one is
+   ever visible, and a crowded rail drops JOIN and the address before the
+   code, as it always has. A foot row under .content instead cost a row and
+   clipped TV's Call & Answer prompt at 1280x720. */
+.main > .stage-time{grid-column:-2 / -1;grid-row:1;align-self:end;
+  contain:inline-size;min-width:0;flex-wrap:wrap;row-gap:.3em;
+  font-size:var(--t-meta);font-weight:600;
+  border-left:var(--hair) solid var(--rule);padding-left:calc(1.2vw + 8px)}
+/* Both placed explicitly: with the time line pinned to row 1, auto-placement
+   would push the meter on to a second row under the content. */
+.main:has(> .stage-time) > .meter{grid-column:-2 / -1;grid-row:1;
+  max-height:calc(100% - var(--t-meta) * 2.6)}
+/* The column is the meter's width: the words wrap rather than run past it. */
+.main > .stage-time .rtime-words{white-space:normal;min-width:0}
+.main.solo > .stage-time{display:none}
+.rail .rail-time{display:none;flex:0 1 auto;min-width:0;
+  font-size:var(--t-meta);font-weight:600}
+.rail .rail-time .rtime-bar{width:5em;min-width:2em}
+.stage:has(> .main[data-auto-solo="1"]) .rail .rail-time{display:inline-flex}
 
 /* The completed state. `.dock .status.go` below already carries the same idea
    for the dock — colour plus the finite `cue` pulse, guarded for reduced
@@ -709,6 +805,9 @@ a.dock-more{text-decoration:none}
    label in the dock for the rest of the session. */
 .dock-progress{display:none;flex:none;align-items:baseline;gap:.55em;min-width:0}
 .main[data-auto-solo="1"] ~ .dock .dock-progress{display:inline-flex}
+/* Your part now sits ABOVE .main (2h), where a sibling combinator cannot
+   reach back; the same switch, read from the stage that holds both. */
+.stage:has(> .main[data-auto-solo="1"]) .dock--part .dock-progress{display:inline-flex}
 .dock-progress .lbl{font-size:var(--t-meta);color:var(--muted);font-weight:700;
   letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
 .dock-progress .val{font-family:var(--font-display);font-weight:800;line-height:1;

@@ -168,7 +168,7 @@ test('the host stage draws the RESULTS rows in the order of their labels', async
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
 
   // All five on the first page: Table (the jsdom default) holds the pick and
   // four runners-up since 18 Oct 2026 (components/stage/roomPaging.js). The

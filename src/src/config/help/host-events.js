@@ -53,18 +53,20 @@
                        (moving on finishes the live item; an open survey
                        pauses), End confirm ("End it", "Keep it"), survey refusal.
     session-on-the-day GameHostPage eventCode: lobby shows the event code,
-                       Dock AGENDA (one screen), "Back to the agenda" as the
-                       leave primary. Since experience plan 2d: a Call & Answer
-                       item on two screens gets the console (config/surfaces.js
-                       consoleFor), with "‹ Agenda" as the strip's first crumb
-                       (WorkflowStrip `agenda`), Agenda and Bring everyone here
-                       in the Session menu (SessionSetupPanel `event`), the
-                       Needs-you item "The event moved on to Item N" with Bring
-                       everyone here (config/needsYou.js eventMoved,
+                       "Back to the agenda" as the leave primary. Since
+                       experience plan 2d: a Call & Answer item on two screens
+                       gets the console (config/surfaces.js consoleFor), with
+                       "‹ Agenda" as the strip's first crumb (WorkflowStrip
+                       `agenda`), the Session menu's first row "This event":
+                       Agenda and Bring everyone here (SessionSetupPanel
+                       `event`; first in the menu since 2h, on one screen too),
+                       the Needs-you item "The event moved on to Item N" with
+                       Bring everyone here (config/needsYou.js eventMoved,
                        config/eventAgenda.js eventMovedOn), a latecomer's
-                       "from item N" in People (latecomersFrom), Main menu to
-                       the start screen (leaveToMainMenu), and Setup once per
-                       event day (eventScreensSet / markEventScreens).
+                       "from item N" in People (latecomersFrom), Main menu
+                       always home, asking first with people in the room
+                       (requestLeave / leaveToMainMenu, 2h), and Setup once
+                       per event day (eventScreensSet / markEventScreens).
     talks-on-the-day   EventStage deck: ← → PageUp PageDown, Full screen / F,
                        Space and click while full screen, Esc; the "Just
                        arrived? Open" join block and "Coming up".
@@ -331,11 +333,11 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** on the dock. From there, **Set the running order** chooses which questions come first.',
+          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** in Your part now. From there, **Set the running order** chooses which questions come first.',
         },
         {
           t: 'p',
-          text: 'When you are ready, press **Bring everyone here** on that item\'s main button (**Bring everyone back** on one you paused), or **Go live** on its row.',
+          text: 'When you are ready, press **Bring everyone here**, the main button in that item\'s Your part now (**Bring everyone back** on a paused one), or **Go live** on its row.',
         },
         {
           t: 'p',
@@ -379,8 +381,8 @@ const eventDay = {
           t: 'list',
           items: [
             { title: 'The event\'s code', text: 'Its lobby and **Join** show the event code, not a session code. Late arrivals join the event and land in this session; in People a latecomer reads **from item 2** (the item they arrived in) where others show what they are doing.' },
-            { title: '**‹ Agenda**', text: 'On two screens, the first step on the steps strip; on one screen, **AGENDA** on the dock. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Agenda** is in the Session menu too. **Main menu** still goes to your start screen.' },
-            { title: 'At the end', text: 'When the session ends, the main button is **Back to the agenda**.' },
+            { title: '**Agenda**', text: 'The first thing in the **Session menu** (top right), on one screen or two, beside **Bring everyone here** while the room is elsewhere. On two screens **‹ Agenda** is also the first step on the steps strip. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Main menu**, top left, still goes to your start screen, asking first when people are in the room.' },
+            { title: 'At the end', text: 'When the session ends, Your part now offers **Back to the agenda**.' },
           ],
         },
       ],

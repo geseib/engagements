@@ -38,6 +38,9 @@ const HW = Object.freeze({
   // The room's screen status (§3.6: the room's window on two screens).
   roomsWindow: 'Room\'s window',
   roomSeesThisScreen: 'The room sees this screen',
+  roomSeesThisScreenHint: 'One screen: this laptop is the room\'s screen. Names and private details stay on your phone, or behind Show on this screen.',
+  // In an event, up one level (§3.6): the Session menu's Agenda item on the stage.
+  agendaHint: 'Back to the event\'s agenda. The phones stay where they are.',
   // The connection, drawn only when it is broken (PLAN §4.2 row 7).
   notHearing: 'Not hearing the room',
   reconnecting: 'Reconnecting',

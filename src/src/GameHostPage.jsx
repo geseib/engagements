@@ -127,7 +127,9 @@ import {
 import { lateRailMeta } from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
-import HostConsole from './components/console/HostConsole';
+import HostConsole, { splitLeave } from './components/console/HostConsole';
+import ConsoleTop from './components/console/ConsoleTop';
+import PublicNeedsLine from './components/needs/PublicNeedsLine';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
@@ -5745,6 +5747,9 @@ Focus on actionable business strategy insights.`;
     is a small modal and not the type-to-confirm ceremony deletion gets.
   */
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // The one-screen Needs-you sheet (2h): the top bar's bell and the public
+  // Needs-you line's Open open this one sheet.
+  const [needsSheetOpen, setNeedsSheetOpen] = useState(false);
 
   /**
    * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
@@ -5785,29 +5790,38 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const requestLeave = () => {
+  /*
+    MAIN MENU ALWAYS MEANS THE MAIN MENU (experience plan §3.6; Phase 2 step
+    2h settles the owner's open question from the dock fix). Inside an event
+    it used to go to the agenda, which made it a second AGENDA. Now it goes
+    home in an event too, asking first when people are in the room, and
+    Agenda is separate: the Session menu's first item, and an ended item's
+    own "Back to the agenda" primary (HOST_INTENTS.LEAVE in an event, below).
+    Leaving an event's item drops the event from this page as well, so the
+    next session opened from the start screen is not taken for one of its
+    items; the event keeps running and its agenda is one click from home.
+  */
+  const leaveToMainMenu = () => {
     if (eventCode) {
-      goToAgenda();
-      return;
+      setEventCode('');
+      setEventItem(null);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('event');
+        url.searchParams.delete('gameId');
+        window.history.replaceState(window.history.state, '', url.toString());
+      } catch (e) { /* no history API: the state reset still stands */ }
     }
+    handleSwitchGame();
+  };
+
+  const requestLeave = () => {
     const midSession = gameState !== 'CREATED' && gameState !== 'ENDED' && players.length > 0;
     if (midSession) {
       setConfirmLeave(true);
       return;
     }
-    handleSwitchGame();
-  };
-
-  /*
-    MAIN MENU IN AN EVENT (experience plan §3.6, 2d): the start screen, as
-    everywhere. Agenda is the level up, and has its own doors (the strip's
-    first crumb, the Session menu, the dock on one screen). A full navigation,
-    as the event's own stage leaves: nothing of the event lingers on this page
-    for the next session opened. The item keeps running.
-  */
-  const leaveToMainMenu = () => {
-    if (!eventCode) { requestLeave(); return; }
-    navigateTo('/host');
+    leaveToMainMenu();
   };
 
   const handleSwitchGame = () => {
@@ -7495,11 +7509,11 @@ Focus on actionable business strategy insights.`;
   const previewRunningOrder = Boolean(eventCode && eventItem && eventItem.state === 'planned'
     && hasRunningOrder(eventItem.type));
   /*
-    AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
-    (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
-    to one place, and the second one pushed SESSION off a 1024-wide dock
-    (measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
-    finished survey), it says where it goes.
+    AND NO SECOND WAY BACK. In an event the ways out are Main menu (the top
+    bar, home) and Agenda (the Session menu); a LEAVE round button beside them
+    would be a third door (it once pushed SESSION off a 1024-wide dock,
+    measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
+    finished survey), it says where it goes: the agenda.
   */
   const eventLeave = (control) => (control && control.intent === HOST_INTENTS.LEAVE ? null : control);
   const eventControls = eventCode
@@ -7596,6 +7610,9 @@ Focus on actionable business strategy insights.`;
       tertiary: null,
     }
     : hostControls;
+  // THE STAGE'S YOUR PART NOW (2h): the same controls without a LEAVE round
+  // button, which the top bar's Main menu already is (as on the console).
+  const stageControls = splitLeave(dockControls).controls;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -7848,8 +7865,13 @@ Focus on actionable business strategy insights.`;
           the session stays live and rejoinable through Continue. That is why
           the label is Back to Menu rather than Exit: see the note on the
           settings panel's copy of this button.
+
+          IN AN EVENT a LEAVE control is only ever the primary "Back to the
+          agenda" (eventControls strips every other one), so there it goes to
+          the agenda; Main menu, on the top bar, goes home (2h).
         */
-        requestLeave();
+        if (eventCode) goToAgenda();
+        else requestLeave();
         break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
@@ -8347,6 +8369,17 @@ Focus on actionable business strategy insights.`;
     setJoinOnStage(!joinPanel);
     return true;
   };
+  /*
+    THE TOP BAR'S ONE JOIN TOGGLE ON THE STAGE (experience plan §3.6, 2h):
+    "Show join code" puts it up (the side panel in a round, the QR elsewhere),
+    "Hide join code" takes it down. Not offered once joining has closed.
+  */
+  const joinCodeOpen = Boolean(gameId) && hostPhase !== 'ENDED' && hostPhase !== 'CLOSED' && gameState !== 'SURVEY#CLOSED';
+  const joinCodeUp = joinPanelAllowed ? Boolean(joinPanel) : qrMode === 'pinned';
+  const toggleJoinCode = () => {
+    if (joinPanelAllowed) setJoinOnStage(!joinPanel);
+    else setQrMode((mode) => (mode === 'pinned' ? null : 'pinned'));
+  };
 
   /**
    * Why the primary is greyed out, and the key that fires it when it is not.
@@ -8622,8 +8655,8 @@ Focus on actionable business strategy insights.`;
   /*
     THE TIME CHIP beside the opening move (2f, D4): Start round N takes the
     answering chip, Start voting the voting chip. `timeChipFor` builds it for
-    whichever bar draws the primary; `placement` 'up' in the one-screen dock,
-    which sits at the stage's foot.
+    whichever bar draws the primary: the console's Your part now, Setup's, and
+    the one-screen stage's (under its top bar since 2h, so 'down' everywhere).
   */
   const timeChipFor = (controls, placement = 'down') => {
     const kind = chipKindFor(controls && controls.primary);
@@ -8997,8 +9030,27 @@ Focus on actionable business strategy insights.`;
             help: consoleHelp,
             // The bell is the Needs-you door in a live session (experience plan §4.3).
             bellSession: needsBell,
-            // Main menu, always (2a): the step's leave control when it has one, else this.
-            onLeave: leaveToMainMenu,
+            /* SETUP ON ONE SCREEN, ONCE CHOSEN (2h): this laptop is the room's
+               screen, so the bar says so and its bell is the count-only one,
+               the same as the stage the session moves on to. */
+            oneScreen: !twoSurfaces && roomScreenChoice === 'classic',
+            bell: !twoSurfaces && roomScreenChoice === 'classic' ? (
+              <OneScreenNeedsBell
+                variant="top"
+                needs={needs}
+                onAct={onNeedsAct}
+                busy={needsBusy}
+                error={needsError}
+                oneScreen
+                remoteConnected={false}
+                onConnectPhone={() => openSetupAt('settings')}
+                open={needsSheetOpen}
+                onOpenChange={setNeedsSheetOpen}
+              />
+            ) : null,
+            /* Main menu, always (2a), and always home (2h): asking first with
+               people in the room, in an event too. */
+            onLeave: requestLeave,
             // The connection, on the top bar only when it is broken.
             connected: wsConnected || !wsEverConnected.current,
             // The Session menu, top right: a sheet over the content area.
@@ -9100,19 +9152,24 @@ Focus on actionable business strategy insights.`;
           // The round timer's line under the meter (2f) adds a row: re-measure.
           phaseTimer && phaseTimer.onWall !== false ? 'time' : '',
         ].join('|')}
-        strip={workflow
+        /* NO STEPS STRIP ON ONE SCREEN (experience plan §3.3, 2h): it is
+           folded into the room's view, whose eyebrow and rail say where the
+           round is and whose meter is the count; the row it held goes back to
+           the content under the frame. A private laptop on two screens (an
+           event's item, a survey) keeps it, to look at a step. */
+        strip={workflow && twoSurfaces
           ? (
             <WorkflowStrip
               strip={workflow}
-              mode={twoSurfaces ? 'full' : 'slim'}
+              mode="full"
               // Drafting a question is looking at Ask: the room still sees the read.
               viewing={viewing || (askComposer && workflow.live !== 'ask' ? 'ask' : null)}
               onView={stripOnView}
-              places={twoSurfaces ? setupPanelTabs().map((t) => ({
-                id: t.id,
-                label: t.id === 'players' ? `${t.label} ${players.length}` : t.label,
-                onClick: () => openSetupAt(t.id),
-              })) : null}
+              /* No Session-menu doors in the strip and no second "Your part
+                 now" line (2h): the top bar has the Session menu, and Your
+                 part now is its own row under it, as on the console. */
+              places={null}
+              hidePart
               viewingWhere={liveWhere(workflow)}
               onBack={() => { setViewingStep(null); setAskComposer(null); }}
             />
@@ -9137,11 +9194,134 @@ Focus on actionable business strategy insights.`;
             />
           )
           : null}
+        /* THE HOST'S FRAME, ON TOP (experience plan §3.3, Phase 2 step 2h):
+           the console's own top bar, then Your part now directly under it,
+           slim, then the Needs-you line, so the main button is in the same
+           place on one screen as on two. The bottom dock is gone: everything
+           it held has one place now (Main menu, the bell, ?, the Session menu
+           and the room's window on the bar; the status, the count, the hint
+           and the round's buttons in Your part now; Agenda in the Session
+           menu). Public-safe on one screen (PLAN principle 3): the bell and
+           the line are counts by kind, never a name. */
+        top={(
+          <ConsoleTop
+            title={eventTitle || 'Engagements'}
+            code={joinCodeOpen ? (eventCode || gameId) : ''}
+            oneScreen={!twoSurfaces}
+            onJoin={toggleJoinCode}
+            joinPressed={joinCodeUp}
+            presentHref={twoSurfaces && gameId ? presentHref(gameId) : ''}
+            presentDetail={presentDetail}
+            short
+            help={dockHelp}
+            onLeave={requestLeave}
+            connected={wsConnected || !wsEverConnected.current}
+            onSessionMenu={() => setSetupPanelOpen((open) => !open)}
+            sessionMenuOpen={setupPanelOpen}
+            /* NEEDS YOU (experience plan §3.3, 1b): on one screen a count and
+               never a name; its sheet starts "The room can see this screen".
+               There is no signal yet that the phone Remote is open, so the
+               sheet offers Connect your phone, never "on your phone" (§3.3:
+               only while it is connected). On two screens (an event's item,
+               a survey) the laptop is private: the session's own bell. */
+            bell={twoSurfaces ? null : (
+              <OneScreenNeedsBell
+                variant="top"
+                needs={needs}
+                onAct={onNeedsAct}
+                busy={needsBusy}
+                error={needsError}
+                oneScreen
+                remoteConnected={false}
+                onConnectPhone={() => openSetupAt('settings')}
+                open={needsSheetOpen}
+                onOpenChange={setNeedsSheetOpen}
+              />
+            )}
+            bellSession={twoSurfaces ? needsBell : null}
+          />
+        )}
+        now={(
+          <Dock
+            lead={RW.yourPartLabel}
+            hint={dockHint}
+            kbd={dockKbd}
+            status={dockLine}
+            statusLink={dockLateLink}
+            onStatusLink={openLateList}
+            notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
+            complete={everybodyIn}
+            /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
+               `heading` / `body`, handed to Your part now so that the fitter
+               taking the meter's COLUMN no longer takes the NUMBER with it —
+               which is the owner's "the larger views also dont have the player
+               counts". Only one of the two is ever visible and the switch is a
+               CSS rule keyed on the fitter's own `data-auto-solo`; Dock.jsx and
+               styles/stage.css both carry the argument next to the mechanism.
+               Passing `meter` unchanged is deliberate: two sources for one
+               fraction is how they drift apart. */
+            progress={meter ? { ...meter, complete: everybodyIn } : null}
+          >
+            {/* Not reimplemented here. HostActionBar keeps its keyboard
+                handling, its typing-target guard and its disabled hint; only
+                its positioning changes, and `bigScreen` is what makes it a
+                static element in a grid row rather than a fixed overlay. A
+                LEAVE round button comes off (splitLeave): Main menu is the
+                top bar's, and one place for each thing. */}
+            <HostActionBar
+              controls={stageControls}
+              onAction={runHostAction}
+              bigScreen
+              shortcutsEnabled={!anyOverlayOpen}
+              /* The time chip and +1 min (2f), beside the main button as on
+                 the console: the row is under the top bar now (2h), so the
+                 chip's choices open downwards. */
+              timeChip={viewing ? null : timeChipFor(stageControls)}
+              onAddTime={phaseTimer && !viewing ? addMinute : null}
+              /*
+                → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
+                extra pages of the workie response by hitting the right
+                arrow." On FIELD_NOTES with unread pages ahead, the advance
+                key turns the page; on the LAST page it advances the round —
+                the same mental model as a slide deck, where "next" moves
+                through the content before it moves past it. The BUTTON
+                always advances: a host who clicks Next Round means it.
+              */
+              interceptAdvance={consoleInterceptAdvance}
+              /*
+                ← STEPS BACKWARDS — pages first, then the beat. At the first
+                Workie page it returns the room to the RESULTS tally, which is
+                the "way to go backwards from the AI Workie screen to the
+                results screen" and the key config/stagePaging.js reserved for
+                exactly this. Published over /stage-beat, so the phone remote
+                follows the step back the same way it follows the step in.
+              */
+              onBackKey={consoleOnBackKey}
+              keyHint={
+                hostPhase === 'FIELD_NOTES'
+                  ? `→ next page · ← back · at the end, → ${isSurvey ? 'ends the session' : 'starts the next round'}`
+                  : hostPhase === 'FEEDBACK'
+                    ? `← back to what we heard · → ${isSurvey ? 'ends the session' : 'starts the next round'}`
+                    : ''
+              }
+            />
+          </Dock>
+        )}
+        needs={twoSurfaces
+          ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
+          : <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />}
         rail={(
           <Rail
             phase={hostPhase}
-            title={eventTitle || 'Engagements'}
+            /* No title: the top bar names the session (one fact, once). */
+            title={null}
             context={railContext}
+            /* The room's time (2f), mirrored for when the fitter takes the
+               meter's column; exactly one of the two shows (stage.css). */
+            time={phaseTimer && phaseTimer.onWall !== false ? <RoomTimeLine time={phaseTimer} className="rail-time" /> : null}
+            /* The code for the room to read. The top bar's Show join code is
+               the labelled toggle (§3.6); pointing at the code here still
+               previews the QR, as the owner asked (2026-10-13). */
             join={gameId
               ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED' || gameState === 'SURVEY#CLOSED'
                 ? { code: gameId, closed: true }
@@ -9170,99 +9350,14 @@ Focus on actionable business strategy insights.`;
               {/* ONE SCREEN IS THE ROOM'S SCREEN (experience plan 2f, F3): the
                   round timer in words and a bar under the meter, never
                   seconds, only when "show the time" is on. The seconds and
-                  +1 min live in the dock's chip and the + key. */}
+                  +1 min live in Your part now's chip and the + key. */}
               {phaseTimer && phaseTimer.onWall !== false ? <RoomTimeLine time={phaseTimer} className="stage-time" /> : null}
             </>
           )
           : null}
-        dock={(
-          <Dock
-            status={dockLine}
-            statusLink={dockLateLink}
-            onStatusLink={openLateList}
-            notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
-            hint={dockHint}
-            kbd={dockKbd}
-            onSetup={() => setSetupPanelOpen((open) => !open)}
-            /* MAIN MENU, ALWAYS (owner, 2 Nov 2026: "im not real sure how to
-               get back to the main menu here"). The console's own leave
-               (2a), so it asks first with people in the room. */
-            onMainMenu={requestLeave}
-            help={dockHelp}
-            /* NEEDS YOU ON THE STAGE (experience plan §3.3, 1b), just before
-               SESSION in the dock's fixed slot for a type's own item. On one
-               screen a count and never a name; the sheet starts "The room can
-               see this screen". There is no signal yet that the phone Remote
-               is open, so the sheet offers Connect your phone, never "on your
-               phone" (§3.3: only while it is connected). */
-            home={(
-              <OneScreenNeedsBell
-                needs={needs}
-                onAct={onNeedsAct}
-                busy={needsBusy}
-                error={needsError}
-                oneScreen={!twoSurfaces}
-                remoteConnected={false}
-                onConnectPhone={() => openSetupAt('settings')}
-              />
-            )}
-            onAgenda={eventCode ? goToAgenda : undefined}
-            present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
-            complete={everybodyIn}
-            /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
-               `heading` / `body`, handed to the dock so that the fitter taking
-               the meter's COLUMN no longer takes the NUMBER with it — which is
-               the owner's "the larger views also dont have the player counts".
-               Only one of the two is ever visible and the switch is a CSS rule
-               keyed on the fitter's own `data-auto-solo`; Dock.jsx and
-               styles/stage.css both carry the argument next to the mechanism.
-               Passing `meter` unchanged is deliberate: two sources for one
-               fraction is how they drift apart. */
-            progress={meter ? { ...meter, complete: everybodyIn } : null}
-          >
-            {/* Not reimplemented here. HostActionBar keeps its keyboard
-                handling, its typing-target guard and its disabled hint; only
-                its positioning changes, and `bigScreen` is what makes it a
-                static element in a grid row rather than a fixed overlay. */}
-            <HostActionBar
-              controls={dockControls}
-              onAction={runHostAction}
-              bigScreen
-              shortcutsEnabled={!anyOverlayOpen}
-              // The time chip and +1 min (experience plan 2f), as on the console.
-              timeChip={viewing ? null : timeChipFor(dockControls, 'up')}
-              onAddTime={phaseTimer && !viewing ? addMinute : null}
-              /*
-                → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
-                extra pages of the workie response by hitting the right
-                arrow." On FIELD_NOTES with unread pages ahead, the advance
-                key turns the page; on the LAST page it advances the round —
-                the same mental model as a slide deck, where "next" moves
-                through the content before it moves past it. The dock BUTTON
-                always advances: a host who clicks Next Round means it.
-              */
-              interceptAdvance={consoleInterceptAdvance}
-              /*
-                ← STEPS BACKWARDS — pages first, then the beat. At the first
-                Workie page it returns the room to the RESULTS tally, which is
-                the "way to go backwards from the AI Workie screen to the
-                results screen" and the key config/stagePaging.js reserved for
-                exactly this. Published over /stage-beat, so the phone remote
-                follows the step back the same way it follows the step in.
-              */
-              onBackKey={consoleOnBackKey}
-              keyHint={
-                hostPhase === 'FIELD_NOTES'
-                  ? `→ next page · ← back · at the end, → ${isSurvey ? 'ends the session' : 'starts the next round'}`
-                  : hostPhase === 'FEEDBACK'
-                    ? `← back to what we heard · → ${isSurvey ? 'ends the session' : 'starts the next round'}`
-                    : ''
-              }
-            />
-          </Dock>
-        )}
         /* THE SCOREBOARD, in the stage's own layer: over the rail, bar and
-           main, with the dock still live beneath it. Mounted only while the
+           main, with the host's frame (top bar, Your part now) still live
+           above it. Mounted only while the
            server's board is open; the rows, pages and motion are its own
            (components/stage/scoreboard/Scoreboard.jsx). `refreshKey` is the
            room's state AND the last counted round, so a round scored under an
@@ -10192,12 +10287,14 @@ Focus on actionable business strategy insights.`;
           authorsRevealed={authorsRevealed}
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
-          onSwitchGame={leaveToMainMenu}
-          // An event's item (2d): Agenda, and Bring everyone here while the room is elsewhere.
+          onSwitchGame={requestLeave}
+          /* AN EVENT'S ITEM (2d, with 2h's order): the Session menu's first
+             row, Agenda (up one level, never instead of Main menu) and Bring
+             everyone here while the room is elsewhere. */
           event={eventCode ? {
-            onAgenda: goToAgenda,
+            onAgenda: () => { closeAllSidePanels(); goToAgenda(); },
             onBringHere: eventWaiting && eventItem && (eventItem.state === 'planned' || eventMoved)
-              ? () => runHostAction(hostControls.primary)
+              ? () => { closeAllSidePanels(); runHostAction(hostControls.primary); }
               : null,
             busy: eventBusy,
           } : null}
@@ -10284,7 +10381,7 @@ Focus on actionable business strategy insights.`;
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => { setConfirmLeave(false); handleSwitchGame(); }}
+                onClick={() => { setConfirmLeave(false); leaveToMainMenu(); }}
               >
                 Back to Menu
               </button>

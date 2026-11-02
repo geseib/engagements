@@ -44,7 +44,7 @@ const CHIP = {
   ENDED: ['done', 'Complete'],
 };
 
-export default function Rail({ phase, title, context = {}, join = {}, timer }) {
+export default function Rail({ phase, title, context = {}, join = {}, timer, time = null }) {
   const hasJoin = Boolean(join && (join.code || join.url));
   // A FINISHED SESSION MUST NOT ADVERTISE A LIVE ONE. The join block was
   // rendered whenever a gameId existed, so ENDED still read "JOIN
@@ -64,7 +64,9 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
           {chip[1]}
         </span>
       )}
-      <span className="rail-title" data-drop="1">{title}</span>
+      {/* No title where the host's top bar already names the session (the
+          host stage since experience plan 2h): one fact, once per viewport. */}
+      {title ? <span className="rail-title" data-drop="1">{title}</span> : null}
       <span className="rail-ctx">
         {context.category && <span>{context.category}</span>}
         {context.category && context.round != null && <i>/</i>}
@@ -96,6 +98,9 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
         )}
       </span>
       {timer && <span className="rail-timer">{timer}</span>}
+      {/* The room's time line (2f) when the fitter has taken the meter's
+          column: hidden by CSS until then (styles/stage.css, .rail-time). */}
+      {time}
       {hasJoin && closed && (
         <div className="rail-join">
           <span data-join-closed="">{join.code ? `Session ${join.code} · closed` : 'Session closed'}</span>

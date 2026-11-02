@@ -181,7 +181,7 @@ const quickStart = {
         { t: 'phases', gameType: 'trivia' },
         {
           t: 'p',
-          text: 'You move the room on from the bottom of your screen, and the Session panel holds the players, the questions, past rounds and the settings. The Running the room guide covers each step, the buttons and the keys.',
+          text: 'You move the room on from Your part now, under the top bar, and the Session panel holds the players, the questions, past rounds and the settings. The Running the room guide covers each step, the buttons and the keys.',
         },
       ],
     },

@@ -183,7 +183,13 @@ describe('an event\'s Call & Answer item on two screens', () => {
     const { container } = await mountItem();
     await consoleUp(container);
     fireEvent.click(container.querySelector('.hc-top [data-slot="main-menu"]'));
-    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/host'));
+    // Home on this page (2h: the same leave as one screen, asking first only
+    // with people in the room; nobody is here). Never the agenda.
+    await waitFor(() => expect(container.querySelector('.hc')).toBeNull(), { timeout: LOAD_WAIT });
+    expect(navigateTo).not.toHaveBeenCalledWith(`/host/event/${CODE}`);
+    expect(events.runEvent).not.toHaveBeenCalled();
+    // The event is dropped from the page on the way home.
+    expect(window.location.search).not.toMatch(/event=/);
   });
 
   test('the Session menu carries Agenda; Bring everyone here only while the room is elsewhere', async () => {

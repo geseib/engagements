@@ -40,7 +40,9 @@ test('PRESENTING once a Presentation is connected', () => {
 
 test('the host page offers it only under the two-surface switch', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-  expect(src).toMatch(/present=\{twoSurfaces && gameId \? \{ href: presentHref\(gameId\), presenting \} : null\}/);
+  // Since experience plan 2h the stage's top bar carries the room's window
+  // (ConsoleTop's room-screen slot), only on two screens.
+  expect(src).toMatch(/presentHref=\{twoSurfaces && gameId \? presentHref\(gameId\) : ''\}/);
   // The page decides from the choice it holds (review #38), not storage re-read per render.
   expect(src).toMatch(/const twoSurfaces = twoSurfacesFor\(roomScreenChoice, \{ gameType: currentGameType/);
 });

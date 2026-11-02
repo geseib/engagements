@@ -54,10 +54,15 @@ describe('Main menu in the dock', () => {
     expect(screen.queryByRole('button', { name: HW.mainMenu })).toBeNull();
   });
 
-  test('the host stage hands it the console\'s own leave, which asks first with people in the room', () => {
+  test('the host stage\'s Main menu is the top bar\'s now, with the console\'s own leave, which asks first', () => {
+    // Experience plan 2h: the stage's frame is on top. Main menu left the
+    // dock for the top bar (ConsoleTop), as on the console; Your part now (the
+    // <Dock> the stage still draws) carries no Main menu of its own.
     const page = read('GameHostPage.jsx');
     const dock = page.slice(page.indexOf('<Dock\n'), page.indexOf('</Dock>'));
-    expect(dock).toMatch(/onMainMenu=\{requestLeave\}/);
+    expect(dock).not.toMatch(/onMainMenu=/);
+    const top = page.slice(page.indexOf('<ConsoleTop\n'), page.indexOf('/>', page.indexOf('bellSession={twoSurfaces')));
+    expect(top).toMatch(/onLeave=\{requestLeave\}/);
     const leave = page.slice(page.indexOf('const requestLeave = () => {'), page.indexOf('const handleSwitchGame'));
     expect(leave).toMatch(/players\.length > 0/);
     expect(leave).toMatch(/setConfirmLeave\(true\)/);

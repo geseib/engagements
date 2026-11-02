@@ -93,7 +93,6 @@ const ALREADY_ASKED = 'Already asked this session. The running order skips asked
 export default function SessionSetupPanel({
   onClose = () => {},
   wsConnected = false,
-
   // Players
   players = [],
   gameState = '',
@@ -254,9 +253,10 @@ export default function SessionSetupPanel({
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
   /* AN EVENT'S ITEM (experience plan §3.2a "Session menu: same + Agenda";
-     2d): `{ onAgenda, onBringHere, busy }`. Agenda is always there in an
-     event; Bring everyone here only while the room is somewhere else (a
-     preview, or the event moved on). Null outside an event. */
+     2d, first in the menu since 2h): `{ onAgenda, onBringHere, busy }`.
+     Agenda is always there in an event, up one level, never instead of Main
+     menu (which means home); Bring everyone here only while the room is
+     somewhere else (a preview, or the event moved on). Null outside an event. */
   event = null,
   // Task 4, 2026-09-26 bug sweep: what pressing "End session" does. Whether
   // it is offered at all is `canEndSession(gameType, gameState)` below, from
@@ -578,11 +578,23 @@ export default function SessionSetupPanel({
           </button>
         </div>
 
+        {/* AN EVENT'S ITEM, FIRST IN THE MENU (2d's row, 2h's order): Agenda,
+            up one level and never instead of Main menu (top left on the bar,
+            and always home), then Bring everyone here while the room is
+            elsewhere. One Agenda entry; above the tabs, so whichever tab is
+            open. */}
         {event && typeof event.onAgenda === 'function' ? (
           <div className="setup-panel__event" role="group" aria-label={EVENT_WORDS.menuK}>
             <span className="setup-panel__event-k">{EVENT_WORDS.menuK}</span>
-            <button type="button" onClick={event.onAgenda} disabled={Boolean(event.busy)} title={EVENT_WORDS.agendaHint}>
-              {EVENT_WORDS.agenda}
+            <button
+              type="button"
+              onClick={event.onAgenda}
+              disabled={Boolean(event.busy)}
+              title={EVENT_WORDS.agendaHint}
+              data-testid="session-menu-agenda"
+            >
+              <Icon name="ListBullets" weight="bold" size={15} color="currentColor" />
+              {` ${EVENT_WORDS.agenda}`}
             </button>
             {typeof event.onBringHere === 'function' ? (
               <button type="button" onClick={event.onBringHere} disabled={Boolean(event.busy)} title={EVENT_WORDS.bringHereHint}>

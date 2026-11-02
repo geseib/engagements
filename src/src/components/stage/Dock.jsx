@@ -181,19 +181,38 @@ function useCrowded(ref, deps) {
 // Kept as an export for anything that imported it from here.
 export { keyName };
 
+/*
+  `lead` MAKES THIS "YOUR PART NOW" (experience plan §3.3, Phase 2 step 2h).
+  The host stage puts the same strip directly under the top bar, slim, so the
+  main button sits where the console's does: a <section> named by `lead`,
+  `.dock.dock--part`, the word first, then the status, the count when the
+  meter's column has gone, the hint and the round's buttons. Main menu, the
+  bell, `?` and the Session menu are the top bar's (components/console/
+  ConsoleTop.jsx), so a caller passing `lead` passes none of them here: one
+  place for each thing. It holds still and stays one line exactly as the
+  bottom dock does (the same fixed slots, the same useCrowded steps).
+*/
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
-  setupProps = null, help = '', onMainMenu = null, children, ...rest
+  setupProps = null, help = '', onMainMenu = null, lead = '', children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, onMainMenu, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, onMainMenu, lead, children]);
   // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
   // part of the status ("1 late answer kept", or "Review" at the end), and
   // opens the host's late list. Only when the status really ends with it.
   const linked = Boolean(statusLink && onStatusLink && typeof status === 'string' && status.endsWith(statusLink));
+  const Tag = lead ? 'section' : 'footer';
   return (
-    <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined} {...rest}>
+    <Tag
+      className={lead ? 'dock dock--part' : 'dock'}
+      ref={ref}
+      aria-label={lead || undefined}
+      data-agenda={onAgenda ? '' : undefined}
+      {...rest}
+    >
+      {lead ? <span className="dock-k" aria-hidden="true">{lead}</span> : null}
       {typeof onMainMenu === 'function' && (
         <button
           type="button"
@@ -212,6 +231,9 @@ export default function Dock({
           className={`status${complete ? ' go' : ''}${notice ? ' notice' : ''}`}
           aria-live="polite"
           data-goal-notice={notice ? '' : undefined}
+          // Your part now keeps its status on one line (stage.css): a cut
+          // status carries its full words here (engage-design hard rule 7).
+          title={lead && typeof status === 'string' ? status : undefined}
         >
           {linked ? (
             <>
@@ -331,6 +353,6 @@ export default function Dock({
           {setupCount > 0 && <span className="dock-more-n">{setupCount}{setupCountLabel && <span className="dock-sr">{setupCountLabel}</span>}</span>}
         </button>
       )}
-    </footer>
+    </Tag>
   );
 }

@@ -21,7 +21,8 @@ import './NeedsYou.css';
  * `oneScreen` false (a private laptop showing the stage, as an event item on
  * two screens does): the same sheet, named, with each item's buttons.
  *
- * It sits in the dock, shaped like SESSION (`dock-more`), just before it.
+ * On the host stage it sits in the top bar's Needs-you slot (`variant="top"`,
+ * experience plan 2h); the dock shape (`dock-more`) stays for any dock.
  *
  * COMPACT, AND ABSENT WHEN NOTHING WAITS (owner, 2 Nov 2026: "the bottom bar
  * became 2 lines"). A bell and the count, no word: the word NEEDS YOU was the
@@ -30,11 +31,28 @@ import './NeedsYou.css';
  * Now or Soon, the dock draws nothing here; a sheet already open stays open
  * until it is closed, so an item handled from it does not yank it away.
  */
+/*
+ * IN THE TOP BAR (`variant="top"`, experience plan 2h). The one-screen stage
+ * draws the console's top bar, and this is its Needs-you slot: ALWAYS THERE
+ * (the slot never moves), the word "Needs you" and a count, never a name, in
+ * the bar's own outlined shape (`.hc-needsbtn`). `open` / `onOpenChange` let
+ * the page own the sheet, so the public Needs-you line's Open
+ * (components/needs/PublicNeedsLine.jsx) opens this same sheet rather than a
+ * second one.
+ */
 export default function OneScreenNeedsBell({
   needs, onAct, busy = false, error = '', oneScreen = true, remoteConnected = false, onConnectPhone = null,
+  variant = 'dock', open: openProp, onOpenChange = null,
 }) {
-  const [open, setOpen] = useState(false);
+  const [openOwn, setOpenOwn] = useState(false);
+  const controlled = typeof openProp === 'boolean';
+  const open = controlled ? openProp : openOwn;
+  const setOpen = (next) => {
+    if (!controlled) setOpenOwn(next);
+    if (typeof onOpenChange === 'function') onOpenChange(next);
+  };
   const buttonRef = useRef(null);
+  const top = variant === 'top';
   const nowCount = needs ? needs.nowCount : 0;
   const soon = needs ? needs.soonCount > 0 : false;
   const label = nowCount
@@ -49,13 +67,17 @@ export default function OneScreenNeedsBell({
     if (action === 'see') { close(); }
     onAct(item, action);
   };
-  if (!nowCount && !soon && !open) return null;
+  if (!top && !nowCount && !soon && !open) return null;
+  const cls = top
+    ? `hc-needsbtn${nowCount ? ' is-lit' : ''}`
+    : `dock-more dock-needs${nowCount ? ' dock-more--lit' : ''}`;
+  const n = top ? 'hc-needs-n' : 'dock-more-n';
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        className={`dock-more dock-needs${nowCount ? ' dock-more--lit' : ''}`}
+        className={cls}
         onClick={() => setOpen(true)}
         aria-label={label}
         aria-haspopup="dialog"
@@ -64,8 +86,9 @@ export default function OneScreenNeedsBell({
         data-testid="needs-bell"
       >
         <Icon name="Bell" weight={nowCount ? 'fill' : 'bold'} size={16} color="currentColor" />
-        {nowCount > 0 ? <span className="dock-more-n" data-testid="needs-bell-count">{nowCount}</span> : null}
-        {!nowCount && soon ? <span className="dock-more-n" data-testid="needs-bell-dot" aria-hidden="true">•</span> : null}
+        {top ? <span aria-hidden="true">{NEEDS_WORDS.title}</span> : null}
+        {nowCount > 0 ? <span className={n} data-testid="needs-bell-count">{nowCount}</span> : null}
+        {!nowCount && soon ? <span className={n} data-testid="needs-bell-dot" aria-hidden="true">•</span> : null}
       </button>
       {open ? (
         <Modal
