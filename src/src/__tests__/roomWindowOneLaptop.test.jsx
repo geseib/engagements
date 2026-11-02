@@ -160,10 +160,12 @@ describe('two screens covers the Build Room (item 3)', () => {
     const m = new Map();
     return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
   };
-  test('build is in TWO_SURFACE_TYPES: on by default on dev only, as Call & Answer', () => {
+  // No tier default for either type since experience plan 2b (F6): the Build
+  // Room asks its own "Where will the room watch?" until the browser chooses.
+  test('build is in TWO_SURFACE_TYPES: off until chosen on every tier, as Call & Answer', () => {
     expect(TWO_SURFACE_TYPES).toEqual(['call-and-answer', 'build']);
-    expect(twoSurfacesOn({ env: 'development', search: '', storage: memory(), gameType: 'build' })).toBe(true);
-    for (const env of ['test', 'production', undefined]) {
+    expect(twoSurfacesOn({ env: 'test', search: '?surfaces=two', storage: memory(), gameType: 'build' })).toBe(true);
+    for (const env of ['development', 'test', 'production', undefined]) {
       expect(twoSurfacesOn({ env, search: '', storage: memory(), gameType: 'build' })).toBe(false);
     }
   });
@@ -176,8 +178,8 @@ describe('two screens covers the Build Room (item 3)', () => {
     expect(quick).not.toMatch(/'build': \[\]/);
     // The round types' panel and Setup are GameHostPage's; a Build Room session never reaches it.
     expect(read('App.jsx')).toMatch(/if \(\/\^\\\/build\\\/\?\$\/\.test\(path\)\)/);
-    // The lobby chooser stays Call & Answer's own.
-    expect(read('GameHostPage.jsx')).toMatch(/normalizeGameType\(currentGameType\) === 'call-and-answer'\n\s*&& \(roomScreenChoice === null \|\| roomScreenOpen\)/);
+    // The lobby chooser (Setup's step 1) stays Call & Answer's own.
+    expect(read('GameHostPage.jsx')).toMatch(/const setupOn = hostPhase === 'LOBBY' && Boolean\(gameId\) && !eventCode\n\s*&& normalizeGameType\(currentGameType\) === 'call-and-answer' && typeKnownFor === gameId;/);
   });
 });
 

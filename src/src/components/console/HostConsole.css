@@ -204,6 +204,15 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
    centre (the Build Room's folds): it runs from the next-step card's row to
    the foot and scrolls inside itself. Call & Answer has none: unchanged. */
 .hc.hc--side { grid-template-columns: 340px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail needs side" "rail pulse side" "rail main side"; }
+/* SETUP IS THE LOBBY (experience plan 2b, session-start F7): no rail until
+   round 1, so Setup takes the full width. */
+.hc.hc--setup { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "loop" "now" "needs" "pulse" "main"; }
+@media (max-width: 760px) {
+  .hc.hc--setup .hc-now { flex-wrap: wrap; margin: 12px 12px 0; }
+  .hc.hc--setup .hc-now-text { flex-basis: 100%; }
+  .hc.hc--setup .hc-main { padding: 12px; }
+  .hc.hc--setup .hc-top { overflow-x: auto; }
+}
 .hc-side { grid-area: side; min-height: 0; overflow: auto; border-left: 1px solid rgb(var(--glow-rgb) / .12); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
 /* The strip with nothing live (answer (c)): kept, dimmed; its label stays readable. */
 .hc-loop.is-idle .wfs-loop .wfs-step { opacity: .55; }

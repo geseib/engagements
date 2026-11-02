@@ -1,10 +1,13 @@
 /**
  * THE TWO-SURFACE SWITCH (docs/design/two-surface/PLAN.md D6).
  *
- * On by default only on dev (`window.ENV === 'development'`), and only for the
- * game types the Presentation covers (Call & Answer first; trivia and poll are
- * Phase 7). `?surfaces=two|classic` overrides it on any tier and is remembered
- * per browser, so the owner can try it on test without a deploy.
+ * The browser's own choice, and only for the types the room's window covers.
+ * NO TIER DEFAULT (session-start F6; experience plan 2b, owner 1 Nov 2026):
+ * until this browser has chosen, it is one screen here and Setup's step 1
+ * asks "Where will the room watch?" on every tier. It used to default to two
+ * screens on dev only, which is why dev and test felt like two products.
+ * `?surfaces=two|classic` still sets it on any tier and is remembered per
+ * browser, for testing.
  *
  * `/present` itself is live on every tier; this decides only whether the host's
  * screens offer it.
@@ -45,7 +48,8 @@ export function twoSurfacesOn({ env, search, storage, gameType } = {}) {
   try { stored = storage ? storage.getItem(SURFACES_KEY) : null; } catch (e) { stored = null; }
   if (stored === 'two') return true;
   if (stored === 'classic') return false;
-  return env === 'development';
+  // `env` is accepted and ignored: no tier picks for the host (F6).
+  return false;
 }
 
 /**
@@ -60,7 +64,8 @@ export function twoSurfacesFor(choice, { gameType, env } = {}) {
   if (!TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer')) return false;
   if (choice === 'two') return true;
   if (choice === 'classic') return false;
-  return env === 'development';
+  // No choice yet: one screen while Setup asks (F6), whatever the tier.
+  return false;
 }
 
 /** The page's own reading, for components. */

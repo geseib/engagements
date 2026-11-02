@@ -15,10 +15,10 @@ import ReadPanel from '../components/console/panels/ReadPanel';
 const host = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
-test('the choice decides; no choice falls back to the tier default', () => {
+test('the choice decides; no choice is one screen on every tier while Setup asks (F6)', () => {
   expect(twoSurfacesFor('two', { gameType: 'call-and-answer' })).toBe(true);
   expect(twoSurfacesFor('classic', { gameType: 'call-and-answer', env: 'development' })).toBe(false);
-  expect(twoSurfacesFor(null, { gameType: 'call-and-answer', env: 'development' })).toBe(true);
+  expect(twoSurfacesFor(null, { gameType: 'call-and-answer', env: 'development' })).toBe(false);
   expect(twoSurfacesFor(null, { gameType: 'call-and-answer', env: 'test' })).toBe(false);
   expect(twoSurfacesFor('two', { gameType: 'trivia' })).toBe(false);
 });

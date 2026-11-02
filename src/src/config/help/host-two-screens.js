@@ -123,7 +123,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Where you choose', text: 'The lobby asks **Where will the room watch?**; Quick start shows **Where the room watches** above the sets when a Call & Answer set is listed; during a session it is in Settings, under Screens. This browser remembers your choice.' },
+            { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen; Quick start shows **Where the room watches** above the sets when a Call & Answer set is listed; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
             { title: 'Changing your mind', text: 'Switch between **One screen** and **Two screens** in Settings, under Screens. It applies at once, to this laptop and the room\'s window; the round carries on.' },
             { title: 'When to stay on one screen', text: 'If the room sees this laptop itself (a mirrored display, or the laptop is all there is), keep one screen: the room would otherwise see your console.' },
           ],
@@ -145,7 +145,7 @@ const twoScreens = {
           t: 'steps',
           items: [
             { title: 'Connect the room\'s display', text: 'Plug in the room\'s TV or display as a second display, set to extend your desktop rather than mirror it.' },
-            { title: 'Open it', text: 'Press **Room\'s window ↗** on the console\'s top line (or **Open ↗** in Settings, under Screens). Quick start on two screens opens it for you as the session starts.' },
+            { title: 'Open it', text: 'Setup\'s step 2 makes it the one orange button, **Open the room\'s window ↗**. **Room\'s window ↗** on the top bar (or **Open ↗** in Settings, under Screens) does the same at any time. **Start · two screens** on your sessions list, and Quick start on two screens, open it for you as the session starts.' },
             { title: 'Put it on the room\'s display', text: 'In Chrome or Edge with a second display, it opens there and fills it. The first time, the browser asks to manage windows on all your displays: allow it. In other browsers, or if you say no, it opens beside you: drag it across.' },
             { title: 'Fill the screen', text: 'Click the room\'s window once. While it shows **Click anywhere to fill the screen**, that click makes it full screen. F does the same anywhere, and F again leaves full screen.' },
           ],
@@ -154,7 +154,7 @@ const twoScreens = {
           t: 'note',
           tone: 'tip',
           title: 'If nothing opened',
-          text: 'The browser blocked the window. Press **Room\'s window ↗** on the top line, or allow pop-ups for Engage.',
+          text: 'The browser blocked the window. Setup stays on step 2 and says so: press **Open the room\'s window ↗** there, or allow pop-ups for Engage.',
         },
         {
           t: 'p',
@@ -259,11 +259,11 @@ const twoScreens = {
           head: ['Part', 'What it is for'],
           rows: [
             ['Top bar', 'Always in this order: **Main menu** (the start screen; the session keeps running, and Rejoin brings you back), the session\'s name, **Join** and the code, **Room\'s window ↗** with its status, **Not hearing the room** only while the connection is down, the bell (**Needs you**), **?**, and **Session menu**.'],
-            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup holds Screens and **Session menu**.'],
+            ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup is the lobby\'s own panel: where the room watches, the room\'s window and its size.'],
             ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
             ['The Needs-you line', 'Under Your part now: calm, or amber with what needs you and its buttons.'],
             ['Three tiles', '**Answered** (or **Voted**) with a bar, turning to **Everyone\'s in**; **Time**, how long the round has been open; **Since this round opened**, who joined since, and any late items to review.'],
-            ['Left rail', 'Round queue, People and Late & not reviewed (see The left rail).'],
+            ['Left rail', 'From round 1: round queue, People and Late & not reviewed (see The left rail).'],
             ['Main area', 'What the step needs, from the lobby to the report (see The main area).'],
           ],
         },
@@ -297,7 +297,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Lobby', text: 'The code and who has joined.' },
+            { title: 'Setup (the lobby)', text: 'Three steps: where the room watches, the room\'s window (open, full screen, and the size), and the room joining. The join code goes up only at step 3, with how many are in, who arrived in the last minute, named, and what round 1 is. There is no left rail and no tiles until round 1; the rail appears with it. **Setup** on the strip opens the same panel during the session, with the joining folded to one line.' },
             { title: 'Answering', text: 'The title, the lesson and the question, then the responses as they arrive, newest first. While names are hidden they read Response 1, Response 2. **For you** shows the question\'s background notes, which only you see.' },
             { title: 'Voting', text: '**The ballot, in the order the room sees it**: every response as Response 1, 2 and so on, never a name.' },
             { title: 'Results', text: 'The responses ranked, with names and points where the round shows them.' },

@@ -575,8 +575,11 @@ describe('the stage takes a set instruction from the question, not only the cata
     // THE REGRESSION: fix round 1 left this reading "Start First Round" —
     // the generic default — forever, because the lookup that would have
     // supplied "Lesson" was never called on this path.
+    // Setup is the lobby (experience plan 2b): before the host has chosen
+    // where the room watches, Your part now holds round 1's slot and names it
+    // with the same label ("Start lesson 1 · after setup").
     await waitFor(
-      () => expect(screen.getByText('Start lesson 1')).toBeInTheDocument(),
+      () => expect(screen.getByText(/^Start lesson 1\b/)).toBeInTheDocument(),
       { timeout: 2000 }
     );
   });

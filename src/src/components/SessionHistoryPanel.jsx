@@ -4,6 +4,8 @@ import Icon from './Icon';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import SetImageBadge from './SetImageBadge';
+import { openPendingRoomWindow } from '../present/roomWindow';
+import { START_WORDS, startModeFor } from '../config/sessionStart';
 import { formatWhen, countOrDash } from '../config/tableCells';
 import {
   isBuildSession, buildRoomPath, buildReportPath,
@@ -179,6 +181,16 @@ export default function SessionHistoryPanel({
   onResults = () => {},
   onOpen = () => {},
   onStart = () => {},
+  /*
+    A RETURNING HOST'S START (session-start D2, F5; experience plan 2b): the
+    browser's stored choice of where the room watches ('two' | 'classic' |
+    null). With 'two', a Call & Answer row's Start says "Start · two screens"
+    and opens the room's window inside its own click (openPendingRoomWindow),
+    handing it to onStart as its third argument: (gameId, title,
+    { pending, blocked }). `onRoomScreen` is "One screen this time".
+  */
+  roomScreen = null,
+  onRoomScreen = null,
   /** Where a Build Room row goes: /build is a page of its own. Injectable for tests. */
   navigate = (url) => window.location.assign(url),
   onEdit = () => {},
@@ -213,6 +225,15 @@ export default function SessionHistoryPanel({
   );
 
   const titleOf = (s) => s.title || s.eventTitle || 'Untitled session';
+  /** Start, said for what it will do; two screens opens the window in the click. */
+  const startRow = (session, title) => {
+    const mode = startModeFor(session, roomScreen);
+    if (mode !== 'two') { onStart(session.gameId, title); return; }
+    const pending = openPendingRoomWindow();
+    onStart(session.gameId, title, { pending, blocked: !pending });
+  };
+  const startLabel = (session) => START_WORDS.label(startModeFor(session, roomScreen));
+  const offersMode = roomScreen && sorted.some((s) => !isEventRow(s) && rowActions(s).start && startModeFor(s, roomScreen));
 
   return (
     <div className="shist" data-theme="dark">
@@ -269,8 +290,8 @@ export default function SessionHistoryPanel({
                  button calls it. This passed the whole row, and the page built
                  POST /games/[object Object]/start from it — "Game not found"
                  (issue #48 finding 1). */
-              <button type="button" className="shist__done-start" onClick={() => onStart(row.gameId, done.title || titleOf(row))}>
-                <Icon name="Play" weight="fill" size={13} color="currentColor" /> Start it now
+              <button type="button" className="shist__done-start" onClick={() => startRow(row, done.title || titleOf(row))}>
+                <Icon name="Play" weight="fill" size={13} color="currentColor" /> {START_WORDS.now(startModeFor(row, roomScreen))}
               </button>
             )}
           </div>
@@ -349,6 +370,16 @@ export default function SessionHistoryPanel({
           </tbody>
         </table>
       </div>
+      {/* LIKE LAST TIME (A7): what Start will do, and the one-off way round it. */}
+      {offersMode ? (
+        <p className="shist__mode" data-testid="shist-mode">
+          <Icon name="CheckCircle" weight="fill" size={16} color="currentColor" />
+          <span><b>{START_WORDS.likeLast(roomScreen)}</b> {START_WORDS.likeLastLine(roomScreen)}</span>
+          {roomScreen === 'two' && typeof onRoomScreen === 'function' ? (
+            <button type="button" className="shist__mode-switch" onClick={() => onRoomScreen('classic')}>{START_WORDS.oneThisTime}</button>
+          ) : null}
+        </p>
+      ) : null}
     </div>
   );
 
@@ -489,10 +520,10 @@ export default function SessionHistoryPanel({
                         <button
                           type="button"
                           className="shist__btn shist__btn--sm"
-                          onClick={() => onStart(session.gameId, title)}
-                          title={`Start "${title}" — puts it on the stage and players can join`}
+                          onClick={() => startRow(session, title)}
+                          title={START_WORDS.hint(startModeFor(session, roomScreen), title)}
                         >
-                          <Icon name="PlayCircle" weight="fill" size={14} /> Start
+                          <Icon name="PlayCircle" weight="fill" size={14} /> {startLabel(session)}
                         </button>
                       )}
                       {acts.continue && (

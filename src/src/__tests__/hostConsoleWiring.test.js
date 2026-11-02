@@ -6,7 +6,9 @@ const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'ut
 
 test('the console renders only on two screens, round types, outside an event', () => {
   expect(page).toMatch(/const useConsole = twoSurfaces && !eventCode && \['call-and-answer', 'trivia', 'poll', 'wavelength'\]\.includes\(normalizeGameType\(currentGameType\)\)/);
-  expect(page).toMatch(/useConsole \? \(\s*<HostConsole/);
+  // `consoleOn`: the console on two screens, or Setup's frame in the lobby on either (experience plan 2b).
+  expect(page).toMatch(/const consoleOn = useConsole \|\| setupFrame;/);
+  expect(page).toMatch(/consoleOn \? \(\s*<HostConsole/);
 });
 
 test('the host-state read keeps the window status and the host notes', () => {
