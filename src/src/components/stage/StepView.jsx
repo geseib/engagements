@@ -56,6 +56,9 @@ export default function StepView({ step, facts = {}, onAllSettings, screens = nu
         <p className="wfs-view-note">{V.reportFromSession}</p>
       </>
     );
+  } else if (step.id === 'scores') {
+    // Trivia's Scores (2g): the scoreboard, any time after a round is scored.
+    body = <p className="wfs-view-p">{V.scoresNote}</p>;
   } else if (step.state === 'done') {
     const n = facts.playerCount || 0;
     const line = step.id === 'answer' ? V.answeredOf(facts.answered || 0, n)

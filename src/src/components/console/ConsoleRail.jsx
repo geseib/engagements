@@ -129,6 +129,17 @@ export default function ConsoleRail({
             <li key={p.name}>
               <span className={MARK[p.state] === '✓' ? 'hc-tick' : 'hc-wait'}>{MARK[p.state]}</span>
               <span>{p.name}{(META[p.state] || p.from) ? <span className="hc-meta">{` · ${META[p.state] || p.from}`}</span> : null}</span>
+              {/* The format's one added fact, at the row's end (§3.2b, 2g): Trivia's score, ✓/✗ in front after the reveal. */}
+              {p.fact ? (
+                <span className="hc-fact" data-testid="person-fact">
+                  {p.fact.mark ? (
+                    <span className={p.fact.mark === 'right' ? 'hc-tick' : 'hc-miss'} aria-label={p.fact.mark === 'right' ? CW.gotItRight : CW.gotItWrong}>
+                      {p.fact.mark === 'right' ? '✓' : '✗'}
+                    </span>
+                  ) : null}
+                  <span className="hc-score">{p.fact.score}</span>
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

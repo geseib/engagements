@@ -28,6 +28,10 @@ export const PULSE_WORDS = Object.freeze({
   people: 'People',
   time: 'Time',
   since: 'Since this round opened',
+  // Trivia's tile 3 (experience plan §3.2a, 2g): host-only, never on the wall.
+  correct: 'Correct so far',
+  correctOf: (n) => `of ${n}`,
+  onlyYou: 'only you see this',
   everyoneIn: 'Everyone\'s in',
   stillWriting: 'still writing',
   stillVoting: 'still voting',
@@ -111,6 +115,8 @@ export function pulseFor({
   timer = null,
   // Under reduced motion the ring moves in steps (D3: 10 s), not every second.
   ringStepMs = 0,
+  // A format with no vote (Trivia, Poll; 2g): after the round, "N here", never "0 voted".
+  noVote = false,
 } = {}) {
   const phase = pulsePhase(moment);
   const n = Math.max(0, Number(players) || 0);
@@ -136,7 +142,7 @@ export function pulseFor({
           : `${Math.max(0, n - done)} ${phase === 'answer' ? PULSE_WORDS.stillWriting : PULSE_WORDS.stillVoting}`,
     };
   } else if (phase === 'after') {
-    room = { eyebrow: PULSE_WORDS.thisRound, value: String(a), of: PULSE_WORDS.answeredLower, bar: null, everyoneIn: false, sub: `${v} ${PULSE_WORDS.votedLower}` };
+    room = { eyebrow: PULSE_WORDS.thisRound, value: String(a), of: PULSE_WORDS.answeredLower, bar: null, everyoneIn: false, sub: noVote ? `${n} ${PULSE_WORDS.here}` : `${v} ${PULSE_WORDS.votedLower}` };
   } else {
     room = { eyebrow: PULSE_WORDS.people, value: String(n), of: PULSE_WORDS.here, bar: null, everyoneIn: false, sub: n === 0 ? PULSE_WORDS.nobodyYet : PULSE_WORDS.inTheRoom };
   }

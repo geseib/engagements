@@ -4,6 +4,7 @@ const { resolveSetPartition } = require('./set-version');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
+const { correctSlots, drawnOptions } = require('./trivia-answer');
 const { normalizeNames } = require('./survey-names');
 
 const { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll } = require('./room-counts');
@@ -130,6 +131,8 @@ exports.handler = async (event) => {
     const lessonNumber = stateItem?.LessonNumber || 0;
     let currentQuestionData = null;
     let currentQuestionHostNotes = null;
+    // The trivia answer for the HOST'S DOOR only (experience plan 2g): see below.
+    let currentQuestionHostAnswer = null;
     
     // Use the actual state directly (ASK#001, VOTE#001, etc.)
     const frontendState = currentState;
@@ -356,6 +359,14 @@ exports.handler = async (event) => {
 
           if (question.Item) {
             currentQuestionHostNotes = questionItem.Background ? { background: String(questionItem.Background) } : null;
+            if ((gameMetadata.Item && gameMetadata.Item.GameType) === 'trivia') {
+              // The DRAWN letters (what the room sees and the phones submit),
+              // resolved by the scorer's own module, so "B is correct" on the
+              // console is the B the room is paid for.
+              const slots = correctSlots(questionItem);
+              const letters = drawnOptions(questionItem).filter((o) => slots.includes(o.slot)).map((o) => o.letter);
+              currentQuestionHostAnswer = letters.length ? { round: currentQuestionNumber, letters } : null;
+            }
             currentQuestionData = {
               id: currentQuestionNumber,
               questionNumber: currentQuestionNumber,
@@ -636,6 +647,18 @@ exports.handler = async (event) => {
       // set's Background, on the host door only. /state never carries it
       // (tests/present-public-reads.js §2).
       response.hostNotes = currentQuestionHostNotes || null;
+
+      /*
+        THE PRIVATE TRIVIA ANSWER (experience plan 2g, §3.2a: "B is correct.
+        Only you see this."). The console on two screens marks it for the host
+        while the room is still answering, and the phone Remote is the host's
+        private half on one screen. `{ round, letters }`: the drawn letters,
+        resolved by trivia-answer.js, the module that scores the room. ON
+        THIS DOOR ONLY: the public `/state`, `?view=room`, the player's read
+        and every frame carry no answer before RESULTS
+        (tests/trivia-answer-private.js).
+      */
+      response.hostAnswer = currentQuestionHostAnswer;
 
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.

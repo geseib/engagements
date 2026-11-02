@@ -19,7 +19,26 @@ const stateOf = (strip) => Object.fromEntries(strip.steps.map((s) => [s.id, s.st
 describe('the steps', () => {
   test('Call and Answer has six steps; a type without a vote has five', () => {
     expect(stepIdsFor('call-and-answer')).toEqual(['setup', 'answer', 'vote', 'heard', 'ask', 'finish']);
-    expect(stepIdsFor('trivia')).toEqual(['setup', 'answer', 'heard', 'ask', 'finish']);
+    expect(stepIdsFor('wavelength')).toEqual(['setup', 'answer', 'heard', 'ask', 'finish']);
+  });
+
+  // Experience plan §3.2a (2g): Trivia "Question · Reveal · Scores", Poll "Ask · Results".
+  test('Trivia names its steps Question, Reveal, Scores; Poll Ask, Results', () => {
+    expect(stepIdsFor('trivia')).toEqual(['setup', 'answer', 'heard', 'scores', 'finish']);
+    expect(stepIdsFor('poll')).toEqual(['setup', 'answer', 'heard', 'finish']);
+    const t = stripFor(snap({ gameType: 'trivia', state: 'ASK#002' }));
+    expect(t.steps.filter((s) => s.loop).map((s) => s.label)).toEqual(['Question', 'Reveal', 'Scores']);
+    expect(t.steps.find((s) => s.id === 'scores').optional).toBe(true);
+    const p = stripFor(snap({ gameType: 'poll', state: 'RESULTS#002' }));
+    expect(p.steps.filter((s) => s.loop).map((s) => s.label)).toEqual(['Ask', 'Results']);
+    expect(p.live).toBe('heard');
+  });
+
+  test('Scores is optional: a trivia round past its reveal leaves it unticked', () => {
+    const s = stripFor(snap({ gameType: 'trivia', state: 'ENDED' }));
+    expect(s.steps.find((x) => x.id === 'scores').state).toBe('done');
+    const r = stripFor(snap({ gameType: 'trivia', state: 'RESULTS#002' }));
+    expect(stateOf(r)).toEqual({ setup: 'done', answer: 'done', heard: 'live', scores: 'todo', finish: 'todo' });
   });
 
   test('the lobby: Setup is live and nothing in the loop is done', () => {

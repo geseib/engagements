@@ -50,7 +50,35 @@ export function peopleSummary({ players = 0 } = {}) {
  * doing-now slot when there is nothing being done (here), the way anyone new
  * shows when they joined; it is never a second fact beside writing or voted.
  */
-export function consolePeopleFor({
+export function consolePeopleFor(args = {}) {
+  const { facts = null } = args;
+  const rows = peopleRows(args);
+  if (!facts) return rows;
+  return rows.map((row) => (facts[row.name] ? { ...row, fact: facts[row.name] } : row));
+}
+
+/*
+  THE ONE ADDED FACT (experience plan §3.2b, step 2g): a format adds one fact
+  at the end of the row and never anything else. Trivia: the running score,
+  with ✓ or ✗ in front of it once the answer is out (`marks`, name → true or
+  false from the round's results, passed only after the reveal). Poll and
+  Wavelength add none: null, and the slot stays empty. (Call & Answer's score
+  is its own step; this returns null for it today.)
+*/
+export function personFactsFor({ gameType, players = [], marks = null } = {}) {
+  if (gameType !== 'trivia') return null;
+  const out = {};
+  (players || []).forEach((p) => {
+    const name = (p && (p.name || p.playerName)) || '';
+    if (!name) return;
+    const score = Number(p.score !== undefined ? p.score : p.totalScore) || 0;
+    const mark = marks && Object.prototype.hasOwnProperty.call(marks, name) ? (marks[name] ? 'right' : 'wrong') : null;
+    out[name] = { score, mark };
+  });
+  return out;
+}
+
+function peopleRows({
   moment, players = [], answeredNames = [], answeredCount = 0, votedNames = [], votedCount = 0,
   gameType, anonymousUntilReveal, authorsRevealed, from = null,
 } = {}) {

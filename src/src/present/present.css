@@ -536,6 +536,78 @@ html.present-locked body {
   color: var(--accent-text);
 }
 
+/* ---- Trivia and Poll (experience plan 2g) ----
+   Trivia: the lettered options in two columns, nothing marked while the room
+   answers; at the reveal the right one carries the word "Correct" and a
+   success ring, the rest go quiet (--muted ink, never opacity, so the ratio
+   is the token's), and each option's share is the fill behind it, as the
+   results tally's bars are. Poll: the survey's own board (PollBoard, .svw),
+   handed the wall's ladder instead of the stage's --t-* steps. */
+.present .present-qprompt {
+  margin: 0 0 .7em;
+  max-width: 52ch;
+  font-size: calc(var(--L-body) * var(--fit));
+  line-height: 1.32;
+  color: var(--text);
+}
+.present .present-opts {
+  list-style: none;
+  margin: .2em 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(20px * var(--fit));
+  align-content: start;
+}
+.present .present-opt {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: .6em;
+  padding: calc(22px * var(--fit)) calc(28px * var(--fit));
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 var(--hair, 1px) var(--present-line-strong);
+  font-size: calc(var(--L-secondary) * var(--fit));
+}
+.present .present-opt-l { flex: none; font-size: .8em; }
+.present .present-opt-t { flex: 1 1 auto; min-width: 0; line-height: 1.25; font-weight: 600; overflow-wrap: anywhere; }
+/* The share fill is a neutral warm tint, not the skin's accent (orange under
+   Classic would read as a second "right" colour); the right option's fill is
+   the success tint, the same hue as its ring and its word. */
+.present .present-opt-fill { position: absolute; top: 0; bottom: 0; left: 0; z-index: -1; background: rgb(var(--glow-rgb) / .12); }
+.present .present-opt.is-correct .present-opt-fill { background: rgb(var(--success-rgb) / .24); }
+.present .present-opt-pct { flex: none; font-size: calc(var(--L-body) * var(--fit)); font-weight: 700; color: var(--text); }
+.present .present-opt-flag {
+  flex: none;
+  font-size: calc(var(--L-meta) * var(--fit));
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--present-success-text);
+}
+.present .present-opt.is-correct { box-shadow: inset 0 0 0 4px var(--success); }
+.present .present-opt.is-correct .present-opt-l.ui-badge { background: var(--success); color: var(--bg); box-shadow: none; }
+.present .present-opt.is-dim .present-opt-t { color: var(--muted); font-weight: 500; }
+.present .present-poll { min-width: 0; }
+.present .present-poll .svw {
+  --svr-t-floor: var(--L-meta);
+  --svr-t-label: calc(var(--L-body) * var(--fit));
+  --svr-t-body: calc(var(--L-secondary) * var(--fit));
+  --svr-t-head: calc(var(--L-secondary) * var(--fit));
+  --svr-t-numeral: calc(var(--L-hero) * var(--fit));
+  --svr-on-accent: var(--on-accent);
+  font-size: var(--svr-t-body);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: calc(18px * var(--fit));
+}
+.present .present-poll .svw .rule-note { margin: 0; font-size: calc(var(--L-body) * var(--fit)); color: var(--muted); }
+
 /* ---- one result up (frame 12): its place, the answer, the ladder ---- */
 .present .present-result {
   flex: 1;

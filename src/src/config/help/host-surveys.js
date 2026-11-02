@@ -29,7 +29,7 @@ const hostSurveys = {
       "Two-minute warning", "See the results" + tertiary "Walk through".
       GameSetupDialog.jsx: a survey is created AND opened by "Open the survey"
       (openNewSurvey in GameHostPage.jsx). One screen only (config/surfaces.js:
-      two screens are Call & Answer only).
+      two screens are Call & Answer, Trivia and Poll).
     */
     {
       id: 'how-a-survey-runs',

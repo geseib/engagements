@@ -28,8 +28,17 @@
   remote. Sources, by section:
 
     when-two-screens   config/surfaces.js TWO_SURFACE_TYPES (call-and-answer,
-                       build); config/surfaces.js consoleFor / CONSOLE_TYPES
-                       (two screens, Call & Answer, in an event too since 2d);
+                       build, trivia and poll since 2g); ONE_SCREEN_WHY
+                       (Wavelength's reason, ScreensGroup `why`);
+                       config/surfaces.js consoleFor / CONSOLE_TYPES
+                       (two screens, Call & Answer, in an event too since 2d;
+                       Trivia and Poll since 2g);
+    trivia-poll        presentModel.js triviaModel / pollModel,
+                       PresentMoments.jsx PresentTriviaQuestion,
+                       PresentTriviaReveal, PresentPoll; console
+                       panels/FormatPanels.jsx; ConsolePulse `correct`;
+                       config/consoleRail.js personFactsFor; get-game-state.js
+                       hostAnswer (host door only); workflowStrip.js TYPE_STEPS.
                        config/roomScreen.js ROOM_WORDS, SCREEN_WORDS;
                        QuickstartMenu.jsx (the choice shows when a C&A set is
                        listed); SessionSetupPanel "Screens · applies now".
@@ -110,7 +119,7 @@ const twoScreens = {
   id: 'host-two-screens',
   title: 'Two screens and your phone',
   icon: 'Monitor',
-  summary: 'Call & Answer on two screens: opening the room\'s window, what the room sees, your laptop console, the join code, video calls, and your phone as a remote.',
+  summary: 'Call & Answer, Trivia and Poll on two screens: opening the room\'s window, what the room sees, your laptop console, the join code, video calls, and your phone as a remote.',
   sections: [
     {
       id: 'when-two-screens',
@@ -119,21 +128,25 @@ const twoScreens = {
       blocks: [
         {
           t: 'p',
-          text: 'Two screens is for Call & Answer sessions, on their own or as an item in an event. The room watches the room\'s window on a display of its own, and your laptop shows your console: the next step, the responses, Workie\'s read and the controls, none of which the room sees. Every other kind of session runs on one screen, where the room watches the stage on your laptop.',
+          text: 'Two screens is for Call & Answer, Trivia and Poll sessions, on their own or as an item in an event. The room watches the room\'s window on a display of its own, and your laptop shows your console: the next step, the responses or the answer, Workie\'s read and the controls, none of which the room sees.',
+        },
+        {
+          t: 'table',
+          head: ['Format', 'Screens'],
+          rows: [
+            ['Call & Answer, Trivia, Poll', 'One screen or two: you choose.'],
+            ['Build Room', 'One screen or two, with its own console (its guide covers it).'],
+            ['Wavelength', 'One screen for now. The room\'s window has no Write and Reveal moments yet; Settings says so under Screens.'],
+            ['Survey', 'One screen: people answer in their own time, so there is no round for a room to watch.'],
+          ],
         },
         {
           t: 'list',
           items: [
-            { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen; Quick start shows **Where the room watches** above the sets when a Call & Answer set is listed; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
+            { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen; Quick start shows **Where the room watches** above the sets when a set that can use two screens is listed; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
             { title: 'Changing your mind', text: 'Switch between **One screen** and **Two screens** in Settings, under Screens. It applies at once, to this laptop and the room\'s window; the round carries on.' },
             { title: 'When to stay on one screen', text: 'If the room sees this laptop itself (a mirrored display, or the laptop is all there is), keep one screen: the room would otherwise see your console.' },
           ],
-        },
-        {
-          t: 'note',
-          tone: 'info',
-          title: 'Build Room',
-          text: 'A Build Room has its own two-screen console with its own controls. Its guide covers it.',
         },
       ],
     },
@@ -223,6 +236,26 @@ const twoScreens = {
         {
           t: 'p',
           text: 'When the round moves on, a band crosses the screen naming the new step: Answering, Voting, or Results with "Look up".',
+        },
+      ],
+    },
+    {
+      id: 'trivia-poll',
+      title: 'Trivia and Poll on two screens',
+      icon: 'ListChecks',
+      blocks: [
+        {
+          t: 'table',
+          head: ['Moment', 'On the room\'s window', 'On your console'],
+          rows: [
+            ['Trivia, answering', 'The question and its lettered options, nothing marked, and a count of who has answered.', 'The options with how many picked each, and the answer in a locked line: "B is correct. Only you see this." **Correct so far** counts the right answers.'],
+            ['Trivia, the answer', 'The right option marked **Correct**, the rest quiet, how the room split across them, and how many got it.', 'The same options, the answer, and a tick or a cross by each person\'s score under People.'],
+            ['Poll', 'The board, filling in as people answer, then still at the results.', 'The same board.'],
+          ],
+        },
+        {
+          t: 'p',
+          text: 'The answer reaches no phone and not the room\'s window until you press **Show results**. The scoreboard is the strip\'s **Scores** step: show it with S, or under People.',
         },
       ],
     },

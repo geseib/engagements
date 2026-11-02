@@ -55,6 +55,17 @@ const CW = Object.freeze({
   noComments: 'No comments yet.',
   waitingForResponses: 'No responses yet.',
   points: (n) => (n === 1 ? '1 point' : `${n} points`),
+  // ── Trivia and Poll on the console (experience plan 2g) ──────────────
+  gotItRight: 'Got it right',
+  gotItWrong: 'Got it wrong',
+  /** The private answer: "B is correct. Only you see this." */
+  isCorrect: (letters) => `${letters.join(' and ')} ${letters.length > 1 ? 'are' : 'is'} correct.`,
+  onlyYou: 'Only you see this.',
+  onlyYouLong: 'The room\'s window shows the options with nothing marked until you show results.',
+  answerUnknown: 'This question has no answer marked in its set, so nobody can score on it.',
+  revealedOnWall: 'The room\'s window shows the answer now.',
+  liveBoardNote: 'The board fills in live on the room\'s window.',
+  boardFinal: 'The room\'s window shows this result.',
 });
 
 export default CW;

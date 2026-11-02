@@ -97,7 +97,10 @@ export function presentFitKey(model) {
   // The voting overview's answers and the QR panel change the layout too.
   const answers = Array.isArray(model.answers) ? model.answers.map((a) => (a && a.text) || '').join('\u241E') : '';
   const join = model.join ? 'qr' : '';
-  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task, answers, join]
+  // Trivia's options (and the reveal landing on them) and a poll's board (2g).
+  const options = Array.isArray(model.options) ? model.options.map((o) => `${o.text}${o.share === null || o.share === undefined ? '' : `:${o.share}`}`).join('␞') : '';
+  const board = model.question ? `${model.tally ? model.tally.n : 0}` : '';
+  return [model.moment, model.index, model.part, model.page, model.text, model.content, model.title, model.joined, rows, model.more, model.task, answers, join, model.prompt, options, model.loading, board]
     .map((x) => (x === undefined ? '' : String(x))).join('|');
 }
 

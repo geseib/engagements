@@ -200,6 +200,30 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc .askstage .askstage-idea em { font-size: 13px; }
 .hc .hc-panel > .qdetail { font-size: 15px; max-width: none; }
 
+/* TRIVIA AND POLL IN THE CONTENT AREA (experience plan 2g; frames p-2, p-6).
+   Trivia: the options two up, each with its live count and a bar (the count
+   relative to the most-picked option), the right one with a success edge, and
+   the private answer under them in one locked line. Poll: the survey's board
+   (PollBoard, .svw) pinned to the laptop ladder, as the room question is. */
+.hc-opts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hc-opt { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "l t n" "l bar bar"; column-gap: 12px; row-gap: 8px; align-items: center; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc-opt-l { grid-area: l; width: 32px; height: 32px; border-radius: 8px; display: inline-grid; place-items: center; font-size: 15px; font-weight: 800; background: var(--surface-2); color: var(--text); }
+.hc-opt-t { grid-area: t; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.hc-opt-n { grid-area: n; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.hc-opt-bar { grid-area: bar; display: block; height: 6px; border-radius: 999px; background: rgb(var(--glow-rgb) / .12); overflow: hidden; }
+.hc-opt-bar i { display: block; height: 100%; background: var(--info); border-radius: inherit; }
+.hc-opt.is-correct { border-color: var(--success); box-shadow: inset 0 0 0 1px var(--success); }
+.hc-opt.is-correct .hc-opt-l { background: var(--success); color: var(--bg); }
+.hc-private { margin: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .22); font-size: 15px; color: var(--text); }
+.hc-private svg { flex: none; color: var(--muted); }
+.hc-private b { font-weight: 700; }
+.hc .hc-poll .svw { --svr-t-floor: 12px; --svr-t-label: 13px; --svr-t-body: 15px; --svr-t-head: 19px; --svr-t-numeral: 24px; font-size: 15px; gap: 10px; }
+.hc .hc-poll .svw .rule-note { margin: 0; font-size: 13px; color: var(--muted); }
+/* THE PERSON ROW'S ADDED FACT (§3.2b): at the row's end, ✓ or ✗ in front of the score. */
+.hc-list li .hc-fact { margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.hc-score { color: var(--text); font-weight: 600; min-width: 3ch; text-align: right; }
+.hc-miss { color: var(--danger-text); font-weight: 800; }
+
 /* ONE CONSOLE, OTHER USES (parity PLAN §2.6, B8). A side column right of the
    centre (the Build Room's folds): it runs from the next-step card's row to
    the foot and scrolls inside itself. Call & Answer has none: unchanged. */

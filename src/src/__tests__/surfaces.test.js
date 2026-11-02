@@ -14,9 +14,30 @@ describe('twoSurfacesOn (two-surface D6)', () => {
     }
   });
   it('off for a type the Presentation does not cover yet, even when asked for', () => {
-    for (const gameType of ['trivia', 'poll', 'survey', 'build-room', 'wavelength']) {
+    for (const gameType of ['survey', 'build-room', 'wavelength']) {
       expect(twoSurfacesOn({ env: 'development', search: '?surfaces=two', storage: memory(), gameType })).toBe(false);
     }
+  });
+  // Experience plan 2g (§7 decision 10): the room's window covers Trivia and Poll.
+  it('Trivia and Poll can use two screens, off until chosen as Call & Answer', () => {
+    for (const gameType of ['trivia', 'poll']) {
+      expect(twoSurfacesOn({ env: 'test', search: '?surfaces=two', storage: memory(), gameType })).toBe(true);
+      expect(twoSurfacesOn({ env: 'development', search: '', storage: memory(), gameType })).toBe(false);
+    }
+  });
+});
+
+describe('one screen only, said with the reason (decision 10 fallback)', () => {
+  // eslint-disable-next-line global-require
+  const { oneScreenWhy, TWO_SURFACE_TYPES, CONSOLE_TYPES } = require('../config/surfaces');
+  it('the lists: two screens and the console', () => {
+    expect(TWO_SURFACE_TYPES).toEqual(['call-and-answer', 'build', 'trivia', 'poll']);
+    expect(CONSOLE_TYPES).toEqual(['call-and-answer', 'trivia', 'poll']);
+  });
+  it('Wavelength says why; a two-screen type says nothing', () => {
+    expect(oneScreenWhy('wavelength')).toMatch(/one screen for now/);
+    expect(oneScreenWhy('wavelength')).toMatch(/Write and Reveal/);
+    ['call-and-answer', 'trivia', 'poll', 'build'].forEach((t) => expect(oneScreenWhy(t)).toBe(''));
   });
   it('?surfaces=two turns it on anywhere and is remembered; ?surfaces=classic turns it off', () => {
     const storage = memory();

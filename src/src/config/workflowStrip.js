@@ -33,14 +33,28 @@ const LIVE_STEP = Object.freeze({
   ENDED: 'finish',
 });
 
+/*
+  TRIVIA AND POLL NAME THEIR OWN STEPS (experience plan §3.2a, step 2g; owner,
+  1 Nov: "only adding or subtracting items that apply"). Trivia: Question ·
+  Reveal · Scores; Poll: Ask · Results. Neither asks the room a follow-up
+  question (the host page enables asks for Call & Answer only), so the Ask
+  step is subtracted; Trivia adds Scores, the scoreboard, optional like Ask.
+*/
+const TYPE_STEPS = Object.freeze({
+  trivia: ['setup', 'answer', 'heard', 'scores', 'finish'],
+  poll: ['setup', 'answer', 'heard', 'finish'],
+});
+
 /** The steps in order: Setup, the round's loop, Finish. */
 export function stepIdsFor(gameType) {
+  if (TYPE_STEPS[gameType]) return TYPE_STEPS[gameType].slice();
   return hostRunsVotePhase(gameType)
     ? ['setup', 'answer', 'vote', 'heard', 'ask', 'finish']
     : ['setup', 'answer', 'heard', 'ask', 'finish'];
 }
 
-export const LOOP_STEPS = Object.freeze(['answer', 'vote', 'heard', 'ask']);
+export const LOOP_STEPS = Object.freeze(['answer', 'vote', 'heard', 'ask', 'scores']);
+const OPTIONAL_STEPS = Object.freeze(['ask', 'scores']);
 
 const LABEL = {
   setup: RW.stepSetup,
@@ -48,11 +62,23 @@ const LABEL = {
   vote: RW.stepVote,
   heard: RW.whatWeHeard,
   ask: RW.stepAsk,
+  scores: RW.stepScores,
   finish: RW.stepFinish,
 };
 
+const TYPE_LABEL = Object.freeze({
+  trivia: { answer: RW.stepQuestion, heard: RW.stepReveal },
+  poll: { answer: RW.stepAsk, heard: RW.stepResults },
+});
+
 /** The step's own name, for the "Viewing …" bar. */
 export const stepLabel = (id) => LABEL[id] || '';
+
+/** The step's name in this format's words: Trivia's "Question", Poll's "Results". */
+export const stepLabelFor = (id, gameType) => (TYPE_LABEL[gameType] && TYPE_LABEL[gameType][id]) || LABEL[id] || '';
+
+/** What a step is, in this format's words, for hover and the Remote's long press. */
+const explainFor = (id, gameType) => (RW.stepExplainFor[gameType] && RW.stepExplainFor[gameType][id]) || RW.stepExplain[id];
 
 const lower = (text) => String(text || '').toLowerCase();
 
@@ -110,10 +136,11 @@ function partKey(moment, step, ctx = {}) {
 export function workflowStrip(step, rawCtx = {}) {
   const ctx = normaliseContext(rawCtx);
   const moment = step && step.moment;
-  const live = LIVE_STEP[moment];
+  const ids = stepIdsFor(ctx.gameType);
+  // A format without the Ask step reads a question for the room as its results.
+  const live = LIVE_STEP[moment] === 'ask' && !ids.includes('ask') ? 'heard' : LIVE_STEP[moment];
   if (!live) return null;
 
-  const ids = stepIdsFor(ctx.gameType);
   const liveAt = ids.indexOf(live);
   const ended = moment === 'ENDED';
   const asksReady = Number(ctx.asksReady) || 0;
@@ -124,21 +151,23 @@ export function workflowStrip(step, rawCtx = {}) {
     else if (i === liveAt) state = 'live';
     // Ask is optional: a round that moved past the read without asking leaves
     // it unticked, never "done".
-    else if (i < liveAt) state = id === 'ask' ? 'todo' : 'done';
+    else if (i < liveAt) state = OPTIONAL_STEPS.includes(id) ? 'todo' : 'done';
     else state = 'todo';
     // Before round 1 the loop has not run, so nothing in it is done.
     if (moment === 'LOBBY' && id !== 'setup') state = 'todo';
 
     let sub = state === 'live' ? subFor(id, moment, ctx) : '';
+    // Trivia's Reveal and Poll's Results ARE the results: "Reveal · results" said it twice.
+    if (id === 'heard' && moment === 'RESULTS' && TYPE_LABEL[ctx.gameType]) sub = '';
     if (id === 'ask' && state !== 'live' && asksReady > 0 && live === 'heard') sub = RW.readyCount(asksReady);
     return {
       id,
-      label: LABEL[id],
+      label: stepLabelFor(id, ctx.gameType),
       state,
-      optional: id === 'ask',
+      optional: OPTIONAL_STEPS.includes(id),
       loop: LOOP_STEPS.includes(id),
       sub,
-      explain: RW.stepExplain[id],
+      explain: explainFor(id, ctx.gameType),
     };
   });
 

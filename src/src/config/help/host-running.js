@@ -493,8 +493,8 @@ const sessionPanel = {
   arrive."), the same board at RESULTS. Wavelength: WavelengthConvergence
   (matching sentence, then ranked words, landed words full weight, others
   dimmer with counts); ENDED WavelengthSessionVocabulary ("Where the room was
-  already agreed"), no scoreboard (BOARD_TYPES). Two screens: C&A only
-  (config/surfaces.js). What we heard follows every round type's results
+  already agreed"), no scoreboard (BOARD_TYPES). Two screens: C&A, Trivia
+  and Poll since 2g; Wavelength one screen (config/surfaces.js ONE_SCREEN_WHY). What we heard follows every round type's results
   (roundStep RESULTS); Ask the room is C&A only (GameHostPage asksEnabled).
 */
 const byType = {
@@ -511,7 +511,7 @@ const byType = {
         { t: 'phases', gameType: 'call-and-answer' },
         {
           t: 'p',
-          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote, the only one that can run on two screens, and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide.',
+          text: 'The room writes, votes for the best answers, and sees the ranking: see The vote and Showing the results in Running the room. It is the only type with a vote and the only one with Ask the room after Workie\'s read, where it is offered (What we heard and Ask the room › Asking the room a quick question). How points are earned is in the players\' Scoring guide.',
         },
       ],
     },
@@ -523,7 +523,7 @@ const byType = {
         { t: 'phases', gameType: 'trivia' },
         {
           t: 'p',
-          text: 'The question goes up with its options. There is nothing to vote on, so **Show results** goes straight to the answer: the correct option is marked **Correct**, the others are dimmed, and every option shows the share of the room that chose it. The scoreboard is there with S.',
+          text: 'The question goes up with its options. There is nothing to vote on, so **Show results** goes straight to the answer: the correct option is marked **Correct**, the others are dimmed, and every option shows the share of the room that chose it. The scoreboard is there with S. On two screens your console shows the answer while the room answers; the room\'s window does not.',
         },
       ],
     },

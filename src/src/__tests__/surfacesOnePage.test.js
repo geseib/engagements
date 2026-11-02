@@ -20,7 +20,8 @@ test('the choice decides; no choice is one screen on every tier while Setup asks
   expect(twoSurfacesFor('classic', { gameType: 'call-and-answer', env: 'development' })).toBe(false);
   expect(twoSurfacesFor(null, { gameType: 'call-and-answer', env: 'development' })).toBe(false);
   expect(twoSurfacesFor(null, { gameType: 'call-and-answer', env: 'test' })).toBe(false);
-  expect(twoSurfacesFor('two', { gameType: 'trivia' })).toBe(false);
+  expect(twoSurfacesFor('two', { gameType: 'trivia' })).toBe(true);
+  expect(twoSurfacesFor('two', { gameType: 'wavelength' })).toBe(false);
 });
 
 test('the host page reads the mode from its own choice, not from storage on every render', () => {
