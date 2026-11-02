@@ -113,7 +113,7 @@
 [data-theme="light"] { --ui-btn-link-ink: var(--accent-text); }
 .ui-btn--tertiary {
   border-color: transparent;
-  color: var(--ui-btn-link-ink);
+  color: var(--ui-btn-link-ink, var(--info));
   padding-left: .25em;
   padding-right: .25em;
 }

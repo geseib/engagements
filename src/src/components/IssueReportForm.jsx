@@ -93,7 +93,7 @@ const IssueReportForm = ({
             {issueType === 'feature' && 'Request a Feature'}
             {issueType === 'help' && 'Get Help'}
           </h2>
-          <button className="close-button" onClick={onClose}>×</button>
+          <button type="button" className="close-button" aria-label="Close" onClick={onClose}><Icon name="X" weight="bold" size={14} color="currentColor" /></button>
         </div>
 
         {submitSuccess ? (

@@ -297,7 +297,8 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
 describe('the head and foot stick', () => {
   test('the head sticks to the top on the card colour', () => {
     expect(CSS).toMatch(/\.gsd \.gsd-head\s*\{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*background:\s*var\(--gsd-card\)/s);
-    expect(JSX).toMatch(/<div className="gsd-head">[\s\S]*?className="gsd-close"/);
+    // The shared head since experience plan 5b, in the dialog's own classes.
+    expect(JSX).toMatch(/<DialogHead\s+className="gsd-head"[\s\S]*?closeClassName="gsd-close"/);
   });
 
   test('the foot sticks to the bottom on the card colour', () => {

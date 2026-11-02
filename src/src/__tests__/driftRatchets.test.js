@@ -35,7 +35,10 @@ const CSS = D.cssFiles();
 /** test.each rows: every file with a count or an allowance, so stale entries are caught too. */
 function rows(counts, allowances) {
   const files = new Set([...Object.keys(counts), ...Object.keys(allowances || {})]);
-  return [...files].sort().map((f) => [f]);
+  const out = [...files].sort().map((f) => [f]);
+  // A guard at zero (close glyphs since experience plan 5b) still runs one row,
+  // which fails the moment any file gains one: jest refuses an empty table.
+  return out.length ? out : [['(no file has any)']];
 }
 function expectRatchet(opts) {
   const problems = D.ratchet(opts);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -106,20 +107,13 @@ export default function QuestionSetDeleteDialog({
       closeOnBackdrop={dismissable}
       closeOnEscape={dismissable}
     >
-      <header>
-        <Icon
+      <DialogHead titleId="qsets-del-title" title={<>{finished ? 'Question set deleted' : 'Delete this question set?'}</>} titlesClassName="qsets-grow" sub={<>{name} · {gameTypeLabel(questionSet.engagementType)} · {questions} question
+            {questions === 1 ? '' : 's'} in {categories} categor{categories === 1 ? 'y' : 'ies'}</>} subClassName="qsets-dim" icon={<Icon
           name={finished ? 'Check' : 'Warning'}
           weight="fill"
           size={20}
           color={finished ? 'var(--success)' : 'var(--danger-text)'}
-        />
-        <div className="qsets-grow">
-          <h2 id="qsets-del-title">{finished ? 'Question set deleted' : 'Delete this question set?'}</h2>
-          <p className="qsets-dim">
-            {name} · {gameTypeLabel(questionSet.engagementType)} · {questions} question
-            {questions === 1 ? '' : 's'} in {categories} categor{categories === 1 ? 'y' : 'ies'}
-          </p>
-        </div>
+        />} onClose={() => onCancel && onCancel()} closeDisabled={!dismissable()} closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "qsets-del-close" }}>
         {/*
           THE `×` IN THE CORNER, HELD TO THE SAME GATE AS EVERY OTHER EXIT.
           `dismissable` is stated once above and now spent four times — backdrop,
@@ -128,18 +122,7 @@ export default function QuestionSetDeleteDialog({
           for: unmounting the only surface that can report the outcome of a
           delete that is still in flight, or of one that has already happened.
         */}
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={() => onCancel && onCancel()}
-          disabled={!dismissable()}
-          aria-label="Close"
-          title={busy ? 'Wait for the delete to finish' : 'Close'}
-          data-testid="qsets-del-close"
-        >
-          ×
-        </button>
-      </header>
+      </DialogHead>
 
       <div className="qsets-modal-body">
         {!finished && (
@@ -194,7 +177,7 @@ export default function QuestionSetDeleteDialog({
         )}
       </div>
 
-      <footer>
+      <DialogFoot>
         <span className="qsets-grow" />
         {finished ? (
           <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onDeleted && onDeleted(message)}>
@@ -210,7 +193,7 @@ export default function QuestionSetDeleteDialog({
             </button>
           </>
         )}
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

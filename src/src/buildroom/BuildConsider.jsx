@@ -19,6 +19,7 @@
  */
 import React, { createContext, useContext, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { MARK_WORDS } from './sentMarks';
@@ -115,13 +116,7 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--consider" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-consider-q">
-      <div className="brm-pa-head">
-        <div>
-          <div className="brm-pa-eb">{W.considerEyebrow(item.askId ? askNo(item.askId) : null)}</div>
-          <h2 className="brm-pa-q brm-consider-q" id="brm-consider-q">{`“${item.words}”`}</h2>
-        </div>
-        <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-pa-head" titleId="brm-consider-q" title={<>{`“${item.words}”`}</>} titleClassName="brm-pa-q brm-consider-q" eyebrow={<>{W.considerEyebrow(item.askId ? askNo(item.askId) : null)}</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
       <div className="brm-consider-doors" role="radiogroup" aria-label={W.consider}>
         <button type="button" role="radio" aria-checked={d.door === 'room'} className={`brm-cdoor${d.door === 'room' ? ' is-on' : ''}`} onClick={() => set({ door: 'room' })}>
           <b>{W.considerQueue}</b>
@@ -166,7 +161,7 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
         </>
       )}
       {error && <p className="brm-alert" role="alert">{error}</p>}
-      <div className="brm-sd-foot">
+      <DialogFoot className="brm-sd-foot">
         {d.door === 'claude' ? (
           <>
             <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !d.text.trim()} onClick={() => send(false)}>
@@ -179,7 +174,7 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
         )}
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
         <span className="brm-hint brm-push">{W.considerEsc}</span>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

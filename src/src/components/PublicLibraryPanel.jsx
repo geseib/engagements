@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import QuestionSetsPanel from './QuestionSetsPanel';
 import { shareStateOf } from '../utils/shareState';
 import './PublicLibraryPanel.css';
@@ -83,20 +84,16 @@ function UnpublishDialog({ set, onClose, onConfirm }) {
 
   return (
     <Modal overlayClassName="publib publib-scrim" contentClassName="publib-dialog" labelledBy="publib-title" onClose={requestClose} closeOnBackdrop={() => !busy && !note.trim()} closeOnEscape={() => !busy && !note.trim()}>
-      <header className="publib-head">
-        <h2 id="publib-title">Unpublish “{set.name}”?</h2>
-        <button type="button" className="publib-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="publib-head" titleId="publib-title" title={<>Unpublish “{set.name}”?</>} onClose={requestClose} closeDisabled={busy} closeClassName="publib-x" />
       <div className="publib-body">
         <p>It is gone for everyone. The organisation keeps their copy and sees your note in their editor.</p>
         <label className="publib-label" htmlFor="publib-note">Note to the organisation (required)</label>
         <textarea id="publib-note" className="publib-textarea" rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
         {error && <div className="publib-outage" role="alert">{error}</div>}
       </div>
-      <footer className="publib-foot">
-        <button type="button" className="publib-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="publib-foot" cancel={<button type="button" className="publib-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button type="button" className="publib-btn publib-btn--danger" onClick={handleConfirm} disabled={busy || !note.trim()}>Unpublish</button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -134,10 +131,7 @@ function UnpublishDialog({ set, onClose, onConfirm }) {
 function SharePickerDialog({ sets, onClose, onPick }) {
   return (
     <Modal overlayClassName="publib publib-scrim" contentClassName="publib-dialog qsets" labelledBy="publib-pick-title" onClose={onClose}>
-      <header className="publib-head">
-        <h2 id="publib-pick-title">Which set do you want to share?</h2>
-        <button type="button" className="publib-x" onClick={onClose} aria-label="Close" title="Close">×</button>
-      </header>
+      <DialogHead className="publib-head" titleId="publib-pick-title" title="Which set do you want to share?" onClose={onClose} closeClassName="publib-x" />
       <div className="publib-body">
         <p>
           Sharing submits a set&rsquo;s active version for the content check. If it passes, a copy
@@ -180,9 +174,7 @@ function SharePickerDialog({ sets, onClose, onPick }) {
           </ul>
         )}
       </div>
-      <footer className="publib-foot">
-        <button type="button" className="publib-btn" onClick={onClose}>Cancel</button>
-      </footer>
+      <DialogFoot className="publib-foot"><button type="button" className="publib-btn" onClick={onClose}>Cancel</button></DialogFoot>
     </Modal>
   );
 }

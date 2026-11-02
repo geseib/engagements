@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
@@ -80,10 +81,7 @@ export default function ShareSetDialog({ set, version = null, onClose, onOutcome
       closeOnBackdrop={canClose}
       closeOnEscape={canClose}
     >
-      <header className="pubshare-head">
-        <h2 id="pubshare-title">Share “{set.name}” publicly</h2>
-        <button type="button" className="pubshare-x" onClick={() => onClose && onClose()} aria-label="Close" title="Close">×</button>
-      </header>
+      <DialogHead className="pubshare-head" titleId="pubshare-title" title={<>Share “{set.name}” publicly</>} onClose={() => onClose && onClose()} closeClassName="pubshare-x" />
 
       {state === 'idle' || state === 'submitting' ? (
         <div className="pubshare-body">
@@ -107,12 +105,11 @@ export default function ShareSetDialog({ set, version = null, onClose, onOutcome
           <p className="pubshare-fine">Publishing copies the set. The public copy does not change when you edit yours, and nobody who copies it can change yours.</p>
           {note && <p className="pubshare-note" role="status">{note}</p>}
           <StatusMessage message={error} tone="error" className="pubshare-alert" />
-          <footer className="pubshare-foot">
-            <button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Cancel</button>
+          <DialogFoot className="pubshare-foot" cancel={<button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Cancel</button>}>
             <button type="button" className="pubshare-btn pubshare-btn--primary" onClick={submit} disabled={busy}>
               {state === 'submitting' ? 'Starting…' : 'Submit for review'}
             </button>
-          </footer>
+          </DialogFoot>
         </div>
       ) : null}
 
@@ -123,9 +120,9 @@ export default function ShareSetDialog({ set, version = null, onClose, onOutcome
           </p>
           <p className="pubshare-phase">{progress.phase || 'Checking…'}</p>
           <p className="pubshare-fine">Closing this keeps the check running. The outcome shows on this set's row.</p>
-          <footer className="pubshare-foot">
+          <DialogFoot className="pubshare-foot">
             <button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Close — this keeps running</button>
-          </footer>
+          </DialogFoot>
         </div>
       )}
 
@@ -133,22 +130,21 @@ export default function ShareSetDialog({ set, version = null, onClose, onOutcome
         <div className="pubshare-body pubshare-done">
           <p className="pubshare-result pubshare-result--ok"><Icon name="CheckCircle" weight="fill" size={18} color="var(--pubshare-success-text)" /> Now in the public library{meta.publicVersion ? ` as version ${meta.publicVersion}` : ''}.</p>
           {meta.promptDropped && <p className="pubshare-fine">Published without your Workie — Engage's default is used.</p>}
-          <footer className="pubshare-foot"><button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => onClose && onClose()}>Done</button></footer>
+          <DialogFoot className="pubshare-foot"><button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => onClose && onClose()}>Done</button></DialogFoot>
         </div>
       )}
       {state === 'escalated' && (
         <div className="pubshare-body pubshare-done">
           <p className="pubshare-result"><Icon name="UserCircle" weight="fill" size={18} color="var(--primary)" /> Gone to a person at Engage. The outcome will show on this set's row.</p>
-          <footer className="pubshare-foot"><button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => onClose && onClose()}>Done</button></footer>
+          <DialogFoot className="pubshare-foot"><button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => onClose && onClose()}>Done</button></DialogFoot>
         </div>
       )}
       {state === 'failed' && (
         <div className="pubshare-body pubshare-done">
           <StatusMessage message={error || 'The check did not finish. Submit it again.'} tone="error" className="pubshare-alert" />
-          <footer className="pubshare-foot">
-            <button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Close</button>
+          <DialogFoot className="pubshare-foot" cancel={<button type="button" className="pubshare-btn" onClick={() => onClose && onClose()}>Close</button>}>
             <button type="button" className="pubshare-btn pubshare-btn--primary" onClick={() => { setError(null); setNote(''); setState('idle'); }}>Try again</button>
-          </footer>
+          </DialogFoot>
         </div>
       )}
     </Modal>

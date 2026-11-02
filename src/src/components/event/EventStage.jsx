@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { QRCodeSVG } from 'qrcode.react';
 import Stage from '../stage/Stage';
 import Modal from '../Modal';
+import { DialogHead, DialogFoot } from '../ui/DialogParts';
 import Icon from '../Icon';
 import KeyCap from '../stage/KeyCap';
 import HelpButton from '../HelpButton';
@@ -927,12 +928,13 @@ export default function EventStage({ code }) {
 
       {qrOpen && (
         <Modal overlayClassName="ag-scrim" contentClassName="ag-qrcard" onClose={() => setQrOpen(false)} label="Join the event" theme="dark">
+          <DialogHead title="Join the event" onClose={() => setQrOpen(false)} closeLabel="Close the join code" />
           <div className="qr ag-qr">
             <QRCodeSVG value={playUrl(code)} size={512} level="M" includeMargin={false} />
           </div>
           <p className="ag-qr-url">{joinDisplayUrl()}</p>
           <p className="ag-qr-code">{code}</p>
-          <button type="button" className="ag-close" onClick={() => setQrOpen(false)}>Close</button>
+          <DialogFoot className="ag-confirm-foot"><button type="button" className="ag-close" onClick={() => setQrOpen(false)}>Close</button></DialogFoot>
         </Modal>
       )}
 
@@ -945,15 +947,14 @@ export default function EventStage({ code }) {
           label={`End ${confirmEnd.title || typeLabel(confirmEnd.type)}`}
           theme="dark"
         >
-          <h2>{`End ${confirmEnd.title || typeLabel(confirmEnd.type)}?`}</h2>
+          <DialogHead title={`End ${confirmEnd.title || typeLabel(confirmEnd.type)}?`} onClose={() => setConfirmEnd(null)} closeDisabled={busy} />
           <p>
             {isEngagement(confirmEnd.type)
               ? 'Its session ends for everyone now, and its report is kept in the session history. '
               : ''}
             Everyone’s agenda shows it as done, and it cannot be taken live again.
           </p>
-          <div className="ag-confirm-foot">
-            <button type="button" className="ag-close" onClick={() => setConfirmEnd(null)}>Keep it</button>
+          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setConfirmEnd(null)}>Keep it</button>}>
             <button
               type="button"
               className="ag-end"
@@ -966,7 +967,7 @@ export default function EventStage({ code }) {
             >
               End it
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -979,10 +980,9 @@ export default function EventStage({ code }) {
           label={askGoLive.ask.title}
           theme="dark"
         >
-          <h2>{askGoLive.ask.title}</h2>
+          <DialogHead title={askGoLive.ask.title} onClose={() => setAskGoLive(null)} closeDisabled={busy} />
           <p>{askGoLive.ask.message}</p>
-          <div className="ag-confirm-foot">
-            <button type="button" className="ag-close" onClick={() => setAskGoLive(null)}>Not yet</button>
+          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setAskGoLive(null)}>Not yet</button>}>
             <button
               type="button"
               className="ag-yes"
@@ -991,7 +991,7 @@ export default function EventStage({ code }) {
             >
               {askGoLive.ask.confirmText}
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -1004,14 +1004,13 @@ export default function EventStage({ code }) {
           label="Reopen the event?"
           theme="dark"
         >
-          <h2>Reopen the event?</h2>
+          <DialogHead title="Reopen the event?" onClose={() => setAskReopen(false)} closeDisabled={busy} />
           <p>
             People can join again with the same code, and items that never ran can go live. What finished
             stays finished: those sessions are over, and their reports are kept.
             {keptUntil ? ` The event is kept until ${keptUntil}.` : ''}
           </p>
-          <div className="ag-confirm-foot">
-            <button type="button" className="ag-close" onClick={() => setAskReopen(false)}>Not now</button>
+          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setAskReopen(false)}>Not now</button>}>
             <button
               type="button"
               className="ag-yes"
@@ -1020,7 +1019,7 @@ export default function EventStage({ code }) {
             >
               Reopen the event
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -1033,7 +1032,7 @@ export default function EventStage({ code }) {
           label="Leave the stage, or end the event?"
           theme="dark"
         >
-          <h2>Leave the stage, or end the event?</h2>
+          <DialogHead title="Leave the stage, or end the event?" onClose={() => setExitOpen(false)} closeDisabled={busy} />
           <div className="ag-exit-ways">
             <div className="ag-exit-way">
               <button type="button" className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(START_PATH); }}>
@@ -1060,9 +1059,7 @@ export default function EventStage({ code }) {
               </p>
             </div>
           </div>
-          <div className="ag-confirm-foot">
-            <button type="button" className="ag-close" onClick={() => setExitOpen(false)}>Stay</button>
-          </div>
+          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setExitOpen(false)}>Stay</button>} />
         </Modal>
       )}
 
@@ -1075,13 +1072,12 @@ export default function EventStage({ code }) {
           label="End the event"
           theme="dark"
         >
-          <h2>End the event?</h2>
+          <DialogHead title="End the event?" onClose={() => setConfirmEndEvent(false)} closeDisabled={busy} />
           <p>
             Anything live or paused ends now, and nobody new can join. Items that have not started stay
             on the agenda, unplayed. Reports already made are kept.
           </p>
-          <div className="ag-confirm-foot">
-            <button type="button" className="ag-close" onClick={() => setConfirmEndEvent(false)}>Keep going</button>
+          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setConfirmEndEvent(false)}>Keep going</button>}>
             <button
               type="button"
               className="ag-end"
@@ -1090,7 +1086,7 @@ export default function EventStage({ code }) {
             >
               End the event
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
     </div>

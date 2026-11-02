@@ -125,7 +125,7 @@ describe('the variants read the roles SPEC §6 names', () => {
   });
   test('tertiary: no outline, no fill, the theme-keyed link ink', () => {
     expect(decl('.ui-btn--tertiary', 'border-color')).toBe('transparent');
-    expect(decl('.ui-btn--tertiary', 'color')).toBe('var(--ui-btn-link-ink)');
+    expect(decl('.ui-btn--tertiary', 'color')).toBe('var(--ui-btn-link-ink, var(--info))');
     expect(() => decl('.ui-btn--tertiary', 'background')).toThrow();
     expect(decl(':root', '--ui-btn-link-ink')).toBe('var(--info)');
     expect(decl('[data-theme="light"]', '--ui-btn-link-ink')).toBe('var(--accent-text)');

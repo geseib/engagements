@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot, DialogCancel } from './ui/DialogParts';
 import Icon from './Icon';
 import { ADD_MODES, MAX_CATEGORIES, rowsFromCsv, holdToMode } from '../utils/addQuestions';
 import { PER_CATEGORY_PRESETS } from './CountField';
@@ -106,13 +107,7 @@ export default function AddQuestionsDialog({
       closeOnBackdrop={() => !dirty}
       closeOnEscape={() => !dirty}
     >
-      <header className="addq-head">
-        <div className="qsets-grow">
-          <p className="addq-kicker">Add to · {gameTypeLabel(engagementType)}</p>
-          <h2 id="addq-title" className="addq-title">{setName}</h2>
-        </div>
-        <button type="button" className="qs-dialog-close" onClick={requestClose} aria-label="Close add questions" title="Close" data-testid="addq-close">×</button>
-      </header>
+      <DialogHead className="addq-head" titleId="addq-title" title={<>{setName}</>} titleClassName="addq-title" titlesClassName="qsets-grow" eyebrow={<>Add to · {gameTypeLabel(engagementType)}</>} eyebrowClassName="addq-kicker" onClose={requestClose} closeLabel="Close add questions" closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "addq-close" }} />
 
       <div className="addq-body">
         {/* THE BALANCE. Every category, its count, and — live — what it becomes. */}
@@ -205,6 +200,8 @@ export default function AddQuestionsDialog({
           </div>
         )}
       </div>
+      {/* The bottom exit (engage-design hard rule 2), through the same close as the X. */}
+      <DialogFoot className="addq-foot" cancel={<DialogCancel onClick={requestClose}>Close</DialogCancel>} />
     </Modal>
   );
 }

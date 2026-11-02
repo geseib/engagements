@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import BuildImage from './BuildImage';
 import { claudeKindLabel, decisionChain } from './buildScreens';
@@ -110,13 +111,7 @@ export default function AskDetail({ ask, entry = null, held = false, onClose, on
   const sentAt = (entry && entry.createdAt) || ask.decidedAt || d.decidedAt;
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--ask" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-pa-q">
-      <div className="brm-pa-head">
-        <div>
-          <div className="brm-pa-eb">Ask {askNo(ask.askId)} · {KIND_WORD[ask.kind] || 'Ask'} · decided {clockOf(ask.decidedAt || d.decidedAt)}</div>
-          <h2 className="brm-pa-q" id="brm-pa-q">{ask.prompt}</h2>
-        </div>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-pa-head" titleId="brm-pa-q" title={<>{ask.prompt}</>} titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · {KIND_WORD[ask.kind] || 'Ask'} · decided {clockOf(ask.decidedAt || d.decidedAt)}</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-btn brm-btn--sm brm-btn--ghost brm-push" />
       <div className="brm-pa-body">
         {ask.kind === 'choice' && <ChoiceCards ask={ask} onViewMockup={onViewMockup} />}
         {ask.kind === 'suggest' && <IdeaRows ask={ask} />}
@@ -144,9 +139,9 @@ export default function AskDetail({ ask, entry = null, held = false, onClose, on
           </p>
         )}
       </div>
-      <div className="brm-pa-foot">
+      <DialogFoot className="brm-pa-foot">
         <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onClose}>Close</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

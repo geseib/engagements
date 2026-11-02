@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { pollGenerationJob } from '../utils/aiBatchClient';
@@ -327,20 +328,16 @@ function TakedownDialog({ name, onClose, onConfirm }) {
 
   return (
     <Modal overlayClassName="scard scard-scrim" contentClassName="scard-dialog" labelledBy="scard-td-title" onClose={requestClose} closeOnBackdrop={() => !busy && !note.trim()} closeOnEscape={() => !busy && !note.trim()}>
-      <header className="scard-head">
-        <h2 id="scard-td-title">Take down “{name}”?</h2>
-        <button type="button" className="scard-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="scard-head" titleId="scard-td-title" title={<>Take down “{name}”?</>} onClose={requestClose} closeDisabled={busy} closeClassName="scard-x" />
       <div className="scard-body">
         <p>It is gone for everyone. The organisation keeps their copy and sees your note — their editor shows it where the check's own findings would.</p>
         <label className="scard-label" htmlFor="scard-td-note">Note to the organisation (required)</label>
         <textarea id="scard-td-note" className="scard-textarea" rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
         {error && <div className="scard-outage" role="alert">{error}</div>}
       </div>
-      <footer className="scard-foot">
-        <button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="scard-foot" cancel={<button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button type="button" className="scard-btn scard-btn--danger" onClick={handleConfirm} disabled={busy || !note.trim()}>Take down</button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -379,10 +376,7 @@ function RecheckDialog({ name, version, onClose, onConfirm }) {
   };
   return (
     <Modal overlayClassName="scard scard-scrim" contentClassName="scard-dialog" labelledBy="scard-rc-title" onClose={requestClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy}>
-      <header className="scard-head">
-        <h2 id="scard-rc-title">Run the check again on “{name}”?</h2>
-        <button type="button" className="scard-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="scard-head" titleId="scard-rc-title" title={<>Run the check again on “{name}”?</>} onClose={requestClose} closeDisabled={busy} closeClassName="scard-x" />
       <div className="scard-body">
         <p>
           It runs the content check again on the version the public library is serving
@@ -399,10 +393,9 @@ function RecheckDialog({ name, version, onClose, onConfirm }) {
         <p className="scard-fine">It usually finishes in under a minute. Leaving this card keeps it running; what it measured shows here next time you open it.</p>
         {error && <div className="scard-outage" role="alert">{error}</div>}
       </div>
-      <footer className="scard-foot">
-        <button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="scard-foot" cancel={<button type="button" className="scard-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button type="button" className="scard-btn" onClick={handleConfirm} disabled={busy}>{busy ? 'Starting…' : 'Run the check'}</button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

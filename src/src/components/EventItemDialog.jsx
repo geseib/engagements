@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import SetChooser from './SetChooser';
 import HelpButton from './HelpButton';
@@ -445,24 +446,17 @@ export default function EventItemDialog({
       theme="dark"
     >
       <form onSubmit={submit} noValidate>
-        <header className="evb-modal-head">
-          <div className="evb-grow">
-            <h2 id="evb-item-title">{heading}</h2>
-            <p>
-              {unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
+        <DialogHead className="evb-modal-head" titleId="evb-item-title" title={<>{heading}</>} titlesClassName="evb-grow" sub={<>{unreadable && 'Its title and description could not be opened, so it cannot be edited. Remove it, and add it again if it is still wanted.'}
               {!unreadable && picking && `Pick the set. It plays as its own ${label} session, started by you, under the event's code.`}
               {!unreadable && !picking && isBreak && 'A return time on the agenda. Not counted, and not billed.'}
               {!unreadable && type === rules.PRESENTATION && 'A talk. Add its slides as a PDF and the stage shows them, a slide at a time.'}
               {!unreadable && type === rules.CUSTOM && 'Anything else on the day: networking, lunch with a speaker, an open discussion. It sits on the agenda, with nothing to answer.'}
               {!unreadable && editing && !isBreak && item.set && item.set.name && (item.set.pinnedMissing
                 ? `Pinned to ${item.set.name} · v${item.setRef.version}, which is no longer in the set.`
-                : `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`)}
-            </p>
-          </div>
+                : `Plays ${item.set.name}${item.setRef && item.setRef.version ? ` · v${item.setRef.version}` : ''}.`)}</>} onClose={requestClose} closeDisabled={busy} closeClassName="evb-x">
           {/* The agenda guide's adding-items section (Help Phase 3). */}
           <HelpButton {...helpFor('event-builder')} variant="inline" size="small" tooltip="Help: agenda items" className="help-button-quiet" />
-          <button type="button" className="evb-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-        </header>
+        </DialogHead>
 
         <div className="evb-modal-body">
           {!unreadable && (<>
@@ -708,7 +702,7 @@ export default function EventItemDialog({
           {error && <p className="evb-error" role="alert">{error}</p>}
         </div>
 
-        <footer className="evb-modal-foot">
+        <DialogFoot className="evb-modal-foot">
           {editing && confirmingRemove ? (
             <div className="evb-confirm" data-testid="remove-confirm">
               <p>
@@ -755,7 +749,7 @@ export default function EventItemDialog({
               )}
             </>
           )}
-        </footer>
+        </DialogFoot>
       </form>
     </Modal>
   );

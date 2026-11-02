@@ -11,6 +11,7 @@
  */
 import React from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { stageFrom } from './buildScreens';
@@ -49,13 +50,7 @@ export function TakeDownOffer({ ideas, busy, onNotNow, onVote, onClose }) {
   const n = ideas.length;
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-takedown-title">
-      <div className="brm-dh">
-        <div>
-          <p className="brm-hint">{W.takingDown}</p>
-          <h2 className="brm-h" id="brm-takedown-title">{W.putIdeasToVote(n)}</h2>
-        </div>
-        <button type="button" className="brm-x" aria-label={W.close} onClick={onClose}><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-dh" titleId="brm-takedown-title" title={<>{W.putIdeasToVote(n)}</>} titleClassName="brm-h" eyebrow={<>{W.takingDown}</>} eyebrowClassName="brm-hint" onClose={onClose} closeLabel={W.close} closeClassName="brm-x" />
       <p>{W.roomSentIdeas(n)}</p>
       <ul className="brm-reviewopts">
         {ideas.map((idea, i) => (
@@ -66,10 +61,10 @@ export function TakeDownOffer({ ideas, busy, onNotNow, onVote, onClose }) {
         ))}
       </ul>
       <p className="brm-hint">{W.takeDownEither} {W.takeDownClose}</p>
-      <div className="brm-row brm-gap">
+      <DialogFoot className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onNotNow}>{W.notNow}</button>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onVote}>{W.putToAVote}</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

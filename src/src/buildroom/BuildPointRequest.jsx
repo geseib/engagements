@@ -10,6 +10,7 @@
  */
 import React, { useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 
@@ -46,10 +47,7 @@ export default function BuildPointRequest({ kind, initial = '', ideaId = '', con
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm brm-modal--point" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-preq-title">
-      <div className="brm-dh">
-        <h2 className="brm-h" id="brm-preq-title">{title}</h2>
-        <button type="button" className="brm-x" aria-label={W.close} onClick={onClose}><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-dh" titleId="brm-preq-title" title={<>{title}</>} titleClassName="brm-h" onClose={onClose} closeLabel={W.close} closeClassName="brm-x" />
       <label className="brm-field">
         <span className="brm-lbl">{mockups ? W.mockupsLabel : walk ? W.walkthroughLabel : ideas ? W.ideasLabel : W.researchLabel}</span>
         <input
@@ -70,11 +68,11 @@ export default function BuildPointRequest({ kind, initial = '', ideaId = '', con
       <p className="brm-hint">{mockups ? W.mockupsNote : walk ? W.walkthroughNote : ideas ? W.ideasNote : W.researchNote}</p>
       {old && <p className="brm-hint brm-hint--warn" role="status">{W.updatePluginFor(MOCKUPS_PLUGIN)}</p>}
       {!connected && <p className="brm-hint brm-hint--warn" role="status">{W.claudeAway}</p>}
-      <div className="brm-row brm-gap">
+      <DialogFoot className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>{W.close}</button>
         <span className="brm-say is-keys brm-push" title={W.ctrlEnterTitle}>{W.ctrlEnterSends}</span>
         <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !ready} onClick={send}>{W.sendToClaudeNow}</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

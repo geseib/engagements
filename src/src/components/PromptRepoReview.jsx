@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import StatusMessage from './StatusMessage';
 import {
@@ -54,16 +55,21 @@ export default function PromptRepoReview({ prompt, status, onSave, onClose }) {
       closeOnEscape={() => !saving}
       labelledBy="pmgr-repo-title"
     >
-      <div className="pmgr-modal-head">
-        <div className="pmgr-repo-headtext">
-          <p className="pmgr-repo-crumb">Prompts › {prompt.name}</p>
-          <h2 id="pmgr-repo-title">Newer version in the repo</h2>
-        </div>
+      <DialogHead
+        className="pmgr-modal-head"
+        titleId="pmgr-repo-title"
+        title="Newer version in the repo"
+        titlesClassName="pmgr-repo-headtext"
+        eyebrow={<>Prompts › {prompt.name}</>}
+        eyebrowClassName="pmgr-repo-crumb"
+        onClose={close}
+        closeLabel="Close the review"
+        closeClassName="pmgr-x"
+      >
         <span className="pmgr-repo-live" data-testid="pmgr-repo-live">
           Live: v{liveVersion || '?'}
         </span>
-        <button type="button" className="pmgr-x" onClick={close} aria-label="Close the review">×</button>
-      </div>
+      </DialogHead>
 
       <div className="pmgr-advisor-body pmgr-repo-body" data-testid="pmgr-repo-review">
         <p className="pmgr-advice-lede">
@@ -115,7 +121,7 @@ export default function PromptRepoReview({ prompt, status, onSave, onClose }) {
         })}
       </div>
 
-      <div className="form-actions pmgr-repo-foot">
+      <DialogFoot className="form-actions pmgr-repo-foot">
         {error && (
           <div className="pmgr-notice" data-testid="pmgr-repo-error">
             <StatusMessage message={error} tone="error" />
@@ -130,7 +136,7 @@ export default function PromptRepoReview({ prompt, status, onSave, onClose }) {
         <button type="button" className="btn-primary" onClick={save} disabled={saving} data-testid="pmgr-repo-save">
           {saving ? 'Saving…' : `Save as version ${nextVersion}`}
         </button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

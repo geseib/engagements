@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import pricing from '../../../lambda-functions/game/pricing';
 import './InvoicePanel.css';
@@ -192,10 +193,7 @@ export function LedgerRowDialog({ source, invoice, onClose }) {
   else row = (invoice.adjustmentSnapshot || []).find((a) => a.SK === source) || { source, note: 'Not in this invoice\'s snapshot.' };
   return (
     <Modal overlayClassName="inv inv-scrim" contentClassName="inv-modal" labelledBy="inv-row-title" onClose={onClose}>
-      <header className="inv-mhead">
-        <div className="inv-grow"><h2 id="inv-row-title">The row behind this number</h2><p className="inv-dim"><code className="inv-code">{source}</code></p></div>
-        <button type="button" className="inv-x" onClick={onClose} aria-label="Close" title="Close">×</button>
-      </header>
+      <DialogHead className="inv-mhead" titleId="inv-row-title" title="The row behind this number" titlesClassName="inv-grow" sub={<><code className="inv-code">{source}</code></>} subClassName="inv-dim" onClose={onClose} closeClassName="inv-x" />
       <div className="inv-mbody">
         <dl className="inv-kv" data-testid="inv-row-fields">
           {Object.entries(row).filter(([k]) => k !== 'source').map(([k, v]) => (
@@ -203,7 +201,7 @@ export function LedgerRowDialog({ source, invoice, onClose }) {
           ))}
         </dl>
       </div>
-      <footer className="inv-mfoot"><button type="button" className="inv-btn" onClick={onClose}>Close</button></footer>
+      <DialogFoot className="inv-mfoot"><button type="button" className="inv-btn" onClick={onClose}>Close</button></DialogFoot>
     </Modal>
   );
 }

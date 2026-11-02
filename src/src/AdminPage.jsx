@@ -62,6 +62,7 @@ import {
 import { uploadGeneratedSet, generatedSetPendingNotice } from './utils/generatedSetUpload';
 import NotificationsBell from './components/NotificationsBell';
 import DraftReview from './components/DraftReview';
+import { useConfirm } from './components/ConfirmDialog';
 import { listDrafts, waitingDrafts } from './utils/draftsApi';
 import { librariesFrom } from './utils/libraries';
 import { destinationOf } from './utils/notificationsApi';
@@ -967,9 +968,10 @@ function AdminPage() {
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
-  // Sign-out handler
-  const handleSignOut = () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
+  // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
+  const handleSignOut = async () => {
+    if (await askConfirm({ title: 'Sign out?', message: 'You can sign back in at any time.', confirmText: 'Sign out' })) {
       signOut();
       window.location.href = '/auth';
     }
@@ -2674,6 +2676,7 @@ function AdminPage() {
       */}
 
       {/* GitHub Issue Reporting FAB */}
+      {confirmDialog}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { authFetch, setActiveOrgId } from '../auth/authFetch';
 import pricing from '../../../lambda-functions/game/pricing';
 import './CreateOrgDialog.css';
@@ -86,18 +87,7 @@ export default function CreateOrgDialog({ onClose, onCreated }) {
       label="Create an organisation"
     >
       <form className="corg-form" onSubmit={submit}>
-        <div className="corg-head">
-          <h2 className="corg-title">Create a team</h2>
-          <button
-            type="button"
-            className="corg-x"
-            onClick={onClose}
-            disabled={busy}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
+        <DialogHead className="corg-head" title="Create a team" titleClassName="corg-title" onClose={onClose} closeDisabled={busy} closeClassName="corg-x" />
 
         <p className="corg-sub">
           A team has its own question sets, sessions and members. Your own space stays
@@ -128,14 +118,18 @@ export default function CreateOrgDialog({ onClose, onCreated }) {
         {error && <p className="corg-error" role="alert">{error}</p>}
 
         {/* An X AND a bottom exit, which is the rule every dialog here follows. */}
-        <div className="corg-actions">
-          <button type="button" className="corg-btn" onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
+        <DialogFoot
+          className="corg-actions"
+          cancel={(
+            <button type="button" className="corg-btn" onClick={onClose} disabled={busy}>
+              Cancel
+            </button>
+          )}
+        >
           <button type="submit" className="corg-btn corg-btn--go" disabled={busy || !name.trim()}>
             {busy ? 'Creating…' : 'Create team'}
           </button>
-        </div>
+        </DialogFoot>
       </form>
     </Modal>
   );

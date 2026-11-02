@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import './SessionHistoryPanel.css';
 import Icon from './Icon';
+import { DialogHead } from './ui/DialogParts';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import SessionList from './SessionList';
@@ -196,9 +197,15 @@ export default function SessionHistoryPanel({
 
   return (
     <div className="shist" data-theme="dark">
-      <div className="shist__head">
-        <div>
-          <h2 className="shist__title" id="shist-title" tabIndex={-1}>
+      {/* The shared dialog head (ui/DialogParts, experience plan 5b): this
+          panel is the content of the sessions dialog. */}
+      <DialogHead
+        className="shist__head"
+        titleId="shist-title"
+        titleClassName="shist__title"
+        titleProps={{ tabIndex: -1 }}
+        title={(
+          <>
             <Icon
               name={mode === 'select' ? 'GameController' : 'ChartBar'}
               weight="duotone"
@@ -209,25 +216,19 @@ export default function SessionHistoryPanel({
                 is sessions that have not happened yet. In reports mode it is
                 the same list, read for a played session's report. */}
             {' Your sessions'}
-          </h2>
-          <p className="shist__sub">
-            {mode === 'select'
-              ? 'Start one when the room is ready, or edit it first. More is under ⋯ on each row.'
-              : 'Read a report from a session that has been played. Saved PDFs are under Reports.'}
-          </p>
-        </div>
+          </>
+        )}
+        sub={mode === 'select'
+          ? 'Start one when the room is ready, or edit it first. More is under ⋯ on each row.'
+          : 'Read a report from a session that has been played. Saved PDFs are under Reports.'}
+        subClassName="shist__sub"
+        onClose={onClose}
+        closeLabel="Close your sessions"
+        closeClassName="shist__close"
+      >
         {/* The setup guide's sessions-list section (Help Phase 3). */}
         <HelpButton {...helpFor('host-sessions')} variant="inline" size="small" tooltip="Help: your sessions" className="help-button-quiet shist__help" />
-        <button
-          type="button"
-          className="shist__close"
-          onClick={onClose}
-          aria-label="Close your sessions"
-          title="Close your sessions"
-        >
-          <Icon name="X" weight="bold" size={16} color="currentColor" />
-        </button>
-      </div>
+      </DialogHead>
 
       {notice && (
         <div className="shist__notice" role="alert">{notice}</div>

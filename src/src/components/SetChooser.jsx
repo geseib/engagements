@@ -583,7 +583,7 @@ export default function SetChooser({
           {chips.map((c) => (
             <span key={c.key} className="schs-chip">
               {c.text}
-              <button type="button" aria-label={`Remove ${c.text}`} onClick={c.clear || (() => patch(clearPatch(config, c.key)))}>×</button>
+              <button type="button" aria-label={`Remove ${c.text}`} onClick={c.clear || (() => patch(clearPatch(config, c.key)))}><Icon name="X" weight="bold" size={14} color="currentColor" /></button>
             </span>
           ))}
           <button type="button" className="schs-link" onClick={() => patch(clearAllPatch(config))}>Clear all</button>

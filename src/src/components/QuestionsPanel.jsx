@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import PlanLimitNotice from './PlanLimitNotice';
 import { parseUpgradeRequired } from '../utils/upgradeRequired';
@@ -1643,22 +1644,8 @@ export default function QuestionsPanel({
             below. Leaving one exit live while the other is gated would be an
             inconsistency people discover at the worst moment.
           */}
-          <div className="qs-dialog-head">
-            <h3 id="qs-question-dialog-title">
-              <Icon name="PencilSimple" weight="bold" size={16} color="var(--primary)" />{' '}
-              {isAdding ? 'New question' : 'Edit question'}
-            </h3>
-            <button
-              type="button"
-              className="qs-dialog-close"
-              onClick={cancelEdit}
-              disabled={aiBusy}
-              aria-label="Close"
-              title={aiBusy ? 'Wait for the draft to finish' : 'Close'}
-            >
-              ×
-            </button>
-          </div>
+          <DialogHead className="qs-dialog-head" titleId="qs-question-dialog-title" title={<><Icon name="PencilSimple" weight="bold" size={16} color="var(--primary)" />{' '}
+              {isAdding ? 'New question' : 'Edit question'}</>} as="h3" onClose={cancelEdit} closeDisabled={aiBusy} closeClassName="qs-dialog-close" />
 
           <QuestionForm
             draft={draft}
@@ -1887,14 +1874,7 @@ export default function QuestionsPanel({
           onClose={closeDraftReview}
           theme="dark"
         >
-          <header>
-            <Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />
-            <div className="qsets-grow">
-              <h2 id="qs-draft-review-title">Review AI draft</h2>
-              <p className="qsets-dim">Questions waiting to join “{setName}”. Nothing changes until you accept.</p>
-            </div>
-            <button type="button" className="qs-dialog-close" onClick={closeDraftReview} aria-label="Close the review" title="Close">×</button>
-          </header>
+          <DialogHead titleId="qs-draft-review-title" title="Review AI draft" titlesClassName="qsets-grow" sub={<>Questions waiting to join “{setName}”. Nothing changes until you accept.</>} subClassName="qsets-dim" icon={<Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />} onClose={closeDraftReview} closeLabel="Close the review" closeClassName="qs-dialog-close" />
           <div className="qsets-modal-body">
             <DraftReview
               draftId={reviewDraft.draftId}
@@ -1904,9 +1884,9 @@ export default function QuestionsPanel({
               onChanged={async () => { await load(); refreshSetDrafts(); if (onChanged) onChanged(); }}
             />
           </div>
-          <footer>
+          <DialogFoot>
             <button type="button" className="qsets-btn" onClick={closeDraftReview}>Close</button>
-          </footer>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -1928,17 +1908,16 @@ export default function QuestionsPanel({
           labelledBy="qs-discard-title"
           onClose={() => setConfirmDiscard(false)}
         >
-            <h3 id="qs-discard-title"><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Discard your changes?</h3>
+            <DialogHead titleId="qs-discard-title" title={<><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> Discard your changes?</>} as="h3" onClose={() => setConfirmDiscard(false)} />
             <p>
               {describeRowChanges(summary)} — none of it has been saved. Discarding puts the set
               back exactly as it was when you opened it, and there is no way to get the edits back.
             </p>
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setConfirmDiscard(false)}>
+            <DialogFoot className="modal-actions" cancel={<button className="btn-secondary" onClick={() => setConfirmDiscard(false)}>
                 Keep editing
-              </button>
+              </button>}>
               <button className="btn-danger" onClick={discard}>Discard changes</button>
-            </div>
+            </DialogFoot>
         </Modal>
       )}
 
@@ -1953,10 +1932,8 @@ export default function QuestionsPanel({
           closeOnBackdrop={() => !saving}
           closeOnEscape={() => !saving}
         >
-            <h3 id="qs-new-set-title-heading">
-              <Icon name="Plus" weight="bold" size={16} color="var(--primary)" />{' '}
-              {newSetDialog.mode === 'fork' ? 'Save this as your own copy' : 'New set from your selection'}
-            </h3>
+            <DialogHead titleId="qs-new-set-title-heading" title={<><Icon name="Plus" weight="bold" size={16} color="var(--primary)" />{' '}
+              {newSetDialog.mode === 'fork' ? 'Save this as your own copy' : 'New set from your selection'}</>} as="h3" onClose={() => setNewSetDialog(null)} />
             <p>
               {newSetDialog.mode === 'fork'
                 ? `"${setName}" belongs to someone else, so it cannot be changed. This creates a new set that is yours, `
@@ -1996,14 +1973,13 @@ export default function QuestionsPanel({
             {newSetError && <StatusMessage message={newSetError} tone="error" />}
             <PlanLimitNotice refusal={newSetLimit} outcome="Nothing was created." surface="dusk" />
 
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>
+            <DialogFoot className="modal-actions" cancel={<button className="btn-secondary" onClick={() => setNewSetDialog(null)} disabled={saving}>
                 Cancel
-              </button>
+              </button>}>
               <button className="btn-primary" onClick={handleSaveAsNewSet} disabled={saving}>
                 {saving ? 'Creating...' : 'Create the set'}
               </button>
-            </div>
+            </DialogFoot>
         </Modal>
       )}
     </section>

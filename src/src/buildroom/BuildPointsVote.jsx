@@ -13,6 +13,7 @@
  */
 import React, { useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { defaultPicks, VOTE_PICKS_MAX, POINT_TAGS, pointFrom } from './buildScreens';
@@ -34,10 +35,7 @@ export default function BuildPointsVote({ points, openAsk = null, busy, onOpen, 
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--vote" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-pvote-title">
-      <div className="brm-dh">
-        <h2 className="brm-h" id="brm-pvote-title">{W.putToVote(n)}</h2>
-        <button type="button" className="brm-x" aria-label={W.close} onClick={onClose}><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-dh" titleId="brm-pvote-title" title={<>{W.putToVote(n)}</>} titleClassName="brm-h" onClose={onClose} closeLabel={W.close} closeClassName="brm-x" />
       <div onKeyDown={onKey}>
         <label className="brm-field">
           <span className="brm-lbl">{W.voteQuestion}</span>
@@ -66,13 +64,13 @@ export default function BuildPointsVote({ points, openAsk = null, busy, onOpen, 
         </div>
         <p className="brm-hint">{W.voteOptionsNote}</p>
       </div>
-      <div className="brm-row brm-gap">
+      <DialogFoot className="brm-row brm-gap">
         <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>{W.close}</button>
         <span className="brm-say is-keys brm-push" title={W.ctrlEnterTitle}>{W.ctrlEnterOpens}</span>
         <button type="button" className="brm-btn brm-btn--primary" disabled={!ready} onClick={open}>
           {openAsk ? W.closeAskOpenVote(Number(openAsk.askId) || openAsk.askId) : W.openVoting}
         </button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

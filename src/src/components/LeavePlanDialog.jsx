@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
@@ -211,16 +212,8 @@ export default function LeavePlanDialog({
       closeOnBackdrop={() => !busy}
       closeOnEscape={() => !busy}
     >
-      <header className="lvp-head">
-        <div className="lvp-grow">
-          <h2 id="lvp-title">Leave the {plan}</h2>
-          <p className="lvp-dim">
-            {orgName ? <b>{orgName}</b> : 'This organisation'} moves to the free plan the moment you leave —
-            no request, nothing to wait for.
-          </p>
-        </div>
-        <button type="button" className="lvp-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="lvp-head" titleId="lvp-title" title={<>Leave the {plan}</>} titlesClassName="lvp-grow" sub={<>{orgName ? <b>{orgName}</b> : 'This organisation'} moves to the free plan the moment you leave —
+            no request, nothing to wait for.</>} subClassName="lvp-dim" onClose={requestClose} closeDisabled={busy} closeClassName="lvp-x" />
 
       <div className="lvp-body">
         {loadError && <p className="lvp-alert" role="alert">{loadError}</p>}
@@ -358,7 +351,7 @@ export default function LeavePlanDialog({
         {leaveError && <p className="lvp-alert" role="alert">{leaveError}</p>}
       </div>
 
-      <footer className="lvp-foot">
+      <DialogFoot className="lvp-foot">
         {why && <span className="lvp-why" id="lvp-why" data-testid="lvp-why">{why}</span>}
         <button type="button" className="lvp-btn" onClick={requestClose} disabled={busy}>Not now</button>
         <button
@@ -371,7 +364,7 @@ export default function LeavePlanDialog({
         >
           {leaving ? 'Leaving…' : `Leave the ${plan}`}
         </button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

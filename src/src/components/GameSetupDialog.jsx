@@ -83,6 +83,7 @@ import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
@@ -1379,22 +1380,21 @@ export default function GameSetupDialog({
       ) : null}
     >
       {/* THE HEAD STAYS, so the X is always on screen. */}
-      <div className="gsd-head">
-        <h2 id="gsd-heading">{phone && view === 'compare' ? 'Format guide' : headingText}</h2>
+      {/* The shared head (ui/DialogParts, experience plan 5b). THE X goes
+          through requestClose(), exactly like Cancel and Escape. */}
+      <DialogHead
+        className="gsd-head"
+        titleId="gsd-heading"
+        title={phone && view === 'compare' ? 'Format guide' : headingText}
+        onClose={requestClose}
+        closeLabel={isEdit ? 'Close without saving changes' : 'Close without creating'}
+        closeClassName="gsd-close"
+        closeProps={{ title: isEdit ? 'Close without saving changes' : 'Close without creating' }}
+      >
         <span className="gsd-head-acts">
           <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
-          {/* THE X goes through requestClose(), exactly like Cancel and Escape. */}
-          <button
-            type="button"
-            className="gsd-close"
-            onClick={requestClose}
-            aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
-            title={isEdit ? 'Close without saving changes' : 'Close without creating'}
-          >
-            ×
-          </button>
         </span>
-      </div>
+      </DialogHead>
 
       <div
         className={`gsd-body${showSide && !(howHidden && !isEdit) ? ' has-side' : ''}${showSide && howHidden && !isEdit ? ' has-rail' : ''}`}
@@ -1458,7 +1458,7 @@ export default function GameSetupDialog({
       <p className="gsd-sr" aria-live="polite">{announce}</p>
 
       {confirmingClose ? (
-        <div className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
+        <DialogFoot className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
           <p className="gsd-confirm-t" id="gsd-confirm-t">
             {isEdit
               ? <><b>Discard your changes?</b> The session stays as it was.</>
@@ -1477,9 +1477,9 @@ export default function GameSetupDialog({
           >
             Discard
           </button>
-        </div>
+        </DialogFoot>
       ) : (
-        <div className="dialog-actions">
+        <DialogFoot className="dialog-actions">
           {showNeed && (
             <p className="gsd-foot-note gsd-foot-need" id="gsd-need">
               <Icon name="Info" weight="bold" size={14} color="currentColor" />
@@ -1520,7 +1520,7 @@ export default function GameSetupDialog({
               <kbd className="gsd-kbd" aria-hidden="true">{shortcut}</kbd>
             )}
           </button>
-        </div>
+        </DialogFoot>
       )}
     </Modal>
   );

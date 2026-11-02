@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import Icon from './Icon';
@@ -20,31 +21,16 @@ export default function HostReportsDialog({ onClose }) {
       onClose={() => onClose && onClose()}
       theme="dark"
     >
-      <header>
-        <Icon name="FileText" weight="duotone" size={20} color="var(--primary)" />
-        <div className="qsets-grow">
-          <h2 id="hrp-title">Reports</h2>
-          <p className="qsets-dim">Saved from a session's report screen. They stay after the session has expired.</p>
-        </div>
+      <DialogHead titleId="hrp-title" title="Reports" titlesClassName="qsets-grow" sub="Saved from a session's report screen. They stay after the session has expired." subClassName="qsets-dim" icon={<Icon name="FileText" weight="duotone" size={20} color="var(--primary)" />} onClose={() => onClose && onClose()} closeLabel="Close Reports" closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "hrp-close" }}>
         {/* The reporting guide's saved-reports help (Help Phase 3). */}
         <HelpButton {...helpFor('host-reports')} variant="inline" size="small" tooltip="Help: reports" className="help-button-quiet" />
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={() => onClose && onClose()}
-          aria-label="Close Reports"
-          title="Close Reports"
-          data-testid="hrp-close"
-        >
-          ×
-        </button>
-      </header>
+      </DialogHead>
       <div className="qsets-modal-body">
         <ReportsPanel />
       </div>
-      <footer>
+      <DialogFoot>
         <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>Close</button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

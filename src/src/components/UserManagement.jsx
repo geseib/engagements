@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Icon from './Icon';
+import { useConfirm } from './ConfirmDialog';
 import './UserManagement.css';
 
 /**
@@ -181,6 +182,8 @@ function displayName(user) {
 }
 
 const UserManagement = () => {
+  // Reject and Remove ask in the small confirm dialog (experience plan 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -437,13 +440,14 @@ const UserManagement = () => {
                       type="button"
                       className="um-btn um-btn--danger"
                       disabled={busy}
-                      onClick={() => {
+                      onClick={async () => {
                         const who = name || user.username;
-                        if (
-                          window.confirm(
-                            `Reject ${who}?\n\nThey move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.`
-                          )
-                        ) {
+                        if (await askConfirm({
+                          title: `Reject ${who}?`,
+                          message: 'They move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.',
+                          confirmText: 'Reject',
+                          danger: true,
+                        })) {
                           changeUserState(user.username, 'disabled');
                         }
                       }}
@@ -580,12 +584,13 @@ const UserManagement = () => {
                       aria-label={`Remove ${who}`}
                       title={`Remove ${who}`}
                       disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete ${who}'s account?\n\nThey lose access immediately and would have to register again from scratch. Sessions they hosted and any question sets they uploaded are not affected.`
-                          )
-                        ) {
+                      onClick={async () => {
+                        if (await askConfirm({
+                          title: `Delete ${who}'s account?`,
+                          message: 'They lose access immediately and would have to register again from scratch. Sessions they hosted and any question sets they uploaded are not affected.',
+                          confirmText: 'Delete the account',
+                          danger: true,
+                        })) {
                           changeUserState(user.username, 'delete');
                         }
                       }}
@@ -609,6 +614,7 @@ const UserManagement = () => {
         Cognito returns at most 60 accounts in one page and there is no second page.
         Search and role filters apply to what is loaded.
       </p>
+      {confirmDialog}
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import DocRenderer, { scrollToHelpSection } from './documentation/DocRenderer';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import './HelpSystem.css';
 import Icon from './Icon';
 import {
@@ -368,20 +369,7 @@ const HelpSystem = ({ section, guide, onClose }) => {
       closeOnEscape={false}
     >
       <div className="help-modal-root" ref={contentRef}>
-        <div className="help-modal-header">
-          <h2 id={titleId}>
-            <Icon name="Books" weight="duotone" size={16} color="var(--accent)" /> Help
-          </h2>
-          <button
-            ref={closeRef}
-            type="button"
-            className="help-close-button"
-            onClick={onClose}
-            aria-label="Close help"
-          >
-            <Icon name="X" weight="bold" size={16} color="currentColor" />
-          </button>
-        </div>
+        <DialogHead className="help-modal-header" titleId={titleId} title={<><Icon name="Books" weight="duotone" size={16} color="var(--accent)" /> Help</>} onClose={onClose} closeLabel="Close help" closeClassName="help-close-button" closeRef={closeRef} />
 
         {renderNavigation()}
 
@@ -389,7 +377,7 @@ const HelpSystem = ({ section, guide, onClose }) => {
           {renderContent()}
         </div>
 
-        <div className="help-modal-footer">
+        <DialogFoot className="help-modal-footer">
           <div className="help-footer-links">
             <button
               type="button"
@@ -423,7 +411,7 @@ const HelpSystem = ({ section, guide, onClose }) => {
               <Icon name="Bug" weight="bold" size={16} color="currentColor" /> Report an issue
             </a>
           </div>
-        </div>
+        </DialogFoot>
       </div>
     </Modal>,
     document.body,

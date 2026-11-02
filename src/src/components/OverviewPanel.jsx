@@ -4,6 +4,7 @@ import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { inviteUrl } from './TeamPanel';
 import { DecideRequestDialog } from './PlanRequestsPanel';
+import { useConfirm } from './ConfirmDialog';
 import {
   orderBoxes, orangeTarget, scopeTotal, SHOW_ROWS, auditSeenKey, shortDate,
   invitationBox, sentBackBox, usageBox, planRequestBox, reportsBox, approvalsBox,
@@ -272,6 +273,8 @@ export default function OverviewPanel({
   const [busy, setBusy] = useState('');
   const [notes, setNotes] = useState({});
   const [deciding, setDeciding] = useState(null);
+  // The two decisions here ask in the small confirm dialog (step 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
 
   const d = (k) => reads[k].data;
   const boxes = useMemo(() => {
@@ -368,11 +371,15 @@ export default function OverviewPanel({
         );
       }
       case 'revoke':
-        if (!window.confirm(`Revoke the invitation to ${row.data.email}?\n\nThe link stops working. Nobody is removed and nothing is lost; you can invite this address again.`)) return undefined;
-        return run(box, row, async () => {
+        return askConfirm({
+          title: `Revoke the invitation to ${row.data.email}?`,
+          message: 'The link stops working. Nobody is removed and nothing is lost; you can invite this address again.',
+          confirmText: 'Revoke',
+          danger: true,
+        }).then((yes) => (yes ? run(box, row, async () => {
           await readJson(`orgs/${orgId}/invites/${encodeURIComponent(row.data.token)}`, { method: 'DELETE' });
           reads.members.reload();
-        });
+        }) : undefined));
       case 'read-log':
         if (onNavigate) onNavigate('privacy');
         return undefined;
@@ -385,13 +392,17 @@ export default function OverviewPanel({
         });
       case 'reject-account': {
         const who = row.name;
-        if (!window.confirm(`Reject ${who}?\n\nThey move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.`)) return undefined;
-        return run(box, row, async () => {
+        return askConfirm({
+          title: `Reject ${who}?`,
+          message: 'They move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.',
+          confirmText: 'Reject',
+          danger: true,
+        }).then((yes) => (yes ? run(box, row, async () => {
           await readJson(`admin/users/${encodeURIComponent(row.data.username)}/state`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newState: 'disabled' }),
           });
           reads.users.reload();
-        });
+        }) : undefined));
       }
       case 'decide':
         setDeciding(row.data);
@@ -542,6 +553,7 @@ export default function OverviewPanel({
           onDecided={() => { setDeciding(null); reads.planqueue.reload(); }}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

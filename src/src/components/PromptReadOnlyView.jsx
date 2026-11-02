@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { promptOwnerTag, ENGAGE, PUBLIC } from '../utils/setOwnerTag';
 
 /**
@@ -49,12 +50,7 @@ export default function PromptReadOnlyView({ prompt, parts = [], facts = [], onC
       onClose={onClose}
       labelledBy="pmgr-view-title"
     >
-      <div className="pmgr-modal-head">
-        <h2 id="pmgr-view-title">{prompt.name}</h2>
-        <button type="button" className="pmgr-x" onClick={onClose} aria-label="Close this prompt">
-          ×
-        </button>
-      </div>
+      <DialogHead className="pmgr-modal-head" titleId="pmgr-view-title" title={<>{prompt.name}</>} onClose={onClose} closeLabel="Close this prompt" closeClassName="pmgr-x" />
 
       <div className="pmgr-view-body" data-testid="pmgr-view-body">
         <p className="pmgr-view-note">{PROMPTS_READ_ONLY_NOTE}</p>
@@ -75,9 +71,9 @@ export default function PromptReadOnlyView({ prompt, parts = [], facts = [], onC
         ))}
       </div>
 
-      <div className="pmgr-view-foot">
+      <DialogFoot className="pmgr-view-foot">
         <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

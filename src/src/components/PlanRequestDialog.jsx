@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import pricing from '../../../lambda-functions/game/pricing';
 import { formatWhen } from '../config/tableCells';
 import './PlanRequests.css';
@@ -90,13 +91,7 @@ export default function PlanRequestDialog({ orgId, orgName, orgType = '', onClos
       closeOnBackdrop={() => !dirty && !busy}
       closeOnEscape={() => !dirty && !busy}
     >
-      <header className="preq-modal-head">
-        <div className="preq-grow">
-          <h2 id="preq-ask-title">{`Request the ${plan.name}`}</h2>
-          <p className="preq-dim">For <b>{orgName}</b>. Engage reviews requests by hand for now — usually within a day.</p>
-        </div>
-        <button type="button" className="preq-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="preq-modal-head" titleId="preq-ask-title" title={<>{`Request the ${plan.name}`}</>} titlesClassName="preq-grow" sub={<>For <b>{orgName}</b>. Engage reviews requests by hand for now — usually within a day.</>} subClassName="preq-dim" onClose={requestClose} closeDisabled={busy} closeClassName="preq-x" />
       <div className="preq-modal-body">
         <div className="preq-sum" data-testid="preq-sum">
           <div className="preq-sum-row"><span>{`${plan.name}, list price`}</span><b>{terms.price}</b></div>
@@ -139,12 +134,11 @@ export default function PlanRequestDialog({ orgId, orgName, orgType = '', onClos
         </p>
         {error && <p className="preq-alert" role="alert">{error}</p>}
       </div>
-      <footer className="preq-modal-foot">
-        <button type="button" className="preq-btn" onClick={requestClose} disabled={busy}>Not now</button>
+      <DialogFoot className="preq-modal-foot" cancel={<button type="button" className="preq-btn" onClick={requestClose} disabled={busy}>Not now</button>}>
         <button type="button" className="preq-btn preq-btn--primary" onClick={submit} disabled={busy} data-testid="preq-send">
           {busy ? 'Sending…' : 'Send the request'}
         </button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

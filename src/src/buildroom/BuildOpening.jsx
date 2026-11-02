@@ -17,6 +17,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { questionAnswer } from './buildScreens';
 import { W } from './words';
@@ -214,17 +215,13 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-startbuild-title">
-      <div className="brm-dh">
-        <h2 className="brm-h" id="brm-startbuild-title">Start building?</h2>
-        <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-dh" titleId="brm-startbuild-title" title="Start building?" titleClassName="brm-h" onClose={onClose} closeClassName="brm-x" />
       <p>{W.startConfirmFramed(n, of, more)}</p>
       {/* Where it really is (host review, 25 Oct 2026): there is no More. */}
       <p className="brm-hint">Nothing is lost: Back to the opening, under SESSION, returns to these steps and tells Claude to pause.</p>
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep framing</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep framing</button>}>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={start}>Start building</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import { useConfirm } from './ConfirmDialog';
 import AdjustmentsLedger, { AdjustedBill } from './AdjustmentsLedger';
 import pricingAdjust from '../../../lambda-functions/game/pricing-adjust';
 import pricing from '../../../lambda-functions/game/pricing';
@@ -63,13 +65,7 @@ export default function OrgBillingDrawer({ org, onClose }) {
       closeOnBackdrop={() => !granting && !revoking}
       closeOnEscape={() => !granting && !revoking}
     >
-      <header className="obill-head">
-        <div className="obill-grow">
-          <h2 id="obill-title">{org.name} — billing</h2>
-          <p className="obill-dim">{plan.name}{org.ownerEmail ? ` · owner ${org.ownerEmail}` : ''} · every number here is a row you can open.</p>
-        </div>
-        <button type="button" className="obill-x" onClick={onClose} aria-label="Close" title="Close">×</button>
-      </header>
+      <DialogHead className="obill-head" titleId="obill-title" title={<>{org.name} — billing</>} titlesClassName="obill-grow" sub={<>{plan.name}{org.ownerEmail ? ` · owner ${org.ownerEmail}` : ''} · every number here is a row you can open.</>} subClassName="obill-dim" onClose={onClose} closeClassName="obill-x" />
       <div className="obill-body">
         {error && <p className="obill-alert" role="alert">{error}</p>}
         {loading && <p className="obill-dim">Loading the ledger…</p>}
@@ -82,10 +78,9 @@ export default function OrgBillingDrawer({ org, onClose }) {
         <h3 className="obill-h3">Adjustments</h3>
         {!loading && <AdjustmentsLedger adjustments={rows} audience="staff" onRevoke={(a) => setRevoking(a)} />}
       </div>
-      <footer className="obill-foot">
-        <button type="button" className="obill-btn" onClick={onClose}>Close</button>
+      <DialogFoot className="obill-foot" cancel={<button type="button" className="obill-btn" onClick={onClose}>Close</button>}>
         <button type="button" className="obill-btn obill-btn--primary" onClick={() => setGranting(true)} data-testid="obill-grant">Grant an adjustment</button>
-      </footer>
+      </DialogFoot>
 
       {granting && (
         <GrantAdjustmentDialog
@@ -156,9 +151,10 @@ export function GrantAdjustmentDialog({ org, plan, usage, rows, period, onCancel
   const body = grantBody(kind, fields, period);
   const preview = period ? applyAdjustments(plan, usage, [...rows, previewRow(body, period)], period) : null;
 
-  const requestClose = () => {
+  const [askConfirm, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without granting? What you typed will be lost.')) return;
+    if (dirty && !(await askConfirm({ title: 'Close without granting?', message: 'What you typed will be lost.', confirmText: 'Close', cancelText: 'Keep editing' }))) return;
     onCancel();
   };
   const submit = async () => {
@@ -191,13 +187,7 @@ export function GrantAdjustmentDialog({ org, plan, usage, rows, period, onCancel
       closeOnBackdrop={() => !dirty && !busy}
       closeOnEscape={() => !dirty && !busy}
     >
-      <header className="obill-head">
-        <div className="obill-grow">
-          <h2 id="obill-grant-title">Grant an adjustment</h2>
-          <p className="obill-dim">To <b>{org.name}</b>. Written to their ledger with your name; they see it on Plan &amp; usage.</p>
-        </div>
-        <button type="button" className="obill-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="obill-head" titleId="obill-grant-title" title="Grant an adjustment" titlesClassName="obill-grow" sub={<>To <b>{org.name}</b>. Written to their ledger with your name; they see it on Plan &amp; usage.</>} subClassName="obill-dim" onClose={requestClose} closeDisabled={busy} closeClassName="obill-x" />
       <div className="obill-body">
         <fieldset className="obill-kinds">
           <legend className="obill-lab">Kind</legend>
@@ -247,10 +237,10 @@ export function GrantAdjustmentDialog({ org, plan, usage, rows, period, onCancel
         )}
         {error && <p className="obill-alert" role="alert">{error}</p>}
       </div>
-      <footer className="obill-foot">
-        <button type="button" className="obill-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="obill-foot" cancel={<button type="button" className="obill-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button type="button" className="obill-btn obill-btn--primary" onClick={submit} disabled={busy} data-testid="obill-grant-submit">{busy ? 'Granting…' : buttonLabel}</button>
-      </footer>
+      </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }
@@ -273,19 +263,15 @@ function RevokeDialog({ org, adjustment, onCancel, onRevoked }) {
   };
   return (
     <Modal overlayClassName="obill obill-scrim obill-scrim--over" contentClassName="obill-modal obill-modal--narrow" labelledBy="obill-revoke-title" onClose={onCancel} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy}>
-      <header className="obill-head">
-        <div className="obill-grow"><h2 id="obill-revoke-title">Revoke this adjustment?</h2><p className="obill-dim">{pricingAdjust.describe(adjustment)}. The row stays on their ledger, marked revoked with your reason.</p></div>
-        <button type="button" className="obill-x" onClick={onCancel} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="obill-head" titleId="obill-revoke-title" title="Revoke this adjustment?" titlesClassName="obill-grow" sub={<>{pricingAdjust.describe(adjustment)}. The row stays on their ledger, marked revoked with your reason.</>} subClassName="obill-dim" onClose={onCancel} closeDisabled={busy} closeClassName="obill-x" />
       <div className="obill-body">
         <label className="obill-field"><span className="obill-lab">Reason <span className="obill-dim">(required — the customer reads it)</span></span>
           <textarea className="obill-input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} /></label>
         {error && <p className="obill-alert" role="alert">{error}</p>}
       </div>
-      <footer className="obill-foot">
-        <button type="button" className="obill-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+      <DialogFoot className="obill-foot" cancel={<button type="button" className="obill-btn" onClick={onCancel} disabled={busy}>Cancel</button>}>
         <button type="button" className="obill-btn obill-btn--danger" onClick={submit} disabled={busy}>{busy ? 'Revoking…' : 'Revoke'}</button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

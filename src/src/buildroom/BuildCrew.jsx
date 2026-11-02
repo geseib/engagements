@@ -29,6 +29,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead as SharedDialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
 import BuildImage from './BuildImage';
@@ -149,13 +150,10 @@ function Link({ href, children }) {
   return <a className="brm-lnk" href={url} target="_blank" rel="noopener noreferrer">{children || url}</a>;
 }
 
+// The shared dialog head (components/ui/DialogParts, experience plan 5b),
+// in the Build Room's own classes.
 function DialogHead({ id, title, onClose }) {
-  return (
-    <div className="brm-dh">
-      <h2 className="brm-h" id={id}>{title}</h2>
-      {onClose && <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
-    </div>
-  );
+  return <SharedDialogHead className="brm-dh" titleId={id} title={title} titleClassName="brm-h" onClose={onClose} closeClassName="brm-x" />;
 }
 
 function Copy({ text, label }) {
@@ -210,8 +208,7 @@ export function RunCrewCodeSwitch({ crew, busy, run, api }) {
           <DialogHead id="brc-run-title" title="Switch Run crew code on?" onClose={() => setConfirming(false)} />
           <p>Claude may install and run builders&apos; code on this laptop: their tests, and the project, to review or merge it.</p>
           <p className="brm-hint">Their code is untrusted. Claude says in every review which way the switch was set. Switch it off again at any time.</p>
-          <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirming(false)}>Keep it off</button>
+          <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirming(false)}>Keep it off</button>}>
             <button
               type="button"
               className="brm-btn brm-btn--primary brm-push"
@@ -220,7 +217,7 @@ export function RunCrewCodeSwitch({ crew, busy, run, api }) {
             >
               Switch on
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
     </>
@@ -726,12 +723,10 @@ export function EarlyLookDialog({ share, crew, busy, run, api, onClose }) {
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide brc brc-lookmodal" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brc-look-title">
-      <div className="brm-dh">
-        <span className="brm-sr" id="brc-look-title">Early look: {share.title}</span>
-        <button type="button" className="brm-x" aria-label="Close" onClick={requestClose}><Icon name="X" size={16} /></button>
-      </div>
+      <SharedDialogHead className="brm-dh" as="span" titleId="brc-look-title" titleClassName="brm-sr" title={`Early look: ${share.title}`} onClose={requestClose} closeClassName="brm-x" />
       <EarlyLook share={share} crew={crew} host busy={busy} run={run} api={api} onDirty={setDirty} />
-      <div className="brm-row brm-gap"><button type="button" className="brm-btn brm-push" onClick={requestClose}>Close</button></div>
+      <DialogFoot className="brm-row brm-gap"><button type="button" className="brm-btn brm-push" onClick={requestClose}>Close</button>
+      </DialogFoot>
     </Modal>
   );
 }

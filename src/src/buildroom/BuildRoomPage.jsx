@@ -23,6 +23,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Modal from '../components/Modal';
+import { DialogHead as SharedDialogHead, DialogFoot } from '../components/ui/DialogParts';
 import { getAuthToken } from '../auth/authFetch';
 import { rememberReturnPath } from '../auth/returnPath';
 import reloadPage from '../utils/reloadPage';
@@ -3083,12 +3084,11 @@ export function PickConfirm({ ask, id, busy, onConfirm, onClose }) {
       <DialogHead id="brm-pick-title" title={v.isPreferred ? W.pickRoomChoice : W.pickAlternate} onClose={onClose} />
       <p data-testid="brm-pick-body">{body}</p>
       {open && <p className="brm-hint">This closes the vote.</p>}
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>}>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onConfirm}>
           {W.pick(short(v.pick))}
         </button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -4110,8 +4110,7 @@ export function VoteFromIdeasDialog({ ideas: chosen, more = [], picks: startPick
         <div className="brm-notice brm-unheard">{W.hiddenUntilMockups}</div>
       )}
       {!connected && <p className="brm-hint">{W.offlineNoMockups}</p>}
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Cancel</button>}>
         {!mockups && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ open: false })}>{W.saveDraft}</button>}
         {mockups ? (
           <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !prompt.trim() || n < 2} onClick={() => send({ askForMockups: true })}>Ask Claude for {n} mockups</button>
@@ -4120,7 +4119,7 @@ export function VoteFromIdeasDialog({ ideas: chosen, more = [], picks: startPick
             {openAsk ? `Close ask ${askNumber(openAsk.askId)} and open the vote` : W.openVoting}
           </button>
         )}
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -4128,13 +4127,13 @@ export function VoteFromIdeasDialog({ ideas: chosen, more = [], picks: startPick
 // ── Dialogs ─────────────────────────────────────────────────────────────────
 
 // `help`: a screen id (config/help/screens.js); its `?` sits beside the X.
+// The shared dialog head (components/ui/DialogParts, experience plan 5b),
+// in the Build Room's own classes.
 function DialogHead({ id, title, onClose, help = '' }) {
   return (
-    <div className="brm-dh">
-      <h2 className="brm-h" id={id}>{title}</h2>
+    <SharedDialogHead className="brm-dh" titleId={id} title={title} titleClassName="brm-h" onClose={onClose} closeClassName="brm-x">
       {help ? <HelpButton {...helpFor(help)} variant="inline" size="small" tooltip={`Help: ${title}`} className="help-button-quiet brm-dh-help" /> : null}
-      <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
-    </div>
+    </SharedDialogHead>
   );
 }
 
@@ -4598,10 +4597,9 @@ export function WrapUpPanel({ outcome, room = null, connected = false, api, run,
         {form.links.length < LINK_MAX && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-selfstart" onClick={addLink}><Icon name="Plus" size={14} /> {W.wrapAddLink}</button>}
       </div>
       <label className="brm-field"><span className="brm-lbl">Next steps (one per line)</span><textarea className="brm-input brm-ta brm-ta--sm" value={form.nextSteps} onChange={set('nextSteps')} /></label>
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>}>
         <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !form.summary.trim()} onClick={save}>Save wrap-up</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -4615,10 +4613,9 @@ function EndDialog({ api, run, busy, onClose }) {
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-end-title">
       <DialogHead id="brm-end-title" title="End this session?" onClose={onClose} />
       <p>{W.endBody}</p>
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep it running</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep it running</button>}>
         <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={end}>End session</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

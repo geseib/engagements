@@ -570,7 +570,7 @@ export default function ReportsPanel({ heading = null }) {
               <div className="rp-drops">
                 {drops.map((d) => (
                   <button key={d.key} type="button" className="rp-drop" onClick={() => clearOne(d.key)}>
-                    {d.label} <span aria-hidden="true">×</span>
+                    {d.label} <span aria-hidden="true"><Icon name="X" weight="bold" size={14} color="currentColor" /></span>
                   </button>
                 ))}
               </div>

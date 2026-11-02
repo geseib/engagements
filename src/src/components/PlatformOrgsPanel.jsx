@@ -3,6 +3,8 @@ import { authFetch } from '../auth/authFetch';
 import OrgBillingDrawer from './OrgBillingDrawer';
 import { AuditLogDialog } from './AuditLog';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import { useConfirm } from './ConfirmDialog';
 import './PlatformOrgsPanel.css';
 
 /**
@@ -326,9 +328,10 @@ export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
   const dirty = why.length > 0;
   const ready = why.length >= SUSPEND_REASON_MIN && why.length <= SUSPEND_REASON_MAX;
 
-  const requestClose = () => {
+  const [askConfirm, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without suspending? The reason you typed will be lost.')) return;
+    if (dirty && !(await askConfirm({ title: 'Close without suspending?', message: 'The reason you typed will be lost.', confirmText: 'Close', cancelText: 'Keep editing' }))) return;
     onCancel();
   };
 
@@ -358,16 +361,8 @@ export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
       closeOnBackdrop={() => !dirty && !busy}
       closeOnEscape={() => !dirty && !busy}
     >
-      <header className="porgs-modal-head">
-        <div className="porgs-grow">
-          <h2 id="porgs-suspend-title">Suspend {org.name}?</h2>
-          <p className="porgs-dim">
-            This marks the organisation Suspended on this list. Nothing else changes yet: its members
-            can still sign in and run sessions. Reinstate lifts it.
-          </p>
-        </div>
-        <button type="button" className="porgs-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="porgs-modal-head" titleId="porgs-suspend-title" title={<>Suspend {org.name}?</>} titlesClassName="porgs-grow" sub="This marks the organisation Suspended on this list. Nothing else changes yet: its members
+            can still sign in and run sessions. Reinstate lifts it." subClassName="porgs-dim" onClose={requestClose} closeDisabled={busy} closeClassName="porgs-x" />
       <div className="porgs-modal-body">
         <label className="porgs-field">
           <span className="porgs-lab">Reason <span className="porgs-dim">(required)</span></span>
@@ -385,8 +380,7 @@ export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
         </label>
         {error && <p className="porgs-alert" role="alert">{error}</p>}
       </div>
-      <footer className="porgs-modal-foot">
-        <button type="button" className="porgs-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="porgs-modal-foot" cancel={<button type="button" className="porgs-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button
           type="button"
           className="porgs-btn porgs-btn--danger"
@@ -396,7 +390,8 @@ export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
         >
           {busy ? 'Suspending…' : 'Suspend'}
         </button>
-      </footer>
+      </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import './InviteDialog.css';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import {
   buildInvite, retentionStatus, formatDeadline, RETENTION_DAYS,
@@ -115,14 +116,13 @@ export default function InviteDialog({
       closeOnEscape
       label={`Invite people to ${target.title || 'this session'}`}
     >
-      <div className="inv__head">
-        <h2 className="inv__title">
-          <Icon name="ClipboardText" weight="duotone" size={20} color="var(--primary)" /> Invite
-        </h2>
-        <button type="button" className="inv__x" onClick={onClose} aria-label="Close">
-          <Icon name="X" weight="bold" size={18} />
-        </button>
-      </div>
+      <DialogHead
+        className="inv__head"
+        titleClassName="inv__title"
+        title={<><Icon name="ClipboardText" weight="duotone" size={20} color="var(--primary)" /> Invite</>}
+        onClose={onClose}
+        closeClassName="inv__x"
+      />
 
       <p className="inv__for">{target.title || 'Engagement Session'}</p>
 
@@ -192,14 +192,18 @@ export default function InviteDialog({
 
       {copyError && <p className="inv__warn inv__warn--warn">{copyError}</p>}
 
-      <div className="inv__acts">
-        <button type="button" className="inv__btn" onClick={onClose}>
-          Close
-        </button>
+      <DialogFoot
+        className="inv__acts"
+        cancel={(
+          <button type="button" className="inv__btn" onClick={onClose}>
+            Close
+          </button>
+        )}
+      >
         <button type="button" className="inv__btn inv__btn--primary" onClick={copy}>
           {copied ? 'Copied!' : 'Copy invite'}
         </button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

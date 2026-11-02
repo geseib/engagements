@@ -157,7 +157,9 @@ describe('New set is a dialog, not a panel below the table', () => {
     expect(dialog).toMatch(/overlayClassName="qsets qsets-scrim"/);
     expect(dialog).toMatch(/contentClassName="qsets-modal qsets-modal--create"/);
     // Both exits, and Modal's own onClose, are the same function.
-    expect((dialog.match(/onClick=\{requestClose\}/g) || []).length).toBe(2);
+    // The X is the shared head's (DialogHead onClose, step 5b); the bottom exit an onClick.
+    expect((dialog.match(/onClick=\{requestClose\}/g) || []).length).toBe(1);
+    expect(dialog).toMatch(/<DialogHead [^\n]*onClose=\{requestClose\}/);
     expect(dialog).toMatch(/onClose=\{requestClose\}/);
   });
 

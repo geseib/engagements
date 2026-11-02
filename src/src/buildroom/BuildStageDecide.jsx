@@ -13,6 +13,7 @@
  */
 import React, { useContext, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { ViewerContext } from './MockupViewer';
 import { W } from './words';
@@ -110,13 +111,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   if (mode === 'reask') {
     return (
       <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sd" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-sd-title">
-        <div className="brm-pa-head">
-          <div>
-            <div className="brm-pa-eb">Ask {askNo(ask.askId)} · ask again</div>
-            <h2 className="brm-pa-q" id="brm-sd-title">Ask the room again</h2>
-          </div>
-          <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-        </div>
+        <DialogHead className="brm-pa-head" titleId="brm-sd-title" title="Ask the room again" titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · ask again</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
         <div className="brm-sd-body">
           <label className="brm-field"><span className="brm-lbl">Question</span>
             <input className="brm-input" value={form.prompt} maxLength={300} onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))} />
@@ -148,25 +143,19 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
           )}
           {error && <p className="brm-alert" role="alert">{error}</p>}
         </div>
-        <div className="brm-sd-foot">
+        <DialogFoot className="brm-sd-foot">
           <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setError(''); setMode('send'); }}>
             <Icon name="ArrowLeft" size={14} /> {`Back to ${W.change}`}
           </button>
           <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !reaskReady} onClick={askAgain}>Ask again</button>
-        </div>
+        </DialogFoot>
       </Modal>
     );
   }
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sd" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-sd-title">
-      <div className="brm-pa-head">
-        <div>
-          <div className="brm-pa-eb">Ask {askNo(ask.askId)} · results</div>
-          <h2 className="brm-pa-q" id="brm-sd-title">{W.change}</h2>
-        </div>
-        <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-pa-head" titleId="brm-sd-title" title={<>{W.change}</>} titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · results</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
       <div className="brm-sd-body">
         <p className="brm-sd-q">{ask.prompt}</p>
         {choices.length > 0 && (
@@ -223,14 +212,10 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
       </div>
       {confirmDiscard && (
         <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={() => setConfirmDiscard(false)} closeOnBackdrop={false} labelledBy="brm-sd-discard">
-          <div className="brm-dh">
-            <h2 className="brm-h" id="brm-sd-discard">{`Discard Ask ${askNo(ask.askId)}? The votes stay in History.`}</h2>
-            <button type="button" className="brm-x" aria-label="Close" onClick={() => setConfirmDiscard(false)}><Icon name="X" size={16} /></button>
-          </div>
-          <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirmDiscard(false)}>Keep it</button>
+          <DialogHead className="brm-dh" titleId="brm-sd-discard" title={<>{`Discard Ask ${askNo(ask.askId)}? The votes stay in History.`}</>} titleClassName="brm-h" onClose={() => setConfirmDiscard(false)} closeClassName="brm-x" />
+          <DialogFoot className="brm-row brm-gap" cancel={<button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirmDiscard(false)}>Keep it</button>}>
             <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={discard}>Discard</button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
     </Modal>

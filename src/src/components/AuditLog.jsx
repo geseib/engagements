@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import {
   RETENTION_LINE, describeAction, actorName, actorLine, targetName, targetTypeLabel, changeLine, whenLabel, outcomeLabel,
 } from '../utils/auditCopy';
@@ -213,17 +214,9 @@ export function AuditLogDialog({ org = null, orgNames = null, onClose }) {
       onClose={onClose}
       theme="dark"
     >
-      <header className="alog-head">
-        <div className="alog-grow">
-          <h2 id="alog-title">{org ? `${org.name}: who changed what` : 'What Engage staff have changed'}</h2>
-          <p className="alog-dim alog-headnote">
-            {org
+      <DialogHead className="alog-head" titleId="alog-title" title={<>{org ? `${org.name}: who changed what` : 'What Engage staff have changed'}</>} titlesClassName="alog-grow" sub={<>{org
               ? `The same list the organisation's owners and admins see on Data & privacy. ${RETENTION_LINE}`
-              : `Every change staff made to a team, an account or a discount code, newest first. ${RETENTION_LINE}`}
-          </p>
-        </div>
-        <button type="button" className="alog-x" onClick={onClose} aria-label="Close" title="Close">×</button>
-      </header>
+              : `Every change staff made to a team, an account or a discount code, newest first. ${RETENTION_LINE}`}</>} subClassName="alog-dim alog-headnote" onClose={onClose} closeClassName="alog-x" />
       <div className="alog-body">
         <AuditLog
           path={logPath}
@@ -233,9 +226,7 @@ export function AuditLogDialog({ org = null, orgNames = null, onClose }) {
             : 'When Engage staff change a team, an account or a discount code, it appears here.'}
         />
       </div>
-      <footer className="alog-foot">
-        <button type="button" className="alog-btn" onClick={onClose}>Close</button>
-      </footer>
+      <DialogFoot className="alog-foot"><button type="button" className="alog-btn" onClick={onClose}>Close</button></DialogFoot>
     </Modal>
   );
 }

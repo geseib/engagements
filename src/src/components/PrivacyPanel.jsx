@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { RETENTION_LINE } from '../utils/auditCopy';
 import './PrivacyPanel.css';
 
@@ -194,19 +195,7 @@ function DeleteDialog({
       closeOnEscape={() => !deleting}
       labelledBy="priv-del-title"
     >
-      <header>
-        <h2 id="priv-del-title">Delete {orgName}?</h2>
-        <span className="priv-grow" />
-        <button
-          type="button"
-          className="priv-btn priv-btn--icon"
-          onClick={requestClose}
-          disabled={deleting}
-          aria-label="Close"
-        >
-          <Icon name="X" weight="bold" size={14} color="currentColor" />
-        </button>
-      </header>
+      <DialogHead titleId="priv-del-title" title={<>Delete {orgName}?</>} titlesClassName="priv-grow" onClose={requestClose} closeDisabled={deleting} closeClassName="priv-btn priv-btn--icon" />
       <div className="priv-modal-body">
         {/* The consequence, not the severity. */}
         <ul className="priv-consq">
@@ -250,7 +239,7 @@ function DeleteDialog({
         </div>
         {error ? <p className="priv-err">{error}</p> : null}
       </div>
-      <footer>
+      <DialogFoot>
         {/* The bottom exit. Every dialog gets one AND an X, both through
             requestClose. */}
         <button
@@ -270,7 +259,7 @@ function DeleteDialog({
           <Icon name="Trash" weight="bold" size={14} color="currentColor" />
           {deleting ? 'Deleting…' : 'Delete for ever'}
         </button>
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

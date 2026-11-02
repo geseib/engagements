@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import { DialogClose } from './ui/DialogParts';
 import { step, canStep, positionLabel } from '../utils/answerSpotlight';
 import { answerText } from '../config/stageAnswers';
 import { minimalK, partText } from '../present/presentFit';
@@ -305,14 +306,8 @@ export default function AnswerSpotlight({
         {parts > 1 && (
           <span className="answer-spotlight__part">{`Part ${shownPart + 1} of ${parts}`}</span>
         )}
-        <button
-          type="button"
-          className="answer-spotlight__close"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <Icon name="X" size={22} />
-        </button>
+        {/* A viewer, not a form: no title bar, but the one shared close (ui/DialogParts). */}
+        <DialogClose className="answer-spotlight__close" onClose={onClose} size={22} />
       </div>
 
       {!variant && <div className="answer-spotlight__text">{text}</div>}

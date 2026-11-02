@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import './ui/Dialog.css';
 import './ui/Button.css';
@@ -213,12 +214,7 @@ export function AskComposerBody({
 
   const root = (
       <div className="askp-root">
-        <header className="ui-dialog-head">
-          <div className="ui-dialog-titles">
-            <h2 id={titleId} className="ui-dialog-title">{FW.askTheRoom}</h2>
-          </div>
-          <button type="button" className="ui-dialog-x" aria-label={FW.close} onClick={requestClose} disabled={busy}>×</button>
-        </header>
+        <DialogHead titleId={titleId} title={FW.askTheRoom} onClose={requestClose} closeLabel={FW.close} closeDisabled={busy} />
 
         <div className="ui-dialog-body askc-body">
           {suggestions.length ? (
@@ -442,12 +438,12 @@ export function AskComposerBody({
           ) : null}
         </div>
 
-        <footer className="ui-dialog-foot">
+        <DialogFoot>
           <button type="button" className="ui-btn ui-btn--quiet" onClick={requestClose} disabled={busy}>{FW.cancel}</button>
           <button type="button" className="ui-btn ui-btn--action" onClick={send} disabled={sendDisabled}>
             {busy ? FW.sending : (comments ? FW.commentsSend : FW.sendToRoom)}
           </button>
-        </footer>
+        </DialogFoot>
       </div>
   );
   return inline ? <div className="askp askc askc--inline">{root}</div> : root;

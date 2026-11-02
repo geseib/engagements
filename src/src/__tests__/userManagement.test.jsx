@@ -288,21 +288,26 @@ describe('the approval queue, which is a queue and not a filter tab', () => {
     // registration has a reversible neighbour (RATIONALE §8) — disabled — and
     // the dialog has to say which one it is rather than shouting that it cannot
     // be undone.
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    // Asked in the small confirm dialog since experience plan 5b, never the browser's.
+    const browser = jest.spyOn(window, 'confirm');
     await mount();
     const queue = screen.getByRole('region', { name: /waiting for approval/i });
     const row = within(queue).getByText('Adaeze Okafor').closest('li');
     fireEvent.click(within(row).getByRole('button', { name: /reject/i }));
 
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm.mock.calls[0][0]).toMatch(/disabled/i);
+    let ask = await screen.findByRole('dialog', { name: /^Reject Adaeze Okafor/ });
+    expect(ask).toHaveTextContent(/disabled/i);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Reject/ })).toBeNull());
     expect(stateCalls()).toHaveLength(0);
 
-    confirm.mockReturnValue(true);
     fireEvent.click(within(row).getByRole('button', { name: /reject/i }));
+    ask = await screen.findByRole('dialog', { name: /^Reject Adaeze Okafor/ });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Reject' }));
     await waitFor(() => expect(stateCalls()).toHaveLength(1));
     expect(JSON.parse(stateCalls()[0][1].body)).toEqual({ newState: 'disabled' });
-    confirm.mockRestore();
+    expect(browser).not.toHaveBeenCalled();
+    browser.mockRestore();
   });
 });
 
@@ -390,7 +395,6 @@ describe('the members table, and the badge that used to lie about it', () => {
     // rejects: `deleteUser`, which sent DELETE /admin/users/{id} — a route that
     // is not deployed — and rejects a confirmation that states severity
     // ("cannot be undone") instead of consequence (RATIONALE §8).
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
     await mount();
     // Sam is the disabled fixture, and disabled rows live behind their own
     // tab now — which is also where a permanent removal actually happens.
@@ -399,30 +403,32 @@ describe('the members table, and the badge that used to lie about it', () => {
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
 
-    expect(confirm.mock.calls[0][0]).toMatch(/Sam Okonkwo/);
-    expect(confirm.mock.calls[0][0]).toMatch(/register again/i);
+    let ask = await screen.findByRole('dialog', { name: /Sam Okonkwo/ });
+    expect(ask).toHaveTextContent(/register again/i);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Sam Okonkwo/ })).toBeNull());
     expect(stateCalls()).toHaveLength(0);
 
-    confirm.mockReturnValue(true);
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
+    ask = await screen.findByRole('dialog', { name: /Sam Okonkwo/ });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete the account' }));
     await waitFor(() => expect(stateCalls()).toHaveLength(1));
     expect(JSON.parse(stateCalls()[0][1].body)).toEqual({ newState: 'delete' });
     expect(authFetch.mock.calls.every(([, o = {}]) => o.method !== 'DELETE')).toBe(true);
-    confirm.mockRestore();
   });
 
   test('a failed state change is reported rather than swallowed into the row', async () => {
     // rejects: optimistically rewriting local state before the response, which
     // makes a 500 look exactly like a success until the next reload.
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     await mount({ stateStatus: 500 });
     fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
       .getByRole('button', { name: /^Disabled/i }));
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
+    const ask = await screen.findByRole('dialog', { name: /Sam Okonkwo/ });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete the account' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/nope/i));
     expect(within(screen.getByRole('table')).getByText('Sam Okonkwo')).toBeInTheDocument();
-    confirm.mockRestore();
   });
 });
 

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import Modal from '../Modal';
+import { DialogHead, DialogFoot } from '../ui/DialogParts';
 import Icon from '../Icon';
 import Button from '../ui/Button';
 import SessionNeedsList from './SessionNeedsList';
@@ -102,12 +103,7 @@ export default function OneScreenNeedsBell({
           onClose={close}
           theme="dark"
         >
-          <header className="ny-sheet-head">
-            <h2 className="ny-sheet-title">{oneScreen ? NEEDS_WORDS.roomCanSee : NEEDS_WORDS.title}</h2>
-            <button type="button" className="ny-x" aria-label="Close Needs you" onClick={close}>
-              <Icon name="X" weight="bold" size={14} color="currentColor" />
-            </button>
-          </header>
+          <DialogHead className="ny-sheet-head" title={<>{oneScreen ? NEEDS_WORDS.roomCanSee : NEEDS_WORDS.title}</>} titleClassName="ny-sheet-title" onClose={close} closeLabel="Close Needs you" closeClassName="ny-x" />
           {oneScreen ? <p className="ny-k">{NEEDS_WORDS.thisSession}</p> : null}
           <SessionNeedsList
             needs={needs}
@@ -118,9 +114,9 @@ export default function OneScreenNeedsBell({
             remoteConnected={remoteConnected}
             onConnectPhone={onConnectPhone ? () => { setOpen(false); onConnectPhone(); } : null}
           />
-          <footer className="ny-sheet-foot">
+          <DialogFoot className="ny-sheet-foot">
             <Button variant="secondary" size={44} onClick={close}>Close</Button>
-          </footer>
+          </DialogFoot>
         </Modal>
       ) : null}
     </>

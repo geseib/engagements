@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import AIScenarioBuilder from './AIScenarioBuilder';
@@ -525,15 +526,7 @@ export default function HostQuestionSetsDialog({
       labelledBy="hqs-title"
       onClose={() => onClose && onClose()}
     >
-      <header>
-        <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
-        <div className="qsets-grow">
-          <h2 id="hqs-title">Your question sets</h2>
-          <p className="qsets-dim">
-            Sets you made. You can rename or delete these; everything else in the library stays
-            as your administrator left it.
-          </p>
-        </div>
+      <DialogHead titleId="hqs-title" title="Your question sets" titlesClassName="qsets-grow" sub="Sets you made. You can rename or delete these; everything else in the library stays as your administrator left it." subClassName="qsets-dim" icon={<Icon name="Books" weight="duotone" size={20} color="var(--primary)" />} onClose={() => onClose && onClose()} closeLabel="Close your question sets" closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "hqs-close" }}>
         {/* The setup guide's question-set section (Help Phase 3). */}
         <HelpButton {...helpFor('host-question-sets')} variant="inline" size="small" tooltip="Help: question sets" className="help-button-quiet" />
         {/*
@@ -543,17 +536,7 @@ export default function HostQuestionSetsDialog({
           spelling the control differently — and the corner is where people look
           first, so it is the one that has to be predictable.
         */}
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={() => onClose && onClose()}
-          aria-label="Close your question sets"
-          title="Close your question sets"
-          data-testid="hqs-close"
-        >
-          ×
-        </button>
-      </header>
+      </DialogHead>
 
       <div className="qsets-modal-body">
         {/* A PLAN LIMIT (`notice.limit`) is the shared notice — what ran out and
@@ -1026,12 +1009,12 @@ export default function HostQuestionSetsDialog({
         discoverable and neither exists on a tablet. `.qsets-modal footer`
         already carries the layout; it was simply never used on this dialog.
       */}
-      <footer>
+      <DialogFoot>
         <span className="qsets-grow" />
         <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>
           Close
         </button>
-      </footer>
+      </DialogFoot>
 
       {builder && (
         /*
@@ -1083,15 +1066,7 @@ export default function HostQuestionSetsDialog({
           onClose={() => { setReviewDraft(null); refreshDrafts(); }}
           theme="dark"
         >
-          <header>
-            <Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />
-            <div className="qsets-grow">
-              <h2 id="host-draft-review-title">Review AI draft</h2>
-              <p className="qsets-dim">Nothing is saved until you accept.</p>
-            </div>
-            <button type="button" className="qs-dialog-close" aria-label="Close the review" title="Close"
-              onClick={() => { setReviewDraft(null); refreshDrafts(); }}>×</button>
-          </header>
+          <DialogHead titleId="host-draft-review-title" title="Review AI draft" titlesClassName="qsets-grow" sub="Nothing is saved until you accept." subClassName="qsets-dim" icon={<Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />} onClose={() => { setReviewDraft(null); refreshDrafts(); }} closeLabel="Close the review" closeClassName="qs-dialog-close" />
           <div className="qsets-modal-body">
             <DraftReview
               draftId={reviewDraft.draftId}
@@ -1100,9 +1075,9 @@ export default function HostQuestionSetsDialog({
               onChanged={() => { load(); refreshDrafts(); }}
             />
           </div>
-          <footer>
+          <DialogFoot>
             <button type="button" className="qsets-btn" onClick={() => { setReviewDraft(null); refreshDrafts(); }}>Close</button>
-          </footer>
+          </DialogFoot>
         </Modal>
       )}
 

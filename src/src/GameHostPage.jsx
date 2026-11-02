@@ -72,7 +72,8 @@ import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
-import ConfirmDialog from './components/ConfirmDialog';
+import ConfirmDialog, { useConfirm } from './components/ConfirmDialog';
+import { DialogHead, DialogFoot } from './components/ui/DialogParts';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
@@ -1115,9 +1116,12 @@ function GameHostPage() {
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
 
-  // Sign-out handler
-  const handleSignOut = () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
+  // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
+  // Mounted in both places Sign out is offered: the start screen's early
+  // return and the page's own (the Session menu).
+  const [askConfirm, confirmDialog] = useConfirm();
+  const handleSignOut = async () => {
+    if (await askConfirm({ title: 'Sign out?', message: 'Your sessions keep running; you can sign back in at any time.', confirmText: 'Sign out' })) {
       signOut();
       window.location.href = '/auth';
     }
@@ -7366,6 +7370,7 @@ Focus on actionable business strategy insights.`;
         {/* Home's rows offer Invite too (experience plan 4a); this branch is
             an early return, so the dialog is mounted here as well. */}
         <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+        {confirmDialog}
       </>
     );
   }
@@ -10537,20 +10542,24 @@ Focus on actionable business strategy insights.`;
           closeOnBackdrop
           closeOnEscape
         >
-          <h2>Leave this session?</h2>
+          <DialogHead title="Leave this session?" onClose={() => setConfirmLeave(false)} />
           <div className="dialog-content">
             <p className="dialog-help-text" style={{ fontSize: '15px' }}>
               {`${players.length} ${players.length === 1 ? 'person is' : 'people are'} in the room. The session stays live — their screens keep working, and you can come back to it any time with Continue.`}
             </p>
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="btn-primary"
-                autoFocus
-                onClick={() => setConfirmLeave(false)}
-              >
-                Stay in the session
-              </button>
+            <DialogFoot
+              className="dialog-actions"
+              cancel={(
+                <button
+                  type="button"
+                  className="btn-primary"
+                  autoFocus
+                  onClick={() => setConfirmLeave(false)}
+                >
+                  Stay in the session
+                </button>
+              )}
+            >
               <button
                 type="button"
                 className="btn-secondary"
@@ -10558,7 +10567,7 @@ Focus on actionable business strategy insights.`;
               >
                 Back to Menu
               </button>
-            </div>
+            </DialogFoot>
           </div>
         </Modal>
       )}
@@ -10703,6 +10712,7 @@ Focus on actionable business strategy insights.`;
           onCancel={confirmModalProps.onCancel}
         />
       )}
+      {confirmDialog}
 
       {/* GOING BACK THROUGH A ROUND THAT ALREADY HAPPENED.
 

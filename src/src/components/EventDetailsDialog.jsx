@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import { createEvent, updateEvent } from '../utils/eventsApi';
@@ -142,17 +143,9 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
       theme="dark"
     >
       <form onSubmit={submit} noValidate>
-        <header className="evts-modal-head">
-          <div className="evts-grow">
-            <h2 id="evts-details-title">{editing ? 'Event details' : 'New event'}</h2>
-            <p>
-              {editing
+        <DialogHead className="evts-modal-head" titleId="evts-details-title" title={<>{editing ? 'Event details' : 'New event'}</>} titlesClassName="evts-grow" sub={<>{editing
                 ? 'The name, the day and the place, as the agenda shows them.'
-                : 'Name it, say when and where, and choose who can join. You build the agenda next, from empty.'}
-            </p>
-          </div>
-          <button type="button" className="evts-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-        </header>
+                : 'Name it, say when and where, and choose who can join. You build the agenda next, from empty.'}</>} onClose={requestClose} closeDisabled={busy} closeClassName="evts-x" />
 
         <div className="evts-modal-body">
           <div className="evts-field evts-step">
@@ -234,14 +227,13 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
           {error && <p className="evts-error" role="alert">{error}</p>}
         </div>
 
-        <footer className="evts-modal-foot">
-          <button type="button" className="evts-btn" onClick={requestClose} disabled={busy}>Close</button>
+        <DialogFoot className="evts-modal-foot" cancel={<button type="button" className="evts-btn" onClick={requestClose} disabled={busy}>Close</button>}>
           <span className="evts-grow" />
           {!editing && <span className="evts-foot-note">The join code is chosen when you create it.</span>}
           <button type="submit" className="evts-btn evts-btn--primary" disabled={busy}>
             {busy ? 'Saving…' : (editing ? 'Save' : 'Create event')}
           </button>
-        </footer>
+        </DialogFoot>
       </form>
     </Modal>
   );
