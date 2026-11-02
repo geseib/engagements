@@ -65,10 +65,10 @@ export function ReadFailureCard({ failure, onRetry = null, onRedo = null, retryi
       {failure.detail ? <p className="hc-muted">{failure.detail}</p> : null}
       <div className="hc-fail-acts">
         {typeof onRetry === 'function' ? (
-          <Button size="sm" variant="quiet" onClick={onRetry} disabled={retrying}>{retrying ? CW.retrying : CW.retry}</Button>
+          <Button size={36} variant="secondary" onClick={onRetry} disabled={retrying}>{retrying ? CW.retrying : CW.retry}</Button>
         ) : null}
         {typeof onRedo === 'function' ? (
-          <Button size="sm" variant="quiet" onClick={onRedo} disabled={retrying}>{CW.redo}</Button>
+          <Button size={36} variant="secondary" onClick={onRedo} disabled={retrying}>{CW.redo}</Button>
         ) : null}
       </div>
     </div>

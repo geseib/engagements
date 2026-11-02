@@ -41,35 +41,32 @@ const decl = (body, prop) => {
 };
 
 // rejects: dev QA 2 Nov — the main button went blue in some states and orange in others.
+// Since experience plan step 5a the bar's buttons are ui/Button: the primary is
+// `ui-btn--action` and paints from components/ui/Button.css, and they no longer carry
+// the global .btn-primary / .btn-secondary that the Bootstrap-blue leaks reached.
 describe('the console (and the Build Room\'s, and Setup\'s): .hc-acts', () => {
-  const P = '.hc-acts .host-action-bar .host-action-bar__primary';
-  test('the main button is the --action fill with --on-action ink', () => {
-    const [body] = blocksFor(consoleCss, P);
-    expect(body).toBeTruthy();
+  const buttonCss = strip(read('components', 'ui', 'Button.css'));
+  test('the main button is the --action fill with --on-action ink (ui/Button)', () => {
+    const [body] = blocksFor(buttonCss, '.ui-btn--action');
     expect(decl(body, 'background')).toBe('var(--action)');
     expect(decl(body, 'color')).toBe('var(--on-action)');
   });
   test('armed, it keeps the fill: the ring says it, not a new colour', () => {
-    const [body] = blocksFor(consoleCss, `${P}.is-armed`);
-    expect(decl(body, 'background')).toBe('var(--action)');
-    expect(decl(body, 'color')).toBe('var(--on-action)');
-    expect(decl(body, 'box-shadow')).toMatch(/--warn-rgb/);
+    const [ring] = blocksFor(stylesCss, '.host-action-bar .host-action-bar__primary.is-armed');
+    expect(decl(ring, 'background')).toBeNull();
+    expect(decl(ring, 'box-shadow')).toMatch(/--warn-rgb/);
   });
-  test('hovered, it stays orange (the action hover), at a specificity the blue leak cannot reach', () => {
-    const [body] = blocksFor(consoleCss, `${P}:hover:not(:disabled)`);
+  test('hovered, it stays orange (the action hover)', () => {
+    const [body] = blocksFor(buttonCss, '.ui-btn--action:hover:not(:disabled):not([aria-disabled="true"])');
     expect(decl(body, 'background')).toBe('var(--action-hover)');
   });
   test('disabled, it is a grey wash, never a solid fill that reads as live', () => {
-    const [body] = blocksFor(consoleCss, `${P}:disabled`);
+    const [body] = blocksFor(buttonCss, '.ui-btn--action:disabled');
     expect(decl(body, 'background')).not.toMatch(/--action|--primary/);
     expect(decl(body, 'color')).toBe('var(--muted)');
   });
-  test('every other button is quiet: no fill, no amber', () => {
-    for (const cls of ['__secondary', '__tertiary', '__addtime']) {
-      const [body] = blocksFor(consoleCss, `.hc-acts .host-action-bar .host-action-bar${cls}`);
-      expect([cls, decl(body, 'background')]).toEqual([cls, 'transparent']);
-      expect([cls, decl(body, 'color')]).toEqual([cls, 'var(--text)']);
-    }
+  test('the console states no paint of its own over the bar any more', () => {
+    expect(consoleCss).not.toMatch(/\.hc-acts \.host-action-bar \.host-action-bar__\w+[^{]*\{[^}]*background/);
   });
 });
 
@@ -92,16 +89,20 @@ describe('the stage dock (one screen) and the shared bar', () => {
 });
 
 describe('the phone Remote', () => {
-  test('its main button is the amber fill, and armed it keeps it', () => {
-    const [body] = blocksFor(remoteCss, '.hr-primary');
-    expect(decl(body, 'background')).toBe('var(--primary)');
+  test('its main button is ui/Button\'s primary (the --action fill), and armed it keeps it', () => {
+    // Since step 5a the fill is the library's: the Remote's rule sets width and type only.
+    const own = blocksFor(remoteCss, '.hr .hr-primary');
+    expect(own).toHaveLength(1);
+    expect(decl(own[0], 'background')).toBeNull();
     for (const armed of blocksFor(remoteCss, '.hr-primary.is-armed')) {
       expect(decl(armed, 'background')).toBeNull();
     }
+    expect(read('HostRemote.jsx')).toMatch(/variant="primary"\s+size=\{56\}\s+className=\{`hr-primary /);
   });
-  test('the Remote draws one .hr-primary', () => {
+  test('the Remote draws one .hr-primary, and no scoped button family is left', () => {
     const jsx = read('HostRemote.jsx');
     expect((jsx.match(/className=\{?[`'"][^`'"]*\bhr-primary\b(?!-)/g) || [])).toHaveLength(1);
+    expect(remoteCss).not.toMatch(/\.hr-btn/);
   });
 });
 
@@ -125,12 +126,13 @@ describe('the structure: exactly one primary, the rest quiet', () => {
         showAddTime
       />,
     );
-    const filled = container.querySelectorAll('.btn-primary');
+    const filled = container.querySelectorAll('.ui-btn--action');
     expect(filled).toHaveLength(1);
     expect(filled[0].classList.contains('host-action-bar__primary')).toBe(true);
+    expect(container.querySelectorAll('.btn-primary, .btn-secondary')).toHaveLength(0);
     for (const cls of ['host-action-bar__secondary', 'host-action-bar__tertiary', 'host-action-bar__addtime']) {
       const el = container.querySelector(`.${cls}`);
-      expect([cls, el.classList.contains('btn-primary')]).toEqual([cls, false]);
+      expect([cls, el.classList.contains('ui-btn--quiet'), el.classList.contains('ui-btn--h36')]).toEqual([cls, true, true]);
     }
   });
 });

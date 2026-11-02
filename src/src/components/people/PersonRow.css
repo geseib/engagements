@@ -56,7 +56,7 @@
 
 /* ⋯ and its menu. */
 .prow .prow-more { position: relative; display: inline-flex; justify-content: flex-end; }
-/* The primitive Button (quiet, sm) keeps its outline and ink; only its shape is set here. */
+/* The primitive Button (secondary) keeps its outline and ink; only its shape is set here. */
 .prow .prow-more-toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; padding: 0;
@@ -82,6 +82,5 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
   padding: 2px 0 8px;
 }
-.prow .prow-flag { color: var(--text); font-size: var(--prow-t-label); }
-.prow .prow-ago { color: var(--muted); font-size: var(--prow-t-floor); }
+.prow .prow-flag { font-size: var(--prow-t-label); }
 .prow .prow-needs .ny-acts { margin-left: auto; }

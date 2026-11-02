@@ -287,6 +287,6 @@ describe('a builder\'s lane: Research… and Ideas… for their own task', () =>
     serve(phoneView('Priya', LANE));
     await mount('Priya', 'Your lane');
     const lane = screen.getByRole('region', { name: 'Your lane' });
-    expect(lane.querySelectorAll('.plr-btn')).toHaveLength(0);
+    expect(lane.querySelectorAll('.ui-btn--action')).toHaveLength(0);
   });
 });

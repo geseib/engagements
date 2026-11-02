@@ -197,7 +197,7 @@ describe('the survey section', () => {
 
   test('Back and Next share the dock as a quiet half and a filled half', () => {
     expect(block('.plr-pair')).toMatch(/grid-template-columns:\s*minmax\(0,\s*\.62fr\)\s+minmax\(0,\s*1fr\)/);
-    expect(block('.plr-pair .plr-btn + .plr-btn')).toMatch(/margin-top:\s*0/);
+    expect(block('.plr-pair .ui-btn + .ui-btn')).toMatch(/margin-top:\s*0/);
   });
 
   test('the follow-up opens in place, under a primary rule', () => {

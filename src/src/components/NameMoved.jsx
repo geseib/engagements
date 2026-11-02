@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './ui/Button';
 
 /**
  * "SAM IS NOW ON ANOTHER DEVICE." — what the OLD device shows once the host
@@ -26,9 +27,9 @@ export const NAME_MOVED_LABEL = 'Join again with a different name';
 
 export function NameMovedActions({ onJoinAgain }) {
   return (
-    <button type="button" className="plr-btn" onClick={onJoinAgain}>
+    <Button variant="primary" size={56} onClick={onJoinAgain}>
       {NAME_MOVED_LABEL}
-    </button>
+    </Button>
   );
 }
 

@@ -568,7 +568,8 @@ describe('the shell is what makes "scroll to read, never to act" structural', ()
     // A4 measures this on a device and cannot be measured here. What CAN be
     // pinned is that the declaration exists on each of them, including the two
     // places it is easiest to cheat: the rank buttons and the Show-all control.
-    expect(block(CSS, '.plr-btn')).toMatch(/min-height:\s*56px/);
+    // The dock's buttons are ui/Button at 56px since step 5a (components/ui/Button.css).
+    expect(block(stripped(read('components', 'ui', 'Button.css')), '.ui-btn--h56')).toMatch(/min-height:\s*56px/);
     for (const sel of ['.plr-rk', '.plr-slot', '.plr-mode', '.plr-more', '.plr-chip']) {
       expect(block(CSS, sel)).toMatch(/min-height:\s*var\(--plr-tap\)/);
     }

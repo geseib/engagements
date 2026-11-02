@@ -649,7 +649,7 @@ describe('the join refusal', () => {
 
     const buttons = within(dock()).getAllByRole('button');
     for (const button of buttons) {
-      expect(button).toHaveClass('plr-btn');
+      expect(button).toHaveClass('ui-btn', 'ui-btn--h56');
       expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
     }
     expect(within(stage()).queryAllByRole('button')).toEqual([]);

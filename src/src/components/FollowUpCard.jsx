@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Button from './ui/Button';
 import { createPortal } from 'react-dom';
 import RatingInput from './survey/RatingInput';
 import ChoiceInput from './survey/ChoiceInput';
@@ -132,7 +133,7 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
         {late && place(
           <>
             <p className="fu-sent" role="status">{FW.keptLate}</p>
-            {onDone && <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>}
+            {onDone && <Button variant="secondary" size={56} onClick={onDone}>{FW.done}</Button>}
           </>,
         )}
       </section>
@@ -158,16 +159,17 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
           {sent && <p className="fu-sent" role="status">{late ? FW.keptLate : FW.sent}</p>}
           {error && <p className="fu-error" role="alert">{error}</p>}
           {late && onDone ? (
-            <button type="button" className="plr-btn plr-btn--ghost" onClick={onDone}>{FW.done}</button>
+            <Button variant="secondary" size={56} onClick={onDone}>{FW.done}</Button>
           ) : (
-            <button
+            <Button
               type="submit"
               form={formId}
-              className={`plr-btn${plain ? ' plr-btn--ghost' : ''}`}
+              variant={plain ? 'secondary' : 'primary'}
+              size={56}
               disabled={busy || sent || !answered(ask, value)}
             >
               {busy ? FW.sending : FW.send}
-            </button>
+            </Button>
           )}
         </>,
       )}
@@ -186,7 +188,7 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
 export function HeldFollowUp({ held, onSend, onDraft, onLeave, actionsIn, plain = false }) {
   if (!held || !held.ask) return null;
   const leave = !held.late
-    ? <button type="button" className="plr-btn plr-btn--ghost" onClick={onLeave}>{FW.leaveDraft}</button>
+    ? <Button variant="secondary" size={56} onClick={onLeave}>{FW.leaveDraft}</Button>
     : null;
   return (
     <section className="fu-held" aria-label={FW.questionForRoom}>

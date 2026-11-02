@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Button from '../components/ui/Button';
 import { createPortal } from 'react-dom';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
@@ -49,7 +50,7 @@ import { ENDED } from '../config/playerWords';
  * never in the way of answering. The base-moved notice rides in the feed.
  *
  * It draws in PlayerShell, so it sits in the `.plr` scope and reuses the
- * player's own controls (`.plr-opt`, `.plr-inp`, `.plr-btn`, RatingInput's
+ * player's own controls (`.plr-opt`, `.plr-inp`, ui/Button at 56px, RatingInput's
  * `.plr-scale`); what is particular to a Build Room is under `.bpl`
  * (BuildPlayer.css).
  */
@@ -273,9 +274,9 @@ function SuggestAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!text || full || busy} onClick={submit}>
+      <Button variant="primary" size={56} disabled={!text || full || busy} onClick={submit}>
         {full ? `${MAX_SUGGESTIONS} of ${MAX_SUGGESTIONS} sent` : busy ? 'Sending…' : 'Suggest'}
-      </button>
+      </Button>
       <p className="plr-note plr-note--after bpl-center">{W.votingSoon}</p>
     </>
   );
@@ -378,9 +379,9 @@ function ChoiceAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!picks.length || unchanged || busy} onClick={submit}>
+      <Button variant="primary" size={56} disabled={!picks.length || unchanged || busy} onClick={submit}>
         {label}
-      </button>
+      </Button>
       <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
@@ -439,7 +440,7 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!value || unchanged || busy} onClick={submit}>{label}</button>
+      <Button variant="primary" size={56} disabled={!value || unchanged || busy} onClick={submit}>{label}</Button>
       <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
@@ -495,7 +496,7 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
       <div className="bpl-slots" aria-hidden="true">
         {Array.from({ length: max }, (_, i) => <i key={i} className={i < sel.length ? 'bpl-slot--on' : ''} />)}
       </div>
-      <button type="button" className="plr-btn" disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</button>
+      <Button variant="primary" size={56} disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</Button>
     </>
   );
 

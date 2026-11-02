@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
+import Button from './ui/Button';
 import { sameFocus } from '../config/stageFocus';
 import { answerText } from '../config/stageAnswers';
 import { voteOrder, tallyOrder } from '../config/navigatorOrder';
@@ -67,16 +68,16 @@ export default function RemoteFocusPanel({
         These change the <b>room&apos;s screen</b>, not this phone.
       </p>
 
-      <button
-        className={`hr-btn ${showingQuestion ? 'hr-btn--primary' : 'hr-btn--ghost'}`}
-        type="button"
+      <Button
+        variant={showingQuestion ? 'primary' : 'secondary'}
+        size={44}
         disabled={busy || !questionTitle}
         aria-pressed={showingQuestion}
         onClick={() => onFocus(showingQuestion ? { focus: 'none' } : { focus: 'question' })}
       >
         <Icon name={showingQuestion ? 'ArrowsIn' : 'ArrowsOut'} weight="bold" size={18} color="currentColor" />
         {showingQuestion ? 'Shrink the question' : 'Enlarge the question'}
-      </button>
+      </Button>
 
       {/*
         THE QUESTION'S OWN TEXT, so the host can confirm they are enlarging the
@@ -115,15 +116,16 @@ export default function RemoteFocusPanel({
                   screen reader and for the copy the host might want.
                 */}
                 <span className="hr-focus__text">{answerText(answer.answer) || answerText(answer.text)}</span>
-                <button
-                  className={`hr-btn hr-btn--small ${showing ? 'hr-btn--primary' : 'hr-btn--ghost'}`}
-                  type="button"
+                <Button
+                  variant={showing ? 'primary' : 'secondary'}
+                  size={44}
+                  className="hr-focus__show"
                   disabled={busy}
                   aria-pressed={showing}
                   onClick={() => onFocus(showing ? { focus: 'none' } : { focus: 'answer', index })}
                 >
                   {showing ? 'Stop showing' : 'Show the room'}
-                </button>
+                </Button>
               </div>
             );
           })
@@ -141,16 +143,15 @@ export default function RemoteFocusPanel({
         showing, so it is never a button that means nothing.
       */}
       {anythingShowing && (
-        <button
-          className="hr-btn hr-btn--ghost"
-          type="button"
+        <Button
+          variant="secondary" size={44}
           disabled={busy}
           data-testid="focus-clear"
           onClick={() => onFocus({ focus: 'none' })}
         >
           <Icon name="X" weight="bold" size={18} color="currentColor" />
           Back to the normal view
-        </button>
+        </Button>
       )}
     </div>
   );

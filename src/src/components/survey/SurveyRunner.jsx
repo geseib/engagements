@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import Button from '../ui/Button';
 import { PlayerShell } from '../PlayerShell';
 import Icon from '../Icon';
 import { namesMode } from '../../config/surveyNames';
@@ -415,9 +416,9 @@ export default function SurveyRunner({
         ctx: 'Survey',
         centre: true,
         dock: (
-          <button type="button" className="plr-btn" onClick={() => { setLoad({ status: 'loading', error: null }); setAttempt((a) => a + 1); }}>
+          <Button variant="primary" size={56} onClick={() => { setLoad({ status: 'loading', error: null }); setAttempt((a) => a + 1); }}>
             Try again
-          </button>
+          </Button>
         ),
       }, (
         <>
@@ -443,9 +444,9 @@ export default function SurveyRunner({
       ctx: `Survey · ${SENT}`,
       centre: true,
       dock: (
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={() => goTo('review')}>
+        <Button variant="secondary" size={56} onClick={() => goTo('review')}>
           Change my answers
-        </button>
+        </Button>
       ),
     }, (
       <>
@@ -485,23 +486,21 @@ export default function SurveyRunner({
             <p className="plr-note" id={reasonId}>{reason}</p>
           )}
           <div className="plr-pair">
-            <button
-              type="button"
-              className="plr-btn plr-btn--ghost"
+            <Button
+              variant="secondary" size={56}
               disabled={total === 0}
               onClick={() => goTo('answering', Math.max(0, total - 1))}
             >
               Back
-            </button>
-            <button
-              type="button"
-              className="plr-btn"
+            </Button>
+            <Button
+              variant="primary" size={56}
               disabled={blocked || total === 0}
               aria-describedby={reason ? reasonId : undefined}
               onClick={send}
             >
               {sending ? 'Sending…' : 'Send my answers'}
-            </button>
+            </Button>
           </div>
         </>
       ),
@@ -594,23 +593,21 @@ export default function SurveyRunner({
           </p>
         )}
         <div className="plr-pair">
-          <button
-            type="button"
-            className="plr-btn plr-btn--ghost"
+          <Button
+            variant="secondary" size={56}
             disabled={index === 0 && !view.fromReview}
             onClick={() => (view.fromReview && index === 0 ? goTo('review') : goTo('answering', index - 1, view.fromReview))}
           >
             Back
-          </button>
-          <button
-            type="button"
-            className="plr-btn"
+          </Button>
+          <Button
+            variant="primary" size={56}
             disabled={held}
             aria-describedby={held || notice ? reasonId : undefined}
             onClick={forward}
           >
             {primaryLabel}
-          </button>
+          </Button>
         </div>
       </>
     ),

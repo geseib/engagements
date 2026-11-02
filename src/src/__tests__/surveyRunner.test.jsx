@@ -647,7 +647,7 @@ describe('checking and sending', () => {
     const dock = document.querySelector('.plr-dock');
     const change = screen.getByRole('button', { name: 'Change my answers' });
     expect(dock.contains(change)).toBe(true);
-    expect(change).toHaveClass('plr-btn--ghost');
+    expect(change).toHaveClass('ui-btn--quiet');
     expect(document.querySelector('.plr-stage').querySelectorAll('button')).toHaveLength(0);
     fireEvent.click(change);
     expect(await screen.findByRole('heading', { name: 'Check your answers' })).toBeInTheDocument();

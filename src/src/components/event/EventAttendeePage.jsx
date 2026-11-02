@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Button from '../ui/Button';
 import PlayerPage from '../../PlayerPage';
 import { PlayerShell } from '../PlayerShell';
 import Icon from '../Icon';
@@ -366,9 +367,9 @@ export default function EventAttendeePage({ code }) {
         ctx={title}
         dock={(
           <>
-            <button type="submit" form="evp-join-form" className="plr-btn" disabled={joining}>
+            <Button type="submit" form="evp-join-form" variant="primary" size={56} disabled={joining}>
               {joining ? 'Joining…' : 'Join the event'}
-            </button>
+            </Button>
             <p className="plr-note plr-note--after">
               Once, for the whole day. No account, nothing to install, and no more codes.
             </p>
@@ -461,7 +462,7 @@ export default function EventAttendeePage({ code }) {
           online={online}
           centre
           dock={(
-            <button type="button" className="plr-btn" onClick={toAgenda}>Open the agenda</button>
+            <Button variant="primary" size={56} onClick={toAgenda}>Open the agenda</Button>
           )}
         >
           <div className="evp">
@@ -553,9 +554,9 @@ export default function EventAttendeePage({ code }) {
       who={who}
       online={online}
       dock={backToLive ? (
-        <button type="button" className="plr-btn" onClick={() => { setFollowed(backToLive.itemId); setView('item'); }}>
+        <Button variant="primary" size={56} onClick={() => { setFollowed(backToLive.itemId); setView('item'); }}>
           Back to live · {backToLive.title}
-        </button>
+        </Button>
       ) : null}
     >
       <div className="evp">

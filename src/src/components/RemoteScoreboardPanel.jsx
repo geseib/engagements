@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
+import Button from './ui/Button';
 import { SCOREBOARD_STYLES, STYLE_LABELS } from '../config/scoreboard';
 
 /**
@@ -38,41 +39,38 @@ export default function RemoteScoreboardPanel({
       <h2 className="hr-card-heading">Scoreboard</h2>
       <p className="hr-hint">Standings on the room&apos;s screen — every player, their total and how far they moved.</p>
       <div className="hr-grid hr-sb-controls">
-        <button
-          type="button"
-          className="hr-btn hr-btn--ghost"
+        <Button
+          variant="secondary" size={44}
           aria-pressed={open}
           disabled={busy || (!open && !availability.enabled)}
           onClick={() => onToggle(!open)}
         >
           <Icon name={open ? 'EyeSlash' : 'ListNumbers'} weight="bold" size={18} color="currentColor" />
           {open ? 'Hide the scoreboard' : 'Show the scoreboard'}
-        </button>
-        <button
-          type="button"
-          className="hr-btn hr-btn--ghost"
+        </Button>
+        <Button
+          variant="secondary" size={44}
           disabled={busy || !open}
           onClick={onNextPage}
         >
           <Icon name="ArrowRight" weight="bold" size={18} color="currentColor" />
           Next page
-        </button>
+        </Button>
       </div>
       {!availability.enabled && availability.reason && (
         <p className="hr-hint hr-sb-reason">{availability.reason}</p>
       )}
       <div className="hr-sb-looks" role="group" aria-label="Scoreboard look">
         {SCOREBOARD_STYLES.map((style) => (
-          <button
+          <Button
             key={style}
-            type="button"
-            className="hr-btn hr-btn--ghost hr-btn--small"
+            variant="secondary" size={44}
             aria-pressed={board.style === style}
             disabled={busy}
             onClick={() => { if (board.style !== style) onStyle(style); }}
           >
             {STYLE_LABELS[style]}
-          </button>
+          </Button>
         ))}
       </div>
     </section>

@@ -43,7 +43,7 @@ export default function SessionNeedsList({
   const phone = remoteConnected
     ? <span className="ny-item-d">{NEEDS_WORDS.waitingOnPhone}</span>
     : (typeof onConnectPhone === 'function'
-      ? <Button size="sm" variant="quiet" onClick={onConnectPhone}>{NEEDS_WORDS.connectPhone}</Button>
+      ? <Button size={36} variant="secondary" onClick={onConnectPhone}>{NEEDS_WORDS.connectPhone}</Button>
       : null);
   return (
     <ul className="ny-list" data-testid="needs-list">

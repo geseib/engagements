@@ -4,6 +4,7 @@ import RoomWindowStatus from '../stage/RoomWindowStatus';
 import HostNotificationsBell from '../HostNotificationsBell';
 import HelpButton from '../HelpButton';
 import Icon from '../Icon';
+import Button from '../ui/Button';
 import { helpFor } from '../../config/help/screens';
 
 export { TOP_SLOTS };
@@ -49,18 +50,21 @@ export default function ConsoleTop({
   const joinWords = oneScreen ? (pressed ? HW.hideJoinCode : HW.showJoinCode) : '';
   return (
     <header className="hc-top">
-      <button type="button" className="hc-leave" data-slot="main-menu" onClick={leave} title={HW.mainMenuHint}>
+      {/* Every button on the bar is ui/Button, secondary at 36px (experience
+          plan §5.1, step 5a): the bar spends no orange; Your part now has it. */}
+      <Button variant="secondary" size={36} className="hc-leave" data-slot="main-menu" onClick={leave} title={HW.mainMenuHint}>
         <Icon name="House" weight="bold" size={16} color="currentColor" />
         {/* `leaveLabel`: kept for a caller still passing its own copy of the word. */}
         <span>{leaveLabel || HW.mainMenu}</span>
-      </button>
+      </Button>
       <span className="hc-name" data-slot="name" title={title}>{title}</span>
       <span className="hc-spacer" />
       {/* THE ONE JOIN TOGGLE (§3.6): the code on the room's screen, or not.
           A press shows it; the next press takes it down. */}
       {code ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size={36}
           className="hc-code"
           data-slot="join"
           onClick={onJoin}
@@ -71,7 +75,7 @@ export default function ConsoleTop({
         >
           <Icon name="QrCode" weight="bold" size={16} color="currentColor" />
           {joinWords || <>{HW.join} <b>{code}</b></>}
-        </button>
+        </Button>
       ) : null}
       {/* The room's screen. On one screen, a status: this laptop IS it. On two,
           the room's window and whether it is really up; on a laptop with no
@@ -90,7 +94,7 @@ export default function ConsoleTop({
           onOpen={open}
           short={short}
           linkLabel={`${HW.roomsWindow} ↗`}
-          classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }}
+          classes={{ link: 'ui-btn ui-btn--quiet ui-btn--h36', stat: 'hc-winstat', dot: 'hc-dot' }}
         />
       )}
       {children}
@@ -124,8 +128,9 @@ export default function ConsoleTop({
       {/* THE SESSION MENU (§3.2b): one labelled button, top right. It opens
           as a sheet over the content area, never over Your part now. */}
       {typeof onSessionMenu === 'function' ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size={36}
           className="hc-menu"
           data-slot="session-menu"
           aria-haspopup="dialog"
@@ -134,7 +139,7 @@ export default function ConsoleTop({
         >
           <Icon name="List" weight="bold" size={16} color="currentColor" />
           {HW.sessionMenu}
-        </button>
+        </Button>
       ) : null}
     </header>
   );

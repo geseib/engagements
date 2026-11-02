@@ -346,10 +346,8 @@ body {
   gap: 8px;
 }
 
-.host-action-bar__primary {
-  padding: 14px 28px;
-  font-size: 1.05rem;
-}
+/* The bar's buttons are ui/Button since experience plan step 5a: their
+   height and padding are the library's (36px), not set here. */
 
 /* The phase-specific key legend under the buttons. Muted and floor-adjacent —
    it is a glanced legend, not copy — but never below the 12px floor: unlike
@@ -746,7 +744,9 @@ body {
 /* `.setup-ask` (Ask next / Ask now) is exempt too: the two must read as two
    DIFFERENT actions, and this repaint would draw them as one navy button —
    which is how the Queue / Ask next pair looked the same for its whole life. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button) {
+/* `.ui-btn` is exempt: the Session menu's actions are ui/Button (experience
+   plan §5.1, step 5a), which paints itself from the roles. */
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button):not(.ui-btn) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;

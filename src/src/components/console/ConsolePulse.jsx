@@ -79,7 +79,7 @@ export default function ConsolePulse({
               {time.sub ? <p className="cpulse-sub" data-testid="pulse-time-sub">{time.sub}</p> : null}
             </div>
             {onAddMinute ? (
-              <Button variant="quiet" size="sm" className="cpulse-plus" onClick={onAddMinute} title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`} aria-keyshortcuts="+ =">
+              <Button variant="secondary" size={36} className="cpulse-plus" onClick={onAddMinute} title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`} aria-keyshortcuts="+ =">
                 {TIMER_WORDS.plusOne}
               </Button>
             ) : null}
@@ -101,7 +101,7 @@ export default function ConsolePulse({
           <p className="cpulse-sub">{PULSE_WORDS.onlyYou}</p>
           {since.late ? (
             onLate
-              ? <Button variant="quiet" size="sm" className="cpulse-late" onClick={onLate}>{since.late.text}</Button>
+              ? <Button variant="secondary" size={36} className="cpulse-late" onClick={onLate}>{since.late.text}</Button>
               : <p className="cpulse-sub">{since.late.text}</p>
           ) : null}
         </div>
@@ -112,7 +112,7 @@ export default function ConsolePulse({
         {since.sub ? <p className="cpulse-sub" title={since.sub}>{since.sub}</p> : null}
         {since.late ? (
           onLate
-            ? <Button variant="quiet" size="sm" className="cpulse-late" onClick={onLate}>{since.late.text}</Button>
+            ? <Button variant="secondary" size={36} className="cpulse-late" onClick={onLate}>{since.late.text}</Button>
             : <p className="cpulse-sub">{since.late.text}</p>
         ) : null}
       </div>

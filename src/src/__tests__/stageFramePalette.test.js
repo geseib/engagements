@@ -88,9 +88,10 @@ describe('host chrome on the laptop ladder, nothing under 12px; the stage\'s lad
   });
 
   test('the new top-bar parts are on the console\'s ladder (12 / 13px)', () => {
-    expect(rule(hc, '.hc-needsbtn')).toMatch(/font-size: 13px/);
+    // The bell is ui/Button at 36px since step 5a (OneScreenNeedsBell passes size 36);
+    // the bar sets its type through --ui-size.
+    expect(rule(hc, '.hc-top .hc-needsbtn')).toMatch(/--ui-size: 13px/);
     expect(rule(hc, '.hc-needs-n')).toMatch(/font-size: 12px/);
-    expect(rule(hc, '.hc-needsbtn')).toMatch(/min-height: 36px/);
   });
 
   test('the four profile ladders are as they were (2h changes no stage type size)', () => {

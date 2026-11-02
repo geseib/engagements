@@ -1,6 +1,6 @@
 /* The room's window on a top line (components/stage/RoomWindowStatus.jsx):
    Call & Answer's console top line and the Build Room's header. The host
-   surface passes its own button and pill classes (hc-btn / hc-winstat,
+   surface passes its own button and pill classes (ui/Button's / hc-winstat,
    brm-btn / brm-winstat); this sheet owns only the cluster, the tab link and
    the note line. Tokens only (styles/roles.css). Measured on the dusk
    surfaces both hosts draw on (classic skin): the note, --muted #9BA8BE,

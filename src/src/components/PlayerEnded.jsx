@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './ui/Button';
 import { ENDED } from '../config/playerWords';
 
 /**
@@ -75,8 +76,8 @@ export default function PlayerEnded({
 export function PlayerEndedDock({ event = null }) {
   if (!event || typeof event.onAgenda !== 'function') return null;
   return (
-    <button type="button" className="plr-btn" onClick={() => event.onAgenda()}>
+    <Button variant="primary" size={56} onClick={() => event.onAgenda()}>
       {ENDED.agenda}
-    </button>
+    </Button>
   );
 }

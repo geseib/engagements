@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './ui/Button';
 import Icon from './Icon';
 
 /**
@@ -63,7 +64,7 @@ import Icon from './Icon';
  * Shaped after docs/design/player-redesign/03-join-ended.html and
  * 04-join-locked.html: heading at the primary rung, one muted sentence,
  * actions in the dock. No stylesheet of its own: every class is
- * `PlayerSurface.css` vocabulary (`.plr-note`, `.plr-err`, `.plr-btn`).
+ * `PlayerSurface.css` vocabulary (`.plr-note`, `.plr-err`) and ui/Button at the dock's 56px.
  */
 
 /** One reading of `kind`, shared by the body and the actions. */
@@ -164,33 +165,25 @@ export function JoinNameCollisionActions({
   if (ambiguous) {
     return (
       <>
-        <button type="button" className="plr-btn" onClick={onRejoinAnyway}>
+        <Button variant="primary" size={56} onClick={onRejoinAnyway}>
           Yes — rejoin as {playerName}
-        </button>
-        <button type="button" className="plr-btn plr-btn--ghost" onClick={onUseAnotherName}>
+        </Button>
+        <Button variant="secondary" size={56} onClick={onUseAnotherName}>
           No — I&apos;m a different {playerName}
-        </button>
+        </Button>
       </>
     );
   }
 
   const ask = (label, ghost = false) => (
-    <button
-      type="button"
-      className={ghost ? 'plr-btn plr-btn--ghost' : 'plr-btn'}
-      onClick={onRequestHandover}
-    >
+    <Button variant={ghost ? 'secondary' : 'primary'} size={56} onClick={onRequestHandover}>
       {label}
-    </button>
+    </Button>
   );
   const leave = (label, ghost = true) => (
-    <button
-      type="button"
-      className={ghost ? 'plr-btn plr-btn--ghost' : 'plr-btn'}
-      onClick={onUseAnotherName}
-    >
+    <Button variant={ghost ? 'secondary' : 'primary'} size={56} onClick={onUseAnotherName}>
       {label}
-    </button>
+    </Button>
   );
 
   const someoneElse = inEvent ? HANDOVER_LABELS.someoneElseEvent : HANDOVER_LABELS.someoneElse;
@@ -200,7 +193,7 @@ export function JoinNameCollisionActions({
     case 'asking':
       return (
         <>
-          <button type="button" className="plr-btn" disabled>{HANDOVER_LABELS.asking}</button>
+          <Button variant="primary" size={56} disabled>{HANDOVER_LABELS.asking}</Button>
           {leave(someoneElse)}
         </>
       );

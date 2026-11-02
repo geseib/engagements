@@ -100,18 +100,8 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
-.ny .ny-link {
-  font: inherit;
-  font-size: var(--ny-t-label);
-  font-weight: 700;
-  color: var(--info);
-  background: transparent;
-  border: 0;
-  padding: 4px 2px;
-  cursor: pointer;
-}
-.ny .ny-link:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
-.ny .ny-link:disabled { opacity: .5; cursor: default; }
+/* "See in People" is ui/Button's tertiary look (text, the link ink). */
+.ny .ny-acts .ny-link { --ui-size: var(--ny-t-label); }
 
 /* ---- a list of items (the bell's This session, the Remote, the sheet) ---- */
 .ny .ny-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

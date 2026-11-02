@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../Icon';
+import Button from '../ui/Button';
 import {
   setupPanelTabs, sessionMenuSection, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
@@ -638,7 +639,7 @@ export default function SessionSetupPanel({
             onClick={onClose}
             aria-label={HW.closeSessionMenu}
           >
-            ✕
+            <Icon name="X" weight="bold" size={18} color="currentColor" />
           </button>
         </div>
 
@@ -670,8 +671,9 @@ export default function SessionSetupPanel({
             <section className="setup-agenda" role="tabpanel" id="setup-panel-agenda" aria-labelledby="setup-tab-agenda">
           <div className="setup-panel__event" role="group" aria-label={EVENT_WORDS.menuK}>
             <span className="setup-panel__event-k">{EVENT_WORDS.menuK}</span>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size={36}
               onClick={event.onAgenda}
               disabled={Boolean(event.busy)}
               title={EVENT_WORDS.agendaHint}
@@ -679,11 +681,11 @@ export default function SessionSetupPanel({
             >
               <Icon name="ListBullets" weight="bold" size={15} color="currentColor" />
               {` ${EVENT_WORDS.agenda}`}
-            </button>
+            </Button>
             {typeof event.onBringHere === 'function' ? (
-              <button type="button" onClick={event.onBringHere} disabled={Boolean(event.busy)} title={EVENT_WORDS.bringHereHint}>
+              <Button variant="secondary" size={36} onClick={event.onBringHere} disabled={Boolean(event.busy)} title={EVENT_WORDS.bringHereHint}>
                 {EVENT_WORDS.bringHere}
-              </button>
+              </Button>
             ) : null}
           </div>
             </section>
@@ -716,8 +718,9 @@ export default function SessionSetupPanel({
                   Players tab". */}
               {sbButton.show && (
                 <div className="setup-row setup-scoreboard">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size={36}
                     data-testid="scoreboard-toggle"
                     aria-pressed={Boolean(scoreboard.open)}
                     disabled={sbButton.disabled}
@@ -730,7 +733,7 @@ export default function SessionSetupPanel({
                     }}
                   >
                     {sbButton.label}
-                  </button>
+                  </Button>
                   {sbButton.reason && <p className="setup-note">{sbButton.reason}</p>}
                 </div>
               )}
@@ -765,7 +768,7 @@ export default function SessionSetupPanel({
                       them. They are in the panel header now, beside Close. This
                       control is a different thing: it puts an explanation on the
                       PROJECTOR, for the room. */}
-                  <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
+                  <Button variant="secondary" size={36} onClick={onShowHowToPlay}>Show how this works on the stage →</Button>
               </div>
 
               <details className="setup-fold">
@@ -1133,7 +1136,7 @@ export default function SessionSetupPanel({
                 cannot be mistaken for one of the rounds beneath it.
               */}
               <div className="setup-row setup-history__actions">
-                <button type="button" onClick={onViewReports}>Session report</button>
+                <Button variant="secondary" size={36} onClick={onViewReports}>Session report</Button>
               </div>
 
               {late ? (
@@ -1313,17 +1316,17 @@ export default function SessionSetupPanel({
                 <p className="setup-url">{playUrl}</p>
                 {gameId && <p className="setup-note">{`Session code ${gameId}`}</p>}
                 <div className="setup-row">
-                  <button type="button" onClick={onCopyJoinLink}>
+                  <Button variant="secondary" size={36} onClick={onCopyJoinLink}>
                     {joinLinkCopied ? 'Copied!' : 'Copy join link'}
-                  </button>
+                  </Button>
                   {/* A calendar-invite blob, not a url — distinct from the link
                       above, and the mockup only drew the link. */}
-                  <button type="button" onClick={onInvite}>
+                  <Button variant="secondary" size={36} onClick={onInvite}>
                     {'Invite…'}
-                  </button>
-                  <button type="button" onClick={onShowJoinCode}>
+                  </Button>
+                  <Button variant="secondary" size={36} onClick={onShowJoinCode}>
                     {HW.showJoinCode}
-                  </button>
+                  </Button>
                 </div>
 
               </section>
@@ -1341,9 +1344,9 @@ export default function SessionSetupPanel({
                     <p className="setup-note">{SMW.closeNote}</p>
                     <div className="setup-row">
                       {surveyActs.warn ? (
-                        <button type="button" onClick={() => surveyActs.onAct(surveyActs.warn)}>{surveyActs.warn.label}</button>
+                        <Button variant="secondary" size={36} onClick={() => surveyActs.onAct(surveyActs.warn)}>{surveyActs.warn.label}</Button>
                       ) : null}
-                      <button type="button" data-testid="session-menu-close-survey" onClick={() => surveyActs.onAct(surveyActs.close)}>{surveyActs.close.label}</button>
+                      <Button variant="secondary" size={36} data-testid="session-menu-close-survey" onClick={() => surveyActs.onAct(surveyActs.close)}>{surveyActs.close.label}</Button>
                     </div>
                   </>
                 ) : (
@@ -1442,7 +1445,7 @@ export default function SessionSetupPanel({
                     <>
                       <p className="setup-note">{SMW.endSurveyNote}</p>
                       <div className="setup-row">
-                        <button type="button" className="btn-danger" data-testid="session-menu-end" onClick={() => surveyActs.onAct(surveyActs.end)}>{surveyActs.end.label}</button>
+                        <Button variant="danger" size={36} data-testid="session-menu-end" onClick={() => surveyActs.onAct(surveyActs.end)}>{surveyActs.end.label}</Button>
                       </div>
                     </>
                   ) : <p className="setup-note">{gameState === 'ENDED' ? SMW.ended : SMW.endSurveyFirst}</p>
@@ -1450,7 +1453,7 @@ export default function SessionSetupPanel({
                   <>
                     <p className="setup-note">{isLobbyState(gameState) ? SMW.endLobbyNote : SMW.endNote}</p>
                     <div className="setup-row">
-                      <button type="button" className="btn-danger" data-testid="session-menu-end" onClick={onEndSession} title={HW.endSessionHint}>{HW.endSession}</button>
+                      <Button variant="danger" size={36} data-testid="session-menu-end" onClick={onEndSession} title={HW.endSessionHint}>{HW.endSession}</Button>
                     </div>
                   </>
                 ) : <p className="setup-note">{SMW.ended}</p>}
@@ -1479,7 +1482,7 @@ export default function SessionSetupPanel({
                     because it is the same act on all three.
                   */}
                   {/* Main menu since experience plan 2a (§3.6): one word for leaving. */}
-                  <button type="button" onClick={onSwitchGame} title={HW.mainMenuHint}>{HW.mainMenu}</button>
+                  <Button variant="secondary" size={36} onClick={onSwitchGame} title={HW.mainMenuHint}>{HW.mainMenu}</Button>
                   {/*
                     ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
 
@@ -1507,7 +1510,7 @@ export default function SessionSetupPanel({
                       Admin ↗
                     </a>
                   )}
-                  <button type="button" onClick={onSignOut}>Sign out</button>
+                  <Button variant="secondary" size={36} onClick={onSignOut}>Sign out</Button>
                 </div>
               </section>
             </section>

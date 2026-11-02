@@ -1,5 +1,6 @@
 // src/src/components/console/panels/SimplePanels.jsx
 import React from 'react';
+import Button from '../../ui/Button';
 import CW from '../../../config/consoleWords';
 import RW from '../../../config/roundWords';
 
@@ -62,7 +63,7 @@ export function EndedPanel({ onOpenReport }) {
   return (
     <section className="hc-panel">
       <p className="hc-kicker">{CW.reportSoFar}</p>
-      <button type="button" className="hc-btn" onClick={onOpenReport}>{RW.openReport}</button>
+      <Button variant="secondary" size={36} onClick={onOpenReport}>{RW.openReport}</Button>
     </section>
   );
 }

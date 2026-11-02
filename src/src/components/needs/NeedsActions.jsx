@@ -9,9 +9,10 @@ export const ARM_MS = 6000;
 /**
  * THE BUTTONS A NEEDS-YOU ITEM CARRIES (PLAN §4.2 "Actions"), the same pair
  * wherever the item is drawn: the Needs-you line, a People row, the bell's
- * This session, the phone Remote's card. Outlined, never orange: the room's
- * next step keeps the one orange button (PLAN §4.4). "See in People" is a
- * text link, because it moves the eye, not the session.
+ * This session, the phone Remote's card. Secondary (outlined, 36px), never
+ * orange: the room's next step keeps the one orange button (PLAN §4.4). "See
+ * in People" is the tertiary look (text), because it moves the eye, not the
+ * session (ui/Button, PLAN §5.1).
  *
  * LET THEM ARMS IN PLACE when the item says the first device is still
  * answering (`item.armLet`, from get-players `deviceConnected`): the first
@@ -59,17 +60,17 @@ export default function NeedsActions({
       {actions.map((a) => {
         if (a === NEEDS_ACTIONS.SEE) {
           return (
-            <button key={a} type="button" className="ny-link" disabled={busy} onClick={() => press(a)}>
+            <Button key={a} variant="tertiary" size={36} className="ny-link" disabled={busy} onClick={() => press(a)}>
               {ACTION_WORDS[a]}
-            </button>
+            </Button>
           );
         }
         const word = a === NEEDS_ACTIONS.LET && armed ? ACTION_WORDS.letArmed : ACTION_WORDS[a];
         return (
           <Button
             key={a}
-            size="sm"
-            variant="quiet"
+            size={36}
+            variant="secondary"
             disabled={busy}
             onClick={() => press(a)}
             aria-label={item.name ? `${word}: ${item.name}` : undefined}

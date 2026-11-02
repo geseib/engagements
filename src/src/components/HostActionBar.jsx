@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
+import Button from './ui/Button';
 import StatusMessage from './StatusMessage';
 import KeyCap from './stage/KeyCap';
 import { TIMER_WORDS } from '../config/roundTimer';
@@ -285,35 +286,42 @@ export default function HostActionBar({
           {armedControl && (
             <span className="host-action-bar__armed" role="alert">{armedControl.arm.text}</span>
           )}
+          {/* ui/Button (experience plan §5.1, step 5a): the main move is the
+              one primary, every other button secondary, 36px. The
+              host-action-bar__* classes stay as hooks for the stage dock's
+              sizing (styles/stage.css) and the tests. */}
           {secondary && (
-            <button
-              type="button"
-              className={`btn-secondary host-action-bar__secondary${armClass(secondary)}`}
+            <Button
+              variant="secondary"
+              size={36}
+              className={`host-action-bar__secondary${armClass(secondary)}`}
               onClick={() => press(secondary)}
               disabled={Boolean(secondary.disabled)}
               title={labelOf(secondary)}
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
               <span>{labelOf(secondary)}</span>
-            </button>
+            </Button>
           )}
           {tertiary && (
-            <button
-              type="button"
-              className={`btn-secondary host-action-bar__tertiary${armClass(tertiary)}`}
+            <Button
+              variant="secondary"
+              size={36}
+              className={`host-action-bar__tertiary${armClass(tertiary)}`}
               onClick={() => press(tertiary)}
               disabled={Boolean(tertiary.disabled)}
               title={labelOf(tertiary)}
             >
               <Icon name={tertiary.icon} weight="bold" size={18} />
               <span>{labelOf(tertiary)}</span>
-            </button>
+            </Button>
           )}
           {timeChip}
           {showAddTime && typeof onAddTime === 'function' ? (
-            <button
-              type="button"
-              className="btn-secondary host-action-bar__addtime"
+            <Button
+              variant="secondary"
+              size={36}
+              className="host-action-bar__addtime"
               onClick={() => onAddTime()}
               title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`}
               aria-keyshortcuts="+ ="
@@ -321,11 +329,12 @@ export default function HostActionBar({
             >
               <Icon name="Plus" weight="bold" size={16} />
               <span>{TIMER_WORDS.plusOne}</span>
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className={`btn-primary host-action-bar__primary${armClass(primary)}`}
+          <Button
+            variant="primary"
+            size={36}
+            className={`host-action-bar__primary${armClass(primary)}`}
             onClick={() => press(primary)}
             disabled={primary.disabled}
             title={primary.disabled ? primary.hint : 'Space or → also advances'}
@@ -336,7 +345,7 @@ export default function HostActionBar({
             {/* The key, on the button (./stage/KeyCap.jsx). Inside a Dock the
                 dock says whether it works; on the console, this bar does. */}
             <KeyCap on={!primary.disabled && shortcutsEnabled} />
-          </button>
+          </Button>
         </div>
         {/*
           WHAT THE KEYS DO RIGHT NOW — "should there be a visual queue on what

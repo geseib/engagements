@@ -122,8 +122,8 @@ describe('RoomWindowStatus: the top-line part', () => {
     });
   });
   test('the host surface\'s own classes go on the link and the pill', () => {
-    const { container } = render(<RoomWindowStatus href={HREF} detail={UP} classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }} />);
-    expect(container.querySelector('a.hc-btn')).not.toBeNull();
+    const { container } = render(<RoomWindowStatus href={HREF} detail={UP} classes={{ link: 'ui-btn ui-btn--quiet ui-btn--h36', stat: 'hc-winstat', dot: 'hc-dot' }} />);
+    expect(container.querySelector('a.ui-btn.ui-btn--quiet')).not.toBeNull();
     expect(container.querySelector('.hc-winstat.is-success .hc-dot')).not.toBeNull();
   });
   test('no address: nothing at all', () => {

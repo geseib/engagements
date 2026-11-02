@@ -382,7 +382,7 @@
    many rounds scrolls its list inside the dock rather than pushing the dock
    up over the whole screen. */
 .plr-dock .plr-ended-comments { margin-top: 0; }
-.plr-dock .plr-ended-comments + .plr-btn { margin-top: 12px; }
+.plr-dock .plr-ended-comments + .ui-btn { margin-top: 12px; }
 .plr-dock .plr-ended-rounds { max-height: 38dvh; overflow-y: auto; }
 
 /* ==========================================================================
@@ -539,51 +539,26 @@
    5. CONTROLS
    ========================================================================== */
 
-.plr-btn {
-  display: block;
+/* THE DOCK'S BUTTONS ARE ui/Button AT 56px (experience plan §5.1, step 5a):
+   primary for the one thing to do, secondary for a way back or a plain
+   alternative. The library paints them from the roles (the --action fill, the
+   slate wash when disabled, the outlined quiet); this sheet sets only the
+   phone's width, type and stacking. The scoped .plr-btn family is gone. */
+.plr .ui-btn--h56 {
+  display: flex;
   width: 100%;
-  min-height: 56px;
-  padding: 15px 16px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--primary);
-  color: var(--bg);
-  font-family: inherit;
-  font-size: var(--plr-t-secondary);
+  --ui-size: var(--plr-t-secondary);
   font-weight: 800;
-  line-height: 1.2;
   letter-spacing: -.01em;
+  white-space: normal;
   text-align: center;
-  cursor: pointer;
 }
-
-/* A DISABLED PRIMARY SPENDS NO AMBER. It is still the primary action and still
-   the last element in the document; it simply says what is missing. */
-.plr-btn[disabled] {
-  background: transparent;
-  border: 1px solid var(--plr-rule-strong);
-  color: var(--plr-muted);
-  font-weight: 700;
-  cursor: default;
-}
-
-.plr-btn.plr-btn--ghost {
-  background: transparent;
-  border: 1px solid var(--plr-rule-strong);
-  color: var(--text);
-  font-weight: 700;
-}
-
-.plr-btn + .plr-btn { margin-top: 10px; }
-
-.plr-btn:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
-}
+.plr .ui-btn--h56.ui-btn--quiet { font-weight: 700; }
+.plr .ui-btn--h56 + .ui-btn--h56 { margin-top: 10px; }
 
 /* "Comment on this round": in the dock since phone-comments 3b, where it is
    the dock's first child and has nothing above it to clear. */
-.plr-feedback-btn { margin-top: 0; }
+.plr .plr-feedback { margin-top: 0; }
 /* The end screen's way back to a round's comments (issue #34): wraps, never scrolls sideways. */
 .plr-ended-comments { margin-top: 22px; text-align: left; }
 /* Issue #47: one round per row, its number then its title, the title cut
@@ -592,9 +567,9 @@
   display: flex; flex-direction: column; gap: 8px;
   margin: 10px 0 0; padding: 0; list-style: none;
 }
-.plr-btn.plr-ended-round {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; min-width: 0; margin-top: 0; text-align: left;
+.plr .ui-btn--h56.plr-ended-round {
+  justify-content: flex-start; gap: 8px;
+  min-width: 0; margin-top: 0; text-align: left;
 }
 .plr-ended-round__n { flex: 0 0 auto; white-space: nowrap; }
 .plr-ended-round__sep { flex: 0 0 auto; color: var(--plr-muted); }
@@ -1325,7 +1300,7 @@
    `--primary` — 1.96:1 both ways, the one pairing SKILL §1 says outright
    cannot carry text. It also declares no disabled state at all, so the
    Previous on the first response looked identical to a live one. Restated as
-   the ghost treatment `.plr-btn--ghost` already uses in the dock, so stepping
+   the ghost treatment the dock's secondary ui/Button uses, so stepping
    through responses reads as the same product as the button that submitted the
    answer. */
 .plr-spot .answer-spotlight__nav .btn-secondary {
@@ -1421,7 +1396,7 @@
 /* ---------------------------------------------------------------------------
    AN INLINE TEXT ACTION UNDER A FIELD.
 
-   "Use a different code" is not a dock button: `.plr-btn` is the full-width
+   "Use a different code" is not a dock button: the dock's ui/Button is the full-width
    56px primary action, and the dock is where the ONE thing you came to do
    lives. This is a way out of a field, sitting under that field, and it must
    not compete with Join Game two inches below it.
@@ -1872,7 +1847,7 @@
   gap: 10px;
 }
 
-.plr-pair .plr-btn + .plr-btn { margin-top: 0; }
+.plr-pair .ui-btn + .ui-btn { margin-top: 0; }
 
 .plr-saved {
   display: flex;
@@ -1968,4 +1943,4 @@
 .plr-rev-ed:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* "Change my answers" on the sent screen is a plain button in the dock since
-   experience plan 3d (.plr-btn--ghost): still no amber in REST volume. */
+   experience plan 3d (ui/Button, secondary): still no amber in REST volume. */

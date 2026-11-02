@@ -72,11 +72,15 @@ export default function OneScreenNeedsBell({
     ? `hc-needsbtn${nowCount ? ' is-lit' : ''}`
     : `dock-more dock-needs${nowCount ? ' dock-more--lit' : ''}`;
   const n = top ? 'hc-needs-n' : 'dock-more-n';
+  /* On the top bar it is ui/Button, secondary at 36px, like the bar's other
+     buttons (experience plan §5.1, step 5a); on the stage dock, the dock's own. */
+  const Trigger = top ? Button : 'button';
+  const triggerLook = top ? { variant: 'secondary', size: 36 } : { type: 'button' };
   return (
     <>
-      <button
+      <Trigger
         ref={buttonRef}
-        type="button"
+        {...triggerLook}
         className={cls}
         onClick={() => setOpen(true)}
         aria-label={label}
@@ -89,7 +93,7 @@ export default function OneScreenNeedsBell({
         {top ? <span aria-hidden="true">{NEEDS_WORDS.title}</span> : null}
         {nowCount > 0 ? <span className={n} data-testid="needs-bell-count">{nowCount}</span> : null}
         {!nowCount && soon ? <span className={n} data-testid="needs-bell-dot" aria-hidden="true">•</span> : null}
-      </button>
+      </Trigger>
       {open ? (
         <Modal
           overlayClassName="ny ny-scrim"
@@ -115,7 +119,7 @@ export default function OneScreenNeedsBell({
             onConnectPhone={onConnectPhone ? () => { setOpen(false); onConnectPhone(); } : null}
           />
           <footer className="ny-sheet-foot">
-            <Button variant="quiet" onClick={close}>Close</Button>
+            <Button variant="secondary" size={44} onClick={close}>Close</Button>
           </footer>
         </Modal>
       ) : null}

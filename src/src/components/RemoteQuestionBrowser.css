@@ -162,7 +162,7 @@
   margin-top: 12px;
 }
 
-.hrq-actions .hr-btn { padding-inline: 8px; }
+.hrq-actions .ui-btn { padding-inline: 8px; }
 
 /* The preview's pair — the same two asks, full width under the card. */
 .hrq-asks {
@@ -247,10 +247,10 @@
 }
 
 /* THE GHOST BUTTON, WORN RATHER THAN REPAINTED. The markup carries
-   `hr-btn hr-btn--ghost` (HostRemote.css), which owns the ground, the hairline
-   border, the colour, the radius, the icon row and the remote's own 48px touch
-   floor. This used to restate all of it by hand and land on 44px — 4px under
-   every other button on this phone. The one thing left is the one thing this bar
+   ui/Button's secondary (components/ui/Button.css), which owns the outline,
+   the colour, the radius, the icon row and the 44px touch height. This used
+   to restate all of it by hand and land 4px under every other button on this
+   phone. The one thing left is the one thing this bar
    owns: the way back does not stretch, the toggle beside it does. */
 .hrqp-back { flex: none; }
 
@@ -273,12 +273,11 @@
   overflow: hidden;
 }
 
-/* 48px, not 44: the remote's floor is `.hr-btn`'s 48 (HostRemote.css), and this
-   segment shares a line with the way back, which wears it. */
+/* 44px: ui/Button's touch height, which the way back on the same line wears. */
 .hrqp-seg-btn {
   flex: 1;
   min-width: 0;
-  min-height: 48px;
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--text);

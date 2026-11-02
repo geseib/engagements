@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Button from './components/ui/Button';
 import webSocketClient from './WebSocketClient';
 import Icon from './components/Icon';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
@@ -3544,9 +3545,9 @@ function PlayerPage({ event = null } = {}) {
         help={eventJoinError ? 'player-join-errors' : 'player-event'}
         centre
         dock={eventJoinError ? (
-          <button type="button" className="plr-btn" onClick={() => attemptEventJoin(String(event.gameId))}>
+          <Button variant="primary" size={56} onClick={() => attemptEventJoin(String(event.gameId))}>
             Try again
-          </button>
+          </Button>
         ) : null}
       >
         {eventJoinError ? (
@@ -3598,12 +3599,12 @@ function PlayerPage({ event = null } = {}) {
         ctx="Welcome back"
         dock={(
           <>
-            <button type="button" className="plr-btn" onClick={handleRejoinConfirm}>
+            <Button variant="primary" size={56} onClick={handleRejoinConfirm}>
               Rejoin as {rejoinPrompt.name}
-            </button>
-            <button type="button" className="plr-btn plr-btn--ghost" onClick={handleRejoinDecline}>
+            </Button>
+            <Button variant="secondary" size={56} onClick={handleRejoinDecline}>
               Join as someone else
-            </button>
+            </Button>
           </>
         )}
       >
@@ -3635,9 +3636,9 @@ function PlayerPage({ event = null } = {}) {
         help="player-join"
         centre
         dock={(
-          <button type="button" className="plr-btn plr-btn--ghost" onClick={leaveEarlyJoin}>
+          <Button variant="secondary" size={56} onClick={leaveEarlyJoin}>
             {EARLY.change}
-          </button>
+          </Button>
         )}
       >
         <div data-testid="early-lobby">
@@ -3669,12 +3670,11 @@ function PlayerPage({ event = null } = {}) {
           help="player-join-errors"
           dock={(
             <>
-              <button type="submit" form="plr-access-form" className="plr-btn">
+              <Button type="submit" form="plr-access-form" variant="primary" size={56}>
                 {JOIN.button}
-              </button>
-              <button
-                type="button"
-                className="plr-btn plr-btn--ghost"
+              </Button>
+              <Button
+                variant="secondary" size={56}
                 onClick={() => {
                   setNeedsAccessCode(false);
                   setAccessCodeInput('');
@@ -3685,7 +3685,7 @@ function PlayerPage({ event = null } = {}) {
                 }}
               >
                 Back
-              </button>
+              </Button>
             </>
           )}
         >
@@ -3726,9 +3726,9 @@ function PlayerPage({ event = null } = {}) {
         help={joinError ? 'player-join-errors' : 'player-join'}
         dock={(
           <>
-            <button type="submit" form="plr-join-form" className="plr-btn">
+            <Button type="submit" form="plr-join-form" variant="primary" size={56}>
               {JOIN.button}
-            </button>
+            </Button>
             <p className="plr-note plr-note--after">
               No account, nothing to install. On this device, the same code and name bring
               you back. On another device? You can move your name here.
@@ -4164,9 +4164,9 @@ function PlayerPage({ event = null } = {}) {
        Post stays in its sheet, which sticks to the foot of the stage (3b D5),
        so it is never scrolled away either. */
     dock = (
-      <button type="button" className="plr-btn plr-btn--ghost" onClick={closeMyFeedback}>
+      <Button variant="secondary" size={56} onClick={closeMyFeedback}>
         {myFeedbackExitLabel}
-      </button>
+      </Button>
     );
 
   /* ---------------------------------------------------------------- ENDED --
@@ -4219,9 +4219,8 @@ function PlayerPage({ event = null } = {}) {
             const unsent = Boolean(myFeedbackDrafts[padded]);
             return (
               <li key={n}>
-                <button
-                  type="button"
-                  className="plr-btn plr-btn--ghost plr-ended-round"
+                <Button
+                  variant="secondary" size={56} className="plr-ended-round"
                   title={label.full}
                   aria-label={unsent ? `${label.full}, unsent comment` : label.full}
                   onClick={() => openMyFeedback({ padded, title: label.number, knownTitle: label.title })}
@@ -4235,7 +4234,7 @@ function PlayerPage({ event = null } = {}) {
                     </>
                   )}
                   {unsent && <span className="plr-ended-round__draft">Unsent comment</span>}
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -4388,9 +4387,9 @@ function PlayerPage({ event = null } = {}) {
       dock = (
         <>
           <p className="plr-note plr-note--status" role="status">{HELD.line}</p>
-          <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingAnswer}>
+          <Button variant="secondary" size={56} onClick={handleEditPendingAnswer}>
             {HELD.changeAnswer}
-          </button>
+          </Button>
         </>
       );
     } else if (!hasAnswered) {
@@ -4445,14 +4444,13 @@ function PlayerPage({ event = null } = {}) {
             <p className="plr-note">
               {selectedTriviaAnswer ? SEND.triviaPicked(selectedTriviaAnswer) : SEND.triviaPick}
             </p>
-            <button
-              type="button"
-              className="plr-btn"
+            <Button
+              variant="primary" size={56}
               onClick={() => handleSubmitAnswer(null, selectedTriviaAnswer)}
               disabled={!selectedTriviaAnswer}
             >
               {SEND.answer}
-            </button>
+            </Button>
           </>
         );
       } else if (gameType === 'wavelength') {
@@ -4506,14 +4504,13 @@ function PlayerPage({ event = null } = {}) {
                   a room because they ran dry at six (spec §2.1). */}
               {SEND.wordsCount(wordCount)}
             </p>
-            <button
-              type="button"
-              className="plr-btn"
+            <Button
+              variant="primary" size={56}
               onClick={handleSubmitAnswer}
               disabled={wordCount === 0}
             >
               {SEND.words(wordCount)}
-            </button>
+            </Button>
           </>
         );
       } else if (gameType === 'poll' && currentQuestion?.poll) {
@@ -4534,9 +4531,9 @@ function PlayerPage({ event = null } = {}) {
         dock = (
           <>
             {answerStatusLine}
-            <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!pollIsAnswered(pollQ, pollValue)}>
+            <Button type="submit" form="plr-answer-form" variant="primary" size={56} disabled={!pollIsAnswered(pollQ, pollValue)}>
               {SEND.answer}
-            </button>
+            </Button>
           </>
         );
       } else {
@@ -4584,9 +4581,9 @@ function PlayerPage({ event = null } = {}) {
         dock = (
           <>
             {answerStatusLine}
-            <button type="submit" form="plr-answer-form" className="plr-btn" disabled={!answerInput.trim()}>
+            <Button type="submit" form="plr-answer-form" variant="primary" size={56} disabled={!answerInput.trim()}>
               {SEND.answer}
-            </button>
+            </Button>
           </>
         );
       }
@@ -4718,9 +4715,9 @@ function PlayerPage({ event = null } = {}) {
       dock = (
         <>
           <p className="plr-note plr-note--status" role="status">{HELD.line}</p>
-          <button type="button" className="plr-btn plr-btn--ghost" onClick={handleEditPendingVote}>
+          <Button variant="secondary" size={56} onClick={handleEditPendingVote}>
             {HELD.changeVotes}
-          </button>
+          </Button>
         </>
       );
     } else if (answers.length > 0) {
@@ -4884,16 +4881,15 @@ function PlayerPage({ event = null } = {}) {
           {/* THE VALIDATION IS ON THE BUTTON, NOT IN AN alert(). "Please select
               answers for all 3 positions." was a modal system dialog standing in
               for a form that could simply say what is missing. */}
-          <button
-            type="button"
-            className="plr-btn"
+          <Button
+            variant="primary" size={56}
             onClick={handleSubmitVotes}
             disabled={filledVotes < requiredVotes || voteSending}
           >
             {filledVotes < requiredVotes
               ? SEND.pickMore(requiredVotes - filledVotes)
               : SEND.votes}
-          </button>
+          </Button>
         </>
       );
     } else {
@@ -5221,14 +5217,13 @@ function PlayerPage({ event = null } = {}) {
         {/* Voting closed under a ballot, or it never left an offline phone:
             said here, on this round's result, not in a browser alert (3d). */}
         {voteStatusLine}
-        <button
-          type="button"
-          className="plr-btn plr-btn--ghost plr-feedback-btn"
+        <Button
+          variant="secondary" size={56} className="plr-feedback"
           onClick={openMyFeedback}
         >
           <Icon name="ChatCircleText" size={18} />
           {' '}Comment on this round
-        </button>
+        </Button>
         <p className="plr-note plr-note--after">Reply to a response, or comment on Workie’s read.</p>
       </>
     );

@@ -31,7 +31,7 @@ export default function PrivateReveal({ oneScreen, summary = '', children, testI
         {children}
         <div className="ny ny-private" data-testid={`${testId}-shown`}>
           <span className="ny-acts">
-            <Button size="sm" variant="quiet" onClick={() => setStage('hidden')}>{NEEDS_WORDS.hide}</Button>
+            <Button size={36} variant="secondary" onClick={() => setStage('hidden')}>{NEEDS_WORDS.hide}</Button>
           </span>
         </div>
       </>
@@ -46,13 +46,13 @@ export default function PrivateReveal({ oneScreen, summary = '', children, testI
         <>
           <p className="ny-confirm" role="status">{NEEDS_WORDS.roomWillSee}</p>
           <span className="ny-acts">
-            <Button size="sm" variant="quiet" onClick={() => setStage('shown')}>{NEEDS_WORDS.showIt}</Button>
-            <Button size="sm" variant="quiet" onClick={() => setStage('hidden')}>{NEEDS_WORDS.cancel}</Button>
+            <Button size={36} variant="secondary" onClick={() => setStage('shown')}>{NEEDS_WORDS.showIt}</Button>
+            <Button size={36} variant="secondary" onClick={() => setStage('hidden')}>{NEEDS_WORDS.cancel}</Button>
           </span>
         </>
       ) : (
         <span className="ny-acts">
-          <Button size="sm" variant="quiet" onClick={() => setStage('confirm')}>{NEEDS_WORDS.showHere}</Button>
+          <Button size={36} variant="secondary" onClick={() => setStage('confirm')}>{NEEDS_WORDS.showHere}</Button>
           {after}
         </span>
       )}

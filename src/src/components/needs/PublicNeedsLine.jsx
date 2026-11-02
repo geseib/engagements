@@ -39,7 +39,7 @@ export default function PublicNeedsLine({ needs, onOpen = null, remoteConnected 
         <span className="ny-line-main">{kindSummary(needs, { remoteConnected })}</span>
       </div>
       {items.length && typeof onOpen === 'function' ? (
-        <Button size="sm" variant="quiet" onClick={onOpen} data-testid="needs-line-open">{NEEDS_WORDS.open}</Button>
+        <Button size={36} variant="secondary" onClick={onOpen} data-testid="needs-line-open">{NEEDS_WORDS.open}</Button>
       ) : null}
     </section>
   );

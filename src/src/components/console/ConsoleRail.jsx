@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Button from '../ui/Button';
 import CW from '../../config/consoleWords';
 import { consoleRailFor, peopleSummary } from '../../config/consoleRail';
 import LW from '../../config/lateWords';
@@ -24,7 +25,7 @@ export function Section({ id, title, summary, alert = false, open, onToggle, chi
         {title}<span className={`hc-count${alert ? ' is-alert' : ''}`}>{summary}</span>
       </summary>
       {children}
-      {link ? <button type="button" className="hc-link" onClick={onLink}>{link}</button> : null}
+      {link ? <Button variant="tertiary" className="hc-sec-link" onClick={onLink}>{link}</Button> : null}
     </details>
   );
 }
@@ -149,14 +150,14 @@ export default function ConsoleRail({
             Call & Answer), disabled with its reason before a round is scored. */}
         {scoreboard && scoreboard.show ? (
           <div className="hc-board">
-            <button
-              type="button"
-              className="hc-btn"
+            <Button
+              variant="secondary"
+              size={36}
               disabled={!scoreboard.enabled}
               onClick={() => scoreboard.onToggle(!scoreboard.open)}
             >
               {scoreboard.open ? CW.hideScoreboard : CW.showScoreboard}
-            </button>
+            </Button>
             {!scoreboard.enabled && scoreboard.reason ? <span className="hc-meta">{scoreboard.reason}</span> : null}
           </div>
         ) : null}
@@ -174,8 +175,8 @@ export default function ConsoleRail({
                   {l.label}<span className="hc-meta">{l.meta ? ` · ${l.meta}` : ''}</span>
                   {l.item ? (
                     <span className="hc-late-acts">
-                      {canShowOnWall(l.item, lateWall) ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</button> : null}
-                      {!l.item.reviewed ? <button type="button" className="hc-link" disabled={lateBusy} onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</button> : null}
+                      {canShowOnWall(l.item, lateWall) ? <Button variant="tertiary" disabled={lateBusy} onClick={() => lateAct(onLateShow)(l.item)}>{LW.show}</Button> : null}
+                      {!l.item.reviewed ? <Button variant="tertiary" disabled={lateBusy} onClick={() => lateAct(onLateMark)(l.item)}>{LW.markReviewed}</Button> : null}
                     </span>
                   ) : null}
                 </span>

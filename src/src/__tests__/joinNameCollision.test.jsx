@@ -136,12 +136,12 @@ describe('JoinNameCollision — the refusal', () => {
     const first = actions('declined', { canAskAgain: false });
     const [main] = screen.getAllByRole('button');
     expect(main.textContent).toBe(HANDOVER_LABELS.pickAnother);
-    expect(main).not.toHaveClass('plr-btn--ghost');
+    expect(main).not.toHaveClass('ui-btn--quiet');
     expect(labelsOf()).toEqual([HANDOVER_LABELS.pickAnother]);
     first.view.unmount();
     actions('declined', { canAskAgain: true });
     expect(labelsOf()).toEqual([HANDOVER_LABELS.pickAnother, HANDOVER_LABELS.askAgain]);
-    expect(screen.getByRole('button', { name: HANDOVER_LABELS.askAgain })).toHaveClass('plr-btn--ghost');
+    expect(screen.getByRole('button', { name: HANDOVER_LABELS.askAgain })).toHaveClass('ui-btn--quiet');
   });
 
   it('a lapsed ask says the host has not answered, with Ask again or another name', () => {
@@ -199,12 +199,12 @@ describe('JoinNameCollision — the refusal', () => {
     expect(screen.getByText('Are you the Chris already here?')).toBeInTheDocument();
   });
 
-  it('dresses the ways out in the dock vocabulary', () => {
+  it('dresses the ways out in the dock vocabulary (ui/Button at 56px, step 5a)', () => {
     actions('idle');
     const [main, other] = screen.getAllByRole('button');
-    expect(main).toHaveClass('plr-btn');
-    expect(main).not.toHaveClass('plr-btn--ghost');
-    expect(other).toHaveClass('plr-btn', 'plr-btn--ghost');
+    expect(main).toHaveClass('ui-btn', 'ui-btn--action', 'ui-btn--h56');
+    expect(main).not.toHaveClass('ui-btn--quiet');
+    expect(other).toHaveClass('ui-btn', 'ui-btn--quiet', 'ui-btn--h56');
     for (const button of screen.getAllByRole('button')) {
       expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
     }

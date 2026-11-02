@@ -35,7 +35,9 @@ test('the reused action bar is pinned to the ladder inside the console', () => {
   expect(css).toMatch(/\.hc-acts \.host-action-bar__primary \.keycap[^{]*\{[^}]*font-size:\s*12px/);
 });
 test('keyboard focus is visible on the console\'s own controls', () => {
-  for (const sel of ['.hc-sec summary', '.hc-link', '.hc-code', '.hc-btn', '.hc-winstat']) {
+  // Main menu, Join, the Session menu and the scoreboard are ui/Button since step 5a,
+  // which draws its own focus ring (uiButtonPalette.test.js).
+  for (const sel of ['.hc-sec summary', '.hc-link', '.hc-winstat']) {
     expect(css).toMatch(new RegExp(`${sel.replace(/\./g, '\\.')}:focus-visible`));
   }
 });

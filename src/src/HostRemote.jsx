@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import Button from './components/ui/Button';
 import HostNotificationsBell from './components/HostNotificationsBell';
 import HelpButton from './components/HelpButton';
 import { helpFor } from './config/help/screens';
@@ -1524,9 +1525,9 @@ function HostRemote() {
               value={gameIdDraft}
               onChange={(e) => setGameIdDraft(e.target.value.toUpperCase())}
             />
-            <button className="hr-btn hr-btn--primary" type="submit" disabled={!gameIdDraft.trim()}>
+            <Button variant="primary" size={44} type="submit" disabled={!gameIdDraft.trim()}>
               Connect
-            </button>
+            </Button>
           </form>
         </div>
       </div>
@@ -1621,15 +1622,14 @@ function HostRemote() {
                 <Icon name="Warning" weight="fill" size={18} color="currentColor" />
                 {accessDeniedMessage({ reason: access.reason, email })}
               </p>
-              <button
-                className="hr-btn hr-btn--primary"
-                type="button"
+              <Button
+                variant="primary" size={44}
                 onClick={access.reason === 'error' ? () => checkAccess(gameId) : handleSignInAgain}
               >
                 {access.reason === 'error' ? 'Try again'
                   : access.reason === 'expired' ? 'Sign in again'
                     : 'Sign in as someone else'}
-              </button>
+              </Button>
               {/* Only for the 'account' reason — the account this device is
                   signed in as may run a DIFFERENT one of its own teams, which
                   is a team change, not a sign-in change. Reconciles and heals a
@@ -1648,10 +1648,10 @@ function HostRemote() {
                   does — the door cannot tell the two apart, on purpose — so
                   this offers the same exit the normal Session card's "Back to
                   Menu" does, for every denial reason, not only 'account'. */}
-              <button className="hr-btn hr-btn--ghost" type="button" onClick={backToMenu}>
+              <Button variant="secondary" size={44} onClick={backToMenu}>
                 <Icon name="House" weight="bold" size={18} color="currentColor" />
                 Enter a different code
-              </button>
+              </Button>
             </section>
           )
         ) : panelTab ? (
@@ -1807,15 +1807,14 @@ function HostRemote() {
                       ))}
                     </span>
                     {notesPage > 0 && (
-                      <button
-                        className="hr-btn hr-btn--ghost hr-btn--small"
-                        type="button"
+                      <Button
+                        variant="secondary" size={44}
                         disabled={blocked}
                         onClick={() => fire('notes-back')}
                       >
                         <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
                         {RW.backPage}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -1953,15 +1952,14 @@ function HostRemote() {
             <section className="hr-card" aria-label="This round">
               <h2 className="hr-card-heading">This round</h2>
               <div className="hr-grid">
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   disabled={!setId}
                   onClick={() => setPanelTab('questions')}
                 >
                   <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
                   Choose next question
-                </button>
+                </Button>
 
                 {/* THE ROOM'S SCREEN, FROM THE HOST'S HAND.
 
@@ -1972,16 +1970,15 @@ function HostRemote() {
                     disappears between rounds is one they have to re-find every
                     time. `round` is null in LOBBY and after the session ends,
                     which is exactly when there is nothing to enlarge. */}
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   aria-expanded={focusOpen}
                   disabled={!round}
                   onClick={() => setFocusOpen((open) => !open)}
                 >
                   <Icon name="ArrowsOut" weight="bold" size={18} color="currentColor" />
                   Show on the big screen
-                </button>
+                </Button>
 
               </div>
 
@@ -2092,29 +2089,26 @@ function HostRemote() {
                     named for what the host came for, is the shape the desktop
                     already has (its dock button and its per-category
                     magnifier). */}
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   onClick={() => setPanelTab('players')}
                 >
                   <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
                   Players &amp; rounds
-                </button>
+                </Button>
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   aria-expanded={categoriesOpen}
                   disabled={!setId}
                   onClick={() => setCategoriesOpen((open) => !open)}
                 >
                   <Icon name="Folder" weight="bold" size={18} color="currentColor" />
                   Categories
-                </button>
+                </Button>
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   aria-expanded={joinOpen}
                   onClick={() => setJoinOpen((open) => !open)}
                 >
@@ -2129,7 +2123,7 @@ function HostRemote() {
                       much as a code. */}
                   <Icon name="LinkSimple" weight="bold" size={18} color="currentColor" />
                   Join code
-                </button>
+                </Button>
 
                 {/* PRESENT replaces Big screen under the two-surface switch
                     (PLAN 2.14): the room's screen is /present, which follows
@@ -2137,8 +2131,10 @@ function HostRemote() {
                     reload on either end loses nothing. */}
                 {/* A Build Room's window needs its wall key, which this page never reads. */}
                 {gameType !== 'build' && twoSurfacesHere(gameType) ? (
-                  <a
-                    className="hr-btn hr-btn--ghost"
+                  <Button
+                    as="a"
+                    variant="secondary"
+                    size={44}
                     href={presentHref(gameId)}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -2146,22 +2142,20 @@ function HostRemote() {
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                     {Number(snapshot && snapshot.presenting) > 0 ? 'Presenting' : 'Present'}
-                  </a>
+                  </Button>
                 ) : (
-                  <button
-                    className="hr-btn hr-btn--ghost"
-                    type="button"
+                  <Button
+                    variant="secondary" size={44}
                     aria-expanded={screenOpen}
                     onClick={() => setScreenOpen((open) => !open)}
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                     Big screen
-                  </button>
+                  </Button>
                 )}
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   onClick={backToMenu}
                 >
                   {/* House, not ArrowsClockwise: this goes back to the code
@@ -2169,7 +2163,7 @@ function HostRemote() {
                       reads as "reload this session". */}
                   <Icon name="House" weight="bold" size={18} color="currentColor" />
                   Back to Menu
-                </button>
+                </Button>
               </div>
 
               {categoriesOpen && (
@@ -2198,9 +2192,8 @@ function HostRemote() {
                 <div className="hr-join">
                   <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
                   <code className="hr-join-url">{playerJoinUrl}</code>
-                  <button
-                    className="hr-btn hr-btn--ghost"
-                    type="button"
+                  <Button
+                    variant="secondary" size={44}
                     onClick={() => {
                       navigator.clipboard?.writeText(playerJoinUrl)
                         .then(() => setNotice('Join link copied.'))
@@ -2208,14 +2201,13 @@ function HostRemote() {
                     }}
                   >
                     <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
-                  </button>
+                  </Button>
                   {/* THE JOIN CODE ON THE ROOM'S SCREEN (owner, 2026-10-13): a
                       `join` focus, so the Presentation and the host page show
                       it too. Only while a round is on; the lobby already does. */}
                   {round ? (
-                    <button
-                      className="hr-btn hr-btn--ghost"
-                      type="button"
+                    <Button
+                      variant="secondary" size={44}
                       data-join-toggle=""
                       aria-pressed={joinOnWall}
                       disabled={focusBusy}
@@ -2223,7 +2215,7 @@ function HostRemote() {
                     >
                       <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                       {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               )}
@@ -2232,25 +2224,25 @@ function HostRemote() {
                 <div className="hr-card-panel">
                   {displayLinked ? (
                     <div className="hr-grid">
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
                         <Icon name="ArrowUp" weight="bold" size={18} color="currentColor" />Top
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
                         <Icon name="ChartBar" weight="bold" size={18} color="currentColor" />Results
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
                         <Icon name="ArrowDown" weight="bold" size={18} color="currentColor" />Bottom
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
                         <Icon name="Monitor" weight="bold" size={18} color="currentColor" />Full screen
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={openHostPage}>
+                      <Button variant="secondary" size={44} onClick={openHostPage}>
                         <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                         Open the big screen
-                      </button>
+                      </Button>
                       {/* Honest about the limit rather than showing dead buttons:
                           scrolling and full-screen are display-only, they have no
                           server representation, and a window handle cannot be
@@ -2280,16 +2272,17 @@ function HostRemote() {
                   amber. The same control the host page's dock shows beside
                   its primary: roundStep gives both the same one. */}
               {secondary && (
-                <button
-                  className={`hr-btn hr-btn--ghost hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size={44}
+                  className={`hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
                   disabled={blocked || secondary.disabled}
                   onClick={onSecondary}
                   onBlur={() => { if (secondaryArmed) disarm(); }}
                 >
                   <Icon name={secondaryArmed ? 'Warning' : secondary.icon} weight="bold" size={18} color="currentColor" />
                   {secondaryArmed ? 'Tap again to confirm' : secondary.label}
-                </button>
+                </Button>
               )}
               {(primaryArmed || secondaryArmed) && (
                 <p className="hr-dock-warn" role="status">
@@ -2301,9 +2294,12 @@ function HostRemote() {
               {action.disabled && action.hint && (
                 <p className="hr-dock-hint" role="status">{action.hint}</p>
               )}
-              <button
+              {/* THE ONE ORANGE BUTTON ON THE PHONE: ui/Button's primary at the
+                  phone dock's 56px (experience plan §5.1, step 5a). */}
+              <Button
+                variant="primary"
+                size={56}
                 className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
-                type="button"
                 disabled={blocked || action.disabled}
                 onClick={onPrimary}
                 onBlur={() => { if (primaryArmed) disarm(); }}
@@ -2317,7 +2313,7 @@ function HostRemote() {
                 <span className="hr-primary-label">
                   {busyAction ? 'Working…' : primaryArmed ? 'Tap again to confirm' : action.label}
                 </span>
-              </button>
+              </Button>
             </>
           ) : (
             <p className="hr-dock-idle">{step.status.text}</p>

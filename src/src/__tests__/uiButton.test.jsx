@@ -4,7 +4,7 @@
  */
 import React, { createRef } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import Button, { BUTTON_VARIANTS, BUTTON_SIZES } from '../components/ui/Button';
+import Button, { BUTTON_VARIANTS, BUTTON_SIZES, BUTTON_HEIGHTS, VARIANT_CLASS } from '../components/ui/Button';
 
 describe('Button', () => {
   test('defaults: a quiet, medium <button type="button">', () => {
@@ -21,7 +21,38 @@ describe('Button', () => {
   });
 
   test('an unknown variant or size falls back instead of rendering an unstyled class', () => {
-    render(<Button variant="primary" size="xl">Go</Button>);
+    render(<Button variant="loud" size="xl">Go</Button>);
+    expect(screen.getByRole('button').className).toBe('ui-btn ui-btn--quiet');
+  });
+
+  // experience plan §5.1: primary (orange, one per screen), secondary (quiet,
+  // outlined), tertiary (text), danger. The primary renders the role's class, never
+  // a `*-btn--primary` one, which the button-class ratchet counts as a scoped primary.
+  test.each([
+    ['primary', 'ui-btn--action'],
+    ['secondary', 'ui-btn--quiet'],
+    ['tertiary', 'ui-btn--tertiary'],
+    ['danger', 'ui-btn--danger'],
+  ])('the §5.1 look %s renders %s', (variant, cls) => {
+    render(<Button variant={variant}>Go</Button>);
+    expect(screen.getByRole('button').className).toBe(`ui-btn ${cls}`);
+    expect(screen.getByRole('button').className).not.toMatch(/primary/);
+  });
+
+  test('every name maps onto a class the stylesheet declares', () => {
+    for (const cls of Object.values(VARIANT_CLASS)) expect(BUTTON_VARIANTS).toContain(cls);
+  });
+
+  test.each(BUTTON_HEIGHTS)('size %i is a fixed height class, as a number or a string', (h) => {
+    const { unmount } = render(<Button size={h}>Go</Button>);
+    expect(screen.getByRole('button')).toHaveClass(`ui-btn--h${h}`);
+    unmount();
+    render(<Button size={String(h)}>Go</Button>);
+    expect(screen.getByRole('button')).toHaveClass(`ui-btn--h${h}`);
+  });
+
+  test('a height that is not one of the three falls back to the default', () => {
+    render(<Button size={40}>Go</Button>);
     expect(screen.getByRole('button').className).toBe('ui-btn ui-btn--quiet');
   });
 

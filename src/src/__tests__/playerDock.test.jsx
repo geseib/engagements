@@ -19,7 +19,7 @@
  * One deliberate exception to "no primary in the stage": the comment
  * composer's Post (`.fbr__post`) lives in a sheet that sticks to the foot of
  * the stage (phone-comments 3b D5), so it is never scrolled away either; it is
- * not a `.plr-btn` and is not counted here.
+ * not a ui/Button primary and is not counted here.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
@@ -151,9 +151,8 @@ async function setConnected(up) {
 
 const dock = () => document.querySelector('.plr-dock');
 const stage = () => document.querySelector('.plr-stage');
-/** A main (orange) button: `.plr-btn` that is not the plain ghost. */
-const mainButtons = (root) => [...root.querySelectorAll('button.plr-btn')]
-  .filter((b) => !b.classList.contains('plr-btn--ghost'));
+/** A main (orange) button: ui/Button's primary (step 5a moved the dock onto it). */
+const mainButtons = (root) => [...root.querySelectorAll('button.ui-btn--action')];
 
 function expectNoMainInStage() {
   expect(stage()).not.toBeNull();
@@ -446,8 +445,8 @@ describe('FollowUpCard draws its actions where it is told', () => {
     const slot = document.createElement('div');
     document.body.appendChild(slot);
     const { rerender, container } = render(<FollowUpCard ask={ASK} onSend={jest.fn()} actionsIn={slot} />);
-    expect(slot.querySelector('button.plr-btn')).toHaveTextContent('Send');
-    expect(container.querySelector('.fu-card button.plr-btn')).toBeNull();
+    expect(slot.querySelector('button.ui-btn--h56')).toHaveTextContent('Send');
+    expect(container.querySelector('.fu-card button.ui-btn')).toBeNull();
 
     rerender(<FollowUpCard ask={ASK} onSend={jest.fn()} actionsIn={null} />);
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
@@ -456,6 +455,6 @@ describe('FollowUpCard draws its actions where it is told', () => {
 
   test('plain, for a card above a screen with its own main button', () => {
     render(<FollowUpCard ask={ASK} onSend={jest.fn()} plain />);
-    expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('plr-btn--ghost');
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('ui-btn--quiet');
   });
 });

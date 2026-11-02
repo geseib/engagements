@@ -11,14 +11,16 @@
 .hc-top > .hc-name { flex: 0 1 auto; }
 .hc-top > .hc-spacer { flex: 1 1 0; }
 .hc-name { color: var(--text); font-size: 15px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 10px; border-left: 1px solid rgb(var(--glow-rgb) / .12); }
-.hc-leave, .hc-menu, .hc-code { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; box-sizing: border-box; }
-.hc-menu { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 10px; padding: 5px 12px; cursor: pointer; }
-.hc-menu[aria-expanded="true"] { border-color: var(--accent); background: rgb(var(--glow-rgb) / .08); }
+/* Main menu, Join and the Session menu are ui/Button (secondary, 36px;
+   experience plan §5.1, step 5a). Only their type and the open state are
+   the bar's: 13px, and the open Session menu edged in the accent. */
+.hc-top .hc-leave, .hc-top .hc-code, .hc-top .hc-menu { --ui-size: 13px; }
+.hc-top .hc-menu[aria-expanded="true"] { border-color: var(--accent); background: rgb(var(--glow-rgb) / .08); }
+.hc-top .rws .ui-btn { --ui-size: 13px; }
 .hc-bell, .hc-helpslot { display: inline-flex; align-items: center; }
 /* The connection, only when it is broken (PLAN §4.2 row 7): amber edge, the text stays --text. */
 .hc-conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text); border: 1px solid var(--warn); background: rgb(var(--warn-rgb) / .14); border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
 .hc-spacer { margin-left: auto; }
-.hc-code, .hc-btn { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
 .hc-code b { color: var(--accent-text); letter-spacing: .06em; margin-left: 4px; }
 .hc-winstat { font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; border: 1px solid rgb(var(--glow-rgb) / .22); color: var(--text); text-decoration: none; }
 .hc-winstat.is-success { border-color: var(--success); background: rgb(var(--success-rgb) / .14); }
@@ -33,10 +35,9 @@
    Session menu, its count on the amber accent. Text stays --text. */
 .hc-roomsees { border-color: var(--info); background: rgb(var(--info-rgb) / .14); }
 .hc-roomsees .hc-dot { background: var(--info); }
-.hc-needsbtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; box-sizing: border-box; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 10px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
-.hc-needsbtn.is-lit { border-color: var(--accent); }
+.hc-top .hc-needsbtn { --ui-size: 13px; }
+.hc-top .hc-needsbtn.is-lit { border-color: var(--accent); }
 .hc-needs-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.hc-needsbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hc-loop { grid-area: loop; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
 .hc-loop .wfs { border-bottom: 0; }
 .hc-rail { grid-area: rail; border-right: 1px solid rgb(var(--glow-rgb) / .12); overflow: auto; padding: 8px 0; }
@@ -55,13 +56,16 @@
 .hc-empty { margin: 0; padding: 0 14px 10px; font-size: 13px; color: var(--muted); }
 .hc-link { font: inherit; font-size: 12px; font-weight: 700; color: var(--info); background: transparent; border: 0; padding: 0 14px 10px; cursor: pointer; text-align: left; }
 .hc-list .hc-link { padding: 0; font-size: 13px; }
+/* A section's link (ui/Button, tertiary) at the section's foot. */
+.hc-sec > .hc-sec-link { --ui-size: 12px; margin: 0 8px 10px; }
+.hc-late-acts .ui-btn { --ui-size: 13px; min-height: 0; padding-top: 0; padding-bottom: 0; }
 .hc-link:disabled { opacity: .5; cursor: default; }
 /* The slice of Workie's read the wall shows now (owner, 16 Oct 2026). */
 .hc-read-page { border-left: 3px solid transparent; padding-left: 12px; margin-left: -15px; scroll-margin-block: 12px; }
 .hc-read-page.is-onwall { border-left-color: var(--accent); }
 .hc-onwall-k { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 .hc-board { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 14px 10px; }
-.hc-board .hc-btn:disabled { opacity: .5; cursor: default; }
+.hc-board .ui-btn { --ui-size: 13px; }
 .hc-main { grid-area: main; overflow: auto; padding: 16px 20px; display: grid; gap: 14px; align-content: start; container-type: size; }
 /* WHAT THE HOST DOES NEXT (owner, 18 Oct 2026): a card at the top of the
    centre, the sentence large, the buttons beside it. Was the footer. */
@@ -107,9 +111,6 @@
 .hc-now--extra .hc-now-text { flex: 1 1 0; }
 .hc-now-extra { flex: 1 1 100%; min-width: 0; }
 .hc-now-extra:empty { display: none; }
-/* The way out, on the top line (owner, 18 Oct 2026). */
-.hc-leave { font: inherit; font-size: 15px; font-weight: 700; color: var(--text); background: transparent; border: 0; padding: 4px 6px; cursor: pointer; }
-.hc-leave:hover { color: var(--accent-text); }
 .hc-acts .host-action-bar__status { display: none; }
 
 /* The bar is position:fixed with a paper background by default (styles.css
@@ -123,23 +124,16 @@
 .hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary, .hc-acts .host-action-bar__addtime { font-size: 15px; }
 
 /* ONE ORANGE MAIN BUTTON, IN EVERY STATE (PLAN §2 principle 4; dev QA 2 Nov:
-   it went blue in some states and orange in others). The bar's buttons carry
-   the global .btn-primary / .btn-secondary, which bare rules elsewhere in the
-   bundle paint Bootstrap blue and paper white, in whatever order the chunks
-   load. Stated here at a specificity those leaks cannot reach, as the stage's
-   dock does (styles/stage.css): the main action is the --action fill, armed
-   or not; a disabled one is a grey wash, never a solid fill; every other
-   button is quiet. Measured in mainButtonPalette.test.js. */
-.hc-acts .host-action-bar .host-action-bar__primary { background: var(--action); border: 1px solid var(--action); color: var(--on-action); cursor: pointer; opacity: 1; transform: none; box-shadow: none; }
-.hc-acts .host-action-bar .host-action-bar__primary:hover:not(:disabled) { background: var(--action-hover); border-color: var(--action-hover); color: var(--on-action); transform: none; box-shadow: none; }
-.hc-acts .host-action-bar .host-action-bar__primary:disabled { background: rgb(var(--slate-rgb) / .18); border-color: transparent; color: var(--muted); cursor: not-allowed; opacity: 1; transform: none; box-shadow: none; }
-.hc-acts .host-action-bar .host-action-bar__primary.is-armed { background: var(--action); color: var(--on-action); border-color: var(--warn); box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / .55); }
-.hc-acts .host-action-bar .host-action-bar__secondary, .hc-acts .host-action-bar .host-action-bar__tertiary, .hc-acts .host-action-bar .host-action-bar__addtime { background: transparent; border: 1px solid var(--rule-strong); color: var(--text); cursor: pointer; transform: none; box-shadow: none; }
-.hc-acts .host-action-bar .host-action-bar__secondary:hover:not(:disabled), .hc-acts .host-action-bar .host-action-bar__tertiary:hover:not(:disabled), .hc-acts .host-action-bar .host-action-bar__addtime:hover:not(:disabled) { background: var(--row-hover); border-color: var(--muted); color: var(--text); transform: none; box-shadow: none; }
+   it went blue in some states and orange in others). Since step 5a the bar's
+   buttons are ui/Button and no longer carry the global .btn-primary /
+   .btn-secondary that the Bootstrap-blue leaks painted, so the console states
+   no paint of its own: ui/Button.css draws the --action fill, the grey wash
+   when disabled, and the quiet look for the rest (mainButtonPalette.test.js).
+   The armed ring is styles.css's. */
 .hc-acts .host-action-bar__keyhint, .hc-acts .host-action-bar__primary .keycap { font-size: 12px; }
 
-/* Keyboard focus, as WorkflowStrip.css draws it. */
-.hc-sec summary:focus-visible, .hc-leave:focus-visible, .hc-link:focus-visible, .hc-code:focus-visible, .hc-btn:focus-visible, .hc-winstat:focus-visible, .hc-menu:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Keyboard focus, as WorkflowStrip.css draws it. ui/Button draws its own. */
+.hc-sec summary:focus-visible, .hc-link:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Responses panel (host console spec 3.4) */
 .hc-panel { display: grid; gap: 12px; }

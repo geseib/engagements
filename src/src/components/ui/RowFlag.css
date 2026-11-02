@@ -1,0 +1,32 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   ROW FLAG — components/ui/RowFlag.jsx (experience plan §5.1, step 5a).
+
+   An amber dot plus words. ROLES ONLY: --accent (the "needs you" amber, the
+   dot only, never text), --text, --muted. Type is the caller's: the flag sets
+   no font-size of its own except the "ago", one rung down in em.
+
+   Measured (uiRowFlagPalette.test.js, every skin x theme, on --bg, --surface
+   and --surface-2): --text >= 10:1, --muted >= 4.5:1. The dot is non-text and
+   always sits beside words, so colour is never the only signal.
+   ========================================================================== */
+
+.ui-flag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .45em;
+  min-width: 0;
+  color: var(--text);
+}
+.ui-flag-dot {
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.ui-flag-words { min-width: 0; }
+.ui-flag-ago { color: var(--muted); font-size: max(12px, .92em); white-space: nowrap; }
+.ui-flag--calm { color: var(--muted); }
+.ui-flag--calm .ui-flag-dot { background: var(--muted); }

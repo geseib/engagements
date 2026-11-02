@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from '../Icon';
 import Button from '../ui/Button';
+import RowFlag from '../ui/RowFlag';
 import NeedsActions from '../needs/NeedsActions';
 import { NEEDS_ACTIONS } from '../../config/needsYou';
 import './PersonRow.css';
@@ -72,10 +73,10 @@ function PersonMenu({ name, menu }) {
   };
   return (
     <span className="prow-more" ref={wrap}>
-      {/* The primitive Button (PLAN §5.1), quiet and small, squared for one glyph. */}
+      {/* The primitive Button (PLAN §5.1), secondary, squared for one glyph. */}
       <Button
         ref={button}
-        variant="quiet"
+        variant="secondary"
         size="sm"
         className="prow-more-toggle"
         aria-label={PERSON_WORDS.more(name)}
@@ -121,10 +122,8 @@ export default function PersonRow({
       {menu.length ? <PersonMenu name={name} menu={menu} /> : <span className="prow-more" />}
       {asking ? (
         <span className="prow-needs">
-          <span className="prow-flag">
-            {PERSON_WORDS.wantsName}
-            {needsItem.ago ? <span className="prow-ago">{` · ${needsItem.ago}`}</span> : null}
-          </span>
+          {/* The row flag (PLAN §5.1): an amber dot plus words. */}
+          <RowFlag className="prow-flag" ago={needsItem.ago || ''}>{PERSON_WORDS.wantsName}</RowFlag>
           <NeedsActions item={needsItem} onAct={onNeedsAct} busy={needsBusy} only={[NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW]} />
         </span>
       ) : null}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import TimeRing from './console/TimeRing';
+import Button from './ui/Button';
 import { timeLeft, clock, TIMER_WORDS } from '../config/roundTimer';
 import { serverNowMs } from '../utils/serverClock';
 
@@ -33,9 +34,9 @@ export default function RemoteTimeCard({ timer, onAddMinute, busy = false, now: 
           <p className="hr-time-sub">{tl.up ? TIMER_WORDS.overOf(clock(tl.overMs), given) : TIMER_WORDS.leftOf(given)}</p>
         </div>
         {onAddMinute ? (
-          <button type="button" className="hr-btn hr-btn--ghost hr-time-plus" onClick={onAddMinute} disabled={busy} aria-label={TIMER_WORDS.plusOneLabel}>
+          <Button variant="secondary" size={44} className="hr-time-plus" onClick={onAddMinute} disabled={busy} aria-label={TIMER_WORDS.plusOneLabel}>
             {TIMER_WORDS.plusOne}
-          </button>
+          </Button>
         ) : null}
       </div>
     </section>
