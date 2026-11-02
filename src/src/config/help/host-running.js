@@ -176,7 +176,10 @@ const running = {
       ],
     },
     /*
-      Dock.jsx (status, SPACE cap, SESSION "Session panel — backslash key",
+      Dock.jsx (Main menu first: onMainMenu = requestLeave; the Needs-you
+      bell, count only, absent at 0; data-crowded drops the words of Main
+      menu, AGENDA, PRESENT, never wraps above 900px;
+      status, SPACE cap, SESSION "Session panel — backslash key",
       its count when someone asks for a name, the late-count link). Keys:
       HostActionBar (Space/→ advance, ← back through pages and beats:
       GameHostPage consoleOnBackKey), Pager ↑/↓, RoomMeter U, GameHostPage J,
@@ -190,7 +193,11 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. **NEEDS YOU**, just before **SESSION**, counts what is waiting on you. On one screen it never shows a name: see Managing players › Needs you.',
+          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. Before **SESSION**, a bell with a number counts what waits on you (**Needs you**); never a name on one screen, gone when nothing waits.',
+        },
+        {
+          t: 'p',
+          text: '**Main menu**, far left, goes to your start screen; the session keeps running, and with people in the room it asks first. Crowded, some buttons show only an icon.',
         },
         {
           t: 'keys',
@@ -277,7 +284,7 @@ const running = {
           t: 'note',
           tone: 'info',
           title: 'Main menu does not end anything',
-          text: '**Main menu** in the same fold or top left on the two-screen console, or **Back to menu** on the dock, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
+          text: '**Main menu** (at the left end of the dock, in the same fold, or top left on the two-screen console), or **Back to menu** once the session has ended, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
         },
       ],
     },
@@ -678,7 +685,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'On one screen the room can see the laptop',
-          text: '**NEEDS YOU** shows a count, never a name. Its sheet lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way.',
+          text: 'The bell on the dock (**Needs you**) shows a count, never a name, and is not there when nothing waits. Its sheet lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way.',
         },
       ],
     },

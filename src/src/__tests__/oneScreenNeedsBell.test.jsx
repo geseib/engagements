@@ -84,11 +84,39 @@ test('a private laptop (an event item on two screens): named, with buttons, no g
   expect(screen.getByRole('button', { name: 'Let them: Sam Okafor' })).toBeInTheDocument();
 });
 
-test('nothing waiting: no number, a calm sheet', () => {
-  render(<OneScreenNeedsBell needs={needsYou({})} onAct={() => {}} />);
+// rejects: owner, 2 Nov 2026 — "the bottom bar became 2 lines". The bell with
+//          its word NEEDS YOU was the widest item in the dock, and it stood
+//          there even with nothing waiting.
+test('nothing waiting: nothing in the dock at all', () => {
+  const { container } = render(<OneScreenNeedsBell needs={needsYou({})} onAct={() => {}} />);
+  expect(screen.queryByTestId('needs-bell')).toBeNull();
+  expect(container).toBeEmptyDOMElement();
+});
+
+test('compact: a bell and the count, no word; the name is in the label and title', () => {
+  render(<OneScreenNeedsBell needs={needs} onAct={() => {}} />);
+  const bell = screen.getByTestId('needs-bell');
+  expect(bell.querySelector('svg')).not.toBeNull();
+  expect(bell.querySelector('.dock-more-lbl')).toBeNull();
+  expect(bell.textContent).toBe('1');
+  expect(bell).toHaveAttribute('aria-label', 'Needs you, 1 waiting');
+  expect(bell).toHaveAttribute('title', 'Needs you, 1 waiting');
+});
+
+test('only something to review: the bell and a dot, still no word', () => {
+  render(<OneScreenNeedsBell needs={needsYou({ late: { notReviewed: 2, answers: 2 } })} onAct={() => {}} />);
+  const bell = screen.getByTestId('needs-bell');
+  expect(bell.querySelector('.dock-more-lbl')).toBeNull();
   expect(screen.queryByTestId('needs-bell-count')).toBeNull();
+});
+
+test('an open sheet stays open when the last item is handled', () => {
+  const { rerender } = render(<OneScreenNeedsBell needs={needs} onAct={() => {}} />);
   fireEvent.click(screen.getByTestId('needs-bell'));
+  rerender(<OneScreenNeedsBell needs={needsYou({})} onAct={() => {}} />);
   expect(screen.getByRole('dialog')).toHaveTextContent('Nothing needs you now.');
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByTestId('needs-bell')).toBeNull();
 });
 
 // rejects: dev QA 1 Nov — the one-screen sheet said "The room can see this

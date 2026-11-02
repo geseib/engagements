@@ -22,6 +22,13 @@ import './NeedsYou.css';
  * two screens does): the same sheet, named, with each item's buttons.
  *
  * It sits in the dock, shaped like SESSION (`dock-more`), just before it.
+ *
+ * COMPACT, AND ABSENT WHEN NOTHING WAITS (owner, 2 Nov 2026: "the bottom bar
+ * became 2 lines"). A bell and the count, no word: the word NEEDS YOU was the
+ * widest item in the dock and pushed it onto a second line. The name is in
+ * the aria-label and title ("Needs you, 1 waiting"). With nothing waiting,
+ * Now or Soon, the dock draws nothing here; a sheet already open stays open
+ * until it is closed, so an item handled from it does not yank it away.
  */
 export default function OneScreenNeedsBell({
   needs, onAct, busy = false, error = '', oneScreen = true, remoteConnected = false, onConnectPhone = null,
@@ -42,12 +49,13 @@ export default function OneScreenNeedsBell({
     if (action === 'see') { close(); }
     onAct(item, action);
   };
+  if (!nowCount && !soon && !open) return null;
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        className={`dock-more${nowCount ? ' dock-more--lit' : ''}`}
+        className={`dock-more dock-needs${nowCount ? ' dock-more--lit' : ''}`}
         onClick={() => setOpen(true)}
         aria-label={label}
         aria-haspopup="dialog"
@@ -56,7 +64,6 @@ export default function OneScreenNeedsBell({
         data-testid="needs-bell"
       >
         <Icon name="Bell" weight={nowCount ? 'fill' : 'bold'} size={16} color="currentColor" />
-        <span className="dock-more-lbl">NEEDS YOU</span>
         {nowCount > 0 ? <span className="dock-more-n" data-testid="needs-bell-count">{nowCount}</span> : null}
         {!nowCount && soon ? <span className="dock-more-n" data-testid="needs-bell-dot" aria-hidden="true">•</span> : null}
       </button>

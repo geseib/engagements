@@ -8846,6 +8846,10 @@ Focus on actionable business strategy insights.`;
             hint={dockHint}
             kbd={dockKbd}
             onSetup={() => setSetupPanelOpen((open) => !open)}
+            /* MAIN MENU, ALWAYS (owner, 2 Nov 2026: "im not real sure how to
+               get back to the main menu here"). The console's own leave
+               (2a), so it asks first with people in the room. */
+            onMainMenu={requestLeave}
             help={dockHelp}
             /* NEEDS YOU ON THE STAGE (experience plan §3.3, 1b), just before
                SESSION in the dock's fixed slot for a type's own item. On one
