@@ -1,4 +1,4 @@
-/* skin-allowance: colour=25 font=0 primary=0 */
+/* skin-allowance: colour=24 font=0 primary=0 */
 /* ============================================================================
    THE CREATE / EDIT ENGAGEMENT DIALOG — dusk, at last.
 
@@ -225,7 +225,7 @@
 .gsd .gsd-head { padding-right: 132px; }
 @media (max-width: 600px) {
   .gsd .gsd-head { padding: 14px 112px 12px 16px; }
-  .gsd .gsd-head-acts .gsd-btn { display: none; }
+  .gsd .gsd-head-acts .gsd-act { display: none; }
 }
 
 /* The Advanced fold's own `?`, at the head of the open fold. */
@@ -1022,39 +1022,32 @@
   color: var(--gsd-muted);
 }
 
-.gsd .gsd-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border: 1px solid var(--gsd-rule-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--gsd-text);
-  font: inherit;
-  font-size: var(--gsd-t-label);
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
+/* EVERY BUTTON IN THE DIALOG IS ui/Button (experience plan §5.1, step 5c):
+   Create the one primary, Cancel / Keep editing / Back and every in-form
+   action the outlined secondary, the text links tertiary, Discard danger.
+   The dialog keeps no button family of its own (the scoped .gsd-btn and the
+   re-skinned global .btn-primary / .btn-secondary are gone).
+
+   The card is dusk whatever <html> says, and it declares no data-theme, so
+   the button's roles are re-pointed at this scope's own measured tokens on
+   the button itself: the ink, the muted ink, the rule and the link ink are
+   the dialog's, and every ratio this file already measured still holds. The
+   orange (--action / --on-action) and the danger are theme-invariant. */
+.gsd .ui-btn {
+  --text: var(--gsd-text);
+  --muted: var(--gsd-muted);
+  --rule-strong: var(--gsd-rule-strong);
+  --row-hover: var(--gsd-wash);
+  --ui-btn-link-ink: var(--gsd-secondary);
+  --ui-size: var(--gsd-t-label);
+  transition: none;
 }
-
-.gsd .gsd-btn:hover { border-color: var(--gsd-primary); }
-
-.gsd .gsd-btn:focus-visible {
-  outline: 2px solid var(--gsd-focus);
-  outline-offset: 2px;
-}
-
-.gsd .gsd-btn--link {
-  padding: 0;
-  border: 0;
-  color: var(--gsd-secondary);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.gsd .gsd-btn--link:hover { color: var(--gsd-text); }
+/* The foot's three are the body step (15px), as they were. */
+.gsd .gsd-foot-act,
+.gsd .gsd-guide-use { --ui-size: var(--gsd-t-body); }
+.gsd .gsd-act { gap: 7px; }
+.gsd .gsd-link { text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.gsd .gsd-link:hover:not(:disabled) { color: var(--gsd-text); }
 
 .gsd .gsd-brief.is-working,
 .gsd .gsd-brief.is-ready {
@@ -1336,9 +1329,7 @@
    375px) and the padding tightens. */
 @media (max-width: 480px) {
   .gsd .dialog-actions { padding: 10px 16px 12px; gap: 8px; }
-  .gsd .dialog-actions .btn-secondary,
-  .gsd .dialog-actions .btn-primary,
-  .gsd .dialog-actions .gsd-discard { min-width: 0; flex: 1 1 auto; }
+  .gsd .dialog-actions .gsd-foot-act { min-width: 0; flex: 1 1 auto; }
   .gsd .gsd-foot-note { flex-basis: 100%; }
 }
 
@@ -1379,70 +1370,18 @@
 
 .gsd .gsd-confirm-t b { font-weight: 700; }
 
-/* Filled deep danger carrying the dialog's text: 5.2:1. --danger itself never
-   carries words (skill §1). */
-.gsd .gsd-discard {
-  min-width: 120px;
-  padding: 10px 18px;
-  border: 1px solid var(--danger-deep);
-  border-radius: 8px;
-  background: var(--danger-deep);
-  color: var(--gsd-text);
-  font: inherit;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-}
+/* Discard is ui/Button's danger look: filled --danger-deep carrying the glow
+   ink, 5.16:1 (uiButtonPalette.test.js). --danger itself never carries words
+   (skill §1). Only its width is the foot's. */
+.gsd .gsd-discard { min-width: 120px; }
 
-.gsd .gsd-discard:hover { filter: brightness(1.08); }
-
-.gsd .btn-primary,
-.gsd .btn-secondary {
-  font: inherit;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  padding: 10px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme.
-   `transition: none` answers styles.css's `transition: all .3s`, which faded
-   "Loading topics…" from amber for 300ms (live dev test M1, B12). */
-.gsd .btn-primary {
-  border: 1px solid var(--gsd-primary);
-  background: var(--gsd-primary);
-  color: #1B2942;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-  transition: none;
-}
-
-.gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
-/* styles.css lifts a primary 2px with a shadow on hover; not here. */
-.gsd .btn-primary:hover { transform: none; box-shadow: none; }
-
-/* NOT YET: OUTLINED, NOT DIMMED (README §9, visual review: a dimmed amber
-   block was under AA and read as broken). A dashed amber outline with the
-   muted label, 7.0:1 on the card. `opacity: 1` answers styles.css's 0.6,
-   which had brought the label down to 3.5:1 (live dev test M1). */
-.gsd .btn-primary:disabled {
-  border: 1px dashed var(--gsd-primary);
-  background: transparent;
-  color: var(--gsd-muted);
-  cursor: not-allowed;
-  opacity: 1;
-  transform: none;
-}
-
-.gsd .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+/* CREATE is ui/Button primary: --on-action on --action, the library's hover,
+   no lift and no fade (`transition: none` above answers the old 300ms fade,
+   live dev test M1). NOT YET, disabled or aria-disabled, is the library's
+   slate wash with the muted label: it spends no orange and is never a dimmed
+   amber block (README §9; experience plan §2 principle 4). Measured over the
+   card in gameSetupPalette.test.js. */
+.gsd .gsd-create { gap: 8px; }
 
 /* The shortcut, at full opacity, inheriting the button's colour (compact only). */
 .gsd .gsd-kbd {
@@ -1454,19 +1393,6 @@
   font-weight: 700;
 }
 
-.gsd .btn-secondary {
-  border: 1px solid var(--gsd-rule-strong);
-  background: transparent;
-  color: var(--gsd-text);
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-  transition: none;
-}
-
-.gsd .btn-secondary:hover { border-color: var(--gsd-muted); background: transparent; color: var(--gsd-text); }
 
 /* THE HELP "?" (live dev test H6): HelpButton.css's quiet re-tint reads the
    page roles, which resolve to PAPER here (this card has no dusk ancestor),
@@ -1571,8 +1497,7 @@
 .gsd .gsd-side-pvhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .gsd .gsd-side-pvhead .gsd-side-h { margin: 0 auto 0 0; }
 .gsd .gsd-side-tabs { display: inline-flex; gap: 6px; }
-.gsd .gsd-side-tabs .gsd-btn[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); padding: 6px 11px; }
-.gsd .gsd-btn:disabled { cursor: not-allowed; color: var(--gsd-muted); border-style: dashed; }
+.gsd .gsd-side-tabs .gsd-act[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); }
 .gsd .gsd-side-example { display: flex; gap: 8px; margin: 12px 0 10px; font-size: var(--gsd-t-label); line-height: 1.45; color: var(--gsd-text); }
 .gsd .gsd-side-example svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
 .gsd .gsd-stage {
@@ -1799,9 +1724,7 @@
   .gsd .gsd-fmt--chips,
   .gsd .gsd-meet-chip,
   .gsd .category-button,
-  .gsd .gsd-btn,
-  .gsd .btn-primary,
-  .gsd .btn-secondary { min-height: 44px; }
+  .gsd .ui-btn:not(.gsd-link) { min-height: 44px; }
   .gsd .gsd-fmt-group--gallery { grid-template-columns: 1fr; }
   .gsd .gsd-step-acts { margin-left: 0; }
 }
@@ -1868,7 +1791,7 @@
 .gsd .gsd-fmt-wrap--chips .gsd-fmt-more { margin-top: 0; }
 
 /* Text links get a real target (devtest 3 L3). */
-.gsd .gsd-btn--link,
+.gsd .gsd-link,
 .gsd .gsd-setlink,
 .gsd .gsd-handoff-note a { padding-block: 4px; }
 
@@ -1897,9 +1820,7 @@
   .gsd .gsd-meet { display: none; }
   .gsd .dialog-actions { flex-wrap: wrap; padding: 10px 16px 12px; gap: 8px; }
   .gsd .dialog-actions .gsd-foot-note { flex: 1 0 100%; margin: 0; }
-  .gsd .dialog-actions .btn-secondary,
-  .gsd .dialog-actions .btn-primary,
-  .gsd .dialog-actions .gsd-discard {
+  .gsd .dialog-actions .gsd-foot-act {
     flex: 1 1 0;
     min-width: 0;
     min-height: 44px;
@@ -2220,8 +2141,7 @@
   border-top: 1px solid var(--gsd-rule);
   background: var(--gsd-card);
 }
-.gsd .gsd-guide-foot .btn-secondary,
-.gsd .gsd-guide-foot .btn-primary { flex: 1 1 0; min-height: 44px; justify-content: center; }
+.gsd .gsd-guide-foot .ui-btn { flex: 1 1 0; min-height: 44px; justify-content: center; }
 .gsd.gsd--guide.gsd--phone .dialog-actions { display: none; }
 
 
@@ -2440,16 +2360,7 @@
 .gsd .gsd-foot-need b { font-weight: 700; }
 
 /* CREATE NOT READY: aria-disabled, so it stays reachable (review A1), drawn
-   with the outlined style the disabled button already measured at 7.0:1. */
-.gsd .btn-primary[aria-disabled="true"] {
-  border: 1px dashed var(--gsd-primary);
-  background: transparent;
-  color: var(--gsd-muted);
-  cursor: not-allowed;
-  opacity: 1;
-  transform: none;
-}
-.gsd .btn-primary[aria-disabled="true"]:hover { filter: none; }
+   in ui/Button's disabled-primary wash (Button.css), never dimmed. */
 
 /* SEVEN CHIPS ON ONE ROW AT 1280 WIDE, PANE OPEN (revision, 31 Oct). At
    1280×720 the form column is ~8px narrower than at 1440 and scrolls, so its

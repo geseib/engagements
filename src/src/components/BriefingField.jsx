@@ -29,6 +29,7 @@ import Icon from './Icon';
 import {
   readDocumentText, draftBriefing, BRIEFING_MAX_BYTES, NO_TEXT_BELOW,
 } from '../utils/documentText';
+import Button from './ui/Button';
 
 const CAP = 1500;
 const ACCEPT = '.pdf,.docx,.txt,.md,.pptx,.ppt,.key,.odp';
@@ -227,13 +228,13 @@ export default function BriefingField({
             reflects the room’s answers. <b>People who join never see it.</b>
           </p>
           <div className="gsd-brief-acts">
-            <button type="button" className="gsd-btn" onClick={choose}>
+            <Button variant="secondary" size={36} className="gsd-act" onClick={choose}>
               <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />Choose a document
-            </button>
+            </Button>
             <span className="gsd-fine">PDF, Word or text · up to 4 MB</span>
-            <button type="button" className="gsd-btn gsd-btn--link" onClick={writeYourself}>
+            <Button variant="tertiary" size="sm" className="gsd-link" onClick={writeYourself}>
               or write the key points yourself
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -269,7 +270,7 @@ export default function BriefingField({
           <div className="gsd-sweep" aria-hidden="true"><i /></div>
           <p className="gsd-brief-d">Keep filling in the rest — nothing else waits on this. The document itself is not kept.</p>
           <div className="gsd-brief-acts">
-            <button type="button" className="gsd-btn gsd-btn--link" onClick={stop}>Stop and choose another</button>
+            <Button variant="tertiary" size="sm" className="gsd-link" onClick={stop}>Stop and choose another</Button>
           </div>
         </div>
       </div>
@@ -304,13 +305,13 @@ export default function BriefingField({
             </>
           )}
           <div className="gsd-brief-acts">
-            <button type="button" className="gsd-btn" onClick={choose}>
+            <Button variant="secondary" size={36} className="gsd-act" onClick={choose}>
               <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />Choose another
-            </button>
+            </Button>
             {!scanned && (
-              <button type="button" className="gsd-btn gsd-btn--link" onClick={writeYourself}>
+              <Button variant="tertiary" size="sm" className="gsd-link" onClick={writeYourself}>
                 write the key points yourself
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -329,12 +330,12 @@ export default function BriefingField({
           <p className="gsd-brief-t">{issue && issue.message}</p>
           <p className="gsd-brief-d">Nothing is lost: try again, or write the key points yourself.</p>
           <div className="gsd-brief-acts">
-            <button type="button" className="gsd-btn" onClick={retry}>
+            <Button variant="secondary" size={36} className="gsd-act" onClick={retry}>
               <Icon name="ArrowCounterClockwise" weight="bold" size={16} color="currentColor" />Try again
-            </button>
-            <button type="button" className="gsd-btn gsd-btn--link" onClick={writeYourself}>
+            </Button>
+            <Button variant="tertiary" size="sm" className="gsd-link" onClick={writeYourself}>
               write the key points yourself
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -361,12 +362,12 @@ export default function BriefingField({
             <div className="gsd-src">Written by you</div>
           )}
           <div className="gsd-brief-acts">
-            <button type="button" className="gsd-btn" onClick={choose}>
+            <Button variant="secondary" size={36} className="gsd-act" onClick={choose}>
               <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />Replace
-            </button>
-            <button type="button" className="gsd-btn" onClick={remove}>
+            </Button>
+            <Button variant="secondary" size={36} className="gsd-act" onClick={remove}>
               <Icon name="Trash" weight="bold" size={16} color="currentColor" />Remove
-            </button>
+            </Button>
           </div>
         </div>
         {truncated && (

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=0 font=0 primary=4 */
+/* skin-allowance: colour=0 font=0 primary=0 */
 /* components/event/HostEventAgenda.jsx — an event's agenda on the host's side.
    ==========================================================================
    The frame around the console's own builder (EventBuilder.jsx, `.evb`), so a
@@ -71,39 +71,14 @@
   color: var(--text);
 }
 
-.hea .hea-btn {
+/* THE HEAD'S BUTTONS ARE ui/Button, secondary, at 36px (experience plan
+   §5.1, step 5c). The page's one primary is the builder's Add item; Open the
+   stage is a door, not this page's work. */
+.hea .hea-head .ui-btn {
   flex: none;
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--hea-rule-strong);
-  background: transparent;
-  color: var(--text);
-  font: 700 var(--hea-t-body)/1.2 var(--font-ui);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.hea .hea-btn:hover {
-  border-color: var(--muted);
-}
-
-.hea .hea-btn--primary {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--hea-on-accent);
-}
-
-.hea .hea-btn--primary:hover {
-  border-color: var(--primary-deep);
-}
-
-.hea .hea-btn:disabled {
-  opacity: 0.6;
-  cursor: progress;
+  --rule-strong: var(--hea-rule-strong);
+  --ui-size: var(--hea-t-body);
 }
 
 /* Why the event summary was not made (danger-text: the copy token; --danger never carries text). */
@@ -115,10 +90,6 @@
   border-bottom: 1px solid var(--hea-rule);
 }
 
-.hea .hea-btn:focus-visible {
-  outline: 3px solid var(--primary);
-  outline-offset: 2px;
-}
 
 /* The console's work field, to the pixel (AdminShell.css .adm-work-body[data-theme="dark"]). */
 .hea .hea-body {

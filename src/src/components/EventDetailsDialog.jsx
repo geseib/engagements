@@ -5,6 +5,8 @@ import Icon from './Icon';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import { createEvent, updateEvent } from '../utils/eventsApi';
 import './EventsPanel.css';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * NEW EVENT, AND "EDIT DETAILS" — docs/design/agenda-redesign/05-new-event.html.
@@ -88,9 +90,17 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
   const dirty = title !== baseline.title || date !== baseline.date || time !== baseline.time
     || timeZone !== baseline.timeZone || place !== baseline.place || reports !== baseline.reports;
 
-  const requestClose = () => {
+  /* Asked in the small confirm dialog (useConfirm, experience plan 5c), never
+     the browser's own window.confirm. */
+  const [ask, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without saving? What you typed will be lost.')) return;
+    if (dirty && !(await ask({
+      title: 'Close without saving?',
+      message: 'What you typed will be lost.',
+      confirmText: 'Discard',
+      cancelText: 'Keep editing',
+    }))) return;
     onClose();
   };
 
@@ -227,14 +237,15 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
           {error && <p className="evts-error" role="alert">{error}</p>}
         </div>
 
-        <DialogFoot className="evts-modal-foot" cancel={<button type="button" className="evts-btn" onClick={requestClose} disabled={busy}>Close</button>}>
+        <DialogFoot className="evts-modal-foot" cancel={<Button variant="secondary" size={44} onClick={requestClose} disabled={busy}>Close</Button>}>
           <span className="evts-grow" />
           {!editing && <span className="evts-foot-note">The join code is chosen when you create it.</span>}
-          <button type="submit" className="evts-btn evts-btn--primary" disabled={busy}>
+          <Button type="submit" variant="primary" size={44} disabled={busy}>
             {busy ? 'Saving…' : (editing ? 'Save' : 'Create event')}
-          </button>
+          </Button>
         </DialogFoot>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

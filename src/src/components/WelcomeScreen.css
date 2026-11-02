@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=6 */
+/* skin-allowance: colour=3 font=0 primary=4 */
 /* ============================================================
    THE WELCOME SCREEN — components/WelcomeScreen.jsx
 
@@ -23,8 +23,8 @@
      muted  #9BA8BE on bg      #0F1A2E    7.24:1
      muted  #9BA8BE on surface #1B2942    6.06:1
      amber  #F6A94C on bg      #0F1A2E    8.86:1
-     bg     #0F1A2E on amber   #F6A94C    8.86:1  (primary button label)
-     bg     #0F1A2E on hover   #FFBB63   10.39:1
+     New engagement is ui/Button primary since 5c: --on-action on --action,
+     8.86:1, measured in uiButtonPalette.test.js, not here.
    ============================================================ */
 
 .wel-page {
@@ -261,23 +261,17 @@
    the sentence that says what it does, which the old screen never said. */
 .wel-stack { margin-top: 26px; display: grid; gap: 12px; max-width: 34rem; }
 
-.wel-action {
+/* New engagement is ui/Button, primary (experience plan §5.1, step 5c): the
+   look, the hover and the disabled wash are the library's. Only the shape is
+   Home's: a two-line card, the name over the sentence that says what it does. */
+.wel-page .wel-action {
   display: block;
   width: 100%;
   text-align: left;
+  white-space: normal;
   padding: 16px 18px;
-  border-radius: var(--wel-radius);
-  border: 1px solid var(--wel-rule-strong);
-  background: var(--surface);
-  color: var(--text);
   font: inherit;
-  cursor: pointer;
-  transition: border-color .15s ease, background .15s ease;
 }
-
-.wel-action:hover { border-color: var(--muted); background: var(--surface-2); }
-/* The Build Room entry is a link, styled as its button neighbours. */
-.wel-action--link { text-decoration: none; }
 
 .wel-action-name {
   display: block;
@@ -295,16 +289,9 @@
   color: var(--muted);
 }
 
-/* THE ONE AMBER THING ON THE PAGE. --primary is the single hero accent in
-   Warm Summit; the screen this replaces spent it on the entire background,
-   which left nothing to point with. */
-.wel-action.is-primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--bg);
-}
-.wel-action.is-primary:hover { background: #FFBB63; border-color: #FFBB63; }
-.wel-action.is-primary .wel-action-note { color: rgba(15, 26, 46, .78); }
+/* THE ONE AMBER THING ON THE PAGE. The note keeps the button's own ink
+   (--on-action), so it reads at the button's ratio, not a faded one. */
+.wel-page .wel-action .wel-action-note { color: inherit; }
 
 /* ---------------------------------------------------------- code entry ---- */
 /* The participant's four-cell field from RootPage, because a host continuing a
@@ -358,76 +345,19 @@
 .wel-codewrap.is-complete .wel-cell { border-color: var(--wel-rule); }
 
 /* ------------------------------------------------------------- controls --- */
-.wel-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  padding: 12px 20px;
-  border-radius: var(--wel-radius-sm);
-  font: 700 var(--wel-t-body)/1.2 var(--font-ui);
-  cursor: pointer;
-  border: 2px solid transparent;
-  background: transparent;
-  color: var(--text);
-  /* An <a> wears this class too — the Admin console link in the account
-     corner. Colour is an author declaration and already beats the UA's
-     `a:link`, but the underline is not overridden unless it is named. */
-  text-decoration: none;
-  /* At 375 the identity row wraps to its own line and "Sign out" broke across
-     two, which then squeezed the name to "Dana Whitfi…". The label is two
-     words; it never needs to wrap. */
-  white-space: nowrap;
-}
-
-.wel-btn-ghost {
-  margin-top: 14px;
-  border-color: var(--wel-rule-strong);
-}
-.wel-btn-ghost:hover { border-color: var(--muted); }
-
-/* A disabled Continue must not read as a second, quieter action. Dropping the
-   weight as well as the colour is what separates it from the ghost above. */
-.wel-btn-ghost[disabled] {
-  color: var(--muted);
-  border-color: var(--wel-rule);
-  cursor: not-allowed;
-  font-weight: 600;
-}
-
-.wel-btn-quiet {
-  width: auto;
-  min-height: 40px;
-  padding: 8px 12px;
-  color: var(--muted);
-  font-weight: 600;
-  font-size: var(--wel-t-label);
-}
-.wel-btn-quiet:hover { color: var(--text); }
-
-/* SAME SIZE AS QUIET, VISIBLY A BUTTON. The library controls were `wel-btn-quiet`
-   — muted text on nothing, pulled 12px left to sit flush with the paragraph
-   under it — which is exactly how a text link is drawn, and it read as one.
-   *"the button for game histroy should be more obviousd that its a button
-   (doesnt need to be bigger though)"*: so the box appears and the metrics stay.
-   min-height, padding and font-size are `wel-btn-quiet`'s to the pixel; what
-   changes is the rule and the text colour.
-
-   The border is 2px because `.wel-btn` reserves 2px of transparent border on
-   every control here — a 1px rule would shift the label half a pixel and make
-   these two sit differently from Continue directly above them. */
-.wel-btn-line {
-  width: auto;
-  min-height: 40px;
-  padding: 8px 12px;
-  border-color: var(--wel-rule-strong);
-  color: var(--text);
-  font-weight: 700;
-  font-size: var(--wel-t-label);
-}
-.wel-btn-line:hover { border-color: var(--muted); background: var(--surface); }
+/* EVERY CONTROL HERE IS ui/Button (experience plan §5.1, step 5c), so Home
+   has no button family of its own: New engagement the one primary, the
+   outlined secondary for every other button ("visibly a button", the owner's
+   game-history note, at 36px: not bigger), and the account corner's two in
+   the tertiary text look. Home sets only their type, on its own ladder. */
+.wel-page .ui-btn { --ui-size: var(--wel-t-label); }
+.wel-page .wel-action { --ui-size: var(--wel-t-body); }
+/* At 375 the identity row wraps to its own line and "Sign out" broke across
+   two, which then squeezed the name to "Dana Whitfi…". ui/Button is nowrap. */
+.wel-page .wel-corner { text-decoration: none; }
+/* Continue fills the code block's width, under the four cells. A disabled
+   Continue is the library's faded secondary, never a second action. */
+.wel-page .wel-continue { width: 100%; margin-top: 14px; --ui-size: var(--wel-t-body); }
 
 /* ------------------------------------------------------------- Home (4b) --
    Home's other three blocks (experience plan 4b): Rejoin's live sessions,
@@ -445,7 +375,7 @@
   padding: 8px 0;
   border-bottom: 1px solid var(--wel-rule);
 }
-.wel-live-row .wel-btn-line { flex: none; gap: 6px; }
+.wel-live-row .wel-line { flex: none; gap: 6px; }
 .wel-live-none { margin-top: 10px; }
 
 .wel-recent,
@@ -455,7 +385,7 @@
   border-top: 1px solid var(--wel-rule);
 }
 .wel-recent .wel-evhead { margin-bottom: 10px; }
-.wel-recent .wel-evhead .wel-btn-line { text-decoration: none; gap: 6px; }
+.wel-recent .wel-evhead .wel-line { text-decoration: none; gap: 6px; }
 .wel-seeall-in { font-weight: 600; }
 .wel-recent-wait { padding: 10px 0; }
 .wel-library-row {
@@ -465,7 +395,7 @@
   align-items: center;
   gap: 8px 10px;
 }
-.wel-library-row .wel-btn-quiet { margin-left: 0; text-decoration: none; }
+.wel-library-row .wel-corner { margin-left: 0; }
 .wel-library { padding-bottom: 28px; }
 
 /* ---------------------------------------------------------------------------
@@ -531,7 +461,7 @@
   min-width: 0;
 }
 
-.wel-evhead .wel-btn-line {
+.wel-evhead .wel-line {
   flex: none;
   margin-left: auto;
 }
@@ -543,7 +473,6 @@
   min-height: 24px;
   padding: 0 4px;
   vertical-align: baseline;
-  color: var(--text);
   text-decoration: underline;
 }
 
@@ -594,7 +523,7 @@
   font-weight: 700;
 }
 
-.wel-ev .wel-btn-line {
+.wel-ev .wel-line {
   flex: none;
 }
 

@@ -546,7 +546,7 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
   test('on a phone the rows are cards and every control is 44px', () => {
     const phone = LIST.slice(LIST.lastIndexOf('@media (max-width: 600px)'));
     expect(phone).toMatch(/\.slist \.slist-tbl tr \{[^}]*display:\s*flex/);
-    expect(phone).toMatch(/\.slist \.slist-btn,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
+    expect(phone).toMatch(/\.slist \.slist-act,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
   });
 });
 

@@ -721,7 +721,7 @@ describe('live dev test fixes', () => {
     render(<GameSetupDialog {...base({ onCreate })} hasCreated lastFormat="trivia"
       recentSetUses={new Map([[KEY_SPACE, Date.now()]])} />);
     expect(document.querySelector('.gsd-fmt--gallery')).not.toBeNull();
-    expect(document.querySelector('.btn-primary .gsd-kbd')).toHaveAttribute('aria-hidden', 'true');
+    expect(document.querySelector('.ui-btn--action .gsd-kbd')).toHaveAttribute('aria-hidden', 'true');
     const title = screen.getByLabelText(/name it/i);
     title.focus();
     fireEvent.keyDown(title, { key: 'Enter' });
@@ -904,7 +904,7 @@ describe('round 2: focus home, the sessions dialog, icons', () => {
     const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'SessionList.css'), 'utf8');
     const phone = css.slice(css.lastIndexOf('@media (max-width: 600px)'));
     expect(phone).toMatch(/\.slist \.slist-tbl tr \{[^}]*display:\s*flex/);
-    expect(phone).toMatch(/\.slist \.slist-btn,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
+    expect(phone).toMatch(/\.slist \.slist-act,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
     expect(phone).toMatch(/\.slist \.slist-nm \{[^}]*white-space:\s*normal/);
     render(<SessionHistoryPanel sessions={[{ gameId: '7158', title: 'UX QA — Round 2 speed run', gameType: 'trivia', byMe: true, createdAt: '2026-10-30T09:00:00Z' }]} questionSets={[]} mode="select" />);
     expect(screen.getByText('UX QA — Round 2 speed run').closest('.slist-nm')).toHaveAttribute('title', 'UX QA — Round 2 speed run');

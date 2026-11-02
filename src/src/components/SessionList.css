@@ -85,47 +85,29 @@
 
 /* --------------------------------------------------------------- buttons --- */
 
-.slist-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 30px;
+/* Every action here is the shared ui/Button (experience plan §5.1, step 5c):
+   no button family of this list's own. Only the row geometry is the list's:
+   30px beside the 36px row at the label step, the ⋯ square. */
+.slist .slist-act,
+.slist .slist-lead {
+  min-height: 30px;
   padding: 0 11px;
   border-radius: 6px;
-  border: 1px solid var(--slist-rule-strong);
-  background: transparent;
-  color: var(--text);
-  font: 600 var(--slist-t-label)/1 var(--font-ui);
-  cursor: pointer;
-  white-space: nowrap;
-  text-decoration: none;
+  font-size: var(--slist-t-label);
+  min-width: 0;
 }
-.slist-btn:hover:not(:disabled) { background: var(--slist-row-hover); border-color: var(--muted); }
-.slist-btn:disabled { opacity: .42; cursor: not-allowed; }
 /* THE ROW'S ONE PRIMARY is the shared ui/Button (quiet, sm), outlined in the
    action colour here so a list of forty rows is not forty amber blocks (one
    orange per screen, "One look"). Sized to sit beside ⋯ at the label step. */
 .slist .slist-lead {
-  min-height: 30px;
-  font-size: var(--slist-t-label);
   border-color: var(--action);
   color: var(--accent-text);
-  min-width: 0;
 }
-.slist .slist-lead:hover:not(:disabled) { background: rgb(var(--accent-rgb) / .12); border-color: var(--action); }
-.slist-btn > span,
+.slist .slist-lead:hover:not(:disabled):not([aria-disabled="true"]) { background: rgb(var(--accent-rgb) / .12); border-color: var(--action); }
+.slist .slist-act > span,
 .slist .slist-lead > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.slist-more { width: 30px; padding: 0; }
-.slist-btn--dangersolid { background: var(--danger-deep); border-color: var(--danger-deep); color: var(--text); }
-.slist-btn--link {
-  height: auto;
-  border: 0;
-  background: none;
-  color: var(--accent-text);
-  padding: 0;
-  text-decoration: underline;
-}
+.slist .slist-more { width: 30px; padding: 0; }
+.slist .slist-clear { font-size: var(--slist-t-label); padding: 0; min-height: 0; text-decoration: underline; }
 
 /* -------------------------------------------------------------- no match --- */
 
@@ -354,7 +336,7 @@
   .slist .slist-tbl td.slist-c-name { flex: 1 1 100%; min-width: 0; }
   .slist .slist-tbl td.slist-c-acts { flex: 1 1 auto; }
   .slist .slist-nm { white-space: normal; }
-  .slist .slist-btn,
+  .slist .slist-act,
   .slist .slist-lead { min-height: 44px; }
   .slist .slist-more { width: 44px; }
   .slist .slist-menu-item { min-height: 44px; }

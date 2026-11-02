@@ -1,4 +1,4 @@
-/* skin-allowance: colour=2 font=0 primary=12 */
+/* skin-allowance: colour=2 font=0 primary=8 */
 /* components/EventBuilder.jsx, EventItemDialog.jsx — one event's agenda.
    ==========================================================================
    Built from docs/design/agenda-redesign/02-builder.html, 02b-cap-reached
@@ -54,20 +54,19 @@
 .evb :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
 
 /* ------------------------------------------------------------- buttons --- */
-.evb-btn {
-  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
-  border-radius: 6px; border: 1px solid var(--evb-rule-strong); background: transparent;
-  color: var(--text); font: 600 var(--evb-t-label)/1 var(--font-ui); cursor: pointer; white-space: nowrap;
-  text-decoration: none; /* an <a> wears it too: "Run the event", "Order" */
-}
-.evb-btn:hover:not(:disabled) { background: var(--evb-row-hover); border-color: var(--muted); }
-.evb-btn:disabled { opacity: .42; cursor: not-allowed; }
-.evb-btn--primary { background: var(--primary); border-color: var(--primary); color: var(--evb-on-accent); font-weight: 700; }
-.evb-btn--primary:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); filter: brightness(1.08); }
-.evb-btn--sm { height: 26px; padding: 0 9px; font-size: var(--evb-t-floor); }
-.evb-btn--icon { width: 26px; padding: 0; justify-content: center; }
-.evb-btn--ghostdanger { border-color: transparent; color: var(--danger-text); }
-.evb-btn--ghostdanger:hover:not(:disabled) { border-color: var(--danger-text); background: var(--evb-tint-danger); }
+/* EVERY BUTTON HERE IS ui/Button (experience plan §5.1, step 5c): Add item
+   the one primary of the builder, its dialog's Save / Add to agenda the
+   dialog's; Run the event the outlined secondary edged in the action colour
+   (a door to the stage, not this screen's work); a row's Edit / Order / the
+   arrows at the row's 26px; Remove and Delete event in the destructive ink
+   until the confirm, whose answer is the filled danger. */
+.evb .ui-btn { --rule-strong: var(--evb-rule-strong); --row-hover: var(--evb-row-hover); --ui-size: var(--evb-t-label); }
+.evb .ui-btn--h44 { --ui-size: var(--evb-t-body); }
+.evb .evb-act { min-height: 26px; padding: 0 9px; border-radius: 6px; --ui-size: var(--evb-t-floor); }
+.evb .evb-icon { width: 26px; padding: 0; }
+.evb .evb-lead { border-color: var(--action); color: var(--accent-text); }
+.evb .evb-del { border-color: transparent; color: var(--danger-text); }
+.evb .evb-del:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--danger-text); background: var(--evb-tint-danger); }
 .evb-dim { color: var(--muted); }
 .evb-grow { flex: 1 1 auto; min-width: 0; }
 /* Visually hidden but announced — the reorder live region. */
@@ -98,7 +97,7 @@
    sentence, and the link, left-aligned under the session options. */
 .evb-order { margin-top: 16px; }
 .evb-order .evb-hint { margin: 0; }
-.evb-order .evb-btn { align-self: flex-start; }
+.evb-order .evb-act { align-self: flex-start; }
 .evb-modal-head { display: flex; gap: 10px; align-items: flex-start; padding: 16px 18px 10px; }
 .evb-modal-head h2 { margin: 0; font: 800 var(--evb-t-head)/1.2 var(--font-display); }
 .evb-modal-head p { margin: 4px 0 0; font-size: var(--evb-t-label); color: var(--muted); }
@@ -155,8 +154,6 @@
 .evb-chip--warn { color: var(--primary); border-color: var(--evb-rule-warn); }
 /* An item's state on the day (events M3), beside its name. */
 .evb-runstate { margin-left: 6px; }
-/* "Run the event" is a link to the stage, drawn as the primary button. */
-.evb-facts-acts a.evb-btn { text-decoration: none; }
 .evb-error {
   margin: 12px 0 0; padding: 9px 12px; border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
   background: var(--evb-tint-danger); color: var(--danger-text); font-size: var(--evb-t-label);

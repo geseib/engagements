@@ -149,20 +149,19 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
   });
 
-  test('round 4: a not-ready Create (aria-disabled) wears the measured outlined style, never dimmed', () => {
-    const rule = CSS.match(/\.gsd \.btn-primary\[aria-disabled="true"\]\s*\{([^}]*)\}/)[1];
-    expect(rule).toMatch(/border:\s*1px dashed var\(--gsd-primary\)/);
-    expect(rule).toMatch(/background:\s*transparent/);
-    expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
-    expect(rule).toMatch(/opacity:\s*1\b/);
-    expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
-  });
-
-  test('a disabled Create is outlined with the muted label, not a dimmed amber block', () => {
-    const rule = CSS.match(/\.gsd \.btn-primary:disabled\s*\{([^}]*)\}/)[1];
-    expect(rule).toMatch(/background:\s*transparent/);
-    expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
-    expect(rule).toMatch(/opacity:\s*1\b/); // answers styles.css's 0.6 (devtest M1)
+  /* Since experience plan 5c Create is ui/Button primary. Not yet (disabled, or
+     aria-disabled for the reason), it is the library's slate wash with the muted
+     label, never a dimmed amber block: and in this dialog --muted is re-pointed
+     at --gsd-muted on the button itself, so the label is measured on the card. */
+  const BUTTON_CSS = read('components', 'ui', 'Button.css');
+  test('a not-ready Create (disabled or aria-disabled) is the slate wash with the muted label, at full opacity', () => {
+    const rule = BUTTON_CSS.match(/\.ui-btn--action:disabled,\s*\.ui-btn--action\[aria-disabled="true"\]\s*\{([^}]*)\}/)[1];
+    expect(rule).toMatch(/background:\s*rgb\(var\(--slate-rgb\) \/ \.18\)/);
+    expect(rule).toMatch(/color:\s*var\(--muted\)/);
+    expect(rule).toMatch(/opacity:\s*1\b/); // answers the library's .45 (devtest M1)
+    expect(CSS).toMatch(/\.gsd \.ui-btn\s*\{[^}]*--muted:\s*var\(--gsd-muted\)/);
+    const slate = H.parseColor(`rgb(${H.role('--slate-rgb', { skin, theme: 'light' })})`).rgb;
+    expect(ratio(muted(), alphaOver(slate, card(), 0.18))).toBeGreaterThanOrEqual(AA);
   });
 
   test('the selected category chip: body text on the same tint', () => {
@@ -217,7 +216,9 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     const deep = H.composite([H.role('--danger-deep', { skin, theme: 'light' })]);
     expect(ratio(text(), deep)).toBeGreaterThanOrEqual(AA);
     expect(CSS).toMatch(/\.gsd \.dialog-actions\.is-confirm\s*\{[^}]*background:\s*var\(--gsd-confirm\)/);
-    expect(CSS).toMatch(/\.gsd \.gsd-discard\s*\{[^}]*background:\s*var\(--danger-deep\)[^}]*color:\s*var\(--gsd-text\)/s);
+    // Discard is ui/Button danger (5c): the glow ink on --danger-deep.
+    expect(JSX).toMatch(/variant="danger"[\s\S]{0,80}className="gsd-foot-act gsd-discard"/);
+    expect(ratio(H.parseColor(`rgb(${H.role('--glow-rgb', { skin, theme: 'light' })})`).rgb, deep)).toBeGreaterThanOrEqual(AA);
     expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
   });
 
@@ -280,10 +281,12 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
   });
 
   test('the filled primary button carries DARK text, never white', () => {
-    // #F6A94C under white is 1.9:1 in either theme. The dark navy clears 7:1.
-    const m = CSS.match(/\.gsd \.btn-primary \{[^}]*color:\s*(#[0-9A-Fa-f]{6})/);
-    expect(m).not.toBeNull();
-    expect(ratio(parseHex(m[1]), token('--gsd-primary'))).toBeGreaterThanOrEqual(AA);
+    // #F6A94C under white is 1.9:1 in either theme. Create is ui/Button primary
+    // (5c): --on-action on --action, the dark navy, 8.86:1.
+    expect(JSX).toMatch(/variant=\{view === 'compare' \? 'secondary' : 'primary'\}/);
+    const ink = H.composite([H.role('--on-action', { skin: SKIN0, theme: 'light' })]);
+    expect(ratio(ink, H.composite([H.role('--action', { skin: SKIN0, theme: 'light' })]))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(ink, token('--gsd-primary'))).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -330,14 +333,14 @@ describe('the scope is whole, and it is the only scope', () => {
   });
 
   test('no raw hex outside the token block', () => {
-    // One deliberate exception: the filled button's dark text, which is a
-    // colour ABOUT the amber fill, not about the theme — documented inline.
-    // Comments are stripped first: the header quotes the old #e1e1e1 inputs
-    // it is retiring, and prose is not paint.
+    // None at all since experience plan 5c: the one exception, the filled
+    // button's dark text (#1B2942), went with the scoped .btn-primary; Create
+    // is ui/Button and reads --on-action. Comments are stripped first: the
+    // header quotes the old #e1e1e1 inputs it is retiring, and prose is not paint.
     const body = CSS.slice(CSS.indexOf('}', CSS.indexOf('.gsd {')) + 1)
       .replace(/\/\*[\s\S]*?\*\//g, '');
     const hexes = body.match(/#[0-9A-Fa-f]{6}\b/g) || [];
-    expect(hexes).toEqual(['#1B2942']);
+    expect(hexes).toEqual([]);
   });
 
   test('every var() the sheet uses is declared on the scope', () => {

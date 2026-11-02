@@ -1,4 +1,4 @@
-/* skin-allowance: colour=6 font=0 primary=5 */
+/* skin-allowance: colour=4 font=0 primary=4 */
 /* ============================================================================
    THE SESSIONS SCREEN — components/SessionsPanel.jsx
 
@@ -109,45 +109,13 @@
 }
 .sp-input::placeholder { color: var(--muted); opacity: .62; }
 .sp-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
-.sp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--sp-rule-strong);
-  background: transparent;
-  color: var(--text);
-  font: 600 var(--sp-t-label)/1 var(--font-ui);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.sp-btn:hover:not(:disabled) { background: var(--sp-row-hover); border-color: var(--muted); }
-.sp-btn:disabled { opacity: .42; cursor: not-allowed; }
-.sp-btn--danger { border-color: rgba(229, 100, 94, .55); color: var(--danger-text); }
-.sp-btn--danger:hover:not(:disabled) {
-  background: rgba(229, 100, 94, .12);
-  border-color: var(--danger-text);
-}
-/* The one filled destructive control in this screen. --danger-deep, not
-   --danger: see the header. */
-.sp-btn--dangersolid {
-  background: var(--danger-deep);
-  border-color: var(--danger-deep);
-  color: var(--text);
-}
-.sp-btn--dangersolid:disabled { opacity: .42; }
-.sp-btn--link {
-  height: auto;
-  min-height: 0;
-  border: 0;
-  background: none;
-  color: var(--primary);
-  padding: 0;
-  text-decoration: underline;
-  font: 600 var(--sp-t-label)/1.4 var(--font-ui);
-}
+/* EVERY BUTTON HERE IS ui/Button (experience plan §5.1, step 5c): no family
+   of this screen's own. Delete all sessions… is the outlined secondary in the
+   destructive ink (it opens the dialog; it deletes nothing); the dialog's
+   Delete all N is the library's one filled destructive look, --danger-deep. */
+.sp .ui-btn { --rule-strong: var(--sp-rule-strong); --row-hover: var(--sp-row-hover); --ui-size: var(--sp-t-label); }
+.sp .sp-del { color: var(--danger-text); border-color: rgb(var(--danger-rgb) / .55); }
+.sp .sp-del:hover:not(:disabled):not([aria-disabled="true"]) { background: rgb(var(--danger-rgb) / .12); border-color: var(--danger-text); }
 
 /* THE LIST ITSELF is SessionList (SessionList.css, `.slist`) since the
    experience plan's 4a: one sessions table for this console and the host's

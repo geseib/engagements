@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { listEvents } from '../utils/eventsApi';
 import { readEventsAccess } from '../utils/eventsAccess';
 import { navigateTo } from '../auth/navigate';
+import Button from './ui/Button';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import pricing from '../../../lambda-functions/game/pricing';
 
@@ -96,9 +97,9 @@ export default function WelcomeEvents({ nowMs }) {
       {!canCreate && enabled && access.offerPlanName && (
         <p className="wel-meta wel-ev-more">
           {`Events come with the ${access.offerPlanName}: a whole agenda behind one code. `}
-          <button type="button" className="wel-btn wel-btn-quiet wel-ev-plan" onClick={() => navigateTo('/admin?section=events')}>
+          <Button variant="tertiary" size="sm" className="wel-ev-plan" onClick={() => navigateTo('/admin?section=events')}>
             See how
-          </button>
+          </Button>
         </p>
       )}
       {events.length > 0 && (
@@ -113,14 +114,15 @@ export default function WelcomeEvents({ nowMs }) {
                   {Number(event.attendeeCount) > 0 ? ` · ${event.attendeeCount} joined` : ''}
                 </span>
               </span>
-              <button
-                type="button"
-                className="wel-btn wel-btn-line"
+              <Button
+                variant="secondary"
+                size={36}
+                className="wel-line"
                 onClick={() => navigateTo(`/host/event/${encodeURIComponent(event.code)}`)}
                 aria-label={`Open ${event.title || 'the event'}: its agenda and stage`}
               >
                 Open
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

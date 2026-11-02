@@ -132,10 +132,11 @@ function RowMenu({ label, items, onPick }) {
   if (!items.length) return null;
   return (
     <span className="slist-menuwrap">
-      <button
+      <Button
         ref={btnRef}
-        type="button"
-        className="slist-btn slist-more"
+        variant="secondary"
+        size="sm"
+        className="slist-act slist-more"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
@@ -143,7 +144,7 @@ function RowMenu({ label, items, onPick }) {
         onClick={() => setOpen((was) => !was)}
       >
         <Icon name="DotsThree" weight="bold" size={18} color="currentColor" />
-      </button>
+      </Button>
       {open && (
         <div
           ref={menuRef}
@@ -335,15 +336,16 @@ export default function SessionList({
             )}
             {confirm.error && <p className="slist-confirm-err" role="alert">{confirm.error}</p>}
             <div className="slist-confirm-acts">
-              <button type="button" className="slist-btn" onClick={() => setConfirm(null)}>Keep it</button>
-              <button
-                type="button"
-                className="slist-btn slist-btn--dangersolid"
+              <Button variant="secondary" size="sm" className="slist-act" onClick={() => setConfirm(null)}>Keep it</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                className="slist-act"
                 disabled={busyId === row.gameId || (confirm.asking && !reason.trim())}
                 onClick={() => doDelete(row)}
               >
                 Delete
-              </button>
+              </Button>
             </div>
           </div>
         </td>
@@ -467,10 +469,10 @@ export default function SessionList({
           <div className="slist-acts">
             {acts.expired && <span className="slist-chip slist-chip--off">Session expired</span>}
             {acts.menu.includes('report') && has('reportItem') && (
-              <button type="button" className="slist-btn" onClick={() => on.reportItem(item, event)} title={`Read the report for "${itemTitle}"`}>
+              <Button variant="secondary" size="sm" className="slist-act" onClick={() => on.reportItem(item, event)} title={`Read the report for "${itemTitle}"`}>
                 <Icon name="ChartBar" weight="bold" size={14} color="currentColor" />
                 <span>{ROW_ACTION_WORDS.report}</span>
-              </button>
+              </Button>
             )}
             {acts.primary === 'continue' && has('continueItem') && (
               <Button variant="quiet" size="sm" className="slist-lead" onClick={() => on.continueItem(item, event)} title={`Continue "${itemTitle}" on the stage`}>
@@ -551,7 +553,7 @@ export default function SessionList({
               </button>
             ))}
           </div>
-          <button type="button" className="slist-btn slist-btn--link" onClick={list.clearAll}>Clear all filters</button>
+          <Button variant="tertiary" size="sm" className="slist-clear" onClick={list.clearAll}>Clear all filters</Button>
         </div>
       )}
 

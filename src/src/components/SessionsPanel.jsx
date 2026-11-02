@@ -16,6 +16,7 @@ import { sessionIntentPath, continuePath, inviteTargetFor } from '../config/sess
 import { deleteSessionRow, copyJoinLink } from '../utils/sessionRowsApi';
 import './SessionsPanel.css';
 import { formatWhen, countOrDash } from '../config/tableCells';
+import Button from './ui/Button';
 
 /* Re-exported: this module was formatWhen's home before three screens needed
    it, and existing importers should not have to move. matchesSessionFilters
@@ -228,9 +229,8 @@ export default function SessionsPanel({
           toolbar={deleteAllAs !== '' ? (
             /* DELETE ALL lives beside the list rather than in a red card of
                its own: the list is the thing that says what would be lost. */
-            <button
-              type="button"
-              className="sp-btn sp-btn--danger"
+            <Button
+              variant="secondary" size={36} className="sp-del"
               onClick={() => {
                 setTyped('');
                 setAllReason('');
@@ -239,7 +239,7 @@ export default function SessionsPanel({
             >
               <Icon name="Trash" weight="bold" size={14} color="currentColor" />
               Delete all sessions…
-            </button>
+            </Button>
           ) : null}
         />
       )}
@@ -340,17 +340,16 @@ export default function SessionsPanel({
                 </span>
               )}
               <span className="sp-grow" />
-              <button type="button" className="sp-btn" onClick={() => setConfirmAll(false)}>
+              <Button variant="secondary" size={44} onClick={() => setConfirmAll(false)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="sp-btn sp-btn--dangersolid"
+              </Button>
+              <Button
+                variant="danger" size={44}
                 disabled={!armed || busyId === '__all__'}
                 onClick={deleteAll}
               >
                 Delete all {sessions.length}
-              </button>
+              </Button>
             </footer>
           </div>
         </div>

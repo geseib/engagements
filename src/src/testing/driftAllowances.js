@@ -14,17 +14,14 @@
  * Not named *token*: .gitignore has an unanchored `*token*`.
  */
 module.exports = {
-  "buttonFamilies": 107,
+  "buttonFamilies": 99,
   "dialogs": {
     "GameHostPage.jsx": 6,
     "buildroom/BuildCrew.jsx": 3,
     "buildroom/BuildRoomPage.jsx": 2,
     "components/AIScenarioBuilder.jsx": 1,
     "components/AddQuestionsDialog.jsx": 1,
-    "components/EventDetailsDialog.jsx": 1,
-    "components/EventItemDialog.jsx": 1,
     "components/GameReport.jsx": 1,
-    "components/NewSetDialog.jsx": 1,
     "components/PlanRequestDialog.jsx": 1,
     "components/PollAIBuilder.jsx": 2,
     "components/SurveyAIBuilder.jsx": 2,
@@ -40,10 +37,7 @@ module.exports = {
     "components/BillingPanel.css": 1,
     "components/DiscountCodes.css": 1,
     "components/DraftReview.css": 1,
-    "components/EventBuilder.css": 1,
-    "components/EventsPanel.css": 1,
     "components/FileUploadPrompt.css": 1,
-    "components/GameSetupDialog.css": 1,
     "components/GeneratedItemsTable.css": 1,
     "components/GenerationJobPanel.css": 1,
     "components/InviteDialog.css": 1,
@@ -67,7 +61,6 @@ module.exports = {
     "components/TeamPanel.css": 1,
     "components/UsageStatsPanel.css": 1,
     "components/UserManagement.css": 1,
-    "components/event/HostEventAgenda.css": 1,
     "marketing/HomePage.css": 1,
     "marketing/MarketingShell.css": 1,
     "styles.css": 1
@@ -394,12 +387,8 @@ module.exports = {
     "dcode-btn",
     "drv-btn",
     "entry-btn",
-    "evb-btn",
-    "evts-btn",
     "game-action-btn",
     "git-btn",
-    "gsd-btn",
-    "hea-btn",
     "help-back-btn",
     "help-button",
     "help-close-button",
@@ -447,7 +436,6 @@ module.exports = {
     "regenerate-ai-btn",
     "remove-option-btn",
     "revert-btn",
-    "rp-btn",
     "rsc-btn",
     "rshare-btn",
     "scard-btn",
@@ -457,9 +445,7 @@ module.exports = {
     "set-correct-btn",
     "setup-q__btn",
     "sks-btn",
-    "slist-btn",
     "smed-btn",
-    "sp-btn",
     "srev-btn",
     "start-btn",
     "tab-btn",
@@ -472,7 +458,6 @@ module.exports = {
     "variable-btn",
     "vote-btn",
     "vote-buttons",
-    "wel-btn",
     "wfs-view-btn"
   ]
 };

@@ -140,7 +140,9 @@ describe('adding an engagement', () => {
     expect(p.onClose).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByLabelText('Customer knowledge — Q4'));
     fireEvent.click(exits[1]);
-    expect(window.confirm).toHaveBeenCalled();
+    // The small confirm dialog (useConfirm, experience plan 5c), not window.confirm.
+    expect(screen.getByRole('dialog', { name: 'Close without saving?' })).toBeInTheDocument();
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(p.onClose).toHaveBeenCalledTimes(1);
   });
 });

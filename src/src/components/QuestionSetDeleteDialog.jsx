@@ -6,6 +6,7 @@ import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import { gameTypeLabel } from '../config/gameTypes';
 import './QuestionSetsPanel.css';
+import Button from './ui/Button';
 
 /**
  * DELETING A QUESTION SET.
@@ -148,14 +149,13 @@ export default function QuestionSetDeleteDialog({
                 {/* The set's name is already in the header. Repeating it inside a
                     link is how a 98-character title (the longest this product
                     has produced) pushes the dialog sideways. */}
-                <button
-                  type="button"
-                  className="qsets-btn qsets-btn--link"
+                <Button
+                  variant="tertiary" size="sm" className="qsets-clear"
                   disabled={busy}
                   onClick={() => onDeactivate(questionSet)}
                 >
                   Deactivate it instead
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -180,17 +180,17 @@ export default function QuestionSetDeleteDialog({
       <DialogFoot>
         <span className="qsets-grow" />
         {finished ? (
-          <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onDeleted && onDeleted(message)}>
+          <Button variant="primary" size={44} onClick={() => onDeleted && onDeleted(message)}>
             Done
-          </button>
+          </Button>
         ) : (
           <>
-            <button type="button" className="qsets-btn" disabled={busy} onClick={() => onCancel && onCancel()}>
+            <Button variant="secondary" size={44} disabled={busy} onClick={() => onCancel && onCancel()}>
               {phase === 'failed' ? 'Close' : 'Keep it'}
-            </button>
-            <button type="button" className="qsets-btn qsets-btn--dangersolid" disabled={busy} onClick={remove}>
+            </Button>
+            <Button variant="danger" size={44} disabled={busy} onClick={remove}>
               {busy ? 'Deleting…' : phase === 'failed' ? 'Try again' : 'Delete the set'}
-            </button>
+            </Button>
           </>
         )}
       </DialogFoot>

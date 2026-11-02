@@ -5,6 +5,8 @@ import Modal from './Modal';
 import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * "NEW SET" IS A DIALOG, LIKE EVERY OTHER MAKE-ONE-THING ACTION HERE.
@@ -27,13 +29,20 @@ import QuestionSetUploadPanel from './QuestionSetUploadPanel';
  *
  * EVERY EXIT IS ONE FUNCTION. The X, the footer button, Escape and the backdrop
  * all go through `requestClose`, which asks first when a file or a title would
- * be lost.
+ * be lost: in the small confirm dialog (useConfirm, experience plan 5c), never
+ * the browser's own window.confirm.
  */
 export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...panelProps }) {
   const [dirty, setDirty] = useState(false);
+  const [ask, confirmDialog] = useConfirm();
 
-  const requestClose = () => {
-    if (dirty && !window.confirm('Close without importing? The file and the details you entered will be lost.')) return;
+  const requestClose = async () => {
+    if (dirty && !(await ask({
+      title: 'Close without importing?',
+      message: 'The file and the details you entered will be lost.',
+      confirmText: 'Discard',
+      cancelText: 'Keep editing',
+    }))) return;
     if (onClose) onClose();
   };
 
@@ -69,8 +78,9 @@ export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...pa
       </div>
 
       <DialogFoot>
-        <button type="button" className="qsets-btn" onClick={requestClose}>Close</button>
+        <Button variant="secondary" size={44} onClick={requestClose}>Close</Button>
       </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }

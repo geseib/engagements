@@ -35,9 +35,15 @@ describe.each(H.SKINS)('contrast on the dusk field (%s)', (skin) => {
     expect(H.ratio(r('--text'), r('--bg'))).toBeGreaterThanOrEqual(H.AA);
     expect(H.ratio(r('--muted'), r('--bg'))).toBeGreaterThanOrEqual(H.AA);
   });
-  test('the filled button\'s ink is a declared local and clears AA on --primary', () => {
+  test('the head\'s buttons are ui/Button secondaries, with no scoped button look left', () => {
+    // Experience plan 5c: the page's one primary is the builder's Add item, so
+    // the head keeps no filled button and no .hea-btn family of its own.
     expect(H.ratio(local('--hea-on-accent'), r('--primary'))).toBeGreaterThanOrEqual(H.AA);
-    expect(block('.hea .hea-btn--primary')).toMatch(/color:\s*var\(--hea-on-accent\)/);
+    expect(stripped).not.toMatch(/\.hea-btn/);
+    expect(JSX).not.toMatch(/hea-btn/);
+    expect(JSX.match(/<Button\b[^>]*variant="secondary"/g)).toHaveLength(3);
+    expect(JSX).not.toMatch(/variant="primary"/);
+    expect(block('.hea .hea-head .ui-btn')).toMatch(/--rule-strong:\s*var\(--hea-rule-strong\)/);
   });
   test('--danger never carries text', () => {
     expect(stripped).not.toMatch(/(^|[^-])color:\s*var\(--danger\)/m);

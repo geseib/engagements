@@ -84,6 +84,7 @@ import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOpt
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
 import { DialogHead, DialogFoot } from './ui/DialogParts';
+import Button from './ui/Button';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
@@ -1094,14 +1095,13 @@ export default function GameSetupDialog({
               : ' Every answer carries its author’s name from the moment voting opens.'}
           </span>
         </div>
-        <button
-          type="button"
-          className="gsd-btn"
+        <Button
+          variant="secondary" size={36} className="gsd-act"
           aria-label="Change how names are shown"
           onClick={() => openAdvancedAt(advRoot(), '.gsd-opt-head input[type="checkbox"]')}
         >
           Change
-        </button>
+        </Button>
       </div>
     );
   } else if (isSurvey && !chooserOpen && revealed) {
@@ -1109,14 +1109,13 @@ export default function GameSetupDialog({
       <div className="gsd-namesline is-compact" data-testid="gsd-namesline">
         <Icon name="EyeSlash" size={16} />
         <div><b>Names: {namesMode(namesChoice).label}</b> · locked when it opens</div>
-        <button
-          type="button"
-          className="gsd-btn"
+        <Button
+          variant="secondary" size={36} className="gsd-act"
           aria-label="Change the names rule"
           onClick={() => openAdvancedAt(advRoot(), '.gsd-three-opt[aria-checked="true"]')}
         >
           Change
-        </button>
+        </Button>
       </div>
     );
   }
@@ -1212,15 +1211,14 @@ export default function GameSetupDialog({
         <span className="gsd-quick-lead">{QUICK_WORDS.lead}</span>{' '}
         <b>{quickLabel}</b> with “{quickPick.name}”, {QUICK_WORDS.every}. {QUICK_WORDS.lands}
       </p>
-      <button
-        type="button"
-        className="gsd-btn gsd-quick-go"
+      <Button
+        variant="secondary" size={36} className="gsd-act gsd-quick-go"
         onClick={quickStart}
         disabled={busy}
         aria-describedby="gsd-quick-line"
       >
         <Icon name="Lightning" size={14} /> {QUICK_WORDS.button}
-      </button>
+      </Button>
       <HelpButton {...helpFor('host-quick-start')} variant="inline" size="small" tooltip="Help: Quick start" className="help-button-quiet" />
     </section>
   ) : null;
@@ -1236,9 +1234,9 @@ export default function GameSetupDialog({
      nothing between them (live dev test 5 N1). It opens the Format guide. */
   const formatActs = !isEdit && (
     <span className="gsd-step-acts">
-      <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+      <Button variant="tertiary" size="sm" className="gsd-link gsd-compare-link" onClick={openCompare}>
         <Icon name="ListBullets" size={14} /> {phone ? 'Compare' : 'Compare formats'}
-      </button>
+      </Button>
     </span>
   );
   /* Enter on a format goes on to the questions, as Enter in the title does
@@ -1334,7 +1332,7 @@ export default function GameSetupDialog({
       <b>{title.trim() || 'Untitled'}</b>
       <span aria-hidden="true">·</span>
       <span>{formatLabel}</span>
-      <button type="button" className="gsd-btn gsd-btn--link" onClick={() => setChooserClose((n) => n + 1)}>Edit</button>
+      <Button variant="tertiary" size="sm" className="gsd-link" onClick={() => setChooserClose((n) => n + 1)}>Edit</Button>
     </p>
   );
 
@@ -1464,19 +1462,20 @@ export default function GameSetupDialog({
               ? <><b>Discard your changes?</b> The session stays as it was.</>
               : <><b>Discard this engagement?</b> Nothing has been created yet, and what you filled in is lost.</>}
           </p>
-          <button type="button" className="btn-secondary" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
+          <Button variant="secondary" size={44} className="gsd-foot-act" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
             Keep editing
-          </button>
+          </Button>
           {/* DISCARD MEANS DISCARD (devtest 7 R1 / 8 R3-2): in create mode the
               title is the page's, so it outlived the dialog and reopened
               ticked done, with new typing appended to it. Empty it first. */}
-          <button
-            type="button"
-            className="gsd-discard"
+          <Button
+            variant="danger"
+            size={44}
+            className="gsd-foot-act gsd-discard"
             onClick={() => { if (!isEdit) onEventTitleChange?.(''); onCancel?.(); }}
           >
             Discard
-          </button>
+          </Button>
         </DialogFoot>
       ) : (
         <DialogFoot className="dialog-actions">
@@ -1492,15 +1491,19 @@ export default function GameSetupDialog({
               <span>{footNote}</span>
             </p>
           )}
-          <button type="button" className="btn-secondary" ref={cancelRef} onClick={requestClose}>
+          <Button variant="secondary" size={44} className="gsd-foot-act" ref={cancelRef} onClick={requestClose}>
             Cancel
-          </button>
+          </Button>
           {/* The guard: no set, no questions; no title, nothing to name. A
-              survey is created AND opened by this press. */}
-          <button
-            type="button"
+              survey is created AND opened by this press.
+              ONE PRIMARY PER SCREEN (experience plan §5.1, step 5c): while the
+              Format guide is up its "Use <format>" is the main action, so
+              Create steps down to the outlined look until the form is back. */}
+          <Button
             ref={primaryRef}
-            className="btn-primary"
+            variant={view === 'compare' ? 'secondary' : 'primary'}
+            size={44}
+            className="gsd-foot-act gsd-create"
             onClick={submit}
             /* NEVER INERT (review A1): aria-disabled keeps it in the Tab order
                and described by its reason; pressed early, it takes the focus
@@ -1519,7 +1522,7 @@ export default function GameSetupDialog({
             {!isEdit && !isOther && !busy && (
               <kbd className="gsd-kbd" aria-hidden="true">{shortcut}</kbd>
             )}
-          </button>
+          </Button>
         </DialogFoot>
       )}
     </Modal>
