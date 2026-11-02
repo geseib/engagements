@@ -221,7 +221,7 @@ describe('the shell owns the wait, so the button is never dead', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('create-report returned 502.');
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
     expect(onRetry).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getAllByRole('button', { name: /all session reports/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /your sessions/i })[0]);
     expect(onBrowseAll).toHaveBeenCalledTimes(1);
   });
 
@@ -231,7 +231,7 @@ describe('the shell owns the wait, so the button is never dead', () => {
   test('the history list is still reachable from the report', () => {
     const onBrowseAll = jest.fn();
     render(<GameReport reportData={reportData} status="ready" onClose={() => {}} onBrowseAll={onBrowseAll} />);
-    fireEvent.click(screen.getByRole('button', { name: /all session reports/i }));
+    fireEvent.click(screen.getByRole('button', { name: /your sessions/i }));
     expect(onBrowseAll).toHaveBeenCalledTimes(1);
   });
 

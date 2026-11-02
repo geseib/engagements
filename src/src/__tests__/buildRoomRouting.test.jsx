@@ -139,14 +139,17 @@ describe('GameHostPage ?gameId= sends a build session to /build', () => {
   });
 });
 
-describe('the welcome screen has a door to /build', () => {
-  test('a Build Room link', () => {
+/* ONE NEW DOOR (experience plan 4c): the welcome screen's own Build Room
+   link went; Build Room is a format in New engagement, created there and
+   landed on its room page. /build itself still routes (above). */
+describe('the welcome screen reaches the Build Room through New engagement', () => {
+  test('no Build Room door of its own; New engagement names it', () => {
     const WelcomeScreen = require('../components/WelcomeScreen').default;
     authFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
     render(<WelcomeScreen currentUser={{ groups: ['hosts'], attributes: {} }} />);
-    const link = screen.getByRole('link', { name: /Build Room/ });
-    expect(link).toHaveAttribute('href', '/build');
+    expect(screen.queryByRole('link', { name: /Build Room/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /new engagement/i })).toHaveTextContent(/a Build Room/);
   });
 });
 

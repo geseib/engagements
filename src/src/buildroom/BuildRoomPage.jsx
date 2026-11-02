@@ -78,7 +78,7 @@ import { presentHref } from '../config/surfaces';
 import { openRoomWindow } from '../present/roomWindow';
 import {
   pluginInstallCommand, projectSlug, cleanFolder, startCommand, resumeCommand, shellFolder, hostImageUrl, apiBase, buildApi,
-  createBuildSession, buildRoomPath, connectCommand, safeHref,
+  createBuildRoom, buildSetupProblem, buildRoomPath, connectCommand, safeHref,
 } from './buildHostApi';
 import './BuildRoom.css';
 import {
@@ -275,19 +275,14 @@ export function BuildCreate({ navigate = (url) => window.location.assign(url), i
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!title.trim()) { setError('Give the room a title.'); return; }
-    if (decides === 'host' && !goal.trim()) { setError('Write the goal, or let the room decide.'); return; }
-    if (visibility === 'private' && !accessCode.trim()) { setError('A private room needs an access code.'); return; }
+    // The same checks and the same create as New engagement's Build Room
+    // (buildHostApi.js), so the two forms cannot drift.
+    const problem = buildSetupProblem({ title, goal, decides, visibility, accessCode });
+    if (problem) { setError(problem); return; }
     setBusy(true);
     setError('');
     try {
-      const gameId = await createBuildSession({ title, goal, visibility, accessCode });
-      if (decides === 'host') {
-        try { await buildApi(gameId).openingAction('answer', { step: 'kind', text: goal.trim() }); } catch (e) { /* the host can answer it in the room */ }
-      }
-      if (!review) {
-        try { await buildApi(gameId).saveSettings({ reviewAgentAsks: false }); } catch (e) { /* the room can switch it */ }
-      }
+      const gameId = await createBuildRoom({ title, goal, decides, visibility, accessCode, review });
       navigate(buildRoomPath(gameId));
     } catch (e) {
       setError(e.message || 'The room could not be created.');

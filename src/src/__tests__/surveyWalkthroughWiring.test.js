@@ -73,7 +73,7 @@ describe('the walk-through is checked before the cut sheet', () => {
 
 describe('the page\'s own listeners go quiet while the presenter is open', () => {
   test('the auto-mode timer\'s blocking list carries showSurveyWalkthrough', () => {
-    const block = /if \(showQuickstartMenu \|\| showWelcomeScreen \|\| showNewGameDialog[\s\S]*?return undefined;/.exec(PAGE);
+    const block = /if \(createdSetup \|\| showWelcomeScreen \|\| showNewGameDialog[\s\S]*?return undefined;/.exec(PAGE);
     expect(block).not.toBeNull();
     expect(block[0]).toMatch(/\bshowSurveyWalkthrough\b/);
   });

@@ -167,7 +167,8 @@ const heard = {
   THE SESSION REPORT. Opened by the Rounds tab's "Session report"
   (SessionSetupPanel ~940 → handleViewReports → this session's report), the
   ENDED primary RW.openReport, or the Sessions list (W2). GameReport.jsx
-  toolbar: "Back to session", "All session reports", "Print", "Save report";
+  toolbar: "Back to session", "Your sessions" (the sessions list; "Reports"
+  means saved PDFs only, experience plan 4c), "Print", "Save report";
   a cover (Held = startedAt else createdAt, Hosted by, Format, the result
   strip), "About this session", "Who was here", per round (the opener, the
   task, "Workie's read", "What the room said" ranked with points,
@@ -201,7 +202,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'Along the top: **Back to session**, **All session reports**, **Print** and **Save report**.',
+          text: 'Along the top: **Back to session**, **Your sessions** (the list, for another session\'s report), **Print** and **Save report**.',
         },
       ],
     },

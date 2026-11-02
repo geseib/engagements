@@ -526,25 +526,29 @@ describe('⌘/Ctrl+Enter', () => {
     expect(props.onCreate).toHaveBeenCalledTimes(1);
   });
 
-  test('on Build Room it moves the focus to Continue and never leaves on its own', () => {
+  test('on Build Room it moves the focus to Create the Build Room and never leaves on its own', () => {
     const onChooseOther = jest.fn();
-    render(<GameSetupDialog {...base({ onChooseOther })} initialFormat="call-and-answer" />);
+    render(<GameSetupDialog {...base({ onChooseOther })} eventTitle="Retro" initialFormat="call-and-answer" />);
     fireEvent.click(radio('Build Room'));
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
     expect(onChooseOther).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Set up the Build Room' })).toHaveFocus();
-    expect(screen.getByText(/moves to Continue; press Enter there to go/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create the Build Room' })).toHaveFocus();
+    expect(live()).toHaveTextContent(/moved to Create the Build Room\. Press Enter there to create it\./);
+    // The foot says where Create lands (experience plan 4c).
+    expect(screen.getByText(/Creates the room and opens its page: connect Claude Code there/)).toBeInTheDocument();
   });
 });
 
 describe('the hand-offs and the survey', () => {
-  test('a survey says people can answer as soon as it opens, and the button opens it', () => {
+  /* 4c: a survey lands on its Setup like every format; Open is there. */
+  test('a survey says nobody can answer until it is opened, on the Setup it lands on', () => {
     render(<GameSetupDialog {...base()} initialFormat="survey" />);
     // Until the set is in, the foot says what is still needed (round 4).
     expect(need()).toHaveTextContent('Still needed: a question set.');
     pickSet(setRefKey({ id: 'pulse' }));
-    expect(screen.getByText(/People can answer as soon as you open it\. There is no separate Start\./)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open the survey' })).toBeInTheDocument();
+    expect(screen.getByText(/Nobody can answer until you open it\. You land on its Setup, with Open the survey there\./)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open the survey' })).toBeNull();
+    expect(createButton()).toBeInTheDocument();
     // The walkthrough's first step says so too.
     expect(screen.getByRole('heading', { name: /Open it/ })).toBeInTheDocument();
   });
@@ -555,7 +559,7 @@ describe('the hand-offs and the survey', () => {
     fireEvent.click(radio('Event'));
     expect(screen.getByTestId('gsd-event-plan')).toHaveTextContent('Events come with the Standard plan.');
     expect(screen.queryByTestId('gsd-event-price')).toBeNull();
-    notReady(screen.getByRole('button', { name: 'Continue to the event' }));
+    notReady(screen.getByRole('button', { name: 'Create the event' }));
   });
 
   test('Event on a paid plan states the price', () => {
@@ -627,8 +631,8 @@ describe('live dev test fixes', () => {
       eventsAccess={{ enabled: true, canCreate: false, offerPlanName: 'Standard plan' }} />);
     fireEvent.click(radio('Event'));
     fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
-    expect(screen.getByText(/Events come with the Standard plan, so there is nothing to continue to/)).toBeInTheDocument();
-    expect(screen.queryByText(/moved to Continue/)).toBeNull();
+    expect(screen.getByText(/Events come with the Standard plan, so there is nothing to create/)).toBeInTheDocument();
+    expect(screen.queryByText(/moved to Create/)).toBeNull();
   });
 
   test('B4: "Use Trivia" in the Format guide lets go of the Retro chip and its line', () => {
@@ -1089,7 +1093,7 @@ describe('no set fits', () => {
 */
 describe('round 4: the reveal rules', () => {
   const setHeading = () => screen.queryByRole('heading', { name: 'Question set' });
-  const advanced = () => document.querySelector('details.gsd-adv');
+  const advanced = () => document.querySelector('details.gsd-adv:not(.gsd-xfold)');
 
   test('the title reveals nothing: typing it leaves the form as it was, and only the foot changes', () => {
     const props = base({ eventTitle: '' });
@@ -1168,8 +1172,8 @@ describe('round 4: the reveal rules', () => {
     expect(live().textContent).toBe('Next: the Build Room page, below.');
     expect(advanced()).toBeNull();                // hidden with the set
     fireEvent.click(radio('Event'));
-    expect(screen.getByRole('heading', { name: 'Next: the event page' })).toBeInTheDocument();
-    expect(live().textContent).toBe('Next: the event page, below.');
+    expect(screen.getByRole('heading', { name: 'Next: the agenda' })).toBeInTheDocument();
+    expect(live().textContent).toBe('Next: the agenda, below.');
     fireEvent.click(radio('Call & Answer'));
     expect(chosenSet()).toBe(KEY_B);              // setByFormat, shipped
     expect(advanced()).not.toBeNull();            // and the options come back with it
@@ -1320,10 +1324,10 @@ describe('round 4: Create is never inert', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  test('ready: the foot says nobody can join until it starts, and Create fills', () => {
+  test('ready: the foot says nobody can join until it starts, that it lands on Setup, and Create fills', () => {
     render(<GameSetupDialog {...base()} initialFormat="call-and-answer" initialSetId="setb" />);
     expect(screen.queryByText(/Still needed/)).toBeNull();
-    expect(screen.getByText('Nobody can join until you start it.')).toBeInTheDocument();
+    expect(screen.getByText('Nobody can join until you start it. You land on its Setup, ready to start.')).toBeInTheDocument();
     expect(createButton()).not.toHaveAttribute('aria-disabled');
   });
 });

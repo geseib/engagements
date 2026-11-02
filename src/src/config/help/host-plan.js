@@ -82,7 +82,7 @@ const plan = {
       blocks: [
         {
           t: 'p',
-          text: 'On the free plan, a session past the month\'s allowance is refused when you create it, in Create engagement or Quick start. A note says what ran out and **Nothing was created.** A set past the allowance is refused when you save it, and nothing is saved.',
+          text: 'On the free plan, a session past the month\'s allowance is refused when you create it, in New engagement, Quick start included. A note says what ran out and **Nothing was created.** A set past the allowance is refused when you save it, and nothing is saved.',
         },
         {
           t: 'list',

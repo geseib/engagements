@@ -181,12 +181,13 @@ describe('GameHostPage wires it', () => {
   });
 
   test('it is mounted above the early returns, alongside the scoreboard keys', () => {
-    // rejects: moving the call below `if (showQuickstartMenu) { return ... }`
+    // rejects: moving the call below `if (showReport) { return ... }` (the
+    // first early return since Quick start's menu went, 4c)
     // or any other early return — a hook below a conditional return breaks
     // React's hook order.
     const scoreboardAt = PAGE.indexOf('useScoreboardKeys({');
     const sessionAt = PAGE.indexOf('useSessionPanelKey({');
-    const firstReturnAt = PAGE.indexOf('if (showQuickstartMenu)');
+    const firstReturnAt = PAGE.indexOf('if (showReport) {');
     expect(scoreboardAt).toBeGreaterThan(-1);
     expect(sessionAt).toBeGreaterThan(scoreboardAt);
     expect(firstReturnAt).toBeGreaterThan(sessionAt);
@@ -203,7 +204,7 @@ describe('GameHostPage wires it', () => {
     const hook = /useSessionPanelKey\(\{([\s\S]*?)\}\);/.exec(PAGE);
     expect(hook).not.toBeNull();
     expect(hook[1]).toMatch(/enabled:\s*sessionPanelKeyOn\b/);
-    for (const term of ['showQuickstartMenu', 'showWelcomeScreen', 'showNewGameDialog',
+    for (const term of ['createdSetup', 'showWelcomeScreen', 'showNewGameDialog',
       'showReport', 'showSurveyResults', 'showSurveyWalkthrough', 'editTarget', 'confirmLeave', 'gameId']) {
       expect(hook[1]).toMatch(new RegExp(`\\b${term}\\b`));
     }

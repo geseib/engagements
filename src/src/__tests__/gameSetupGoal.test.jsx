@@ -133,7 +133,7 @@ describe('a goal at create', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Survey' })); // formats are one radio group (README §3.8)
     pickSet('platform:pulse');
     expect(screen.queryByLabelText('Goal')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Open the survey' }));
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
     expect(props.onCreate).toHaveBeenCalledTimes(1);
     expect('target' in props.onCreate.mock.calls[0][0]).toBe(false);
   });

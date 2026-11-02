@@ -81,7 +81,6 @@ export default function WelcomeScreen({
   continueGameId = '',
   onContinueGameIdChange,
   onContinue,
-  onQuickStart,
   onCreateEngagement,
   onReports,
   onQuestionSets,
@@ -239,10 +238,13 @@ export default function WelcomeScreen({
 
           <div className="wel-split">
 
-          {/* NEW, ONE BUTTON. Starting something is why a host opens this
-              page, so it is first in the DOM at every width. Quick start and
-              the Build Room stay one press away beneath it until New folds
-              them in (experience plan 4c). */}
+          {/* NEW, ONE BUTTON, ONE DOOR (experience plan 4c; audit E N1).
+              Starting something is why a host opens this page, so it is first
+              in the DOM at every width. Quick start, the Build Room and a new
+              event used to be doors of their own here, each landing somewhere
+              different; all three are inside New engagement now (Quick start
+              as its fast lane, Build Room and Event as formats), and every
+              one lands on its own Setup or page. */}
           <section className="wel-start">
             <p className="wel-kicker">Home</p>
             <h1>Start an engagement</h1>
@@ -254,19 +256,10 @@ export default function WelcomeScreen({
               <button type="button" className="wel-action is-primary" onClick={() => onCreateEngagement?.()}>
                 <span className="wel-action-name">New engagement</span>
                 <span className="wel-action-note">
-                  Choose the format, the question set and which categories the room gets.
+                  A session, a survey, a Build Room or an event. In a hurry? Quick start is inside.
                 </span>
               </button>
             </div>
-            <p className="wel-also">
-              <span className="wel-meta">Or go straight in:</span>
-              <button type="button" className="wel-btn wel-btn-line" onClick={() => onQuickStart?.()}>
-                Quick start
-              </button>
-              {/* THE BUILD ROOM (docs/design/build-room/PLAN.md). Its own page,
-                  so a real link: App.jsx routes on pathname. */}
-              <a className="wel-btn wel-btn-line" href="/build">Build Room</a>
-            </p>
           </section>
 
           {/* REJOIN: the host's own live sessions, each one press from its

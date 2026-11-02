@@ -1749,6 +1749,49 @@
 .gsd .gsd-handoff-note svg { flex: none; margin-top: 3px; color: var(--gsd-secondary); }
 .gsd .gsd-handoff-note a { color: var(--gsd-secondary); }
 
+/* ============================================ BUILD ROOM AND EVENT FIELDS
+   BuildRoomFields.jsx, EventFields.jsx (experience plan 4c): the Build Room's
+   four setup fields fold into an Optional line like Advanced (`.gsd-adv`
+   above gives the summary, the chevron and the body); an event's day sits
+   open above its own fold. Body-size inputs, label-size legends, the colours
+   the rest of the form already measures (--gsd-text on --gsd-card). */
+.gsd .gsd-xfields { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gsd .gsd-xfield { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.gsd .gsd-xfield > legend,
+.gsd .gsd-xlabel { padding: 0; margin-bottom: 2px; font-size: var(--gsd-t-label); font-weight: 700; color: var(--gsd-text); }
+.gsd .gsd-xgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.gsd .gsd-xcheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  font-size: var(--gsd-t-body);
+  line-height: 1.45;
+  color: var(--gsd-text);
+  cursor: pointer;
+}
+.gsd .gsd-xcheck input { flex: none; margin-top: 4px; accent-color: var(--gsd-primary); }
+.gsd .gsd-xcheck .dialog-help-text { margin-top: 2px; }
+
+/* =============================================================== QUICK START
+   The fast lane (config/quickStart.js): one quiet line above Name it, its
+   button outlined like the dialog's other secondary buttons, so Create stays
+   the one filled button in the foot. */
+.gsd .gsd-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 2px 0 4px;
+  padding: 10px 14px;
+  border: 1px dashed var(--gsd-rule-strong);
+  border-radius: 10px;
+}
+.gsd .gsd-quick-line { flex: 1 1 260px; min-width: 0; margin: 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
+.gsd .gsd-quick-line b { color: var(--gsd-text); }
+.gsd .gsd-quick-lead { font-weight: 700; color: var(--gsd-text); }
+.gsd .gsd-quick-go { margin-left: auto; }
+
 /* ================================================================== PHONE
    44px targets throughout (frame 10). */
 @media (max-width: 600px) {

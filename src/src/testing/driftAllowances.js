@@ -34,7 +34,6 @@ module.exports = {
     "components/PlanRequestsPanel.jsx": 1,
     "components/PlatformOrgsPanel.jsx": 1,
     "components/PollAIBuilder.jsx": 2,
-    "components/QuickstartMenu.jsx": 1,
     "components/SurveyAIBuilder.jsx": 2,
     "components/TriviaAIBuilder.jsx": 1,
     "components/UserManagement.jsx": 2
@@ -70,7 +69,6 @@ module.exports = {
     "components/QuestionSetDeleteDialog.jsx": 1,
     "components/QuestionSetEditor.jsx": 1,
     "components/QuestionsPanel.jsx": 2,
-    "components/QuickstartMenu.jsx": 1,
     "components/ReportsPanel.jsx": 1,
     "components/ScoreCard.jsx": 2,
     "components/SetChooser.jsx": 1,
@@ -206,17 +204,13 @@ module.exports = {
     },
     "components/GameReport.jsx": {
       "Comment": 1,
-      "Results": 1,
-      "Session reports": 2
+      "Results": 1
     },
     "components/GameSetupDialog.jsx": {
       "Main screen": 1
     },
     "components/GenerationJobPanel.jsx": {
       "game": 2
-    },
-    "components/HostReportsDialog.jsx": {
-      "Your reports": 3
     },
     "components/IssueReportForm.jsx": {
       "Game ID": 1,
@@ -242,9 +236,6 @@ module.exports = {
       "AI summary": 1,
       "Presentation": 1,
       "game": 1
-    },
-    "components/QuickstartMenu.jsx": {
-      "game": 4
     },
     "components/ReportsPanel.jsx": {
       "the summary": 2
@@ -318,9 +309,6 @@ module.exports = {
       "All sessions": 2,
       "Settings": 2
     },
-    "config/help/admin-team.js": {
-      "Session reports": 1
-    },
     "config/help/ai.js": {
       "Session panel": 1
     },
@@ -344,8 +332,7 @@ module.exports = {
       "Session panel": 2
     },
     "config/help/host-reports.js": {
-      "Session panel": 2,
-      "Session reports": 1
+      "Session panel": 2
     },
     "config/help/host-running.js": {
       "Back to Menu": 1,
@@ -354,7 +341,7 @@ module.exports = {
     },
     "config/help/host-setup.js": {
       "Main screen": 1,
-      "Session panel": 6
+      "Session panel": 5
     },
     "config/help/host-surveys.js": {
       "Back to Menu": 1,

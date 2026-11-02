@@ -32,6 +32,9 @@
  *
  * rejects: the extraction changing one attribute, id, class, word or order in
  * the create or edit form, for any format.
+ * RE-RECORDED ON PURPOSE, 2 Nov 2026, for EXPERIENCE PLAN 4c: the Quick start
+ * lane (`gsd-quick`, config/quickStart.js) above Name it. One section added
+ * at the top of each create shape; nothing else in the form moved.
  */
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';

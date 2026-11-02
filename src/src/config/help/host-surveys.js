@@ -27,8 +27,9 @@ const hostSurveys = {
       (+ FIELD_NOTES, FEEDBACK) → ENDED; primaries "Close the survey",
       "What We Heard", "End the session", "Back to Menu"; secondaries
       "Two-minute warning", "See the results" + tertiary "Walk through".
-      GameSetupDialog.jsx: a survey is created AND opened by "Open the survey"
-      (openNewSurvey in GameHostPage.jsx). One screen only (config/surfaces.js:
+      GameSetupDialog.jsx: a survey is created by Create engagement and lands
+      on its Setup (SetupBeforeStart.jsx, experience plan 4c), where "Open the
+      survey" opens it (startFromSetup in GameHostPage.jsx). One screen only (config/surfaces.js:
       two screens are Call & Answer, Trivia and Poll).
     */
     {
@@ -43,7 +44,7 @@ const hostSurveys = {
         {
           t: 'steps',
           items: [
-            { title: 'Open it', text: 'Create the session as a survey. **Open the survey** creates it and opens it to answers in one press.' },
+            { title: 'Open it', text: 'Create the session as a survey. It lands on its Setup; **Open the survey** there opens it to answers.' },
             { title: 'Let it fill', text: 'The join code and QR stay up while people answer. Your stage shows how far the room has got.' },
             { title: 'Warn, then close', text: '**Two-minute warning** tells every phone the close is coming; **Close the survey** stops the answers.' },
             { title: 'Read it back', text: '**See the results** for yourself, **Walk through** them with the room, then **What We Heard**.' },
@@ -61,10 +62,11 @@ const hostSurveys = {
     /*
       GameSetupDialog.jsx: Format "Survey" ("Structured multi-question
       feedback, reported in aggregate." on dev); categories, shuffle and goal
-      hidden for a survey (isSurvey, ~311-340); foot note not shown; button
-      "Open the survey" / "Opening…". openNewSurvey: on a refused start, "The
-      survey was created but did not open: …" and the Sessions list opens.
-      QuickstartMenu.jsx offers no survey. Sessions: rowActions (closed survey:
+      hidden for a survey (isSurvey, ~311-340); foot "Nobody can answer until
+      you open it. You land on its Setup, with Open the survey there."; button
+      Create engagement. SetupBeforeStart: "Open the survey"; refused, "It did
+      not open: …" on that Setup. Quick start (config/quickStart.js) can make
+      a survey with the set's own names rule. Sessions: rowActions (closed survey:
       Report, Results, Continue). Checked on dev.
     */
     {
@@ -75,19 +77,19 @@ const hostSurveys = {
         {
           t: 'steps',
           items: [
-            'On the start screen choose **Create engagement**.',
+            'On the start screen choose **New engagement**.',
             'Give it a title and pick **Survey** as the format. The question set list then offers your survey sets.',
             'Open **Advanced** and choose **Names** (next section). It starts on Anonymous, or on the set\'s own choice if it has one.',
-            'Press **Open the survey**. The stage opens with the join code, and phones can answer straight away.',
+            'Press **Create engagement**. You land on its Setup, not opened yet: **Edit** changes it first. Press **Open the survey** there and phones can answer straight away.',
           ],
         },
         {
           t: 'p',
-          text: 'There are no categories, shuffle or goal for a survey: everyone gets every question, in the set\'s order. **Quick start** does not offer surveys.',
+          text: 'There are no categories, shuffle or goal for a survey: everyone gets every question, in the set\'s order. **Quick start** makes one with the set\'s own names choice.',
         },
         {
           t: 'p',
-          text: 'If the survey is created but does not open, your sessions list says why; press **Start** on its row to try again. A survey set is made like any other set: see Making a set, and reviewing an AI draft in Setting a session up.',
+          text: 'If the survey does not open, its Setup says why; press **Open the survey** again, or later **Start** on its row. A survey set is made like any other set: see Making a set, and reviewing an AI draft in Setting a session up.',
         },
       ],
     },

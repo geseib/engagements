@@ -22,6 +22,13 @@
  *            foot, aria-disabled with "Still needed: …"; pressed early, it
  *            takes the focus to the first gap.
  *
+ *   ONE NEW DOOR (experience plan 4c): Quick start is a lane at the top
+ *            (config/quickStart.js): one press, every default, said before
+ *            the press. Build Room and Event carry their own fields here (the
+ *            Build Room's four folded into an Optional line; an event's day)
+ *            and are created from this dialog. Every created session lands on
+ *            its own Setup (SetupBeforeStart), with Start and Edit there.
+ *
  *   ONE LAYOUT (owner round 3, option A) min(1240px, 100vw−48px): the form
  *            on the left and a 420px pane, "How <format> runs", a storyboard
  *            to scroll through (components/FormatWalkthrough); before a
@@ -96,19 +103,27 @@ import FormatWalkthrough from './FormatWalkthrough';
 import OtherFormatHandoff from './OtherFormatHandoff';
 import { walkthroughFor } from '../config/formatWalkthrough';
 import { setOwnerTag, YOURS } from '../utils/setOwnerTag';
+import BuildRoomFields from './BuildRoomFields';
+import EventFields, { eventDefaults, eventFieldsFor, eventProblem } from './EventFields';
+import { BUILD_SETUP_DEFAULTS, buildSetupProblem } from '../buildroom/buildHostApi';
+import {
+  QUICK_WORDS, quickFormat, quickSet, quickTitle,
+} from '../config/quickStart';
 import './GameSetupDialog.css';
 
 const EMPTY_USES = new Map();
 
 /*
-  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04), each with its own
-  setup screen: picking one hands the title over (`onChooseOther`). Create
-  mode only; Event only while events are switched on for the tier
-  (`eventsAccess.enabled`), and on Free it says which plan brings them.
+  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04). Since experience
+  plan 4c their setup fields are in this dialog (the Build Room's four in its
+  Optional section, an event's day under "Next: the agenda"), and Create makes
+  the thing and hands it to the page (`onChooseOther`), which lands it on its
+  own page. Create mode only; Event only while events are switched on for the
+  tier (`eventsAccess.enabled`), and on Free it says which plan brings them.
 */
 const OTHER_LABELS = Object.freeze({
-  [BUILD_KIND]: 'Set up the Build Room',
-  [EVENT_KIND]: 'Continue to the event',
+  [BUILD_KIND]: 'Create the Build Room',
+  [EVENT_KIND]: 'Create the event',
 });
 
 /** True while the window is at most `px` wide (false where there is no window). */
@@ -130,7 +145,7 @@ function useNarrow(px) {
 
 /** The fold that the names line's "Change" opens, and the control it focuses. */
 function openAdvancedAt(root, selector) {
-  const fold = root && root.querySelector('details.gsd-adv');
+  const fold = root && root.querySelector('details.gsd-adv:not(.gsd-xfold)');
   if (!fold) return;
   fold.open = true;
   const target = fold.querySelector(selector);
@@ -187,7 +202,12 @@ export default function GameSetupDialog({
   initialValues = null,
   /** { enabled, canCreate, offerPlanName } from utils/eventsAccess.js, or null. */
   eventsAccess = null,
-  /** (kind, { title }) => void — Event or Build Room chosen. Absent, neither is offered. */
+  /**
+   * (kind, { title, fields }) => void — create an Event or a Build Room from
+   * this dialog: `fields` is the Build Room's four ({ goal, decides,
+   * visibility, accessCode, review }) or the event's (agenda-rules'
+   * checkEventFields shape). Absent, neither is offered.
+   */
   onChooseOther,
   isFirstEngagement = true,
   eventTitle = '',
@@ -341,6 +361,11 @@ export default function GameSetupDialog({
   const [briefing, setBriefing] = useState(isEdit ? (seed.briefing || null) : null);
   const [briefingWorking, setBriefingWorking] = useState(false);
   const [target, setTarget] = useState(isEdit && Number.isInteger(seed.target) ? seed.target : null);
+  /* THE BUILD ROOM'S FOUR FIELDS AND AN EVENT'S DAY (experience plan 4c),
+     kept while the dialog is open even if the format moves away and back. */
+  const [buildFields, setBuildFields] = useState(() => ({ ...BUILD_SETUP_DEFAULTS }));
+  const [buildFoldOpen, setBuildFoldOpen] = useState(false);
+  const [eventFields, setEventFields] = useState(() => eventDefaults());
   const pickNames = (id) => {
     namesTouched.current = true;
     setNamesChoice(namesMode(id).id);
@@ -428,8 +453,12 @@ export default function GameSetupDialog({
   // A draft still being written would be lost by a Create pressed now; a goal
   // the set cannot meet would only be refused; topics still loading would be
   // the wrong set's.
+  const isBuild = engagementType === BUILD_KIND;
+  const otherProblem = !isOther ? ''
+    : isBuild ? buildSetupProblem({ title, ...buildFields })
+      : (eventBlocked ? '' : eventProblem(title, eventFields));
   const canCreate = isOther
-    ? !eventBlocked
+    ? !eventBlocked && !otherProblem
     : hasFormat && Boolean(newGameSetId) && title.trim().length > 0
       && !(isCallAndAnswer && briefingWorking) && !goalProblem && !categoriesLoading;
 
@@ -476,7 +505,7 @@ export default function GameSetupDialog({
   */
   const formatMessage = (typeId) => {
     if (isHandoffFormat(typeId)) {
-      return `Next: ${typeId === BUILD_KIND ? 'the Build Room page' : 'the event page'}, below.`;
+      return `Next: ${typeId === BUILD_KIND ? 'the Build Room page' : 'the agenda'}, below.`;
     }
     if (setAnnounced.current || isEdit) return '';
     setAnnounced.current = true;
@@ -580,7 +609,21 @@ export default function GameSetupDialog({
   */
   const pressEarly = () => {
     if (isOther) {
-      if (eventBlocked) setAnnounce(`Events come with the ${(eventsAccess && eventsAccess.offerPlanName) || 'paid plan'}, so there is nothing to continue to.`);
+      if (eventBlocked) { setAnnounce(`Events come with the ${(eventsAccess && eventsAccess.offerPlanName) || 'paid plan'}, so there is nothing to create.`); return; }
+      /* The gap, in the order the form reads: the title, then the field the
+         problem names (the Build Room's open their fold first). */
+      const root = bodyRef.current;
+      if (!title.trim()) {
+        setTimeout(() => titleRef.current?.focus(), 0);
+      } else if (isBuild) {
+        setBuildFoldOpen(true);
+        const sel = buildFields.decides === 'host' && !String(buildFields.goal).trim() ? '#gsd-build-goal' : '#gsd-build-code';
+        setTimeout(() => { const el = root && root.querySelector(sel); if (el) el.focus(); }, 0);
+      } else {
+        const el = root && root.querySelector('#gsd-event-date');
+        if (el) el.focus();
+      }
+      if (otherProblem) setAnnounce(otherProblem);
       return;
     }
     if (readyButTopics) {
@@ -614,7 +657,10 @@ export default function GameSetupDialog({
     if (busy) return;
     if (!canCreate) { pressEarly(); return; }
     if (isOther) {
-      onChooseOther?.(engagementType, { title: title.trim() });
+      onChooseOther?.(engagementType, {
+        title: title.trim(),
+        fields: isBuild ? { ...buildFields } : eventFieldsFor(title, eventFields),
+      });
       return;
     }
     // An edit that deselected every category is refused HERE.
@@ -651,6 +697,7 @@ export default function GameSetupDialog({
     newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice, target,
     isEdit ? Array.from(editCategoryNames).sort() : null,
     briefing ? briefing.text : null, briefingWorking,
+    buildFields, eventFields,
   ]);
   const openedAs = useRef(snapshot);
   const dirty = snapshot !== openedAs.current;
@@ -735,6 +782,7 @@ export default function GameSetupDialog({
   latest.current = {
     canCreate, busy, isOther, confirmingClose, submit, readyButTopics, eventBlocked, pressEarly,
     planName: (eventsAccess && eventsAccess.offerPlanName) || 'paid plan',
+    otherLabel: OTHER_LABELS[engagementType] || '',
   };
   useEffect(() => {
     const onKey = (event) => {
@@ -754,11 +802,11 @@ export default function GameSetupDialog({
       // there navigates. A disabled Continue takes no focus, so it says why.
       if (now.isOther) {
         if (now.eventBlocked) {
-          setAnnounce(`Events come with the ${now.planName}, so there is nothing to continue to.`);
+          setAnnounce(`Events come with the ${now.planName}, so there is nothing to create.`);
           return;
         }
         primaryRef.current?.focus();
-        setAnnounce(`${shortcut} moved to Continue. Press Enter there to go.`);
+        setAnnounce(`${shortcut} moved to ${now.otherLabel}. Press Enter there to create it.`);
         return;
       }
       if (now.busy) return;
@@ -821,26 +869,44 @@ export default function GameSetupDialog({
   /* STILL NEEDED (README round 4): beside the button it is about, read through
      its aria-describedby, and NOT a live region (review A5) — it changes with
      every keystroke that empties or fills the title. */
-  const needed = [
-    ...(title.trim() ? [] : ['a title']),
-    ...(hasFormat ? [] : ['a format']),
-    ...(newGameSetId ? [] : ['a question set']),
-  ];
-  const showNeed = !canCreate && !isOther && !isEdit && view !== 'compare' && needed.length > 0;
+  /* A Build Room or an event needs its own few things (experience plan 4c). */
+  let needed;
+  if (isBuild) {
+    needed = [
+      ...(title.trim() ? [] : ['a title']),
+      ...(buildFields.decides === 'host' && !String(buildFields.goal).trim() ? ['the goal'] : []),
+      ...(buildFields.visibility === 'private' && !String(buildFields.accessCode).trim() ? ['an access code'] : []),
+    ];
+  } else if (isOther) {
+    needed = eventBlocked ? [] : [
+      ...(title.trim() ? [] : ['a title']),
+      ...(eventFields.date && eventFields.time ? [] : ['a date and start time']),
+    ];
+  } else {
+    needed = [
+      ...(title.trim() ? [] : ['a title']),
+      ...(hasFormat ? [] : ['a format']),
+      ...(newGameSetId ? [] : ['a question set']),
+    ];
+  }
+  const showNeed = !canCreate && !isEdit && view !== 'compare' && needed.length > 0;
+  /* WHERE CREATE LANDS, SAID BESIDE IT (experience plan 4c, the owner's
+     decision 7): every format lands on its own Setup, with Start there. */
   if (showNeed) { footNote = null; footIcon = 'Info'; }
   else if (isEdit) footNote = 'This session has not started, so nobody can join it yet.';
-  else if (isSurvey) { footNote = 'People can answer as soon as you open it. There is no separate Start.'; footIcon = 'Warning'; }
-  else if (isOther) { footNote = `Nothing is created yet. ${shortcut} moves to Continue; press Enter there to go.`; footIcon = 'Info'; }
+  else if (isSurvey) footNote = 'Nobody can answer until you open it. You land on its Setup, with Open the survey there.';
+  else if (isBuild) { footNote = 'Creates the room and opens its page: connect Claude Code there, then the room joins.'; footIcon = 'Info'; }
+  else if (isOther && otherProblem && !eventBlocked) { footNote = otherProblem; footIcon = 'Info'; }
+  else if (isOther) { footNote = 'Creates the event and opens its agenda, where you add the items.'; footIcon = 'Info'; }
   else if (view === 'compare') { footNote = 'Choosing a format. Use one, or go back to the form.'; footIcon = 'Info'; }
-  else footNote = 'Nobody can join until you start it.';
+  else footNote = 'Nobody can join until you start it. You land on its Setup, ready to start.';
 
   let primaryLabel;
-  if (busy) primaryLabel = isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…');
+  if (busy) primaryLabel = isEdit ? 'Saving…' : 'Creating…';
   else if (isEdit) primaryLabel = 'Save changes';
   else if (OTHER_LABELS[engagementType]) primaryLabel = OTHER_LABELS[engagementType];
   else if (pendingCreate) primaryLabel = 'Waiting for topics…';
   else if (categoriesLoading) primaryLabel = 'Loading topics…';
-  else if (isSurvey) primaryLabel = 'Open the survey';
   // Frame 10: one word where the foot is a phone's width.
   else primaryLabel = phone ? 'Create' : 'Create engagement';
   let primaryTitle;
@@ -893,7 +959,7 @@ export default function GameSetupDialog({
   const setIntro = 'The questions you will ask. Start from a ready-made set; you can switch topics off once it is picked.';
   const questionsStep = !hasFormat ? null : isOther ? (
     <section className="gsd-step" aria-labelledby="gsd-next-label">
-      <h3 className="gsd-step-h" id="gsd-next-label">Next: {engagementType === BUILD_KIND ? 'the Build Room page' : 'the event page'}</h3>
+      <h3 className="gsd-step-h" id="gsd-next-label">Next: {engagementType === BUILD_KIND ? 'the Build Room page' : 'the agenda'}</h3>
       <OtherFormatHandoff
         kind={engagementType}
         title={title}
@@ -901,6 +967,19 @@ export default function GameSetupDialog({
         planName={eventsAccess && eventsAccess.offerPlanName}
         billingHref={billingHref}
       />
+      {/* THEIR FIELDS, HERE (experience plan 4c; audit E N2): no second form,
+          no page load. The Build Room's four fold into Optional; an event's
+          day is asked here and the rest folds. */}
+      {isBuild ? (
+        <BuildRoomFields
+          value={buildFields}
+          onChange={(patch) => setBuildFields((prev) => ({ ...prev, ...patch }))}
+          open={buildFoldOpen}
+          onToggle={(event) => setBuildFoldOpen(event.currentTarget.open)}
+        />
+      ) : !eventBlocked ? (
+        <EventFields value={eventFields} onChange={(patch) => setEventFields((prev) => ({ ...prev, ...patch }))} />
+      ) : null}
     </section>
   ) : (
     <section className="gsd-step" aria-labelledby="gsd-set-label">
@@ -1083,6 +1162,68 @@ export default function GameSetupDialog({
     </div>
   ) : null;
 
+  /* ── QUICK START, THE FAST LANE (experience plan 4c; config/quickStart.js) ──
+     One press: the format chosen here (else the last one, else Call & Answer),
+     the set picked here (else the one used lately, else a ready-made one),
+     the title typed (else "Quick <format>: <set>"), every other default. It
+     creates like Create does and lands on the session's Setup. The line says
+     exactly what it will make before the press; with no set to start from,
+     there is no lane. */
+  const quickFmt = isEdit ? '' : quickFormat({
+    chosen: engagementType, lastFormat, offered: PICKER_GAME_TYPES.map((t) => t.id), isHandoff: isHandoffFormat,
+  });
+  const quickPick = quickFmt ? quickSet({
+    sets: sessionSets,
+    format: quickFmt,
+    chosenKey: engagementType === quickFmt ? newGameSetKey : '',
+    recent: recentSetUses,
+    keyOf: setRefKey,
+    isUnreadable: isUnreadableSet,
+  }) : null;
+  const quickLabel = quickFmt ? gameTypeMeta(quickFmt).label : '';
+  const showQuick = !isEdit && !isOther && Boolean(quickPick) && view === 'form' && !chooserOpen;
+  const quickStart = () => {
+    if (busy || !quickPick) return;
+    const kind = normalizeGameType(quickFmt);
+    const ref = parseSetRefKey(setRefKey(quickPick));
+    setAnnounce(QUICK_WORDS.announce(quickLabel, quickPick.name));
+    onCreate?.({
+      title: quickTitle(title, quickLabel, quickPick.name),
+      gameType: quickFmt,
+      setId: ref.id,
+      setScope: ref.scope,
+      // Every topic: an empty list is "all of them" to create-game.js.
+      categoryIds: [],
+      eventDetails: '',
+      aiContext: '',
+      personaId: '',
+      promptId: '',
+      randomizeQuestions: kind !== 'survey',
+      anonymousResponses: true,
+      ...(kind === 'survey' ? { names: namesMode(quickPick.namesDefault).id } : { target: null }),
+      ...(kind === 'call-and-answer' ? { briefing: null } : {}),
+      quick: true,
+    });
+  };
+  const quickLane = showQuick ? (
+    <section className="gsd-quick" data-testid="gsd-quick" aria-label={QUICK_WORDS.button}>
+      <p className="gsd-quick-line" id="gsd-quick-line">
+        <span className="gsd-quick-lead">{QUICK_WORDS.lead}</span>{' '}
+        <b>{quickLabel}</b> with “{quickPick.name}”, {QUICK_WORDS.every}. {QUICK_WORDS.lands}
+      </p>
+      <button
+        type="button"
+        className="gsd-btn gsd-quick-go"
+        onClick={quickStart}
+        disabled={busy}
+        aria-describedby="gsd-quick-line"
+      >
+        <Icon name="Lightning" size={14} /> {QUICK_WORDS.button}
+      </button>
+      <HelpButton {...helpFor('host-quick-start')} variant="inline" size="small" tooltip="Help: Quick start" className="help-button-quiet" />
+    </section>
+  ) : null;
+
   /* ── the format step (step 2) ─────────────────────────────────────────── */
   const openCompare = () => {
     compareReturn.current = '.gsd-compare-link';
@@ -1199,6 +1340,7 @@ export default function GameSetupDialog({
   const form = (
     <>
       {chooserOpen ? foldedLine : null}
+      {quickLane}
       <div hidden={chooserOpen || undefined}>
         {titleStep}
         {formatStep}

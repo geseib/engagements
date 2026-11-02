@@ -23,7 +23,7 @@ export default function HostReportsDialog({ onClose }) {
       <header>
         <Icon name="FileText" weight="duotone" size={20} color="var(--primary)" />
         <div className="qsets-grow">
-          <h2 id="hrp-title">Your reports</h2>
+          <h2 id="hrp-title">Reports</h2>
           <p className="qsets-dim">Saved from a session's report screen. They stay after the session has expired.</p>
         </div>
         {/* The reporting guide's saved-reports help (Help Phase 3). */}
@@ -32,8 +32,8 @@ export default function HostReportsDialog({ onClose }) {
           type="button"
           className="qs-dialog-close"
           onClick={() => onClose && onClose()}
-          aria-label="Close your reports"
-          title="Close your reports"
+          aria-label="Close Reports"
+          title="Close Reports"
           data-testid="hrp-close"
         >
           ×

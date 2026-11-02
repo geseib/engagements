@@ -10,9 +10,9 @@
   Claims are taken from the code, checked on dev on 22 Oct with a session of
   our own (create, opening, an Ideas ask with one phone, decide, send, wrap
   up, report, two screens, end):
-    the create page            buildroom/BuildRoomPage.jsx BuildCreate;
-                               components/WelcomeScreen.jsx (the Build Room
-                               door); GameSetupDialog.jsx (Set up the Build Room)
+    the create page            GameSetupDialog.jsx (Build Room format, its
+                               fields in BuildRoomFields.jsx, "Create the Build
+                               Room", experience plan 4c); BuildCreate at /build
     the Host screen, header    BuildRoomPage.jsx RoomHeader/HeaderTools,
                                AgentChip, ConnectionChip; BuildSetup.jsx
                                (Before the room starts, since 26 Oct 2026)
@@ -125,12 +125,12 @@ const buildRoom = {
         {
           t: 'steps',
           items: [
-            { title: 'Open the New Build Room page', text: 'Choose **Build Room** on your start screen. In **Create engagement**, Build Room is one of the formats too: **Set up the Build Room** goes to the same page.' },
-            { title: 'Give it a title', text: 'It names the session for the room and in the report.' },
+            { title: 'Choose Build Room', text: 'Press **New engagement** on your start screen and pick **Build Room**, under Bigger than one session.' },
+            { title: 'Give it a title', text: 'It names the session for the room and in the report. The settings below are in the closed **Build Room setup** line, each with a default.' },
             { title: 'Say who sets the goal', text: 'Under What to build: **The room decides** (the room picks what to make in the opening, and Claude waits for it), or I\'ve set the goal (write it; Claude builds toward it, and the opening starts from who it is for). With the room deciding, the goal is an optional starting idea. It shows to the room and at the top of the report.' },
             { title: 'Who can join', text: '**Anyone with the code**, or **Private: an access code as well**.' },
             { title: 'Review Claude\'s questions', text: 'On to start with: Claude\'s questions wait for you before the room sees them. You can switch it in the room.' },
-            { title: 'Create room', text: '**Create room** opens the Host screen. People can join straight away.' },
+            { title: 'Create it', text: '**Create the Build Room** opens its Host screen, at the setup card. People can join straight away.' },
           ],
         },
       ],

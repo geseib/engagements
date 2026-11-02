@@ -161,18 +161,21 @@ describe('what a survey does not show', () => {
 });
 
 describe('submitting', () => {
-  test('the button reads "Open the survey"', () => {
+  /* A SURVEY LANDS ON ITS SETUP LIKE EVERY FORMAT (experience plan 4c): the
+     dialog creates it, and Open the survey is on the Setup it lands on. */
+  test('the button creates it (Open the survey is on its Setup), and the foot says so', () => {
     setup();
     chooseSurvey();
-    expect(screen.getByRole('button', { name: /open the survey/i })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /create engagement/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /create engagement/i })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /open the survey/i })).toBeNull();
+    expect(screen.getByText(/Nobody can answer until you open it\. You land on its Setup, with Open the survey there\./)).toBeInTheDocument();
   });
 
   test('the payload carries names, and a survey is never shuffled', () => {
     const { props } = setup();
     chooseSurvey();
     fireEvent.click(radio('Named'));
-    fireEvent.click(screen.getByRole('button', { name: /open the survey/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
     expect(props.onCreate).toHaveBeenCalledTimes(1);
     expect(props.onCreate.mock.calls[0][0]).toEqual(expect.objectContaining({
       gameType: 'survey', setId: 'q3-feedback', names: 'named', randomizeQuestions: false,
@@ -182,7 +185,7 @@ describe('submitting', () => {
   test('left alone, it sends Anonymous', () => {
     const { props } = setup();
     chooseSurvey();
-    fireEvent.click(screen.getByRole('button', { name: /open the survey/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create engagement/i }));
     expect(props.onCreate.mock.calls[0][0].names).toBe('anonymous');
   });
 });

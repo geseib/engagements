@@ -6,16 +6,16 @@
   (a small event, 4698, built, run and ended by the QA host in a team on a
   paid plan). Sources, by section:
 
-    what-an-event-is   WelcomeEvents.jsx ("Run an event", "New event", "See how",
+    what-an-event-is   WelcomeEvents.jsx ("Run an event", "See how", no door of its own since 4c,
                        two shown, "N more in the console's Events list");
                        utils/eventsAccess.js (paid plan, any member);
                        agenda-rules.js MAX_ITEMS 16, MAX_ENGAGEMENTS 8, breaks
                        not counted. Billing is host-plan#other-things-counted.
-    new-event          EventDetailsDialog.jsx (Name, Date, Starts, Time zone,
-                       Place, Who can join, Reports for attendees, afterwards,
-                       Create event, "The join code is chosen when you create
-                       it."); GameSetupDialog.jsx EVENT_KIND "Continue to the
-                       event" → GameHostPage newEventTitle → the same dialog.
+    new-event          GameSetupDialog.jsx EVENT_KIND (experience plan 4c):
+                       "Next: the agenda", EventFields.jsx (Date, Starts; fold
+                       "Time zone, place, reports"), "Create the event" →
+                       GameHostPage handleChooseOther → createEvent → the
+                       agenda. The console's New event: EventDetailsDialog.jsx.
                        Attendee reports are stored on the event; nothing yet
                        hands them to attendees, so the help names the choice only.
     the-agenda-page    HostEventAgenda.jsx (Main screen, Save event summary (PDF) —
@@ -117,10 +117,10 @@ const eventAgenda = {
         {
           t: 'steps',
           items: [
-            { title: 'Start it', text: 'Press **New event** under **Run an event** on your start screen. Or, in **Create engagement**, pick the Event format and press **Continue to the event**; your title comes with you.' },
-            { title: 'Say when and where', text: 'Give it a **Name**, a **Date**, a start time (**Starts**) and a **Time zone**. **Place** is optional and shows on the agenda.' },
+            { title: 'Start it', text: 'Press **New engagement** on your start screen, name it, and pick the **Event** format. (In the console, Events has its own **New event**.)' },
+            { title: 'Say when and where', text: 'Under **Next: the agenda**, set the **Date** (today to begin with) and **Starts**. The fold below holds the **Time zone**, an optional **Place** for the agenda, and the reports default.' },
             { title: 'Choose the reports default', text: 'Under **Reports for attendees, afterwards**, pick **Full**, **Anonymous** or **Not shared**: the default for every item\'s report.' },
-            { title: 'Create it', text: 'Press **Create event**. Engage chooses the four-digit join code, and the agenda page opens, empty.' },
+            { title: 'Create it', text: 'Press **Create the event**. Engage chooses the four-digit join code, and the agenda page opens, empty.' },
           ],
         },
         {

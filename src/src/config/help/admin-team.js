@@ -406,7 +406,7 @@ const dataPrivacy = {
         },
         {
           t: 'p',
-          text: 'Before then, you can download a set\'s questions with **Download CSV** in its editor, save session reports, and save Activity with **Download CSV**.',
+          text: 'Before then, you can download a set\'s questions with **Download CSV** in its editor, save each session\'s report, and save Activity with **Download CSV**.',
         },
       ],
     },

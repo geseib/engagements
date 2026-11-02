@@ -8,9 +8,13 @@
  * POST /games/[object%20Object]/start and alerted "Game not found", while the
  * row's own Start worked for the same session. The banner handed `onStart` the
  * whole session row; its contract is (gameId, title).
+ *
+ * SINCE EXPERIENCE PLAN 4c a create lands on the session's own Setup (not the
+ * Sessions list's "Created …" banner), with Start and Edit there. The same
+ * regression is held on that path: create, Edit and close it unchanged, Start
+ * from Setup, and the start names the session by its id.
  */
 import React from 'react';
-import { clickRowAction } from '../testUtils/sessionRows';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 
 jest.mock('../auth/AuthContext', () => ({
@@ -101,13 +105,13 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('Your sessions: the confirmation after Create', () => {
+describe('Setup after Create: Start starts the session it names', () => {
   // rejects: issue #48 finding 1 — "Start it now" after opening and closing the
   //          new row's Edit sent POST /games/[object Object]/start (404, "That
   //          session did not start: Game not found"); the banner passed the
   //          session row where the page's start expects the game id.
   jest.setTimeout(30000);
-  test('create with Ctrl+Enter, Edit and close it unchanged, then Start it now starts that session by its id', async () => {
+  test('create with Ctrl+Enter, Edit on its Setup and close it unchanged, then Start starts that session by its id', async () => {
     render(<GameHostPage />);
 
     // Create engagement → Call & Answer → a set → Ctrl+Enter.
@@ -123,21 +127,20 @@ describe('Your sessions: the confirmation after Create', () => {
       fireEvent.keyDown(screen.getByLabelText(/name it/i), { key: 'Enter', ctrlKey: true });
     });
 
-    // The confirmation, with its Start it now.
-    const done = await screen.findByTestId('shist-done', {}, { timeout: 5000 });
-    expect(done).toHaveTextContent(`Its code is ${GAME}`);
+    // It lands on its own Setup, not started, with its code.
+    const setup = await screen.findByTestId('setup-before-start', {}, { timeout: 5000 });
+    expect(setup).toHaveTextContent(`Code ${GAME}`);
+    expect(setup).toHaveTextContent(TITLE);
+    expect(startCalls()).toHaveLength(0);
 
-    // Open the new row's Edit, then close it without changes.
-    // Edit is under the row's ⋯ since the experience plan's 4a.
-    // Not inside one act(): the menu has to render before its item is pressed.
-    clickRowAction(within(done.closest('.shist')).getByText(TITLE).closest('tr'), /^Edit/);
-    await act(async () => {});
+    // Edit on Setup, then close it without changes: back to the same Setup.
+    await act(async () => { fireEvent.click(within(setup).getByRole('button', { name: /^Edit$/ })); });
     const cancel = await screen.findByRole('button', { name: 'Close without saving changes' }, { timeout: 5000 });
     await act(async () => { fireEvent.click(cancel); });
 
-    const again = await screen.findByTestId('shist-done', {}, { timeout: 5000 });
+    const again = await screen.findByTestId('setup-before-start', {}, { timeout: 5000 });
     await act(async () => {
-      fireEvent.click(within(again).getByRole('button', { name: /Start it now/ }));
+      fireEvent.click(within(again).getByRole('button', { name: /^Start/ }));
     });
 
     await waitFor(() => expect(startCalls()).toHaveLength(1));

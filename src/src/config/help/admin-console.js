@@ -295,7 +295,7 @@ const questionSets = {
           items: [
             { title: 'Active / Inactive', text: 'Only active sets are offered to hosts. Switching one off loses nothing.' },
             { title: 'A set with no topic', text: 'A set must have a topic to be switched on. Click **Inactive** on an unfiled set and the row asks for one, with a topic already suggested from its name and description. Change it if you like, then press **Save topic and switch on**, or **Cancel**.' },
-            { title: 'Quickstart', text: 'Puts the set on the Quick start menu of the host\'s start screen, for everyone in this space. Keep that menu short enough to fit on one screen.' },
+            { title: 'Quickstart', text: 'Makes the set the one Quick start in New engagement reaches for in its format, for everyone in this space, when a host has not used another lately.' },
           ],
         },
         {

@@ -29,6 +29,12 @@ import './SessionSetup.css';
  * says "Nothing yet" (D1). The main button is never here: Your part now owns
  * it (the page passes Setup's own control there for steps 1 and 2).
  *
+ * `before`: the session has not started (experience plan 4c: every created
+ * thing lands on its own Setup, with Start there). Step 1 is open or done as
+ * usual, so the host can choose where the room watches before Start; steps 2
+ * and 3 wait, saying "after Start", and the preview says nobody can join yet.
+ * The page draws this inside SetupBeforeStart, beside Start and Edit.
+ *
  * `mid`: Setup pressed in the strip mid-session. The same panel, with step 3
  * folded, so the screen the owner likes is the same screen at the start and
  * in the middle (D1 "Setup in the strip stays").
@@ -137,8 +143,8 @@ function Joins({ players, nowMs, firstUp, onRunningOrder }) {
   );
 }
 
-function Preview({ two, step, title, count, joinUrl, code, detail, nowMs }) {
-  const live = step === 'joins';
+function Preview({ two, step, title, count, joinUrl, code, detail, nowMs, before = false }) {
+  const live = step === 'joins' && !before;
   if (!two) {
     return (
       <aside className="hsetup-preview" aria-label={W.previewK}>
@@ -170,13 +176,13 @@ function Preview({ two, step, title, count, joinUrl, code, detail, nowMs }) {
           </div>
         ) : <div className="hsetup-qr is-blank" aria-hidden="true" />}
       </div>
-      <p className="hsetup-hint">{live ? W.lateJoin : (step === 'screen' ? W.previewOpens : W.nothingYet)}</p>
+      <p className="hsetup-hint">{live ? W.lateJoin : (before ? W.nothingBeforeStart : (step === 'screen' ? W.previewOpens : W.nothingYet))}</p>
     </aside>
   );
 }
 
 export default function SessionSetup({
-  step = 'where', choice = null, choosing = false, mid = false,
+  step = 'where', choice = null, choosing = false, mid = false, before = false,
   onChoose = () => {}, onChange = null, onKeep = null, onRecheck = null,
   presentHref = '', presentDetail = null, blocked = false,
   profile = 'room', onProfileChange = () => {},
@@ -194,6 +200,10 @@ export default function SessionSetup({
   const at = stepNumber(step);
   const stateOf = (id) => {
     const n = stepNumber(id);
+    if (before) {
+      if (id !== 'where') return 'later';
+      return choice && !choosing ? 'done' : 'now';
+    }
     if (mid && id === 'joins' && step === 'joins') return 'done';
     return n < at ? 'done' : n === at ? 'now' : 'later';
   };
@@ -205,7 +215,7 @@ export default function SessionSetup({
   const joins = stateOf('joins');
 
   return (
-    <section className={`hsetup${mid ? ' is-mid' : ''}`} aria-label={W.label} data-at={step} data-mode={two ? 'two' : (choice ? 'one' : 'unset')}>
+    <section className={`hsetup${mid ? ' is-mid' : ''}${before ? ' is-before' : ''}`} aria-label={W.label} data-at={before ? 'before' : step} data-mode={two ? 'two' : (choice ? 'one' : 'unset')}>
       <ol className="hsetup-steps">
         <li className={`hsetup-step is-${where}`} data-step="where" data-state={where}>
           <StepHead
@@ -240,7 +250,7 @@ export default function SessionSetup({
               ? (two ? W.windowDone : W.checkDone)
               : (choice === 'classic' ? W.checkOpen : W.windowOpen)}
             value={screen === 'done' ? (two ? status.short : W.checked) : ''}
-            note={screen === 'later' ? W.after(1) : (screen === 'done' && sizeName ? sizeName : '')}
+            note={screen === 'later' ? (before ? W.afterStart : W.after(1)) : (screen === 'done' && sizeName ? sizeName : '')}
             onChange={screen === 'done' && !two ? onRecheck : null}
           />
           {screen === 'now' && two ? (
@@ -272,7 +282,7 @@ export default function SessionSetup({
             state={joins}
             title={W.joins}
             value={joins === 'done' ? W.inRoom(players.length) : ''}
-            note={joins === 'later' ? (two ? W.codeHereTwo : (choice === 'classic' ? W.codeHereOne : W.codeHere)) : ''}
+            note={joins === 'later' ? (before ? W.afterStart : (two ? W.codeHereTwo : (choice === 'classic' ? W.codeHereOne : W.codeHere))) : ''}
           />
           {joins === 'now' ? (
             <div className="hsetup-body">
@@ -284,7 +294,7 @@ export default function SessionSetup({
 
       <div className="hsetup-side">
         {choice ? (
-          <Preview two={two} step={step} title={title} count={players.length} joinUrl={joinUrl} code={code} detail={presentDetail} nowMs={nowMs} />
+          <Preview before={before} two={two} step={step} title={title} count={players.length} joinUrl={joinUrl} code={code} detail={presentDetail} nowMs={nowMs} />
         ) : (
           <aside className="hsetup-preview" aria-label={W.previewKBefore}>
             <p className="hsetup-k">{W.previewKBefore}</p>
@@ -295,7 +305,7 @@ export default function SessionSetup({
               </div>
               <div className="hsetup-qr is-blank" aria-hidden="true" />
             </div>
-            <p className="hsetup-hint">{W.nothingYet}</p>
+            <p className="hsetup-hint">{before ? W.nothingBeforeStart : W.nothingYet}</p>
           </aside>
         )}
         {!two && choice === 'classic' && onUseTwo && !oneOnly && step !== 'joins' ? (

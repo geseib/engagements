@@ -26,7 +26,6 @@ const host = {
 
 function setup(props = {}) {
   const handlers = {
-    onQuickStart: jest.fn(),
     onCreateEngagement: jest.fn(),
     onQuestionSets: jest.fn(),
     onSignOut: jest.fn(),
@@ -95,10 +94,11 @@ describe('the five ways out of this screen', () => {
   // that renders and is wired to nothing. That is not hypothetical here — the
   // whole screen is being rebuilt from scratch, so every handler is a fresh
   // connection between a new element and an old page-level function.
-  test('Quick start raises onQuickStart', () => {
-    const { onQuickStart } = setup();
-    fireEvent.click(screen.getByRole('button', { name: /quick start/i }));
-    expect(onQuickStart).toHaveBeenCalledTimes(1);
+  // Quick start is no door of its own since experience plan 4c: it is the
+  // fast lane inside New engagement (newEngagementDialog.test.jsx).
+  test('there is no Quick start button any more: New engagement holds it', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: /^quick start$/i })).toBeNull();
   });
 
   test('New engagement raises onCreateEngagement', () => {
@@ -199,7 +199,6 @@ describe('continuing a session that is already running', () => {
       <WelcomeScreen
         currentUser={admin}
         continueGameId="1234"
-        onQuickStart={jest.fn()}
         onCreateEngagement={jest.fn()}
         onViewHistory={jest.fn()}
         onSignOut={jest.fn()}
@@ -309,13 +308,22 @@ describe('Home: New, Rejoin, recent sessions, events and See all (experience pla
     onInvite: jest.fn(), onCopyPlayerUrl: jest.fn(), onDelete: jest.fn(() => Promise.resolve()),
   });
 
-  test('New is one button: the one amber action, with Quick start and the Build Room beneath it', () => {
+  /* ONE NEW DOOR (experience plan 4c; audit E N1): Quick start, the Build
+     Room and New event were three more doors here, each landing somewhere
+     different. All three live inside New engagement now. */
+  test('Home has one New button: New engagement, and no Quick start, Build Room or New event door', () => {
     const { container } = setup({ sessions: rows });
     expect(container.querySelectorAll('.wel-action.is-primary')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: /new engagement/i })).toHaveClass('is-primary');
-    // Kept reachable until New folds them in (4c); neither is a second amber.
-    expect(screen.getByRole('button', { name: /quick start/i })).not.toHaveClass('is-primary');
-    expect(screen.getByRole('link', { name: /build room/i })).toHaveAttribute('href', '/build');
+    const newButton = screen.getByRole('button', { name: /new engagement/i });
+    expect(newButton).toHaveClass('is-primary');
+    expect(newButton).toHaveTextContent(/Quick start is inside/);
+    expect(screen.queryByRole('button', { name: /^quick start$/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /build room/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /new event/i })).toBeNull();
+    expect(container.querySelector('a[href="/build"]')).toBeNull();
+    // Every button whose name starts a new thing: exactly one.
+    const doors = screen.getAllByRole('button').filter((b) => /^(new|quick start|create)\b/i.test(b.textContent.trim()));
+    expect(doors).toHaveLength(1);
   });
 
   test('Rejoin lists the host\'s own running sessions, and Rejoin continues one', () => {

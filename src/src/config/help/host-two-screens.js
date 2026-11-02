@@ -143,7 +143,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen; Quick start shows **Where the room watches** above the sets when a set that can use two screens is listed; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
+            { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen, and a new session\'s Setup asks it before Start; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
             { title: 'Changing your mind', text: 'Switch between **One screen** and **Two screens** in the Screens section. It applies at once, to this laptop and the room\'s window; the round carries on.' },
             { title: 'When to stay on one screen', text: 'If the room sees this laptop itself (a mirrored display, or the laptop is all there is), keep one screen: the room would otherwise see your console.' },
           ],

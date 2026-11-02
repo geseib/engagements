@@ -12,7 +12,7 @@ import {
   focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus, roundOfState,
 } from './config/stageFocus';
 import RW from './config/roundWords';
-import QuickstartMenu from './components/QuickstartMenu';
+import SetupBeforeStart from './components/SetupBeforeStart';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import HostReportsDialog from './components/HostReportsDialog';
@@ -30,6 +30,7 @@ import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
 import { readSessionIntent, inviteTargetFor } from './config/sessionRows';
+import { startRow, startLabelFor } from './config/hostSessionActions';
 import { deleteSessionRow } from './utils/sessionRowsApi';
 import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
@@ -109,7 +110,7 @@ import useSurveyProgress, {
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
 import { requestHostTicket } from './utils/hostTicketClient';
-import { BUILD_GAME_TYPE, buildRoomPath } from './buildroom/buildHostApi';
+import { BUILD_GAME_TYPE, buildRoomPath, createBuildRoom } from './buildroom/buildHostApi';
 import { readStartRefusal } from './utils/startRefusal';
 import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
@@ -168,7 +169,7 @@ import {
 import { readEventsAccess } from './utils/eventsAccess';
 import useActiveOrgs from './hooks/useActiveOrgs';
 import { recentUses } from './config/setFinder';
-import EventDetailsDialog from './components/EventDetailsDialog';
+import { createEvent } from './utils/eventsApi';
 import {
   hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
   expiredItemPath, goneSessionNotice,
@@ -816,7 +817,7 @@ function GameHostPage() {
 
     IT LIVES UP HERE BECAUSE IT IS A HOOK, and that is not a style preference.
     It was declared beside `answerPage`, ~1000 lines down and BELOW five early
-    returns (showQuickstartMenu, showWelcomeScreen, showReport, showReportsModal,
+    returns (then showQuickstartMenu, showWelcomeScreen, showReport, showReportsModal,
     showNewGameDialog). On the Quick Start menu the component returned at the
     first of those and this `useState` never ran; picking a lesson cleared the
     flag, the render carried past it, and React counted one more hook than the
@@ -1211,7 +1212,17 @@ function GameHostPage() {
     keeps the Create button honestly disabled until a deliberate pick is made,
     instead of enabled on a leftover.
   */
-  const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
+  /*
+    WHERE A CREATED SESSION LANDS (experience plan 4c; the owner's decision
+    7): its own Setup, not started, with Start there and Edit beside it.
+    `{ gameId, title, gameType, setId, setScope }` or null. Navigation state
+    like the flags beside it; the session itself is on the server. Quick
+    start's own menu (and its showQuickstartMenu flag) went with 4c: Quick
+    start is a lane inside New engagement and lands here too.
+  */
+  const [createdSetup, setCreatedSetup] = useState(null);
+  const [setupNotice, setSetupNotice] = useState('');
+  const [setupStarting, setSetupStarting] = useState(false);
   /*
     THE HOST'S SET SHELF, REACHED WITHOUT STARTING A SESSION.
 
@@ -1226,30 +1237,42 @@ function GameHostPage() {
   const [createRefusal, setCreateRefusal] = useState(null);
   const [eventTitle, setEventTitle] = useState('');
   /*
-    EVENT AND BUILD ROOM FROM THE CREATE SCREEN (2026-10-04). The create
-    dialog offers both as formats and hands each to its own setup screen:
-    a Build Room to /build (title carried over), an event to the new-event
-    dialog — the one WelcomeEvents and the console use — and from there to
-    its agenda. `eventsAccess` decides whether Event is offered at all (the
+    EVENT AND BUILD ROOM FROM THE CREATE SCREEN (2026-10-04; experience plan
+    4c). The create dialog offers both as formats and, since 4c, carries their
+    fields: the Build Room's four in its Optional section, an event's day.
+    Create makes the thing here and lands it on its own page: a Build Room on
+    its room page's setup, an event on its agenda. No second form, no second
+    dialog. `eventsAccess` decides whether Event is offered at all (the
     tier's switch, and the plan); read once, when the create screen first
-    opens. `newEventTitle` non-null shows the new-event dialog. Navigation
-    state, like the flags above: nothing here survives into a session.
+    opens.
   */
   const [eventsAccess, setEventsAccess] = useState(null);
-  const [newEventTitle, setNewEventTitle] = useState(null);
   useEffect(() => {
     if (!showNewGameDialog || eventsAccess) return undefined;
     let live = true;
     readEventsAccess().then((access) => { if (live) setEventsAccess(access); });
     return () => { live = false; };
   }, [showNewGameDialog, eventsAccess]);
-  const handleChooseOther = (kind, { title = '' } = {}) => {
-    if (kind === BUILD_KIND) {
-      navigateTo(title ? `/build?title=${encodeURIComponent(title)}` : '/build');
-      return;
+  const handleChooseOther = async (kind, { title = '', fields = {} } = {}) => {
+    if (creatingSessionRef.current) return;
+    creatingSessionRef.current = true;
+    setCreatingSession(true);
+    setCreateRefusal(null);
+    try {
+      if (kind === BUILD_KIND) {
+        const newId = await createBuildRoom({ ...fields, title });
+        navigateTo(buildRoomPath(newId));
+        return;
+      }
+      const event = await createEvent(fields);
+      navigateTo(eventAgendaPath(event.code));
+    } catch (err) {
+      // Said in the dialog the host is looking at, never alert().
+      setCreateRefusal({ message: (err && err.message) || 'it was not created' });
+    } finally {
+      creatingSessionRef.current = false;
+      setCreatingSession(false);
     }
-    setShowNewGameDialog(false);
-    setNewEventTitle(title);
   };
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
@@ -6030,29 +6053,40 @@ Focus on actionable business strategy insights.`;
     if (pending) pending.go(presentHref(id));
   };
 
-  /**
-   * CREATE → OPEN → THE COLLECTING STAGE, for a survey (IMPLEMENTATION-phase-2.md
-   * §5 risk 5). The dialog's button said "Open the survey", so the create is
-   * followed straight by the start, the way QuickstartMenu creates-and-starts;
-   * there is no history modal and no lobby to fill first, matching
-   * s-01-collecting, which draws none.
-   *
-   * If the start is refused the survey still EXISTS, unopened — so the host is
-   * shown it in history, where its Start button is, rather than left on a
-   * blank screen, with the server's reason on the list (never an alert()).
-   */
-  const openNewSurvey = async (newGameId, form) => {
-    const opened = await startSession(newGameId, form.title, {
-      currentGameType: 'survey',
-      selectedSetId: form.setId,
-    });
-    if (opened.ok) return;
-    setHistoryNotice(`The survey was created but did not open: ${opened.error}`);
-    await fetchGamesList();
-    setReportsModalMode('select');
-    setShowReportsModal(true);
+  /*
+    START, FROM A NEW SESSION'S SETUP (experience plan 4c). The same start as
+    a list row's (startSession, the one caller of POST /start): two screens
+    opens the room's window inside the press (startRow, in the component's
+    click) and sends it on once the session has started; a survey's start IS
+    its open. Refused, the host stays on Setup and reads the server's reason
+    there. Started, the live frame opens at Setup's next step (2b).
+  */
+  const startFromSetup = async (opts = {}) => {
+    const target = createdSetup;
+    if (!target || setupStarting) return;
+    const pending = (opts && opts.pending) || null;
+    setSetupNotice('');
+    setSetupStarting(true);
+    const survey = isSurveyType(target.gameType);
+    const started = await startSession(target.gameId, target.title, survey
+      ? { currentGameType: 'survey', selectedSetId: target.setId }
+      : {});
+    setSetupStarting(false);
+    if (!started.ok) {
+      if (pending) pending.cancel();
+      setSetupNotice(`${survey ? 'It did not open' : 'It did not start'}: ${started.error}`);
+      return;
+    }
+    setWindowBlockedFor(opts && opts.blocked ? target.gameId : null);
+    if (pending) pending.go(presentHref(target.gameId));
+    setCreatedSetup(null);
   };
-  
+  const leaveSetup = () => {
+    setCreatedSetup(null);
+    setSetupNotice('');
+    setShowWelcomeScreen(true);
+  };
+
   /*
     EDIT A SESSION BEFORE IT STARTS, from the history list. Prefill comes from
     the server, not from the row: the list rows carry no details/aiContext/
@@ -6136,6 +6170,8 @@ Focus on actionable business strategy insights.`;
       // title in step rather than showing the old name until the next load.
       if (targetId === gameId) setEventTitle(form.title);
       if (targetId === gameId && 'target' in form) setSessionTarget(Number.isInteger(form.target) ? form.target : null);
+      // Edited from its Setup (4c): the Setup the host goes back to says the new name.
+      setCreatedSetup((prev) => (prev && prev.gameId === String(targetId) ? { ...prev, title: form.title } : prev));
       localStorage.setItem(`game_${targetId}_title`, form.title);
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
@@ -6251,22 +6287,22 @@ Focus on actionable business strategy insights.`;
         localStorage.setItem(`game_${newGameId}_title`, form.title);
 
         /*
-          THE DIALOG CLOSES LAST. It used to close here, before the awaits
-          below, and the empty host stage showed until the session list (or
-          the survey) was ready — the owner's second flash, "after you have
-          created it and before it brings up the list of sessions". The list's
-          branch returns ahead of the dialog's, so opening it first and closing
-          the dialog after is safe in either order React commits them.
+          EVERY CREATED SESSION LANDS ON ITS OWN SETUP (experience plan 4c;
+          the owner's decision 7). A round type used to land in the Sessions
+          list ("Created … press Start"), a survey opened and went live at
+          once, and Quick start went live at once: three landings. Now all of
+          them land on Setup, not started, with Start (Open the survey) and
+          Edit there. The Setup branch returns ahead of the dialog's, so the
+          host never sees the empty stage between the two.
         */
-        if (isSurveyType(form.gameType)) {
-          await openNewSurvey(newGameId, form);
-        } else {
-          // Show game history with the new game highlighted
-          await fetchGamesList();
-          setReportsModalMode('select');
-          setShowReportsModal(true);
-          setHistoryDone({ gameId: newGameId, title: form.title, verb: 'created' });
-        }
+        setSetupNotice('');
+        setCreatedSetup({
+          gameId: String(newGameId),
+          title: form.title,
+          gameType: form.gameType,
+          setId: form.setId,
+          setScope: form.setScope || '',
+        });
         setShowNewGameDialog(false);
 
         console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
@@ -6496,7 +6532,7 @@ Focus on actionable business strategy insights.`;
    * — so the list was a menu with the answer already on it.
    *
    * The list is not gone; it moved to where it is actually a choice. From
-   * inside the report, `All session reports` reaches it (see
+   * inside the report, `Your sessions` reaches it (see
    * handleBrowseReportHistory), and it is still the fallback here for the one
    * case where the question is real: no session loaded, so there is no "this
    * one" to open.
@@ -6823,7 +6859,7 @@ Focus on actionable business strategy insights.`;
    */
   useEffect(() => {
     if (!autoMode) return undefined;
-    if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
+    if (createdSetup || showWelcomeScreen || showNewGameDialog
         || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
@@ -6923,7 +6959,7 @@ Focus on actionable business strategy insights.`;
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
-    playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
+    playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
@@ -7000,7 +7036,7 @@ Focus on actionable business strategy insights.`;
     // session?" is reachable with the session menu closed, and is a dialog
     // exactly like the others in this list, not an overlay term
     // `shortcutsSuppressed` already tracks.
-    enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
+    enabled: scoreboardKeysOn && !createdSetup && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
       && !editTarget && !confirmLeave && Boolean(gameId),
     open: scoreboard.open,
@@ -7041,7 +7077,7 @@ Focus on actionable business strategy insights.`;
     // ...and never over a surface that replaced the stage — the same list
     // `useScoreboardKeys`'s own `enabled` carries above, `confirmLeave`
     // included.
-    enabled: sessionPanelKeyOn && !showQuickstartMenu && !showWelcomeScreen
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
       && !editTarget && !confirmLeave && Boolean(gameId),
     onOpen: () => setSetupPanelOpen(true),
@@ -7123,31 +7159,6 @@ Focus on actionable business strategy insights.`;
       hostActionFailed('Another minute was not added: no connection.');
     }
   }, [gameId, takeHostTime, hostActionFailed]);
-
-  // Render the quickstart menu if it's being shown
-  if (showQuickstartMenu) {
-    return (
-      <QuickstartMenu
-        onGameCreated={(gameData) => {
-          setShowQuickstartMenu(false);
-          // switchToGame clears every per-game value in the same React batch as
-          // the new gameId, so the quickstart game can never be drawn over the
-          // previous session's question/phase/answers. The [gameId] effect then
-          // restores the new game from the server onto a clean slate.
-          switchToGame(gameData.gameId, {
-            eventTitle: gameData.eventTitle,
-            currentGameType: gameData.gameType || 'call-and-answer',
-            selectedSetId: gameData.questionSetId || '',
-          });
-        }}
-        onClose={() => setShowQuickstartMenu(false)}
-        // The empty menu's way to the sets (#43): Your question sets opens over the start screen.
-        onQuestionSets={() => { setShowQuickstartMenu(false); setShowHostSets(true); }}
-        roomScreen={roomScreenChoice}
-        onRoomScreen={chooseRoomScreen}
-      />
-    );
-  }
 
   // Render the report if it's being shown.
   //
@@ -7259,6 +7270,50 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  /*
+    A NEW SESSION'S SETUP, BEFORE START (experience plan 4c). AFTER the edit
+    branch, because Edit is pressed from here and closing the edit dialog
+    falls back to this; before Home, the list and the create dialog, so the
+    host lands here the moment Create returns.
+  */
+  if (createdSetup) {
+    const setupKind = normalizeGameType(createdSetup.gameType);
+    const setupRow = { gameId: createdSetup.gameId, gameType: createdSetup.gameType, started: false };
+    const setupSet = questionSets.find((qs) => qs.id === createdSetup.setId
+      && (!createdSetup.setScope || !qs.scope || qs.scope === createdSetup.setScope));
+    const beforeOneOnly = oneScreenWhy(setupKind);
+    return (
+      <>
+        <SetupBeforeStart
+          title={createdSetup.title}
+          code={createdSetup.gameId}
+          formatLabel={gameTypeLabel(createdSetup.gameType)}
+          setName={setupSet ? setupSet.name : ''}
+          survey={isSurveyType(createdSetup.gameType)}
+          steps={SETUP_TYPES.includes(setupKind)}
+          startLabel={isSurveyType(createdSetup.gameType) ? 'Open the survey' : startLabelFor(roomScreenChoice)(setupRow)}
+          onStart={() => startRow(setupRow, createdSetup.title, { onStart: (_id, _t, opts) => startFromSetup(opts), roomScreen: beforeOneOnly ? 'classic' : roomScreenChoice })}
+          onEdit={() => editGameFromHistory(createdSetup.gameId)}
+          onInvite={() => setInviteTarget(inviteTargetFor({ ...setupRow, title: createdSetup.title, questionSetId: createdSetup.setId }, questionSets))}
+          onMainMenu={leaveSetup}
+          busy={setupStarting}
+          notice={setupNotice}
+          choice={beforeOneOnly ? 'classic' : roomScreenChoice}
+          choosing={beforeOneOnly ? false : roomScreenOpen}
+          oneOnly={beforeOneOnly}
+          onChoose={(choice) => { setRoomScreenOpen(false); chooseRoomScreen(choice); }}
+          onChange={beforeOneOnly ? null : () => setRoomScreenOpen(true)}
+          onKeep={() => setRoomScreenOpen(false)}
+          presentHref={presentHref(createdSetup.gameId)}
+          profile={profile}
+          onProfileChange={setProfile}
+        />
+        {/* This branch is an early return, so Invite is mounted here too. */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+      </>
+    );
+  }
+
   // Render the welcome screen if no game is selected.
   //
   // AFTER the report, survey results and edit branches (experience plan 4b):
@@ -7281,7 +7336,6 @@ Focus on actionable business strategy insights.`;
           continueGameId={continueGameId}
           onContinueGameIdChange={setContinueGameId}
           onContinue={handleContinueGame}
-          onQuickStart={() => setShowQuickstartMenu(true)}
           onCreateEngagement={handleWelcomeNewGame}
           onQuestionSets={() => setShowHostSets(true)}
           onReports={() => setShowHostReports(true)}
@@ -7398,19 +7452,6 @@ Focus on actionable business strategy insights.`;
   // the form and nothing else, and hands back one payload — including the
   // selected category ids, which is what freed handleStartNewGame from reading
   // them out of a closure leaveCurrentGame() had already invalidated.
-  // THE NEW-EVENT DIALOG, reached from the create screen's Event format: the
-  // same dialog as everywhere else, then the event's agenda. Closing it goes
-  // back to the create screen the host came from.
-  if (newEventTitle !== null) {
-    return (
-      <EventDetailsDialog
-        initial={{ title: newEventTitle }}
-        onClose={() => { setNewEventTitle(null); setShowNewGameDialog(true); }}
-        onSaved={(event) => { setNewEventTitle(null); navigateTo(eventAgendaPath(event.code)); }}
-      />
-    );
-  }
-
   if (showNewGameDialog) {
     return (
       <GameSetupDialog

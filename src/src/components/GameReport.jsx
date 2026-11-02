@@ -290,7 +290,7 @@ function GameReport({
         <div className="report-tool-group">
           {onBrowseAll && (
             <button type="button" className="report-tool" onClick={onBrowseAll}>
-              <Icon name="ClockCounterClockwise" weight="bold" size={16} /> All session reports
+              <Icon name="ClockCounterClockwise" weight="bold" size={16} /> Your sessions
             </button>
           )}
           <button
@@ -346,7 +346,7 @@ function GameReport({
             )}
             {onBrowseAll && (
               <button type="button" className="report-tool" onClick={onBrowseAll}>
-                All session reports
+                Your sessions
               </button>
             )}
             <button type="button" className="report-tool" onClick={onClose}>

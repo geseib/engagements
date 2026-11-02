@@ -137,7 +137,8 @@ describe('the wiring — source contracts on what jsdom cannot mount', () => {
     const effect = host.slice(host.indexOf('if (!autoMode) return undefined'));
     expect(effect).toMatch(/shortcutsSuppressed\(\{/);
     expect(effect.indexOf('shortcutsSuppressed')).toBeLessThan(effect.indexOf('autoDecision('));
-    expect(effect).toMatch(/showQuickstartMenu \|\| showWelcomeScreen \|\| showNewGameDialog/);
+    // createdSetup (a new session's Setup, 4c) took Quick start's menu's place.
+    expect(effect).toMatch(/createdSetup \|\| showWelcomeScreen \|\| showNewGameDialog/);
   });
 
   // rejects: state with no switch — a feature only reachable from devtools.

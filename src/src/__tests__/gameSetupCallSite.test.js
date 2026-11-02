@@ -24,7 +24,7 @@ function stripComments(text) {
 }
 
 const host = stripComments(fs.readFileSync(src('GameHostPage.jsx'), 'utf8'));
-const quickstart = stripComments(fs.readFileSync(src('components', 'QuickstartMenu.jsx'), 'utf8'));
+const dialog = stripComments(fs.readFileSync(src('components', 'GameSetupDialog.jsx'), 'utf8'));
 
 describe('GameHostPage actually uses the extracted dialog', () => {
   // rejects: the whole extraction shipping as dead code — a new component file
@@ -110,8 +110,9 @@ describe('the trivia timer is gone, not hidden', () => {
     expect(host).not.toMatch(/triviaTimer/i);
   });
 
-  test('Quickstart sends it no longer', () => {
-    expect(quickstart).not.toMatch(/triviaTimer/i);
+  // Quick start is a lane inside the dialog since experience plan 4c.
+  test('Quick start (the dialog\'s lane) sends it no longer', () => {
+    expect(dialog).not.toMatch(/triviaTimer/i);
   });
 });
 
@@ -176,46 +177,48 @@ describe('the host page carries the set\'s scope, not just its id', () => {
 });
 
 /**
- * A SURVEY IS CREATED AND OPENED IN ONE PRESS (IMPLEMENTATION-phase-2.md §5
- * risk 5). The dialog's button says "Open the survey", so the create call is
- * followed by POST /start and the host lands on the collecting stage — the
- * QuickstartMenu precedent. Every other type still goes create → history →
- * Start, because a lobby that fills before the first round is their design;
- * a survey has no lobby worth waiting in (s-01-collecting draws none).
+ * EVERY CREATED SESSION LANDS ON ITS OWN SETUP (experience plan 4c; the
+ * owner's decision 7). A survey used to be created AND opened in one press,
+ * and every other type went create → history list → Start. Now every type,
+ * survey included, lands on Setup (SetupBeforeStart), not started, with Start
+ * (Open the survey) and Edit there; Start goes through the one start helper.
  */
-describe('a survey create opens the survey, with no history modal in between', () => {
+describe('a create lands on Setup, and Setup starts through the one helper', () => {
   const bodyOf = (name) => {
     const start = host.indexOf(`const ${name} = async`);
     expect(start).toBeGreaterThan(-1);
     return host.slice(start, host.indexOf('\n  };', start));
   };
 
-  test('handleStartNewGame sends a survey down its own path', () => {
+  test('handleStartNewGame lands every type on Setup, never the list and never a start', () => {
     const body = bodyOf('handleStartNewGame');
-    const branch = body.match(/if \(isSurveyType\(form\.gameType\)\) \{([\s\S]*?)\} else \{([\s\S]*?)\n {8}\}/);
-    expect(branch).not.toBeNull();
-    const [, surveyPath, otherPath] = branch;
-    expect(surveyPath).toMatch(/openNewSurvey\(newGameId, form\)/);
-    // rejects: the survey path falling through to the history modal.
-    expect(surveyPath).not.toMatch(/setShowReportsModal\(true\)/);
-    expect(otherPath).toMatch(/setShowReportsModal\(true\)/);
+    expect(body).toMatch(/setCreatedSetup\(\{\s*gameId: String\(newGameId\)/);
+    // rejects: a format sent back to the history list, or opened at once.
+    expect(body).not.toMatch(/setShowReportsModal\(true\)/);
+    expect(body).not.toMatch(/startSession\(/);
+    expect(body).not.toMatch(/isSurveyType\(form\.gameType\)/);
   });
 
-  test('opening posts /start through the one start helper, then goes to the stage', () => {
-    const open = bodyOf('openNewSurvey');
-    const starts = open.indexOf('startSession(');
-    expect(starts).toBeGreaterThan(-1);
-    // The history modal is only the fallback for a start that failed.
-    const fallback = open.indexOf('setShowReportsModal(true)');
-    expect(fallback === -1 || fallback > starts).toBe(true);
-    // startSession resolves {ok, error} (the refusal in the server's words,
-    // utils/startRefusal.js), so success is `opened.ok`, not a bare boolean.
-    expect(open).toMatch(/if \(opened\.ok\) return;/);
+  test('Setup renders before Home and after the edit dialog, so Edit falls back to it', () => {
+    const edit = host.indexOf('if (editTarget) {');
+    const setup = host.indexOf('if (createdSetup) {');
+    const home = host.indexOf('if (showWelcomeScreen) {');
+    expect(edit).toBeGreaterThan(-1);
+    expect(setup).toBeGreaterThan(edit);
+    expect(home).toBeGreaterThan(setup);
+    expect(host).toMatch(/<SetupBeforeStart[\s\S]{0,1200}onEdit=\{\(\) => editGameFromHistory\(createdSetup\.gameId\)\}/);
+  });
 
-    const start = bodyOf('startSession');
-    expect(start).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{\w+\}\/start`/);
-    expect(start).toMatch(/method: 'POST'/);
-    expect(start).toMatch(/switchToGame\(/);
+  test('Start from Setup posts /start through the one start helper; a survey opens with its type', () => {
+    const start = bodyOf('startFromSetup');
+    expect(start).toMatch(/startSession\(target\.gameId/);
+    expect(start).toMatch(/currentGameType: 'survey'/);
+    // Refused: the host stays on Setup and reads why there.
+    expect(start).toMatch(/setSetupNotice\(/);
+    const helper = bodyOf('startSession');
+    expect(helper).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{\w+\}\/start`/);
+    expect(helper).toMatch(/method: 'POST'/);
+    expect(helper).toMatch(/switchToGame\(/);
   });
 
   test('history\'s own Start still uses the same helper — one caller of /start', () => {

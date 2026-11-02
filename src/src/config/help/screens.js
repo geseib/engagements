@@ -30,7 +30,8 @@ export const HELP_FOR_SCREEN = {
   /* ---- host: setting up ---- */
   'host-create': { guide: 'host-game-setup', section: 'create-engagement' },    // GameSetupDialog head
   'host-create-advanced': { guide: 'host-game-setup', section: 'advanced' },     // SessionOptions (the Advanced fold, also in EventItemDialog)
-  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // QuickstartMenu header
+  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // GameSetupDialog's Quick start lane
+  'host-before-start': { guide: 'host-quick-start', section: 'step-2-start' },   // SetupBeforeStart (where a created session lands)
   'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' }, // HostQuestionSetsDialog header
   'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },       // SessionHistoryPanel header
   'host-reports': { guide: 'host-reporting', section: 'saving-report' },         // HostReportsDialog header; AdminPage Reports

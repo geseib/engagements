@@ -174,9 +174,10 @@ describe('two screens covers the Build Room (item 3)', () => {
     const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     // The Remote's PRESENT has no wall key: it refuses a Build Room itself.
     expect(read('HostRemote.jsx')).toMatch(/gameType !== 'build' && twoSurfacesHere\(gameType\) \?/);
-    // Quick start lists no Build Room sets, so its "where the room watches" never asks for one.
-    const quick = read('components/QuickstartMenu.jsx');
-    expect(quick).not.toMatch(/'build': \[\]/);
+    // Quick start (New engagement's lane since 4c) never picks a Build Room
+    // or an event: both need their own setup.
+    const quick = read('config/quickStart.js');
+    expect(quick).toMatch(/if \(chosen && !isHandoff\(chosen\) && offered\.includes\(chosen\)\) return chosen;/);
     // The round types' panel and Setup are GameHostPage's; a Build Room session never reaches it.
     expect(read('App.jsx')).toMatch(/if \(\/\^\\\/build\\\/\?\$\/\.test\(path\)\)/);
     // The lobby chooser (Setup's step 1) is the console types' own (Call &

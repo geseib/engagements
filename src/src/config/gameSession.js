@@ -21,7 +21,7 @@
  * this list, so "I forgot to reset it" cannot ship quietly.
  *
  * NOT included, deliberately:
- *   - navigation/modal flags (showWelcomeScreen, showQuickstartMenu,
+ *   - navigation/modal flags (showWelcomeScreen, createdSetup,
  *     showNewGameDialog, showReportsModal, showSetsDialog) — the caller drives
  *     those, and resetting them here would fight the caller.
  *   - the create dialog's own inputs — they are the form, not the game, and
@@ -44,7 +44,10 @@
  *     whether the window is a phone's), and round 4's (31 Oct 2026):
  *     revealLatch (a set has been picked in this dialog, so the names card
  *     and options show), foldOpen (the phone's "How it runs" fold) and
- *     animate (a section's one-off entrance, in the dialog's Reveal).
+ *     animate (a section's one-off entrance, in the dialog's Reveal), and
+ *     experience plan 4c's (2 Nov 2026): buildFields and buildFoldOpen (the
+ *     Build Room's four setup fields and their fold) and eventFields (an
+ *     event's day, place and reports default).
  *     All of it is the form's furniture and dies with the dialog.
  *     (This list named five and omitted three until the
  *     extraction. `localTitle` is the edit-mode title — an edit targets a

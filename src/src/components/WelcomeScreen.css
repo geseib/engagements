@@ -430,21 +430,11 @@
 .wel-btn-line:hover { border-color: var(--muted); background: var(--surface); }
 
 /* ------------------------------------------------------------- Home (4b) --
-   Home's other three blocks (experience plan 4b): Quick start and the Build
-   Room one press under New, Rejoin's live sessions, the recent sessions and
-   the library strip. Every rule and rhythm is the events block's below, so
-   the page reads as one column of sections with one hairline between each. */
-
-/* Quick start and the Build Room until New folds them in (4c): outlined, on
-   one line under the one amber button, never a second amber. */
-.wel-also {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-}
-.wel-also .wel-btn-line { text-decoration: none; }
+   Home's other three blocks (experience plan 4b): Rejoin's live sessions,
+   the recent sessions and the library strip. Every rule and rhythm is the
+   events block's below, so the page reads as one column of sections with
+   one hairline between each. (Quick start and the Build Room's outlined
+   buttons under New went in 4c: both are inside New engagement now.) */
 
 .wel-live { list-style: none; margin: 12px 0 0; padding: 0; }
 .wel-live-row {

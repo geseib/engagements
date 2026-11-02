@@ -96,6 +96,10 @@ export const SETUP_WORDS = Object.freeze({
   openWindow: 'Open the room\'s window ↗',
   showCode: 'Show the join code',
   afterSetup: (start) => `${start} · after setup`,
+  // BEFORE START (experience plan 4c): a session just created lands on its
+  // Setup, not started. Step 1 can be chosen now; 2 and 3 wait for Start.
+  afterStart: 'after Start',
+  nothingBeforeStart: 'Nothing yet. Nobody can join until you start it.',
 });
 
 /** True when the app can see the room's window up (any state but closed). */
