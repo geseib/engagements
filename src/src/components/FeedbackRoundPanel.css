@@ -1,45 +1,41 @@
 /* skin-allowance: colour=3 font=0 primary=0 */
 /*
- * THE PARTICIPANT'S FEEDBACK ROUND — the shell and the composer.
+ * THE PARTICIPANT'S COMMENTS PANEL — the page, its three sections, and the
+ * docked compose sheet (docs/design/phone-comments D1–D10, experience plan 3b).
  *
- * The round artifact inside this is `RoundReport`, which brings its own rules
- * (`past-round__*` in `styles.css`, comment blocks in `RoundReport.css`).
- * Nothing here restyles it: the host's dialog and this surface draw the same
- * markup on purpose, and a sheet that reached in to change it is how the two
- * would drift.
+ * The phone layout of the round (RoundReportSections.jsx) draws only inside
+ * this panel, so its rules live here under `.fbr` / `.fbr-*`. The host's
+ * past-round dialog keeps RoundReport's own layout and stylesheet
+ * (`past-round__*` in styles.css, `.rr-c` in RoundReport.css), untouched.
  *
  * Everything below is namespaced `.fbr` — a scope no other stylesheet declares.
  *
  * ── THEME ──────────────────────────────────────────────────────────────────
  *
  * No `data-theme` declared. This renders inside `PlayerSurface.css`'s dusk
- * shell, which has already chosen; a second declaration would either fight it
- * or need a re-tint block for a polarity this surface has never had.
+ * shell, which has already chosen.
  *
- * ── CONTRAST, MEASURED ─────────────────────────────────────────────────────
+ * ── CONTRAST, MEASURED (composited; the phone has no black-lift) ──────────
  *
- * Composited up the real stack. The player shell paints `--surface` (#1B2942);
- * the composer sits on a 6% white wash of it, #22304A, and the text box on a
- * 10% wash, #293852.
+ *   --text     #F4EDE4 on --surface #1B2942              12.5:1  card text
+ *   --muted    #9BA8BE on --surface                       6.4:1  meta lines
+ *   --text     on the Workie wash (info at 10% / surface) 10.5:1
+ *   --muted    on the Workie wash                         5.4:1
+ *   --text     on the sheet (6% white over --surface)    11.9:1
+ *   --muted    on the sheet                               5.5:1
+ *   --text     in the box (10% white over --surface)     10.5:1
+ *   --text     on the green wash (sent)                  10.1:1
+ *   --bg       on --accent (Post)                         8.9:1
+ *   control outline (--glow at 45%) on --surface          3.7:1  (WCAG 1.4.11)
  *
- *   --text     #F4EDE4 on #22304A   11.9:1   the lead line
- *   --muted    #9BA8BE on #22304A    5.5:1   the character count, the excerpt
- *   --text     #F4EDE4 on #293852   10.5:1   what is being typed
- *   --primary  #F6A94C on #22304A    7.6:1   "Commenting on"
- *   --danger-text #EF8C86 on #22304A 5.6:1   a send that failed
- *   #1B2942 on #F6A94C               8.4:1   the filled Post button
+ * `feedbackRoundPalette.test.js` recomputes every one of these per skin.
  *
- * `--danger-text`, never `--danger`: #E5645E is 4.38:1 on `--surface` and under
- * AA for copy. This is precisely the text somebody has to read carefully — it
- * is standing between them and the words they just wrote.
+ * ── TYPE: THE PHONE LADDER ─────────────────────────────────────────────────
  *
- * ── TYPE ───────────────────────────────────────────────────────────────────
- *
- * Read on a phone at arm's length: the laptop ladder (12/13/15/19/24/30), floor
- * 12px, and the INPUT renders at body (15px). A 13px input is how a surface
- * ends up illegible exactly where a mistake costs the most — and on iOS a font
- * size under 16px in a focused input makes the page zoom, so 15px is already
- * the floor a phone tolerates before it starts moving the layout under a thumb.
+ * Read on a phone at arm's length. Floor 13px (PlayerSurface.css's floor,
+ * above the house 12px), body 16, section heads 19, the page title 24. The
+ * BOX is 19px, the phone's input size: under 16px iOS zooms the page on
+ * focus. Every control is a 44px thumb target.
  */
 
 .fbr {
@@ -48,27 +44,47 @@
   --fbr-accent: var(--accent);
   --fbr-error: var(--danger-text);
   --fbr-ink: var(--bg);
+  --fbr-card: var(--surface);
   --fbr-wash: rgba(255, 255, 255, 0.06);
   --fbr-well: rgba(255, 255, 255, 0.10);
   --fbr-rule: rgba(255, 255, 255, 0.14);
-  /* --bg at 55%. A scoped local rather than a literal at the use site: the
-     design rule allows a raw colour only inside a scope's own token block. */
+  /* An outlined control's edge: 3.7:1 on --surface (WCAG 1.4.11). */
+  --fbr-edge: rgb(var(--glow-rgb) / 0.45);
+  --fbr-workie: var(--info);
+  --fbr-workie-wash: rgb(var(--info-rgb) / 0.10);
+  --fbr-mine-wash: rgb(var(--accent-rgb) / 0.10);
+  --fbr-ok: rgb(var(--success-rgb) / 0.55);
+  --fbr-ok-wash: rgb(var(--success-rgb) / 0.14);
+  /* --bg at 55%. A scoped local rather than a literal at the use site. */
   --fbr-lift: rgb(var(--shade-rgb) / 0.55);
 
-  --fbr-t-floor: 12px;
+  --fbr-t-floor: 13px;
   --fbr-t-label: 13px;
-  --fbr-t-body: 15px;
+  --fbr-t-body: 16px;
+  --fbr-t-head: 19px;
+  --fbr-t-title: 24px;
+  --fbr-t-input: 19px;
+  --fbr-tap: 44px;
 
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  color: var(--fbr-text);
+}
+
+.fbr__title {
+  margin: 0;
+  font-size: var(--fbr-t-title);
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--fbr-text);
 }
 
 .fbr__lead {
   margin: 0;
   font-size: var(--fbr-t-body);
   line-height: 1.5;
-  color: var(--fbr-text);
+  color: var(--fbr-muted);
 }
 
 .fbr__waiting {
@@ -84,78 +100,497 @@
   color: var(--fbr-muted);
 }
 
-/* ── the composer ───────────────────────────────────────────────────────── */
+/* ── the page ───────────────────────────────────────────────────────────── */
 
-/*
-  STICKY, NOT MODAL. The participant is writing ABOUT a section they need to
-  keep reading, so the composer must not cover it. Pinning it to the bottom
-  keeps it reachable without a scroll while leaving the report visible above —
-  and unlike a modal it cannot trap focus away from the thing being discussed.
-*/
-.fbr__composer {
-  position: sticky;
-  bottom: 0;
+.fbr-report {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  /*
-    OPAQUE, IN TWO LAYERS, AND THIS IS NOT A STYLE CHOICE.
-
-    A sticky element with a translucent background lets the page scroll THROUGH
-    it. Caught by looking at it: the round's own comments slid under the
-    composer and rendered on top of "Commenting on …", two texts occupying the
-    same pixels while somebody was trying to write.
-
-    `background-color` cannot stack, so the tint is applied as a one-stop
-    gradient over a solid colour. The composite is identical to the wash on
-    `--surface` (#22304A) — which is what `feedbackRoundPalette.test.js`
-    measures every pairing against — and it is now opaque.
-  */
-  background-color: var(--surface);
-  background-image: linear-gradient(var(--fbr-wash), var(--fbr-wash));
-  border: 1px solid var(--fbr-rule);
-  border-radius: 10px;
-  /* Reads as sitting ABOVE the report rather than being part of it. The report
-     scrolls under this edge, so the edge has to be visible. */
-  box-shadow: 0 -8px 20px var(--fbr-lift);
-}
-
-.fbr__on {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 18px;
   min-width: 0;
 }
 
-.fbr__on-label {
+.fbr-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fbr-jump__link,
+.fbr-act,
+.fbr-more,
+.fbr-thread__toggle {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.fbr-jump__link {
+  min-height: var(--fbr-tap);
+  padding: 0 14px;
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-text);
+  background: transparent;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 999px;
+}
+
+/* THE QUESTION is not a card and takes no action (reviewer 1.4). */
+.fbr-q {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--fbr-rule);
+  min-width: 0;
+}
+
+.fbr-q__label {
+  margin: 0 0 4px;
   font-size: var(--fbr-t-floor);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--fbr-accent);
+  color: var(--fbr-muted);
 }
 
-.fbr__on-anchor {
-  font-size: var(--fbr-t-label);
-  font-weight: 600;
-  color: var(--fbr-text);
+.fbr-q__title {
+  margin: 0 0 6px;
+  font-size: var(--fbr-t-head);
+  font-weight: 700;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-/*
-  A single text node with min-width:0 — never a flex container with spans.
-  `text-overflow` is inert on the latter and the text is silently cut.
-  Truncated to two lines with the full string still in the DOM, so this is a
-  reduction WITH a recovery: the section it quotes is on screen above.
-*/
-.fbr__on-excerpt {
+.fbr-q__detail {
+  margin: 0 0 6px;
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  color: var(--fbr-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fbr-q__image {
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+.fbr-q__task {
+  margin: 8px 0 0;
+  padding: 6px 12px;
+  font-size: var(--fbr-t-body);
+  border-left: 3px solid var(--fbr-accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fbr-q__task-label {
+  display: block;
   font-size: var(--fbr-t-floor);
+  font-weight: 700;
+  color: var(--fbr-muted);
+}
+
+.fbr-q__options {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: var(--fbr-t-body);
+}
+
+/* A SECTION: a real heading at 19px, never the 12.8px label it was (D1). */
+.fbr-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  scroll-margin-top: 12px;
+}
+
+.fbr-sec__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fbr-sec__title {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fbr-t-head);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--fbr-text);
+}
+
+.fbr-sec__count {
+  font-weight: 500;
+  color: var(--fbr-muted);
+}
+
+/* `margin-left: auto`, never `justify-content: flex-end`. */
+.fbr-sec__all {
+  margin-left: auto;
+}
+
+.fbr-sec__hint {
+  margin: 0;
+  font-size: var(--fbr-t-label);
   line-height: 1.45;
   color: var(--fbr-muted);
+}
+
+.fbr-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* A CARD: one response, Workie's read, or the last section. */
+.fbr-card {
+  padding: 14px;
+  background: var(--fbr-card);
+  border: 1px solid var(--fbr-rule);
+  border-radius: 12px;
+  min-width: 0;
+  scroll-margin-top: 12px;
+}
+
+.fbr-card--workie {
+  background-color: var(--fbr-card);
+  background-image: linear-gradient(var(--fbr-workie-wash), var(--fbr-workie-wash));
+  border-left: 4px solid var(--fbr-workie);
+}
+
+.fbr-card--workie .fbr-sec__head > svg {
+  color: var(--fbr-workie);
+}
+
+/* THE TARGET, while the sheet is open (D4): a 2px amber outline on the card.
+   Focus is a 2px --text ring on a control — different element, different
+   colour (reviewer 3.7). */
+.fbr-card.is-target {
+  outline: 2px solid var(--fbr-accent);
+  outline-offset: 2px;
+}
+
+.fbr-card__who {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: var(--fbr-t-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fbr-chip {
+  padding: 1px 8px;
+  font-size: var(--fbr-t-floor);
+  font-weight: 600;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 999px;
+}
+
+.fbr-card__meta {
+  margin: 2px 0 8px;
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-muted);
+}
+
+.fbr-card__text {
+  margin: 0;
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The cuts are VISUAL ONLY (D10): the whole text stays in the DOM, and the
+   "Read all" beside it opens it in place. */
+.fbr-card__text.is-folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fbr-read__body {
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fbr-read__body.is-folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fbr-read__sub {
+  margin: 8px 0 2px;
+  font-size: var(--fbr-t-body);
+  font-weight: 700;
+}
+
+.fbr-quiet {
+  margin: 0;
+  font-size: var(--fbr-t-label);
+  line-height: 1.45;
+  color: var(--fbr-muted);
+}
+
+/* "Read all", "Open all replies": quiet text controls, still 44px tall. */
+.fbr-more {
+  align-self: flex-start;
+  min-height: var(--fbr-tap);
+  padding: 0 2px;
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: transparent;
+  border: none;
+}
+
+.fbr-card__foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--fbr-rule);
+}
+
+/* A SECTION ACTION: an outlined button that says what it comments on. */
+.fbr-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--fbr-tap);
+  padding: 0 14px;
+  font-size: var(--fbr-t-body);
+  font-weight: 600;
+  color: var(--fbr-text);
+  background: transparent;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.fbr-act--wide {
+  width: 100%;
+  justify-content: center;
+}
+
+.fbr-act:hover {
+  background: var(--fbr-wash);
+}
+
+.fbr-jump__link:focus-visible,
+.fbr-act:focus-visible,
+.fbr-more:focus-visible,
+.fbr-thread__toggle:focus-visible,
+.fbr__x:focus-visible,
+.fbr__cancel:focus-visible,
+.fbr__post:focus-visible,
+.fbr__discard:focus-visible {
+  outline: 2px solid var(--fbr-text);
+  outline-offset: 2px;
+}
+
+/* ── threads ────────────────────────────────────────────────────────────── */
+
+.fbr-thread {
+  margin-top: 4px;
+}
+
+.fbr-thread__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--fbr-tap);
+  padding: 0 2px;
+  font-size: var(--fbr-t-label);
+  font-weight: 700;
+  color: var(--fbr-text);
+  background: transparent;
+  border: none;
+}
+
+.fbr-thread__list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fbr-thread__list[hidden] {
+  display: none;
+}
+
+.fbr-thread__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 6px 12px;
+  border-left: 2px solid var(--fbr-rule);
+  min-width: 0;
+}
+
+/* YOURS: an amber edge on an amber wash (D6). */
+.fbr-thread__item.is-mine {
+  padding-right: 10px;
+  border-left: 3px solid var(--fbr-accent);
+  background: var(--fbr-mine-wash);
+  border-radius: 0 8px 8px 0;
+}
+
+.fbr-thread__who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-muted);
+}
+
+.fbr-thread__featured {
+  font-weight: 500;
+}
+
+.fbr-thread__quote {
+  font-size: var(--fbr-t-label);
+  line-height: 1.45;
+  color: var(--fbr-muted);
+  overflow-wrap: anywhere;
+}
+
+.fbr-thread__text {
+  font-size: var(--fbr-t-body);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.fbr-else__list {
+  margin-bottom: 6px;
+}
+
+/* THE SENT CONFIRMATION, inside the card it names (D6). */
+.fbr-sent {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: var(--fbr-t-body);
+  line-height: 1.45;
+  background: var(--fbr-ok-wash);
+  border: 1px solid var(--fbr-ok);
+  border-radius: 10px;
+}
+
+.fbr-sent > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--success);
+}
+
+/* ── the docked sheet ───────────────────────────────────────────────────── */
+
+/*
+  DOCKED, NOT MODAL (D5). It sticks to the foot of the phone's scrolling
+  region, so the page above stays scrollable and the target can still be
+  read. Not `position: fixed`: on iOS that fights the collapsing URL bar and
+  the keyboard, the reason the shell's dock is a flex row.
+
+  OPAQUE, IN TWO LAYERS: a translucent sticky sheet lets the page scroll
+  through it. The tint is a one-stop gradient over a solid colour; the
+  composite is the 6% wash on --surface the palette test measures.
+*/
+.fbr__composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* At 200% text the sheet scrolls inside rather than off the screen. */
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding: 14px;
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--fbr-wash), var(--fbr-wash));
+  border: 1px solid var(--fbr-rule);
+  border-top: 2px solid var(--fbr-accent);
+  border-radius: 14px 14px 10px 10px;
+  box-shadow: 0 -8px 20px var(--fbr-lift);
+}
+
+.fbr__sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fbr__sheet-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fbr-t-head);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.fbr__x {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--fbr-tap);
+  height: var(--fbr-tap);
+  color: var(--fbr-text);
+  background: transparent;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* THE QUOTE of the target. The quote shrinks before anything else at 200%
+   text (D10): it is clamped; the name rule and the actions never are. */
+.fbr__quote {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--fbr-wash);
+  border-left: 3px solid var(--fbr-edge);
+  border-radius: 0 8px 8px 0;
+  min-width: 0;
+}
+
+.fbr__quote--workie {
+  border-left-color: var(--fbr-workie);
+}
+
+.fbr__quote-head {
+  font-size: var(--fbr-t-label);
+  font-weight: 600;
+  color: var(--fbr-muted);
+  overflow-wrap: anywhere;
+}
+
+/* A single text node with min-width:0 — never a flex container with spans. */
+.fbr__quote-text {
+  margin: 2px 0 0;
+  font-size: var(--fbr-t-body);
+  line-height: 1.45;
   min-width: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -163,16 +598,15 @@
 .fbr__box {
   width: 100%;
   box-sizing: border-box;
-  /* BODY, not label. See the header: a 13px input is illegible where it matters
-     most, and under 16px iOS zooms the page on focus. */
-  font-size: var(--fbr-t-body);
+  /* 19px: the phone's input size. Under 16px iOS zooms the page on focus. */
+  font-size: var(--fbr-t-input);
   font-family: inherit;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--fbr-text);
   background: var(--fbr-well);
-  border: 1px solid var(--fbr-rule);
-  border-radius: 8px;
-  padding: 10px;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 10px;
+  padding: 10px 12px;
   /* Vertical only: a horizontal drag on a phone widens the page. */
   resize: vertical;
   min-height: 88px;
@@ -183,22 +617,28 @@
   outline-offset: 1px;
 }
 
-.fbr__meta {
-  display: flex;
-  align-items: baseline;
-}
-
-.fbr__count {
-  margin-left: auto;
-  font-size: var(--fbr-t-floor);
-  color: var(--fbr-muted);
-}
-
 .fbr__attribution {
   margin: 0;
   font-size: var(--fbr-t-label);
   line-height: 1.45;
   color: var(--fbr-muted);
+}
+
+.fbr__ask {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--fbr-wash);
+  border: 1px solid var(--fbr-edge);
+  border-radius: 10px;
+}
+
+.fbr__ask-text {
+  margin: 0;
+  font-size: var(--fbr-t-body);
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .fbr__error {
@@ -209,9 +649,8 @@
   color: var(--fbr-error);
 }
 
-/* `margin-left: auto` on the first pushed child, never `justify-content:
-   flex-end` — that overflows toward the start, where it is unreachable. Wraps
-   so a narrow phone stacks rather than clipping. */
+/* `margin-left: auto` on Post, never `justify-content: flex-end`. Wraps so a
+   narrow phone stacks rather than clipping. */
 .fbr__actions {
   display: flex;
   flex-wrap: wrap;
@@ -219,17 +658,29 @@
   align-items: center;
 }
 
-.fbr__cancel {
-  font-size: var(--fbr-t-label);
-  font-weight: 600;
+.fbr__count {
+  font-size: var(--fbr-t-floor);
   color: var(--fbr-muted);
+}
+
+.fbr__cancel,
+.fbr__discard {
+  font-family: inherit;
+  font-size: var(--fbr-t-body);
+  font-weight: 600;
+  color: var(--fbr-text);
   background: transparent;
-  border: 1px solid var(--fbr-rule);
-  border-radius: 8px;
+  border: 1px solid var(--fbr-edge);
+  border-radius: 10px;
   /* 44px: a thumb target, not a mouse target. */
   min-height: 44px;
   padding: 0 16px;
   cursor: pointer;
+}
+
+.fbr__discard {
+  margin-left: auto;
+  color: var(--fbr-error);
 }
 
 .fbr__post {
@@ -237,32 +688,29 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-family: inherit;
   font-size: var(--fbr-t-body);
   font-weight: 700;
   color: var(--fbr-ink);
   background: var(--fbr-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   min-height: 44px;
   padding: 0 18px;
   cursor: pointer;
 }
 
-.fbr__post:disabled {
+.fbr__post:disabled,
+.fbr__cancel:disabled,
+.fbr__x:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.fbr__cancel:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-/* THE WORKIE'S READ, ON THIS GROUND. MarkdownRenderer brings the paper
-   theme's colours (#2c3e50 headings and body), which on the phone's dusk panel
-   read as dark slate on navy — every feedback round's AI summary, barely
-   legible (seen in Chromium, 27 Sep 2026). The stage fixes the same fault for
-   `.notes-md` in styles/stage.css. */
+/* WORKIE'S READ, ON THIS GROUND. MarkdownRenderer brings the paper theme's
+   colours, which on the phone's dusk panel read as dark slate on navy. And a
+   `##` inside the read must not outrank the section's own 19px heading
+   (phone-comments fault 1): its headings drop to body size. */
 .fbr .markdown-content,
 .fbr .markdown-content * {
   color: var(--fbr-text);
@@ -272,7 +720,11 @@
 .fbr .markdown-content h3,
 .fbr .markdown-content h4,
 .fbr .markdown-content h5,
-.fbr .markdown-content h6,
+.fbr .markdown-content h6 {
+  margin: 6px 0 2px;
+  font-size: var(--fbr-t-body);
+  color: var(--fbr-text);
+}
 .fbr .markdown-content strong {
-  color: var(--fbr-accent);
+  color: var(--fbr-text);
 }

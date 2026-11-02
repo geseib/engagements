@@ -202,11 +202,13 @@ describe('commenting on a section', () => {
     expect(screen.queryByRole('button', { name: /Comment on/ })).toBeNull();
   });
 
-  test('the three sections the owner named become commentable', () => {
+  test('with a handler, every section has its own named action, and none is the bare "Comment"', () => {
+    // rejects: three buttons all reading "Comment" (phone-comments fault 4).
     render(<RoundReport round={aRound()} onComment={jest.fn()} />);
     expect(screen.getByRole('button', { name: 'Comment on Workie’s read' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Comment on the results' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Comment on response 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comment on the whole round' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Reply to this response: / })).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /^Comment$/ })).toBeNull();
   });
 
   test('the question is not commentable', () => {
@@ -225,36 +227,47 @@ describe('commenting on a section', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Comment on Workie’s read' }));
     expect(onComment).toHaveBeenCalledWith(expect.objectContaining({
       anchorKind: 'summary', anchorRef: '', anchorLabel: 'Workie’s read',
-    }));
+    }), expect.anything());
   });
 
   /*
-    THE TIE AGAIN. Rows 1 and 2 both carry rank 1, so both badges print "1". An
-    anchor derived from the badge files every comment on the second response
-    against the first — silently, and only on ties.
+    THE TIE AGAIN, now with ballot numbers (phone-comments B1). Rows 1 and 2
+    both carry rank 1; the anchor is the row's BALLOT number, which is the same
+    on every surface, never the rank and never this list's position.
   */
-  test('a response anchor is the row position, never the printed rank', () => {
+  test('a response anchor is the ballot number, marked as one', () => {
     const onComment = jest.fn();
-    render(<RoundReport round={aRound()} onComment={onComment} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on response 2' }));
+    const round = aRound();
+    round.answers = round.answers.map((a, i) => ({ ...a, ballot: [3, 1, 2][i] }));
+    render(<RoundReport round={round} onComment={onComment} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Reply to this response: Re-price/ }));
     expect(onComment).toHaveBeenCalledWith(expect.objectContaining({
       anchorKind: 'response',
       anchorRef: '1',
-      anchorLabel: 'Response 2 — Sam Ortiz',
-    }));
+      anchorBasis: 'ballot',
+      anchorLabel: 'Response 1 — Sam Ortiz',
+    }), expect.anything());
+  });
+
+  test('a row with no ballot number keeps its position anchor and no basis', () => {
+    // A payload from before 3c (or a survey's question rows).
+    const onComment = jest.fn();
+    render(<RoundReport round={aRound()} onComment={onComment} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Reply to this response: Re-price/ }));
+    const anchor = onComment.mock.calls[0][0];
+    expect(anchor).toEqual(expect.objectContaining({ anchorRef: '1', anchorLabel: 'Response 2 — Sam Ortiz' }));
+    expect(anchor.anchorBasis).toBeUndefined();
   });
 
   test('the anchor carries an excerpt of what is being commented on', () => {
     /*
       Stored on the comment row at write time. From day 8 the raw ANSWER rows
       have expired and create-report rebuilds `answers` empty, so this excerpt
-      is the only surviving copy of what the room was discussing — and in the
-      session report it is what makes a comment readable at all, because the
-      round is not on screen beside it.
+      is the only surviving copy of what the room was discussing.
     */
     const onComment = jest.fn();
     render(<RoundReport round={aRound()} onComment={onComment} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Comment on response 1' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Reply to this response: Freeze/ }));
     const anchor = onComment.mock.calls[0][0];
     expect(anchor.anchorExcerpt).toContain('Freeze all discretionary discounting');
     expect(anchor.anchorExcerpt.length).toBeLessThanOrEqual(141);
@@ -346,25 +359,13 @@ describe('a comment the host put on the wall', () => {
   });
 });
 
-describe('the Comment buttons sit inside the scope that styles them', () => {
-  test('every Comment button is a descendant of the report root carrying rr-c-root', () => {
-    // rejects: buttons rendered outside any element declaring the --rr-c-*
-    // locals, which drew them as plain text instead of pills.
-    const { container } = render(<RoundReport round={aRound()} onComment={jest.fn()} />);
-    const buttons = [...container.querySelectorAll('.rr-c__add')];
-    expect(buttons.length).toBeGreaterThan(2);
-    for (const b of buttons) {
-      expect(b.closest('.rr-c-root')).toBeTruthy();
-      // And never inside the comment box, which is where the locals used to live.
-      expect(b.closest('.rr-c')).toBeNull();
-    }
-  });
-
-  test('each response row holds exactly one Comment button, as its own child', () => {
-    // rejects: the button rendered outside its row's <li>.
-    const { container } = render(<RoundReport round={aRound()} onComment={jest.fn()} />);
-    for (const li of container.querySelectorAll('.past-round__answers > li')) {
-      expect(li.querySelectorAll(':scope > .rr-c__add')).toHaveLength(1);
-    }
+describe('the host’s dialog (no handler) keeps its own layout', () => {
+  test('no phone sections and no action of any kind', () => {
+    // rejects: the phone's three-section layout leaking into PastRound.
+    const { container } = render(<RoundReport round={aRound()} comments={COMMENTS} />);
+    expect(container.querySelector('.past-round__body.rr-c-root')).toBeTruthy();
+    expect(container.querySelector('.fbr-report')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Comment on|Reply to)/ })).toBeNull();
+    expect(container.querySelectorAll('.past-round__answers > li')).toHaveLength(3);
   });
 });

@@ -26,27 +26,61 @@ import './FeedbackRoundPanel.css';
  * legitimate: the phone does not duplicate the stage WHILE THE PARTICIPANT HAS
  * NO TASK. In a feedback round they have one, and it cannot happen anywhere
  * else — the report is here because it is the substrate of the work, not
- * because it is being mirrored. The owner also asked for it explicitly, in the
- * same breath as "so they can read, copy paste", which a projector cannot do.
+ * because it is being mirrored.
  *
  * ── WHY A COMPONENT AND NOT ANOTHER BRANCH IN PlayerPage ───────────────────
  *
- * `PlayerPage.jsx` is 3,229 lines and does not mount under jsdom — it dies on
- * the auth provider — so everything in it is asserted by reading source. A
- * surface that collects customer prose ABOUT NAMED PEOPLE should be testable by
- * rendering it and clicking it, so it lives here and the page holds a branch.
+ * `PlayerPage.jsx` does not mount under jsdom — it dies on the auth provider —
+ * so everything in it is asserted by reading source. A surface that collects
+ * customer prose ABOUT NAMED PEOPLE should be testable by rendering it and
+ * clicking it, so it lives here and the page holds a branch.
  *
- * ── THE COMPOSER IS CHAT-SHAPED, NOT FORM-SHAPED ───────────────────────────
+ * ── PHASE 3b: EVERY ACTION NAMES ITS TARGET (docs/design/phone-comments) ───
  *
- * *"like in chat response they click on a section"*. So there is no standing
- * text box: a box with no stated subject collects remarks about nothing, and
- * the section has to be chosen first. Choosing one opens the composer with the
- * section named at the top of it, and the anchor travels from the click rather
- * than being re-derived on submit — which is what keeps a comment on a tied
- * response attached to the row that was actually tapped.
+ * The owner, 1 Nov 2026: *"how do we know which response they are commenting
+ * on"*. The report is laid out in three sections by RoundReport's phone layout
+ * (RoundReportSections.jsx), each action inside the thing it is about. The
+ * composer is a docked sheet that names its target three ways at once (D4):
+ * its heading ("Reply to Priya Shah's response"), a quote of the target, and
+ * the target's card outlined on the page behind. Switching target with words
+ * in the box asks first; closing with words asks first (D5); a post says where
+ * it landed, inside that card (D6).
+ *
+ * The anchor still travels from the tap rather than being re-derived on submit,
+ * and a response is anchored by its BALLOT number (backend B1), so a reply on a
+ * tied response stays on the row that was tapped, on every surface.
  */
-/** Which section a draft belongs to: its kind and, for a response, its row. */
+
+/** Which target a draft belongs to: its kind and, for a response, its ref. */
 const draftKeyOf = (anchor) => `${anchor.anchorKind}#${anchor.anchorRef ?? ''}`;
+
+/** The name rule under the box (phone-comments D4), word for word. */
+export const NAME_RULE_SHOWN = 'Your name is shown with this comment. Everyone in the session can read it, and the host may put it on the room’s screen.';
+export const NAME_RULE_HIDDEN = 'Your name is not shown with this comment.';
+
+/** A saved anchor from before 3b carries no sheet words; give it some. */
+function withSheetWords(anchor) {
+  if (!anchor || anchor.heading) return anchor;
+  if (anchor.anchorKind === 'summary') {
+    return {
+      ...anchor, targetKey: 'summary', noun: 'comment', heading: 'Comment on Workie’s read',
+      quoteHead: 'Workie’s read', targetName: 'Workie’s read', isWorkie: true,
+      sentLead: 'Comment posted', sentRest: 'under Workie’s read.',
+    };
+  }
+  if (anchor.anchorKind === 'results') {
+    return {
+      ...anchor, targetKey: 'round', noun: 'comment', heading: 'Comment on the whole round',
+      quoteHead: 'The whole round', targetName: 'the whole round',
+      sentLead: 'Comment posted', sentRest: 'on the whole round.',
+    };
+  }
+  const label = anchorLabelShown(anchor) || 'this response';
+  return {
+    ...anchor, noun: 'reply', heading: `Reply to ${label}`, quoteHead: label, targetName: label,
+    sentLead: 'Reply posted', sentRest: `under ${label}.`,
+  };
+}
 
 export default function FeedbackRoundPanel({
   /** The round being commented on, in `config/sessionHistory.js`'s shape. */
@@ -57,62 +91,45 @@ export default function FeedbackRoundPanel({
   comments = [],
   /**
    * Post one comment. Given the anchor the section supplied plus the text.
-   * Resolves `{ok: true}` or `{ok: false, error}` — never throws, because a
-   * throw here would take the participant's words with it.
+   * Resolves `{ok: true, comment?}` or `{ok: false, error}` — never throws,
+   * because a throw here would take the participant's words with it.
    */
   onSubmit,
   /**
    * LIFTED "HAS A DRAFT" FLAG — fix round 1, item 6. Called with `true`
-   * whenever the composer holds unsent text, `false` once it is empty again
-   * (sent, cancelled, or never typed into). This component owns the draft
-   * text itself — it is the one place it exists — but a container that needs
-   * to decide something ABOUT the draft (PlayerPage.jsx: auto-close the
-   * panel and follow the room once the round moves on, but only when there
-   * is nothing to lose) cannot see inside without this. Optional and
-   * side-effect free on the host-triggered caller, which does not pass it.
+   * whenever the composer holds unsent text, `false` once it is empty again.
+   * A container deciding whether it may close the panel (PlayerPage.jsx)
+   * cannot see inside without this. Optional.
    */
   onDraftChange,
-  /**
-   * Pass-through to RoundReport (fix round 2) — see that component's own doc
-   * for why. Neither is used by the host-triggered caller, which reads a
-   * round already loaded in full.
-   */
+  /** Pass-through to RoundReport (fix round 2). */
   answersEmptyText,
   onRetryAnswers,
   /**
    * WHETHER THE WRITER'S NAME GOES WITH THE COMMENT. True for a round, whose
-   * feedback runs attributed (the disclosure below). False for a closed
-   * survey's feedback round (27 Sep 2026): comments.js strips the name from
-   * every survey comment, on every screen and in the report, so the composer
-   * must promise the opposite — and say it before anyone types.
+   * feedback runs attributed. False for a closed survey's feedback round:
+   * comments.js strips the name from every survey comment, so the sheet must
+   * promise the opposite — and say it before anyone types.
    */
   namesShown = true,
   /**
-   * A DRAFT KEPT FOR THIS ROUND (issue #47): `{ anchor, text }` the container
-   * saved the last time this round's panel was open, restored on mount so
-   * going back to another round and returning never loses what was typed.
-   * Read once, at mount — the container keys the panel by round, so a
-   * different round is a different mount and never sees this one's draft.
+   * A DRAFT KEPT FOR THIS ROUND (issue #47): `{ anchor, text }`, restored on
+   * mount — target and words together, so the sheet reopens on the response it
+   * was for. Read once; the container keys the panel by round.
    */
   savedDraft = null,
-  /**
-   * Called with `{ anchor, text }` whenever the composer holds unsent text,
-   * and with null once it is empty (sent, cancelled, cleared). Optional; the
-   * host-triggered caller does not pass it.
-   */
+  /** Called with `{ anchor, text }` while there is unsent text, null after. */
   onDraftSave,
+  /** Whose phone this is, so their own comments read "You". */
+  playerName = '',
 }) {
   const restored = savedDraft && savedDraft.anchor && typeof savedDraft.text === 'string'
-    ? savedDraft : null;
-  /** The section being commented on, or null when the composer is closed. */
+    ? { ...savedDraft, anchor: withSheetWords(savedDraft.anchor) } : null;
+  /** The target being written about, or null when the sheet is closed. */
   const [anchor, setAnchor] = useState(restored ? restored.anchor : null);
-  /*
-    ONE DRAFT PER SECTION, keyed by anchor. Tapping Comment on a different
-    section used to clear the box, silently throwing away whatever had been
-    typed; now each section keeps its own words and gets them back when the
-    participant returns to it. Only Cancel (an explicit "not this one") and a
-    successful send clear a section's draft.
-  */
+  /* Drafts by target. Switching target with words in the box ASKS (D5) rather
+     than silently parking them, so in practice one draft is live; the map is
+     what lets a restored draft and "Move it" carry words to the right key. */
   const [drafts, setDrafts] = useState(
     restored ? { [draftKeyOf(restored.anchor)]: restored.text } : {},
   );
@@ -125,20 +142,32 @@ export default function FeedbackRoundPanel({
   const anyDraft = Object.values(drafts).some((t) => String(t || '').trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** A target tapped while the box held words: "Move your reply to …?" */
+  const [pendingMove, setPendingMove] = useState(null);
+  /** Cancel / X / Escape with words in the box: "Discard your reply?" */
+  const [askDiscard, setAskDiscard] = useState(false);
+  /** The confirmation for the last comment posted (D6). */
+  const [sent, setSent] = useState(null);
   const boxRef = useRef(null);
+  const askRef = useRef(null);
+  /** The control that opened the sheet, for focus to return to (D6). */
+  const openerRef = useRef(null);
+  const headId = `fbr-sheet-h-${questionNumber || 'r'}`;
+  const ruleId = `fbr-sheet-rule-${questionNumber || 'r'}`;
 
-  // Focus the box when it opens: the participant has just tapped a section and
-  // the next thing they want to do is type. Guarded because a ref is null on
-  // the render where the element does not exist yet.
+  // Focus the box when the sheet opens or moves: the next thing is to type.
   useEffect(() => {
     if (anchor && boxRef.current) boxRef.current.focus();
   }, [anchor]);
 
-  // Reported on every change to `text`, not only at send/cancel: a container
-  // deciding "is it safe to close this out from under them right now" needs
-  // the CURRENT answer, not the answer as of the last open/close.
-  // ANY section's draft counts: words kept for a section the participant has
-  // stepped away from are still words a container must not close over.
+  // A question the sheet asks takes focus, so a keyboard or screen-reader
+  // user meets it rather than the box behind it.
+  useEffect(() => {
+    if ((pendingMove || askDiscard) && askRef.current) askRef.current.focus();
+  }, [pendingMove, askDiscard]);
+
+  // ANY target's draft counts: words kept anywhere are words a container
+  // must not close over.
   useEffect(() => {
     onDraftChange?.(anyDraft);
   }, [anyDraft, onDraftChange]);
@@ -153,13 +182,53 @@ export default function FeedbackRoundPanel({
     save(anchor && text.trim() ? { anchor, text } : null);
   }, [anchor, text]);
 
-  // Switching section keeps the draft of the one left behind (see `drafts`).
-  const open = useCallback((next) => {
-    setAnchor(next);
-    setError('');
-  }, []);
+  // The confirmation fades after six seconds; the comment itself stays.
+  useEffect(() => {
+    if (!sent) return undefined;
+    const t = setTimeout(() => setSent(null), 6000);
+    return () => clearTimeout(t);
+  }, [sent]);
 
-  // Cancel, or a comment that landed: this section's draft is done with.
+  /** Return focus to the control that opened the sheet (D6). */
+  const returnFocus = () => {
+    const el = openerRef.current;
+    if (!el || typeof el.focus !== 'function') return;
+    setTimeout(() => { if (el.isConnected) el.focus(); }, 0);
+  };
+
+  /*
+    A TARGET IS TAPPED. With an empty box the sheet simply moves. With words
+    in it, the sheet asks before moving them (D5) — the shipped panel dropped
+    them silently, and later parked them out of sight.
+  */
+  const open = useCallback((next, opener) => {
+    if (opener) openerRef.current = opener;
+    setError('');
+    setAskDiscard(false);
+    const target = withSheetWords(next);
+    if (anchor && draftKeyOf(anchor) !== draftKeyOf(target) && text.trim()) {
+      setPendingMove(target);
+      return;
+    }
+    setPendingMove(null);
+    setAnchor(target);
+  }, [anchor, text]);
+
+  /** "Move it": the words go to the new target, and the sheet follows them. */
+  const moveIt = () => {
+    if (!pendingMove || !anchor) return;
+    const from = draftKeyOf(anchor);
+    const to = draftKeyOf(pendingMove);
+    setDrafts((d) => {
+      const { [from]: words, ...rest } = d;
+      const there = String(rest[to] || '').trim();
+      return { ...rest, [to]: there ? `${rest[to]}\n\n${words || ''}` : (words || '') };
+    });
+    setAnchor(pendingMove);
+    setPendingMove(null);
+  };
+
+  /** Close the sheet and drop this target's draft. */
   const close = useCallback(() => {
     if (anchor) {
       const k = draftKeyOf(anchor);
@@ -170,24 +239,47 @@ export default function FeedbackRoundPanel({
     }
     setAnchor(null);
     setError('');
+    setPendingMove(null);
+    setAskDiscard(false);
   }, [anchor]);
+
+  /** The one way out (X, Cancel, Escape): it asks first when there are words. */
+  const requestClose = () => {
+    if (busy) return;
+    if (text.trim()) {
+      setPendingMove(null);
+      setAskDiscard(true);
+      return;
+    }
+    close();
+    returnFocus();
+  };
 
   const send = useCallback(async () => {
     const prose = text.trim();
     if (!prose || busy) return;
     setBusy(true);
     setError('');
-    const result = await onSubmit({ ...anchor, questionNumber, text: prose });
+    const target = anchor;
+    const result = await onSubmit({ ...target, questionNumber, text: prose });
     setBusy(false);
     if (result && result.ok) {
+      // Posted after the room moved on: the shipped late sentence, attached
+      // to the same confirmation.
+      const late = Boolean(result.comment && result.comment.addedLater);
+      setSent({
+        key: target.targetKey,
+        lead: target.sentLead || 'Comment posted',
+        rest: `${target.sentRest || ''}${late ? ' It is marked as added later.' : ''}`,
+        commentId: (result.comment && result.comment.commentId) || null,
+      });
       close();
+      returnFocus();
       return;
     }
     /*
       THE WORDS STAY. A composer that clears on failure has thrown away what
-      somebody wrote, and this is the ONLY place that text exists — it is not
-      recoverable from the round, the report or the socket. So the box keeps its
-      contents and the reason appears beside it.
+      somebody wrote, and this is the ONLY place that text exists.
     */
     setError((result && result.error) || 'That did not send. Try again.');
   }, [anchor, busy, close, onSubmit, questionNumber, text]);
@@ -195,8 +287,7 @@ export default function FeedbackRoundPanel({
   /*
     THE HOST BUILDS THE REPORT, THEN OPENS THE BEAT. A phone can arrive between
     those two calls, and so can one that reconnects a moment early. That is a
-    STATE, not an error: it says what is happening and it offers nothing to
-    press, rather than showing an empty report that looks broken.
+    STATE, not an error.
   */
   if (!round) {
     return (
@@ -207,86 +298,143 @@ export default function FeedbackRoundPanel({
     );
   }
 
+  const isSurvey = round.kind === 'survey';
+  const ordinal = round.ordinal || parseInt(questionNumber, 10) || '';
+  const title = isSurvey ? 'Comment on the survey' : `Comment on round ${ordinal}`.trim();
+  const noun = anchor ? anchor.noun || 'comment' : 'comment';
+
   return (
     <div className="fbr">
+      <h1 className="fbr__title">{title}</h1>
       <p className="fbr__lead">
-        Read it back, then say what you think. Tap <b>Comment</b> on the summary, on the
-        results, or on any single response.
+        {isSurvey
+          ? 'Every comment is attached to one thing: Workie’s read, one question’s result, or the survey as a whole.'
+          : 'Every comment is attached to one thing: Workie’s read, one response, or the round as a whole.'}
       </p>
 
       <RoundReport
         round={round}
         comments={comments}
         onComment={open}
+        commentTarget={anchor ? anchor.targetKey : null}
+        sent={sent}
+        playerName={playerName}
         answersEmptyText={answersEmptyText}
         onRetryAnswers={onRetryAnswers}
       />
 
       {anchor && (
         /*
-          NOT A MODAL. `Modal` owns Escape, a focus trap and a scroll lock — all
-          right for a dialog laid over something else, all wrong here, where the
-          participant needs to keep reading the section they are commenting on
-          while they write about it. `RemoteSessionPanel` settled the same
-          question the same way: a modal on a phone covers the dock.
+          THE DOCKED SHEET (D5). Not a Modal: the page above stays scrollable,
+          so the target can still be read while writing about it. It sticks to
+          the foot of the phone's scrolling region rather than being
+          `position: fixed`, for the reason the shell's dock is a flex row.
+          `role="region"` labelled by its heading — a dialog role would promise
+          a focus trap this deliberately does not have.
         */
-        <div className="fbr__composer" role="group" aria-label={`Comment on ${anchorLabelShown(anchor)}`}>
-          <div className="fbr__on">
-            <span className="fbr__on-label">Commenting on</span>
-            <span className="fbr__on-anchor">{anchorLabelShown(anchor)}</span>
-            {anchor.anchorExcerpt && (
-              <span className="fbr__on-excerpt">{plainOf(anchor.anchorExcerpt)}</span>
-            )}
+        <div
+          className="fbr__composer"
+          role="region"
+          aria-labelledby={headId}
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            if (pendingMove) { setPendingMove(null); return; }
+            if (askDiscard) { setAskDiscard(false); return; }
+            requestClose();
+          }}
+        >
+          <div className="fbr__sheet-head">
+            <h2 id={headId} className="fbr__sheet-title">{anchor.heading}</h2>
+            <button
+              type="button"
+              className="fbr__x"
+              aria-label="Close this box"
+              onClick={requestClose}
+              disabled={busy}
+            >
+              <Icon name="X" size={20} />
+            </button>
           </div>
+
+          {anchor.anchorExcerpt && (
+            <figure className={`fbr__quote${anchor.isWorkie ? ' fbr__quote--workie' : ''}`}>
+              {anchor.quoteHead && <figcaption className="fbr__quote-head">{anchor.quoteHead}</figcaption>}
+              <p className="fbr__quote-text">{plainOf(anchor.anchorExcerpt)}</p>
+            </figure>
+          )}
 
           <textarea
             ref={boxRef}
             className="fbr__box"
             value={text}
             maxLength={MAX_COMMENT}
-            rows={4}
-            placeholder="What do you make of it?"
+            rows={3}
+            aria-labelledby={headId}
+            aria-describedby={ruleId}
+            placeholder={noun === 'reply' ? 'Write your reply' : 'Write your comment'}
             onChange={(e) => setText(e.target.value)}
           />
 
-          <div className="fbr__meta">
-            <span className="fbr__count">{`${text.length} characters`}</span>
-          </div>
-
-          {/*
-            THE DISCLOSURE, and it is the deliberate half of the anonymity
-            decision rather than a caption.
-
-            A feedback round always runs attributed — `get-results.js` reveals
-            authors unconditionally on entering RESULTS, and this beat is inside
-            RESULTS. But the participant has spent the whole session being told
-            "Your name is not attached to it until voting closes", so carrying
-            that assumption into a comment is the real privacy failure available
-            here. It is said BEFORE they type, not discovered afterwards.
-          */}
-          <p className="fbr__attribution">
-            {namesShown
-              ? 'Your name will be shown with this comment.'
-              : 'Your name is not shown with this comment.'}
+          {/* THE NAME RULE, said BEFORE anyone types (D4). Each clause is
+              something the system does: the name rides on the comment, the
+              public GET /comments returns it, and featureComment can put it
+              on the room's screen. */}
+          <p id={ruleId} className="fbr__attribution">
+            {namesShown ? NAME_RULE_SHOWN : NAME_RULE_HIDDEN}
           </p>
+
+          {pendingMove && (
+            <div className="fbr__ask" role="group" aria-labelledby={`${headId}-move`}>
+              <p id={`${headId}-move`} className="fbr__ask-text">
+                {`Move your ${noun} to ${pendingMove.targetName}? Your words come with it.`}
+              </p>
+              <div className="fbr__actions">
+                <button type="button" ref={askRef} className="fbr__cancel" onClick={() => setPendingMove(null)}>
+                  Keep it here
+                </button>
+                <button type="button" className="fbr__post" onClick={moveIt}>Move it</button>
+              </div>
+            </div>
+          )}
+
+          {askDiscard && (
+            <div className="fbr__ask" role="group" aria-labelledby={`${headId}-discard`}>
+              <p id={`${headId}-discard`} className="fbr__ask-text">{`Discard your ${noun}?`}</p>
+              <div className="fbr__actions">
+                <button type="button" ref={askRef} className="fbr__cancel" onClick={() => setAskDiscard(false)}>
+                  Keep writing
+                </button>
+                <button
+                  type="button"
+                  className="fbr__discard"
+                  onClick={() => { close(); returnFocus(); }}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
 
           {error && <p className="fbr__error">{error}</p>}
 
-          <div className="fbr__actions">
-            {/* The way out that is not the commit. */}
-            <button type="button" className="fbr__cancel" onClick={close} disabled={busy}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="fbr__post"
-              onClick={send}
-              disabled={busy || !text.trim()}
-            >
-              <Icon name="PaperPlaneTilt" size={16} />
-              {busy ? 'Posting…' : 'Post comment'}
-            </button>
-          </div>
+          {!pendingMove && !askDiscard && (
+            <div className="fbr__actions">
+              <button type="button" className="fbr__cancel" onClick={requestClose} disabled={busy}>
+                Cancel
+              </button>
+              <span className="fbr__count">{`${text.length} / ${MAX_COMMENT}`}</span>
+              <button
+                type="button"
+                className="fbr__post"
+                onClick={send}
+                disabled={busy || !text.trim()}
+              >
+                <Icon name="PaperPlaneTilt" size={18} />
+                {busy ? 'Posting…' : (noun === 'reply' ? 'Post reply' : 'Post comment')}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

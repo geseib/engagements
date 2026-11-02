@@ -564,13 +564,9 @@
   outline-offset: 2px;
 }
 
-/* THE FEEDBACK BUTTON, appended after whichever RESULTS body a round type
-   built — always straight after a LookUpCue or the score rows, neither of
-   which is a `.plr-btn`, so the `.plr-btn + .plr-btn` rule two lines up never
-   applies to it and it sat flush against the cue above with no rule of its
-   own. 26px, matching `.plr-lookup`'s own top margin — the same section-break
-   spacing, not the tighter 10px two stacked buttons use. */
-.plr-feedback-btn { margin-top: 26px; }
+/* "Comment on this round": in the dock since phone-comments 3b, where it is
+   the dock's first child and has nothing above it to clear. */
+.plr-feedback-btn { margin-top: 0; }
 /* The end screen's way back to a round's comments (issue #34): wraps, never scrolls sideways. */
 .plr-ended-comments { margin-top: 22px; text-align: left; }
 /* Issue #47: one round per row, its number then its title, the title cut

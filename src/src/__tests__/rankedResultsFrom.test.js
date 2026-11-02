@@ -46,10 +46,31 @@ describe('Call & Answer: data.voteTallies is an OBJECT, not an array', () => {
         1: { answerText: 'Re-price the package.', playerName: 'Sam', totalScore: 7 },
       },
     };
+    // Each row also carries its BALLOT number (display key + 1, phone-comments
+    // B1) and its vote count.
     expect(rankedResultsFrom(data)).toEqual([
-      { answer: 'Re-price the package.', playerName: 'Sam', rank: 1 },
-      { answer: 'Freeze discounting.', playerName: 'Dana', rank: 2 },
+      { answer: 'Re-price the package.', playerName: 'Sam', rank: 1, ballot: 2, votes: 0 },
+      { answer: 'Freeze discounting.', playerName: 'Dana', rank: 2, ballot: 1, votes: 0 },
     ]);
+  });
+
+  test('the ballot number survives the ranking, and the server’s own wins when sent (B1)', () => {
+    // rejects: Object.values throwing the display key away, so a reply could
+    // only be anchored to this phone's ranked position.
+    const data = {
+      voteTallies: {
+        0: { answerText: 'A', playerName: 'Ada', totalScore: 1, firstPlace: 0, secondPlace: 0, thirdPlace: 1 },
+        1: { answerText: 'B', playerName: 'Bo', totalScore: 5, firstPlace: 1, secondPlace: 1, thirdPlace: 0, ballot: 2 },
+      },
+    };
+    expect(rankedResultsFrom(data).map((r) => [r.answer, r.ballot, r.votes])).toEqual([['B', 2, 2], ['A', 1, 1]]);
+  });
+
+  test('a trivia leaderboard or wavelength row carries its ballot only when the server sent one', () => {
+    expect(rankedResultsFrom({ leaderboard: [{ answer: 'A', playerName: 'Ada', rank: 1, ballot: 3 }] }))
+      .toEqual([{ answer: 'A', playerName: 'Ada', rank: 1, ballot: 3 }]);
+    expect(rankedResultsFrom({ answers: [{ answer: 'w', playerName: 'Ada' }] }))
+      .toEqual([{ answer: 'w', playerName: 'Ada', rank: 1 }]);
   });
 
   test('a tie shares the same rank, the way create-report.js ranks answers (1, 1, 3 — not 1, 1, 2)', () => {

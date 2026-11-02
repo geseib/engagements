@@ -316,6 +316,8 @@ function toWire(row) {
     questionNumber: row.QuestionNumber,
     anchorKind: row.AnchorKind,
     anchorRef: row.AnchorRef,
+    // Present only on a reply anchored by ballot number (B1).
+    ...(row.AnchorBasis === 'ballot' ? { anchorBasis: 'ballot' } : {}),
     anchorLabel: row.AnchorLabel,
     anchorExcerpt: row.AnchorExcerpt,
     text: row.Text,
@@ -362,7 +364,7 @@ const HOST_AUTHOR = 'Said in the room';
 async function writeComment(gameId, body, { asHost = false } = {}) {
   const {
     questionNumber, anchorKind, anchorRef,
-    anchorLabel, anchorExcerpt, text,
+    anchorLabel, anchorExcerpt, text, anchorBasis,
   } = body;
   const playerName = asHost ? HOST_AUTHOR : body.playerName;
 
@@ -530,6 +532,15 @@ async function writeComment(gameId, body, { asHost = false } = {}) {
     // attribute and the sort key can never disagree about which response this
     // is about.
     AnchorRef: parseCommentSk(sk).anchorRef,
+    /*
+      WHAT THE NUMBER MEANS (phone-comments B1). 'ballot' says the response's
+      ref is its ballot number — the display place the room voted under, the
+      same on every surface — rather than a position in one phone's ranked
+      list. Only a response anchor can carry it, and only that one value is
+      kept: anything else is dropped, so an older row and a row from an older
+      phone read alike (no basis: placed by its quote, comment-placement.js).
+    */
+    ...(anchorKind === 'response' && anchorBasis === 'ballot' ? { AnchorBasis: 'ballot' } : {}),
     AnchorLabel: String(anchorLabel ?? '').slice(0, 200),
     AnchorExcerpt: String(anchorExcerpt ?? '').slice(0, MAX_EXCERPT + 1),
     Text: prose,

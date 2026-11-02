@@ -83,8 +83,8 @@ const gettingStarted = {
         — the host included — until voting closes. This hides names, not
         identities." Session setting "Show who wrote each response from the
         start" (SessionSetupPanel) makes displayLabelFor (config/anonymity.js)
-        show names. Comments: FeedbackRoundPanel "Your name will be shown with
-        this comment."
+        show names. Comments: FeedbackRoundPanel "Your name is shown with this
+        comment. Everyone in the session can read it, …"
       */
       id: 'who-sees-your-name',
       title: 'Who sees your name',
@@ -99,7 +99,7 @@ const gettingStarted = {
           items: [
             { title: 'Your answers, while the room votes', text: 'Shown as numbers: Response 1, Response 2. Nobody, the host included, sees who wrote what until voting closes. Then names go up with the results.' },
             { title: 'If the host shows names from the start', text: 'Some hosts turn names on for the whole session. Then answers and ballots on phones carry names from the first moment. The main screen still shows no names while the room votes.' },
-            { title: 'Your comments', text: 'A comment on a round carries your name, and the composer says so before you post.' },
+            { title: 'Your comments', text: 'A comment on a round carries your name. Everyone in the session can read it, and the host may put it on the room’s screen. The box says so before you post.' },
           ],
         },
         {
@@ -675,12 +675,17 @@ const feedback = {
   sections: [
     {
       /*
-        RESULTS: the "Feedback" button on every round's results (PlayerPage,
-        owner's ruling 26 Sep 2026). FeedbackRoundPanel: "Read it back, then say
-        what you think. Tap Comment on…", "Commenting on", "What do you make of
-        it?", "Your name will be shown with this comment.", Cancel / Post
-        comment; exits Close / "Go to the question"; "The next question is
-        live. You can still post what you have written." Checked on dev.
+        RESULTS: "Comment on this round" in the dock of every round's results
+        (PlayerPage, owner's ruling 26 Sep 2026; phone-comments 3b).
+        FeedbackRoundPanel + RoundReportSections: "Comment on round N"; three
+        sections, Workie's read ("Comment on Workie's read"), The responses
+        ("Reply to this response" on each card, "Response 2 · 6 votes, the
+        most"), "Anything else about this round?" ("Comment on the whole
+        round"); the docked sheet's heading and quote, the name rule, Cancel /
+        Post reply; "Move your reply to …? Your words come with it." Move it /
+        Keep it here; "Discard your reply?" Keep writing / Discard; "Reply
+        posted under …'s response (response N)." Exits Close / "Go to the
+        question".
       */
       id: 'results-feedback',
       title: 'Commenting on a round',
@@ -688,15 +693,19 @@ const feedback = {
       blocks: [
         {
           t: 'p',
-          text: 'Every round\'s results screen has a **Feedback** button. It opens the round on your phone: the question, the responses with their authors, and Workie\'s read, so you can read it at your own pace.',
+          text: 'Every round\'s results screen has **Comment on this round** at the bottom. It opens the round on your phone in three parts: Workie\'s read, the responses one card each with their authors, and **Anything else about this round?** Every comment is attached to one thing.',
         },
         {
           t: 'steps',
           items: [
-            'Tap **Comment** on the part you want to talk about: the results, Workie\'s read, or one response.',
-            'Write in the box. It shows what you are commenting on, and says your name will be shown with the comment.',
-            'Press **Post comment**, or **Cancel**.',
+            'Pick what you are talking about: **Comment on Workie’s read** inside Workie\'s read, **Reply to this response** on a response\'s card, or **Comment on the whole round** for anything else.',
+            'A box opens at the bottom. Its heading names what you are replying to, it quotes it, and the card behind is outlined. It also says your name is shown with your comment.',
+            'Press **Post reply** (or **Post comment**), or **Cancel**. It says **Reply posted** under that response, and your reply appears in the card.',
           ],
+        },
+        {
+          t: 'p',
+          text: 'Responses are numbered as you voted on them: "Response 2 · 6 votes, the most". Replies stay folded under each card; tap **Show 2 replies**, or **Open all replies**. If you tap another card with words in the box, your phone asks before moving them.',
         },
         {
           t: 'p',

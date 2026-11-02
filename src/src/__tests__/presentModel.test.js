@@ -152,7 +152,7 @@ describe('presentModel: the moment', () => {
     const m = presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments });
     expect(m.featured).toEqual({ text: 'Name the customer.', who: '', credit: 'Said in the room' });
     const named = presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments: comments.slice(0, 2) });
-    expect(named.featured).toEqual({ text: 'Old pick', who: 'Bea', credit: 'on the summary' });
+    expect(named.featured).toEqual({ text: 'Old pick', who: 'Bea', credit: 'on Workie’s read' });
     expect(presentModel(base({ state: 'RESULTS#005', stageBeat: 'feedback' }), { comments: [] }).featured).toBeNull();
   });
   // THE END, AS THE STAGE ENDS (19 Oct 2026): the window said only "Thank

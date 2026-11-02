@@ -96,6 +96,37 @@ describe.each(H.SKINS)('every pairing clears AA on the surface it is really draw
   test('the Post button: its ink on the filled accent', () => {
     expect(ratio(INK, ACCENT)).toBeGreaterThanOrEqual(AA);
   });
+
+  /* The phone layout's own tints (phone-comments 3b), composited onto the
+     card they really sit on. */
+  const over = (base, rgbaStr) => H.composite([base, rgbaStr]);
+  const CARD = r('--surface');
+
+  test('card text and meta on a plain card', () => {
+    expect(ratio(TEXT, CARD)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(MUTED, CARD)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('text and meta on the Workie wash', () => {
+    const workie = over(CARD, fbrVar('--fbr-workie-wash', skin));
+    expect(H.ratio(TEXT, workie)).toBeGreaterThanOrEqual(AA);
+    expect(H.ratio(MUTED, workie)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('text on your own comment (the accent wash) and on the sent line (the green wash)', () => {
+    const mine = over(CARD, fbrVar('--fbr-mine-wash', skin));
+    const ok = over(CARD, fbrVar('--fbr-ok-wash', skin));
+    expect(H.ratio(TEXT, mine)).toBeGreaterThanOrEqual(AA);
+    expect(H.ratio(MUTED, mine)).toBeGreaterThanOrEqual(AA);
+    expect(H.ratio(TEXT, ok)).toBeGreaterThanOrEqual(AA);
+  });
+
+  test('an outlined control’s edge clears 3:1 on the card and on the page (WCAG 1.4.11)', () => {
+    // rejects: the draft's .34 edge at 2.19:1 (reviews.md 3.2).
+    const edge = fbrVar('--fbr-edge', skin);
+    expect(H.ratio(over(CARD, edge), CARD)).toBeGreaterThanOrEqual(3);
+    expect(H.ratio(over(r('--bg'), edge), r('--bg'))).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('the wash', () => {
@@ -164,19 +195,27 @@ describe('the scope is the scope', () => {
 });
 
 describe('the type ladder', () => {
-  test('nothing is below the 12px floor', () => {
-    const sizes = [...SHEET.matchAll(/font-size:\s*(?:var\(--fbr-t-[a-z]+\)|(\d+)px)/g)]
-      .map((m) => m[1]).filter(Boolean).map(Number);
-    for (const size of sizes) expect(size).toBeGreaterThanOrEqual(12);
+  test('nothing is below the phone’s 13px floor', () => {
+    // phone-comments D10: 13px at the smallest, the phone floor
+    // (PlayerSurface.css), above the house 12px.
+    const literal = [...SHEET.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    for (const size of literal) expect(size).toBeGreaterThanOrEqual(13);
+    const steps = [...SHEET.matchAll(/--fbr-t-[a-z]+:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    expect(steps.length).toBeGreaterThan(0);
+    for (const size of steps) expect(size).toBeGreaterThanOrEqual(13);
   });
 
-  test('the three declared steps are on the laptop ladder', () => {
-    // 12 / 13 / 15, from the 12/13/15/19/24/30 ladder. This surface is read on
-    // a phone at arm's length and in a laptop dialog — never projected — so it
-    // must NOT import the stage's profile numbers.
-    expect(SHEET).toMatch(/--fbr-t-floor:\s*12px/);
+  test('the declared steps are the phone ladder: 13 / 16 / 19 / 24, the box at 19', () => {
+    expect(SHEET).toMatch(/--fbr-t-floor:\s*13px/);
     expect(SHEET).toMatch(/--fbr-t-label:\s*13px/);
-    expect(SHEET).toMatch(/--fbr-t-body:\s*15px/);
+    expect(SHEET).toMatch(/--fbr-t-body:\s*16px/);
+    expect(SHEET).toMatch(/--fbr-t-head:\s*19px/);
+    expect(SHEET).toMatch(/--fbr-t-title:\s*24px/);
+    expect(SHEET).toMatch(/--fbr-t-input:\s*19px/);
+  });
+
+  test('section headings are 19px, never the 12.8px label they were (D1)', () => {
+    expect(SHEET).toMatch(/\.fbr-sec__title\s*\{[^}]*font-size:\s*var\(--fbr-t-head\)/);
   });
 
   test('the INPUT renders at body size, never at label size', () => {
@@ -187,8 +226,8 @@ describe('the type ladder', () => {
       input under 16px makes the page zoom, which moves the layout under a
       thumb mid-sentence.
     */
-    const box = SHEET.slice(SHEET.indexOf('.fbr__box'));
-    expect(box.slice(0, 400)).toMatch(/font-size:\s*var\(--fbr-t-body\)/);
+    const box = SHEET.slice(SHEET.indexOf('.fbr__box {'));
+    expect(box.slice(0, 400)).toMatch(/font-size:\s*var\(--fbr-t-input\)/);
   });
 });
 
@@ -222,16 +261,29 @@ describe('reachability', () => {
     expect(actions.slice(0, 300)).toMatch(/flex-wrap:\s*wrap/);
   });
 
-  test('both controls are thumb targets, not mouse targets', () => {
-    // 44px. This is a phone surface, and Cancel sits beside a commit.
-    expect(SHEET).toMatch(/\.fbr__cancel\s*\{[^}]*min-height:\s*44px/);
+  test('every control is a thumb target, not a mouse target', () => {
+    // 44px (phone-comments D10). Cancel sits beside a commit.
+    expect(SHEET).toMatch(/\.fbr__discard\s*\{[^}]*min-height:\s*44px/);
     expect(SHEET).toMatch(/\.fbr__post\s*\{[^}]*min-height:\s*44px/);
+    expect(SHEET).toMatch(/--fbr-tap:\s*44px/);
+    for (const sel of ['.fbr-act', '.fbr-more', '.fbr-thread__toggle', '.fbr-jump__link']) {
+      const at = SHEET.indexOf(`${sel} {`);
+      expect(at).toBeGreaterThan(-1);
+      expect(SHEET.slice(at, at + 400)).toMatch(/min-height:\s*var\(--fbr-tap\)/);
+    }
+    expect(SHEET).toMatch(/\.fbr__x\s*\{[^}]*height:\s*var\(--fbr-tap\)/);
   });
 
-  test('a pasted anchor label can break rather than widening the page', () => {
-    // A participant's response may be one long unbroken token. Without this the
-    // composer widens and the phone scrolls sideways under their thumb.
-    expect(SHEET).toMatch(/\.fbr__on-anchor\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  test('pasted prose can break rather than widening the page', () => {
+    expect(SHEET).toMatch(/\.fbr__quote-head\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(SHEET).toMatch(/\.fbr-card__text\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(SHEET).toMatch(/\.fbr-thread__text\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  });
+
+  test('the sheet docks (sticky), never position: fixed, and the target outline is the accent', () => {
+    expect(SHEET).toMatch(/\.fbr__composer\s*\{[^}]*position:\s*sticky/);
+    expect(SHEET).not.toMatch(/position:\s*fixed/);
+    expect(SHEET).toMatch(/\.fbr-card\.is-target\s*\{[^}]*outline:\s*2px solid var\(--fbr-accent\)/);
   });
 
   test('the text box resizes vertically only', () => {
@@ -245,7 +297,7 @@ describe('reachability', () => {
       with `min-width: 0`, never a flex container with span children — the
       property is inert there and the text is silently cut.
     */
-    const ex = SHEET.slice(SHEET.indexOf('.fbr__on-excerpt'));
+    const ex = SHEET.slice(SHEET.indexOf('.fbr__quote-text {'));
     expect(ex.slice(0, 400)).toMatch(/min-width:\s*0/);
   });
 });

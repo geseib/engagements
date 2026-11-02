@@ -85,6 +85,24 @@ describe('normalizeAnchorRef', () => {
   });
 });
 
+describe('anchorLabelFor, a ballot anchor (phone-comments B1)', () => {
+  const rows = [
+    { answer: 'Freeze discounting.', playerName: 'Dana', ballot: 3 },
+    { answer: 'Re-price onboarding.', playerName: 'Sam', ballot: 1 },
+  ];
+  test('prints the ballot number and finds the row by it, not by position', () => {
+    // rejects: a ballot ref read as a position (Response 2 would be row 1, Sam).
+    expect(anchorLabelFor({ anchorKind: 'response', anchorRef: '3', anchorBasis: 'ballot' }, { answers: rows }))
+      .toBe('Response 3 — Dana');
+    expect(anchorLabelFor({ anchorKind: 'response', anchorRef: '1', anchorBasis: 'ballot' }, { answers: rows }))
+      .toBe('Response 1 — Sam');
+  });
+  test('a ballot no row carries keeps its number and no name', () => {
+    expect(anchorLabelFor({ anchorKind: 'response', anchorRef: '2', anchorBasis: 'ballot' }, { answers: rows }))
+      .toBe('Response 2');
+  });
+});
+
 describe('anchorLabelFor', () => {
   test('names the summary and the results plainly', () => {
     expect(anchorLabelFor({ anchorKind: 'summary', anchorRef: '' }, { answers: [] }))
@@ -208,8 +226,9 @@ describe('anchorLabelShown', () => {
     expect(anchorLabelShown({ anchorKind: 'response' })).toBe('');
   });
 
-  test('the results keep their label; nothing at all is empty', () => {
-    expect(anchorLabelShown({ anchorKind: 'results', anchorLabel: 'Results' })).toBe('Results');
+  test('the results read as the whole round, whatever was stored; nothing at all is empty', () => {
+    // rejects: "On Results" in the report beside the phone's "Comment on the whole round".
+    expect(anchorLabelShown({ anchorKind: 'results', anchorLabel: 'Results' })).toBe('the whole round');
     expect(anchorLabelShown(null)).toBe('');
   });
 });

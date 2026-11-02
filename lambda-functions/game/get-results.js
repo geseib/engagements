@@ -968,12 +968,14 @@ const handle = async (event) => {
       tallied against the answers in SK order above, as they are stored. What
       leaves this handler is keyed by DISPLAY position instead — the numbers
       the stage and the phones voted under — so a tie on the results screen
-      falls in the room's order rather than alphabetically by author. Nothing
-      maps these keys back to a ballot; every reader takes Object.values.
+      falls in the room's order rather than alphabetically by author.
     */
     const shownOrder = displayOrder(answers, gameId, paddedQuestionId);
+    // Each entry also carries its BALLOT number (pos + 1, the number the room
+    // voted under), the stable anchor a reply to it stores (phone-comments B1).
+    // A copy, so the canonical tallies the score writes read stay as they were.
     const shownTallies = Object.fromEntries(
-      shownOrder.map((canonical, pos) => [String(pos), voteTallies[canonical]]));
+      shownOrder.map((canonical, pos) => [String(pos), { ...voteTallies[canonical], ballot: pos + 1 }]));
 
     // Find winners (highest score)
     const maxScore = Math.max(...Object.values(answerScores));
@@ -1256,6 +1258,12 @@ async function handleTriviaResults(event, gameId, questionId) {
     };
   }
 
+  // Each answer's BALLOT number — its 1-based display place (answer-order.js),
+  // the same on every screen — read BEFORE the sort below reorders `answers`
+  // in place. The stable anchor a reply to it stores (phone-comments B1).
+  const triviaBallot = new Map(displayOrder(answers, gameId, paddedQuestionId)
+    .map((canonical, pos) => [answers[canonical], pos + 1]));
+
   // Sort answers by points earned (highest first), then by response time (fastest first)
   const sortedAnswers = answers.sort((a, b) => {
     if (b.PointsEarned !== a.PointsEarned) {
@@ -1273,6 +1281,7 @@ async function handleTriviaResults(event, gameId, questionId) {
   // Create leaderboard for this question
   const leaderboard = sortedAnswers.map((answer, index) => ({
     rank: index + 1,
+    ballot: triviaBallot.get(answer),
     playerName: answer.PlayerName,
     answer: answer.Answer,
     isCorrect: answer.IsCorrect || false,
@@ -1413,6 +1422,7 @@ async function handleTriviaResults(event, gameId, questionId) {
       optionE: question ? (question.optionE || question.OptionE || '') : null,
       optionF: question ? (question.optionF || question.OptionF || '') : null,
       answers: sortedAnswers.map(answer => ({
+        ballot: triviaBallot.get(answer),
         playerName: answer.PlayerName,
         answer: answer.Answer,
         isCorrect: answer.IsCorrect || false,
@@ -1632,12 +1642,17 @@ async function handleWavelengthResults(event, gameId, questionId) {
         : (nothingToCluster ? 'skipped' : 'unavailable')
     };
 
+    const wavelengthBallot = new Map(displayOrder(allAnswers, gameId, paddedQuestionId)
+      .map((canonical, pos) => [canonical, pos + 1]));
     const resultsData = {
       gameId,
       questionId: paddedQuestionId,
       gameType: 'wavelength',
       question,
       answers: submissions.map((s, i) => ({
+        // The 1-based display place (answer-order.js): the stable anchor a
+        // reply to this submission stores (phone-comments B1).
+        ballot: wavelengthBallot.get(i),
         playerName: s.player,
         name: s.player, // For compatibility
         answer: allAnswers[i].Answer,

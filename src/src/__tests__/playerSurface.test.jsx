@@ -284,16 +284,22 @@ describe('the volume is set by the state machine, and the player never chooses',
     expect(dock()).toBeNull();
   });
 
-  // rejects: RESULTS growing an action. The stage is the show in WATCH; the
-  //          phone carries only what is personal and cannot be on the stage.
-  test('results is WATCH and offers nothing to press', async () => {
+  // rejects: RESULTS growing an action beyond the one way into comments. The
+  //          stage is the show in WATCH; the phone's dock carries only
+  //          "Comment on this round" (phone-comments D9; experience plan
+  //          principle 8: the action lives in the dock), never the bare
+  //          "Feedback".
+  test('results is WATCH and its dock offers only "Comment on this round"', async () => {
     const server = makeServer({ state: 'CREATED', gameType: 'trivia' });
     installFetch(server);
     await join();
     server.state = 'RESULTS#001';
     await resync();
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'watch'));
-    expect(dock()).toBeNull();
+    const buttons = dock().querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent.trim()).toBe('Comment on this round');
+    expect(dock().textContent).toContain('Reply to a response, or comment on Workie’s read.');
   });
 });
 
@@ -825,8 +831,8 @@ describe('the states that did not exist', () => {
     await resync();
     await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Is the demo ready for Tuesday?' })).toBeInTheDocument());
-    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    await waitFor(() => expect(document.querySelector('.fbr-q__title')?.textContent).toBe('Is the demo ready for Tuesday?'));
+    expect(document.body.textContent).toMatch(/Round 1 · Comments/i);
     expect(screen.queryByText(/could not be loaded/i)).toBeNull();
   });
 
@@ -844,10 +850,10 @@ describe('the states that did not exist', () => {
     fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
     await waitFor(() => expect(screen.queryByText(/Thanks for playing/i)).toBeNull());
     expect(screen.getByText(/Comments stay open for 24 hours/)).toBeInTheDocument();
-    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    expect(document.body.textContent).toMatch(/Round 1 · Comments/i);
     // The room cannot "move on" from the end: the panel stays, and a comment can be started.
     await new Promise((r) => setTimeout(r, 50));
-    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment on /i })[0]);
     await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
   });
 

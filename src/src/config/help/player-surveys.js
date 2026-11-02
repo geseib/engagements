@@ -234,11 +234,11 @@ const playerSurveys = {
       ],
     },
     /*
-      PlayerPage ~3379: a closed survey's feedback round, FeedbackRoundPanel
-      with namesShown=false. Dev: "Read it back, then say what you think. Tap
-      Comment on the summary, on the results, or on any single response.",
-      "Results by question", the AI read, "Commenting on", "Your name is not
-      shown with this comment.", Cancel / Post comment.
+      PlayerPage: a closed survey's feedback round, FeedbackRoundPanel with
+      namesShown=false (phone-comments 3b): "Comment on the survey", Workie's
+      read with "Comment on Workie's read", "Results by question" with
+      "Comment on this question" on each card, "Comment on the whole round";
+      "Your name is not shown with this comment.", Cancel / Post comment.
     */
     {
       id: 'comments-afterwards',
@@ -251,7 +251,7 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Tap **Comment** on the part you want to talk about, write, and press **Post comment**. In a survey your name is never shown with a comment, and the phone says so. The rest works as in Commenting on a round, in Comments and quick questions.',
+          text: 'Pick what you are talking about: **Comment on Workie’s read**, **Comment on this question** on one question\'s card, or **Comment on the whole round**. Write, and press **Post comment**. In a survey your name is never shown with a comment, and the phone says so. The rest works as in Commenting on a round, in Comments and quick questions.',
         },
       ],
     },
