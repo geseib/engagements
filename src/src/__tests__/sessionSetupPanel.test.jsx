@@ -124,7 +124,7 @@ describe('the panel as a surface', () => {
     // the signed-in name, email and Administrator badge twice over. The room
     // can watch this panel.
     const { container } = renderPanel({ currentUser: { attributes: { email: 'host@example.com' } } });
-    for (const tab of ['Players', 'Questions', 'Settings']) {
+    for (const tab of ['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']) {
       openTab(tab);
       expect(container.textContent).not.toContain('@example.com');
     }
@@ -142,22 +142,22 @@ describe('the panel as a surface', () => {
     // which looks equivalent and is not. setupPanelCallSite.test.js asserts the
     // source; this asserts the rendered element is really reachable.
     const { container } = renderPanel();
-    for (const tab of ['Players', 'Questions', 'Settings']) {
+    for (const tab of ['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']) {
       openTab(tab);
       expect(container.querySelector('.setup-panel')).not.toBeNull();
     }
   });
 
-  test('only the Questions tab widens the panel', () => {
+  test('only the Rounds section (which holds the question browser) widens the panel', () => {
     // rejects: widening unconditionally. Every pixel of panel is a pixel of
     // projected stage the room loses, and Players and Settings are short rows
     // that would just sit in an empty column.
     const { container } = renderPanel();
 
-    openTab('Questions');
+    openTab('Rounds');
     expect(container.querySelector('.setup-panel')).toHaveClass('setup-panel--wide');
 
-    for (const tab of ['Players', 'Settings']) {
+    for (const tab of ['Screens', 'Phone remote', 'Joining', 'People', 'End session']) {
       openTab(tab);
       expect(container.querySelector('.setup-panel')).not.toHaveClass('setup-panel--wide');
     }
@@ -244,7 +244,7 @@ describe('the Players tab', () => {
     // until RESULTS, and entering RESULTS is what reveals, so a cumulative
     // list cannot attribute an unrevealed answer.
     renderPanel();
-    openTab('Players');
+    openTab('People');
     const names = screen.getAllByTestId('roster-name').map((n) => n.textContent);
     expect(names).toEqual(['Grace', 'Alan', 'Ada']);
     expect(screen.getAllByTestId('roster-score').map((s) => s.textContent))
@@ -255,7 +255,7 @@ describe('the Players tab', () => {
     // rejects: dropping the per-round tick, which is the only thing that turns
     // a standings list into an operational one — who are we waiting on.
     renderPanel({ gameState: 'ASK#001', playersWhoAnswered: ['Grace'] });
-    openTab('Players');
+    openTab('People');
     const rows = screen.getAllByTestId('roster-row');
     expect(rows[0]).toHaveAttribute('data-done', 'true');   // Grace
     expect(rows[1]).toHaveAttribute('data-done', 'false');  // Alan
@@ -267,7 +267,7 @@ describe('the Players tab', () => {
     renderPanel({
       gameState: 'VOTE#001', playersWhoAnswered: ['Grace', 'Alan', 'Ada'], playersWhoVoted: ['Ada'],
     });
-    openTab('Players');
+    openTab('People');
     const rows = screen.getAllByTestId('roster-row');
     expect(rows.find((r) => within(r).queryByText('Ada'))).toHaveAttribute('data-done', 'true');
     expect(rows.find((r) => within(r).queryByText('Grace'))).toHaveAttribute('data-done', 'false');
@@ -275,7 +275,7 @@ describe('the Players tab', () => {
 
   test('with nobody in the room yet it says so rather than rendering nothing', () => {
     renderPanel({ players: [] });
-    openTab('Players');
+    openTab('People');
     expect(screen.getByText(/nobody has joined/i)).toBeInTheDocument();
   });
 });
@@ -285,7 +285,7 @@ describe('the Questions tab — categories', () => {
     // rejects: the mockup's static `7 left` badge. The shipped number is
     // computed from the bitmask and the per-category counts, and it moves.
     renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     const chips = screen.getAllByTestId('category-toggle');
     expect(chips[0].textContent).toMatch(/Pricing Power/);
     expect(chips[0].textContent).toMatch(/7/);
@@ -296,7 +296,7 @@ describe('the Questions tab — categories', () => {
     // rejects: dropping the state that stops a host enabling a category which
     // cannot yield a question.
     renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getAllByTestId('category-toggle')[2].className).toMatch(/exhausted/);
     expect(screen.getAllByTestId('category-toggle')[0].className).not.toMatch(/exhausted/);
   });
@@ -305,7 +305,7 @@ describe('the Questions tab — categories', () => {
     // rejects: dropping isTogglingCategory, which lets a host fire three
     // overlapping writes at the bitmask and get whichever lands last.
     renderPanel({ isTogglingCategory: true });
-    openTab('Questions');
+    openTab('Rounds');
     for (const chip of screen.getAllByTestId('category-toggle')) {
       expect(chip).toBeDisabled();
     }
@@ -316,7 +316,7 @@ describe('the Questions tab — categories', () => {
     // off-by-one here toggles the neighbouring category.
     const onToggleCategory = jest.fn();
     renderPanel({ onToggleCategory });
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.click(screen.getAllByTestId('category-toggle')[1]);
     expect(onToggleCategory).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Competitive Response', position: 2, enabled: true })
@@ -327,14 +327,14 @@ describe('the Questions tab — categories', () => {
     // rejects: summing every row, which prints a total the host cannot reach.
     // Here Packaging is enabled but empty and all three are on: 7 + 9 + 0.
     const { unmount } = renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getByTestId('questions-remaining').textContent).toMatch(/16/);
     unmount();
 
     renderPanel({
       categoryBitmasks: { ...categoryBitmasks, 'HostMask1-8': '10000000' },
     });
-    openTab('Questions');
+    openTab('Rounds');
     // Only Pricing Power is on now, so Competitive Response's 9 must drop out.
     expect(screen.getByTestId('questions-remaining').textContent).toMatch(/\b7\b/);
   });
@@ -346,7 +346,7 @@ describe('the Questions tab — the browser', () => {
     // in was a per-category magnifier that scoped the fetch to one category,
     // so a host could never see the whole set at once.
     renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getAllByTestId('browser-row')).toHaveLength(3);
   });
 
@@ -356,7 +356,7 @@ describe('the Questions tab — the browser', () => {
     // the options carry the answer — and every display profile shares this
     // surface with the room.
     const { container } = renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     expect(container.textContent).not.toContain('Seat-based to usage-based billing');
     expect(container.textContent).not.toContain('A 5% list increase');
     expect(container.textContent).not.toContain('Because usage tracks value.');
@@ -368,7 +368,7 @@ describe('the Questions tab — the browser', () => {
 
   test('it still says what a host needs to choose by', () => {
     renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     const row = screen.getAllByTestId('browser-row')[0];
     expect(row.textContent).toMatch(/Which pricing change/);
     expect(row.textContent).toMatch(/Pricing Power/);
@@ -381,7 +381,7 @@ describe('the Questions tab — the browser', () => {
     // rejects: shipping the search box without the count. "Showing 1 of 3" is
     // what tells a host the list is filtered rather than short.
     renderPanel();
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'packaging' } });
     expect(screen.getAllByTestId('browser-row')).toHaveLength(1);
     expect(screen.getByTestId('browser-count').textContent).toMatch(/1 of 3/);
@@ -398,7 +398,7 @@ describe('the Questions tab — the browser', () => {
     expect(filterBrowserRows(withDetail.map((q) => browserRow(q)), { search: 'elasticity', matchDetail: true }))
       .toHaveLength(1);
     renderPanel({ questions: withDetail });
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getByPlaceholderText('Search titles…')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'elasticity' } });
     expect(screen.queryAllByTestId('browser-row')).toHaveLength(0);
@@ -411,7 +411,7 @@ describe('the Questions tab — the browser', () => {
     // conflating them takes a pool away from a host who only wanted to look.
     const onToggleCategory = jest.fn();
     renderPanel({ onToggleCategory });
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.click(screen.getByRole('button', { name: 'Competitive Response' }));
     expect(screen.getAllByTestId('browser-row')).toHaveLength(1);
     expect(onToggleCategory).not.toHaveBeenCalled();
@@ -421,7 +421,7 @@ describe('the Questions tab — the browser', () => {
     // rejects: hiding them. "Did I already use this?" is the question a host
     // asks most, and hiding the row hides the answer to it.
     renderPanel({ usedQuestionIds: ['q-2'] });
-    openTab('Questions');
+    openTab('Rounds');
     const rows = screen.getAllByTestId('browser-row');
     expect(rows).toHaveLength(3);
     expect(rows[1].className).toMatch(/is-used/);
@@ -431,7 +431,7 @@ describe('the Questions tab — the browser', () => {
 
   test('"Unasked only" hides them, on request', () => {
     renderPanel({ usedQuestionIds: ['q-2'] });
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.click(screen.getByRole('button', { name: /unasked only/i }));
     expect(screen.getAllByTestId('browser-row')).toHaveLength(2);
   });
@@ -442,7 +442,7 @@ describe('the Questions tab — the browser', () => {
     // needs.
     const onSelectQuestion = jest.fn();
     renderPanel({ onSelectQuestion });
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.click(within(screen.getAllByTestId('browser-row')[0]).getByRole('button', { name: /^ask now$/i }));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
   });
@@ -450,13 +450,13 @@ describe('the Questions tab — the browser', () => {
   test('while questions are loading it says so', () => {
     // rejects: dropping the spinner the shipped modal had. Fetching is remote.
     renderPanel({ questions: [], loadingQuestions: true });
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getByText(/loading questions/i)).toBeInTheDocument();
   });
 
   test('an empty set gets an empty state, not a blank panel', () => {
     renderPanel({ questions: [], loadingQuestions: false });
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getByText(/no questions/i)).toBeInTheDocument();
   });
 });
@@ -465,7 +465,7 @@ describe('the Settings tab', () => {
   test('the QR encodes the remote, never the join link', () => {
     // rejects: the mix-up that walks a host's own phone into the player flow.
     renderPanel();
-    openTab('Settings');
+    openTab('Phone remote');
     expect(screen.getByTestId('qr').getAttribute('data-value'))
       .toMatch(/\/remote\?gameId=/);
   });
@@ -474,7 +474,7 @@ describe('the Settings tab', () => {
     // rejects: filing the remote QR under a Join heading — the shipped bug
     // that sent a latecomer to a login for an account they will never have.
     const { container } = renderPanel();
-    openTab('Settings');
+    openTab('Phone remote');
     const remote = container.querySelector('.setup-remote');
     expect(remote).toBeTruthy();
     expect(remote.textContent).not.toMatch(/join/i);
@@ -482,7 +482,7 @@ describe('the Settings tab', () => {
 
   test('the remote url is also plain text, for the same-machine case', () => {
     renderPanel();
-    openTab('Settings');
+    openTab('Phone remote');
     expect(screen.getByText('https://eng.example.us/remote?gameId=4821')).toBeInTheDocument();
   });
 
@@ -500,7 +500,7 @@ describe('the Settings tab', () => {
     const onCopyJoinLink = jest.fn();
     const onInvite = jest.fn();
     renderPanel({ onCopyJoinLink, onInvite });
-    openTab('Settings');
+    openTab('Joining');
     fireEvent.click(screen.getByRole('button', { name: /copy join link/i }));
     fireEvent.click(screen.getByRole('button', { name: /invite/i }));
     expect(onCopyJoinLink).toHaveBeenCalledTimes(1);
@@ -531,7 +531,7 @@ describe('the Settings tab', () => {
   test('the display profile picker changes the profile', () => {
     const onProfileChange = jest.fn();
     renderPanel({ onProfileChange });
-    openTab('Settings');
+    openTab('Screens');
     // "Display profile" was renamed "Room screen size" in the 16 Oct regroup (Screens group).
     fireEvent.change(screen.getByLabelText('Room screen size'), { target: { value: 'table' } });
     expect(onProfileChange).toHaveBeenCalledWith('table');
@@ -541,7 +541,7 @@ describe('the Settings tab', () => {
     // rejects: shipping accelerators nothing documents. \\ and Esc in
     // particular are undiscoverable otherwise.
     const { container } = renderPanel();
-    openTab('Settings');
+    openTab('Screens');
     const keys = container.querySelector('.setup-keys');
     expect(keys.textContent).toMatch(/Space/);
     expect(keys.textContent).toMatch(/step back/i);
@@ -559,8 +559,9 @@ describe('the Settings tab', () => {
       onShowHowToPlay: jest.fn(),
     };
     renderPanel(handlers);
-    openTab('Settings');
+    openTab('Joining');
     fireEvent.click(screen.getByRole('button', { name: /join code/i }));
+    openTab('End session');
     /*
       "Back to Menu", not "Switch game". The button leaves the session and shows
       the host menu — it does NOT end the session, which stays live and
@@ -570,6 +571,7 @@ describe('the Settings tab', () => {
     */
     fireEvent.click(screen.getByRole('button', { name: /^Main menu$/ }));
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
+    openTab('Screens');
     fireEvent.click(screen.getByRole('button', { name: /how this works/i }));
     for (const fn of Object.values(handlers)) expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -585,26 +587,30 @@ describe('the Settings tab', () => {
     test('appears for a started non-survey session, and raises onEndSession', () => {
       const onEndSession = jest.fn();
       renderPanel({ gameState: 'ASK#001', gameType: 'trivia', onEndSession });
-      openTab('Settings');
+      openTab('End session');
       fireEvent.click(screen.getByRole('button', { name: /end session/i }));
       expect(onEndSession).toHaveBeenCalledTimes(1);
     });
 
     test('absent for a survey — it has its own way out, on its own CLOSED phase', () => {
       renderPanel({ gameState: 'SURVEY#OPEN', gameType: 'survey' });
-      openTab('Settings');
+      openTab('End session');
       expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
     });
 
-    test('absent before the session has started — Back to Menu already leaves it untouched', () => {
-      renderPanel({ gameState: 'CREATED', gameType: 'trivia' });
-      openTab('Settings');
-      expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
+    // rejects: dev QA 2 Nov — two lobby sessions could not be ended.
+    test('there before the session has started too: End session is in every phase', () => {
+      const onEndSession = jest.fn();
+      renderPanel({ gameState: 'CREATED', gameType: 'trivia', onEndSession });
+      openTab('End session');
+      expect(screen.getByText(/Nothing has been played yet/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /end session/i }));
+      expect(onEndSession).toHaveBeenCalledTimes(1);
     });
 
     test('absent once the session has already ended — the stage has its own way on', () => {
       renderPanel({ gameState: 'ENDED', gameType: 'trivia' });
-      openTab('Settings');
+      openTab('End session');
       expect(screen.queryByRole('button', { name: /end session/i })).toBeNull();
     });
   });
@@ -623,7 +629,7 @@ describe('the Settings tab', () => {
     const onViewReports = jest.fn();
     const { container } = renderPanel({ onViewReports });
 
-    openTab('Settings');
+    openTab('Screens');
     expect(screen.queryByRole('button', { name: /session report/i })).toBeNull();
 
     openTab('Rounds');
@@ -642,7 +648,7 @@ describe('the Settings tab', () => {
     // a host could only report a bug from Settings. It is the help button's menu
     // now, and the help button is in the header whichever tab is open.
     renderPanel({});
-    openTab('Settings');
+    openTab('Screens');
     const help = document.querySelector('.setup-panel__help');
     expect(help).toHaveAttribute('aria-haspopup', 'menu');
     fireEvent.click(help);
@@ -668,7 +674,7 @@ describe('the Settings tab', () => {
 describe('the Settings tab is where the names decisions are made', () => {
   const openNames = (props = {}) => {
     const result = renderPanel({ gameType: 'call-and-answer', ...props });
-    openTab('Settings');
+    openTab('Rounds');
     return result;
   };
 
@@ -785,7 +791,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // rejects: rendering the section for every game type, which would offer a
     // trivia host a switch that changes nothing on screen.
     const { container } = renderPanel({ gameType: 'trivia' });
-    openTab('Settings');
+    openTab('Rounds');
     expect(container.querySelector('[data-testid="attribute-authors"]')).toBeNull();
     expect(container.querySelector('.setup-settings').textContent).not.toMatch(/still waiting/i);
   });
@@ -796,7 +802,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // waitingRoster ignores this setting entirely — and a switch that moves
     // nothing is exactly what this panel refuses to draw.
     const { container } = renderPanel({ gameType: 'call-and-answer', anonymousUntilReveal: false });
-    openTab('Settings');
+    openTab('Rounds');
     expect(container.querySelector('[data-testid="attribute-authors"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="name-waiting"]')).toBeNull();
     expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
@@ -809,7 +815,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     const { container } = renderPanel({
       gameType: 'call-and-answer', answerCount: 2, authorsRevealed: true,
     });
-    openTab('Settings');
+    openTab('Rounds');
     expect(container.querySelector('[data-testid="name-waiting"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="waiting-caution"]')).toBeNull();
   });
@@ -826,7 +832,7 @@ describe('the Settings tab is where the names decisions are made', () => {
     // same panel on all four profiles and requiring identical answers.
     const seen = ['room', 'tv', 'call', 'table'].map((profile) => {
       const { container, unmount } = renderPanel({ gameType: 'call-and-answer', profile, answerCount: 2 });
-      openTab('Settings');
+      openTab('Rounds');
       const section = container.querySelector('.setup-settings');
       const snapshot = {
         attribute: container.querySelector('[data-testid="attribute-authors"]').checked,
@@ -866,7 +872,7 @@ describe('the question browser filters on what the host can see', () => {
   // filter drops nothing and the row never dims.
   test('a question asked this session is tagged and filtered, despite the id prefix', () => {
     renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
-    openTab('Questions');
+    openTab('Rounds');
 
     expect(screen.getByText('Asked')).toBeInTheDocument();
     expect(rows()).toHaveLength(3);
@@ -880,7 +886,7 @@ describe('the question browser filters on what the host can see', () => {
   // state and the row's class is what the stylesheet keys off.
   test('the asked row is marked in the DOM as well as in words', () => {
     const { container } = renderPanel({ usedQuestionIds: ['QUESTION#q-2'] });
-    openTab('Questions');
+    openTab('Rounds');
     expect(container.querySelectorAll('.setup-qb__row.is-used')).toHaveLength(1);
   });
 
@@ -901,7 +907,7 @@ describe('the question browser filters on what the host can see', () => {
 
   test('a question in a switched-off category is tagged Off', () => {
     renderPanel(oneCategoryOff);
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.getByText('Off')).toBeInTheDocument();
   });
 
@@ -909,7 +915,7 @@ describe('the question browser filters on what the host can see', () => {
   // for the button, not just the label.
   test('"Enabled only" drops the switched-off questions', () => {
     renderPanel(oneCategoryOff);
-    openTab('Questions');
+    openTab('Rounds');
     expect(rows()).toHaveLength(3);
 
     fireEvent.click(screen.getByRole('button', { name: /enabled only/i }));
@@ -921,7 +927,7 @@ describe('the question browser filters on what the host can see', () => {
   // literal question "what can I actually ask next".
   test('the two filters compose', () => {
     renderPanel({ ...oneCategoryOff, usedQuestionIds: ['QUESTION#q-1'] });
-    openTab('Questions');
+    openTab('Rounds');
     fireEvent.click(screen.getByRole('button', { name: /enabled only/i }));
     fireEvent.click(screen.getByRole('button', { name: /unasked only/i }));
     // q-1 asked, q-2 off — only q-3 is both enabled and unasked.
@@ -934,7 +940,7 @@ describe('the question browser filters on what the host can see', () => {
   // nothing while implying otherwise is worse than no button.
   test('"Enabled only" is not offered when there is no live mask to read', () => {
     renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.queryByRole('button', { name: /enabled only/i })).not.toBeInTheDocument();
   });
 
@@ -942,7 +948,7 @@ describe('the question browser filters on what the host can see', () => {
   // an absent mask read as "nothing is enabled" would do.
   test('nothing is tagged Off before a game has started', () => {
     renderPanel({ categories: [], categoryCounts: null, categoryBitmasks: null });
-    openTab('Questions');
+    openTab('Rounds');
     expect(screen.queryByText('Off')).not.toBeInTheDocument();
     expect(rows()).toHaveLength(3);
   });

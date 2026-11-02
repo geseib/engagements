@@ -904,8 +904,10 @@ describe('canEndSession — the settings panel gate', () => {
     expect(canEndSession('survey', 'SURVEY#CLOSED')).toBe(false);
   });
 
-  test('refused before the session has started — nothing running to stop yet', () => {
-    expect(canEndSession('trivia', 'CREATED')).toBe(false);
+  // rejects: dev QA 2 Nov — two lobby sessions could not be ended.
+  test('offered before the session has started too: End session is in every phase', () => {
+    expect(canEndSession('trivia', 'CREATED')).toBe(true);
+    expect(canEndSession('call-and-answer', 'STARTED')).toBe(true);
   });
 
   test('refused once the session is already ENDED — the stage has its own way on', () => {

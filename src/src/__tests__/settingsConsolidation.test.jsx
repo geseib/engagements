@@ -41,16 +41,26 @@ const team = { orgId: 'org_A', name: 'Relay Labs', type: 'team' };
 const personal = { orgId: 'org_P', name: 'George Seib', type: 'personal' };
 const user = { attributes: { name: 'George Seib', email: 'george@example.com' } };
 
-describe('the Settings tab, grouped', () => {
-  test('four groups, most used first, then Session and Keys folded away', () => {
+describe('the Session menu, in sections', () => {
+  // rejects: dev QA 2 Nov — one Settings tab of four groups plus a Session
+  // fold; PLAN §3.2a names the sections, each its own, in order.
+  test('Screens, Phone remote, Rounds, Joining, then End session; the old groups live in them', () => {
     const { container } = renderSettings();
-    const groups = [...container.querySelectorAll('.setup-settings > .setup-group > h3.setup-h')]
-      .map((h) => h.childNodes[0].textContent);
-    expect(groups).toEqual(['Screens', 'Your phone as a remote', 'The rounds', 'Joining']);
-    const folds = [...container.querySelectorAll('.setup-settings > details.setup-fold > summary')]
-      .map((s) => s.textContent);
-    expect(folds).toEqual(['Session: Main menu, End session, sign out', 'Keyboard shortcuts']);
-    container.querySelectorAll('details.setup-fold').forEach((d) => expect(d.open).toBe(false));
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs).toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']);
+    const heads = (name) => {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      return [...container.querySelectorAll('.setup-group > h3.setup-h')].map((h) => h.childNodes[0].textContent);
+    };
+    expect(heads('Screens')[0]).toBe('Screens');
+    expect(heads('Phone remote')).toEqual(['Your phone as a remote']);
+    expect(heads('Rounds')).toEqual(['How the rounds run']);
+    expect(heads('Joining')).toEqual(['Joining']);
+    expect(heads('End session')).toEqual(['End session']);
+    // The Session fold is gone; only Keyboard shortcuts folds away, on Screens.
+    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
+    const folds = [...container.querySelectorAll('details.setup-fold > summary')].map((s) => s.textContent);
+    expect(folds).toEqual(['Keyboard shortcuts']);
   });
 
   test('"Display profile" is renamed "Room screen size" and sits with the screens', () => {
@@ -106,7 +116,7 @@ describe('the Screens group', () => {
 
 describe('the remote says who may sign in on the phone', () => {
   test('a team session: any host or admin of the team, and who is on this laptop now', () => {
-    const { container } = renderSettings({ remoteWho: remoteSignIn({ org: team, user, privateScreen: true }) });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: remoteSignIn({ org: team, user, privateScreen: true }) });
     const who = container.querySelector('.setup-remote__who');
     expect(who.textContent).toContain('Sign in on the phone as any host or admin of Relay Labs.');
     expect(who.textContent).toContain('On this laptop now: George Seib · Relay Labs');
@@ -115,14 +125,14 @@ describe('the remote says who may sign in on the phone', () => {
 
   test('a personal account: only you, by email where the laptop is private', () => {
     const words = remoteSignIn({ org: personal, user, privateScreen: true });
-    const { container } = renderSettings({ remoteWho: words });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: words });
     const who = container.querySelector('.setup-remote__who');
     expect(who.textContent).toContain('Sign in on the phone as you (george@example.com). Only your account can drive this session.');
     expect(who.textContent).toContain('On this laptop now: George Seib · Personal');
   });
 
   test('on one screen the room may be watching, so the email never prints', () => {
-    const { container } = renderSettings({ remoteWho: remoteSignIn({ org: personal, user, privateScreen: false }) });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: remoteSignIn({ org: personal, user, privateScreen: false }) });
     expect(container.textContent).not.toContain('@example.com');
     expect(container.querySelector('.setup-remote__who').textContent)
       .toContain('Sign in on the phone as you (George Seib). Only your account can drive this session.');

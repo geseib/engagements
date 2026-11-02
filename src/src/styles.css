@@ -319,7 +319,14 @@ body {
   padding-left: 0.6em;
   border-left: 3px solid var(--warn);
 }
-.host-action-bar button.is-armed {
+/* THE MAIN BUTTON STAYS ORANGE WHEN ARMED (PLAN principle 4; dev QA 2 Nov:
+   it switched colour from state to state). An armed primary keeps its fill
+   and takes the warn ring; only a quiet button takes the warn wash. */
+.host-action-bar .host-action-bar__primary.is-armed {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / 0.55);
+}
+.host-action-bar button.is-armed:not(.host-action-bar__primary) {
   color: var(--text);
   background: rgb(var(--warn-rgb) / 0.22);
   border-color: var(--warn);

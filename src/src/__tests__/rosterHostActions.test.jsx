@@ -45,7 +45,7 @@ const players = [
 ];
 
 const renderPanel = (props = {}) => render(
-  <SessionSetupPanel players={players} gameId="4821" {...props} />
+  <SessionSetupPanel players={players} gameId="4821" initialTab="people" {...props} />
 );
 
 /** The roster row whose NAME cell reads `name` — not any row mentioning it. */

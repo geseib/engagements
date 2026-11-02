@@ -63,6 +63,14 @@ export function oneScreenWhy(gameType) {
 */
 export const CONSOLE_TYPES = ['call-and-answer', 'trivia', 'poll'];
 
+/*
+  WHICH TYPES OPEN SETUP BEFORE ROUND 1 (session-start D1; experience plan
+  §7 decision 10). The console types, and Wavelength: dev QA 2 Nov found Start
+  went straight to its lobby. Wavelength's Setup has no chooser; step 1 says
+  it runs on one screen and why (ONE_SCREEN_WHY), then the one-screen path.
+*/
+export const SETUP_TYPES = Object.freeze([...CONSOLE_TYPES, 'wavelength']);
+
 /** True when the host page renders the console: two screens and a console type. */
 export function consoleFor(twoSurfaces, gameType) {
   return Boolean(twoSurfaces) && CONSOLE_TYPES.includes(gameType || 'call-and-answer');

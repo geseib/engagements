@@ -88,8 +88,8 @@ async function renderLiveGame() {
   render(<GameHostPage />);
   const setup = await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   await act(async () => { fireEvent.click(setup); });
-  await screen.findByRole('tab', { name: 'Settings' });
-  fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+  await screen.findByRole('tab', { name: 'End session' });
+  fireEvent.click(screen.getByRole('tab', { name: 'End session' }));
 }
 
 beforeEach(() => {

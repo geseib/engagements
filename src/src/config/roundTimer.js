@@ -48,6 +48,9 @@ export const TIMER_WORDS = Object.freeze({
   rememberedVote: 'Remembered for your next vote.',
   timesUpPart: { before: '', action: 'Time\'s up.', after: ' Start voting, or give them another minute.' },
   timesUpPartNoVote: { before: '', action: 'Time\'s up.', after: ' Show the results, or give them another minute.' },
+  // Everyone has answered: that leads, whatever the clock says (dev QA 2 Nov).
+  everyoneInPart: { before: '', action: 'Everyone\'s in.', after: ' Start voting.' },
+  everyoneInPartNoVote: { before: '', action: 'Everyone\'s in.', after: ' Show the results.' },
   remoteHeading: 'Time',
 });
 
@@ -157,6 +160,18 @@ export function basePhase(gameState) {
 export function timerOnPhase(timer, gameState) {
   if (!timer || !timer.phase) return null;
   return basePhase(gameState) === String(timer.phase) ? timer : null;
+}
+
+/**
+ * YOUR PART NOW AT ZERO, OR null for the step's own line (D4). Answering only.
+ * When everyone has answered, "Everyone's in" takes precedence over the time
+ * message: dev QA 2 Nov saw "Time's up" with 3 of 3 answered, which reads as a
+ * room that is late when it is done.
+ */
+export function timesUpPartFor({ timeIsUp = false, gameState = '', closesIntoVote = true, everyoneIn = false } = {}) {
+  if (!timeIsUp || !/^ASK#/.test(basePhase(gameState))) return null;
+  if (everyoneIn) return closesIntoVote ? TIMER_WORDS.everyoneInPart : TIMER_WORDS.everyoneInPartNoVote;
+  return closesIntoVote ? TIMER_WORDS.timesUpPart : TIMER_WORDS.timesUpPartNoVote;
 }
 
 /** Which chip an opening control takes: 'ask' (a round opens), 'vote' (voting opens) or null. */

@@ -12,7 +12,35 @@ import {
   classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
   AI_FAILURE_OFFLINE, AI_FAILURE_UNREACHABLE, AI_FAILURE_REJECTED,
   AI_FAILURE_SERVER, AI_FAILURE_TIMEOUT, AI_MAX_AUTO_RETRIES,
+  summaryRoundId, summaryNotReady,
 } from '../utils/aiSummaryRecovery';
+import fs from 'fs';
+import path from 'path';
+
+// rejects: dev QA 2 Nov — the host logged 404s on ai-summary?questionId=1 and
+// =001: two spellings of one round, and "not written yet" said as an error.
+describe('the quiet summary read', () => {
+  it('spells a round one way: "1" and "001" are the same read', () => {
+    expect(summaryRoundId(1)).toBe('001');
+    expect(summaryRoundId('1')).toBe('001');
+    expect(summaryRoundId('001')).toBe('001');
+    expect(summaryRoundId('000')).toBe('000');
+    expect(summaryRoundId('q-1727000000')).toBe('q-1727000000');
+  });
+  it('reads 200 { status: not_ready } as nothing yet, and a summary as a summary', () => {
+    expect(summaryNotReady({ status: 'not_ready', gameId: '4821' })).toBe(true);
+    expect(summaryNotReady({ summary: 'The room wants…' })).toBe(false);
+    expect(summaryNotReady(null)).toBe(false);
+  });
+  it('the host page and the room\'s window ask quietly', () => {
+    const host = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
+    const present = fs.readFileSync(path.join(__dirname, '..', 'present', 'usePresentation.js'), 'utf8');
+    expect(host).toMatch(/ai-summary\?questionId=\$\{encodeURIComponent\(questionId\)\}&quiet=1/);
+    expect(host).toMatch(/ai-summary\/host\?debug=true&questionId=\$\{encodeURIComponent\(questionId\)\}&quiet=1/);
+    expect(host).toMatch(/summaryRoundId\(rawQuestionId\)/);
+    expect(present).toMatch(/ai-summary\?questionId=\$\{encodeURIComponent\(round\.padded\)\}&quiet=1/);
+  });
+});
 
 describe('classifyAISummaryFailure', () => {
   // rejects: collapsing the offline case into the generic network/server copy.

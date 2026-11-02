@@ -120,7 +120,22 @@
 /* The bar's own sizes are rem/em on the 16px root (0.7rem = 11px, under the
    floor); inside the console they are pinned to the laptop ladder. */
 .hc-acts .host-action-bar__hint, .hc-acts .host-action-bar__armed { font-size: 13px; }
-.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary { font-size: 15px; }
+.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary, .hc-acts .host-action-bar__addtime { font-size: 15px; }
+
+/* ONE ORANGE MAIN BUTTON, IN EVERY STATE (PLAN §2 principle 4; dev QA 2 Nov:
+   it went blue in some states and orange in others). The bar's buttons carry
+   the global .btn-primary / .btn-secondary, which bare rules elsewhere in the
+   bundle paint Bootstrap blue and paper white, in whatever order the chunks
+   load. Stated here at a specificity those leaks cannot reach, as the stage's
+   dock does (styles/stage.css): the main action is the --action fill, armed
+   or not; a disabled one is a grey wash, never a solid fill; every other
+   button is quiet. Measured in mainButtonPalette.test.js. */
+.hc-acts .host-action-bar .host-action-bar__primary { background: var(--action); border: 1px solid var(--action); color: var(--on-action); cursor: pointer; opacity: 1; transform: none; box-shadow: none; }
+.hc-acts .host-action-bar .host-action-bar__primary:hover:not(:disabled) { background: var(--action-hover); border-color: var(--action-hover); color: var(--on-action); transform: none; box-shadow: none; }
+.hc-acts .host-action-bar .host-action-bar__primary:disabled { background: rgb(var(--slate-rgb) / .18); border-color: transparent; color: var(--muted); cursor: not-allowed; opacity: 1; transform: none; box-shadow: none; }
+.hc-acts .host-action-bar .host-action-bar__primary.is-armed { background: var(--action); color: var(--on-action); border-color: var(--warn); box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / .55); }
+.hc-acts .host-action-bar .host-action-bar__secondary, .hc-acts .host-action-bar .host-action-bar__tertiary, .hc-acts .host-action-bar .host-action-bar__addtime { background: transparent; border: 1px solid var(--rule-strong); color: var(--text); cursor: pointer; transform: none; box-shadow: none; }
+.hc-acts .host-action-bar .host-action-bar__secondary:hover:not(:disabled), .hc-acts .host-action-bar .host-action-bar__tertiary:hover:not(:disabled), .hc-acts .host-action-bar .host-action-bar__addtime:hover:not(:disabled) { background: var(--row-hover); border-color: var(--muted); color: var(--text); transform: none; box-shadow: none; }
 .hc-acts .host-action-bar__keyhint, .hc-acts .host-action-bar__primary .keycap { font-size: 12px; }
 
 /* Keyboard focus, as WorkflowStrip.css draws it. */

@@ -34,6 +34,8 @@ export const PULSE_WORDS = Object.freeze({
   onlyYou: 'only you see this',
   everyoneIn: 'Everyone\'s in',
   stillWriting: 'still writing',
+  // A trivia or a choice poll: nobody writes, they pick (dev QA 2 Nov).
+  stillAnswering: 'still answering',
   stillVoting: 'still voting',
   nobodyYet: 'Nobody here yet',
   here: 'here',
@@ -52,6 +54,21 @@ export const PULSE_WORDS = Object.freeze({
   inTheRoom: 'in the room',
   roundClosed: 'Round closed',
 });
+
+/**
+ * ARE THIS ROUND'S ANSWERS OPTIONS? Trivia always; a poll unless it is an open
+ * (text) question. A poll row with no `kind` reads as a choice when it has two
+ * or more options, otherwise as open (the survey contract's pollFieldsOf).
+ * Dev QA 2 Nov: Trivia and Poll said "still writing" for a tap on an option.
+ */
+export function answersAreChoices(gameType, question = null) {
+  if (gameType === 'trivia') return true;
+  if (gameType !== 'poll') return false;
+  const q = question || {};
+  const options = q.options || q.Options;
+  const kind = q.kind || q.Kind || (Array.isArray(options) && options.length >= 2 ? 'choice' : 'text');
+  return kind !== 'text';
+}
 
 /** Which column of D3's table a console moment reads from. */
 const PHASE = Object.freeze({
@@ -117,6 +134,8 @@ export function pulseFor({
   ringStepMs = 0,
   // A format with no vote (Trivia, Poll; 2g): after the round, "N here", never "0 voted".
   noVote = false,
+  // The answers are options (answersAreChoices): "still answering", not "still writing".
+  choice = false,
 } = {}) {
   const phase = pulsePhase(moment);
   const n = Math.max(0, Number(players) || 0);
@@ -139,7 +158,7 @@ export function pulseFor({
       everyoneIn: all,
       sub: n === 0 ? PULSE_WORDS.nobodyYet
         : all ? PULSE_WORDS.everyoneIn
-          : `${Math.max(0, n - done)} ${phase === 'answer' ? PULSE_WORDS.stillWriting : PULSE_WORDS.stillVoting}`,
+          : `${Math.max(0, n - done)} ${phase === 'answer' ? (choice ? PULSE_WORDS.stillAnswering : PULSE_WORDS.stillWriting) : PULSE_WORDS.stillVoting}`,
     };
   } else if (phase === 'after') {
     room = { eyebrow: PULSE_WORDS.thisRound, value: String(a), of: PULSE_WORDS.answeredLower, bar: null, everyoneIn: false, sub: noVote ? `${n} ${PULSE_WORDS.here}` : `${v} ${PULSE_WORDS.votedLower}` };

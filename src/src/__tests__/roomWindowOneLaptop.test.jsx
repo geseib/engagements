@@ -180,8 +180,11 @@ describe('two screens covers the Build Room (item 3)', () => {
     // The round types' panel and Setup are GameHostPage's; a Build Room session never reaches it.
     expect(read('App.jsx')).toMatch(/if \(\/\^\\\/build\\\/\?\$\/\.test\(path\)\)/);
     // The lobby chooser (Setup's step 1) is the console types' own (Call &
-    // Answer, Trivia and Poll since 2g), in an event too (2d); never a Build Room's.
-    expect(read('GameHostPage.jsx')).toMatch(/const setupOn = hostPhase === 'LOBBY' && Boolean\(gameId\)\n\s*&& CONSOLE_TYPES\.includes\(normalizeGameType\(currentGameType\)\) && typeKnownFor === gameId;/);
+    // Answer, Trivia and Poll since 2g), in an event too (2d); never a Build
+    // Room's. Setup opens for Wavelength too (dev QA 2 Nov), with the choice
+    // made for it: SETUP_TYPES is the console types plus Wavelength.
+    expect(read('GameHostPage.jsx')).toMatch(/const setupOn = hostPhase === 'LOBBY' && Boolean\(gameId\)\n\s*&& SETUP_TYPES\.includes\(normalizeGameType\(currentGameType\)\) && typeKnownFor === gameId;/);
+    expect(read('config/surfaces.js')).toMatch(/SETUP_TYPES = Object\.freeze\(\[\.\.\.CONSOLE_TYPES, 'wavelength'\]\)/);
   });
 });
 

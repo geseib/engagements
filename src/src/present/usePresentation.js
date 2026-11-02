@@ -178,12 +178,14 @@ export default function usePresentation(gameId) {
       }
       if (snap.stageBeat === 'field-notes' && (force || readsKeyRef.current.summary !== key)) {
         try {
-          const res = await fetch(`${base}games/${gameId}/ai-summary?questionId=${encodeURIComponent(round.padded)}`);
-          if (res.ok) {
-            next.summary = await readJson(res);
+          // quiet=1: "not written yet" is a 200 { status: 'not_ready' }, not a logged 404 (dev QA 2 Nov).
+          const res = await fetch(`${base}games/${gameId}/ai-summary?questionId=${encodeURIComponent(round.padded)}&quiet=1`);
+          const body = res.ok ? await readJson(res) : null;
+          if (body && body.status !== 'not_ready') {
+            next.summary = body;
             readsKeyRef.current.summary = key;
           }
-          // 404: Workie has not written yet; aiSummaryReady or the poll brings it.
+          // Not ready (or an older server's 404): Workie has not written yet; aiSummaryReady or the poll brings it.
         } catch (e) { /* the next poll tries again */ }
       }
     }

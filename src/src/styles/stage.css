@@ -204,6 +204,7 @@ body, .stage-ladder-table{
 .dock.dock--part .host-action-bar__primary,
 .dock.dock--part .host-action-bar__secondary,
 .dock.dock--part .host-action-bar__tertiary{font-size:15px;padding:7px 16px;border-radius:10px}
+.dock.dock--part .host-action-bar__addtime{font-size:15px;padding:7px 16px;border-radius:10px}
 .dock.dock--part .host-action-bar__primary .keycap{font-size:12px}
 .dock.dock--part .host-action-bar__actions{gap:10px}
 /* The key legend sits BEFORE the buttons, so a phase that has one never
@@ -1320,7 +1321,8 @@ a.dock-more{text-decoration:none}
    untouched; everything below is the dock's own paint. */
 .dock .host-action-bar__primary,
 .dock .host-action-bar__secondary,
-.dock .host-action-bar__tertiary{
+.dock .host-action-bar__tertiary,
+.dock .host-action-bar__addtime{
   display:inline-flex;align-items:center;gap:.5em;
   font-family:var(--font-display);font-weight:800;
   font-size:max(var(--floor),calc(var(--t-secondary) * .84));
@@ -1365,11 +1367,13 @@ a.dock-more{text-decoration:none}
   border:var(--hair) solid transparent;cursor:not-allowed;
   opacity:1;filter:none;transform:none;box-shadow:none}
 .dock .host-action-bar__secondary,
-.dock .host-action-bar__tertiary{
+.dock .host-action-bar__tertiary,
+.dock .host-action-bar__addtime{
   background:transparent;color:var(--muted);
   border:var(--hair) solid var(--rule);cursor:pointer}
 .dock .host-action-bar__secondary:hover,
-.dock .host-action-bar__tertiary:hover{
+.dock .host-action-bar__tertiary:hover,
+.dock .host-action-bar__addtime:hover{
   background:transparent;color:var(--text);border-color:var(--muted);
   transform:none;box-shadow:none}
 

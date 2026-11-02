@@ -55,6 +55,8 @@ export const NEEDS_ACTIONS = Object.freeze({
 export const ACTION_WORDS = Object.freeze({
   let: 'Let them',
   letArmed: 'Let them anyway',
+  /** Said beside an armed Let them (dev QA 2 Nov: the second press read as broken). */
+  armedNote: (name) => `${name ? `${name}'s` : 'Their'} first device is still open. Press again to move the name.`,
   notnow: 'Not now',
   see: 'See in People',
   lock: 'Lock again',

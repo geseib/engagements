@@ -42,7 +42,6 @@ import WorkflowStrip from './components/stage/WorkflowStrip';
 import { workflowStrip, liveWhere, stepLabelFor } from './config/workflowStrip';
 import StepView from './components/stage/StepView';
 import { storedRoomScreen, storeRoomScreen } from './config/roomScreen';
-import { setupPanelTabs } from './config/setupPanel';
 import RoomMeter from './components/stage/RoomMeter';
 import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
@@ -61,7 +60,7 @@ import useStageNotesSync from './hooks/useStageNotesSync';
 import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES, CONSOLE_TYPES, oneScreenWhy } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES, CONSOLE_TYPES, SETUP_TYPES, oneScreenWhy } from './config/surfaces';
 import { EVENT_WORDS, eventMovedOn, itemNumber, latecomersFrom, eventScreensSet, markEventScreens } from './config/eventAgenda';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
@@ -83,7 +82,7 @@ import {
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import {
-  classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
+  classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline, summaryRoundId, summaryNotReady,
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
@@ -140,10 +139,10 @@ import ConsolePulse from './components/console/ConsolePulse';
 import TimeChip from './components/console/TimeChip';
 import RoomTimeLine from './components/RoomTimeLine';
 import {
-  loadTimeChoices, saveTimeChoices, chipKindFor, timerOnPhase, mergeTimer, timeLeft, basePhase, TIMER_WORDS,
+  loadTimeChoices, saveTimeChoices, chipKindFor, timerOnPhase, mergeTimer, timeLeft, basePhase, timesUpPartFor,
 } from './config/roundTimer';
 import { noteServerNow, serverNowMs } from './utils/serverClock';
-import { arrivalsSince, withoutRoomCount } from './config/consolePulse';
+import { arrivalsSince, withoutRoomCount, answersAreChoices } from './config/consolePulse';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import SessionSetup from './components/console/panels/SessionSetup';
@@ -2465,8 +2464,10 @@ function GameHostPage() {
   };
 
   // Fetch AI summary for a specific question from DynamoDB
-  const fetchAISummary = async (questionId) => {
-    if (!gameId || !questionId) return null;
+  const fetchAISummary = async (rawQuestionId) => {
+    if (!gameId || !rawQuestionId) return null;
+    // One spelling of a round: "001", never "1" beside it (dev QA 2 Nov).
+    const questionId = summaryRoundId(rawQuestionId);
     
     try {
       // The prompt echo (?debug=true) is served only on the host's route,
@@ -2475,12 +2476,18 @@ function GameHostPage() {
       // The round is named rather than left to the server's CurrentQuestionId:
       // a closed survey has none (its read is 000), and a past round's
       // regenerated summary is not the current one.
+      // quiet=1: "not written yet" answers 200 { status: 'not_ready' } rather
+      // than a 404 the console logs on every look (dev QA 2 Nov).
       const response = gameDebugMode
-        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}`)
-        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}`);
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}&quiet=1`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}&quiet=1`);
 
       if (response.ok) {
         const summaryData = await response.json();
+        if (summaryNotReady(summaryData)) {
+          console.log(`ℹ️ No AI summary exists in DB for question ${questionId} yet`);
+          return null;
+        }
         // THE READ CHECK'S NOTE is served on the host's door only
         // (utils/readCheckClient.js). The debug read already came through it.
         if (!gameDebugMode && (summaryData.markdownResponse || summaryData.summary)) {
@@ -7589,9 +7596,18 @@ Focus on actionable business strategy insights.`;
   */
   const eventScreensReady = Boolean(eventCode) && eventScreensOn;
   const setupOn = hostPhase === 'LOBBY' && Boolean(gameId)
-    && CONSOLE_TYPES.includes(normalizeGameType(currentGameType)) && typeKnownFor === gameId;
+    && SETUP_TYPES.includes(normalizeGameType(currentGameType)) && typeKnownFor === gameId;
+  /*
+    A ONE-SCREEN-ONLY TYPE OPENS SETUP TOO (Wavelength; §7 decision 10, dev
+    QA 2 Nov): the choice is made for it, so step 1 is done and says why
+    instead of offering a chooser, and the host checks the screen and puts
+    the code up, then the one-screen lobby as for any one-screen session.
+  */
+  const setupOneOnly = setupOn ? oneScreenWhy(normalizeGameType(currentGameType)) : '';
+  const setupChoice = setupOneOnly ? 'classic' : roomScreenChoice;
+  const setupChoosing = setupOneOnly ? false : roomScreenOpen;
   const setupStep = setupOn
-    ? setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: screenCheckedFor === gameId || eventScreensReady })
+    ? setupStepFor({ choice: setupChoice, choosing: setupChoosing, detail: presentDetail, checked: screenCheckedFor === gameId || eventScreensReady })
     : null;
   const setupFrame = setupOn && (twoSurfaces || setupStep !== 'joins');
   // The console's frame draws Setup on one screen too (A5), until step 3.
@@ -7826,8 +7842,8 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.END:
         // Task 4, 2026-09-26 bug sweep. The settings panel's own control, not
         // the dock's — see canEndSession (config/hostControls.js) for why it
-        // is never offered on a survey, the lobby, or an already-ENDED
-        // session.
+        // is never offered on a survey or an already-ENDED session (it is in
+        // the lobby since dev QA 2 Nov).
         endSessionNow();
         break;
       case HOST_INTENTS.OPEN_SURVEY:
@@ -8619,6 +8635,7 @@ Focus on actionable business strategy insights.`;
   const triviaMarks = triviaRevealed && Array.isArray(answers) && answers.some((a) => a && typeof a.isCorrect === 'boolean')
     ? Object.fromEntries(answers.filter((a) => a && (a.playerName || a.player)).map((a) => [a.playerName || a.player, a.isCorrect === true]))
     : null;
+  const consoleChoice = answersAreChoices(normalizeGameType(currentGameType), currentQuestion);
   const consolePeople = consolePeopleFor({
     facts: personFactsFor({ gameType: normalizeGameType(currentGameType), players, marks: triviaMarks }),
     moment: consoleMoment,
@@ -8630,6 +8647,8 @@ Focus on actionable business strategy insights.`;
     gameType: currentGameType,
     anonymousUntilReveal,
     authorsRevealed,
+    // Trivia and a choice poll: "still answering" (dev QA 2 Nov).
+    choice: consoleChoice,
     // In an event, a latecomer reads "from item N" (experience plan §3.2b, 2d).
     from: eventCode && eventItem
       ? latecomersFrom({ players, item: eventItem, n: itemNumber(eventRun.items, eventItem.itemId) })
@@ -8673,9 +8692,8 @@ Focus on actionable business strategy insights.`;
     );
   };
   // At zero, Your part now says so (D4): "Time's up. Start voting, or give them another minute."
-  const timesUpPart = timeIsUp && /^ASK#/.test(basePhase(gameState))
-    ? (closesIntoVote ? TIMER_WORDS.timesUpPart : TIMER_WORDS.timesUpPartNoVote)
-    : null;
+  // Everyone's in leads when the whole room has answered (dev QA 2 Nov).
+  const timesUpPart = timesUpPartFor({ timeIsUp, gameState, closesIntoVote, everyoneIn: everybodyIn });
   const consolePulse = useConsole ? (
     <ConsolePulse
       moment={consoleMoment}
@@ -8697,6 +8715,7 @@ Focus on actionable business strategy insights.`;
       // Trivia's tile 3, "Correct so far" (2g): host-only, from the answer letters.
       correct={consoleTrivia && (consoleMoment === 'ANSWERING' || (consoleMoment === 'RESULTS' && stageResponsesReady)) ? correctSoFar(answers, triviaLetters) : null}
       noVote={!closesIntoVote}
+      choice={consoleChoice}
     />
   ) : null;
   /*
@@ -8804,12 +8823,26 @@ Focus on actionable business strategy insights.`;
         // The console's People already lifts the asker; bring the row into view.
         const row = useConsole && typeof document !== 'undefined' ? document.querySelector('[data-testid="people-asker"]') : null;
         if (row && typeof row.scrollIntoView === 'function') { row.scrollIntoView({ block: 'nearest' }); return undefined; }
-        return openSetupAt('players');
+        return openSetupAt('people');
       }
       default: return undefined;
     }
   };
   const needsBell = { needs, onAct: onNeedsAct, busy: needsBusy, error: needsError };
+  /*
+    A SURVEY'S CLOSE AND END IN THE SESSION MENU (§3.2a: Screens · Joining ·
+    Close survey · End session). The very controls the main button carries,
+    confirm included, so the menu and the bar can never disagree.
+  */
+  const surveyControlOf = (intent) => [hostControls.primary, hostControls.secondary, hostControls.tertiary]
+    .find((c) => c && c.intent === intent) || null;
+  const sessionMenuSurveyActs = {
+    close: surveyControlOf(HOST_INTENTS.CLOSE_SURVEY),
+    warn: surveyControlOf(HOST_INTENTS.WARN_SURVEY),
+    end: surveyControlOf(HOST_INTENTS.END_SURVEY),
+    closed: /^SURVEY#CLOSED/.test(String(gameState || '')) || gameState === 'ENDED',
+    onAct: (control) => { closeAllSidePanels(); runHostAction(control); },
+  };
   /*
     WHERE THE SESSION MENU OPENS (experience plan §3.2b, 2a). On the console,
     in HostConsole's sheet host: over the content area, never over Your part
@@ -8826,10 +8859,11 @@ Focus on actionable business strategy insights.`;
     <SessionSetup
       step={step}
       mid={mid}
-      choice={roomScreenChoice}
-      choosing={roomScreenOpen}
+      choice={mid ? roomScreenChoice : setupChoice}
+      choosing={mid ? roomScreenOpen : setupChoosing}
+      oneOnly={mid ? '' : setupOneOnly}
       onChoose={(choice) => { setScreenCheckedFor(null); chooseRoomScreen(choice); }}
-      onChange={() => setRoomScreenOpen(true)}
+      onChange={setupOneOnly && !mid ? null : () => setRoomScreenOpen(true)}
       onKeep={() => setRoomScreenOpen(false)}
       onRecheck={() => setScreenCheckedFor(null)}
       presentHref={gameId ? presentHref(gameId) : ''}
@@ -8844,7 +8878,7 @@ Focus on actionable business strategy insights.`;
       firstUp={setupFirst ? [RW.stripRound(getHostRoundNoun(), setupFirst.n, null), setupFirst.title].filter(Boolean).join(' · ') : ''}
       onRunningOrder={mid ? null : openRunningOrder}
       remoteAddr={`${window.location.host}/remote`}
-      onUseTwo={() => chooseRoomScreen('two')}
+      onUseTwo={setupOneOnly && !mid ? null : () => chooseRoomScreen('two')}
     />
   );
   /* Setup's own main button (steps 1 and 2): opening the room's window must
@@ -8862,7 +8896,7 @@ Focus on actionable business strategy insights.`;
   };
   const setupStartLabel = (hostControls.primary && hostControls.primary.label) || 'Start round 1';
   const setupWordsRaw = setupFrame
-    ? setupPartFor(setupStep, { choice: roomScreenChoice, detail: presentDetail, startLabel: setupStartLabel })
+    ? setupPartFor(setupStep, { choice: setupChoice, detail: presentDetail, startLabel: setupStartLabel })
     : null;
   /* AN EVENT'S ITEM AT STEP 3 WHILE THE ROOM IS ELSEWHERE (2d): the main
      button is Bring everyone here, so Your part now says that, and the status
@@ -8877,7 +8911,7 @@ Focus on actionable business strategy insights.`;
   const setupControls = !setupFrame ? null
     : setupStep === 'screen'
       ? {
-        primary: roomScreenChoice === 'two'
+        primary: setupChoice === 'two'
           ? { id: 'setup-open-window', label: SETUP_WORDS.openWindow, icon: 'ArrowSquareOut' }
           : { id: 'setup-show-code', label: SETUP_WORDS.showCode, icon: 'QrCode' },
         status: { text: '', tone: '' },
@@ -9016,10 +9050,10 @@ Focus on actionable business strategy insights.`;
             // screen it is step 2's own move (the code goes up only at step 3),
             // and before a choice there is nowhere for it to go yet.
             onJoin: setupFrame && !twoSurfaces
-              ? () => { if (roomScreenChoice) setScreenCheckedFor(gameId); }
+              ? () => { if (setupChoice) setScreenCheckedFor(gameId); }
               : () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
             joinPressed: setupFrame && !twoSurfaces ? undefined : qrMode === 'pinned',
-            codeProps: setupFrame && !roomScreenChoice
+            codeProps: setupFrame && !setupChoice
               ? { disabled: true, title: SETUP_WORDS.part.where.after.trim() }
               : null,
             // One screen has no room's window (it IS the room's screen).
@@ -9033,8 +9067,8 @@ Focus on actionable business strategy insights.`;
             /* SETUP ON ONE SCREEN, ONCE CHOSEN (2h): this laptop is the room's
                screen, so the bar says so and its bell is the count-only one,
                the same as the stage the session moves on to. */
-            oneScreen: !twoSurfaces && roomScreenChoice === 'classic',
-            bell: !twoSurfaces && roomScreenChoice === 'classic' ? (
+            oneScreen: !twoSurfaces && setupChoice === 'classic',
+            bell: !twoSurfaces && setupChoice === 'classic' ? (
               <OneScreenNeedsBell
                 variant="top"
                 needs={needs}
@@ -9043,7 +9077,7 @@ Focus on actionable business strategy insights.`;
                 error={needsError}
                 oneScreen
                 remoteConnected={false}
-                onConnectPhone={() => openSetupAt('settings')}
+                onConnectPhone={() => openSetupAt('remote')}
                 open={needsSheetOpen}
                 onOpenChange={setNeedsSheetOpen}
               />
@@ -9233,7 +9267,7 @@ Focus on actionable business strategy insights.`;
                 error={needsError}
                 oneScreen
                 remoteConnected={false}
-                onConnectPhone={() => openSetupAt('settings')}
+                onConnectPhone={() => openSetupAt('remote')}
                 open={needsSheetOpen}
                 onOpenChange={setNeedsSheetOpen}
               />
@@ -9278,6 +9312,9 @@ Focus on actionable business strategy insights.`;
                  chip's choices open downwards. */
               timeChip={viewing ? null : timeChipFor(stageControls)}
               onAddTime={phaseTimer && !viewing ? addMinute : null}
+              /* +1 min as a button beside the main one while a timer runs
+                 (dev QA 2 Nov): one screen has no pulse tile to carry it. */
+              showAddTime
               /*
                 → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
                 extra pages of the workie response by hitting the right
@@ -10174,9 +10211,7 @@ Focus on actionable business strategy insights.`;
         <SessionSetupPanel
           // A place asked for re-mounts the panel at its tab.
           key={setupPanelLanding || 'session'}
-          initialTab={setupPanelLanding === 'running-order'
-            ? 'questions'
-            : (setupPanelTabs().some((t) => t.id === setupPanelLanding) ? setupPanelLanding : 'players')}
+          initialTab={setupPanelLanding || ''}
           focusRunningOrder={setupPanelLanding === 'running-order'}
           rounds={rounds}
           historyLoading={historyLoading}
@@ -10263,6 +10298,11 @@ Focus on actionable business strategy insights.`;
           presentHref={gameId ? presentHref(gameId) : ''}
           presentDetail={presentDetail}
           remoteWho={remoteWho}
+          /* The console mid-session draws People: the full list is a view
+             opened from it, not a section (dev QA 2 Nov). A survey's Close and
+             End are the main button's own controls. */
+          peopleColumn={useConsole && !setupFrame}
+          surveyActs={isSurveyType(currentGameType) ? sessionMenuSurveyActs : null}
           /* THE TWO NAME DECISIONS, both session-level, both the host's.
              `anonymousUntilReveal` is the SAME flag the create dialog set —
              not a second one — so the setter is the same setter; the effect

@@ -138,7 +138,7 @@ describe('useScoreboardKeys', () => {
 describe('the keys are written down where the host looks for them', () => {
   test('the Settings tab lists S and V on a Trivia session', () => {
     const utils = render(<SessionSetupPanel gameType="trivia" />);
-    fireEvent.click(utils.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(utils.getByRole('tab', { name: 'Screens' }));
     const keys = utils.container.querySelector('.setup-keys').textContent;
     expect(keys).toMatch(/S\s*show or hide the scoreboard/);
     expect(keys).toMatch(/V\s*change the scoreboard's look/);
@@ -146,7 +146,7 @@ describe('the keys are written down where the host looks for them', () => {
 
   test('...and not on a Poll, which has no board', () => {
     const utils = render(<SessionSetupPanel gameType="poll" />);
-    fireEvent.click(utils.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(utils.getByRole('tab', { name: 'Screens' }));
     expect(utils.container.querySelector('.setup-keys').textContent).not.toMatch(/scoreboard/);
   });
 

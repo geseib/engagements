@@ -97,7 +97,7 @@ describe('fetchFeedbackRound', () => {
       questionNumber: '003', round: { questionNumber: '003', comments: [] },
     }));
     const res = await fetchFeedbackRound({ fetchFn, apiBase: API, gameId: '4821' });
-    expect(fetchFn.mock.calls[0][0]).toBe('https://api.test/dev/games/4821/feedback-round');
+    expect(fetchFn.mock.calls[0][0]).toBe('https://api.test/dev/games/4821/feedback-round?quiet=1');
     expect(res.ok).toBe(true);
     expect(res.questionNumber).toBe('003');
     expect(res.notOpen).toBe(false);
@@ -111,6 +111,16 @@ describe('fetchFeedbackRound', () => {
     */
     const fetchFn = jest.fn().mockResolvedValue(ok({ error: 'not open' }, 409));
     const res = await fetchFeedbackRound({ fetchFn, apiBase: API, gameId: '4821' });
+    expect(res).toEqual(expect.objectContaining({
+      ok: true, round: null, notOpen: true, error: null,
+    }));
+  });
+
+  // rejects: dev QA 2 Nov — phones logged a 409 on every poll of this route.
+  test('asked quietly, "not open" is a 200 with open: false, read the same as the 409', async () => {
+    const fetchFn = jest.fn().mockResolvedValue(ok({ gameId: '4821', open: false, reason: 'not-open' }));
+    const res = await fetchFeedbackRound({ fetchFn, apiBase: API, gameId: '4821' });
+    expect(fetchFn.mock.calls[0][0]).toMatch(/\?quiet=1$/);
     expect(res).toEqual(expect.objectContaining({
       ok: true, round: null, notOpen: true, error: null,
     }));

@@ -144,7 +144,7 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'Where you choose', text: 'Setup\'s first step asks **Where will the room watch?** when you start a session, until this browser has chosen; Quick start shows **Where the room watches** above the sets when a set that can use two screens is listed; during a session press **Change** in Setup, or use Settings, under Screens. This browser remembers your choice.' },
-            { title: 'Changing your mind', text: 'Switch between **One screen** and **Two screens** in Settings, under Screens. It applies at once, to this laptop and the room\'s window; the round carries on.' },
+            { title: 'Changing your mind', text: 'Switch between **One screen** and **Two screens** in the Screens section. It applies at once, to this laptop and the room\'s window; the round carries on.' },
             { title: 'When to stay on one screen', text: 'If the room sees this laptop itself (a mirrored display, or the laptop is all there is), keep one screen: the room would otherwise see your console.' },
           ],
         },
@@ -159,7 +159,7 @@ const twoScreens = {
           t: 'steps',
           items: [
             { title: 'Connect the room\'s display', text: 'Plug in the room\'s TV or display as a second display, set to extend your desktop rather than mirror it.' },
-            { title: 'Open it', text: 'Setup\'s step 2 makes it the one orange button, **Open the room\'s window ↗**. **Room\'s window ↗** on the top bar (or **Open ↗** in Settings, under Screens) does the same at any time. **Start · two screens** on your sessions list, and Quick start on two screens, open it for you as the session starts.' },
+            { title: 'Open it', text: 'Setup\'s step 2 makes it the one orange button, **Open the room\'s window ↗**. **Room\'s window ↗** on the top bar (or **Open ↗** in the Session menu, under Screens) does the same at any time. **Start · two screens** on your sessions list, and Quick start on two screens, open it for you as the session starts.' },
             { title: 'Put it on the room\'s display', text: 'In Chrome or Edge with a second display, it opens there and fills it. The first time, the browser asks to manage windows on all your displays: allow it. In other browsers, or if you say no, it opens beside you: drag it across.' },
             { title: 'Fill the screen', text: 'Click the room\'s window once. While it shows **Click anywhere to fill the screen**, that click makes it full screen. F does the same anywhere, and F again leaves full screen.' },
           ],
@@ -207,7 +207,7 @@ const twoScreens = {
       blocks: [
         {
           t: 'p',
-          text: 'Set **Room screen size** in Settings, under Screens, or in Setup on the console\'s strip. On two screens it changes the room\'s window straight away, so set it before people arrive and check from the back of the room.',
+          text: 'Set **Room screen size** in the Session menu, under Screens, or in Setup on the console\'s strip. On two screens it changes the room\'s window straight away, so set it before people arrive and check from the back of the room.',
         },
         {
           t: 'list',
@@ -311,10 +311,10 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. **Rounds and questions** opens the Rounds tab of the Session menu.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. **Rounds and questions** opens the Rounds section of the Session menu.' },
             { title: 'People', text: 'How many are here, and while the room answers or votes, who has and who has not (the count itself is the Answered tile). The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
             { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the full list in the Rounds tab (see Late answers and comments).' },
-            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds Players, Questions, Rounds and the settings, with **Main menu** and **End session** at the foot of Settings.' },
+            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds what you set once: Screens, Phone remote, Rounds, Joining and End session (with **Main menu** under it). People\'s **All N, and who left** opens the full list there.' },
           ],
         },
         {
@@ -393,7 +393,7 @@ const twoScreens = {
           items: [
             { title: 'Two screens', text: 'Press **Join** and the code on the top bar, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; **Join** stays pressed on your laptop while it is up, and nothing covers your console. Press **Join** again, or J, to take it down. In the lobby the room\'s window shows it already.' },
             { title: 'From your phone', text: '**Join code**, then **Display on screen** (and **Take it off the screen**).' },
-            { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Show join code** in Settings, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
+            { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Show join code** in the Session menu, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
           ],
         },
       ],
@@ -425,7 +425,7 @@ const twoScreens = {
         {
           t: 'steps',
           items: [
-            { title: 'Open the room\'s window as a tab', text: 'With no second display, press **Open as a tab** (beside **Room\'s window ↗** while no window is open, and in Settings, under Screens). It opens the room\'s window in a tab of this browser.' },
+            { title: 'Open the room\'s window as a tab', text: 'With no second display, press **Open as a tab** (beside **Room\'s window ↗** while no window is open, and in the Session menu, under Screens). It opens the room\'s window in a tab of this browser.' },
             { title: 'Share that tab', text: 'Share the tab, not your whole screen, in the call. Your console stays in its own tab, private to you.' },
             { title: 'Size it for a call', text: 'Set **Room screen size** to Call.' },
           ],
@@ -448,7 +448,7 @@ const twoScreens = {
         {
           t: 'steps',
           items: [
-            { title: 'Open it', text: 'In the Settings tab of the Session menu (on the console: **Session menu**, top right), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
+            { title: 'Open it', text: 'In the Session menu\'s **Phone remote** section (on the console: **Session menu**, top right), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
             { title: 'Sign in', text: 'On a team session, as any host or admin of that team; it does not have to be the account on this laptop. On a personal account, as you. Only your account can drive this session. The box under the QR names who is signed in on this laptop. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.' },
             { title: 'If the phone refuses', text: 'Press **Sign in as someone else**, pick the session\'s team if the phone offers a team switcher, or **Enter a different code**.' },
           ],
@@ -474,7 +474,7 @@ const twoScreens = {
         },
         {
           t: 'p',
-          text: 'Settings stay on the laptop: the phone has no Settings tab.',
+          text: 'The Session menu\'s set-once sections stay on the laptop: the phone has no Screens or Joining section.',
         },
       ],
     },

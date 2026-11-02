@@ -157,9 +157,9 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
     />,
   );
 
-  it('the Settings tab carries the Workie section', () => {
+  it('the Rounds section carries the Workie section', () => {
     renderPanel({ workie: { roundNoun: 'Round', personas, prompts, briefed: true, onRedo: () => {} } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
     const section = screen.getByTestId('workie-settings');
     expect(within(section).getByLabelText('Voice (next round)')).toBeInTheDocument();
     expect(within(section).getByLabelText('Approach (next round)')).toBeInTheDocument();
@@ -169,7 +169,8 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
 
   it('...without next-round pickers on a closed survey', () => {
     renderPanel({ gameType: 'survey', gameState: 'SURVEY#CLOSED', workie: { personas, prompts, onRedo: () => {} } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    // A survey has no Rounds section: Workie's read sits under Close survey.
+    fireEvent.click(screen.getByRole('tab', { name: 'Close survey' }));
     expect(screen.queryByLabelText(/Voice \(next/)).toBeNull();
     expect(screen.getByTestId('workie-redo')).toBeInTheDocument();
   });
@@ -179,7 +180,7 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
       categoryCounts: { '1-8': [0], '9-16': [], '17-24': [] },
       workie: { personas, prompts },
     });
-    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
     expect(screen.queryByLabelText(/Voice \(next/)).toBeNull();
   });
 

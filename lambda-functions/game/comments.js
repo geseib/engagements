@@ -774,20 +774,33 @@ function surveyFeedbackRound(report) {
  * `GET /games/{id}/ai-summary`, so it needs neither the beat nor the REPORT
  * row this function depends on.
  */
-async function readFeedbackRound(gameId) {
+async function readFeedbackRound(gameId, query = {}) {
   const { meta, state } = await readSession(gameId);
   if (!meta || !state) return respond(404, { error: 'Game not found' });
+
+  /*
+    THE QUIET FORM (dev QA 2 Nov: phones logged a 409 on every poll). "No
+    round is open" is the ordinary answer, most of the time, so a caller that
+    sends `?quiet=1` hears it as a 200, `{ open: false, reason }`, and its
+    console stays clean. Without the flag the 409s stand, so a phone still
+    running an older bundle reads them exactly as before (join's waitStatus
+    is the same move).
+  */
+  const quiet = query.quiet === '1' || query.quiet === 'true';
+  const closed = (error, reason) => (quiet
+    ? respond(200, { gameId, open: false, reason, error })
+    : respond(409, { error }));
 
   const onScreen = String(state.State || '').match(/^RESULTS#(\d+)$/);
   const surveyClosed = isSurveySession(meta) && state.State === SURVEY_CLOSED;
   if (!onScreen && !surveyClosed) {
-    return respond(409, { error: 'the host has not opened a feedback round' });
+    return closed('the host has not opened a feedback round', 'not-open');
   }
   const padded = onScreen ? onScreen[1] : SURVEY_ROUND;
 
   const round = await roundRecord(gameId, padded);
   if (!round || round.StageBeat !== 'feedback') {
-    return respond(409, { error: 'the host has not opened a feedback round' });
+    return closed('the host has not opened a feedback round', 'not-open');
   }
 
   // One round: one GetItem on its own row (report-store.js). A closed survey
@@ -799,13 +812,13 @@ async function readFeedbackRound(gameId) {
     ? await readReport(db, { table, gameId, orgId })
     : await readReportHead(db, { table, gameId, orgId });
   if (!report) {
-    return respond(409, { error: 'the round report is not ready yet' });
+    return closed('the round report is not ready yet', 'not-ready');
   }
   const slice = surveyClosed
     ? surveyFeedbackRound(report)
     : await readReportRound(db, { table, gameId, orgId, questionNumber: padded });
   if (!slice) {
-    return respond(409, { error: 'the round report is not ready yet' });
+    return closed('the round report is not ready yet', 'not-ready');
   }
 
   // The comments come from the live rows, not from the report's own snapshot:
@@ -820,6 +833,7 @@ async function readFeedbackRound(gameId) {
 
   return respond(200, {
     gameId,
+    open: true,
     // Named separately as well as on the round, because this is what the
     // composer posts back and it must not have to dig for it.
     questionNumber: padded,
@@ -991,7 +1005,7 @@ exports.handler = async (event) => {
     if (method === 'GET') {
       const route = event.requestContext?.routeKey || event.routeKey || '';
       if (route.includes('/feedback-round')) {
-        return await readFeedbackRound(gameId);
+        return await readFeedbackRound(gameId, event.queryStringParameters || {});
       }
       return await readComments(gameId, event.queryStringParameters || {});
     }

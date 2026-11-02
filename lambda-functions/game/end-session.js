@@ -30,12 +30,14 @@
  *    Letting this route also end a survey would give it two ways to reach
  *    ENDED that disagree about what state it must already be in.
  *
- * ── A CREATED SESSION IS REFUSED HERE TOO, 409. `canEndSession` already
- *    keeps the settings panel from offering the control before a session has
- *    started, but the route does not trust that: ending a CREATED session
- *    would write ENDED over one whose `Started` flag was never set and whose
- *    ttl is still the 90-day unstarted one (session-ttl.js) — see
- *    session-start.js, the only writer of either.
+ * ── A CREATED SESSION ENDS TOO (dev QA 2 Nov: two lobby sessions could not
+ *    be ended, and the experience plan puts End session in every phase).
+ *    It was refused 409 until then. Ending it writes ENDED and broadcasts END
+ *    like any other; it does NOT start the session: `Started` stays unset and
+ *    the ttl stays the unstarted one (session-ttl.js), because nothing was
+ *    played, so the report sweep (report-sweep.js, started sessions only)
+ *    never builds a report of it. session-start.js stays the only writer of
+ *    either.
  *
  * ── ORDER (fix round 1, item 4): the identity check runs BEFORE either
  *    DynamoDB read, so an unidentified caller costs the table nothing.
@@ -148,19 +150,10 @@ exports.handler = async (event) => {
     }
 
     /*
-      FIX ROUND 1, ITEM 3 — A SESSION THAT HAS NOT STARTED HAS NOTHING TO END.
-      `canEndSession` (config/hostControls.js) already keeps the UI from
-      offering this control on a CREATED session, but the route must refuse it
-      on its own: ending a CREATED session would write ENDED over a session
-      whose `Started` flag was never set and whose ttl is still the 90-day
-      unstarted one (session-ttl.js) — session-start.js is the only writer of
-      either, and only next-question.js and start-game.js call it, never this
-      route.
+      A SESSION THAT HAS NOT STARTED ENDS AS IT IS (dev QA 2 Nov; see the
+      header): ENDED, with Started and the ttl left alone.
     */
-    if (gameState.Item.State === 'CREATED') {
-      const reason = 'This session has not started yet.';
-      return respond(409, { error: reason, message: reason });
-    }
+    const wasLobby = gameState.Item.State === 'CREATED';
 
     const { changed } = await endSession(db, process.env.TABLE_NAME, gameId, {
       currentState: gameState.Item.State,
@@ -172,6 +165,8 @@ exports.handler = async (event) => {
       gameId,
       state: 'ENDED',
       changed,
+      // Nothing had been played: the host page says so rather than offering a report of nothing.
+      ...(wasLobby ? { beforeFirstRound: true } : {}),
     });
   } catch (error) {
     console.error('❌ END SESSION: error:', error);

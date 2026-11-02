@@ -56,6 +56,7 @@ jest.mock('../utils/eventsApi', () => ({
 jest.mock('../auth/navigate', () => ({ __esModule: true, navigateTo: jest.fn() }));
 
 import GameHostPage from '../GameHostPage';
+import { markEventScreens } from '../config/eventAgenda';
 
 const events = require('../utils/eventsApi');
 const { navigateTo } = require('../auth/navigate');
@@ -95,6 +96,10 @@ async function mountItemStage() {
 
 beforeEach(() => {
   localStorage.clear();
+  /* A Wavelength item opens Setup since dev QA 2 Nov. Its screens were set
+     up earlier today (the event's once-a-day check, config/eventAgenda.js),
+     so it opens past the check, on its one-screen stage, as these tests read. */
+  markEventScreens(localStorage, CODE);
   jest.clearAllMocks();
 });
 
@@ -222,7 +227,7 @@ test('a live item\'s lobby has one Main menu and no round button that leaves bes
   that opens it that way again after it is closed; the panel opening at all
   without the parameter.
 */
-test('a preview lobby offers "Set the running order", which opens SESSION on Questions', async () => {
+test('a preview lobby offers "Set the running order", which opens SESSION on Rounds', async () => {
   installFetch('CREATED');
   events.getEvent.mockResolvedValue(viewWith(ITEM));
   await mountItemStage();
@@ -231,7 +236,7 @@ test('a preview lobby offers "Set the running order", which opens SESSION on Que
   expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   fireEvent.click(within(door).getByRole('button', { name: 'Set the running order' }));
   const panel = await screen.findByRole('dialog', { name: 'Session menu' });
-  expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(panel).getByRole('tab', { name: 'Rounds' })).toHaveAttribute('aria-selected', 'true');
   expect(within(panel).getByText('Running order')).toBeInTheDocument();
 });
 
@@ -243,14 +248,14 @@ test('no running-order door on a paused item\'s lobby', async () => {
   expect(screen.queryByTestId('preview-running-order')).toBeNull();
 });
 
-test('?panel=questions lands on the Session panel\'s Questions tab, once', async () => {
+test('?panel=questions lands on the Session panel\'s Rounds section, once', async () => {
   installFetch('CREATED');
   events.getEvent.mockResolvedValue(viewWith(ITEM));
   window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}&panel=questions`);
   render(<GameHostPage />);
 
   const panel = await screen.findByRole('dialog', { name: 'Session menu' }, { timeout: 5000 });
-  expect(within(panel).getByRole('tab', { name: 'Questions' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(panel).getByRole('tab', { name: 'Rounds' })).toHaveAttribute('aria-selected', 'true');
   expect(window.location.search).not.toMatch(/panel=/);
   expect(window.location.search).toMatch(`gameId=${GAME}`);
 
@@ -259,7 +264,8 @@ test('?panel=questions lands on the Session panel\'s Questions tab, once', async
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull());
   fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
   const again = await screen.findByRole('dialog', { name: 'Session menu' });
-  expect(within(again).getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
+  // In an event the ordinary panel opens on Agenda, its first section (dev QA 2 Nov).
+  expect(within(again).getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('without ?panel= the stage opens with the Session panel shut', async () => {

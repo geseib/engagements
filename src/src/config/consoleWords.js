@@ -3,6 +3,8 @@
  * Round-step labels stay in roundWords.js; these are the console's own.
  * Sentence case, plain, "phone, laptop or tablet".
  */
+import { SESSION_MENU_WORDS } from './hostWords';
+
 const CW = Object.freeze({
   queue: 'Round queue',
   people: 'People',
@@ -18,7 +20,7 @@ const CW = Object.freeze({
   late: 'Late & not reviewed',
   allRounds: 'Rounds and questions',
   // People's link to the whole list in the Session menu (experience plan p-1).
-  allPeople: (n) => (Number(n) > 0 ? `All ${n}, and who left` : 'Everyone, and who left'),
+  allPeople: SESSION_MENU_WORDS.allPeople,
   reviewLate: 'Review them',
   done: 'done',
   now: 'now',
@@ -26,6 +28,8 @@ const CW = Object.freeze({
   answered: 'answered',
   voted: 'voted',
   stillWriting: 'still writing',
+  // Trivia and a choice poll: they pick an option (dev QA 2 Nov).
+  stillAnswering: 'still answering',
   notYet: 'not yet',
   respondingTitle: 'Responses as they land',
   namesHidden: 'Names hidden',

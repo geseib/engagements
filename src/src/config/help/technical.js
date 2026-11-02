@@ -57,7 +57,7 @@ const troubleshooting = {
           t: 'note',
           tone: 'info',
           title: 'Players never sign in',
-          text: 'A player asked to sign in has a host link. Give them the join address, under **Players join at** in the Session panel\'s Settings, or the QR.',
+          text: 'A player asked to sign in has a host link. Give them the join address, under **Players join at** in the Session menu\'s Joining section, or the QR.',
         },
         {
           t: 'p',

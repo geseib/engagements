@@ -139,7 +139,7 @@ const quickStart = {
       blocks: [
         {
           t: 'p',
-          text: 'A created session waits in your sessions list. Press **Start** on its row when the room is ready. A Call & Answer session opens on **Setup**, the lobby: three steps, each folding to one line when done, with **Your part now** naming the next move.',
+          text: 'A created session waits in your sessions list. Press **Start** on its row when the room is ready. A Call & Answer, Trivia, Poll or Wavelength session opens on **Setup**, the lobby: three steps, each folding to one line when done, with **Your part now** naming the next move.',
         },
         {
           t: 'steps',
@@ -155,7 +155,7 @@ const quickStart = {
             'People scan the QR, or go to the address on screen and type the four-digit code.',
             'People on a video call use the join link: **Link** on the session\'s row copies it.',
             'Once chosen, Start says so: **Start · two screens** opens the room\'s window in the same click. If the browser blocks it, Setup opens at step 2. **One screen this time**, under the list, switches.',
-            'Other formats open on their lobby with the join code up. See Choosing one or two screens.',
+            'A survey opens on its lobby with the code up.',
           ],
         },
         {
@@ -595,7 +595,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A Call & Answer, Trivia or Poll session can run on one screen or two, on its own or inside an event. Wavelength and surveys run on one screen; under Screens, Settings says why for Wavelength.',
+          text: 'A Call & Answer, Trivia or Poll session can run on one screen or two, on its own or inside an event. Wavelength and surveys run on one screen; Wavelength\'s Setup, and Screens in the Session menu, say why.',
         },
         {
           t: 'list',
@@ -606,7 +606,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The first time you start a Call & Answer, Trivia or Poll session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use Screens in the Session menu\'s Settings tab.',
+          text: 'The first time you start a Call & Answer, Trivia or Poll session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use the Session menu\'s Screens section.',
         },
         { t: 'p', text: 'Running on two screens, and placing the room\'s window, is in Two screens and your phone.' },
       ],
@@ -646,18 +646,18 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Once the session has started and before the first round, open the Session panel\'s Settings tab and check:',
+          text: 'Once the session has started and before the first round, open the Session menu and check:',
         },
         {
           t: 'list',
           items: [
             { title: 'Screens', text: 'One screen or two, and the room screen size: Room, TV, Call or Table. The right size is the difference between readable and squinting.' },
-            { title: 'Names', text: 'Under The rounds: **Show who wrote each response from the start**, and **Name who is still waiting** for whether the room sees who has not answered yet.' },
-            { title: 'Controls on your phone', text: '**Your phone as a remote**: scan its QR with your own phone and run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
+            { title: 'Names', text: 'Under Rounds, How the rounds run: **Show who wrote each response from the start**, and **Name who is still waiting** for whether the room sees who has not answered yet.' },
+            { title: 'Controls on your phone', text: '**Phone remote**: scan its QR with your own phone and run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
             { title: 'Joining', text: 'The join link, to paste into a video call\'s chat.' },
           ],
         },
-        { t: 'p', text: 'The Session panel › The Settings tab explains each setting; Two screens and your phone covers the remote.' },
+        { t: 'p', text: 'The Session panel › Screens, joining, and how the rounds run explains each setting; Two screens and your phone covers the remote.' },
       ],
     },
     /*

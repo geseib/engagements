@@ -136,7 +136,7 @@ const glossary = {
       title: 'Room screen size',
       icon: 'CornersOut',
       blocks: [
-        { t: 'p', text: 'How large everything is drawn for the room: Room, TV, Call or Table. Set it in Settings, under Screens, before people arrive.' },
+        { t: 'p', text: 'How large everything is drawn for the room: Room, TV, Call or Table. Set it in the Session menu\'s Screens section, before people arrive.' },
       ],
     },
     {
@@ -144,7 +144,7 @@ const glossary = {
       title: 'Session panel',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: 'Your panel during a session, with the Players, Questions, Rounds and Settings tabs. Open it with Session menu, top right on the top bar, or press \\.' },
+        { t: 'p', text: 'Your panel during a session, with its Screens, Phone remote, Rounds, Joining and End session sections. Open it with Session menu, top right on the top bar, or press \\.' },
       ],
     },
     {
@@ -176,7 +176,7 @@ const glossary = {
       title: 'Phone remote',
       icon: 'DeviceMobile',
       blocks: [
-        { t: 'p', text: 'Your own phone, signed in, running the session while you walk the room. Scan the QR under Your phone as a remote in the Session panel\'s Settings tab.' },
+        { t: 'p', text: 'Your own phone, signed in, running the session while you walk the room. Scan the QR in the Session menu\'s Phone remote section.' },
       ],
     },
     {
@@ -200,7 +200,7 @@ const glossary = {
       title: 'What we heard',
       icon: 'Ear',
       blocks: [
-        { t: 'p', text: 'Workie\'s read of a round: what the room said, questions worth asking next, and next steps. You see it at results, in the Rounds tab and in the session report.' },
+        { t: 'p', text: 'Workie\'s read of a round: what the room said, questions worth asking next, and next steps. You see it at results, in the Session menu\'s Rounds section and in the session report.' },
       ],
     },
     {

@@ -48,4 +48,24 @@ const HW = Object.freeze({
   agenda: 'Agenda',
 });
 
+/*
+  THE SESSION MENU'S OWN WORDS (§3.2; dev QA 2 Nov): its sections are named
+  in config/setupPanel.js setupPanelTabs; these are the lines inside them.
+*/
+export const SESSION_MENU_WORDS = Object.freeze({
+  // People's link to the whole list (experience plan p-1), and that view's heading.
+  allPeople: (n) => (Number(n) > 0 ? `All ${n}, and who left` : 'Everyone, and who left'),
+  endNote: 'Ending stops the session on every phone, laptop or tablet in the room, now. The report keeps everything said so far.',
+  endLobbyNote: 'Nothing has been played yet. Ending closes the session for anyone who has joined, and the code stops working.',
+  ended: 'This session has ended. Its report is on the main button.',
+  leaveHeading: 'Leave without ending',
+  closeSurvey: 'Close survey',
+  closeNote: 'Closing stops every phone mid-answer and freezes the counts. It cannot be reopened. The two-minute warning tells everyone first.',
+  surveyNotOpen: 'The survey is not open yet, so there is nothing to close.',
+  surveyClosed: 'The survey is closed. Its results are on the main button.',
+  afterClose: 'After it closes',
+  endSurveyNote: 'The survey is closed. Ending finishes the session for everyone.',
+  endSurveyFirst: 'Close the survey first (Close survey, above); then you can end the session here.',
+});
+
 export default HW;
