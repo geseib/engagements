@@ -4,6 +4,8 @@ import CompletionFlag from './CompletionFlag';
 import HelpButton from '../HelpButton';
 import { helpFor } from '../../config/help/screens';
 import { DockKeyContext, keyName } from './KeyCap';
+import Icon from '../Icon';
+import HW from '../../config/hostWords';
 
 /**
  * The dock — the `.dock` grid area, and the room's one persistent action
@@ -83,24 +85,68 @@ import { DockKeyContext, keyName } from './KeyCap';
  * THE LAST RESORT WHEN THE DOCK IS CROWDED. The key hints give way first, by
  * width, in ../../styles/stage.css; an event's AGENDA chip adds a 94px target,
  * so they give way sooner there (`data-agenda`). If the row still runs past the
- * edge, the dock takes a second line — the portrait tablet's layout — rather
- * than clipping SESSION off the screen, which is what it did at 1280x720 on a
- * closed survey's feedback beat in an event (measured in Chromium, 27 Sep
- * 2026). Measured, not guessed from a breakpoint, because the labels change
- * with every beat: the attribute is cleared, the row measured unwrapped, and
+ * edge, `data-crowded` is set and the quiet items keep their glyph and drop
+ * their word (AGENDA, PRESENT; the name stays in the aria-label and
+ * the title), the key hint goes and the Space cap goes. If it is STILL too
+ * wide, `data-crowded="2"`: the secondary and tertiary round buttons keep
+ * their glyph and hide their word visually (still their accessible name, and
+ * their title); and only then `"3"`, Main menu down to its house. The main
+ * button and SESSION always keep their words.
+ *
+ * IT USED TO WRAP. A crowded dock took a second line (27 Sep 2026: SESSION
+ * clipped at 1280x720 on a closed survey's feedback beat in an event), and on
+ * 2 Nov the owner reported exactly that second line, once the Needs-you bell
+ * joined the row: "the bottom bar became 2 lines". A second line moves every
+ * button the host has learned to find and takes a row from the stage, so the
+ * dock never wraps now outside the portrait-tablet rule (max-width:900px).
+ *
+ * Measured, not guessed from a breakpoint, because the labels change with
+ * every beat: the attribute is cleared, the row measured with its words, and
  * set again only if it overflows — so it can never hold itself in place.
  */
 function useCrowded(ref, deps) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
+    const over = () => el.scrollWidth > el.clientWidth + 1;
     const fit = () => {
       el.removeAttribute('data-crowded');
-      if (el.scrollWidth > el.clientWidth + 1) el.setAttribute('data-crowded', '');
+      if (!over()) return;
+      // One step at a time, measuring after each (see ../../styles/stage.css):
+      // '' the hints go and AGENDA / PRESENT keep their glyph; '2' the second
+      // and third round buttons keep their glyph; '3' Main menu keeps its
+      // glyph too, because it is the way out the owner could not find; '4'
+      // the status narrows. The main button and SESSION never lose their words.
+      const steps = ['', '2', '3', '4'];
+      for (let i = 0; i < steps.length; i += 1) {
+        el.setAttribute('data-crowded', steps[i]);
+        if (!over()) break;
+      }
     };
     fit();
     window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
+    // AND WHEN THE LADDER CHANGES UNDER IT. The stage puts its profile class
+    // on <html> in an effect that runs after this one, and the host can switch
+    // profile mid-session; either way the words grow (TV's floor is 26px)
+    // with no resize and no new props, so the first measure was Room's.
+    // Settles in one pass: fit() always starts from the cleared state, so a
+    // second call lands where the first did and reports no new size.
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => fit()) : null;
+    if (ro) {
+      // The dock, and every item in it: a font swap changes their widths and
+      // not always the dock's height.
+      ro.observe(el);
+      el.querySelectorAll(':scope > *, .host-action-bar__actions > *').forEach((item) => ro.observe(item));
+    }
+    // A web font arriving widens every word without a resize either.
+    const fonts = typeof document !== 'undefined' && document.fonts && typeof document.fonts.addEventListener === 'function'
+      ? document.fonts : null;
+    if (fonts) fonts.addEventListener('loadingdone', fit);
+    return () => {
+      window.removeEventListener('resize', fit);
+      if (ro) ro.disconnect();
+      if (fonts) fonts.removeEventListener('loadingdone', fit);
+    };
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -121,7 +167,13 @@ function useCrowded(ref, deps) {
   (./KeyCap.jsx), which draws a small cap at the button's trailing edge.
 
   `home` is a type's way back to its own host screen (Build Room's HOST), a
-  fixed item just before SESSION; the two are always last. `setupCount` and
+  fixed item just before SESSION; the two are always last.
+
+  `onMainMenu` is the other end (owner, 2 Nov 2026: "im not real sure how to
+  get back to the main menu here"): Main menu, FIRST in the dock, before the
+  status, shaped like the dock's other quiet items. The caller hands it the
+  console's own leave (GameHostPage's requestLeave, which asks first when
+  people are in the room); the dock only draws it, and only when given one. `setupCount` and
   `setupOpen` let SESSION carry a count (someone asking to take a name) and
   say whether its panel is open, without a second SESSION button;
   `setupProps` are extra attributes for it (a data- attribute, say).
@@ -132,16 +184,29 @@ export { keyName };
 export default function Dock({
   status, hint, kbd, onSetup, onAgenda, present = null, complete = false, notice = false, progress = null,
   statusLink = '', onStatusLink = null, home = null, setupCount = 0, setupCountLabel = '', setupOpen,
-  setupProps = null, help = '', children, ...rest
+  setupProps = null, help = '', onMainMenu = null, children, ...rest
 }) {
   const ref = useRef(null);
-  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, children]);
+  useCrowded(ref, [status, hint, kbd, onSetup, onAgenda, present, notice, progress, statusLink, home, setupCount, help, onMainMenu, children]);
   // THE LATE COUNT AS A LINK (late items Task 4): `statusLink` is the last
   // part of the status ("1 late answer kept", or "Review" at the end), and
   // opens the host's late list. Only when the status really ends with it.
   const linked = Boolean(statusLink && onStatusLink && typeof status === 'string' && status.endsWith(statusLink));
   return (
     <footer className="dock" ref={ref} data-agenda={onAgenda ? '' : undefined} {...rest}>
+      {typeof onMainMenu === 'function' && (
+        <button
+          type="button"
+          className="dock-more dock-main"
+          onClick={onMainMenu}
+          aria-label={HW.mainMenu}
+          title={HW.mainMenuHint}
+          data-testid="dock-main-menu"
+        >
+          <Icon name="House" weight="bold" size={16} color="currentColor" />
+          <span className="dock-more-lbl">{HW.mainMenu}</span>
+        </button>
+      )}
       {status && (
         <span
           className={`status${complete ? ' go' : ''}${notice ? ' notice' : ''}`}
@@ -222,6 +287,7 @@ export default function Dock({
           aria-label="Back to the event's agenda"
           title="Back to the event's agenda — the phones stay where they are"
         >
+          <Icon name="ListBullets" weight="bold" size={16} color="currentColor" />
           <span className="dock-more-lbl">AGENDA</span>
         </button>
       )}
@@ -245,6 +311,7 @@ export default function Dock({
           data-presenting={present.presenting > 0 ? '' : undefined}
         >
           {/* A surface may name it in its own words (`label`: the Build Room's "ROOM'S WINDOW"). */}
+          <Icon name="Monitor" weight="bold" size={16} color="currentColor" />
           <span className="dock-more-lbl">{present.label || (present.presenting > 0 ? 'PRESENTING' : 'PRESENT')}</span>
         </RoomWindowLink>
       )}

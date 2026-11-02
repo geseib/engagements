@@ -535,7 +535,7 @@ body, .stage-ladder-table{
 
 /* ------------------------------------------------------------------- DOCK */
 .dock{grid-area:dock;position:relative;z-index:12;min-height:var(--dock-h);
-  display:flex;align-items:center;gap:calc(1.2vw + 8px);
+  display:flex;flex-wrap:nowrap;align-items:center;gap:calc(1.2vw + 8px);
   padding:calc(1vh + 4px) calc(2.4vw + 10px);
   border-top:var(--hair) solid var(--rule);
   background:linear-gradient(180deg, rgba(15,26,46,0) 0%, rgba(11,18,32,.6) 100%);}
@@ -620,7 +620,7 @@ a.dock-more{text-decoration:none}
 /* AN EVENT'S ITEM carries AGENDA beside SESSION (Dock.jsx), 94px more, so the
    hints go sooner: measured on a closed survey's feedback beat, the widest
    dock there is, the row ran 12-148px past the edge at every width from 1150
-   to 1440. What still does not fit wraps (`.dock[data-crowded]`, below). */
+   to 1440. What still does not fit steps down (`.dock[data-crowded]`, below). */
 @media (max-width:1599px){.dock[data-agenda] .host-action-bar__keyhint{display:none}}
 @media (max-width:1279px){.dock[data-agenda] .keycap{display:none}}
 /* A PORTRAIT TABLET. The measurements above stop at 1000 wide; at 768 the
@@ -636,14 +636,46 @@ a.dock-more{text-decoration:none}
   .dock{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
   .dock .status{flex:1 1 100%;max-width:none}
 }
-/* The same second line wherever the row measures too wide (Dock.jsx
-   useCrowded) — never a button past the edge. */
-.dock[data-crowded]{flex-wrap:wrap;row-gap:calc(.6vh + 6px)}
-.dock[data-crowded] .status{flex:1 1 100%;max-width:none}
-/* A crowded dock drops the Space cap before it wraps a button to a third
-   row (walk of dev 92f8b24d: TV at 1366x768, SESSION alone on a third row
-   took 60px from the stage). The cap is on the button now (.keycap). */
+/* ONE LINE, ALWAYS, ABOVE 900px (owner, 2 Nov 2026: "the bottom bar became
+   2 lines"). Where the row measures too wide (Dock.jsx useCrowded) it no
+   longer takes a second line, which moved every button the host had learned
+   to find and took a row from the stage. Instead, in this order of what gives:
+   the key hint and the Space cap go (they repeat what the buttons say), the
+   gaps close up, AGENDA and PRESENT drop their word and keep the glyph (their
+   name still in the aria-label and title), and the round buttons' side
+   padding closes up. Still too wide (data-crowded="2"), the second and third
+   round buttons keep only their glyph; then (="3") Main menu, because it is
+   the way out; then (="4") the status narrows to two lines. SESSION and the
+   main button keep their words.
+   The status keeps its floor and may run to two lines inside its own box.
+   __tests__/dockOneLinePalette.test.js pins this; measured in Chromium in
+   every reachable state at 1280x720 and 1440x900, all four profiles. */
+.dock[data-crowded]{gap:calc(.4vw + 6px);padding-left:calc(1vw + 8px);padding-right:calc(1vw + 8px)}
 .dock[data-crowded] .keycap{display:none}
+.dock[data-crowded] .host-action-bar__keyhint{display:none}
+.dock[data-crowded] .dock-more:not(.dock-main) > svg + .dock-more-lbl{display:none}
+.dock[data-crowded] .dock-more{padding:.3em .55em}
+.dock[data-crowded] .host-action-bar__primary,
+.dock[data-crowded] .host-action-bar__secondary,
+.dock[data-crowded] .host-action-bar__tertiary{padding-left:calc(.6vw + 12px);padding-right:calc(.6vw + 12px)}
+/* Still too wide (data-crowded="2", TV at 1280): the second and third round
+   buttons keep their glyph; the word stays their accessible name and title. */
+.dock[data-crowded="2"] .host-action-bar__secondary > span,
+.dock[data-crowded="2"] .host-action-bar__tertiary > span,
+.dock[data-crowded="3"] .host-action-bar__secondary > span,
+.dock[data-crowded="3"] .host-action-bar__tertiary > span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* Last (data-crowded="3"): Main menu down to its house, its name still the
+   aria-label and title. Last because it is the way out. */
+.dock[data-crowded="3"] .dock-main > svg + .dock-more-lbl,
+.dock[data-crowded="4"] .dock-main > svg + .dock-more-lbl{display:none}
+/* The very last step (data-crowded="4": TV at 1280x720 on a closed survey in
+   an event, three round buttons and every quiet item): the status gives up
+   part of its floor and runs to a second line inside its own box. */
+.dock[data-crowded="4"] .host-action-bar__secondary > span,
+.dock[data-crowded="4"] .host-action-bar__tertiary > span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.dock[data-crowded="4"] .status{min-width:min(5em, 12vw)}
 
 /* ------------------------------------------- THE COUNT, WHEN THE COLUMN GOES
    THE DEFECT THIS FIXES, stated as measurement rather than opinion. The fitter

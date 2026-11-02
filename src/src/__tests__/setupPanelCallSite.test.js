@@ -214,7 +214,11 @@ describe('the dock control names the panel it opens', () => {
     expect(dock).not.toMatch(/Console/i);
 
     const body = dock.slice(dock.indexOf('<footer'));
-    expect(body.indexOf('dock-more')).toBeGreaterThan(body.indexOf('{children}'));
+    // SESSION (the button labelled SESSION) comes after the primary. Main menu
+    // is a dock-more too since 2 Nov 2026, and is deliberately FIRST — the
+    // other end of the dock from the panel SESSION opens.
+    expect(body.indexOf('>SESSION<')).toBeGreaterThan(body.indexOf('{children}'));
+    expect(body.indexOf('dock-main')).toBeLessThan(body.indexOf('{children}'));
   });
 });
 

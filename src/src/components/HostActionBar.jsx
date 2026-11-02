@@ -251,6 +251,7 @@ export default function HostActionBar({
               className={`btn-secondary host-action-bar__secondary${armClass(secondary)}`}
               onClick={() => press(secondary)}
               disabled={Boolean(secondary.disabled)}
+              title={labelOf(secondary)}
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
               <span>{labelOf(secondary)}</span>
@@ -262,6 +263,7 @@ export default function HostActionBar({
               className={`btn-secondary host-action-bar__tertiary${armClass(tertiary)}`}
               onClick={() => press(tertiary)}
               disabled={Boolean(tertiary.disabled)}
+              title={labelOf(tertiary)}
             >
               <Icon name={tertiary.icon} weight="bold" size={18} />
               <span>{labelOf(tertiary)}</span>
