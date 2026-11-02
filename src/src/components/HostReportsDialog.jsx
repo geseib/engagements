@@ -5,6 +5,7 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import Icon from './Icon';
 import ReportsPanel from './ReportsPanel';
+import Button from './ui/Button';
 
 /**
  * THE HOST'S REPORTS — the same list the console shows, in the host's dialog
@@ -29,7 +30,7 @@ export default function HostReportsDialog({ onClose }) {
         <ReportsPanel />
       </div>
       <DialogFoot>
-        <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>Close</button>
+        <Button variant="secondary" size={44} onClick={() => onClose && onClose()}>Close</Button>
       </DialogFoot>
     </Modal>
   );

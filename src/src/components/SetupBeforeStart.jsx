@@ -76,7 +76,9 @@ export default function SetupBeforeStart({
   return (
     <div className="sbs" data-theme="dark" data-testid="setup-before-start">
       <header className="sbs-top">
-        <Button variant="quiet" size="sm" className="sbs-home" onClick={() => onMainMenu && onMainMenu()}>
+        {/* The §5.1 looks and sizes (experience plan 5c): the bar's way back
+            is the secondary at 36px; Start is the screen's one primary. */}
+        <Button variant="secondary" size={36} className="sbs-home" onClick={() => onMainMenu && onMainMenu()}>
           <Icon name="House" size={16} color="currentColor" /> {W.mainMenu}
         </Button>
         <span className="sbs-crumb" aria-hidden="true">Setup</span>
@@ -92,16 +94,16 @@ export default function SetupBeforeStart({
           </div>
           <div className="sbs-acts">
             {onEdit ? (
-              <Button variant="quiet" onClick={onEdit} disabled={busy}>
+              <Button variant="secondary" size={44} onClick={onEdit} disabled={busy}>
                 <Icon name="PencilSimple" size={16} color="currentColor" /> {W.edit}
               </Button>
             ) : null}
             {onInvite ? (
-              <Button variant="quiet" onClick={onInvite} disabled={busy}>
+              <Button variant="secondary" size={44} onClick={onInvite} disabled={busy}>
                 <Icon name="PaperPlaneTilt" size={16} color="currentColor" /> {W.invite}
               </Button>
             ) : null}
-            <Button variant="action" className="sbs-start" onClick={() => onStart && onStart()} disabled={busy}>
+            <Button variant="primary" size={44} className="sbs-start" onClick={() => onStart && onStart()} disabled={busy}>
               <Icon name="Play" weight="fill" size={16} color="currentColor" /> {busy ? W.starting : startLabel}
             </Button>
           </div>

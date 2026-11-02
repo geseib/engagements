@@ -141,39 +141,31 @@ describe('the five ways out of this screen', () => {
  * button-ness, and identical metrics are the not-bigger.
  */
 describe('the library controls read as buttons', () => {
-  test('neither is the borderless link style any more', () => {
-    // rejects: leaving `wel-btn-quiet` on either control. That class is muted
-    // text on a transparent 2px border with a -12px pull to sit flush under the
-    // paragraph — which is how this file draws a text LINK, and it was read as
-    // one.
+  // Since experience plan 5c every control here is ui/Button: the library
+  // controls are the outlined secondary (a visible rule, so never read as a
+  // link) at the 36px laptop height, i.e. not bigger than the 40px they were.
+  test('neither is the borderless text look', () => {
+    // rejects: the tertiary (text-only) look on either control, which is how
+    // a link is drawn, and the old quiet style was read as one.
     setup({ onReports: jest.fn() });
     for (const name of ['Question sets', 'Reports']) {
       const button = screen.getByRole('button', { name });
-      expect(button.className).toContain('wel-btn-line');
-      expect(button.className).not.toContain('wel-btn-quiet');
+      expect(button).toHaveClass('ui-btn', 'ui-btn--quiet', 'ui-btn--h36');
+      expect(button).not.toHaveClass('ui-btn--tertiary');
     }
   });
 
-  test('the style it carries declares a visible rule', () => {
-    // rejects: a class that exists but draws nothing — `.wel-btn` sets
-    // `border: 2px solid transparent`, so a `.wel-btn-line` that forgets to
-    // name a colour is invisible and every assertion above still passes.
-    const line = ruleFor('.wel-btn-line');
-    expect(line).toMatch(/border-color:\s*var\(--wel-rule-strong\)/);
-    expect(line).toMatch(/color:\s*var\(--text\)/);
+  test('the look it carries declares a visible rule', () => {
+    // rejects: an outlined look that forgets its colour and draws nothing.
+    const BTN = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'ui', 'Button.css'), 'utf8');
+    expect(BTN).toMatch(/\.ui-btn--quiet\s*\{[^}]*border-color:\s*var\(--rule-strong\)/);
   });
 
-  test('and it is not one pixel bigger than the style it replaced', () => {
-    // rejects: reaching for size to make the control obvious, which is the one
-    // thing the owner ruled out. min-height, padding and font-size must match
-    // `.wel-btn-quiet` exactly; only the rule and the ink may differ.
-    const quiet = ruleFor('.wel-btn-quiet');
-    const line = ruleFor('.wel-btn-line');
-    const metric = (rule, prop) => (rule.match(new RegExp(`${prop}:\\s*([^;]+);`)) || [])[1];
-    for (const prop of ['min-height', 'padding', 'font-size']) {
-      expect(metric(line, prop)).toBe(metric(quiet, prop));
-      expect(metric(line, prop)).toBeTruthy();
-    }
+  test('Home declares no button family of its own any more', () => {
+    // rejects: a scoped wel-btn / wel-action look creeping back beside ui/Button.
+    expect(CSS).not.toMatch(/\.wel-btn/);
+    expect(CSS).not.toMatch(/\.wel-action\.is-primary/);
+    expect(CSS).not.toMatch(/#FFBB63/i);
   });
 });
 
@@ -313,9 +305,11 @@ describe('Home: New, Rejoin, recent sessions, events and See all (experience pla
      different. All three live inside New engagement now. */
   test('Home has one New button: New engagement, and no Quick start, Build Room or New event door', () => {
     const { container } = setup({ sessions: rows });
-    expect(container.querySelectorAll('.wel-action.is-primary')).toHaveLength(1);
+    // THE ONE PRIMARY (experience plan §5.1, step 5c): ui/Button, once.
+    expect(container.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     const newButton = screen.getByRole('button', { name: /new engagement/i });
-    expect(newButton).toHaveClass('is-primary');
+    expect(newButton).toHaveClass('ui-btn', 'ui-btn--action', 'wel-action');
+    expect(container.querySelector('[class*="wel-btn"]')).toBeNull();
     expect(newButton).toHaveTextContent(/Quick start is inside/);
     expect(screen.queryByRole('button', { name: /^quick start$/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /build room/i })).toBeNull();

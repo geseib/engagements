@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './Icon';
 import FormatWalkthrough from './FormatWalkthrough';
+import Button from './ui/Button';
 
 /**
  * THE SIDE PANE (docs/design/new-engagement README §3.5; round 2, frames
@@ -85,15 +86,14 @@ export default function CreateSummary({
               exampleOnly={exampleOnly}
               layout="pane"
               headActs={onToggleHidden ? (
-                <button
-                  type="button"
-                  className="gsd-btn gsd-how-hide"
+                <Button
+                  variant="secondary" size={36} className="gsd-act gsd-how-hide"
                   aria-expanded="true"
                   aria-controls="gsd-how-pane"
                   onClick={() => onToggleHidden(true)}
                 >
                   Hide <Icon name="CaretRight" size={13} weight="bold" />
-                </button>
+                </Button>
               ) : null}
             />
           </div>

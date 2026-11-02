@@ -9,6 +9,7 @@ import { START_WORDS, startModeFor } from '../config/sessionStart';
 import { kindOf, isEventRow, itemTitles } from '../config/engagementKinds';
 import { sessionActions, allActions } from '../config/sessionRows';
 import { hostListHandlers, startLabelFor, startRow } from '../config/hostSessionActions';
+import Button from './ui/Button';
 
 /**
  * THE HOST'S OWN SESSION LIST, AS A TABLE.
@@ -249,9 +250,9 @@ export default function SessionHistoryPanel({
               /* onStart's contract is (gameId, title), as the row's own Start
                  calls it. This passed the whole row once, and the page built
                  POST /games/[object Object]/start from it (issue #48 finding 1). */
-              <button type="button" className="shist__done-start" onClick={() => startRow(row, done.title || titleOf(row), { onStart, roomScreen })}>
+              <Button variant="primary" size={36} className="shist__done-start" onClick={() => startRow(row, done.title || titleOf(row), { onStart, roomScreen })}>
                 <Icon name="Play" weight="fill" size={13} color="currentColor" /> {START_WORDS.now(startModeFor(row, roomScreen))}
-              </button>
+              </Button>
             )}
           </div>
         );
@@ -279,7 +280,7 @@ export default function SessionHistoryPanel({
           <Icon name="CheckCircle" weight="fill" size={16} color="currentColor" />
           <span><b>{START_WORDS.likeLast(roomScreen)}</b> {START_WORDS.likeLastLine(roomScreen)}</span>
           {roomScreen === 'two' && typeof onRoomScreen === 'function' ? (
-            <button type="button" className="shist__mode-switch" onClick={() => onRoomScreen('classic')}>{START_WORDS.oneThisTime}</button>
+            <Button variant="tertiary" size="sm" className="shist__mode-switch" onClick={() => onRoomScreen('classic')}>{START_WORDS.oneThisTime}</Button>
           ) : null}
         </p>
       ) : null}

@@ -163,7 +163,8 @@ describe('editing an engagement', () => {
     await settle();
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: '6' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
-    expect(window.confirm).toHaveBeenCalled();
+    // The small confirm dialog (useConfirm, experience plan 5c), not window.confirm.
+    expect(screen.getByRole('dialog', { name: 'Close without saving?' })).toBeInTheDocument();
     expect(p.onClose).not.toHaveBeenCalled();
   });
 
@@ -178,7 +179,9 @@ describe('editing an engagement', () => {
     fireEvent.click(leadership); // remove Leadership — left with just Ops
     fireEvent.click(leadership); // add it back — insertion order is now Ops, Leadership
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1]);
-    expect(window.confirm).not.toHaveBeenCalled(); // sorted, so this reads as unchanged
+    // Sorted, so this reads as unchanged: no ask, it just closes.
+    expect(screen.queryByRole('dialog', { name: 'Close without saving?' })).toBeNull();
+    expect(p.onClose).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(p.onSaved).toHaveBeenCalled());
     expect(api.updateItem).toHaveBeenCalledWith('5307', 'it_00000003', expect.objectContaining({

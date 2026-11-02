@@ -24,6 +24,7 @@ import {
   readExpiredParam, EXPIRED_PARAM, expiredItemNotice,
 } from '../../config/runningOrder';
 import './EventStage.css';
+import Button from '../ui/Button';
 
 /** Where a host builds this event's agenda (components/event/HostEventAgenda.jsx). */
 const agendaPath = (code) => `/host/event/${encodeURIComponent(code)}/agenda`;
@@ -714,7 +715,7 @@ export default function EventStage({ code }) {
             <p className="ag-deck-note" role="status">
               {slides.error || 'Opening the slides…'}
               {slides.error && (
-                <button type="button" className="ag-b" onClick={slides.retry}>Try again</button>
+                <Button variant="secondary" size={44} className="ag-b" onClick={slides.retry}>Try again</Button>
               )}
             </p>
           )}
@@ -934,7 +935,7 @@ export default function EventStage({ code }) {
           </div>
           <p className="ag-qr-url">{joinDisplayUrl()}</p>
           <p className="ag-qr-code">{code}</p>
-          <DialogFoot className="ag-confirm-foot"><button type="button" className="ag-close" onClick={() => setQrOpen(false)}>Close</button></DialogFoot>
+          <DialogFoot className="ag-confirm-foot"><Button variant="secondary" size={44} className="ag-close" onClick={() => setQrOpen(false)}>Close</Button></DialogFoot>
         </Modal>
       )}
 
@@ -954,10 +955,9 @@ export default function EventStage({ code }) {
               : ''}
             Everyone’s agenda shows it as done, and it cannot be taken live again.
           </p>
-          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setConfirmEnd(null)}>Keep it</button>}>
-            <button
-              type="button"
-              className="ag-end"
+          <DialogFoot className="ag-confirm-foot" cancel={<Button variant="secondary" size={44} className="ag-close" onClick={() => setConfirmEnd(null)}>Keep it</Button>}>
+            <Button
+              variant="danger" size={44} className="ag-end"
               disabled={busy}
               onClick={async () => {
                 const target = confirmEnd;
@@ -966,7 +966,7 @@ export default function EventStage({ code }) {
               }}
             >
               End it
-            </button>
+            </Button>
           </DialogFoot>
         </Modal>
       )}
@@ -982,15 +982,14 @@ export default function EventStage({ code }) {
         >
           <DialogHead title={askGoLive.ask.title} onClose={() => setAskGoLive(null)} closeDisabled={busy} />
           <p>{askGoLive.ask.message}</p>
-          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setAskGoLive(null)}>Not yet</button>}>
-            <button
-              type="button"
-              className="ag-yes"
+          <DialogFoot className="ag-confirm-foot" cancel={<Button variant="secondary" size={44} className="ag-close" onClick={() => setAskGoLive(null)}>Not yet</Button>}>
+            <Button
+              variant="primary" size={44} className="ag-yes"
               disabled={busy}
               onClick={async () => { const { item } = askGoLive; setAskGoLive(null); await goLive(item); }}
             >
               {askGoLive.ask.confirmText}
-            </button>
+            </Button>
           </DialogFoot>
         </Modal>
       )}
@@ -1010,15 +1009,14 @@ export default function EventStage({ code }) {
             stays finished: those sessions are over, and their reports are kept.
             {keptUntil ? ` The event is kept until ${keptUntil}.` : ''}
           </p>
-          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setAskReopen(false)}>Not now</button>}>
-            <button
-              type="button"
-              className="ag-yes"
+          <DialogFoot className="ag-confirm-foot" cancel={<Button variant="secondary" size={44} className="ag-close" onClick={() => setAskReopen(false)}>Not now</Button>}>
+            <Button
+              variant="primary" size={44} className="ag-yes"
               disabled={busy}
               onClick={async () => { setAskReopen(false); await act('reopen-event'); }}
             >
               Reopen the event
-            </button>
+            </Button>
           </DialogFoot>
         </Modal>
       )}
@@ -1035,9 +1033,9 @@ export default function EventStage({ code }) {
           <DialogHead title="Leave the stage, or end the event?" onClose={() => setExitOpen(false)} closeDisabled={busy} />
           <div className="ag-exit-ways">
             <div className="ag-exit-way">
-              <button type="button" className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(START_PATH); }}>
+              <Button variant="primary" size={44} className="ag-yes" onClick={() => { setExitOpen(false); navigateTo(START_PATH); }}>
                 Leave — the event keeps going
-              </button>
+              </Button>
               <p>
                 {started
                   ? 'Phones stay where they are and people can still join. Your start screen lists the event; open it from there to come back.'
@@ -1045,21 +1043,20 @@ export default function EventStage({ code }) {
               </p>
             </div>
             <div className="ag-exit-way">
-              <button
-                type="button"
-                className="ag-end"
+              <Button
+                variant="danger" size={44} className="ag-end"
                 disabled={busy}
                 onClick={async () => { setExitOpen(false); setFocus('agenda'); await act('end-event'); }}
               >
                 End the event
-              </button>
+              </Button>
               <p>
                 Anything live or paused ends now, and nobody new can join. Items that have not started stay
                 on the agenda, unplayed. Reports already made are kept.
               </p>
             </div>
           </div>
-          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setExitOpen(false)}>Stay</button>} />
+          <DialogFoot className="ag-confirm-foot" cancel={<Button variant="secondary" size={44} className="ag-close" onClick={() => setExitOpen(false)}>Stay</Button>} />
         </Modal>
       )}
 
@@ -1077,15 +1074,14 @@ export default function EventStage({ code }) {
             Anything live or paused ends now, and nobody new can join. Items that have not started stay
             on the agenda, unplayed. Reports already made are kept.
           </p>
-          <DialogFoot className="ag-confirm-foot" cancel={<button type="button" className="ag-close" onClick={() => setConfirmEndEvent(false)}>Keep going</button>}>
-            <button
-              type="button"
-              className="ag-end"
+          <DialogFoot className="ag-confirm-foot" cancel={<Button variant="secondary" size={44} className="ag-close" onClick={() => setConfirmEndEvent(false)}>Keep going</Button>}>
+            <Button
+              variant="danger" size={44} className="ag-end"
               disabled={busy}
               onClick={async () => { setConfirmEndEvent(false); setFocus('agenda'); await act('end-event'); }}
             >
               End the event
-            </button>
+            </Button>
           </DialogFoot>
         </Modal>
       )}
@@ -1119,9 +1115,9 @@ function BoardRow({ item, busy, onOpen, onLive, onAct, onEnd, expired = false, o
         </span>
         <span className="ag-r-st ag-r-st--expired">Expired</span>
         <span className="ag-r-go">
-          <button type="button" className="ag-b" disabled={busy} onClick={() => onRunAgain(item)} aria-label={`Run ${name} again: a fresh session`}>
+          <Button variant="secondary" size={44} className="ag-b" disabled={busy} onClick={() => onRunAgain(item)} aria-label={`Run ${name} again: a fresh session`}>
             Run it again
-          </button>
+          </Button>
         </span>
       </li>
     );
@@ -1136,28 +1132,28 @@ function BoardRow({ item, busy, onOpen, onLive, onAct, onEnd, expired = false, o
       </span>
       <span className={`ag-r-st ag-r-st--${state}`}>{words[state]}</span>
       <span className="ag-r-go">
-        <button type="button" className="ag-b" disabled={busy} onClick={() => onOpen(item)} aria-label={`Open ${name} on this screen only`}>
+        <Button variant="secondary" size={44} className="ag-b" disabled={busy} onClick={() => onOpen(item)} aria-label={`Open ${name} on this screen only`}>
           Open
-        </button>
+        </Button>
         {state === 'planned' && (
-          <button type="button" className="ag-b ag-b--go" disabled={busy} onClick={() => onLive(item)} aria-label={`Go live with ${name}: bring everyone to it`}>
+          <Button variant="secondary" size={44} className="ag-b ag-b--go" disabled={busy} onClick={() => onLive(item)} aria-label={`Go live with ${name}: bring everyone to it`}>
             Go live
-          </button>
+          </Button>
         )}
         {state === 'paused' && (
-          <button type="button" className="ag-b ag-b--go" disabled={busy} onClick={() => onLive(item)} aria-label={`Resume ${name}: bring everyone back to it`}>
+          <Button variant="secondary" size={44} className="ag-b ag-b--go" disabled={busy} onClick={() => onLive(item)} aria-label={`Resume ${name}: bring everyone back to it`}>
             Resume
-          </button>
+          </Button>
         )}
         {state === 'live' && !isBreak(item.type) && (
-          <button type="button" className="ag-b" disabled={busy} onClick={() => onAct('pause', item)} aria-label={`Pause ${name}`}>
+          <Button variant="secondary" size={44} className="ag-b" disabled={busy} onClick={() => onAct('pause', item)} aria-label={`Pause ${name}`}>
             Pause
-          </button>
+          </Button>
         )}
         {(state === 'live' || state === 'paused') && (
-          <button type="button" className="ag-b" disabled={busy} onClick={() => onEnd(item)} aria-label={`End ${name}`}>
+          <Button variant="secondary" size={44} className="ag-b" disabled={busy} onClick={() => onEnd(item)} aria-label={`End ${name}`}>
             End
-          </button>
+          </Button>
         )}
       </span>
     </li>

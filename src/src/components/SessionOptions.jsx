@@ -54,6 +54,7 @@ import Icon from './Icon';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import './GameSetupDialog.css';
+import Button from './ui/Button';
 
 /** "None picked, so all 4 are in · 12 questions" — what will be asked, not the chips. */
 const questionsIn = (list) => {
@@ -109,7 +110,7 @@ export function SessionCategories({
         ) : (
           <div className="gsd-cat-error" role="alert">
             <span>{error} Nothing from the previous set is kept.</span>
-            {onRetry && <button type="button" className="gsd-btn" onClick={onRetry}>Retry</button>}
+            {onRetry && <Button variant="secondary" size={36} className="gsd-act" onClick={onRetry}>Retry</Button>}
           </div>
         )}
       </div>
@@ -121,7 +122,7 @@ export function SessionCategories({
         <span className="gsd-label" id={labelId}>{label}</span>
         {hint && <span className="gsd-cats-hint">{hint}</span>}
         {onAllOn && categories.length > 0 && picked.length < categories.length && selected.size > 0 && (
-          <button type="button" className="gsd-btn gsd-btn--link gsd-cats-all" onClick={onAllOn}>Turn all on</button>
+          <Button variant="tertiary" size="sm" className="gsd-link gsd-cats-all" onClick={onAllOn}>Turn all on</Button>
         )}
       </div>
       <div className="category-selection">

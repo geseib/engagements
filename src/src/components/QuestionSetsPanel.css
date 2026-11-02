@@ -217,6 +217,33 @@
   font: 600 var(--qsets-t-label)/1.4 var(--font-ui);
 }
 
+/* THE SHELF IS ON ui/Button (experience plan §5.1, step 5c): the sets list,
+   the host's shelf dialog, the delete dialog, the drafts strip and New set.
+   "New set" / "New question set" is the one primary; a row's own lead action
+   (Review an unreviewed generation, Save a rename, Save a topic, a draft's
+   Resume) is the outlined secondary edged in --action, so a shelf of forty
+   rows is not forty orange blocks; a row's Delete is the secondary in the
+   destructive ink. The .qsets-btn family above stays ONLY for the surfaces
+   not yet moved (set editing, step 5e: AddQuestionsDialog, QuestionsPanel;
+   the upload panel and the public library) and goes with the last of them.
+
+   Here the button reads this scope's own tokens, set on the button itself, so
+   the .qsets--onlight re-tint reaches it as it reaches every row: the rule,
+   the row hover and the link ink (--accent-text, the amber the shelf's links
+   always were on dusk). */
+.qsets .ui-btn {
+  --rule-strong: var(--qsets-rule-strong);
+  --row-hover: var(--qsets-row-hover);
+  --ui-btn-link-ink: var(--accent-text);
+  --ui-size: var(--qsets-t-label);
+}
+.qsets .ui-btn--h44 { --ui-size: var(--qsets-t-body); }
+.qsets .qsets-act { min-height: 26px; padding: 0 9px; border-radius: 6px; --ui-size: var(--qsets-t-floor); }
+.qsets .qsets-lead { border-color: var(--action); color: var(--accent-text); }
+.qsets .qsets-del { border-color: transparent; color: var(--danger-text); }
+.qsets .qsets-del:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--qsets-tint-danger); border-color: var(--danger-text); }
+.qsets .qsets-clear { padding: 0; min-height: 0; text-decoration: underline; }
+
 .qsets-head {
   display: flex;
   align-items: center;

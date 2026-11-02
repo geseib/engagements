@@ -150,23 +150,10 @@
 }
 .shist__done > svg { flex: none; margin-top: 3px; color: var(--success); }
 .shist__done p { margin: 0; flex: 1; min-width: 0; }
-.shist__done-start {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--shist-rule-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--shist-t-label);
-  font-weight: 700;
-  cursor: pointer;
-}
-.shist__done-start:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+/* Start, in the just-created line, is ui/Button primary (experience plan
+   §5.1, step 5c): at that moment it is the dialog's one main action; every
+   row's Start in the list below is the outlined lead. */
+.shist .shist__done-start { flex: none; gap: 6px; --ui-size: var(--shist-t-label); }
 
 /* ----------------------------------------------------------------- table --- */
 
@@ -224,15 +211,5 @@
 }
 .shist__mode > svg { flex: none; color: var(--success); }
 .shist__mode b { color: var(--text); }
-.shist__mode-switch {
-  font: inherit;
-  font-weight: 700;
-  color: var(--info);
-  background: transparent;
-  border: 0;
-  padding: 4px 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.shist__mode-switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+/* The one-off way round it: ui/Button tertiary, the link ink. */
+.shist .shist__mode-switch { --ui-size: var(--shist-t-body); text-decoration: underline; text-underline-offset: 3px; }

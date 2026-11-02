@@ -6,6 +6,7 @@ import { listEvents } from '../utils/eventsApi';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import pricing from '../../../lambda-functions/game/pricing';
 import './EventsPanel.css';
+import Button from './ui/Button';
 
 const { upgradePlanFor, formatCents } = pricing;
 
@@ -55,9 +56,9 @@ export const isUpcoming = (event, today) => String((event && event.startsAt) || 
 export function NewEventButton({ onClick }) {
   return (
     <span className="evts evts-headact">
-      <button type="button" className="evts-btn evts-btn--primary evts-btn--lg" onClick={onClick}>
+      <Button variant="primary" size={36} onClick={onClick}>
         <Icon name="Plus" weight="bold" size={16} color="currentColor" /> New event
-      </button>
+      </Button>
     </span>
   );
 }
@@ -88,12 +89,12 @@ function TeamPlanOnly({ onRequestPlan, onShowPlan, planRequest, orgType = '' }) 
         {pending && <PlanRequestStrip request={planRequest} />}
         <div className="evts-acts">
           {!pending && onRequestPlan && (
-            <button type="button" className="evts-btn evts-btn--primary evts-btn--lg" onClick={onRequestPlan}>
+            <Button variant="primary" size={36} onClick={onRequestPlan}>
               {`Request the ${plan.name}`}
-            </button>
+            </Button>
           )}
           {onShowPlan && (
-            <button type="button" className="evts-btn evts-btn--lg" onClick={onShowPlan}>{`What the ${plan.name} adds`}</button>
+            <Button variant="secondary" size={36} onClick={onShowPlan}>{`What the ${plan.name} adds`}</Button>
           )}
         </div>
         {!onRequestPlan && !pending && (
@@ -163,9 +164,9 @@ export default function EventsPanel({
             You name it first, then build its agenda.
           </p>
           <div className="evts-acts">
-            <button type="button" className="evts-btn evts-btn--primary evts-btn--lg" onClick={() => onCreatingChange(true)}>
+            <Button variant="secondary" size={36} onClick={() => onCreatingChange(true)}>
               <Icon name="Plus" weight="bold" size={16} color="currentColor" /> New event
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -198,14 +199,14 @@ export default function EventsPanel({
               {needle ? (
                 <>
                   <p>No {when} event matches “{search.trim()}”.</p>
-                  <button type="button" className="evts-btn" onClick={() => setSearch('')}>Clear the search</button>
+                  <Button variant="secondary" size={36} onClick={() => setSearch('')}>Clear the search</Button>
                 </>
               ) : (
                 <>
                   <p>{when === 'upcoming' ? 'Nothing is coming up.' : 'Nothing has happened yet.'}</p>
-                  <button type="button" className="evts-btn" onClick={() => setWhen(when === 'upcoming' ? 'past' : 'upcoming')}>
+                  <Button variant="secondary" size={36} onClick={() => setWhen(when === 'upcoming' ? 'past' : 'upcoming')}>
                     {when === 'upcoming' ? 'Show past events' : 'Show upcoming events'}
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -257,9 +258,9 @@ export default function EventsPanel({
                     </td>
                     <td>
                       <div className="evts-rowact">
-                        <button type="button" className="evts-btn evts-btn--sm" onClick={() => open(event)} aria-label={`Open ${event.title}`}>
+                        <Button variant="secondary" size="sm" className="evts-act" onClick={() => open(event)} aria-label={`Open ${event.title}`}>
                           Open
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>

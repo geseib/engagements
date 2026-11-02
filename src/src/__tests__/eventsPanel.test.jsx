@@ -174,7 +174,10 @@ describe('New event (05)', () => {
     p.onCreatingChange.mockClear();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Q4 Kickoff' } });
     exits.forEach((b) => fireEvent.click(b));
-    expect(window.confirm).toHaveBeenCalledTimes(2);
+    // The small confirm dialog (useConfirm, experience plan 5c), not
+    // window.confirm: one at a time, and nothing closes until it is answered.
+    expect(screen.getAllByRole('dialog', { name: 'Close without saving?' })).toHaveLength(1);
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(p.onCreatingChange).not.toHaveBeenCalled();
   });
 
@@ -230,7 +233,8 @@ describe('the pieces', () => {
     const { container } = render(<NewEventButton onClick={onClick} />);
     fireEvent.click(screen.getByRole('button', { name: /new event/i }));
     expect(onClick).toHaveBeenCalled();
-    expect(container.querySelector('.evts .evts-btn--primary')).not.toBeNull();
+    // ui/Button primary (experience plan 5c), still inside the events scope.
+    expect(container.querySelector('.evts .ui-btn--action')).not.toBeNull();
   });
   it('upcoming means today or later, by the event\'s own date', () => {
     expect(isUpcoming({ startsAt: '2026-10-09T09:00' }, '2026-10-09')).toBe(true);

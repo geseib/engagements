@@ -8,6 +8,7 @@ import { helpFor } from '../config/help/screens';
 import BrandMark from './BrandMark';
 import WelcomeEvents from './WelcomeEvents';
 import Icon from './Icon';
+import Button from './ui/Button';
 import SessionList from './SessionList';
 import { kindOf, kindLabel } from '../config/engagementKinds';
 import { formatWhen } from '../config/tableCells';
@@ -185,12 +186,14 @@ export default function WelcomeScreen({
               {/* ONE NAME FOR IT (experience plan 4b): "Library & team" for
                   everyone. It was "Admin console" for staff and "Question
                   sets & team" for everyone else (audit E S2). */}
-              <a className="wel-btn wel-btn-quiet" href="/admin">
+              {/* The account corner's two are ui/Button, tertiary: text that
+                  moves the host elsewhere, never a second main action (5c). */}
+              <Button as="a" variant="tertiary" size={36} className="wel-corner" href="/admin">
                 {LIBRARY_NAME}
-              </a>
-              <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
+              </Button>
+              <Button variant="tertiary" size={36} className="wel-corner" onClick={() => onSignOut?.()}>
                 Sign out
-              </button>
+              </Button>
               {/* THE ONE `?` ON THIS SCREEN — and until 2026-09-21 there was none.
                   The host guides were reachable only from inside a running
                   session's side panel, and reporting a bug from here meant
@@ -253,12 +256,14 @@ export default function WelcomeScreen({
             </p>
 
             <div className="wel-stack">
-              <button type="button" className="wel-action is-primary" onClick={() => onCreateEngagement?.()}>
+              {/* THE ONE PRIMARY ON HOME (experience plan §5.1, step 5c): the
+                  shared ui/Button in the orange look, its sentence inside. */}
+              <Button variant="primary" size={44} className="wel-action" onClick={() => onCreateEngagement?.()}>
                 <span className="wel-action-name">New engagement</span>
                 <span className="wel-action-note">
                   A session, a survey, a Build Room or an event. In a hurry? Quick start is inside.
                 </span>
-              </button>
+              </Button>
             </div>
           </section>
 
@@ -279,14 +284,15 @@ export default function WelcomeScreen({
                         {[kindLabel(kindOf(row)), row.gameId, formatWhen(rowDate(row))].filter(Boolean).join(' · ')}
                       </span>
                     </span>
-                    <button
-                      type="button"
-                      className="wel-btn wel-btn-line"
+                    <Button
+                      variant="secondary"
+                      size={36}
+                      className="wel-line"
                       onClick={() => on.continue && on.continue(row)}
                       aria-label={`Rejoin ${row.title || 'the session'}`}
                     >
                       <Icon name="Play" weight="fill" size={14} color="currentColor" /> Rejoin
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -333,9 +339,9 @@ export default function WelcomeScreen({
                 />
               </div>
 
-              <button type="submit" className="wel-btn wel-btn-ghost" disabled={!complete}>
+              <Button type="submit" variant="secondary" size={44} className="wel-continue" disabled={!complete}>
                 Continue
-              </button>
+              </Button>
             </form>
           </aside>
 
@@ -347,9 +353,9 @@ export default function WelcomeScreen({
           <section className="wel-recent" aria-labelledby="wel-recent-title">
             <div className="wel-evhead">
               <h2 id="wel-recent-title">Recent sessions</h2>
-              <a className="wel-btn wel-btn-line" href={LIBRARY_SESSIONS_PATH}>
+              <Button as="a" variant="secondary" size={36} className="wel-line" href={LIBRARY_SESSIONS_PATH}>
                 See all <span className="wel-meta wel-seeall-in">in {LIBRARY_NAME}</span>
-              </a>
+              </Button>
             </div>
             {!loaded && <p className="wel-meta wel-recent-wait">Loading your sessions…</p>}
             {loaded && (
@@ -376,17 +382,17 @@ export default function WelcomeScreen({
           <section className="wel-library" aria-label="Your library">
             <p className="wel-kicker">Your library</p>
             <div className="wel-library-row">
-              <button type="button" className="wel-btn wel-btn-line" onClick={() => onQuestionSets?.()}>
+              <Button variant="secondary" size={36} className="wel-line" onClick={() => onQuestionSets?.()}>
                 Question sets
-              </button>
+              </Button>
               {onReports && (
                 /* Sessions expire a week after they start; a saved report
                    does not. This is where it is found afterwards. */
-                <button type="button" className="wel-btn wel-btn-line" onClick={() => onReports()}>
+                <Button variant="secondary" size={36} className="wel-line" onClick={() => onReports()}>
                   Reports
-                </button>
+                </Button>
               )}
-              <a className="wel-btn wel-btn-quiet" href="/admin">{LIBRARY_NAME}</a>
+              <Button as="a" variant="tertiary" size={36} className="wel-corner" href="/admin">{LIBRARY_NAME}</Button>
             </div>
           </section>
         </div>

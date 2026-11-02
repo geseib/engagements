@@ -13,6 +13,7 @@ import {
   itemStateLabel, eventStateLabel, itemCountText, EVENT_KIND,
 } from '../config/engagementKinds';
 import './ReportsPanel.css';
+import Button from './ui/Button';
 
 /**
  * REPORTS — the saved PDFs, findable after the session that made them is gone.
@@ -90,7 +91,8 @@ const SHARE_FIELD = {
   label: 'rp-share-label',
   row: 'rp-share-row',
   input: 'rp-share-input',
-  button: 'rp-btn',
+  // ui/Button's classes (experience plan 5c): CopyField renders a plain button.
+  button: 'ui-btn ui-btn--quiet ui-btn--h36',
   note: 'rp-share-copynote',
 };
 
@@ -337,38 +339,35 @@ export default function ReportsPanel({ heading = null }) {
         <td>
           {report.auto ? (
             <div className="rp-rowact">
-              <button
-                type="button"
-                className="rp-btn rp-btn--sm"
+              <Button
+                variant="secondary" size="sm" className="rp-act"
                 disabled={busyId === report.id || Boolean(making)}
                 onClick={() => makePdf(report)}
                 aria-label={`Make the PDF of ${name || report.gameId}`}
               >
                 <Icon name="FilePdf" weight="bold" size={13} color="currentColor" />
                 {busyId === report.id ? ' Making…' : ' Make the PDF'}
-              </button>
+              </Button>
             </div>
           ) : (
           <div className="rp-rowact">
-            <button
-              type="button"
-              className="rp-btn rp-btn--sm"
+            <Button
+              variant="secondary" size="sm" className="rp-act"
               onClick={() => setSharingId(sharing ? null : report.id)}
               aria-expanded={sharing}
               aria-controls={shareId}
               aria-label={`Share ${name || report.gameId}`}
             >
               <Icon name="LinkSimple" weight="bold" size={13} color="currentColor" /> Share
-            </button>
-            <button
-              type="button"
-              className="rp-btn rp-btn--sm"
+            </Button>
+            <Button
+              variant="secondary" size="sm" className="rp-act"
               disabled={busyId === report.id}
               onClick={() => download(report)}
               aria-label={`Download ${name || report.gameId}`}
             >
               <Icon name="DownloadSimple" weight="bold" size={13} color="currentColor" /> PDF
-            </button>
+            </Button>
           </div>
           )}
         </td>
@@ -452,15 +451,14 @@ export default function ReportsPanel({ heading = null }) {
         <td>
           {/* The event summary: overview and agenda, which item reports exist
               and where — downloaded, not stored (utils/eventSummary.js). */}
-          <button
-            type="button"
-            className="rp-btn rp-btn--sm"
+          <Button
+            variant="secondary" size="sm" className="rp-act"
             disabled={busyId === event.id}
             onClick={() => summaryPdf(event)}
           >
             <Icon name="FilePdf" weight="bold" size={14} color="currentColor" />
             {busyId === event.id ? 'Making…' : 'Summary PDF'}
-          </button>
+          </Button>
         </td>
       </tr>,
     ];
@@ -574,7 +572,7 @@ export default function ReportsPanel({ heading = null }) {
                   </button>
                 ))}
               </div>
-              <button type="button" className="rp-btn rp-btn--link" onClick={clearAll}>Clear all filters</button>
+              <Button variant="tertiary" size="sm" className="rp-clear" onClick={clearAll}>Clear all filters</Button>
             </div>
           ) : (
             <table className="rp-tbl">

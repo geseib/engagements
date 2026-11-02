@@ -29,6 +29,7 @@ import { buildEditPayload, editableSnapshot, summarizeEditResult } from '../util
 import { SET_SEARCH_FIELDS } from '../config/setFinder';
 import { makeSearchMatcher } from '../config/listControls';
 import './QuestionSetsPanel.css';
+import Button from './ui/Button';
 
 /**
  * THE HOST'S QUESTION SETS — opened from the create-engagement screen.
@@ -386,9 +387,9 @@ export default function HostQuestionSetsDialog({
   const noMatch = (sentence, testId) => (
     <div className="qsets-nomatch" data-testid={testId}>
       <p>{sentence}</p>
-      <button type="button" className="qsets-btn qsets-btn--link" onClick={() => setSearch('')}>
+      <Button variant="tertiary" size="sm" className="qsets-clear" onClick={() => setSearch('')}>
         Clear the search
-      </button>
+      </Button>
     </div>
   );
 
@@ -708,22 +709,20 @@ export default function HostQuestionSetsDialog({
                         />
                       </div>
                       <div className="qsets-actions">
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--primary"
+                        <Button
+                          variant="secondary" size={36} className="qsets-lead"
                           disabled={editing.busy || !editing.name.trim()}
                           onClick={saveEdit}
                         >
                           {editing.busy ? 'Saving…' : 'Save'}
-                        </button>
-                        <button
-                          type="button"
-                          className="qsets-btn"
+                        </Button>
+                        <Button
+                          variant="secondary" size={36}
                           disabled={editing.busy}
                           onClick={() => setEditing(null)}
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -866,16 +865,14 @@ export default function HostQuestionSetsDialog({
                         */}
                         {!isUnreadableSet(set) && (
                           <>
-                            <button
-                              type="button"
-                              className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated && !set.aiReviewedAt ? ' qsets-btn--primary' : ''}`}
+                            <Button
+                              variant="secondary" size="sm" className={`qsets-act${!set.active && set.isAIGenerated && !set.aiReviewedAt ? ' qsets-lead' : ''}`}
                               onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                             >
                               {!set.active && set.isAIGenerated && !set.aiReviewedAt ? 'Review' : 'Edit questions'}
-                            </button>
-                            <button
-                              type="button"
-                              className="qsets-btn qsets-btn--sm"
+                            </Button>
+                            <Button
+                              variant="secondary" size="sm" className="qsets-act"
                               onClick={() => setEditing({
                                 id: set.id,
                                 name: set.name || '',
@@ -884,16 +881,15 @@ export default function HostQuestionSetsDialog({
                               })}
                             >
                               Rename
-                            </button>
+                            </Button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
+                        <Button
+                          variant="secondary" size="sm" className="qsets-act qsets-del"
                           onClick={() => setDeleting(set)}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -967,14 +963,13 @@ export default function HostQuestionSetsDialog({
                       <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
                       <td className="qsets-col-acts">
                         <div className="qsets-rowact">
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm"
+                          <Button
+                            variant="secondary" size="sm" className="qsets-act"
                             onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                             title={`Take your own copy of ${set.name || set.id} and edit it`}
                           >
                             Copy and edit
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -987,14 +982,13 @@ export default function HostQuestionSetsDialog({
 
         <div className="qsets-head">
           <span className="qsets-head-grow" />
-          <button
-            type="button"
-            className="qsets-btn qsets-btn--primary"
+          <Button
+            variant="primary" size={36}
             onClick={() => setCreating(!creating)}
           >
             <Icon name="Plus" weight="bold" size={14} color="currentColor" />
             {creating ? 'Hide new set' : 'New question set'}
-          </button>
+          </Button>
         </div>
 
         {!newFirst && createPanel}
@@ -1011,9 +1005,9 @@ export default function HostQuestionSetsDialog({
       */}
       <DialogFoot>
         <span className="qsets-grow" />
-        <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>
+        <Button variant="secondary" size={44} onClick={() => onClose && onClose()}>
           Close
-        </button>
+        </Button>
       </DialogFoot>
 
       {builder && (
@@ -1076,7 +1070,7 @@ export default function HostQuestionSetsDialog({
             />
           </div>
           <DialogFoot>
-            <button type="button" className="qsets-btn" onClick={() => { setReviewDraft(null); refreshDrafts(); }}>Close</button>
+            <Button variant="secondary" size={44} onClick={() => { setReviewDraft(null); refreshDrafts(); }}>Close</Button>
           </DialogFoot>
         </Modal>
       )}

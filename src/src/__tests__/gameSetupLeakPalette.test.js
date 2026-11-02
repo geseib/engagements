@@ -49,7 +49,9 @@ function rules(css) {
 const MOUNTED = new Set([
   'category-button', 'category-button-grid', 'category-name', 'category-count', 'selected',
   'status-message', 'success', 'error', 'pending',
-  'btn-primary', 'btn-secondary', 'dialog-actions',
+  'dialog-actions',
+  // Not 'btn-primary' / 'btn-secondary' since experience plan 5c: the dialog's
+  // buttons are ui/Button, so the global rules have nothing here to reach.
 ]);
 const PSEUDO = /^(:hover|:disabled|:focus)$/;
 
@@ -72,7 +74,7 @@ const scopedProps = (sel) => {
 
 test('the walk finds the three rules that leaked', () => {
   const sels = globalRules.map(([s]) => s);
-  expect(sels).toEqual(expect.arrayContaining(['.status-message', '.category-button:hover', '.btn-primary:disabled']));
+  expect(sels).toEqual(expect.arrayContaining(['.status-message', '.category-button:hover']));
 });
 
 test.each(globalRules.map(([sel, decls]) => [sel, [...decls.keys()]]))(
@@ -137,11 +139,14 @@ test('H2: the phone foot rules come LAST, after every equal-weight foot rule', (
   const lastFootNote = CSS.lastIndexOf('.gsd .gsd-foot-note {');
   const phoneFoot = CSS.lastIndexOf('.gsd .dialog-actions .gsd-foot-note { flex: 1 0 100%');
   expect(phoneFoot).toBeGreaterThan(lastFootNote);
-  expect(CSS.slice(phoneFoot)).toMatch(/\.btn-primary,[\s\S]*?min-height:\s*44px/);
+  expect(CSS.slice(phoneFoot)).toMatch(/\.gsd-foot-act \{[\s\S]*?min-height:\s*44px/);
 });
 
 test('M1: a disabled Create is never dimmed, and never fades', () => {
-  expect(decl('.gsd .btn-primary:disabled', 'opacity')).toBe('1');
-  expect(decl('.gsd .btn-primary', 'transition')).toBe('none');
+  // Create is ui/Button primary (5c): its disabled look is opacity 1 in the
+  // library, and the dialog stills every button's transition.
+  expect(decl('.gsd .ui-btn', 'transition')).toBe('none');
+  const BTN = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'ui', 'Button.css'), 'utf8');
+  expect(BTN).toMatch(/\.ui-btn--action\[aria-disabled="true"\]\s*\{[^}]*opacity:\s*1/);
   expect(ratio(MUTED, CARD)).toBeGreaterThanOrEqual(4.5);
 });
