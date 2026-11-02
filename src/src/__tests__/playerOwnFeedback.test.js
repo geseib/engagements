@@ -56,7 +56,7 @@ describe('the button on the ordinary results screen', () => {
       'const betweenRounds = lastRankRef.current > 0;',
     );
     expect(resultsArm).toMatch(/onClick=\{openMyFeedback\}/);
-    expect(resultsArm).toMatch(/plr-feedback-btn/);
+    expect(resultsArm).toMatch(/plr-feedback\b/);
     // In the dock (phone-comments D9, experience plan principle 8), named for
     // what it does, never the bare "Feedback".
     expect(resultsArm).toMatch(/dock = \(/);
@@ -311,9 +311,10 @@ describe('minors folded into fix round 1', () => {
   });
 
   test('the Comment on this round button carries a class with an actual CSS rule', () => {
-    expect(player).toMatch(/plr-feedback-btn/);
+    // `plr-feedback` since step 5a moved the dock onto ui/Button (no scoped *-btn family).
+    expect(player).toMatch(/className="plr-feedback"/);
     const css = fs.readFileSync(src('components', 'PlayerSurface.css'), 'utf8');
-    expect(css).toMatch(/\.plr-feedback-btn\s*\{[^}]*margin-top/);
+    expect(css).toMatch(/\.plr-feedback\s*\{[^}]*margin-top/);
   });
 
   test('loadComments (the commentPosted handler) refreshes the player\'s own panel too, not only the host-triggered one', () => {

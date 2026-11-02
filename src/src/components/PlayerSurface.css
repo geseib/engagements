@@ -1,4 +1,4 @@
-/* skin-allowance: colour=4 font=2 primary=31 */
+/* skin-allowance: colour=4 font=2 primary=30 */
 /* PlayerSurface.css — the participant's own device.
  *
  * WHAT THIS IS. The one stylesheet `PlayerPage.jsx` owns. Before it existed the
@@ -558,7 +558,7 @@
 
 /* "Comment on this round": in the dock since phone-comments 3b, where it is
    the dock's first child and has nothing above it to clear. */
-.plr .plr-feedback { margin-top: 0; }
+.plr-feedback { margin-top: 0; }
 /* The end screen's way back to a round's comments (issue #34): wraps, never scrolls sideways. */
 .plr-ended-comments { margin-top: 22px; text-align: left; }
 /* Issue #47: one round per row, its number then its title, the title cut
