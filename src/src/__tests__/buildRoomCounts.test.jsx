@@ -199,7 +199,7 @@ test('one panel before the opening, and no choice to make before it: one orange,
   expect(screen.queryByRole('button', { name: 'Help me pick' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Use two screens' })).toBeInTheDocument();
   // Connect or the opening is not a choice either: Connect is the one orange button.
-  const orange = [...root.querySelectorAll('.brm-btn--primary')];
+  const orange = [...root.querySelectorAll('.ui-btn--action')];
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Connect']);
 });
 
@@ -217,7 +217,7 @@ test('the default opening is five steps: the core on the path, the other four on
 
 test('a connected first view: one press, the orange one, puts the first opening ask live', async () => {
   const { root } = await open({ state: connectedFirstView });
-  const orange = [...root.querySelectorAll('.brm-btn--primary')];
+  const orange = [...root.querySelectorAll('.ui-btn--action')];
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Ask the room to pick']);
 });
 
@@ -288,7 +288,7 @@ test('writing your own ask is two decisions: the kind, then Ask the room (what C
   // Outside the fold: the kind and the one orange, Ask the room; everything else is typing.
   const choices = [...form.querySelectorAll('[role="radiogroup"]')].filter((g) => !g.closest('details:not([open])'));
   expect(choices.map((g) => g.getAttribute('aria-label'))).toEqual(['Kind of ask']);
-  expect([...form.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent)).toEqual(['Ask the room']);
+  expect([...form.querySelectorAll('.ui-btn--action')].map((b) => b.textContent)).toEqual(['Ask the room']);
 });
 
 test('a Yes/No form is smaller still: its two answers start as Yes and No', async () => {
@@ -303,7 +303,7 @@ test('wrap-up saved, one screen: the lead move is Check the report, then End ses
   const now = screen.getByTestId('brm-wrappednow');
   const moves = [...now.querySelectorAll('.brm-wn')].map((li) => li.querySelector('b').textContent);
   expect(moves).toEqual(['Check the report', 'End the session']);
-  expect([...root.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent.trim())).toEqual(['Report']);
+  expect([...root.querySelectorAll('.ui-btn--action')].map((b) => b.textContent.trim())).toEqual(['Report']);
   expect(now.querySelector('[data-next-primary]').textContent).toBe('Report');
 });
 

@@ -16,6 +16,7 @@ import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import BuildImage from './BuildImage';
 import { claudeKindLabel, decisionChain } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const KIND_WORD = { choice: 'Choose', suggest: 'Ideas', rating: 'Rate' };
 const askNo = (askId) => Number(askId) || askId;
@@ -111,7 +112,7 @@ export default function AskDetail({ ask, entry = null, held = false, onClose, on
   const sentAt = (entry && entry.createdAt) || ask.decidedAt || d.decidedAt;
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--ask" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-pa-q">
-      <DialogHead className="brm-pa-head" titleId="brm-pa-q" title={<>{ask.prompt}</>} titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · {KIND_WORD[ask.kind] || 'Ask'} · decided {clockOf(ask.decidedAt || d.decidedAt)}</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-btn brm-btn--sm brm-btn--ghost brm-push" />
+      <DialogHead className="brm-pa-head" titleId="brm-pa-q" title={<>{ask.prompt}</>} titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · {KIND_WORD[ask.kind] || 'Ask'} · decided {clockOf(ask.decidedAt || d.decidedAt)}</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
       <div className="brm-pa-body">
         {ask.kind === 'choice' && <ChoiceCards ask={ask} onViewMockup={onViewMockup} />}
         {ask.kind === 'suggest' && <IdeaRows ask={ask} />}
@@ -140,7 +141,7 @@ export default function AskDetail({ ask, entry = null, held = false, onClose, on
         )}
       </div>
       <DialogFoot className="brm-pa-foot">
-        <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={onClose}>Close</button>
+        <Button type="button" size={44} className="brm-ctl brm-push" onClick={onClose}>Close</Button>
       </DialogFoot>
     </Modal>
   );

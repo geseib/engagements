@@ -21,6 +21,7 @@ import BuildImage from './BuildImage';
 import { ViewerContext } from './MockupViewer';
 import { W } from './words';
 import { mockupsCard } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const askNo = (askId) => Number(askId) || askId;
 
@@ -50,24 +51,24 @@ export default function MockupsReady({
       {queued ? (
         <div className="brm-row brm-gap">
           <span className="brm-chip" data-testid="brm-mockups-queued">{W.opensAfterAsk(open ? askNo(open.askId) : '')}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" disabled={busy} onClick={() => lineUp('notNext')}>{W.notNext}</button>
+          <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => lineUp('notNext')}>{W.notNext}</Button>
         </div>
       ) : asking ? (
         <div className="brm-row brm-gap" role="group" aria-label={W.closeAndOpen(askNo(open.askId))}>
           <b>{W.closeAndOpen(askNo(open.askId))}</b>
-          <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={() => setConfirming(null)}>{W.keepItOpen}</button>
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={async () => { setConfirming(null); await putNow(); }}>{W.closeAndOpenYes}</button>
+          <Button type="button" size={36} className="brm-ctl brm-push" onClick={() => setConfirming(null)}>{W.keepItOpen}</Button>
+          <Button type="button" variant="primary" size={36} className="brm-ctl" disabled={busy} onClick={async () => { setConfirming(null); await putNow(); }}>{W.closeAndOpenYes}</Button>
         </div>
       ) : (
         <div className="brm-row brm-gap">
           {open && (
-            <button type="button" className={`brm-btn${nextLeads ? ' brm-btn--primary' : ''}`} disabled={busy} title={W.opensWhenClose(askNo(open.askId))} onClick={() => lineUp('openNext')}>
+            <Button type="button" variant={nextLeads ? 'primary' : 'secondary'} size={36} className="brm-ctl" disabled={busy} title={W.opensWhenClose(askNo(open.askId))} onClick={() => lineUp('openNext')}>
               {W.nextAfterThis}
-            </button>
+            </Button>
           )}
-          <button type="button" className={`brm-btn${nextLeads ? '' : ' brm-btn--primary'}`} disabled={busy} onClick={() => (open ? setConfirming(ask.askId) : putNow())}>
+          <Button type="button" variant={nextLeads ? 'secondary' : 'primary'} size={36} className="brm-ctl" disabled={busy} onClick={() => (open ? setConfirming(ask.askId) : putNow())}>
             {W.putToRoomNow}
-          </button>
+          </Button>
         </div>
       )}
       {nextLeads && !queued && !asking && <p className="brm-hint">{W.nextFollowsStep}</p>}

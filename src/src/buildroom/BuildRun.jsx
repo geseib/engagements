@@ -29,6 +29,7 @@ import ActionRow from './BuildActionRow';
 import { W } from './words';
 import { useNextFocus } from './useNextFocus';
 import { runNextItem, runCurrentItem } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -84,9 +85,8 @@ export function RunConfirm({ run, busy, onWait, onSend }) {
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onWait} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-runconfirm-title">
       <DialogHead className="brm-dh" titleId="brm-runconfirm-title" title={<>{W.confirmEarly(cur.k, next.k)}</>} titleClassName="brm-h" eyebrow={<>{W.workingThrough}</>} eyebrowClassName="brm-hint" onClose={onWait} closeLabel={W.close} closeClassName="brm-x" />
       <p>{W.confirmEarlyBody(cur.text, cur.k, next.k)}</p>
-      <DialogFoot className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onWait}>{W.waitForClaude}</button>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onSend}>{W.sendAnyway(next.k)}</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" disabled={busy} onClick={onWait}>{W.waitForClaude}</Button>}>
+        <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy} onClick={onSend}>{W.sendAnyway(next.k)}</Button>
       </DialogFoot>
     </Modal>
   );
@@ -166,21 +166,21 @@ export function RunPanel({
       {!running && (
         <div className="brm-row brm-gap">
           <span className="brm-hint">{skipped > 0 ? W.listStopped(doneN, run.total) : ''}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onHide}>{W.hideList}</button>
+          <Button type="button" size={36} className="brm-tight brm-push" onClick={onHide}>{W.hideList}</Button>
         </div>
       )}
       {running && !ended && (
         <ActionRow space={keyed} hint={say}>
-          <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onStop}>{W.stop}</button>
-          {next && <button type="button" className="brm-btn" disabled={busy} onClick={onSkip}>{W.skipItem(next.k)}</button>}
+          <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={onStop}>{W.stop}</Button>
+          {next && <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={onSkip}>{W.skipItem(next.k)}</Button>}
           {next && (
-            <button
-              type="button" className={`brm-btn${orange ? ' brm-btn--primary' : ''}`}
+            <Button
+              type="button" variant={orange ? 'primary' : 'secondary'} size={36} className="brm-ctl"
               data-next-primary={keyed ? true : undefined}
               disabled={busy} onClick={onNext}
             >
               {W.nextItem(next.k, next.text)}
-            </button>
+            </Button>
           )}
         </ActionRow>
       )}

@@ -227,6 +227,6 @@ describe('4. a focused What\'s next move on the console lands with its row in vi
     // eslint-disable-next-line global-require
     const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'buildroom', 'BuildConsole.css'), 'utf8');
     expect(css).toMatch(/\.hc--build \.hc-main \{ scroll-padding-top: 16px; \}/);
-    expect(css).toMatch(/\.hc--build \.hc-main \.brm-wn \.brm-btn \{ scroll-margin-top: 56px; \}/);
+    expect(css).toMatch(/\.hc--build \.hc-main \.brm-wn \.ui-btn \{ scroll-margin-top: 56px; \}/);
   });
 });

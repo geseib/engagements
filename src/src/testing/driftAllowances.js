@@ -14,11 +14,9 @@
  * Not named *token*: .gitignore has an unanchored `*token*`.
  */
 module.exports = {
-  "buttonFamilies": 99,
+  "buttonFamilies": 94,
   "dialogs": {
     "GameHostPage.jsx": 6,
-    "buildroom/BuildCrew.jsx": 3,
-    "buildroom/BuildRoomPage.jsx": 2,
     "components/AIScenarioBuilder.jsx": 1,
     "components/AddQuestionsDialog.jsx": 1,
     "components/GameReport.jsx": 1,
@@ -31,7 +29,6 @@ module.exports = {
   "primaryButtons": {
     "BuilderPage.css": 2,
     "auth/auth.css": 1,
-    "buildroom/BuildRoom.css": 1,
     "components/AIPromptManager.css": 1,
     "components/ArchivePanel.css": 1,
     "components/BillingPanel.css": 1,
@@ -370,11 +367,6 @@ module.exports = {
     "au-btn",
     "auth-button",
     "bill-btn",
-    "bpl-open-btn",
-    "brm-btn",
-    "brm-chip--btn",
-    "brm-halist-btn",
-    "brr-btn",
     "btn",
     "category-browse-btn",
     "category-button",

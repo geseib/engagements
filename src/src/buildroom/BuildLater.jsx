@@ -13,6 +13,7 @@ import Icon from '../components/Icon';
 import { W } from './words';
 import { HideFromRoom } from './BuildSendOptions';
 import { laterItems, VOTE_IDEAS_MAX } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const clockOf = (iso) => {
   const t = Date.parse(iso || '');
@@ -42,15 +43,15 @@ export default function BuildLater({ room, ticked, setTicked, busy, ended, run, 
       {!ended && on.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked in Later">
           <b>{on.length} ticked</b>
-          <button
-            type="button" className="brm-btn brm-btn--sm"
+          <Button
+            type="button" size={36} className="brm-tight"
             disabled={busy || on.length < 2 || on.length > VOTE_IDEAS_MAX}
             title={on.length < 2 ? 'Tick at least 2' : on.length > VOTE_IDEAS_MAX ? 'A vote takes at most 6' : undefined}
             onClick={() => onVote(items.filter((x) => on.includes(x.key)))}
           >
             {W.putToVote(on.length)}
-          </button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked([])}>Clear</button>
+          </Button>
+          <Button type="button" variant="tertiary" size={36} className="brm-tight brm-push" onClick={() => setTicked([])}>Clear</Button>
         </div>
       )}
       {items.map((x) => (
@@ -63,11 +64,11 @@ export default function BuildLater({ room, ticked, setTicked, busy, ended, run, 
           <div className="brm-idea-text">{x.text}</div>
           {!ended && (
             <div className="brm-idea-acts brm-later-acts">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => remove(x)}>{W.remove}</button>
-              <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => onAskRoom(x.text)}>{W.askRoom}</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude gets it now, as Do now" onClick={() => send(x)}>
+              <Button type="button" size={36} className="brm-tight brm-danger" disabled={busy} onClick={() => remove(x)}>{W.remove}</Button>
+              <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => onAskRoom(x.text)}>{W.askRoom}</Button>
+              <Button type="button" size={36} className="brm-tight" disabled={busy} title="Claude gets it now, as Do now" onClick={() => send(x)}>
                 <Icon name="PaperPlaneTilt" size={14} /> {W.sendNow}
-              </button>
+              </Button>
             </div>
           )}
         </div>

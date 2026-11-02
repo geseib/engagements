@@ -15,6 +15,7 @@ import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { stageFrom } from './buildScreens';
+import Button from '../components/ui/Button';
 
 export function PointStage({ point }) {
   return (
@@ -35,8 +36,8 @@ export function ShownPointCard({ point, ideas, busy, ended, onTakeDown, onSaveLa
       <p className="brm-hint">{stageFrom(point)} · {W.nIdeas(ideas)}</p>
       {!ended && (
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn" disabled={busy} onClick={onSaveLater}>{W.saveLater}</button>
-          <button type="button" className="brm-btn brm-push" disabled={busy} onClick={onTakeDown}>{W.takeItDown}</button>
+          <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={onSaveLater}>{W.saveLater}</Button>
+          <Button type="button" size={36} className="brm-ctl brm-push" disabled={busy} onClick={onTakeDown}>{W.takeItDown}</Button>
         </div>
       )}
     </section>
@@ -61,9 +62,8 @@ export function TakeDownOffer({ ideas, busy, onNotNow, onVote, onClose }) {
         ))}
       </ul>
       <p className="brm-hint">{W.takeDownEither} {W.takeDownClose}</p>
-      <DialogFoot className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={onNotNow}>{W.notNow}</button>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={onVote}>{W.putToAVote}</button>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" disabled={busy} onClick={onNotNow}>{W.notNow}</Button>}>
+        <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy} onClick={onVote}>{W.putToAVote}</Button>
       </DialogFoot>
     </Modal>
   );

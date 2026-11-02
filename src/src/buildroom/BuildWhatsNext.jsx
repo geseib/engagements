@@ -26,6 +26,7 @@ import { whatsNextMoves, claudeState, combineLine, METHOD_WORDS } from './buildS
 import { useNextFocus } from './useNextFocus';
 import { ItemMark } from './BuildConsider';
 import { itemKeys } from './sentMarks';
+import Button from '../components/ui/Button';
 
 const MOVE_ICON = { 'vote-mockups': 'Image', 'open-proposed': 'Question', connect: 'Lock', 'ask-room': 'Question', 'vote-later': 'ListChecks', tell: 'ChatCircleText', 'talk-points': 'ListChecks', 'ask-points': 'MagnifyingGlass' };
 
@@ -80,15 +81,15 @@ export function WhatsNext({ room, now, ticked, laterTicked = 0, onMove, continue
               <b>{m.title}</b>
               <span>{m.hint}</span>
             </span>
-            <button
+            <Button
               type="button"
-              className={`brm-btn brm-btn--sm${i === 0 && !outline ? ' brm-btn--primary' : ''}`}
+              variant={i === 0 && !outline ? 'primary' : 'secondary'} size={36} className="brm-tight"
               data-next-primary={i === 0 && !outline ? true : undefined}
               data-capability={m.capability}
               onClick={() => onMove(m.key)}
             >
               {m.button}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -135,8 +136,8 @@ export function DecidedList({ asks, ticked, setTicked, used = {}, onCombine, end
       {!ended && live.length > 0 && (
         <div className="brm-qbulk" role="group" aria-label="Ticked answers">
           <b>{live.length} ticked</b>
-          <button type="button" className="brm-btn brm-btn--sm" onClick={onCombine}>Add to the prompt</button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-push" onClick={() => setTicked(new Set())}>Clear</button>
+          <Button type="button" size={36} className="brm-tight" onClick={onCombine}>Add to the prompt</Button>
+          <Button type="button" variant="tertiary" size={36} className="brm-tight brm-push" onClick={() => setTicked(new Set())}>Clear</Button>
         </div>
       )}
     </div>

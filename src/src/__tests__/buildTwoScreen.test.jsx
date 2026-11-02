@@ -221,7 +221,7 @@ describe('2. each moment: the card, the strip, the rail, the folds', () => {
     expect(card().textContent).not.toMatch('No main move now');
     // One orange: What's next's own Connect is plain while the card holds it.
     const lead = consoleEl().querySelector('.brm-wn.is-lead button');
-    expect(lead).not.toHaveClass('brm-btn--primary');
+    expect(lead).not.toHaveClass('ui-btn--action');
     fireEvent.click(mainButton());
     expect(screen.getByRole('dialog', { name: 'Connect Claude Code' })).toBeInTheDocument();
   });

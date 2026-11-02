@@ -108,7 +108,7 @@ async function openRoom(state) {
 }
 
 /** The orange buttons on the Host screen, outside any dialog (the existing counting rule). */
-const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
+const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
   .filter((b) => !b.closest('[role="dialog"], .brm-modal'));
 const panel = () => screen.getByRole('region', { name: 'Points' });
 /**
@@ -264,7 +264,7 @@ describe('Research… and Ideas…', () => {
     await openRoom(hostState());
     fromComposerMore('Research…');
     const dlg = screen.getByRole('dialog');
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
   });
 
   test('a working request shows its chip; a waiting one for a Claude that is away says so; Cancel posts cancel', async () => {
@@ -303,7 +303,7 @@ describe('ticks and the action row', () => {
     await openRoom(RESEARCH_STATE());
     tick('Finding number 1');
     const row = within(panel());
-    expect(row.getByRole('button', { name: 'Send to Claude' }).className).toMatch('brm-btn--primary');
+    expect(row.getByRole('button', { name: 'Send to Claude' }).className).toMatch('ui-btn--action');
     expect(row.getByRole('button', { name: 'Put 1 to a vote' })).toBeDisabled();
     expect(row.getByRole('button', { name: 'Put 1 to a vote' })).toHaveAttribute('title', 'Tick 2 to 8');
     expect(row.getByRole('button', { name: 'Show on Stage' })).not.toBeDisabled();
@@ -319,8 +319,8 @@ describe('ticks and the action row', () => {
     tick('Finding number 1');
     tick('Finding number 2');
     const row = within(panel());
-    expect(row.getByRole('button', { name: 'Put 2 to a vote' }).className).toMatch('brm-btn--primary');
-    expect(row.getByRole('button', { name: 'Send these 2 to Claude' }).className).not.toMatch('brm-btn--primary');
+    expect(row.getByRole('button', { name: 'Put 2 to a vote' }).className).toMatch('ui-btn--action');
+    expect(row.getByRole('button', { name: 'Send these 2 to Claude' }).className).not.toMatch('ui-btn--action');
     const show = row.getByRole('button', { name: 'Show on Stage' });
     expect(show).toBeDisabled();
     expect(show).toHaveAttribute('title', 'One point at a time on the Stage');
@@ -331,7 +331,7 @@ describe('ticks and the action row', () => {
   test('the main button is last on the right in both states', async () => {
     await openRoom(RESEARCH_STATE());
     tick('Finding number 1');
-    const last = () => [...panel().querySelectorAll('.brm-arow > .brm-btn')].pop();
+    const last = () => [...panel().querySelectorAll('.brm-arow > .ui-btn')].pop();
     expect(last().textContent).toBe('Send to Claude');
     tick('Finding number 2');
     expect(last().textContent).toBe('Put 2 to a vote');
@@ -478,10 +478,10 @@ describe('one orange on the whole Host screen, with Points', () => {
     expect(before).toHaveLength(1);
     tick('Finding number 1');
     expect(oranges().map((b) => b.textContent)).toEqual(before);
-    expect(within(panel()).getByRole('button', { name: 'Send to Claude' }).className).not.toMatch('brm-btn--primary');
+    expect(within(panel()).getByRole('button', { name: 'Send to Claude' }).className).not.toMatch('ui-btn--action');
     tick('Finding number 2');
     expect(oranges().map((b) => b.textContent)).toEqual(before);
-    expect(within(panel()).getByRole('button', { name: 'Put 2 to a vote' }).className).not.toMatch('brm-btn--primary');
+    expect(within(panel()).getByRole('button', { name: 'Put 2 to a vote' }).className).not.toMatch('ui-btn--action');
   });
 
   test('a proposed ask waiting: ticking hands the orange to the row', async () => {
@@ -576,7 +576,7 @@ describe('a point on the Stage', () => {
     // The ideas are the options; who sent them never shows.
     expect(within(dlg).getByText('Room idea 3')).toBeInTheDocument();
     expect(dlg.textContent).not.toMatch(/Ana|Dee|Sam|Priya/);
-    expect(dlg.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(dlg.querySelectorAll('.ui-btn--action')).toHaveLength(1);
     fireEvent.click(within(dlg).getByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(postsTo('points/f1')).toHaveLength(1));
     expect(postsTo('points/f1')[0].body).toEqual({ action: 'hide' });

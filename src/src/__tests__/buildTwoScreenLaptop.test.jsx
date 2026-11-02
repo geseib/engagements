@@ -266,11 +266,11 @@ describe('3. which screen the room watches', () => {
     window.localStorage.removeItem(SURFACES_KEY);
     await openRoom(hostState({ seen: false }));
     const connect = within(setup()).getByRole('button', { name: /Connect/ });
-    expect(connect).toHaveClass('brm-btn--primary');
+    expect(connect).toHaveClass('ui-btn--action');
     const two = within(setup()).getByRole('button', { name: 'Use two screens' });
-    expect(two.className).not.toMatch(/brm-btn--primary/);
+    expect(two.className).not.toMatch(/ui-btn--action/);
     expect(connect.compareDocumentPosition(two) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(document.querySelectorAll('.brm-host .brm-btn--primary')).toHaveLength(1);
+    expect(document.querySelectorAll('.brm-host .ui-btn--action')).toHaveLength(1);
   });
 
   test('Two screens: stored as Call & Answer stores it, and the room\'s window opens in the click, placed', async () => {

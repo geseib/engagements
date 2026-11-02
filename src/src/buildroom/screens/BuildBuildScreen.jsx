@@ -26,6 +26,7 @@ import {
 } from './common';
 import ClaudeStatus from './ClaudeStatus';
 import { buildRoomContent } from '../roomContentData';
+import Button from '../../components/ui/Button';
 
 export default function BuildBuildScreen({
   room, now, controls = null, profile = 'room',
@@ -50,7 +51,7 @@ export default function BuildBuildScreen({
         <h2 className="brm-q">{W.buildSoFar}</h2>
         {safeHref(link) && <span className="brm-push"><OpenLink href={link} label={W.openBuild} primary={!offerShare} /></span>}
         {offerShare && (
-          <button type="button" className={`brm-btn brm-btn--primary${safeHref(link) ? '' : ' brm-push'}`} disabled={controls.busy} onClick={() => controls.run(() => controls.api.share({ on: true }))}>{W.shareDemo}</button>
+          <Button type="button" variant="primary" size={36} className={`brm-ctl${safeHref(link) ? '' : ' brm-push'}`} disabled={controls.busy} onClick={() => controls.run(() => controls.api.share({ on: true }))}>{W.shareDemo}</Button>
         )}
       </div>
       {/* Claude's status, essential on every screen the room sees (owner, 17 Oct 2026). */}

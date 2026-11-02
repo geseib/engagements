@@ -25,7 +25,7 @@ const mount = (ask, props = {}) => render(
 );
 const row = () => document.querySelector('.brm-arow');
 const rowButtons = () => within(row()).getAllByRole('button').map((b) => b.textContent.trim());
-const primaryOf = () => row().querySelector('.brm-btn--primary');
+const primaryOf = () => row().querySelector('.ui-btn--action');
 
 afterEach(() => { document.body.innerHTML = ''; });
 

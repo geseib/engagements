@@ -565,7 +565,7 @@ describe('each ask status', () => {
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     const connect = within(card).getByRole('button', { name: /^Connect/ });
     // Past the first view the card's Connect is a plain button: the ask's move is the orange one.
-    expect(connect.className).not.toMatch(/brm-btn--primary/);
+    expect(connect.className).not.toMatch(/ui-btn--action/);
     expect(connect.closest('li')).not.toHaveClass('is-done');
     cleanup();
     // Claude has called in, building: the card is gone.
@@ -592,9 +592,9 @@ describe('each ask status', () => {
   test('on the first view, Connect is the one orange button (F3)', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
-    expect(within(card).getByRole('button', { name: /^Connect/ }).className).toMatch(/brm-btn--primary/);
+    expect(within(card).getByRole('button', { name: /^Connect/ }).className).toMatch(/ui-btn--action/);
     // Nothing else on the Host screen is orange.
-    expect([...document.querySelectorAll('.brm-host .brm-btn--primary')]).toHaveLength(1);
+    expect([...document.querySelectorAll('.brm-host .ui-btn--action')]).toHaveLength(1);
   });
 
   test('Show the code puts the join code on the Stage, as Join in the header does', async () => {
@@ -841,7 +841,7 @@ describe('Connect Claude Code', () => {
     expect(paste.querySelector('[data-testid="brm-connect"]').textContent).toBe(`/engage:kickoff eng_${GAME}_${'n'.repeat(43)}`);
     expect(mint).toHaveClass('is-done');
     expect(paste).toHaveClass('is-wait');
-    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('brm-btn--primary');
+    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('ui-btn--action');
 
     // An older key used long ago does not count.
     rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { key: { keyId: 'k1', lastUsedAt: ago(900) } } }} />);
@@ -855,7 +855,7 @@ describe('Connect Claude Code', () => {
     expect(screen.getByTestId('brm-connected')).toHaveTextContent(/Claude Code connected at .*, in ~\/build-room\/volunteer-sign-up\. It has started work\./);
     expect(steps[0]).toHaveClass('is-done');
     expect(screen.queryByTestId('brm-connect-waiting')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('brm-btn--primary');
+    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('ui-btn--action');
   });
 
   test('a crew room adds a fourth step: share the repo', () => {
@@ -3106,12 +3106,12 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     await openRoom(hostState({ asks: [WHO, BUILT] }));
     const col = screen.getByRole('main', { name: 'Now' });
     const nudge = within(col).getByRole('region', { name: 'Share demo' });
-    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('brm-btn--primary');
+    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('ui-btn--action');
     // What's next stays, as outline, and Space no longer presses it: sharing the laptop is a click.
     const card = screen.getByRole('region', { name: 'Now' });
     expect(within(card).getByRole('list', { name: "What's next" })).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Ask' })).not.toHaveAttribute('data-next-primary');
-    expect(col.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(col.querySelectorAll('.ui-btn--action')).toHaveLength(1);
   });
 
   test('between asks the Now column says what Claude is doing and leads What\'s next, focused', async () => {
@@ -3314,7 +3314,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }],
     Spinner: 'Dee', Armed: true, Spins: [], ...over,
   });
-  const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
+  const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
     .filter((b) => !b.closest('[role="dialog"], .brm-modal'));
   const decides = () => posts().filter((c) => c.body && c.body.action === 'decide');
   const space = (target = window) => fireEvent.keyDown(target, { key: ' ' });
@@ -3442,7 +3442,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
   test('the Composer\'s Send is outline while a step shows, and orange only when nothing else leads', async () => {
     await openRoom(resultsState());
     const send = () => within(composerPanel()).getAllByRole('button', { name: 'Send to Claude' })[0];
-    expect(send().className).not.toMatch('brm-btn--primary');
+    expect(send().className).not.toMatch('ui-btn--action');
     expect(within(composerPanel()).getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Queue it' })).toBeNull();
   });
@@ -3578,7 +3578,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D1-D5: one orange on the Host screen with a line, folded or open', async () => {
     await openRoom(hostState({ activity: COMMANDS(), doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
-    const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
+    const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
     const before = oranges().length;
     expect(before).toBeLessThanOrEqual(1);
     fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));

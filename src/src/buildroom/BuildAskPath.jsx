@@ -29,6 +29,7 @@ import { W, LOOP } from './words';
 import ActionRow from './BuildActionRow';
 import { HideFromRoom } from './BuildSendOptions';
 import { AskStage, WheelPanel, DecidePanel, KIND_LABEL } from './BuildRoomPage';
+import Button from '../components/ui/Button';
 
 const ORDER = ['ask', 'collect', 'settle', 'send'];
 
@@ -77,12 +78,12 @@ export function MyVote({ ask, busy, run, api }) {
             ))}
           </div>
           <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !picked.length || !changed} onClick={() => cast(suggest ? { respIds: picked } : { choice: picked })}>{mine ? W.myVoteChange : W.myVoteCast}</button>
-            {mine && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</button>}
+            <Button type="button" size={36} className="brm-tight" disabled={busy || !picked.length || !changed} onClick={() => cast(suggest ? { respIds: picked } : { choice: picked })}>{mine ? W.myVoteChange : W.myVoteCast}</Button>
+            {mine && <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</Button>}
           </div>
         </>
       )}
-      {ask.kind === 'rating' && mine && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</button>}
+      {ask.kind === 'rating' && mine && <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} onClick={() => cast({ clear: true })}>{W.myVoteTakeBack}</Button>}
       <p className="brm-hint">{W.myVoteHint}</p>
     </section>
   );
@@ -167,8 +168,8 @@ export function AskWording({ ask, busy, run, api }) {
         <label className="brm-field"><span className="brm-lbl">Question</span><input className="brm-input" value={prompt} maxLength={300} onChange={(e) => setPrompt(e.target.value)} /></label>
         <label className="brm-field"><span className="brm-lbl">Context</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={2000} onChange={(e) => setDetail(e.target.value)} /></label>
         <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setEditing(false); setPrompt(ask.prompt); setDetail(ask.detail || ''); }}>Cancel</button>
-          <button type="button" className="brm-btn brm-push" disabled={busy || !prompt.trim()} onClick={save}>Save wording</button>
+          <Button type="button" size={36} className="brm-ctl" onClick={() => { setEditing(false); setPrompt(ask.prompt); setDetail(ask.detail || ''); }}>Cancel</Button>
+          <Button type="button" size={36} className="brm-ctl brm-push" disabled={busy || !prompt.trim()} onClick={save}>Save wording</Button>
         </div>
       </div>
     );
@@ -177,8 +178,8 @@ export function AskWording({ ask, busy, run, api }) {
     <>
       {ask.detail && <p className="brm-detail">{ask.detail}</p>}
       <div className="brm-path-row">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setEditing(true)}>Edit wording</button>
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" disabled={busy} onClick={() => run(() => api.askAction(ask.askId, { action: 'discard' }))}>Discard</button>
+        <Button type="button" size={36} className="brm-tight" onClick={() => setEditing(true)}>Edit wording</Button>
+        <Button type="button" size={36} className="brm-tight brm-danger" disabled={busy} onClick={() => run(() => api.askAction(ask.askId, { action: 'discard' }))}>Discard</Button>
       </div>
     </>
   );
@@ -194,7 +195,7 @@ export function AskWording({ ask, busy, run, api }) {
 export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPick, answering = false, setAnswering, onSent, draft = null, onDraft, quiet = false }) {
   const ref = useRef(null);
   // A dialog over the Host holds the one orange; this step's main move is outline until it closes.
-  const hot = quiet ? '' : ' brm-btn--primary';
+  const hot = quiet ? 'secondary' : 'primary';
   const [opened, setOpened] = useState(null); // a done step opened by a click
   const [said, setSaid] = useState(''); // a confirmation, in the row's hint slot
   const [hide, setHide] = useState(false); // Don't show the room, for the one-press send
@@ -264,15 +265,15 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
         {then([`3 ${LOOP.settle}`, `4 ${LOOP.send}`])}
         {host && (
           <ActionRow space={!said && !isArmed} hint={isArmed ? early.text : said || W.spaceTo(ideasOpen ? 'open voting' : 'show results')}>
-            {ideasOpen && <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={act('close', W.resultsUp)}>Close without a vote</button>}
-            <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</button>
+            {ideasOpen && <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={act('close', W.resultsUp)}>Close without a vote</Button>}
+            <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => setAnswering(true)}>Answer for the room</Button>
             {/* The wheel instead of a vote (owner, 2026-10-06): close it and let chance pick. */}
             {canSpinInstead(ask) && (
-              <button type="button" className="brm-btn" disabled={busy} title={W.tipWheelAll} onClick={act('wheel')}>{W.spin}</button>
+              <Button type="button" size={36} className="brm-ctl" disabled={busy} title={W.tipWheelAll} onClick={act('wheel')}>{W.spin}</Button>
             )}
             {ideasOpen
-              ? <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</button>
-              : <button type="button" className={`brm-btn${hot}`} data-next-primary data-armed={isArmed ? '' : undefined} disabled={busy} onClick={showResults}>{isArmed ? early.confirmLabel : W.showResults}</button>}
+              ? <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy} onClick={act('vote', W.votingOpen)}>{W.openVoting}</Button>
+              : <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary data-armed={isArmed ? '' : undefined} disabled={busy} onClick={showResults}>{isArmed ? early.confirmLabel : W.showResults}</Button>}
           </ActionRow>
         )}
       </>
@@ -280,7 +281,7 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   } else if (host && ask.status === 'results') {
     collectBody = (
       <div className="brm-path-row">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={act('reopen')}>Reopen</button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={act('reopen')}>Reopen</Button>
       </div>
     );
   }
@@ -307,16 +308,16 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
   let settleBody = null;
   if (stateOf('settle') === 'now') {
     let row = null;
-    const change = (id) => <button type="button" className="brm-btn" disabled={busy || turning} onClick={() => onPick(id, { confirmed: true })}>{W.change}</button>;
+    const change = (id) => <Button type="button" size={36} className="brm-ctl" disabled={busy || turning} onClick={() => onPick(id, { confirmed: true })}>{W.change}</Button>;
     if (host && wheel && wheel.landed) {
       // Where it landed is the room's way on (H3); Spin again is the row's.
       row = (
         <ActionRow space={!said} hint={turning ? '' : said || spaceWords}>
-          <button type="button" className="brm-btn" disabled={busy || turning} onClick={act('spin')}>{W.spinAgain}</button>
+          <Button type="button" size={36} className="brm-ctl" disabled={busy || turning} onClick={act('spin')}>{W.spinAgain}</Button>
           {change(wheel.landed)}
-          <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || turning || !move || !move.direction} onClick={sendWinner}>
+          <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy || turning || !move || !move.direction} onClick={sendWinner}>
             {turning ? 'The wheel is turning…' : sendLabel}
-          </button>
+          </Button>
         </ActionRow>
       );
     } else if (host && !wheel && !ask.revotedAs) {
@@ -325,27 +326,27 @@ export function AskPath({ ask, room, busy, ended, run, api, pickId = null, onPic
           ? (
             <ActionRow space={!said} hint={said || spaceWords}>
               {change(String(avg))}
-              <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || !move} onClick={sendWinner}>{sendLabel}</button>
+              <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy || !move} onClick={sendWinner}>{sendLabel}</Button>
             </ActionRow>
           )
           : (
             <ActionRow hint={W.noRatingsYet}>
-              <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</button>
+              <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy} onClick={act('reopen')}>Reopen</Button>
             </ActionRow>
           );
       } else if (win) {
         row = (
           <ActionRow space={!said} hint={said || spaceWords}>
-            <button type="button" className="brm-btn" disabled={busy} onClick={act('wheel')}>{W.spin}</button>
+            <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={act('wheel')}>{W.spin}</Button>
             {change(win)}
-            <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy || !move || !move.direction} onClick={sendWinner}>{sendLabel}</button>
+            <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy || !move || !move.direction} onClick={sendWinner}>{sendLabel}</Button>
           </ActionRow>
         );
       } else {
         row = (
           <ActionRow space={!said} hint={said || W.spaceTo('spin the wheel')}>
-            {tied.length >= 2 && <button type="button" className="brm-btn" disabled={busy} onClick={act('revote', W.votingAgain)}>{W.voteAgain}</button>}
-            <button type="button" className={`brm-btn${hot}`} data-next-primary disabled={busy} onClick={act('wheel')}>{W.spin}</button>
+            {tied.length >= 2 && <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={act('revote', W.votingAgain)}>{W.voteAgain}</Button>}
+            <Button type="button" variant={hot} size={36} className="brm-ctl" data-next-primary disabled={busy} onClick={act('wheel')}>{W.spin}</Button>
           </ActionRow>
         );
       }

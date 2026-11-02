@@ -25,6 +25,7 @@ import { safeHref } from './buildHostApi';
 import {
   pointsOf, pointGroups, POINT_OPEN, POINT_TAGS, pointNote, pointFrom, POINTS_OPEN_MAX, VOTE_POINTS_MAX,
 } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const SHOWN_PER_GROUP = 2;
 
@@ -50,7 +51,7 @@ function RequestChips({ requests, connected, ended, busy, run, api }) {
       {empty.map((r) => (
         <li key={r.id} className="brm-pchip is-none" data-status="empty">
           <span className="brm-pchip-t" role="status">{W.nothingFound(r.kind, r.subject)}</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setGone((s) => new Set([...s, r.id]))}>{W.hide}</button>
+          <Button type="button" size={36} className="brm-tight" onClick={() => setGone((s) => new Set([...s, r.id]))}>{W.hide}</Button>
         </li>
       ))}
       {active.map((r) => {
@@ -65,7 +66,7 @@ function RequestChips({ requests, connected, ended, busy, run, api }) {
           <li key={r.id} className={`brm-pchip${away ? ' is-away' : ''}`} data-status={r.status}>
             <span className="brm-pchip-t" role="status">{text}</span>
             {!ended && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.cancelPointRequest(r.id))}>{W.cancel}</button>
+              <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.cancelPointRequest(r.id))}>{W.cancel}</Button>
             )}
           </li>
         );
@@ -102,7 +103,7 @@ function PointRow({ p, on, canTick, onTick, busy, ended, run, api, groupBy = '',
         {meta && <span className="brm-who">{meta}</span>}
         {note && <span className="brm-pnote">{note}</span>}
         {!ended && !['sent', 'later', 'voting'].includes(p.status) && (
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger brm-push" disabled={busy} onClick={() => run(() => api.pointAction(p.id, 'remove'))}>{W.remove}</button>
+          <Button type="button" size={36} className="brm-tight brm-danger brm-push" disabled={busy} onClick={() => run(() => api.pointAction(p.id, 'remove'))}>{W.remove}</Button>
         )}
       </div>
       <div className="brm-idea-text">{p.text}</div>
@@ -144,7 +145,7 @@ export default function BuildPoints({
     if (ok !== undefined) clear();
   };
   const n = on.length;
-  const main = leadsRow ? ' brm-btn--primary' : '';
+  const main = leadsRow ? 'primary' : 'secondary';
   // Space never presses these; Ctrl or Cmd Enter does, while the row leads.
   const attrs = { 'data-no-space': true, ...(leadsRow ? { 'data-points-primary': true } : {}) };
   const full = pts.open >= POINTS_OPEN_MAX;
@@ -153,11 +154,11 @@ export default function BuildPoints({
     <section className="brm-points" aria-label={W.points}>
       {!ended && (
         <div className="brm-row brm-gap brm-ptop">
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.researchTip} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.ideasTip} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.researchTip} onClick={() => onRequest('research')}><Icon name="MagnifyingGlass" size={14} /> {W.research}</Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy || full} title={full ? W.pointsFull(POINTS_OPEN_MAX) : W.ideasTip} onClick={() => onRequest('ideas')}><Icon name="Lightbulb" size={14} /> {W.ideasAsk}</Button>
           {/* ASK CLAUDE (ideas flow E, I7): pictures to the host first, or a walk through the demo. */}
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.mockupsTip} onClick={() => onRequest('mockups')}><Icon name="Image" size={14} /> {W.mockupsAsk}</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title={W.walkthroughTip} onClick={() => onRequest('walkthrough')}><Icon name="PlayCircle" size={14} /> {W.walkthroughAsk}</button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.mockupsTip} onClick={() => onRequest('mockups')}><Icon name="Image" size={14} /> {W.mockupsAsk}</Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.walkthroughTip} onClick={() => onRequest('walkthrough')}><Icon name="PlayCircle" size={14} /> {W.walkthroughAsk}</Button>
           {full && <span className="brm-hint" role="status">{W.pointsFull(POINTS_OPEN_MAX)}</span>}
         </div>
       )}
@@ -182,41 +183,41 @@ export default function BuildPoints({
               ))}
             </ul>
             {rest > 0 && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen((s) => new Set([...s, g.key]))}>{W.moreOf(rest, rest === 1 ? g.noun : `${g.noun}s`)}</button>
+              <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={() => setOpen((s) => new Set([...s, g.key]))}>{W.moreOf(rest, rest === 1 ? g.noun : `${g.noun}s`)}</Button>
             )}
             {shownAll && g.points.length > SHOWN_PER_GROUP && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={() => setOpen((s) => { const c = new Set(s); c.delete(g.key); return c; })}>{W.fewer}</button>
+              <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={() => setOpen((s) => { const c = new Set(s); c.delete(g.key); return c; })}>{W.fewer}</Button>
             )}
           </div>
         );
       })}
       {!ended && n > 0 && (
         <ActionRow space={leadsRow} hint={leadsRow ? `${W.ticked(n)} · ${n === 1 ? W.ctrlEnterSends : W.ctrlEnterVote}` : W.ticked(n)}>
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={clear}>{W.clear}</button>
-          <button type="button" className="brm-btn" disabled={busy} onClick={each('later')}>{W.saveLater}</button>
-          <button
-            type="button" className="brm-btn" disabled={busy || n !== 1 || askOpen}
+          <Button type="button" size={36} className="brm-ctl" onClick={clear}>{W.clear}</Button>
+          <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={each('later')}>{W.saveLater}</Button>
+          <Button
+            type="button" size={36} className="brm-ctl" disabled={busy || n !== 1 || askOpen}
             title={n !== 1 ? W.oneAtATime : askOpen ? W.finishAsk : undefined}
             onClick={each('show')}
           >
             {W.showOnStage}
-          </button>
+          </Button>
           {n === 1 ? (
             <>
-              <button type="button" className="brm-btn" disabled title={W.tickRange}>{W.putToVote(1)}</button>
-              <button type="button" className={`brm-btn${main}`} {...attrs} disabled={busy} onClick={send}>{W.sendPlain}</button>
+              <Button type="button" size={36} className="brm-ctl" disabled title={W.tickRange}>{W.putToVote(1)}</Button>
+              <Button type="button" variant={main} size={36} className="brm-ctl" {...attrs} disabled={busy} onClick={send}>{W.sendPlain}</Button>
             </>
           ) : (
             <>
-              <button type="button" className="brm-btn" disabled={busy} onClick={send}>{W.sendThese(n)}</button>
-              <button
-                type="button" className={`brm-btn${main}`} {...attrs}
+              <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={send}>{W.sendThese(n)}</Button>
+              <Button
+                type="button" variant={main} size={36} className="brm-ctl" {...attrs}
                 disabled={busy || n > VOTE_POINTS_MAX}
                 title={n > VOTE_POINTS_MAX ? W.voteAtMost(VOTE_POINTS_MAX) : undefined}
                 onClick={vote}
               >
                 {W.putToVote(n)}
-              </button>
+              </Button>
             </>
           )}
         </ActionRow>

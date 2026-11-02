@@ -23,6 +23,7 @@
 import React from 'react';
 import Icon from '../components/Icon';
 import { W, loopLead } from './words';
+import Button from '../components/ui/Button';
 
 function Row({ done, n, title, line, children, capability }) {
   return (
@@ -64,18 +65,18 @@ export default function BuildSetup({ s }) {
       <ol className="brm-setup-rows">
         <Row done={s.connected} n={1} title={W.connectClaude} line={s.connected ? W.setupConnected(s.folder) : W.setupConnectHint} capability="claude-status">
           {!s.connected && (
-            <button type="button" className={`brm-btn${s.connectLeads ? ' brm-btn--primary' : ''}`} onClick={s.onConnect}>
+            <Button type="button" variant={s.connectLeads ? 'primary' : 'secondary'} size={36} className="brm-ctl" onClick={s.onConnect}>
               <Icon name="Lock" size={16} /> {W.setupConnectBtn}
-            </button>
+            </Button>
           )}
         </Row>
         <Row done={s.joined > 0} n={2} title={W.setupJoin} line={W.setupJoined(s.joined, s.code)}>
-          <button type="button" className="brm-btn brm-btn--sm" aria-pressed={s.codesUp} onClick={s.onCodes}>
+          <Button type="button" size={36} className="brm-tight" aria-pressed={s.codesUp} onClick={s.onCodes}>
             {s.codesUp ? W.hideCode : W.setupShowCode}
-          </button>
+          </Button>
         </Row>
         <Row done={screenDone} n={3} title={s.two ? W.setupScreenTwo : W.setupScreenOne} line={screenLine} capability="screens">
-          {!s.two && <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={s.onTwo}>{W.useTwoScreens}</button>}
+          {!s.two && <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={s.onTwo}>{W.useTwoScreens}</Button>}
         </Row>
       </ol>
       {!s.connected && <p className="brm-hint">{W.setupStartNow} {loopLead()}</p>}

@@ -63,7 +63,7 @@
    main area's top edge with its row and heading in view, never cut off under the card
    (QA walk on test, 31 Oct 2026, screen 162: half of What's next's first row was hidden). */
 .hc--build .hc-main { scroll-padding-top: 16px; }
-.hc--build .hc-main .brm-wn .brm-btn { scroll-margin-top: 56px; }
+.hc--build .hc-main .brm-wn .ui-btn { scroll-margin-top: 56px; }
 
 /* The ask: the board, and beside it the moment's panel. */
 .hc--build .bc-askcols { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
@@ -108,7 +108,7 @@
 .hc--build .hc-main > .brm-panel, .hc--build .hc-main > .brm-notice { margin: 0; }
 .hc--build .bc-inmain { display: grid; gap: 10px; }
 .hc--build .bc-inmain-h { display: flex; align-items: center; gap: 12px; }
-.hc--build .bc-inmain-h .brm-btn { margin-left: auto; }
+.hc--build .bc-inmain-h .ui-btn { margin-left: auto; }
 .hc--build .bc-point .hc-cols { grid-template-columns: minmax(0, 1fr) 280px; }
 
 /* The request strip (a name asked for) and the error bars sit above the main area's work. */
