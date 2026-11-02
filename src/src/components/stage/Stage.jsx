@@ -44,8 +44,25 @@ import PhaseBar from './PhaseBar';
  * growing or a reveal flipping would re-render the stage and never re-measure
  * it, because `profile` and `phase` are unchanged.
  */
+/*
+ * THE HOST'S FRAME ON THE STAGE (experience plan §3.2, §3.3, Phase 2 step 2h).
+ * `top`, `now` and `needs` are three more optional rows ABOVE the rail: the
+ * top bar (components/console/ConsoleTop.jsx), "Your part now" (a Dock given
+ * `lead`) and the Needs-you line, in that order, so on one screen the main
+ * button sits under the top bar exactly where the console has it. Each is
+ * host chrome in its own dusk wrapper (data-theme="dark": <html> is paper)
+ * and none is inside `.main`, so the fitter never scales them; it measures
+ * `.main`'s box, which is whatever these rows leave. With `now` given there is
+ * no bottom dock and no empty placeholder for one: the `dock` row is then 0px
+ * tall, and the height it held (13vh) goes back to the content.
+ *
+ * A caller passing none of the three (the Build Room's stage, an event's
+ * agenda wall, the survey walk-through) gets the stage exactly as it was: the
+ * empty rows collapse to nothing.
+ */
 export default function Stage({
-  profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '', children,
+  profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '',
+  top = null, now = null, needs = null, children,
 }) {
   const stageRef = useRef(null);
 
@@ -97,6 +114,9 @@ export default function Stage({
   return (
     <main className="stage" ref={stageRef}>
       <div className="field" aria-hidden="true" />
+      {top ? <div className="stage-top" data-theme="dark">{top}</div> : null}
+      {now ? <div className="stage-now" data-theme="dark">{now}</div> : null}
+      {needs ? <div className="stage-needs" data-theme="dark">{needs}</div> : null}
       {rail || <div className="rail" />}
       <PhaseBar phase={phase} />
       {/* The workflow strip (session flow v3 §4.6): host-only, in its own row
@@ -109,7 +129,7 @@ export default function Stage({
       {/* A step the host is looking at (session flow v3 §4.8): over `.main`,
           which stays mounted underneath and keeps its place. */}
       {view}
-      {dock || <div className="dock" />}
+      {dock || (now ? null : <div className="dock" />)}
       {overlay}
     </main>
   );

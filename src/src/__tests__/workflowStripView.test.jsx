@@ -75,7 +75,9 @@ describe('looking at another step (session flow v3 §4.8)', () => {
 
   test('the host page swaps the main button for Back to the room and stops the arrows paging while looking', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(page).toMatch(/controls=\{dockControls\}/);
+    // The stage's Your part now takes dockControls less a LEAVE button (2h).
+    expect(page).toMatch(/controls=\{stageControls\}/);
+    expect(page).toMatch(/const stageControls = splitLeave\(dockControls\)\.controls;/);
     expect(page).toMatch(/intent: HOST_INTENTS\.BACK_TO_ROOM/);
     expect(page).toMatch(/hostPhase !== 'FIELD_NOTES' \|\| viewing\) return false/);
     expect(page).toMatch(/const viewing = twoSurfaces && workflow/);

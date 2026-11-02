@@ -65,13 +65,14 @@ const CODE = '5307';
 const ITEM = { itemId: 'it_0000000a', type: 'trivia', title: 'Space night', state: 'planned', gameId: GAME, at: '9:00', until: '9:15' };
 const viewWith = (item) => ({ event: { code: CODE, title: 'Q4 Kickoff', state: 'LIVE', liveItemId: item.state === 'live' ? item.itemId : '' }, items: [item] });
 
-function installFetch(state) {
+function installFetch(state, { players = [] } = {}) {
   global.fetch = jest.fn(async (url) => {
     const u = String(url);
     const body = u.endsWith(`games/${GAME}`) ? { exists: true, started: state !== 'CREATED' }
       : u.includes(`games/${GAME}/host-state`) ? {
         state, gameMetadata: { gameType: 'trivia', title: 'Space night' }, eventRef: CODE, eventPaused: false,
       }
+        : u.includes(`games/${GAME}/players`) ? { players: players.map((playerName) => ({ playerName, totalScore: 0 })) }
         : {};
     return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
   });
@@ -87,7 +88,7 @@ const findAsk = () => waitFor(() => {
 async function mountItemStage() {
   window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
 }
 
 beforeEach(() => {
@@ -162,24 +163,54 @@ test('a paused item offers "Bring everyone back"', async () => {
   await waitFor(() => expect(events.runEvent).toHaveBeenCalledWith(CODE, 'resume', ITEM.itemId));
 });
 
-test('AGENDA is the host looking: back to the event\'s board, and nothing pauses', async () => {
+/*
+  AGENDA AND MAIN MENU ARE TWO PLACES (experience plan §3.6, Phase 2 step 2h:
+  the owner's open question from the dock fix). rejects: Main menu taking an
+  event's host to the agenda (a second Agenda), Agenda standing in for Main
+  menu, and either one pausing anything.
+*/
+test('Agenda is the Session menu\'s first item: back to the event\'s board, and nothing pauses', async () => {
   installFetch('ASK#002');
   events.getEvent.mockResolvedValue(viewWith({ ...ITEM, state: 'live' }));
   await mountItemStage();
 
-  fireEvent.click(await screen.findByRole('button', { name: /Back to the event's agenda/ }, { timeout: 5000 }));
+  // Not on the stage itself any more: no AGENDA beside Your part now.
+  expect(screen.queryByRole('button', { name: /Back to the event's agenda/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
+  const panel = await screen.findByRole('dialog', { name: 'Session menu' });
+  fireEvent.click(within(panel).getByTestId('session-menu-agenda'));
   await waitFor(() => expect(navigateTo).toHaveBeenCalledWith(`/host/event/${CODE}`));
   expect(events.runEvent).not.toHaveBeenCalled();
 });
 
-test('a live item\'s lobby has one way back, AGENDA — not Back to Menu beside it', async () => {
+test('Main menu in an event goes home, not to the agenda, asking first with people in the room', async () => {
+  installFetch('ASK#002', { players: ['Ada', 'Omar'] });
+  events.getEvent.mockResolvedValue(viewWith({ ...ITEM, state: 'live' }));
+  await mountItemStage();
+
+  // The room is known (the meter counts two) before Main menu is pressed.
+  await waitFor(() => expect(document.querySelector('.stage .main').textContent).toMatch(/\/\s*2/), { timeout: 5000 });
+  const mains = screen.getAllByRole('button', { name: 'Main menu' });
+  expect(mains).toHaveLength(1);
+  fireEvent.click(mains[0]);
+  const ask = await screen.findByRole('dialog', { name: 'Leave this session?' }, { timeout: 5000 });
+  fireEvent.click(within(ask).getByRole('button', { name: 'Back to Menu' }));
+  await waitFor(() => expect(document.querySelector('.stage')).toBeNull(), { timeout: 5000 });
+  expect(navigateTo).not.toHaveBeenCalled();
+  expect(events.runEvent).not.toHaveBeenCalled();
+  // The event is dropped from the page on the way home.
+  expect(window.location.search).not.toMatch(/event=/);
+});
+
+test('a live item\'s lobby has one Main menu and no round button that leaves beside it', async () => {
   installFetch('STARTED');
   events.getEvent.mockResolvedValue(viewWith({ ...ITEM, state: 'live' }));
   await mountItemStage();
 
-  expect(await screen.findByRole('button', { name: /Back to the event's agenda/ }, { timeout: 5000 })).toBeInTheDocument();
   await waitFor(() => expect(events.getEvent).toHaveBeenCalled());
+  expect(screen.getAllByRole('button', { name: 'Main menu' })).toHaveLength(1);
   expect(screen.queryByRole('button', { name: /Back to Menu/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Back to the event's agenda/ })).toBeNull();
 });
 
 /*
@@ -224,7 +255,7 @@ test('?panel=questions lands on the Session panel\'s Questions tab, once', async
   // Closed and opened again with SESSION, it is the ordinary panel.
   fireEvent.click(within(panel).getByRole('button', { name: 'Close the Session menu' }));
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull());
-  fireEvent.click(screen.getByRole('button', { name: /session panel/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
   const again = await screen.findByRole('dialog', { name: 'Session menu' });
   expect(within(again).getByRole('tab', { name: 'Players' })).toHaveAttribute('aria-selected', 'true');
 });

@@ -369,8 +369,7 @@ module.exports = {
     },
     "config/help/glossary.js": {
       "Main screen": 1,
-      "SESSION": 2,
-      "Session panel": 3
+      "Session panel": 2
     },
     "config/help/host-events.js": {
       "Back to the agenda": 1,
@@ -382,9 +381,8 @@ module.exports = {
       "Session reports": 1
     },
     "config/help/host-running.js": {
-      "Back to Menu": 2,
-      "SESSION": 3,
-      "Session panel": 6,
+      "Back to Menu": 1,
+      "Session panel": 5,
       "Unlock name": 2
     },
     "config/help/host-setup.js": {

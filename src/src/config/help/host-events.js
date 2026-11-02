@@ -53,7 +53,9 @@
                        (moving on finishes the live item; an open survey
                        pauses), End confirm ("End it", "Keep it"), survey refusal.
     session-on-the-day GameHostPage eventCode: lobby shows the event code,
-                       Dock AGENDA, "Back to the agenda" as the leave primary,
+                       Agenda first in the Session menu (SessionSetupPanel
+                       onAgenda; experience plan 2h: Main menu goes home),
+                       "Back to the agenda" as the leave primary,
                        no two-screen console or room-screen chooser in events.
     talks-on-the-day   EventStage deck: ← → PageUp PageDown, Full screen / F,
                        Space and click while full screen, Esc; the "Just
@@ -321,11 +323,11 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** on the dock. From there, **Set the running order** chooses which questions come first.',
+          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** in Your part now. From there, **Set the running order** chooses which questions come first.',
         },
         {
           t: 'p',
-          text: 'When you are ready, press **Bring everyone here** on that item\'s dock (**Bring everyone back** on a paused one), or **Go live** on its row.',
+          text: 'When you are ready, press **Bring everyone here**, the main button in that item\'s Your part now (**Bring everyone back** on a paused one), or **Go live** on its row.',
         },
         {
           t: 'p',
@@ -369,8 +371,8 @@ const eventDay = {
           t: 'list',
           items: [
             { title: 'The event\'s code', text: 'Its lobby shows the event code, not a session code. Late arrivals join the event and land in this session.' },
-            { title: '**AGENDA** on the dock', text: 'Back to the event\'s stage. It does not pause anything: the phones stay where they are.' },
-            { title: 'At the end', text: 'When the session ends, the dock offers **Back to the agenda**.' },
+            { title: '**Agenda** in the Session menu', text: 'The first thing in the **Session menu** (top right): back to the event\'s stage. It does not pause anything: the phones stay where they are. **Main menu**, top left, still goes to your start screen, asking first when people are in the room.' },
+            { title: 'At the end', text: 'When the session ends, Your part now offers **Back to the agenda**.' },
           ],
         },
         {

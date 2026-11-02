@@ -51,6 +51,12 @@
   color: var(--text);
 }
 .ny.ny-line.is-soon { color: var(--text); }
+/* THE PUBLIC LINE (PublicNeedsLine.jsx, PLAN §3.3, 2h): the room can read it.
+   Calm is the muted line; waiting is an amber EDGE and no wash (a wash reads
+   as an alarm from the back of the room), with the count by kind in --text.
+   Its one button is outlined (.ui-btn--quiet), never the orange. */
+.ny.ny-line.ny-line--public.is-waiting { border-left-color: var(--accent); color: var(--text); }
+.ny.ny-line.ny-line--public .ui-btn { --ui-size: var(--ny-t-label); flex: none; }
 .ny .ny-line-text {
   flex: 1;
   min-width: 0;

@@ -479,9 +479,13 @@ body {
    disabled — with the panel open there was no way to advance the session at
    all.
    --------------------------------------------------------------------------- */
+/* `--stage-now-bottom` (useStageFit, experience plan 2h): where the host
+   stage draws its frame on top (top bar, Your part now, the Needs-you line),
+   the panel and its scrim start below it, so Your part now stays live with
+   the menu open, as the console's sheet does. 0 everywhere else. */
 .setup-panel-scrim {
   position: fixed;
-  top: 0;
+  top: var(--stage-now-bottom, 0px);
   left: 0;
   right: 0;
   bottom: var(--dock-measured, var(--dock-h, 0px));
@@ -492,7 +496,7 @@ body {
 
 .setup-panel {
   position: fixed;
-  top: 0;
+  top: var(--stage-now-bottom, 0px);
   right: 0;
   bottom: var(--dock-measured, var(--dock-h, 0px));
   width: min(560px, 44vw);
@@ -598,6 +602,15 @@ body {
   border: 1px solid rgba(155, 168, 190, 0.22);
   color: #F4EDE4;
   cursor: pointer;
+}
+
+/* AGENDA, IN AN EVENT (experience plan §3.6, 2h): up one level, the first
+   thing in the menu and never instead of Main menu (top left on the bar). The
+   button itself takes the panel's own button paint. */
+.setup-panel__agenda {
+  flex: none;
+  display: flex;
+  padding: 10px 20px 0;
 }
 
 /* Wraps: at 660px and below the panel is its 320px minimum and the four tabs

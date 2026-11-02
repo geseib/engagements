@@ -64,7 +64,9 @@ export default function Rail({ phase, title, context = {}, join = {}, timer }) {
           {chip[1]}
         </span>
       )}
-      <span className="rail-title" data-drop="1">{title}</span>
+      {/* No title where the host's top bar already names the session (the
+          host stage since experience plan 2h): one fact, once per viewport. */}
+      {title ? <span className="rail-title" data-drop="1">{title}</span> : null}
       <span className="rail-ctx">
         {context.category && <span>{context.category}</span>}
         {context.category && context.round != null && <i>/</i>}

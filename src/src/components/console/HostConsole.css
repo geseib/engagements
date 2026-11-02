@@ -27,6 +27,16 @@
 .hc-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .hc-winstat.is-success .hc-dot { background: var(--success); }
 .hc-winstat.is-warn .hc-dot { background: var(--warn); }
+/* ONE SCREEN (experience plan §3.3, 2h): "The room sees this screen" is a
+   status in the room's-screen slot, edged in the info blue (never the one
+   orange); the bell is the count-only Needs-you button, outlined like the
+   Session menu, its count on the amber accent. Text stays --text. */
+.hc-roomsees { border-color: var(--info); background: rgb(var(--info-rgb) / .14); }
+.hc-roomsees .hc-dot { background: var(--info); }
+.hc-needsbtn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; box-sizing: border-box; font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 10px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.hc-needsbtn.is-lit { border-color: var(--accent); }
+.hc-needs-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hc-needsbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hc-loop { grid-area: loop; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
 .hc-loop .wfs { border-bottom: 0; }
 .hc-rail { grid-area: rail; border-right: 1px solid rgb(var(--glow-rgb) / .12); overflow: auto; padding: 8px 0; }

@@ -39,7 +39,7 @@ const heard = {
         {
           t: 'list',
           items: [
-            'While Workie writes, the dock shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
+            'While Workie writes, Your part now shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
             'A long read comes in pages ("Reading page 1 of 4"). **Next page** or → turns the page; ← goes back, and from the first page back to the results.',
             'The second button, "Start round 2", skips the rest. If Workie suggested questions you have not asked, it asks for a second press first.',
             'On the last page, **Ask the room** opens the composer when suggestions are waiting ("1 ask ready"); otherwise the main button starts the next round. Where Ask the room is not offered, see Asking the room a quick question.',
@@ -84,7 +84,7 @@ const heard = {
       blocks: [
         {
           t: 'p',
-          text: 'In Call & Answer, **Ask the room** opens a composer. Some sites do not offer it; there you get **Request feedback** instead (A round of comments, below). Open it from the dock on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
+          text: 'In Call & Answer, **Ask the room** opens a composer. Some sites do not offer it; there you get **Request feedback** instead (A round of comments, below). Open it from Your part now on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
         },
         {
           t: 'steps',

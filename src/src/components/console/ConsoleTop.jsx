@@ -24,11 +24,21 @@ export { TOP_SLOTS };
  *
  * Only what the app can know about the room's window: connected, full screen,
  * visible. Never "the projector is on".
+ *
+ * ONE SCREEN (`oneScreen`, §3.3, Phase 2 step 2h): the one-screen stage draws
+ * this same bar, in the same slots, and two words change. Join reads "Show
+ * join code" / "Hide join code" (the one toggle; the room already reads the
+ * code on the rail), and the room's-window slot reads "The room sees this
+ * screen", a status rather than a link, because there is no window to open.
+ * `bell` replaces the account-aware bell there with the count-only one
+ * (components/needs/OneScreenNeedsBell): the room can read this bar, so it
+ * never carries a name.
  */
 export default function ConsoleTop({
   title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent,
   onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '',
   bellSession = null, connected = null, onSessionMenu = null, sessionMenuOpen = false,
+  oneScreen = false, bell = null,
 }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   // Never a dead control (engage-design hard rule 2): without a page's own way
@@ -36,6 +46,7 @@ export default function ConsoleTop({
   const leave = typeof onLeave === 'function' ? onLeave : () => window.location.assign('/');
   const pressed = Boolean(joinPressed);
   const joinWhat = joinHint || (pressed ? HW.joinHideHint : HW.joinShowHint);
+  const joinWords = oneScreen ? (pressed ? HW.hideJoinCode : HW.showJoinCode) : '';
   return (
     <header className="hc-top">
       <button type="button" className="hc-leave" data-slot="main-menu" onClick={leave} title={HW.mainMenuHint}>
@@ -54,26 +65,34 @@ export default function ConsoleTop({
           data-slot="join"
           onClick={onJoin}
           title={joinWhat}
-          aria-label={`${HW.join} ${code}. ${joinWhat}`}
+          aria-label={joinWords ? `${joinWords}. ${joinWhat}` : `${HW.join} ${code}. ${joinWhat}`}
           aria-pressed={joinPressed === undefined ? undefined : pressed}
           {...(codeProps || {})}
         >
           <Icon name="QrCode" weight="bold" size={16} color="currentColor" />
-          {HW.join} <b>{code}</b>
+          {joinWords || <>{HW.join} <b>{code}</b></>}
         </button>
       ) : null}
-      {/* The room's window and whether it is really up; on a laptop with no
+      {/* The room's screen. On one screen, a status: this laptop IS it. On two,
+          the room's window and whether it is really up; on a laptop with no
           second display, Open as a tab and the line that says what to do
           (owner, 19 Oct 2026). The same part the Build Room's header draws. */}
-      <RoomWindowStatus
-        data-slot="room-screen"
-        href={presentHref}
-        detail={presentDetail}
-        onOpen={open}
-        short={short}
-        linkLabel={`${HW.roomsWindow} ↗`}
-        classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }}
-      />
+      {oneScreen ? (
+        <span className="hc-winstat hc-roomsees" data-slot="room-screen" role="status" title={HW.roomSeesThisScreenHint}>
+          <span className="hc-dot" aria-hidden="true" />
+          {HW.roomSeesThisScreen}
+        </span>
+      ) : (
+        <RoomWindowStatus
+          data-slot="room-screen"
+          href={presentHref}
+          detail={presentDetail}
+          onOpen={open}
+          short={short}
+          linkLabel={`${HW.roomsWindow} ↗`}
+          classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }}
+        />
+      )}
       {children}
       {/* THE CONNECTION, ONLY WHEN IT IS BROKEN (PLAN §4.2 row 7). The socket
           reconnects by itself; the chip says so until it has. */}
@@ -83,9 +102,10 @@ export default function ConsoleTop({
           {HW.notHearing}
         </span>
       ) : null}
-      {/* THE BELL: the session's Needs-you door with `bellSession` (§4.3). */}
+      {/* THE BELL: the session's Needs-you door with `bellSession` (§4.3), or
+          the caller's own `bell` (the one-screen count, never a name). */}
       <span className="hc-bell" data-slot="needs-you">
-        {bellSession ? <HostNotificationsBell newTab session={bellSession} labelled /> : <HostNotificationsBell newTab />}
+        {bell || (bellSession ? <HostNotificationsBell newTab session={bellSession} labelled /> : <HostNotificationsBell newTab />)}
       </span>
       {/* THE `?` (Help Phase 3): the screen id of the type's console
           (config/help/screens.js); the same button reports a bug. */}

@@ -15,7 +15,9 @@
                                  Stage screen is buildroom/buildScreens.js:19
     the room's window            config/consoleWords.js:20 ("Room's window"), components/stage/RoomWindowStatus.jsx
     room screen size             config/roomScreen.js:111 ("Room screen size")
-    Session panel / the dock     components/stage/Dock.jsx:233 (aria-label "Session panel"), :239 (SESSION)
+    Session panel / the dock     config/hostWords.js sessionMenu (ConsoleTop's "Session menu"); the dock:
+                                 components/stage/Dock.jsx (Build Room stage, event wall, survey
+                                 walk-through); the host stage's Your part now is Dock.jsx `lead`
     Workie                       config/consoleSections.js:167 ("what Workie says afterwards")
     What we heard                components/stage/Rail.jsx:37, components/GameReport.jsx:698
     Ask the room                 config/followUpWords.js:95
@@ -102,7 +104,7 @@ const glossary = {
       title: 'The stage',
       icon: 'Monitor',
       blocks: [
-        { t: 'p', text: 'What your laptop shows the room when you run on one screen: the question, the answers and the results, large. You drive it from the dock along its bottom. (A Build Room also has a screen called Stage, one of the three the room can watch.)' },
+        { t: 'p', text: 'What your laptop shows the room when you run on one screen: the question, the answers and the results, large. You drive it from the top: the top bar, then Your part now with the main button. (A Build Room also has a screen called Stage, one of the three the room can watch.)' },
       ],
     },
     {
@@ -126,7 +128,7 @@ const glossary = {
       title: 'Your part now',
       icon: 'Play',
       blocks: [
-        { t: 'p', text: 'The box on your laptop console that says what to do next, in one sentence, with the main button. Space presses it.' },
+        { t: 'p', text: 'The bar directly under the top bar that says what to do next, with the main button: on your laptop console, and on the stage when you run on one screen, in the same place. Space presses it.' },
       ],
     },
     {
@@ -142,7 +144,7 @@ const glossary = {
       title: 'Session panel',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: 'Your panel during a session, with the Players, Questions, Rounds and Settings tabs. Open it with SESSION on the dock, or press \\.' },
+        { t: 'p', text: 'Your panel during a session, with the Players, Questions, Rounds and Settings tabs. Open it with Session menu, top right on the top bar, or press \\.' },
       ],
     },
     {
@@ -150,7 +152,7 @@ const glossary = {
       title: 'The dock',
       icon: 'DotsSixVertical',
       blocks: [
-        { t: 'p', text: 'The row of buttons along the bottom of the stage: the main button that moves the room on, and SESSION for the Session panel.' },
+        { t: 'p', text: 'The row of buttons along the bottom of a Build Room\'s stage, an event\'s agenda wall and the survey walk-through: the main button that moves the room on, and its neighbours. On a session\'s own stage the main button is in Your part now, under the top bar.' },
       ],
     },
     {

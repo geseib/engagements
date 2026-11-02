@@ -88,7 +88,7 @@ async function renderLiveGame(hostState, { restoredText } = {}) {
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   // Something only the restored session can put on screen means host-state
   // has been read and restored — the loading gate `\` obeys is down and the
   // goal is known. Each case names its own (RESULTS restates a question

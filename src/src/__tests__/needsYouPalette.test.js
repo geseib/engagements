@@ -62,10 +62,11 @@ describe('help truth', () => {
     expect(corpus).not.toMatch(/SESSION[^.]*on the dock shows a count/);
   });
 
-  // The dock's door is a bell and a count since 2 Nov 2026 (the word NEEDS YOU
-  // pushed the dock to two lines), so the help names the bell, not the word.
+  // The stage's door is the top bar's bell since experience plan 2h (it was a
+  // bare bell and a count in the dock from 2 Nov 2026), "Needs you" and a
+  // number, never a name on one screen; the help says so.
   test('the help names the door that exists: the bell, the line, Not now for every type', () => {
-    expect(corpus).toMatch(/a bell with a number counts what waits on you \(\*\*Needs you\*\*\)/);
+    expect(corpus).toMatch(/On the top bar, \*\*Needs you\*\* counts what waits on you; on one screen it is a number, never a name/);
     expect(corpus).not.toMatch(/\*\*NEEDS YOU\*\*/);
     expect(read('components', 'needs', 'OneScreenNeedsBell.jsx')).toMatch(/name="Bell"/);
     expect(corpus).not.toMatch(/in a Build Room, press \*\*Not now\*\*/);

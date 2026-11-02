@@ -54,10 +54,14 @@ describe('the page actually mounts the panel', () => {
     expect(host).toMatch(/onClose=\{closeAllSidePanels\}/);
   });
 
-  test('the dock\'s SETUP button opens it, and nothing else does', () => {
-    // rejects: leaving `onSetup` pointed at the deleted qr-sidebar state — a
-    // repoint that is one identifier wide and silent if missed.
-    expect(host).toMatch(/onSetup=\{\(\) => setSetupPanelOpen/);
+  test('the top bar\'s Session menu opens it, on the stage and on the console', () => {
+    // rejects: leaving the opener pointed at the deleted qr-sidebar state — a
+    // repoint that is one identifier wide and silent if missed. Since
+    // experience plan 2h the stage has no bottom dock: its Session menu is the
+    // top bar's (ConsoleTop `onSessionMenu`), as the console's is.
+    const opens = host.match(/onSessionMenu[=:]\s*\{?\(\) => setSetupPanelOpen/g) || [];
+    expect(opens.length).toBe(2);
+    expect(host).not.toMatch(/onSetup=\{/);
     expect(host).not.toMatch(/setQrSidebarVisible/);
   });
 
@@ -213,7 +217,9 @@ describe('the dock control names the panel it opens', () => {
     expect(dock).not.toContain('⋯');
     expect(dock).not.toMatch(/Console/i);
 
-    const body = dock.slice(dock.indexOf('<footer'));
+    // The element is `<Tag>` since experience plan 2h (a <section> when the
+    // dock is Your part now); the body starts there.
+    const body = dock.slice(dock.indexOf('<Tag'));
     // SESSION (the button labelled SESSION) comes after the primary. Main menu
     // is a dock-more too since 2 Nov 2026, and is deliberately FIRST — the
     // other end of the dock from the panel SESSION opens.

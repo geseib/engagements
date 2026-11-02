@@ -718,16 +718,19 @@ describe('what the host page must now render', () => {
     // the room" box (compose=) and pushed <Dock to 2,626.
     // 3200 -> 6000 on 2026-10-14, when the workflow strip (strip=) and the
     // viewed step / room-screen chooser (view=) slots landed ahead of <Rail.
+    // 6000 -> 12000 on 2026-11-02 (experience plan 2h), when the host's frame
+    // (top=, now=, needs=) moved onto the stage ahead of <Rail; the bottom
+    // `dock=` went, and Your part now (`now=`) is the <Dock it held.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 6000));
+      windows.push(source.slice(i, i + 12000));
     }
     expect(windows.length).toBeGreaterThan(0);
 
-    // ONE <Stage> has to carry all three, which is what "composed" means. A
+    // ONE <Stage> has to carry all of them, which is what "composed" means. A
     // window per occurrence because the identifier also appears in prose above
     // the element; requiring the conjunction is what keeps that from counting.
-    const slots = [['rail', '<Rail'], ['meter', '<RoomMeter'], ['dock', '<Dock']];
+    const slots = [['top', '<ConsoleTop'], ['now', '<Dock'], ['rail', '<Rail'], ['meter', '<RoomMeter']];
     const composed = windows.some((w) => slots.every(
       ([slot, component]) => new RegExp(`\\b${slot}=\\{`).test(w) && w.includes(component)
     ));

@@ -100,7 +100,7 @@ async function renderLiveGame() {
   // The stage is up once the dock's SESSION button exists — the same signal
   // endSessionConfirmFlow.test.jsx waits on before it clicks it. This suite
   // never clicks it.
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
 }
 
 beforeEach(() => {

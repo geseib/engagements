@@ -86,7 +86,7 @@ async function renderLiveGame() {
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  const setup = await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  const setup = await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   await act(async () => { fireEvent.click(setup); });
   await screen.findByRole('tab', { name: 'Settings' });
   fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));

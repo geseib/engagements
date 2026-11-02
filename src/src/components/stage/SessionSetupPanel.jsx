@@ -92,6 +92,9 @@ const ALREADY_ASKED = 'Already asked this session. The running order skips asked
 export default function SessionSetupPanel({
   onClose = () => {},
   wsConnected = false,
+  /* AN EVENT'S ITEM (experience plan §3.6, 2h): Agenda, up one level. Only
+     where there is an event; Main menu stays the top bar's, and means home. */
+  onAgenda = null,
 
   // Players
   players = [],
@@ -571,6 +574,15 @@ export default function SessionSetupPanel({
             ✕
           </button>
         </div>
+
+        {typeof onAgenda === 'function' ? (
+          <div className="setup-panel__agenda">
+            <button type="button" onClick={onAgenda} title={HW.agendaHint} data-testid="session-menu-agenda">
+              <Icon name="ListBullets" weight="bold" size={15} color="currentColor" />
+              {` ${HW.agenda}`}
+            </button>
+          </div>
+        ) : null}
 
         <div className="setup-panel__tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
           {setupPanelTabs().map((t) => (

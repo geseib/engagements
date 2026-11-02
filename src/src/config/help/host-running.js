@@ -3,7 +3,7 @@
  *
  * The host is standing in front of a room with the laptop on the screen the
  * room watches. These guides answer "what do I press now, and what will the
- * room see?" for the stage, the dock, the Session panel, each type, late
+ * room see?" for the stage, Your part now, the Session panel, each type, late
  * items and players. Two screens, the room's window and the phone remote are
  * the host-two-screens guide's (W4); What we heard, Ask the room, the
  * feedback round and the report are host-reports.js.
@@ -13,7 +13,7 @@
  * start with two bot players, lobby → answer → vote → results → What we
  * heard → Ask the room → comments → End session → ended → report.
  *
- * The dock's words come from config/roundWords.js through config/roundStep.js
+ * Your part now's words come from config/roundWords.js through config/roundStep.js
  * (one decision function shared with the phone remote); a label built from the
  * round noun ("Start round 2", "Skip this round") is quoted in plain quotes,
  * not marked, because it is not a literal in the code.
@@ -21,10 +21,17 @@
 
 /*
   THE GUIDE FOR THE STAGE ITSELF.
-  Rail: components/stage/Rail.jsx (phase chip, title, "Round 1 of 12", JOIN +
-  code: hover/focus previews the QR, click pins it). Step strip:
-  components/stage/WorkflowStrip.jsx, slim on one screen (hover explains, never
-  pressed), steps RW.stepSetup … stepFinish. Room meter:
+  The frame on top (experience plan 2h): components/console/ConsoleTop.jsx
+  with `oneScreen` (Main menu, the name, HW.showJoinCode/hideJoinCode,
+  HW.roomSeesThisScreen, the count-only OneScreenNeedsBell variant="top", ?,
+  HW.sessionMenu); Your part now = Dock.jsx with `lead` (RW.yourPartLabel);
+  the Needs-you line = components/needs/PublicNeedsLine.jsx (kindSummary,
+  NEEDS_WORDS.open). There is no bottom dock on the host stage now.
+  Rail: components/stage/Rail.jsx (phase chip, "Round 1 of 12", JOIN +
+  code for the room to read; no title, the top bar has it). Step strip:
+  components/stage/WorkflowStrip.jsx, not drawn on the one-screen stage since
+  2h (PLAN §3.3: folded into the room's view); the stage on two screens keeps
+  it in full mode. Room meter:
   components/stage/RoomMeter.jsx (U, REVEAL_LABEL "Already joined", "Still to
   answer", "Still to vote"). Dock: components/stage/Dock.jsx, statuses in
   GameHostPage.jsx ~7895 ("Ready when you are", "Safe to move on", "Some are
@@ -34,7 +41,7 @@ const running = {
   id: 'host-running-engagements',
   title: 'Running the room',
   icon: 'Broadcast',
-  summary: 'The stage on one screen: getting people in, each step of a round, the dock and its keys, the scoreboard, and ending.',
+  summary: 'The stage on one screen: getting people in, each step of a round, Your part now and its keys, the scoreboard, and ending.',
   sections: [
     {
       id: 'the-stage',
@@ -48,10 +55,12 @@ const running = {
         {
           t: 'list',
           items: [
-            { title: 'The top line', text: 'Where the session is (Lobby, Answering, Voting, Results), its title, the round ("Round 1 of 12"), and JOIN with the address and code. Point at the code to show the join QR; click it to keep the QR up.' },
-            { title: 'The step strip', text: 'Setup, then the round\'s steps (Answer, Vote, What we heard, Ask), then Finish. The live step is marked. Point at a step to read what it is; on one screen the steps are not buttons.' },
-            { title: 'The room meter', text: 'Top right: how many have answered or voted. Click the number, or press U, to list who is still to answer (unless the Names setting holds that back), and again to hide it.' },
-            { title: 'The dock', text: 'Along the bottom: a status line on the left, the main button with a small **Space** on it (that key presses it too), sometimes a second button, and **SESSION** for the Session panel.' },
+            { title: 'The top bar', text: 'The two-screen console\'s bar: **Main menu**, the name, **Show join code**, **The room sees this screen**, **Needs you** (a count, never a name), **?** and **Session menu**.' },
+            { title: 'Your part now', text: 'Under the top bar, where it is on two screens: a status line and the main button, with a small **Space** on it (that key presses it too).' },
+            { title: 'The Needs-you line', text: 'Under that: **Nothing needs you now.**, or a count by kind ("1 name request") with **Open**. Never a name, never **Let them** or **Not now**.' },
+            { title: 'The rail', text: 'Where the session is (Lobby, Answering, Voting, Results), the round, and JOIN with the code for the room.' },
+            { title: 'No step strip', text: 'On one screen the rail and the question\'s own heading say where the round is; the steps (Answer, Vote, What we heard) are on your laptop only on two screens.' },
+            { title: 'The room meter', text: 'How many have answered or voted. Click it, or press U, to list who is still to answer.' },
           ],
         },
       ],
@@ -73,20 +82,20 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'The lobby shows **Scan to join · no app, no account**, the QR, the join address and the four-digit code. People scan or type the code on any phone, laptop or tablet; nobody needs an account. A Call & Answer session opens on **Setup** first: where the room watches, then a check that the room can read this screen, then **Show the join code** brings up this lobby. **Setup** on the strip goes back to the check.',
+          text: 'The lobby shows **Scan to join · no app, no account**, the QR, the join address and the four-digit code. People scan or type the code on any phone, laptop or tablet; nobody needs an account. A Call & Answer session opens on **Setup** first: where the room watches, then a check that the room can read this screen, then **Show the join code** brings up this lobby.',
         },
         {
           t: 'list',
           items: [
             'The room meter counts who is in. Click it, or press U, to see the names under "Already joined" and spot who is missing.',
-            'The dock says **Ready when you are** once someone has joined. The main button, "Start round 1", stays grey until then.',
-            '**Back to menu** leaves the lobby; the session stays as it is.',
+            'Your part now says **Ready when you are** once someone has joined. The main button, "Start round 1", stays grey until then.',
+            '**Main menu**, top left, leaves the lobby; the session stays as it is.',
           ],
         },
         { t: 'h', text: 'Letting latecomers in' },
         {
           t: 'p',
-          text: 'People can join at any point. During a round press J to show the QR and code in a panel beside the question, and J again to hide it. In the Session panel, Settings › **Joining** has **Copy join link**, **Invite…** and **Show join code**.',
+          text: 'People can join at any point. During a round press **Show join code** on the top bar, or J, to show the QR and code in a panel beside the question; **Hide join code**, or J again, takes it down. In the Session panel, Settings › **Joining** has **Copy join link**, **Invite…** and **Show join code**.',
         },
       ],
     },
@@ -111,7 +120,7 @@ const running = {
         {
           t: 'list',
           items: [
-            'The meter counts the answers ("Answered 1 / 4"). The dock says "Some are still answering", then **Safe to move on** when everyone is in.',
+            'The meter counts the answers ("Answered 1 / 4"). Your part now says "Some are still answering", then **Safe to move on** when everyone is in.',
             'The main button is **Start voting** for Call & Answer and **Show results** for the other types. It stays grey until someone has answered.',
             'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). Press again within a few seconds to go on; wait and it settles back.',
             '"Skip this round" asks first: the room loses the round, and its answers are not counted.',
@@ -141,7 +150,7 @@ const running = {
           items: [
             'Click an answer to show it large for reading out. ← and → step through the answers (and the parts of a long one); Esc goes back.',
             'More answers than fit? ↑ and ↓ turn the page.',
-            'The meter counts votes. **Next response** on the dock shows the answers one at a time.',
+            'The meter counts votes. **Next response** in Your part now shows the answers one at a time.',
             '**Show results** closes the vote. Pressed early it asks in place, like **Start voting**.',
           ],
         },
@@ -167,7 +176,7 @@ const running = {
         {
           t: 'list',
           items: [
-            'Click an answer to read it in full, or use "Show response 1 of 6" on the dock, then **Next response**, then **Stop showing**.',
+            'Click an answer to read it in full, or use "Show response 1 of 6" in Your part now, then **Next response**, then **Stop showing**.',
             'Click the question line above the answers to put the question back up.',
             'Stay as long as the conversation is good; nothing times out.',
             '**What we heard** moves on to Workie\'s read of the round: see What we heard and Ask the room.',
@@ -176,11 +185,12 @@ const running = {
       ],
     },
     /*
-      Dock.jsx (Main menu first: onMainMenu = requestLeave; the Needs-you
-      bell, count only, absent at 0; data-crowded drops the words of Main
-      menu, AGENDA, PRESENT, never wraps above 900px;
-      status, SPACE cap, SESSION "Session panel — backslash key",
-      its count when someone asks for a name, the late-count link). Keys:
+      Experience plan 2h: Your part now is Dock.jsx with `lead`, under the top
+      bar (status, the late-count link, the hint, HostActionBar with its Space
+      cap; one line, data-crowded steps). Main menu (requestLeave: asks first
+      with people in the room, and goes home in an event too), the count-only
+      bell, ? and Session menu are ConsoleTop's; Agenda is the Session menu's
+      first item in an event (SessionSetupPanel onAgenda). Keys:
       HostActionBar (Space/→ advance, ← back through pages and beats:
       GameHostPage consoleOnBackKey), Pager ↑/↓, RoomMeter U, GameHostPage J,
       useFullscreenKey F, config/scoreboard.js S/V/Esc, useSessionPanelKey \.
@@ -188,16 +198,16 @@ const running = {
     */
     {
       id: 'dock-and-keys',
-      title: 'The dock and the keys',
+      title: 'Your part now and the keys',
       icon: 'DotsSixVertical',
       blocks: [
         {
           t: 'p',
-          text: 'The dock always holds the one button that moves the room on, and Space or → presses it. A grey button says why it cannot act yet. When late answers or comments are waiting, the status line ends with a count you can click to open the list. Before **SESSION**, a bell with a number counts what waits on you (**Needs you**); never a name on one screen, gone when nothing waits.',
+          text: '**Your part now**, under the top bar on one screen and two, holds the button that moves the room on; Space or → presses it. A grey button says why it cannot act yet. A late count in its status line opens the list.',
         },
         {
           t: 'p',
-          text: '**Main menu**, far left, goes to your start screen; the session keeps running, and with people in the room it asks first. Crowded, some buttons show only an icon.',
+          text: 'On the top bar, **Needs you** counts what waits on you; on one screen it is a number, never a name. **Main menu**, top left, goes to your start screen and asks first with people in the room; the session keeps running. In an event, **Agenda** is the first thing in the **Session menu**.',
         },
         {
           t: 'keys',
@@ -284,7 +294,7 @@ const running = {
           t: 'note',
           tone: 'info',
           title: 'Main menu does not end anything',
-          text: '**Main menu** (at the left end of the dock, in the same fold, or top left on the two-screen console), or **Back to menu** once the session has ended, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
+          text: '**Main menu** (top left on the top bar, on one screen and two, or in the same fold), or **Back to menu** once the session has ended, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
         },
       ],
     },
@@ -294,8 +304,9 @@ const running = {
 /*
   THE SESSION PANEL (components/stage/SessionSetupPanel.jsx; tabs from
   config/setupPanel.js: Players, Questions, Rounds, Settings). Opened by
-  SESSION on the dock, Session menu on the two-screen console's top bar (a
-  sheet over the content area), or \ (useSessionPanelKey); header "Session menu",
+  Session menu on the top bar (one screen and two, experience plan 2h; a
+  sheet below Your part now and the Needs-you line), or \ (useSessionPanelKey);
+  in an event its first item is Agenda (onAgenda); header "Session menu",
   "Connected"/"Connecting…", Help, ✕; Esc or \ closes. Sections moved here
   from host-running-engagements in Phase 2 keep their ids (HELP_SECTION_MOVES).
 */
@@ -312,7 +323,7 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'Press **SESSION** on the dock, or \\, to open the panel over the right of the stage; on the two-screen console, **Session menu** top right opens it over the main area, never over Your part now. \\ or Esc closes it. Its header reads **Session menu** and says **Connected** while live updates are reaching you. The room can see the panel on one screen, so it never shows correct answers.',
+          text: 'Press **Session menu**, top right on the top bar, or \\, to open the panel over the right of the stage (on the two-screen console, over the main area). It never covers Your part now, so the main button stays live. In an event, **Agenda** is its first item. \\ or Esc closes it. Its header reads **Session menu** and says **Connected** while live updates are reaching you. The room can see the panel on one screen, so it never shows correct answers.',
         },
         {
           t: 'table',
@@ -549,7 +560,7 @@ const lateItems = {
       blocks: [
         {
           t: 'p',
-          text: 'The list is in the Rounds tab and, on two screens, in the console\'s left rail. The dock\'s status line counts what is waiting ("1 late answer kept", "3 late items not reviewed"); click the count to open the list. Each item says who and when, for example "during Round 3 · Voting".',
+          text: 'The list is in the Rounds tab and, on two screens, in the console\'s left rail. The status line in Your part now counts what is waiting ("1 late answer kept", "3 late items not reviewed"); click the count to open the list. Each item says who and when, for example "during Round 3 · Voting".',
         },
         {
           t: 'table',
@@ -685,7 +696,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'On one screen the room can see the laptop',
-          text: 'The bell on the dock (**Needs you**) shows a count, never a name, and is not there when nothing waits. Its sheet lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way.',
+          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting it says **Nothing needs you now.** The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way.',
         },
       ],
     },

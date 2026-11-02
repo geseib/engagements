@@ -37,10 +37,11 @@ export const HELP_FOR_SCREEN = {
   'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' }, // RoomScreenChooser head
 
   /* ---- host: running the room (one screen) ----
-     No entry for the stage itself: the room sees it. Its help is the dock's,
-     the host's own control, and the dock opens What we heard or the survey's
-     section while those are up (GameHostPage `dockHelp`). */
-  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // Dock (GameHostPage)
+     No entry for the stage itself: the room sees it. Its help is the top
+     bar's `?` (experience plan 2h; it was the dock's), the host's own control,
+     and it opens What we heard or the survey's section while those are up
+     (GameHostPage `dockHelp`). */
+  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // the stage's top bar ? (GameHostPage)
   // The Session panel's header `?` opens the tab that is showing.
   'host-session-players': { guide: 'host-player-management', section: 'players-tab' },
   'host-session-questions': { guide: 'host-session-panel', section: 'choosing-ask-next' },

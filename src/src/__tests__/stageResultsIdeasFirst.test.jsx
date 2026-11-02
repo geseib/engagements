@@ -107,7 +107,7 @@ const mount = async ({ anonymous, extra = 0 }) => {
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   await waitFor(() => {
     expect(document.querySelectorAll('.cards .card .ans').length).toBeGreaterThanOrEqual(3);
   }, { timeout: 5000 });
