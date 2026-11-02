@@ -373,7 +373,7 @@ const eventDay = {
       blocks: [
         {
           t: 'p',
-          text: 'A session item runs like any session: see Running the room. A Call & Answer item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the pulse and People. Other items run on their stage. In an event it differs in these ways.',
+          text: 'A session item runs like any session: see Running the room. A Call & Answer, Trivia or Poll item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the pulse and People. Other items run on their stage. In an event it differs in these ways.',
         },
         {
           t: 'list',
@@ -393,7 +393,7 @@ const eventDay = {
         {
           t: 'list',
           items: [
-            { title: 'Setup, once a day', text: 'The first Call & Answer item of the day opens on Setup and asks where the room watches. Later items that day skip the question and the check: on one screen they open on the lobby, on two screens at the room joining once the room\'s window shows the item.' },
+            { title: 'Setup, once a day', text: 'The first Call & Answer, Trivia or Poll item of the day opens on Setup and asks where the room watches. Later items that day skip the question and the check: on one screen they open on the lobby, on two screens at the room joining once the room\'s window shows the item.' },
             { title: 'When the event moves on', text: 'If another item goes live while you are on this one, the Needs-you line says **The event moved on to Item 3**, with **Bring everyone here**, which brings the phones back to this item. The same button is in the Session menu.' },
           ],
         },

@@ -26,7 +26,30 @@ export const SURFACES_KEY = 'engage.surfaces';
   The Build Room reads the stored choice through config/roomScreen.js, and its
   room's window through presentHref(…, { type: 'build', k }).
 */
-export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
+/*
+  'trivia' and 'poll' since 2 Nov 2026 (experience plan 2g, §7 decision 10:
+  the owner chose to build them): the room's window has their moments
+  (present/presentModel.js TRIVIA_QUESTION, TRIVIA_REVEAL, POLL_ASK,
+  POLL_RESULTS) and the laptop gets the console. Wavelength and Survey stay
+  one screen; ONE_SCREEN_WHY says so, with the reason, where the choice would
+  be (decision 10's fallback: say so instead of hiding the choice).
+*/
+export const TWO_SURFACE_TYPES = ['call-and-answer', 'build', 'trivia', 'poll'];
+
+/*
+  WHY A TYPE IS ONE SCREEN ONLY, said where the chooser would be (Setup in the
+  loop and the Session menu's Screens group, components/stage/ScreensGroup.jsx).
+  A type missing here simply has no chooser (the survey, which has no rounds
+  for the room to watch).
+*/
+export const ONE_SCREEN_WHY = Object.freeze({
+  wavelength: 'Wavelength runs on one screen for now: the room\'s window has no Write and Reveal moments yet, so the room watches this laptop.',
+});
+
+/** The reason a type is one screen only, or '' when it can use two (or has no chooser). */
+export function oneScreenWhy(gameType) {
+  return ONE_SCREEN_WHY[gameType] || '';
+}
 
 /*
   WHICH TYPES GET THE HOST CONSOLE on two screens (experience plan 2d; audit A
@@ -35,9 +58,10 @@ export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
   projector-style stage on a private laptop. Trivia and Poll join in 2g; the
   Build Room has its own page (BuildConsole). The list used to sit in
   GameHostPage beside `!eventCode`, naming trivia, poll and wavelength that
-  twoSurfacesFor had already ruled out.
+  twoSurfacesFor had already ruled out. Trivia and Poll joined in 2g (the
+  question with its private answer; the live board).
 */
-export const CONSOLE_TYPES = ['call-and-answer'];
+export const CONSOLE_TYPES = ['call-and-answer', 'trivia', 'poll'];
 
 /** True when the host page renders the console: two screens and a console type. */
 export function consoleFor(twoSurfaces, gameType) {

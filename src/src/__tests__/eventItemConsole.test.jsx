@@ -7,8 +7,9 @@
  * missing from the strip, or put on the top bar; no Agenda in the Session
  * menu; the event moving on with nothing on the Needs-you line; Bring
  * everyone here that does not take this item live; Setup asking again for an
- * item of an event whose screens were set today; a trivia item in an event
- * getting the console before 2g; a standalone session changing at all.
+ * item of an event whose screens were set today; a wavelength item in an
+ * event getting the console (one screen only, 2g); a standalone session
+ * changing at all.
  */
 import React from 'react';
 import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react';
@@ -269,10 +270,10 @@ describe('Setup in an event: screens once per day', () => {
 });
 
 describe('only Call & Answer gets the console; standalone sessions are unchanged', () => {
-  test('a trivia item in an event on two screens keeps its stage (2g brings trivia)', async () => {
-    gameType = 'trivia';
-    hostState = { ...hostState, state: 'ASK#001', gameMetadata: { gameType: 'trivia', title: 'Space night' } };
-    events.getEvent.mockResolvedValue(viewWith({ ...ITEM, type: 'trivia' }));
+  test('a wavelength item in an event on two screens keeps its stage (one screen only)', async () => {
+    gameType = 'wavelength';
+    hostState = { ...hostState, state: 'ASK#001', gameMetadata: { gameType: 'wavelength', title: 'Space night' } };
+    events.getEvent.mockResolvedValue(viewWith({ ...ITEM, type: 'wavelength' }));
     const { container } = await mountItem();
     await waitFor(() => expect(container.querySelector('.stage')).toBeTruthy(), { timeout: LOAD_WAIT });
     expect(container.querySelector('.hc')).toBeNull();
@@ -294,11 +295,13 @@ describe('only Call & Answer gets the console; standalone sessions are unchanged
 /* ---------------------------------------------------------------- the rules */
 
 describe('the rules, without the page', () => {
-  test('consoleFor: two screens and Call & Answer only', () => {
-    expect(CONSOLE_TYPES).toEqual(['call-and-answer']);
-    expect(consoleFor(true, 'call-and-answer')).toBe(true);
-    expect(consoleFor(false, 'call-and-answer')).toBe(false);
-    ['trivia', 'poll', 'wavelength', 'survey'].forEach((t) => expect(consoleFor(true, t)).toBe(false));
+  test('consoleFor: two screens, and Call & Answer, Trivia or Poll (2g)', () => {
+    expect(CONSOLE_TYPES).toEqual(['call-and-answer', 'trivia', 'poll']);
+    ['call-and-answer', 'trivia', 'poll'].forEach((t) => {
+      expect(consoleFor(true, t)).toBe(true);
+      expect(consoleFor(false, t)).toBe(false);
+    });
+    ['wavelength', 'survey'].forEach((t) => expect(consoleFor(true, t)).toBe(false));
   });
 
   test('eventMovedOn: only a paused item with another live', () => {

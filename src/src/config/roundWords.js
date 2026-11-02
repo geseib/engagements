@@ -139,6 +139,10 @@ const RW = Object.freeze({
   stepAsk: 'Ask',
   stepFinish: 'Finish',
   stepResults: 'Results',
+  // Trivia's steps (experience plan §3.2a, 2g): Question · Reveal · Scores.
+  stepQuestion: 'Question',
+  stepReveal: 'Reveal',
+  stepScores: 'Scores',
   stepFeedback: 'Feedback',
   stepLive: 'Live',
   stepViewing: 'Viewing',
@@ -187,6 +191,18 @@ const RW = Object.freeze({
     ask: 'Optional. Ask the room a question: ideas, a choice or a rating.',
     finish: 'End the session and open its report.',
   }),
+  /** The same, where a format names its steps its own way (2g). */
+  stepExplainFor: Object.freeze({
+    trivia: Object.freeze({
+      answer: 'Everyone picks an option on their phone, laptop or tablet. Only you see the answer.',
+      heard: 'The room\'s window marks the right answer and shows how the room split.',
+      scores: 'Optional. Put the scoreboard on the room\'s window whenever you like; the round does not move.',
+    }),
+    poll: Object.freeze({
+      answer: 'Everyone answers on their phone, laptop or tablet; the board fills in live on the room\'s window.',
+      heard: 'The board stops moving: the room\'s answer, then the read Workie writes of it.',
+    }),
+  }),
   /** The bar above a step the host is looking at; the room does not move. */
   viewingBar: (step, where) => `Viewing ${step} · the room is still on ${where}`,
   viewingWhere: (round, step) => `${round}, ${step}`,
@@ -211,7 +227,8 @@ const RW = Object.freeze({
     heardDone: 'The results and the read are done for this round.',
     comesLater: 'This step has not happened yet in this round.',
     roundsPlayed: (n) => `${n} ${n === 1 ? 'round' : 'rounds'} played so far.`,
-    reportFromSession: 'The report so far opens from the menu at the top right. Finishing the session is its own step there.',
+    scoresNote: 'The scoreboard shows everyone\'s total so far. It goes up and comes down without moving the round.',
+    reportFromSession:'The report so far opens from the menu at the top right. Finishing the session is its own step there.',
   }),
 
   // ── The room's devices and the wall ───────────────────────────────────

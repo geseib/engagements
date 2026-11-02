@@ -92,6 +92,10 @@ export default function ScreensGroup({
   presentDetail = null,
   profile = 'room',
   onProfileChange = () => {},
+  /* WHY THIS TYPE IS ONE SCREEN (config/surfaces.js oneScreenWhy; experience
+     plan §7 decision 10): where the choice would be, the row says One screen
+     and the reason, rather than the choice silently missing. */
+  why = '',
 }) {
   const two = choice === 'two';
   // Setup and the panel can both draw this group: one id each.
@@ -99,6 +103,15 @@ export default function ScreensGroup({
   return (
     <div className="scr">
       {offerChoice ? <ScreenChoiceRow choice={choice} onChoose={onChoose} help="host-room-screen-chooser" /> : null}
+      {!offerChoice && why ? (
+        <div className="scr-row" data-row="where-fixed">
+          <div className="scr-k">
+            <span className="scr-label">{W.where}</span>
+            <span className="scr-hint">{why}</span>
+          </div>
+          <span className="scr-fixed">{W.one}</span>
+        </div>
+      ) : null}
       {offerChoice && two && presentHref ? <RoomWindowRow href={presentHref} detail={presentDetail} /> : null}
       <div className="scr-row">
         <div className="scr-k">

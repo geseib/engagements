@@ -24,7 +24,7 @@ import LW from '../../config/lateWords';
 import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
 import ScreensGroup from './ScreensGroup';
-import { TWO_SURFACE_TYPES } from '../../config/surfaces';
+import { TWO_SURFACE_TYPES, oneScreenWhy } from '../../config/surfaces';
 import PrivateReveal from '../needs/PrivateReveal';
 import HW from '../../config/hostWords';
 import { EVENT_WORDS } from '../../config/eventAgenda';
@@ -1106,6 +1106,7 @@ export default function SessionSetupPanel({
                 <ScreensGroup
                   choice={roomScreen === 'two' ? 'two' : 'classic'}
                   offerChoice={screenChoiceOffered}
+                  why={oneScreenWhy(gameType)}
                   onChoose={(choice) => onRoomScreenChange && onRoomScreenChange(choice)}
                   presentHref={presentHref}
                   presentDetail={presentDetail}

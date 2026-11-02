@@ -723,7 +723,7 @@ export function PresentTriviaQuestion({ model }) {
   return (
     <div className="present-moment present-frame" data-type="trivia">
       <Top model={model} right="Answering" />
-      <div className="present-main is-top">
+      <div className="present-main">
         <QuestionHead model={model} />
         <ol className="present-opts" aria-label="Options">
           {(model.options || []).map((o) => (
@@ -750,7 +750,7 @@ export function PresentTriviaReveal({ model }) {
   return (
     <div className="present-moment present-frame" data-type="trivia">
       <Top model={model} right="The answer" />
-      <div className="present-main is-top">
+      <div className="present-main">
         <QuestionHead model={model} />
         <ol className={`present-opts${tallied ? ' is-revealed' : ''}`} aria-label="Options">
           {(model.options || []).map((o) => (
@@ -759,7 +759,7 @@ export function PresentTriviaReveal({ model }) {
               className={`present-opt${tallied && o.correct ? ' is-correct' : ''}${tallied && !o.correct ? ' is-dim' : ''}`}
             >
               {tallied && o.share !== null ? <span className="present-opt-fill" style={{ width: `${o.share}%` }} /> : null}
-              <NumberBadge as="span" n={o.letter} tone={tallied && o.correct ? 'accent' : 'muted'} className="present-opt-l" />
+              <NumberBadge as="span" n={o.letter} tone="muted" className="present-opt-l" />
               <span className="present-opt-t">{o.text}</span>
               {tallied && o.correct ? <span className="present-opt-flag">Correct</span> : null}
               {tallied && o.share !== null ? <span className="present-opt-pct present-n">{`${o.share}%`}</span> : null}
@@ -784,8 +784,8 @@ export function PresentTriviaReveal({ model }) {
 export function PresentPoll({ model }) {
   return (
     <div className="present-moment present-frame" data-type="poll">
-      <Top model={model} right={model.live ? 'Answering' : 'Results'} />
-      <div className="present-main is-top">
+      <Top model={model} right={model.live ? 'Answering' : RW.stepResults} />
+      <div className="present-main">
         <QuestionHead model={model} />
         <div className="present-poll">
           <PollBoard question={model.question} tally={model.tally} live={model.live} />

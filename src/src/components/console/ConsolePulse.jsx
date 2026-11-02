@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Eyebrow from '../ui/Eyebrow';
 import Button from '../ui/Button';
-import { pulseFor, pulsePhase } from '../../config/consolePulse';
+import { pulseFor, pulsePhase, PULSE_WORDS } from '../../config/consolePulse';
 import { TIMER_WORDS } from '../../config/roundTimer';
 import { serverNowMs } from '../../utils/serverClock';
 import TimeRing from './TimeRing';
@@ -37,6 +37,10 @@ export default function ConsolePulse({
   moment, players = 0, answered = 0, voted = 0, everyoneIn = null,
   openedAt = null, voteAt = null, resultsAt = null, arrivals = [], late = 0,
   onLate = null, now: fixedNow = null, timer = null, onAddMinute = null,
+  /* Trivia's "Correct so far" ({ right, of }), or null: tile 3 is then the since tile. */
+  correct = null,
+  /* Trivia and Poll have no vote: after the round tile 1 says "N here", not "0 voted". */
+  noVote = false,
 }) {
   const ticking = fixedNow === null && ['answer', 'vote'].includes(pulsePhase(moment));
   const [tick, setTick] = useState(() => serverNowMs());
@@ -48,7 +52,7 @@ export default function ConsolePulse({
   }, [ticking]);
   const now = fixedNow !== null ? fixedNow : tick;
   const ringStepMs = prefersReducedMotion() ? 10000 : 0;
-  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late, timer, ringStepMs });
+  const { phase, room, time, since } = pulseFor({ moment, players, answered, voted, everyoneIn, openedAt, voteAt, resultsAt, now, arrivals, late, timer, ringStepMs, noVote });
   const timed = time.state !== 'none';
   return (
     <section className="cpulse" aria-label="The room this round" data-phase={phase}>
@@ -85,6 +89,21 @@ export default function ConsolePulse({
           </>
         )}
       </div>
+      {correct ? (
+        /* TRIVIA'S TILE 3 (experience plan §3.2a, 2g): how many have the right
+           answer so far, host-only. It takes the "since" tile's place; the
+           late count stays on it, so nothing that tile carried is lost. */
+        <div className="cpulse-tile cpulse-since cpulse-correct" data-tile="correct">
+          <Eyebrow tone="muted">{PULSE_WORDS.correct}</Eyebrow>
+          <p className="cpulse-num" data-testid="pulse-correct">{correct.right} <small>{PULSE_WORDS.correctOf(correct.of)}</small></p>
+          <p className="cpulse-sub">{PULSE_WORDS.onlyYou}</p>
+          {since.late ? (
+            onLate
+              ? <Button variant="quiet" size="sm" className="cpulse-late" onClick={onLate}>{since.late.text}</Button>
+              : <p className="cpulse-sub">{since.late.text}</p>
+          ) : null}
+        </div>
+      ) : (
       <div className="cpulse-tile cpulse-since" data-tile="since">
         <Eyebrow tone="muted">{since.eyebrow}</Eyebrow>
         <p className="cpulse-val" data-testid="pulse-since">{since.value}</p>
@@ -95,6 +114,7 @@ export default function ConsolePulse({
             : <p className="cpulse-sub">{since.late.text}</p>
         ) : null}
       </div>
+      )}
     </section>
   );
 }

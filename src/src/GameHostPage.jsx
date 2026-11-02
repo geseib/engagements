@@ -39,7 +39,7 @@ import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import WorkflowStrip from './components/stage/WorkflowStrip';
-import { workflowStrip, liveWhere } from './config/workflowStrip';
+import { workflowStrip, liveWhere, stepLabelFor } from './config/workflowStrip';
 import StepView from './components/stage/StepView';
 import { storedRoomScreen, storeRoomScreen } from './config/roomScreen';
 import { setupPanelTabs } from './config/setupPanel';
@@ -61,7 +61,7 @@ import useStageNotesSync from './hooks/useStageNotesSync';
 import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES, CONSOLE_TYPES, oneScreenWhy } from './config/surfaces';
 import { EVENT_WORDS, eventMovedOn, itemNumber, latecomersFrom, eventScreensSet, markEventScreens } from './config/eventAgenda';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
@@ -129,6 +129,7 @@ import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
 import HostConsole from './components/console/HostConsole';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
+import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
 import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
 import { needsYou, markHandoverRequested, NEEDS_ACTIONS } from './config/needsYou';
@@ -147,7 +148,7 @@ import SessionSetup from './components/console/panels/SessionSetup';
 import { setupStepFor, setupPartFor, SETUP_WORDS } from './config/sessionSetup';
 import { openRoomWindow, willPlace, ROOM_WINDOW_NAME } from './present/roomWindow';
 import CW from './config/consoleWords';
-import { consolePeopleFor } from './config/consoleRail';
+import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
@@ -1384,6 +1385,8 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  // Trivia's private answer, `{ round, letters }`, from the host's door only (2g).
+  const [hostAnswer, setHostAnswer] = useState(null);
   /*
     THE EVENT'S SCREENS, ONCE PER DAY (2d). Read again when the page learns
     its event (a session reopened from history learns it from host-state), and
@@ -1443,6 +1446,7 @@ function GameHostPage() {
         setPresenting(Number(data.presenting) || 0);
         setPresentDetail(data.presentDetail || null);
         setHostNotes(data.hostNotes || null);
+        setHostAnswer(data.hostAnswer || null);
         if (PROFILES.includes(data.stageProfile)) setSessionProfile(data.stageProfile);
       } catch (e) {
         /* the next read tries again */
@@ -6582,6 +6586,8 @@ Focus on actionable business strategy insights.`;
   const setupScreens = {
     choice: twoSurfaces ? 'two' : 'classic',
     offerChoice: TWO_SURFACE_TYPES.includes(currentGameType || 'call-and-answer'),
+    // Wavelength says why it is one screen (experience plan §7 decision 10).
+    why: oneScreenWhy(currentGameType),
     onChoose: chooseRoomScreen,
     presentHref: gameId ? presentHref(gameId) : '',
     presentDetail,
@@ -7534,7 +7540,7 @@ Focus on actionable business strategy insights.`;
   const viewStep = viewing ? workflow.steps.find((st) => st.id === viewing) : null;
   /*
     SETUP IS THE LOBBY (session-start D1, F1, F6; experience plan 2b). A Call &
-    Answer session before round 1, in both modes: Start opens Setup, and its
+    Answer, Trivia or Poll session (CONSOLE_TYPES, 2g) before round 1, in both modes: Start opens Setup, and its
     step 1 asks where the room watches whenever this browser has not chosen,
     on every tier (no dev-only default, config/surfaces.js). On two screens
     Setup stays the lobby through step 3; on one screen step 3 is the stage
@@ -7551,7 +7557,7 @@ Focus on actionable business strategy insights.`;
   */
   const eventScreensReady = Boolean(eventCode) && eventScreensOn;
   const setupOn = hostPhase === 'LOBBY' && Boolean(gameId)
-    && normalizeGameType(currentGameType) === 'call-and-answer' && typeKnownFor === gameId;
+    && CONSOLE_TYPES.includes(normalizeGameType(currentGameType)) && typeKnownFor === gameId;
   const setupStep = setupOn
     ? setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: screenCheckedFor === gameId || eventScreensReady })
     : null;
@@ -8544,7 +8550,26 @@ Focus on actionable business strategy insights.`;
       item,
     };
   });
+  /*
+    TRIVIA ON THE CONSOLE (experience plan 2g). The answer's drawn letters:
+    the host's door's `hostAnswer` for this round while the room answers
+    (never on a public read before RESULTS), and at the reveal the question's
+    own correctAnswer, which /state then carries, read as the stage reads it.
+  */
+  const consoleTrivia = normalizeGameType(currentGameType) === 'trivia';
+  const triviaRound = String(lessonNumber || 0).padStart(3, '0');
+  const triviaRevealed = consoleTrivia && /^RESULTS#/.test(basePhase(gameState));
+  const triviaLetters = (() => {
+    if (!consoleTrivia) return null;
+    if (hostAnswer && hostAnswer.round === triviaRound && Array.isArray(hostAnswer.letters) && hostAnswer.letters.length) return hostAnswer.letters;
+    return triviaRevealed ? revealedLetters(currentQuestion) : null;
+  })();
+  // ✓/✗ in the person row, after the reveal only: the round's results rows carry isCorrect.
+  const triviaMarks = triviaRevealed && Array.isArray(answers) && answers.some((a) => a && typeof a.isCorrect === 'boolean')
+    ? Object.fromEntries(answers.filter((a) => a && (a.playerName || a.player)).map((a) => [a.playerName || a.player, a.isCorrect === true]))
+    : null;
   const consolePeople = consolePeopleFor({
+    facts: personFactsFor({ gameType: normalizeGameType(currentGameType), players, marks: triviaMarks }),
     moment: consoleMoment,
     players,
     answeredNames: playersWhoAnswered,
@@ -8618,6 +8643,9 @@ Focus on actionable business strategy insights.`;
       // the last phase's, for "2:00 given".
       timer={pulseTimer}
       onAddMinute={phaseTimer ? addMinute : null}
+      // Trivia's tile 3, "Correct so far" (2g): host-only, from the answer letters.
+      correct={consoleTrivia && (consoleMoment === 'ANSWERING' || (consoleMoment === 'RESULTS' && stageResponsesReady)) ? correctSoFar(answers, triviaLetters) : null}
+      noVote={!closesIntoVote}
     />
   ) : null;
   /*
@@ -8818,7 +8846,7 @@ Focus on actionable business strategy insights.`;
       return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
     }
     // Setup pressed in the strip mid-session: the lobby's own panel (D1).
-    if (viewStep && viewStep.id === 'setup' && normalizeGameType(currentGameType) === 'call-and-answer') {
+    if (viewStep && viewStep.id === 'setup' && CONSOLE_TYPES.includes(normalizeGameType(currentGameType))) {
       return setupPanelFor(setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: true }), true);
     }
     if (viewStep) {
@@ -8837,6 +8865,32 @@ Focus on actionable business strategy insights.`;
           }}
           onAllSettings={() => setSetupPanelOpen(true)}
           screens={setupScreens}
+        />
+      );
+    }
+    /* TRIVIA AND POLL (experience plan 2g): their own content while the room
+       answers and at the results; the read, feedback and the end are every
+       type's. Trivia's answer is private here; the room's window shows the
+       options unmarked until the reveal. */
+    const formatKind = normalizeGameType(currentGameType);
+    if (formatKind === 'trivia' && (consoleMoment === 'ANSWERING' || consoleMoment === 'RESULTS')) {
+      return (
+        <TriviaPanel
+          kicker={consoleKicker(stepLabelFor(consoleMoment === 'ANSWERING' ? 'answer' : 'heard', formatKind))}
+          question={currentQuestion}
+          answers={consoleMoment === 'ANSWERING' || stageResponsesReady ? answers : []}
+          letters={triviaLetters}
+          revealed={consoleMoment === 'RESULTS'}
+        />
+      );
+    }
+    if (formatKind === 'poll' && (consoleMoment === 'ANSWERING' || consoleMoment === 'RESULTS')) {
+      return (
+        <PollPanel
+          kicker={consoleKicker(stepLabelFor(consoleMoment === 'ANSWERING' ? 'answer' : 'heard', formatKind))}
+          question={currentQuestion}
+          tally={pollTallyNow}
+          live={consoleMoment === 'ANSWERING'}
         />
       );
     }

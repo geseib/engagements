@@ -62,7 +62,9 @@ const { navigateTo } = require('../auth/navigate');
 
 const GAME = '4821';
 const CODE = '5307';
-const ITEM = { itemId: 'it_0000000a', type: 'trivia', title: 'Space night', state: 'planned', gameId: GAME, at: '9:00', until: '9:15' };
+// Wavelength, a type whose lobby is still the stage: since experience plan 2g a
+// Trivia or Poll item opens on Setup, as Call & Answer does (eventItemConsole.test.jsx).
+const ITEM = { itemId: 'it_0000000a', type: 'wavelength', title: 'Space night', state: 'planned', gameId: GAME, at: '9:00', until: '9:15' };
 const viewWith = (item) => ({ event: { code: CODE, title: 'Q4 Kickoff', state: 'LIVE', liveItemId: item.state === 'live' ? item.itemId : '' }, items: [item] });
 
 function installFetch(state) {
@@ -70,7 +72,7 @@ function installFetch(state) {
     const u = String(url);
     const body = u.endsWith(`games/${GAME}`) ? { exists: true, started: state !== 'CREATED' }
       : u.includes(`games/${GAME}/host-state`) ? {
-        state, gameMetadata: { gameType: 'trivia', title: 'Space night' }, eventRef: CODE, eventPaused: false,
+        state, gameMetadata: { gameType: 'wavelength', title: 'Space night' }, eventRef: CODE, eventPaused: false,
       }
         : {};
     return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };

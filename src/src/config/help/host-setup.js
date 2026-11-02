@@ -570,7 +570,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'When a Call & Answer set is listed, **Where the room watches** sits at the top: choose **One screen** or **Two screens** before you press a set. On two screens the room\'s window opens as the session starts.',
+          text: 'When a Call & Answer, Trivia or Poll set is listed, **Where the room watches** sits at the top: choose **One screen** or **Two screens** before you press a set. On two screens the room\'s window opens as the session starts.',
         },
         {
           t: 'p',
@@ -579,9 +579,9 @@ const gameSetup = {
       ],
     },
     /*
-      config/surfaces.js TWO_SURFACE_TYPES (call-and-answer, build), no tier
+      config/surfaces.js TWO_SURFACE_TYPES (call-and-answer, build, trivia, poll), no tier
       default (F6); Setup's step 1 (SessionSetup.jsx, GameHostPage.jsx
-      setupStepFor), C&A only (events too since 2d, once per event day:
+      setupStepFor), C&A, Trivia and Poll since 2g (events too since 2d, once per event day:
       config/eventAgenda.js eventScreensSet), until this browser has chosen or
       Change reopens it; config/roomScreen.js ROOM_WORDS (Where will the
       room watch?, Two screens, One screen, Help me pick and its three
@@ -595,7 +595,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A Call & Answer session can run on one screen or two, on its own or inside an event. Every other format runs on one screen.',
+          text: 'A Call & Answer, Trivia or Poll session can run on one screen or two, on its own or inside an event. Wavelength and surveys run on one screen; under Screens, Settings says why for Wavelength.',
         },
         {
           t: 'list',
@@ -606,7 +606,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The first time you start a Call & Answer session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use Screens in the Session menu\'s Settings tab.',
+          text: 'The first time you start a Call & Answer, Trivia or Poll session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use Screens in the Session menu\'s Settings tab.',
         },
         { t: 'p', text: 'Running on two screens, and placing the room\'s window, is in Two screens and your phone.' },
       ],
