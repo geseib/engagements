@@ -315,8 +315,8 @@ describe('3. which screen the room watches', () => {
     const open = jest.spyOn(window, 'open').mockImplementation(() => fakeWindow());
     try {
       await openRoom(hostState());
-      fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-      const panel = screen.getByRole('dialog', { name: 'Session' });
+      fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+      const panel = screen.getByRole('dialog', { name: 'Session menu' });
       fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
       const g = panel.querySelector('[data-group="screens"]');
       const seg = within(g).getByRole('group', { name: 'Where the room watches' });
@@ -358,8 +358,8 @@ describe('4. one laptop, no second display', () => {
   test('Settings, Screens: the same offer and line; New link says why you would press it', async () => {
     classic();
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    const panel = screen.getByRole('dialog', { name: 'Session' });
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    const panel = screen.getByRole('dialog', { name: 'Session menu' });
     fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
     const g = panel.querySelector('[data-group="screens"]');
     expect(within(g).getByRole('link', { name: 'Open as a tab' })).toHaveAttribute('href', `${WALL}&placed=1`);

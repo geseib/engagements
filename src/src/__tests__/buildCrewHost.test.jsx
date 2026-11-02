@@ -154,8 +154,8 @@ async function openRoom(state) {
 }
 /** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
 const openMore = () => {
-  fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
 };
 
 async function openCrew(state = hostState()) {

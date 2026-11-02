@@ -18,10 +18,13 @@
  * `kindText`, by kind and never a name, for a screen the room can see
  * (principle 3: "count only" — "A name request", "2 late answers").
  *
- * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5 and 7 — the ones whose
- * data the host page already holds. Rows 8 (room's window) and 13 (the event
- * moved on) keep their own top-line and dock signals until Phase 2 gives them
- * a slot; row 14 (Build Room) has its own queue.
+ * The events covered are PLAN §4.2 rows 1/16, 2, 3, 4, 5, 7 and 14 — the ones
+ * whose data the host page already holds. Rows 8 (room's window) and 13 (the
+ * event moved on) keep their own top-line and dock signals until Phase 2 gives
+ * them a slot. Row 14 (Build Room, experience plan 2e, §3.2a): the Build
+ * Room's "Waiting for you" feeds this list through `build` — Claude's asks
+ * and its mockups are Now (Claude is waiting on them), the room's ideas and
+ * Claude's held posts are Soon. The queue itself stays where the work is done.
  */
 
 /* The lapse and the two readings live in setupPanel.js, which the roster
@@ -43,6 +46,8 @@ export const NEEDS_ACTIONS = Object.freeze({
   RETRY: 'retry',
   REDO: 'redo',
   FINE: 'fine',
+  // Build Room (PLAN §4.2 row 14): open the ask in Waiting for you.
+  DECIDE: 'decide',
 });
 
 /** The words on each action's button (PLAN §3.6, §4.2). */
@@ -56,6 +61,7 @@ export const ACTION_WORDS = Object.freeze({
   retry: 'Retry',
   redo: 'Redo',
   fine: "It's fine",
+  decide: 'Decide',
 });
 
 export const NEEDS_WORDS = Object.freeze({
@@ -159,6 +165,9 @@ function lateText({ notReviewed = 0, answers = 0 } = {}) {
  *   connected     the host's socket (false only once it had connected)
  *   dismissed     ids the host has said "It's fine" to
  *   now           ms, for lapse and countdowns
+ *   build         the Build Room's waiting work (buildroom/buildConsole.js
+ *                 buildNeedsOf): { asks: [{ askId, title }], mockups:
+ *                 [{ askId, title }], ideas: n, posts: n }, or null
  *
  * Returns { items, nowCount, soonCount, top }: Now items first (the
  * connection, then name requests newest first, then a failed read), then
@@ -166,7 +175,7 @@ function lateText({ notReviewed = 0, answers = 0 } = {}) {
  */
 export function needsYou({
   players = [], late = null, readFailure = null, readCheck = '', readRound = null,
-  connected = true, dismissed = [], now = Date.now(),
+  connected = true, dismissed = [], now = Date.now(), build = null,
 } = {}) {
   const gone = new Set(dismissed || []);
   const nowItems = [];
@@ -231,6 +240,59 @@ export function needsYou({
   // Newest first: "Ask again" moves a request back to the top (PLAN §4.4).
   asking.sort((a, b) => (msOf(b.at) || 0) - (msOf(a.at) || 0));
   nowItems.push(...asking);
+
+  /* THE BUILD ROOM'S WAITING WORK (PLAN §4.2 row 14). Claude asked and is
+     waiting: one item per question, oldest first, because each is a decision
+     of its own. Mockups ready, the same. The room's ideas and Claude's held
+     posts are one Soon item each, however many. */
+  if (build) {
+    (build.asks || []).forEach((a) => {
+      nowItems.push({
+        id: `claude-ask:${a.askId}`,
+        kind: 'claude-ask',
+        level: NEEDS_LEVELS.NOW,
+        askId: a.askId,
+        text: a.title ? `Claude asked: ${a.title}` : 'Claude has a question for the room',
+        kindText: 'A question from Claude',
+        actions: [NEEDS_ACTIONS.DECIDE],
+      });
+    });
+    (build.mockups || []).forEach((a) => {
+      nowItems.push({
+        id: `mockups:${a.askId}`,
+        kind: 'mockups',
+        level: NEEDS_LEVELS.NOW,
+        askId: a.askId,
+        text: a.title ? `Claude's mockups are ready: ${a.title}` : "Claude's mockups are ready",
+        kindText: 'Mockups from Claude',
+        actions: [NEEDS_ACTIONS.DECIDE],
+      });
+    });
+    const ideas = Number(build.ideas) || 0;
+    if (ideas > 0) {
+      soonItems.push({
+        id: 'ideas',
+        kind: 'ideas',
+        level: NEEDS_LEVELS.SOON,
+        count: ideas,
+        text: ideas === 1 ? '1 idea from the room to review' : `${ideas} ideas from the room to review`,
+        kindText: ideas === 1 ? '1 idea from the room' : `${ideas} ideas from the room`,
+        actions: [NEEDS_ACTIONS.REVIEW],
+      });
+    }
+    const posts = Number(build.posts) || 0;
+    if (posts > 0) {
+      soonItems.push({
+        id: 'posts',
+        kind: 'posts',
+        level: NEEDS_LEVELS.SOON,
+        count: posts,
+        text: posts === 1 ? 'Claude wants to show the room 1 thing' : `Claude wants to show the room ${posts} things`,
+        kindText: posts === 1 ? '1 post from Claude to release' : `${posts} posts from Claude to release`,
+        actions: [NEEDS_ACTIONS.REVIEW],
+      });
+    }
+  }
 
   if (readFailure) {
     nowItems.push({

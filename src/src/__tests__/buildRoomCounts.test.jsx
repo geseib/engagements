@@ -224,7 +224,8 @@ test('a connected first view: one press, the orange one, puts the first opening 
 test('between asks with three ideas, one screen: no more than 39 controls (76 in the plan, 58 after phase 1, 40 after phase 2)', async () => {
   const { controls } = await open({ state: betweenAsks });
   // The right column (owner, 28 Oct 2026): History's chips in place of the folds, Decided folded (38);
-  // phase 3 adds What's next's Wrap up, its last move (39).
+  // phase 3 adds What's next's Wrap up, its last move (39). Experience plan 2e: the shared top bar's
+  // bell comes in and the header's "N joined" goes (no such top-bar slot; the Players tab counts), 39.
   expect(controls).toBeLessThanOrEqual(39);
 });
 
@@ -232,7 +233,11 @@ test('between asks with three ideas, two screens: the console takes the same cut
   // The console's top line and rail are Call & Answer's and were left as they are (phase 1 did
   // the same); its own panels take every phase 2 cut. Held where it landed, so it cannot drift.
   const { controls } = await open({ two: true, state: betweenAsks });
-  expect(controls).toBeLessThanOrEqual(45);
+  // EXPERIENCE PLAN 2e (45 to 46): the shared frame adds the bell (Needs you), the labelled
+  // Session menu button and the Needs-you line's Review (the three ideas, a Soon item). Moving
+  // the rail's Session slot into the Session menu did not pay for them: that slot was a closed
+  // fold here, so its doors were never counted; only its summary goes. Net +1, held there.
+  expect(controls).toBeLessThanOrEqual(46);
 });
 
 test("an idea's card carries three routes and its tick (eight and the tick before); its words open Consider", async () => {

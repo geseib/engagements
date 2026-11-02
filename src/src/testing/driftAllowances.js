@@ -182,11 +182,7 @@ module.exports = {
       "Feedback": 1
     },
     "buildroom/BuildRoomPage.jsx": {
-      "SESSION": 1,
       "game": 1
-    },
-    "buildroom/BuildSessionPanel.jsx": {
-      "Session panel": 1
     },
     "buildroom/BuildStageDecide.jsx": {
       "Results": 1
@@ -359,9 +355,6 @@ module.exports = {
     "config/help/ai.js": {
       "Session panel": 1
     },
-    "config/help/build-room-claude.js": {
-      "Session panel": 2
-    },
     "config/help/build-room-participant.js": {
       "Join Game": 1,
       "Main screen": 2,
@@ -369,8 +362,7 @@ module.exports = {
     },
     "config/help/build-room.js": {
       "Players": 1,
-      "SESSION": 3,
-      "Session panel": 11,
+      "SESSION": 1,
       "game": 2,
       "stage": 1,
       "the summary": 1
