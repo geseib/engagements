@@ -721,9 +721,11 @@ describe('what the host page must now render', () => {
     // 6000 -> 12000 on 2026-11-02 (experience plan 2h), when the host's frame
     // (top=, now=, needs=) moved onto the stage ahead of <Rail; the bottom
     // `dock=` went, and Your part now (`now=`) is the <Dock it held.
+    // 12000 -> 14000 on 2026-11-03, when the one-screen auto-hide props
+    // (autoHide=, chromeHold=, urgent=) and their comment landed first.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 12000));
+      windows.push(source.slice(i, i + 14000));
     }
     expect(windows.length).toBeGreaterThan(0);
 

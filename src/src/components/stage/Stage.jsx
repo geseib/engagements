@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PROFILES, profileClass } from '../../config/displayProfile';
 import useStageFit from '../../hooks/useStageFit';
+import useChromeAutoHide from '../../hooks/useChromeAutoHide';
 import PhaseBar from './PhaseBar';
 
 /**
@@ -60,13 +61,36 @@ import PhaseBar from './PhaseBar';
  * agenda wall, the survey walk-through) gets the stage exactly as it was: the
  * empty rows collapse to nothing.
  */
+/*
+ * THE CHROME STEPS ASIDE ON ONE SCREEN (owner, 3 Nov 2026; hooks/
+ * useChromeAutoHide.js). `autoHide` is the caller's "this laptop is the room's
+ * screen": after a few seconds without the mouse, the frame's rows and any
+ * `.fn-controls` fade (`data-chrome="hidden"`, styles/stage.css) and come back
+ * when the mouse moves. Never on two screens: that laptop is private and its
+ * chrome is the host's to read. `chromeHold` is a sheet or menu the page has
+ * open. THE ROWS KEEP THEIR HEIGHT: only opacity changes, so `.main`'s box and
+ * the fitter's scale are the same shown and hidden, and the room never sees
+ * the stage move (measured in Chromium, 1280x720 and 1920x1080, Room and TV:
+ * collapsing the rows would refit by up to 28% and lift the question by 67 to
+ * 178px on every show and hide; floating them over a full-height stage would
+ * cover the rail, code and all, every time the mouse moved).
+ *
+ * `urgent` is the count of Needs-you items at Now. While the chrome is hidden
+ * it draws a small cue in the corner where the bell sits: a dot and the count,
+ * never a name (the same count the public line shows), so the host knows to
+ * reach for the mouse. Decorative: the line under it keeps its own live
+ * region, which a screen reader still reads with the chrome faded.
+ */
 export default function Stage({
   profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '',
-  top = null, now = null, needs = null, children,
+  top = null, now = null, needs = null, autoHide = false, chromeHold = false, urgent = 0, children,
 }) {
   const stageRef = useRef(null);
 
   useStageFit(stageRef, [profile, phase, fitKey]);
+
+  const hasChrome = Boolean(top || now || needs);
+  const chromeHidden = useChromeAutoHide({ enabled: Boolean(autoHide) && hasChrome, hold: chromeHold, rootRef: stageRef });
 
   useEffect(() => {
     const root = document.documentElement;
@@ -112,7 +136,11 @@ export default function Stage({
   }, []);
 
   return (
-    <main className="stage" ref={stageRef}>
+    <main
+      className="stage"
+      ref={stageRef}
+      data-chrome={autoHide && hasChrome ? (chromeHidden ? 'hidden' : 'shown') : undefined}
+    >
       <div className="field" aria-hidden="true" />
       {top ? <div className="stage-top" data-theme="dark">{top}</div> : null}
       {now ? <div className="stage-now" data-theme="dark">{now}</div> : null}
@@ -131,6 +159,12 @@ export default function Stage({
       {view}
       {dock || (now ? null : <div className="dock" />)}
       {overlay}
+      {autoHide && chromeHidden && urgent > 0 ? (
+        <div className="stage-cue" data-theme="dark" aria-hidden="true" data-testid="stage-chrome-cue">
+          <span className="stage-cue-dot" />
+          <span className="stage-cue-n">{urgent}</span>
+        </div>
+      ) : null}
     </main>
   );
 }
