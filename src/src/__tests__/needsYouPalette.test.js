@@ -25,7 +25,9 @@ const block = (sel) => {
 
 test('every selector is rooted at .ny', () => {
   const selectors = css.match(/[^{}]+(?=\{)/g) || [];
+  // At-rules (@media, @keyframes) and keyframe stops are not selectors.
   selectors.flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean)
+    .filter((s) => !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s))
     .forEach((s) => expect([s, s.startsWith('.ny')]).toEqual([s, true]));
 });
 

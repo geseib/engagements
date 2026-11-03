@@ -6,6 +6,9 @@
  * //          there was no indication": consolePeopleFor reduced each person to
  * //          { name, state } and the handover flag never reached the rail.
  * // rejects: People collapsing itself on Workie's read while someone asks.
+ * // rejects: People forced open with a header that did nothing when pressed
+ * //          (ConsoleRail.jsx:81,114 before 3 Nov; console-rail fork 4): it
+ * //          opens once and the host may close it, the header holding the mark.
  */
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
@@ -34,9 +37,12 @@ test('the asker is lifted to the top under "Needs you", flagged, and not listed 
   expect(row).toHaveTextContent('Wants their name on a new device');
   const listed = Array.from(people.querySelectorAll('.hc-list li')).map((li) => li.textContent);
   expect(listed.some((t) => t.includes('Sam'))).toBe(false);
-  // The section's header says it, in the alert style.
-  expect(people.querySelector('summary .hc-count')).toHaveTextContent('1 needs you');
-  expect(people.querySelector('summary .hc-count').className).toMatch(/is-alert/);
+  // Open, the rows carry the mark; the header stays calm (one alarm, not two).
+  expect(people.querySelector('summary').getAttribute('data-level')).toBe('calm');
+  // Closed, the header wears it: the name, in the Needs-you line's paint.
+  fireEvent.click(people.querySelector('summary'));
+  expect(people.querySelector('summary .hc-count')).toHaveTextContent('Sam needs you · 3 here');
+  expect(people.querySelector('summary').getAttribute('data-level')).toBe('now');
 });
 
 test('Let them / Not now sit on the row and reach the page', () => {
@@ -47,10 +53,12 @@ test('Let them / Not now sit on the row and reach the page', () => {
   expect(onNeedsAct.mock.calls.map((c) => c[1])).toEqual(['let', 'notnow']);
 });
 
-test('People never collapses while anyone asks, even on the read, even when pressed', () => {
+test('People is open on the read while someone asks, and the host can close it', () => {
   renderRail();
   const people = document.querySelector('[data-section="people"]');
   expect(people.open).toBe(true);
+  fireEvent.click(people.querySelector('summary'));
+  expect(people.open).toBe(false);
   fireEvent.click(people.querySelector('summary'));
   expect(people.open).toBe(true);
 });

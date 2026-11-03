@@ -27,12 +27,169 @@ export function consoleRailFor(moment) {
 }
 
 /**
- * The People header: "N here" in every phase. The answered and voted count is
- * the pulse's (config/consolePulse.js; session-start D3 "the count leaves the
- * People header"), so the console says it once.
+ * The People header's count, "N here" (session-start D3: the answered and
+ * voted count is the pulse's, config/consolePulse.js, so the console says it
+ * once). railSummaries builds every header from it.
  */
 export function peopleSummary({ players = 0 } = {}) {
   return `${players} here`;
+}
+
+/*
+  THE HEADERS, OPEN AND CLOSED (docs/design/console-rail README D1, D3, D7;
+  owner, 3 Nov 2026, "Looks good", every fork at its recommendation).
+
+  A closed header says one thing worth reading that the rest of the screen
+  does not; never a fact the pulse already states in the same viewport (hard
+  rule 5). So People closed says WHO is still out ("6 here · waiting on
+  Marcus"), never "5/6 answered", which tile 1 says at 30px.
+*/
+export const RAIL_WORDS = Object.freeze({
+  rounds: (n) => (n === 1 ? '1 round' : `${n} rounds`),
+  nextRound: (title) => `next: ${title}`,
+  firstRound: (title) => `first: ${title}`,
+  ended: 'done',
+  tookPart: (n) => `${n} took part`,
+  waitingOn: (who) => `waiting on ${who}`,
+  top: (name, score) => `top: ${name}, ${score}`,
+  needsYou: (names) => (names.length === 1 ? `${names[0]} needs you`
+    : names.length === 2 ? `${names[0]}, ${names[1]} need you` : `${names.length} need you`),
+  toReview: (n) => `${n} to review`,
+  none: 'none',
+  // The long forms, for the summary's accessible name and title= (review A2).
+  stillOut: Object.freeze({ ANSWERING: 'Still writing', VOTING: 'Not voted yet', VOTE_RESPONSES: 'Not voted yet' }),
+  stillAnswering: 'Still answering',
+  wantsName: 'wants their name on a new device',
+  roundOf: (n, of) => `Round ${n} of ${of}`,
+});
+
+/** Past this many people still out, "waiting on 14" rather than names (review H2). */
+export const RAIL_NAMES_MAX = 12;
+
+const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || String(name || '');
+const andList = (names) => (names.length <= 1 ? (names[0] || '')
+  : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/**
+ * "waiting on Marcus"; "Marcus, Ana" in full for two; "Marcus, Ana +3" for
+ * three to twelve; past twelve the count, "waiting on 14". Empty or unknown
+ * says nothing rather than something wrong.
+ */
+export function waitingClause(names) {
+  if (!Array.isArray(names) || names.length === 0) return '';
+  if (names.length > RAIL_NAMES_MAX) return RAIL_WORDS.waitingOn(names.length);
+  const short = names.map(firstName);
+  if (short.length <= 2) return RAIL_WORDS.waitingOn(short.join(', '));
+  return RAIL_WORDS.waitingOn(`${short[0]}, ${short[1]} +${short.length - 2}`);
+}
+
+/** The leader by the rows' own scores; null with no score above zero. Ties: the first in roster order. */
+export function leaderOf(people = []) {
+  let best = null;
+  (people || []).forEach((p) => {
+    const s = p && p.fact ? Number(p.fact.score) : NaN;
+    if (!Number.isFinite(s) || s <= 0) return;
+    if (!best || s > best.score) best = { name: p.name, score: s };
+  });
+  return best;
+}
+
+const ROUNDING = new Set(['ANSWERING', 'VOTING', 'VOTE_RESPONSES']);
+const STILL = new Set(['writing', 'answering', 'not-yet']);
+
+/**
+ * Scores read in text colour from Results on, muted while the room answers
+ * or votes (a score cannot change mid-round) and in the lobby (README D6).
+ */
+export function scoresLive(moment) {
+  return !ROUNDING.has(moment) && moment !== 'LOBBY';
+}
+
+/**
+ * Every header's summary, `{ queue, people, late }`, each
+ *   { text, strong, who, dot, title, label, level: 'calm'|'soon'|'now' }
+ * drawn as [dot][who] · text · <b>strong</b>. `label` is the summary's
+ * accessible name without the section title; it never truncates (review A2).
+ *
+ * `open` is { queue, people, late }: a closed header adds its closing clause,
+ * an open one drops it because the list below says it (one fact, once).
+ */
+export function railSummaries({
+  moment, open = {}, players = 0, people = [], askers = [], rounds = [], total = null, late = 0,
+} = {}) {
+  const join = (...parts) => parts.filter(Boolean).join(' · ');
+
+  // ---- Round queue ----
+  const nowRound = rounds.find((r) => r.state === 'now');
+  const nextRound = rounds.find((r) => r.state === 'next') || rounds.find((r) => r.state === 'later');
+  const of = Number(total) > 0 ? Number(total) : null;
+  let queue = { text: '', level: 'calm' };
+  if (moment === 'ENDED') {
+    const last = rounds.length ? Math.max(...rounds.map((r) => Number(r.n) || 0)) : 0;
+    if (last > 0) {
+      const base = `${last} of ${of || last}`;
+      queue = { text: open.queue ? base : join(base, RAIL_WORDS.ended), level: 'calm' };
+    }
+  } else if (nowRound) {
+    // The session's total is the strip's ("Round 1 of 80"), never the length
+    // of the list (walk, 15 Oct). No total known: the round alone.
+    const base = of ? `${nowRound.n} of ${of}` : String(nowRound.n);
+    const tail = !open.queue && nextRound && nextRound.title ? RAIL_WORDS.nextRound(nextRound.title) : '';
+    queue = {
+      text: join(base, tail),
+      title: tail ? join(of ? RAIL_WORDS.roundOf(nowRound.n, of) : String(nowRound.n), tail) : undefined,
+      level: 'calm',
+    };
+  } else {
+    const count = of || rounds.length;
+    const first = rounds[0];
+    const base = count ? RAIL_WORDS.rounds(count) : '';
+    const tail = !open.queue && first && first.title ? RAIL_WORDS.firstRound(first.title) : '';
+    queue = { text: join(base, tail), title: tail ? join(base, tail) : undefined, level: 'calm' };
+  }
+  queue.label = queue.title || queue.text;
+
+  // ---- People ----
+  const here = moment === 'ENDED' ? RAIL_WORDS.tookPart(players) : peopleSummary({ players });
+  let peopleH;
+  const askNames = (askers || []).map((a) => a && a.name).filter(Boolean);
+  if (askNames.length && !open.people) {
+    // The mark on the thing (README D3): the Needs-you line's own paint.
+    const who = RAIL_WORDS.needsYou(askNames.map(firstName));
+    const long = askNames.map((n) => `${n} ${RAIL_WORDS.wantsName}`).join('. ');
+    peopleH = { who, text: here, dot: true, level: 'now', title: long, label: join(who, here, long) };
+  } else if (ROUNDING.has(moment)) {
+    // The rows' own list, so the clause can never disagree with them; when
+    // the names lag the count (state 'unknown') it says nothing.
+    const lagging = people.some((p) => p.state === 'unknown');
+    const out = lagging ? [] : people.filter((p) => STILL.has(p.state)).map((p) => p.name);
+    const clause = !open.people ? waitingClause(out) : '';
+    const word = people.some((p) => p.state === 'answering') ? RAIL_WORDS.stillAnswering : RAIL_WORDS.stillOut[moment];
+    peopleH = {
+      text: here,
+      strong: clause,
+      level: 'calm',
+      title: clause ? `${word}: ${out.join(', ')}` : undefined,
+      label: clause ? join(here, RAIL_WORDS.waitingOn(andList(out))) : here,
+    };
+  } else {
+    // Results and after, in a scored format: the leader, light (fork F7).
+    const leader = !open.people ? leaderOf(people) : null;
+    peopleH = {
+      text: here,
+      strong: leader ? RAIL_WORDS.top(firstName(leader.name), leader.score) : '',
+      level: 'calm',
+      label: join(here, leader ? RAIL_WORDS.top(leader.name, leader.score) : ''),
+    };
+  }
+
+  // ---- Late & not reviewed: a Soon item, a dot, never amber (PLAN §4.1) ----
+  const waiting = Number(late) || 0;
+  const lateH = waiting > 0
+    ? { strong: RAIL_WORDS.toReview(waiting), dot: true, level: 'soon', label: RAIL_WORDS.toReview(waiting) }
+    : { text: RAIL_WORDS.none, level: 'calm', label: RAIL_WORDS.none };
+
+  return { queue, people: peopleH, late: lateH };
 }
 
 /**
@@ -40,8 +197,8 @@ export function peopleSummary({ players = 0 } = {}) {
  *
  * Through `waitingRoster`'s freshness guard (config/anonymity.js): on a hidden
  * round the `playerAnswered` frame carries no name, so the names on hand can
- * lag the count. When they do not cover every response counted, there are no
- * per-person rows at all (the header's count still stands), never a "still
+ * lag the count. When they do not cover every response counted, every row
+ * keeps its name with the status unknown ('unknown', "—"), never a "still
  * writing" beside someone who has answered. The laptop is private, so the
  * wall's "name the waiters" setting does not apply here.
  *
@@ -107,7 +264,10 @@ function peopleRows({
     authorsRevealed,
     nameWaitingWhenAnonymous: true,
   });
-  if (!waiting) return [];
+  // The names lag the count (a hidden round): keep the names and blank only
+  // the status ('unknown', drawn "—"), rather than an empty People section,
+  // which reads as "everyone left" (console-rail README D7).
+  if (!waiting) return names.map((name) => ({ name, state: 'unknown' }));
   const still = new Set(waiting);
   return names.map((name) => ({
     name,

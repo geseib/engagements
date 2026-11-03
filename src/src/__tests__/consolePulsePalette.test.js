@@ -18,7 +18,9 @@ const rule = (sel) => {
 test('every selector is rooted at .cpulse, and styles.css declares nothing there', () => {
   const selectors = css.match(/[^{}]+(?=\{)/g) || [];
   expect(selectors.length).toBeGreaterThan(8);
+  // At-rules (@media, @keyframes) and keyframe stops are not selectors.
   selectors.flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean)
+    .filter((s) => !s.startsWith('@') && !/^(from|to|\d+%)$/.test(s))
     .forEach((s) => expect([s, s.startsWith('.cpulse')]).toEqual([s, true]));
   expect(read('styles.css')).not.toMatch(/\.cpulse\b/);
 });

@@ -31,6 +31,11 @@ const CW = Object.freeze({
   // Trivia and a choice poll: they pick an option (dev QA 2 Nov).
   stillAnswering: 'still answering',
   notYet: 'not yet',
+  // A hidden round whose names lag the count: the row keeps its name, "—" (console-rail D7).
+  notKnownYet: 'not known yet',
+  // The People column's heads (console-rail frames 1, 3, 6).
+  colName: 'Name',
+  colScore: 'Score',
   respondingTitle: 'Responses as they land',
   namesHidden: 'Names hidden',
   forYou: 'For you',

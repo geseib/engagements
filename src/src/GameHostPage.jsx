@@ -9501,6 +9501,9 @@ Focus on actionable business strategy insights.`;
             onNeedsAct,
             needsBusy,
             needsError,
+            // The row's ⋯, the same two the Session menu's People offers (PersonRow).
+            onPersonMove: (name) => grantNameHandover(name, false),
+            onPersonRemove: (name) => setPlayerRemoved(name, true),
           }}
           footer={setupFrame ? {
             // SETUP'S "YOUR PART NOW" moves with the step (QA, 1 Nov: after

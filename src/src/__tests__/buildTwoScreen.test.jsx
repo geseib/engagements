@@ -178,7 +178,7 @@ describe('1. the console on two screens, never on one', () => {
 describe('2. each moment: the card, the strip, the rail, the folds', () => {
   test('the rail has three slots, in order (answer (d)); Session moved into the Session menu (experience plan 2e)', async () => {
     await openRoom(MOMENTS['a · between asks']());
-    const titles = [...rail().querySelectorAll(':scope > details > summary')].map((s) => s.firstChild.textContent);
+    const titles = [...rail().querySelectorAll(':scope > details > summary')].map((s) => s.querySelector('.hc-sec-title').textContent);
     expect(titles).toEqual(['Waiting for you', 'People', 'Later']);
   });
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import NeedsActions from './NeedsActions';
 import { ACTION_WORDS, NEEDS_LEVELS, NEEDS_WORDS } from '../../config/needsYou';
+import useArrival from '../../hooks/useArrival';
 import './NeedsYou.css';
 
 /**
@@ -28,8 +29,13 @@ export default function NeedsYouLine({ needs, onAct, busy = false, error = '' })
   const [armed, setArmed] = useState(false);
   const topId = top ? top.id : '';
   useEffect(() => { setArmed(false); }, [topId]);
+  /* THE ONE MOTION (console-rail README D4; owner fork 3): a NEW Now item
+     fades the amber in once, 240ms, in the same commit as the People
+     header's mark (both read the same items through useArrival). Never on
+     a reload, never repeated, no fade-out; reduced motion skips it. */
+  const arrived = useArrival(needs && needs.items ? needs.items.filter((i) => i.level === NEEDS_LEVELS.NOW).map((i) => i.id) : []);
   return (
-    <section className={`ny ny-line ${level}`} aria-label={NEEDS_WORDS.title} data-testid="needs-line" data-level={top ? top.level : 'calm'}>
+    <section className={`ny ny-line ${level}`} aria-label={NEEDS_WORDS.title} data-testid="needs-line" data-level={top ? top.level : 'calm'} data-arrived={arrived && level === 'is-now' ? '' : undefined}>
       <div className="ny-line-text" aria-live="polite" data-testid="needs-line-text">
         {top && armed ? (
           <span className="ny-line-main" data-testid="needs-armed-note"><b>{ACTION_WORDS.armedNote(top.name)}</b></span>

@@ -84,11 +84,25 @@
   height: 100%;
   background: var(--info);
 }
+/* EVERYONE'S IN (docs/design/console-rail README D5; owner fork 2): the
+   theme's success green, never orange (orange is "needs you"). The edge and
+   a 10% success wash settle in once over 600ms, blue bar to green: a
+   --surface veil fades off the wash under the words, one iteration. The
+   class arriving is the trigger, so it never repeats while it holds.
+   --muted on the wash measures 5.14:1, the lowest new pairing. */
 .cpulse .cpulse-room.is-in {
   border-color: var(--success);
+  background: linear-gradient(rgb(var(--success-rgb) / .10), rgb(var(--success-rgb) / .10)), var(--surface);
+  animation: cpulse-settle 600ms ease-out 1 both;
 }
 .cpulse .cpulse-room.is-in .cpulse-bar i {
   background: var(--success);
+  animation: cpulse-settle-bar 600ms ease-out 1 both;
+}
+@keyframes cpulse-settle { from { border-color: rgb(var(--glow-rgb) / .12); box-shadow: inset 0 0 0 100vmax var(--surface); } }
+@keyframes cpulse-settle-bar { from { background-color: var(--info); } }
+@media (prefers-reduced-motion: reduce) {
+  .cpulse .cpulse-room.is-in, .cpulse .cpulse-room.is-in .cpulse-bar i { animation: none; }
 }
 .cpulse .cpulse-room.is-in .cpulse-sub {
   color: var(--success-text);

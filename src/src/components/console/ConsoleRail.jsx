@@ -1,31 +1,57 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button';
 import CW from '../../config/consoleWords';
-import { consoleRailFor, peopleSummary } from '../../config/consoleRail';
+import { consoleRailFor, railSummaries, scoresLive } from '../../config/consoleRail';
 import LW from '../../config/lateWords';
 import { canShowOnWall } from '../../utils/lateClient';
 import NeedsActions from '../needs/NeedsActions';
 import { NEEDS_ACTIONS, NEEDS_WORDS } from '../../config/needsYou';
 import YoursMark from '../YoursMark';
 import Icon from '../Icon';
+import PersonRow, { PERSON_WORDS } from '../people/PersonRow';
+import useArrival from '../../hooks/useArrival';
 import { ownQuestionWords as OQ } from '../../config/consoleWords';
+import '../needs/NeedsYou.css';
 
 /** The rail shows the first few; "Review them" opens the whole list. */
 const LATE_SHOWN = 3;
 
-const MARK = { answered: '✓', voted: '✓', here: '✓', writing: '…', answering: '…', 'not-yet': '…' };
-const META = { answered: CW.answered, voted: CW.voted, writing: CW.stillWriting, answering: CW.stillAnswering, 'not-yet': CW.notYet, here: '' };
+/* The doing-now glyph for each row state (PersonRow density="rail"), and its
+   word: the glyph's accessible name and title (console-rail README D7). */
+const MARK = { answered: 'done', voted: 'done', writing: 'wait', answering: 'wait', 'not-yet': 'wait', unknown: 'unknown' };
+const WORD = {
+  answered: CW.answered, voted: CW.voted, writing: CW.stillWriting, answering: CW.stillAnswering,
+  'not-yet': CW.notYet, unknown: CW.notKnownYet,
+};
 
 /*
   A <details> whose `open` React owns. The summary's click is taken (no native
-  toggle) so the host's choice lives in one place: ConsoleRail's state. The
-  summary stays the native control, so it is focusable and Enter/Space press it.
+  toggle) so the host's choice lives in one place: the rail's state. The
+  summary stays the native control, so it is focusable and Enter/Space press
+  it, and it ALWAYS toggles: no header is a button that does nothing.
+
+  The caret (README D2) is decorative; <details> exposes expanded/collapsed.
+  `level` paints the header: 'now' wears the Needs-you line's own edge and
+  wash, 'soon' a dot, 'calm' nothing. `label` is the summary's accessible
+  name past its title, whole even where the visible text truncates (review
+  A2); `tip` its title=. `arrived` is the one fade (README D4).
 */
-export function Section({ id, title, summary, alert = false, open, onToggle, children, link, onLink }) {
+export function Section({
+  id, title, summary, alert = false, open, onToggle, children, link, onLink,
+  level = 'calm', label = '', tip = undefined, arrived = false,
+}) {
   return (
     <details className="hc-sec" data-section={id} open={open}>
-      <summary onClick={(e) => { e.preventDefault(); onToggle(id); }}>
-        {title}<span className={`hc-count${alert ? ' is-alert' : ''}`}>{summary}</span>
+      <summary
+        onClick={(e) => { e.preventDefault(); onToggle(id); }}
+        data-level={level}
+        data-arrived={arrived ? '' : undefined}
+        aria-label={label ? `${title}, ${label}` : undefined}
+        title={tip}
+      >
+        <span className="hc-caret" aria-hidden="true"><Icon name="CaretRight" weight="bold" size={12} color="currentColor" /></span>
+        <span className="hc-sec-title">{title}</span>
+        <span className={`hc-count${alert ? ' is-alert' : ''}`}>{summary}</span>
       </summary>
       {children}
       {link ? <Button variant="tertiary" className="hc-sec-link" onClick={onLink}>{link}</Button> : null}
@@ -33,19 +59,53 @@ export function Section({ id, title, summary, alert = false, open, onToggle, chi
   );
 }
 
+/** One header summary from railSummaries: [dot][who] · text · <b>strong</b>. */
+function HeadSummary({ head }) {
+  if (!head) return null;
+  const { dot, who, text, strong } = head;
+  return (
+    <>
+      {dot ? <i className="hc-dot" aria-hidden="true" /> : null}
+      {who ? <span className="hc-who">{who}</span> : null}
+      {who && text ? ' · ' : null}
+      {text}
+      {strong ? <>{text || who ? ' · ' : null}<b>{strong}</b></> : null}
+    </>
+  );
+}
+
+/** The format's one added fact (§3.2b, 2g): Trivia's ✓/✗ then the score; C&A the score. */
+function Fact({ fact, unscored }) {
+  if (!fact) return '';
+  return (
+    <span data-testid="person-fact">
+      {fact.mark ? (
+        <span className={fact.mark === 'right' ? 'prow-right' : 'prow-wrong'} role="img" aria-label={fact.mark === 'right' ? CW.gotItRight : CW.gotItWrong}>
+          {fact.mark === 'right' ? '✓' : '✗'}
+        </span>
+      ) : null}
+      {/* "–" before the first scored round: a column of zeros reads as everyone failed (review H5). */}
+      <span className="hc-score">{unscored ? '–' : fact.score}</span>
+    </span>
+  );
+}
+
 /**
- * THE CONSOLE'S RAIL (spec §3.3): round queue, people, late & not reviewed.
- * The section that matters for the moment opens by itself; the
- * host's own open/close choice holds until the moment changes.
+ * THE CONSOLE'S RAIL (spec §3.3; docs/design/console-rail): round queue,
+ * people, late & not reviewed. The section that matters for the moment opens
+ * by itself; the host's own open/close choice holds until the moment changes.
+ * Every header says one useful thing, more when it is closed.
  */
 export default function ConsoleRail({
   moment, rounds = [], total = null, people = [], counts = {}, late = [], lateCount = null, lateWall = null,
   onLateShow = () => {}, onLateMark = () => {}, onOpenSection = () => {},
   scoreboard = null,
-  /* NEEDS YOU, ON THE PERSON (experience plan §3.2b, §4.4): the name items
-     from config/needsYou.js. An asker's row is lifted to the top under
-     "Needs you", amber, with Let them / Not now in the row itself; an open
-     name shows Lock again. People never collapses while anyone asks. */
+  /* NEEDS YOU, ON THE PERSON (experience plan §3.2b, §4.4; console-rail D3):
+     the name items from config/needsYou.js. An asker's row is lifted to the
+     top under "Needs you", amber, with Let them / Not now in the row itself;
+     an open name shows Lock again. People opens ONCE when a request arrives
+     and the host may close it again: the closed header then carries the mark
+     ("● Sam needs you · 6 here") in the Needs-you line's paint. */
   asking = [],
   onNeedsAct = null,
   needsBusy = false,
@@ -55,6 +115,11 @@ export default function ConsoleRail({
      Rounds. Null draws nothing. A round the host wrote carries `own: true`
      and is marked Yours. */
   onWriteQuestion = null,
+  /* THE ROW'S ⋯ (PersonRow; the Session menu's People has the same two):
+     Move to a new device, and Remove from session (pressed twice). Null
+     leaves the item out. */
+  onPersonMove = null,
+  onPersonRemove = null,
 }) {
   // A refusal from the late buttons, said in the section (as LateList does).
   const [lateError, setLateError] = useState('');
@@ -71,24 +136,50 @@ export default function ConsoleRail({
       setLateBusy(false);
     }
   };
-  const [open, setOpen] = useState(() => consoleRailFor(moment));
-  useEffect(() => { setOpen(consoleRailFor(moment)); }, [moment]);
-  const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
   const askers = (asking || []).filter((a) => a.kind === 'name-request');
   const opened = (asking || []).filter((a) => a.kind === 'name-open');
   const flagged = new Set((asking || []).map((a) => a.name));
-  // While anyone asks, People stays open whatever the moment or the host's last click.
-  const peopleOpen = askers.length > 0 || open === 'people';
+  const [open, setOpen] = useState(() => (askers.length ? 'people' : consoleRailFor(moment)));
+  // A moment change opens its own section, unless someone is still asking:
+  // then People (the read must not fold a request away; owner, 1 Nov).
+  const asked = askers.length > 0;
+  useEffect(() => { setOpen(asked ? 'people' : consoleRailFor(moment)); }, [moment]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
+  // A new request opens People once, and fades the mark in (the line's same commit).
+  const arrived = useArrival(askers.map((a) => a.id), () => setOpen('people'));
+  const peopleOpen = open === 'people';
   const peopleRows = people.filter((p) => !flagged.has(p.name));
-  const nowRound = rounds.find((r) => r.state === 'now');
   const waiting = Number.isFinite(Number(lateCount)) && lateCount !== null ? Number(lateCount) : late.length;
-  // The session's total is the strip's ("Round 1 of 80"), never the length of
-  // the list: the page knows only a few rounds' titles (walk, 15 Oct: the
-  // queue said "1 of 7" beside "Round 1 of 80"). No total known: the round.
-  const queueSummary = !nowRound ? '' : (Number(total) > 0 ? `${nowRound.n} of ${Number(total)}` : String(nowRound.n));
+  const heads = railSummaries({
+    moment,
+    open: { queue: open === 'queue', people: peopleOpen, late: open === 'late' },
+    players: counts && counts.players ? Number(counts.players) : 0,
+    people,
+    askers,
+    rounds,
+    total,
+    late: waiting,
+  });
+  const live = scoresLive(moment);
+  const unscored = Boolean(scoreboard && scoreboard.show && !scoreboard.enabled);
+  const menuFor = (name) => [
+    onPersonMove && { id: 'move', label: PERSON_WORDS.move, onSelect: () => onPersonMove(name) },
+    onPersonRemove && { id: 'remove', label: PERSON_WORDS.remove, danger: true, onSelect: () => onPersonRemove(name) },
+  ].filter(Boolean);
   return (
     <aside className="hc-rail" aria-label="Session">
-      <Section id="queue" title={CW.queue} summary={queueSummary} open={open === 'queue'} onToggle={toggle} link={CW.allRounds} onLink={() => onOpenSection('history')}>
+      <Section
+        id="queue"
+        title={CW.queue}
+        summary={<HeadSummary head={heads.queue} />}
+        level={heads.queue.level}
+        label={heads.queue.label}
+        tip={heads.queue.title}
+        open={open === 'queue'}
+        onToggle={toggle}
+        link={CW.allRounds}
+        onLink={() => onOpenSection('history')}
+      >
         <ul className="hc-list">
           {rounds.map((r) => (
             <li key={r.n} className={r.state === 'now' ? 'is-now' : ''}>
@@ -108,15 +199,18 @@ export default function ConsoleRail({
       <Section
         id="people"
         title={CW.people}
-        summary={askers.length ? `${askers.length} ${CW.needsYou}` : peopleSummary({ moment, ...counts })}
-        alert={askers.length > 0}
+        summary={<HeadSummary head={heads.people} />}
+        level={heads.people.level}
+        label={heads.people.label}
+        tip={heads.people.title}
+        arrived={arrived}
         open={peopleOpen}
-        onToggle={askers.length ? () => {} : toggle}
+        onToggle={toggle}
         link={CW.allPeople(counts && counts.players)}
         onLink={() => onOpenSection('players')}
       >
         {askers.length || opened.length ? (
-          <div className="ny ny-asking" data-testid="people-needs">
+          <div className="ny ny-asking" data-testid="people-needs" data-arrived={arrived ? '' : undefined}>
             <p className="ny-k">{NEEDS_WORDS.title}</p>
             {askers.map((a) => (
               <div key={a.id} className="ny-asker" data-testid="people-asker">
@@ -140,23 +234,33 @@ export default function ConsoleRail({
             {needsError ? <p className="ny-empty ny-error" role="alert">{needsError}</p> : null}
           </div>
         ) : null}
-        <ul className="hc-list">
+        {/* THE SHARED PERSON ROW (PLAN §3.2b), at the rail's compact density:
+            the status a glyph, the score muted mid-round and bright from
+            Results (README D6, D7). Rows never re-sort during a round. */}
+        {peopleRows.length ? (
+          // The columns' heads (frames 1, 3, 6): decorative, the row's own labels speak.
+          <div className="hc-colhd" aria-hidden="true">
+            <span />
+            <span>{CW.colName}</span>
+            <span>{peopleRows.some((p) => MARK[p.state]) ? '✓' : ''}</span>
+            <span>{peopleRows.some((p) => p.fact) ? CW.colScore : ''}</span>
+            <span />
+          </div>
+        ) : null}
+        <ul className="hc-list hc-people" aria-label={CW.people}>
           {peopleRows.map((p) => (
-            <li key={p.name}>
-              <span className={MARK[p.state] === '✓' ? 'hc-tick' : 'hc-wait'}>{MARK[p.state]}</span>
-              <span>{p.name}{(META[p.state] || p.from) ? <span className="hc-meta">{` · ${META[p.state] || p.from}`}</span> : null}</span>
-              {/* The format's one added fact, at the row's end (§3.2b, 2g): Trivia's score, ✓/✗ in front after the reveal. */}
-              {p.fact ? (
-                <span className="hc-fact" data-testid="person-fact">
-                  {p.fact.mark ? (
-                    <span className={p.fact.mark === 'right' ? 'hc-tick' : 'hc-miss'} aria-label={p.fact.mark === 'right' ? CW.gotItRight : CW.gotItWrong}>
-                      {p.fact.mark === 'right' ? '✓' : '✗'}
-                    </span>
-                  ) : null}
-                  <span className="hc-score">{p.fact.score}</span>
-                </span>
-              ) : null}
-            </li>
+            <PersonRow
+              key={p.name}
+              density="rail"
+              name={p.name}
+              status="here"
+              mark={MARK[p.state] || null}
+              doing={WORD[p.state] || ''}
+              note={!MARK[p.state] && p.from ? p.from : ''}
+              fact={<Fact fact={p.fact} unscored={unscored} />}
+              factLive={live && !unscored}
+              menu={menuFor(p.name)}
+            />
           ))}
         </ul>
         {/* THE SCOREBOARD, ON THE WALL OR OFF IT (owner, 16 Oct 2026): the
@@ -179,8 +283,19 @@ export default function ConsoleRail({
       </Section>
       {/* LATE & NOT REVIEWED (late items Task 4): the whole count, the first
           few with their two quiet buttons; "Review them" opens the full list
-          in the Session panel's Rounds tab. */}
-      <Section id="late" title={CW.late} summary={String(waiting)} alert={waiting > 0} open={open === 'late'} onToggle={toggle} link={waiting ? CW.reviewLate : null} onLink={() => onOpenSection('history')}>
+          in the Session panel's Rounds tab. A Soon item: a dot and "2 to
+          review", never amber (PLAN §4.1; console-rail fork 7). */}
+      <Section
+        id="late"
+        title={CW.late}
+        summary={<HeadSummary head={heads.late} />}
+        level={heads.late.level}
+        label={heads.late.label}
+        open={open === 'late'}
+        onToggle={toggle}
+        link={waiting ? CW.reviewLate : null}
+        onLink={() => onOpenSection('history')}
+      >
         {late.length ? (
           <ul className="hc-list">
             {late.slice(0, LATE_SHOWN).map((l) => (

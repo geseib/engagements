@@ -45,11 +45,16 @@ describe('consolePeopleFor: never "still writing" beside someone who has answere
   const players = [{ name: 'Ada' }, { name: 'Omar' }, { name: 'Lin' }, { name: 'Bo' }];
   const anon = { gameType: 'call-and-answer', anonymousUntilReveal: true, authorsRevealed: false };
 
-  test('a hidden round: 3 answers counted, no names on hand -> no per-person rows', () => {
-    expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: [], answeredCount: 3, ...anon })).toEqual([]);
+  // console-rail README D7: the names stay, only the status blanks ("—"); an
+  // empty People section mid-round read as "everyone left".
+  // rejects: the rows vanishing on a hidden round (consoleRail.js:110 before 3 Nov).
+  test('a hidden round: 3 answers counted, no names on hand -> every name, status unknown', () => {
+    expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: [], answeredCount: 3, ...anon }).map((p) => p.state)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
   });
-  test('names that lag the count -> no rows (2 named, 3 counted)', () => {
-    expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: ['Ada', 'Omar'], answeredCount: 3, ...anon })).toEqual([]);
+  test('names that lag the count -> every name, status unknown, never a wrong tick (2 named, 3 counted)', () => {
+    expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: ['Ada', 'Omar'], answeredCount: 3, ...anon })).toEqual(
+      players.map((p) => ({ name: p.name, state: 'unknown' })),
+    );
   });
   test('names that cover the count -> ticks and still writing', () => {
     expect(consolePeopleFor({ moment: 'ANSWERING', players, answeredNames: ['Ada', 'Omar'], answeredCount: 2, ...anon })).toEqual([
@@ -60,7 +65,7 @@ describe('consolePeopleFor: never "still writing" beside someone who has answere
   test('voting reads the voters the same way', () => {
     expect(consolePeopleFor({ moment: 'VOTING', players, votedNames: ['Lin'], votedCount: 1, ...anon }).map((p) => p.state))
       .toEqual(['not-yet', 'not-yet', 'voted', 'not-yet']);
-    expect(consolePeopleFor({ moment: 'VOTE_RESPONSES', players, votedNames: [], votedCount: 2, ...anon })).toEqual([]);
+    expect(consolePeopleFor({ moment: 'VOTE_RESPONSES', players, votedNames: [], votedCount: 2, ...anon }).map((p) => p.state)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
   });
   test('other moments: everyone is here', () => {
     expect(consolePeopleFor({ moment: 'READ', players }).map((p) => p.state)).toEqual(['here', 'here', 'here', 'here']);

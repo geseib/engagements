@@ -107,18 +107,40 @@ function PersonMenu({ name, menu }) {
   );
 }
 
+/*
+  THE RAIL'S COMPACT DENSITY (docs/design/console-rail README D7; owner, 3 Nov
+  2026, fork 6). In the 340px People column the 92px word slot left a name
+  about 90px ("Priya Ra…"), so `density="rail"` draws the doing-now slot as a
+  20px glyph: ✓ done, … still out, — not known yet (the names lag the count).
+  Shape tells them apart, not colour; the word is the glyph's accessible name
+  (role="img", aria-label) and its title. The full-width row (the Session
+  menu, the phone remote) keeps the words.
+
+  `factLive` (README D6): the score reads in text colour at Results and muted
+  while the room answers or votes. `note` (rail only): a latecomer's "from
+  item N", which has no slot at 20px, joins the name's one text node.
+*/
+export const DOING_GLYPH = Object.freeze({ done: '✓', wait: '…', unknown: '—' });
+
 export default function PersonRow({
   name, status = 'here', doing = '', fact = '', menu = [], state = undefined,
   needsItem = null, onNeedsAct = null, needsBusy = false,
+  density = 'full', mark = null, factLive = false, note = '',
 }) {
   const asking = Boolean(needsItem && needsItem.kind === 'name-request');
-  const cls = ['prow', asking ? 'is-asking' : ''].filter(Boolean).join(' ');
+  const rail = density === 'rail';
+  const cls = ['prow', rail ? 'prow--rail' : '', asking ? 'is-asking' : ''].filter(Boolean).join(' ');
+  const shown = rail && note ? `${name} · ${note}` : name;
   return (
     <li className={cls} data-status={status} data-state={state} data-testid={asking ? 'person-asking' : undefined}>
       <span className={`prow-dot is-${status}`} role="img" aria-label={PERSON_WORDS[status] || status} />
-      <span className="prow-name" title={name}>{name}</span>
-      <span className="prow-doing">{doing}</span>
-      <span className="prow-fact">{fact}</span>
+      <span className="prow-name" title={shown}>{shown}</span>
+      {rail ? (
+        mark && DOING_GLYPH[mark] ? (
+          <span className={`prow-doing is-${mark}`} role="img" aria-label={doing} title={doing} data-testid="person-doing">{DOING_GLYPH[mark]}</span>
+        ) : <span className="prow-doing" />
+      ) : <span className="prow-doing">{doing}</span>}
+      <span className={`prow-fact${factLive ? ' is-live' : ''}`}>{fact}</span>
       {menu.length ? <PersonMenu name={name} menu={menu} /> : <span className="prow-more" />}
       {asking ? (
         <span className="prow-needs">

@@ -745,7 +745,7 @@ const playerManagement = {
       blocks: [
         {
           t: 'p',
-          text: 'Everyone in the room, in score order, with their place and points, and who left: the Session menu\'s **People** section, in every version of the menu. On the two-screen console the People column stays the at-a-glance view, and its **All N, and who left** opens this section. During a round each row says whether that person has answered yet.',
+          text: 'Everyone in the room, in score order, with their place and points, and who left: the Session menu\'s **People** section, in every version of the menu. On the two-screen console the People column stays the at-a-glance view, and its **All N, and who left** opens this section. During a round each row says whether that person has answered yet; the People column says it with a ✓ or … and the same ⋯ on each row.',
         },
         {
           t: 'p',
@@ -829,7 +829,7 @@ const playerManagement = {
         {
           t: 'list',
           items: [
-            'On two screens it is the Needs-you line under your main button: calm when nothing waits, amber with the buttons when someone is waiting.',
+            'On two screens it is the Needs-you line under your main button: calm when nothing waits, amber with the buttons when someone is waiting. The amber fades in once when the item arrives and never flashes. A name request also opens the rail\'s People once; close it and its header carries the same amber with the name.',
             'In a live session the bell counts only what this session needs now, and lists it first. Your account\'s notifications are folded below it.',
             'The phone Remote shows the same list, named, with the same buttons. Whichever you press first wins.',
           ],

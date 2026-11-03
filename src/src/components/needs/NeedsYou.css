@@ -50,6 +50,21 @@
   background: linear-gradient(rgb(var(--warn-rgb) / .08), rgb(var(--warn-rgb) / .08)), var(--surface);
   color: var(--text);
 }
+/* THE ONE MOTION (docs/design/console-rail README D4; owner fork 3): a new
+   Now item fades the amber in ONCE, 240ms ease-out, in the same commit as
+   the People header's mark and the rail's lifted asker (useArrival). Paint
+   only: the edge from transparent, and a --surface veil fading off the
+   wash (an inset shadow sits under the words, so they are there at once).
+   One iteration; never alternate, never infinite (WCAG 2.3.1). Cleared, it
+   goes calm at once: the calm rule carries no animation. */
+.ny.ny-line.is-now[data-arrived] { animation: ny-arrive 240ms ease-out 1 both; }
+.ny.ny-asking[data-arrived] .ny-asker { animation: ny-arrive 240ms ease-out 1 both; }
+.ny.ny-asking[data-arrived] .ny-dot { animation: ny-arrive-dot 240ms ease-out 1 both; }
+@keyframes ny-arrive { from { border-left-color: transparent; box-shadow: inset 0 0 0 100vmax var(--surface); } }
+@keyframes ny-arrive-dot { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ny.ny-line.is-now[data-arrived], .ny.ny-asking[data-arrived] .ny-asker, .ny.ny-asking[data-arrived] .ny-dot { animation: none; }
+}
 .ny.ny-line.is-soon { color: var(--text); }
 /* THE PUBLIC LINE (PublicNeedsLine.jsx, PLAN §3.3, 2h): the room can read it.
    Calm is the muted line; waiting is an amber EDGE and no wash (a wash reads

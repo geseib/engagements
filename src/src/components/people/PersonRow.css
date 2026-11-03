@@ -54,6 +54,28 @@
 .prow .prow-doing { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--prow-t-label); }
 .prow .prow-fact { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--prow-t-label); text-align: right; }
 
+.prow .prow-fact.is-live { color: var(--text); font-weight: 700; }
+
+/* THE RAIL'S COMPACT DENSITY (docs/design/console-rail README D7, §5): the
+   doing-now slot is a 20px glyph and the fact 48px, so in the 340px People
+   column a name gets about 170px instead of 90. ⋯ stays 28px (review A7:
+   2.5.8 needs 24px; do not go lower). Measured on the rail's --bg #0F1A2E
+   (consoleRailPalette.test.js): --success-text 9.30:1, --muted 7.24:1. */
+.prow.prow--rail {
+  /* Restated at two classes, so a host list's `li` rule cannot unmake the grid. */
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 20px 48px 28px;
+  column-gap: 10px;
+  align-items: center;
+}
+.prow.prow--rail .prow-doing { text-align: center; font-size: var(--prow-t-body); line-height: 1; }
+.prow.prow--rail .prow-doing.is-done { color: var(--success-text); font-weight: 700; }
+.prow.prow--rail .prow-doing.is-wait,
+.prow.prow--rail .prow-doing.is-unknown { color: var(--muted); }
+.prow.prow--rail .prow-fact { font-variant-numeric: tabular-nums; }
+.prow .prow-fact .prow-right { color: var(--success-text); font-weight: 800; margin-right: 4px; }
+.prow .prow-fact .prow-wrong { color: var(--danger-text); font-weight: 800; margin-right: 4px; }
+
 /* ⋯ and its menu. */
 .prow .prow-more { position: relative; display: inline-flex; justify-content: flex-end; }
 /* The primitive Button (secondary) keeps its outline and ink; only its shape is set here. */

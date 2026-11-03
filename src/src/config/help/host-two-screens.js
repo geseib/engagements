@@ -75,7 +75,15 @@
                        Main menu runs requestLeave (asks first with people in
                        the room), then handleSwitchGame.
     console-rail       components/console/ConsoleRail.jsx; config/consoleRail.js
-                       (which section opens per moment; People says "N here").
+                       (which section opens per moment; railSummaries: each
+                       header open and closed, "waiting on", "top:", the
+                       Needs-you mark; waitingClause past 12 = the count);
+                       components/people/PersonRow.jsx density="rail" (✓ / …
+                       glyph, score muted until Results); hooks/useArrival.js
+                       (the one fade, shared with NeedsYouLine.jsx).
+                       docs/design/console-rail.
+    console-people     the same files: PersonRow density="rail", railSummaries
+                       (people), ConsoleRail's useArrival opening People once.
     console-main       GameHostPage.jsx consolePanel; panels/SimplePanels.jsx,
                        ResponsesPanel.jsx, ReadPanel.jsx.
     putting-up         ResponsesPanel.jsx (The question / The results / All
@@ -301,7 +309,7 @@ const twoScreens = {
             ['The strip', '**Setup**, then the round (**Answer**, **Vote**, **What we heard**, **Ask**), then **Finish**. LIVE marks where the room is. Press a step to look at it privately: the room stays where it is, and **Back to the room** (or ←) returns. Setup is the lobby\'s own panel: where the room watches, the room\'s window and its size.'],
             ['**Your part now**', 'What to do next in one sentence, what the room\'s window shows next, and the buttons. The main button is on the right; Space presses it.'],
             ['The Needs-you line', 'Under Your part now: calm, or amber with what needs you and its buttons.'],
-            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning to **Everyone\'s in**; **Time**, time left with **+1 min**, or time open; **Since this round opened**, who joined since, and any late items to review.'],
+            ['Three tiles', '**Answered** (or **Voted**) with a bar, turning green once with **Everyone\'s in**; **Time**, time left with **+1 min**, or time open; **Since this round opened**, who joined since, and any late items to review.'],
             ['Left rail', 'From round 1: round queue, People and Late & not reviewed (see The left rail).'],
             ['Main area', 'What the step needs, from the lobby to the report (see The main area).'],
           ],
@@ -317,14 +325,31 @@ const twoScreens = {
           t: 'list',
           items: [
             { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s **Up next** (see Writing a question of your own); **All rounds** opens the Session menu\'s **Rounds so far**.' },
-            { title: 'People', text: 'How many are here, and while the room answers or votes, who has and who has not (the count itself is the Answered tile). The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
+            { title: 'People', text: 'Who is here and who has answered (see The People column); the count is the Answered tile. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
             { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the Session menu\'s **Rounds so far**, where **Review** opens the full list (see Late answers and comments).' },
             { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds Up next, Rounds so far, People, Screens, Joining and How it runs, with **End session…** and **Main menu** at its foot. The People column\'s **All N, and who left** opens its People section.' },
           ],
         },
         {
           t: 'p',
-          text: 'The section that matters for the moment opens by itself. What you open or close stays as you left it until the moment changes.',
+          text: 'An arrow on each header points right when closed, down when open. The section that matters for the moment opens by itself. What you open or close stays as you left it until the moment changes.',
+        },
+      ],
+    },
+    {
+      id: 'console-people',
+      title: 'The People column',
+      icon: 'UsersThree',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Each row', text: 'A ✓ when the person has answered or voted, … while they have not (a screen reader says the word). Rows keep their place during a round. Each row\'s ⋯ has **Move to a new device** and **Remove from session**.' },
+            { title: 'Scores', text: 'In Call & Answer and Trivia, each person\'s score: grey while the room answers or votes, bright from **Show results**, and "–" before the first round is scored. Trivia puts a ✓ or ✗ in front once the answer is out. Poll, Wavelength and Survey show no score.' },
+            { title: 'Closed', text: 'Fold People and its header still says who you are waiting for: "6 here · waiting on Marcus", two names and "+3" for more, and past 12 people just the number ("waiting on 14"). When everyone is in, it just says "6 here"; the Answered tile turns green. At results it says who leads ("top: Priya, 40").' },
+            { title: 'Other closed headers', text: 'The round queue adds the next round ("2 of 21 · next: Pricing"), or the first in the lobby. Late & not reviewed shows a small dot and "2 to review" (never amber: it can wait), or "none".' },
+            { title: 'When someone asks', text: 'A name request opens People once, with the person lifted to the top and **Let them** / **Not now** on their row. You can close it again: the header then wears the same amber as the Needs-you line, with the name ("● Sam needs you"). Both fade in together once; they never flash.' },
+          ],
         },
       ],
     },
