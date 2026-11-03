@@ -35,6 +35,15 @@ const HW = Object.freeze({
   hideJoinCode: 'Hide join code',
   joinShowHint: 'Show the join code on the room\'s screen',
   joinHideHint: 'Take the join code off the room\'s screen',
+  // Two screens (owner, 3 Nov 2026): the code's QR on this laptop, apart from
+  // the room's toggle (components/console/JoinCodeChip.jsx).
+  joinLaptopHint: 'Show the join QR on this laptop. Click to keep it open.',
+  joinCardLabel: 'Join code on this laptop',
+  joinCardClose: 'Close the join code',
+  joinQrLabel: 'QR code to join this session',
+  joinShowOnRoomScreen: 'Show on the room\'s screen',
+  joinOffRoomScreen: 'Take it off the room\'s screen',
+  joinOnRoomScreen: 'The code is on the room\'s screen',
   // The room's screen status (§3.6: the room's window on two screens).
   roomsWindow: 'Room\'s window',
   roomSeesThisScreen: 'The room sees this screen',

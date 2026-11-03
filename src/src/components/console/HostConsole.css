@@ -22,6 +22,23 @@
 .hc-conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text); border: 1px solid var(--warn); background: rgb(var(--warn-rgb) / .14); border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
 .hc-spacer { margin-left: auto; }
 .hc-code b { color: var(--accent-text); letter-spacing: .06em; margin-left: 4px; }
+/* THE JOIN CODE ON THIS LAPTOP (owner, 3 Nov 2026; JoinCodeChip.jsx): hover,
+   focus or a click shows the join QR in a card under the code; the room's
+   toggle is the card's own button. The card is the laptop's, never the room's.
+   The QR sits on --text, near-white on dusk (the code must scan; SessionSetup.css .hsetup-qr does the same), everything else on dusk tokens. */
+.hc-join { position: relative; display: inline-flex; }
+.hc-join.is-up .hc-code { border-color: var(--accent); }
+.hc-join-up { display: inline-flex; margin-left: 6px; color: var(--accent-text); }
+.hc-joincard { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 60; margin-top: 0; padding: 18px 18px 14px; width: 260px; box-sizing: border-box; display: grid; justify-items: center; gap: 8px; background: var(--surface); color: var(--text); border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 14px; box-shadow: 0 12px 32px rgb(var(--shade-rgb) / .45); }
+.hc-joincard::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; height: 10px; } /* the hover bridge from the code to the card */
+.hc-joincard.is-pinned { border-color: var(--accent); }
+.hc-joincard-qr { background: var(--text); padding: 10px; border-radius: 10px; line-height: 0; }
+.hc-joincard-qr svg { width: 200px; height: 200px; display: block; }
+.hc-joincard-code { margin: 4px 0 0; font-size: 24px; font-weight: 800; letter-spacing: .1em; color: var(--accent-text); line-height: 1.1; }
+.hc-joincard-url { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; text-align: center; }
+.hc-joincard .hc-joincard-room { --ui-size: 13px; margin-top: 4px; }
+.hc-joincard-x { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+.hc-joincard-x:hover, .hc-joincard-x:focus-visible { background: rgb(var(--glow-rgb) / .12); }
 .hc-winstat { font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; border: 1px solid rgb(var(--glow-rgb) / .22); color: var(--text); text-decoration: none; }
 .hc-winstat.is-success { border-color: var(--success); background: rgb(var(--success-rgb) / .14); }
 .hc-winstat.is-warn { border-color: var(--warn); background: rgb(var(--warn-rgb) / .14); }
