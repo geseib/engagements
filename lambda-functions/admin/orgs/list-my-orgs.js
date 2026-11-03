@@ -47,11 +47,45 @@ const { myNotifications, isNotificationsRoute } = require('./my-notifications');
 */
 const eventsEnabled = () => String(process.env.EVENTS_ENABLED || '').trim().toLowerCase() === 'on';
 
+/* The codes auth/standing.js puts on the context. Spelled here rather than
+   required across the bundle boundary: admin/ does not ship auth/.
+   tests/suspension-authorizer.js holds the two spellings together. */
+const ACCOUNT_SUSPENDED = 'ACCOUNT_SUSPENDED';
+const ORG_SUSPENDED = 'ORG_SUSPENDED';
+const ACCOUNT_SUSPENDED_MESSAGE = 'This account is suspended. Contact the Engage team to have it reinstated.';
+const ORG_SUSPENDED_MESSAGE = 'This organisation is suspended. Its sessions, question sets and reports are '
+  + 'unavailable until Engage reinstates it. Contact the organisation’s owner or the Engage team.';
+
+/** What the authorizer said about this caller's standing, or blanks. */
+function suspensionOf(event) {
+  const lambda = (event && event.requestContext && event.requestContext.authorizer
+    && event.requestContext.authorizer.lambda) || {};
+  return {
+    code: G.clean(lambda.suspension),
+    orgId: G.clean(lambda.suspendedOrgId),
+  };
+}
+
 async function listMyOrgs(event) {
   const sub = G.callerSub(event);
   // Fails closed: no identity in the authorizer context means no memberships,
   // never "all of them".
   if (!sub) return G.fail(403, 'Sign in to do this.');
+
+  /*
+    THE STANDING ROUTE (auth/standing.js). The authorizer refuses a suspended
+    caller everywhere else with API Gateway's bare 403, which cannot carry a
+    reason; it admits them HERE with `suspension` on the context so the
+    console can say what happened. A suspended ACCOUNT gets the code and
+    nothing else — no personal space is provisioned, no list is read.
+  */
+  const suspension = suspensionOf(event);
+  if (suspension.code === ACCOUNT_SUSPENDED) {
+    return G.json(403, {
+      code: ACCOUNT_SUSPENDED,
+      error: ACCOUNT_SUSPENDED_MESSAGE,
+    });
+  }
 
   /*
     THIS IS WHERE AN APPROVED ACCOUNT GETS ITS HOME.
@@ -101,6 +135,26 @@ async function listMyOrgs(event) {
   // Alphabetical by name. Stable and boring on purpose: a switcher that
   // reorders itself between page loads makes people click the wrong team.
   orgs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  /* The organisation this request asked for is suspended: the list still
+     comes back (the caller may have a personal space or another team to go
+     to), with the code and which organisation, so the console shows its one
+     suspended screen rather than a page of refusals. */
+  if (suspension.code === ORG_SUSPENDED) {
+    const held = orgs.find((o) => o.orgId === suspension.orgId);
+    return G.json(200, {
+      orgs,
+      activeOrgId: '',
+      features: { events: eventsEnabled() },
+      canCreatePersonal: home.reason === 'invite-only',
+      suspension: {
+        code: ORG_SUSPENDED,
+        orgId: suspension.orgId,
+        orgName: held ? held.name : '',
+        message: ORG_SUSPENDED_MESSAGE,
+      },
+    });
+  }
 
   return G.json(200, {
     orgs,

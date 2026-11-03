@@ -4,6 +4,43 @@ const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
+/**
+ * WHICH ENVIRONMENT A REPORT CAME FROM (#43).
+ *
+ * This read the page's hostname and called it Production only when it was
+ * `eng.seibtribe.us` — the retired twin's name, which no tier serves. Real
+ * prod reports (`engage.seibtribe.us`) came in as "unknown", unlabelled.
+ *
+ * The report is posted to THIS tier's API, so the tier is this stack's own
+ * `Environment` parameter (env ENVIRONMENT), and the site is its own
+ * `DomainName` when the page sent no address. A page on localhost (the dev
+ * server proxies to dev) still says Local Development. Without ENVIRONMENT
+ * (a stack deployed before it was passed) the `.dev.` / `.test.` markers in
+ * the hostname are the fallback, and anything else stays "unknown" rather
+ * than being guessed as production.
+ */
+const TIERS = {
+  dev: { environment: 'Development', environmentLabel: 'dev-environment' },
+  test: { environment: 'Test', environmentLabel: 'test-environment' },
+  prod: { environment: 'Production', environmentLabel: 'prod-environment' },
+};
+
+function reportEnvironment(url, { tier = '', domainName = '' } = {}) {
+  let host = '';
+  if (url) {
+    try { host = new URL(url).hostname; } catch (e) { console.warn('Failed to parse URL:', url); }
+  }
+  const siteName = host || String(domainName || '').trim() || 'unknown';
+  if (host && (host.includes('localhost') || host.includes('127.0.0.1'))) {
+    return { environment: 'Local Development', environmentLabel: 'local-dev', siteName };
+  }
+  const own = TIERS[String(tier || '').trim().toLowerCase()];
+  if (own) return { ...own, siteName };
+  if (host.includes('.dev.')) return { ...TIERS.dev, siteName };
+  if (host.includes('.test.')) return { ...TIERS.test, siteName };
+  return { environment: 'unknown', environmentLabel: null, siteName };
+}
+
 exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
@@ -73,36 +110,13 @@ exports.handler = async (event) => {
         break;
     }
     
-    // Add environment label (will be determined after URL parsing)
-    let environmentLabel = null;
-
-    // Extract environment/site information from URL
-    let environment = 'unknown';
-    let siteName = 'unknown';
-    
-    if (url) {
-      try {
-        const urlObj = new URL(url);
-        siteName = urlObj.hostname;
-        
-        // Determine environment based on hostname
-        if (urlObj.hostname.includes('.dev.')) {
-          environment = 'Development';
-          environmentLabel = 'dev-environment';
-        } else if (urlObj.hostname.includes('.test.')) {
-          environment = 'Test';
-          environmentLabel = 'test-environment';
-        } else if (urlObj.hostname.includes('.prod.') || urlObj.hostname === 'eng.seibtribe.us') {
-          environment = 'Production';
-          environmentLabel = 'prod-environment';
-        } else if (urlObj.hostname.includes('localhost') || urlObj.hostname.includes('127.0.0.1')) {
-          environment = 'Local Development';
-          environmentLabel = 'local-dev';
-        }
-      } catch (e) {
-        console.warn('Failed to parse URL:', url);
-      }
-    }
+    // Which tier and which site this report came from (#43). See
+    // reportEnvironment below: the tier is THIS stack's, never guessed from a
+    // hard-coded hostname.
+    const { environment, environmentLabel, siteName } = reportEnvironment(url, {
+      tier: process.env.ENVIRONMENT,
+      domainName: process.env.DOMAIN_NAME,
+    });
 
     // Build issue body with metadata
     let issueBody = description;
@@ -223,3 +237,5 @@ exports.handler = async (event) => {
     };
   }
 };
+
+exports.reportEnvironment = reportEnvironment;

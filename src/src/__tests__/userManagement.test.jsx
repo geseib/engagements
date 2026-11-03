@@ -296,7 +296,7 @@ describe('the approval queue, which is a queue and not a filter tab', () => {
     fireEvent.click(within(row).getByRole('button', { name: /reject/i }));
 
     let ask = await screen.findByRole('dialog', { name: /^Reject Adaeze Okafor/ });
-    expect(ask).toHaveTextContent(/disabled/i);
+    expect(ask).toHaveTextContent(/suspended/i);
     fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Reject/ })).toBeNull());
     expect(stateCalls()).toHaveLength(0);
@@ -323,7 +323,7 @@ describe('the members table, and the badge that used to lie about it', () => {
     // different predicates.
     await mount();
     const filters = screen.getByRole('group', { name: /filter members/i });
-    for (const [name, expected] of [['Admins', 2], ['Hosts', 2], ['Disabled', 1], ['Active', 4]]) {
+    for (const [name, expected] of [['Admins', 2], ['Hosts', 2], ['Suspended', 1], ['Active', 4]]) {
       const button = within(filters).getByRole('button', { name: new RegExp(`^${name}`, 'i') });
       expect(button).toHaveTextContent(String(expected));
       fireEvent.click(button);
@@ -399,7 +399,7 @@ describe('the members table, and the badge that used to lie about it', () => {
     // Sam is the disabled fixture, and disabled rows live behind their own
     // tab now — which is also where a permanent removal actually happens.
     fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
-      .getByRole('button', { name: /^Disabled/i }));
+      .getByRole('button', { name: /^Suspended/i }));
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
 
@@ -422,7 +422,7 @@ describe('the members table, and the badge that used to lie about it', () => {
     // makes a 500 look exactly like a success until the next reload.
     await mount({ stateStatus: 500 });
     fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
-      .getByRole('button', { name: /^Disabled/i }));
+      .getByRole('button', { name: /^Suspended/i }));
     const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
     fireEvent.click(within(row).getByRole('button', { name: /remove sam okonkwo/i }));
     const ask = await screen.findByRole('dialog', { name: /Sam Okonkwo/ });
@@ -514,5 +514,95 @@ describe('the three functions that called routes which do not exist', () => {
     // rejects: the `|| 'https://h1jcmja0w1.execute-api...'` fallback in any form.
     expect(source).not.toMatch(/execute-api/);
     expect(source).not.toMatch(/https?:\/\/[a-z0-9]/i);
+  });
+});
+
+/* ------------------------------------------ suspend and reinstate (#40) */
+
+describe('Suspend and Reinstate, the same words and the same place as Organisations', () => {
+  const SUSPENDED_HOST = {
+    username: 'kofi', email: 'kofi@example.com', name: 'Kofi Mensah',
+    groups: ['hosts'], state: 'disabled', status: 'disabled', userStatus: 'CONFIRMED',
+    enabled: false, created: '2026-03-12T09:12:00.000Z', suspendedReason: 'Abuse report #12',
+  };
+
+  test('Suspend asks first, states the consequence, then sends disabled', async () => {
+    // rejects: the old one-click Disable that never said what it did.
+    await mount();
+    const row = within(screen.getByRole('table')).getByText('Priya Balasubramanian').closest('tr');
+    fireEvent.click(within(row).getByRole('button', { name: /suspend/i }));
+    let ask = await screen.findByRole('dialog', { name: /^Suspend Priya/ });
+    expect(ask).toHaveTextContent(/cannot sign in again until reinstated/i);
+    expect(ask).toHaveTextContent(/exactly the role they have now/i);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Suspend/ })).toBeNull());
+    expect(stateCalls()).toHaveLength(0);
+    fireEvent.click(within(row).getByRole('button', { name: /suspend/i }));
+    ask = await screen.findByRole('dialog', { name: /^Suspend Priya/ });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Suspend' }));
+    await waitFor(() => expect(stateCalls()).toHaveLength(1));
+    expect(JSON.parse(stateCalls()[0][1].body)).toEqual({ newState: 'disabled' });
+  });
+
+  test('suspended accounts are never behind a hidden filter: Active says how many and opens them', async () => {
+    // rejects: "re-enabling means giving it a role, under the Disabled filter
+    // the default view hides" (#40).
+    await mount({ users: [...USERS, SUSPENDED_HOST] });
+    const note = screen.getByTestId('um-suspended-note');
+    expect(note).toHaveTextContent('2 suspended accounts are not shown here.');
+    fireEvent.click(within(note).getByRole('button', { name: 'Show suspended' }));
+    expect(within(screen.getByRole('group', { name: /filter members/i }))
+      .getByRole('button', { name: /^Suspended/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(screen.getByRole('table')).getByText('Kofi Mensah')).toBeInTheDocument();
+  });
+
+  test('a suspended row offers Reinstate and no role moves, with the reason', async () => {
+    await mount({ users: [...USERS, SUSPENDED_HOST] });
+    fireEvent.click(screen.getByRole('button', { name: 'Show suspended' }));
+    const row = within(screen.getByRole('table')).getByText('Kofi Mensah').closest('tr');
+    expect(within(row).getByText('Suspended')).toBeInTheDocument();
+    expect(within(row).getByText(/Abuse report #12/)).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Reinstate' })).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /make host/i })).toBeNull();
+    expect(within(row).queryByRole('button', { name: /make (engage )?admin/i })).toBeNull();
+  });
+
+  test('Reinstate sends reinstate and the row comes back as the host it was', async () => {
+    await mount({ users: [...USERS, SUSPENDED_HOST] });
+    authFetch.mockImplementation(async (url, options = {}) => {
+      if ((options.method || 'GET') === 'PUT') {
+        return jsonResponse(200, { success: true, state: 'hosts', groups: ['hosts'], enabled: true });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Show suspended' }));
+    const row = within(screen.getByRole('table')).getByText('Kofi Mensah').closest('tr');
+    fireEvent.click(within(row).getByRole('button', { name: 'Reinstate' }));
+    await waitFor(() => expect(stateCalls()).toHaveLength(1));
+    expect(JSON.parse(stateCalls()[0][1].body)).toEqual({ newState: 'reinstate' });
+    fireEvent.click(within(screen.getByRole('group', { name: /filter members/i }))
+      .getByRole('button', { name: /^Hosts/i }));
+    const back = within(screen.getByRole('table')).getByText('Kofi Mensah').closest('tr');
+    expect(within(back).getByText('Host')).toBeInTheDocument();
+    expect(within(back).queryByText(/Abuse report/)).toBeNull();
+  });
+
+  test('a reinstated account with no role says it is waiting for approval', async () => {
+    await mount();
+    authFetch.mockImplementation(async (url, options = {}) => {
+      if ((options.method || 'GET') === 'PUT') {
+        return jsonResponse(200, {
+          success: true, state: 'pending', groups: ['pending'], enabled: true,
+          message: 'Account reinstated. It had no role, so it is waiting for approval: choose Approve to let it host.',
+        });
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Show suspended' }));
+    const row = within(screen.getByRole('table')).getByText('Sam Okonkwo').closest('tr');
+    fireEvent.click(within(row).getByRole('button', { name: 'Reinstate' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/waiting for approval/i);
+    const queue = screen.getByRole('region', { name: /waiting for approval/i });
+    expect(within(queue).getByText('Sam Okonkwo')).toBeInTheDocument();
   });
 });

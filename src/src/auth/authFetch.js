@@ -1,5 +1,7 @@
 import { CognitoUserPool, CognitoRefreshToken } from 'amazon-cognito-identity-js';
 import { notifySessionExpired } from './sessionExpiry';
+import { isAuthorizerRefusal, probeStanding } from './suspension';
+import { adminApiUrl } from '../utils/adminApi';
 
 // Standalone token access for non-hook call sites (mirrors AuthContext's
 // lazy pool init so config.js has loaded before the pool is created).
@@ -180,6 +182,15 @@ const withAuthHeaders = (options, token) => {
 export const authFetch = async (url, options = {}) => {
   const token = await getAuthToken();
   const response = await fetch(url, withAuthHeaders(options, token));
+  /* A BARE 403 FROM THE AUTHORIZER may mean the account or the organisation
+     is suspended (auth/suspension.js). Ask GET /orgs why, in the background;
+     the response goes back to the caller untouched. Not for GET /orgs itself,
+     which is the question. */
+  if (response && response.status === 403 && token && !/\/orgs\/?(\?.*)?$/.test(String(url))) {
+    isAuthorizerRefusal(response).then((bare) => {
+      if (bare) probeStanding(() => fetch(adminApiUrl('orgs'), withAuthHeaders({}, token)));
+    }).catch(() => {});
+  }
   if (!response || response.status !== 401) return response;
   if (token) return response;              // a handler's refusal, not an expiry
   if (!hasStoredUser()) return response;   // never signed in: a plain refusal

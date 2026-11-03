@@ -10,6 +10,8 @@
  *   1. the session exists                          -> 404
  *   2. the session has been started                -> 403
  *   3. a private session's access code matches     -> 401 / 403
+ *   4. its organisation is not suspended           -> 403 SESSION_UNAVAILABLE
+ *      (added 2026-11-03, #40; org-standing.js)
  *
  * ORDER IS THE SECURITY PROPERTY, not tidiness. `tests/join-name-collision.js`
  * asserts that a private session answers 401/403 with NO `code` field when a
@@ -29,6 +31,7 @@
  */
 
 const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { orgIsSuspended, sessionUnavailableResponse } = require('./org-standing');
 
 const cors = { 'Access-Control-Allow-Origin': '*' };
 
@@ -113,6 +116,14 @@ async function openSessionOr(db, tableName, gameId, accessCode) {
         }
       };
     }
+  }
+
+  // 4. THE OWNING ORGANISATION IS NOT SUSPENDED (#40, org-standing.js). Last,
+  //    behind the code gate, so a caller without a private session's code
+  //    learns nothing new from it. Plain words, no reason: a participant has
+  //    no business knowing an organisation's standing.
+  if (await orgIsSuspended(db, tableName, gameMetadata.orgId)) {
+    return { ok: false, response: sessionUnavailableResponse(cors) };
   }
 
   return { ok: true, metadata: gameMetadata };

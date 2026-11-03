@@ -19,8 +19,11 @@ const ACTIONS = {
   'user.make-admin': 'Made the account an Engage admin',
   'user.remove-admin': 'Took Engage admin away from the account',
   'user.set-pending': 'Moved the account back to waiting for approval',
-  'user.disable': 'Turned the account off',
+  // `user.disable` is Suspend (a member) and Reject (an applicant) alike: the
+  // account is switched off either way, and the authorizer refuses it.
+  'user.disable': 'Suspended the account',
   'user.enable': 'Turned the account back on',
+  'user.reinstate': 'Reinstated the account',
   'user.delete': 'Deleted the account',
   // A team letting somebody it invited host (orgs/approve-member.js)
   'member.approve-hosting': 'Approved them to host for this team',

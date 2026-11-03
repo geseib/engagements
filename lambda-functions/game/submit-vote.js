@@ -4,6 +4,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { encryptItem } = require('./tenant-crypto');
 const { displayToCanonical } = require('./answer-order');
 const { heldByAnotherDevice, presentedClientId, nameMovedMessage, NAME_MOVED } = require('./name-holder');
+const { orgIsSuspended, sessionUnavailableResponse } = require('./org-standing');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -154,6 +155,10 @@ exports.handler = async (event) => {
       ProjectionExpression: 'orgId'
     }));
     const voteOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+    // A suspended organisation's room takes no new ballots (org-standing.js).
+    if (await orgIsSuspended(db, process.env.TABLE_NAME, voteOrgId)) {
+      return sessionUnavailableResponse();
+    }
 
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,

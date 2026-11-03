@@ -100,6 +100,7 @@ const {
 const { encryptItem, decryptItem, decryptValue } = require('./tenant-crypto');
 const { countAnsweredQuestion } = require('./session-count');
 const retry = require('./survey-retry');
+const { orgIsSuspended, SESSION_UNAVAILABLE } = require('./org-standing');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client, { marshallOptions: { removeUndefinedValues: true } });
@@ -112,6 +113,8 @@ const MAX_TRIES = 3;
 const refuse = (statusCode, code, error, extra = {}) => respond(statusCode, { error, code, ...extra });
 
 const notFound = () => respond(404, { error: 'Survey not found' });
+/* A suspended organisation's survey takes no new answers (org-standing.js). */
+const unavailable = () => refuse(403, SESSION_UNAVAILABLE.code, SESSION_UNAVAILABLE.error, { message: SESSION_UNAVAILABLE.message });
 
 /** Retryable, and said so: the phone tries again on a 503 by itself. */
 const busy = () => refuse(503, 'BUSY', 'Lots of answers are arriving at once. Trying again.');
@@ -424,6 +427,7 @@ async function getSurvey(gameId) {
 async function putAnswer(gameId, body) {
   const { meta, state } = await readSession(db, TABLE(), gameId);
   if (!isSurvey(meta)) return notFound();
+  if (await orgIsSuspended(db, TABLE(), orgOf(meta))) return unavailable();
   const gate = collectingOr(state);
   if (gate) return gate;
 
@@ -506,6 +510,7 @@ async function putAnswer(gameId, body) {
 async function submit(gameId, body) {
   const { meta, state } = await readSession(db, TABLE(), gameId);
   if (!isSurvey(meta)) return notFound();
+  if (await orgIsSuspended(db, TABLE(), orgOf(meta))) return unavailable();
   const gate = collectingOr(state);
   if (gate) return gate;
 

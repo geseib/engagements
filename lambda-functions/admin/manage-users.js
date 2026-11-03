@@ -10,7 +10,7 @@ const {
   ListUsersInGroupCommand,
   AdminGetUserCommand
 } = require('@aws-sdk/client-cognito-identity-provider');
-const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+const { GetCommand, UpdateCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 
 const cognito = new CognitoIdentityProviderClient({ region: 'us-east-1' });
 const USER_POOL_ID = process.env.USER_POOL_ID;
@@ -72,7 +72,27 @@ async function listUsers(event) {
       if (user.Enabled === false) {
         userState = 'disabled';
       }
-      
+
+      // WHY IT IS SUSPENDED, for the Reinstate row (#40). The flag lives on
+      // the PROFILE row the authorizer reads (auth/standing.js). Best effort:
+      // an unreadable row costs the reason, never the list.
+      let suspension = null;
+      if (user.Enabled === false && attributes.sub) {
+        try {
+          const prof = await G.db.send(new GetCommand({
+            TableName: G.tableName(),
+            Key: { PK: tenant.userPk(attributes.sub), SK: 'PROFILE' },
+            ProjectionExpression: 'suspended, suspendedAt, suspendedReason',
+          }));
+          const p = prof && prof.Item;
+          if (p && p.suspended) {
+            suspension = { at: p.suspendedAt || null, reason: p.suspendedReason || '' };
+          }
+        } catch (e) {
+          console.warn(`Could not read the suspension of ${user.Username}:`, e.message);
+        }
+      }
+
       return {
         username: user.Username,
         email: attributes.email,
@@ -82,7 +102,8 @@ async function listUsers(event) {
         status: userState, // Alias for compatibility
         userStatus: user.UserStatus, // CONFIRMED, etc.
         enabled: user.Enabled,
-        created: user.UserCreateDate
+        created: user.UserCreateDate,
+        ...(suspension ? { suspendedAt: suspension.at, suspendedReason: suspension.reason } : {}),
       };
     }));
     
@@ -225,6 +246,7 @@ async function lockoutRefusal(event, username, newState) {
 function auditActionFor(newState, fromGroups, enabled) {
   if (newState === 'delete') return 'user.delete';
   if (newState === 'disabled') return 'user.disable';
+  if (newState === 'reinstate') return 'user.reinstate';
   if (newState === 'admins') return 'user.make-admin';
   if (newState === 'pending') return 'user.set-pending';
   // hosts
@@ -277,7 +299,7 @@ async function changeUserState(event) {
     };
   }
   
-  const validStates = ['pending', 'hosts', 'admins', 'disabled', 'delete'];
+  const validStates = ['pending', 'hosts', 'admins', 'disabled', 'reinstate', 'delete'];
   if (!validStates.includes(newState)) {
     return {
       statusCode: 400,
@@ -327,7 +349,9 @@ async function changeUserState(event) {
     }
 
     try {
-      const result = await applyUserState(username, newState);
+      const result = await applyUserState(username, newState, {
+        sub: who.sub, groups: fromGroups, actor: actorFromEvent(event, 'platform-admin'), reason,
+      });
       /* Engage decided about this person, so no team's "Awaiting approval"
          box may keep offering to (orgs/approve-member.js). Best effort. */
       if (newState !== 'pending' && who.sub) {
@@ -359,8 +383,127 @@ async function changeUserState(event) {
   }
 }
 
+/*
+  ── SUSPENSION IS A FLAG THE AUTHORIZER READS, NOT A MISSING GROUP ──────────
+
+  Until 2026-11-03 "Disable" removed every Cognito group and switched the
+  account off, and nothing else. It held only because the group gate happened
+  to refuse a group-less caller; nothing knew the account was SUSPENDED, so
+  there was nothing to reinstate — the way back was "give it a role again"
+  under a hidden filter (#40), and whatever role it had was forgotten.
+
+  Now Suspend writes `suspended: true` (with when, by whom and why) on the
+  account's PROFILE row, which auth/standing.js reads on EVERY signed-in
+  request, and switches the Cognito account off so no new token can be had.
+  A member's groups are KEPT, so Reinstate is the exact inverse: account on,
+  flag off, and the person is the host or Engage admin they were.
+
+  A pending APPLICANT (no hosts/admins group) rejected through the same state
+  keeps the old behaviour — groups removed — and Reinstate brings them back to
+  `pending`, i.e. undoes the reject. Accounts suspended before this change
+  have no groups and no flag; Reinstate returns them to `pending` too, and the
+  answer says so, so staff know to choose a role.
+
+  Order is chosen so a half-done change errs towards "refused":
+    Suspend:   flag first, then Cognito off.
+    Reinstate: Cognito on first, then flag off.
+*/
+const MEMBER_GROUPS = ['hosts', 'admins'];
+
+async function writeSuspendedFlag(sub, { actor, reason }) {
+  if (!sub) return;
+  const fields = {
+    suspended: true,
+    suspendedAt: new Date().toISOString(),
+    suspendedBy: (actor && (actor.email || actor.sub)) || 'platform-admin',
+    suspendedReason: reason || '',
+  };
+  const key = { PK: tenant.userPk(sub), SK: 'PROFILE' };
+  const update = () => G.db.send(new UpdateCommand({
+    TableName: G.tableName(),
+    Key: key,
+    UpdateExpression: 'SET suspended = :t, suspendedAt = :at, suspendedBy = :by, suspendedReason = :r',
+    ConditionExpression: 'attribute_exists(PK)',
+    ExpressionAttributeValues: {
+      ':t': fields.suspended, ':at': fields.suspendedAt, ':by': fields.suspendedBy, ':r': fields.suspendedReason,
+    },
+  }));
+  const isCondition = (e) => e && e.name === 'ConditionalCheckFailedException';
+  try {
+    await update();
+  } catch (error) {
+    if (!isCondition(error)) throw error;
+    /* No PROFILE row yet (a federated account that never opened the console).
+       The flag must land anyway — it is what the authorizer reads — so the row
+       is created holding it. A row that appeared in between: update it. */
+    try {
+      await G.db.send(new PutCommand({
+        TableName: G.tableName(),
+        Item: { ...key, userId: sub, ...fields },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      }));
+    } catch (putError) {
+      if (!isCondition(putError)) throw putError;
+      await update();
+    }
+  }
+}
+
+async function clearSuspendedFlag(sub) {
+  if (!sub) return;
+  try {
+    await G.db.send(new UpdateCommand({
+      TableName: G.tableName(),
+      Key: { PK: tenant.userPk(sub), SK: 'PROFILE' },
+      UpdateExpression: 'REMOVE suspended, suspendedAt, suspendedBy, suspendedReason',
+      // An Update creates the item it names; a bare PROFILE row minted by a
+      // REMOVE would be a row nobody wrote on purpose. No row, no flag.
+      ConditionExpression: 'attribute_exists(PK)',
+    }));
+  } catch (error) {
+    if (error && error.name === 'ConditionalCheckFailedException') return;
+    throw error;
+  }
+}
+
+const ok = (payload) => ({
+  statusCode: 200,
+  headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ success: true, ...payload }),
+});
+
 /** The Cognito half of a state change. Runs only once the audit entry exists. */
-async function applyUserState(username, newState) {
+async function applyUserState(username, newState, ctx = {}) {
+  const { sub = '', groups: fromGroups = [], actor = null, reason = '' } = ctx;
+
+  // SUSPEND A MEMBER: flag, account off, groups kept (see the note above).
+  if (newState === 'disabled' && fromGroups.some((g) => MEMBER_GROUPS.includes(g))) {
+    await writeSuspendedFlag(sub, { actor, reason });
+    await cognito.send(new AdminDisableUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+    console.log(`Suspended ${username} (groups kept: ${fromGroups.join(',')})`);
+    return ok({ message: 'Account suspended', state: 'disabled', groups: fromGroups, enabled: false });
+  }
+
+  // REINSTATE: the inverse. A group-less account (a rejected applicant, or a
+  // suspension from before groups were kept) comes back as `pending`.
+  if (newState === 'reinstate') {
+    await cognito.send(new AdminEnableUserCommand({ UserPoolId: USER_POOL_ID, Username: username }));
+    await clearSuspendedFlag(sub);
+    let groups = fromGroups.filter((g) => ['pending', 'hosts', 'admins'].includes(g));
+    if (!groups.length) {
+      await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: USER_POOL_ID, Username: username, GroupName: 'pending' }));
+      groups = ['pending'];
+    }
+    console.log(`Reinstated ${username} (groups: ${groups.join(',')})`);
+    return ok({
+      message: groups.includes('pending') && !groups.some((g) => MEMBER_GROUPS.includes(g))
+        ? 'Account reinstated. It had no role, so it is waiting for approval: choose Approve to let it host.'
+        : 'Account reinstated',
+      state: groups.includes('admins') ? 'admins' : groups.includes('hosts') ? 'hosts' : 'pending',
+      groups,
+      enabled: true,
+    });
+  }
   // Handle delete action
   if (newState === 'delete') {
     await cognito.send(new AdminDeleteUserCommand({
@@ -406,6 +549,8 @@ async function applyUserState(username, newState) {
     re-approved host would hold the hosts group and still be locked out.
   */
   if (newState === 'disabled') {
+    // A pending applicant, rejected. Not flagged: it holds no group any host
+    // or staff route admits, and the Cognito account is off.
     await cognito.send(new AdminDisableUserCommand({
       UserPoolId: USER_POOL_ID,
       Username: username
@@ -416,6 +561,9 @@ async function applyUserState(username, newState) {
       UserPoolId: USER_POOL_ID,
       Username: username
     }));
+    // Any real role is also a way back: never leave the flag behind on an
+    // account that has just been switched on.
+    await clearSuspendedFlag(sub);
     await cognito.send(new AdminAddUserToGroupCommand({
       UserPoolId: USER_POOL_ID,
       Username: username,

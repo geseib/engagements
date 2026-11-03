@@ -13,6 +13,7 @@ const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
 const { heldByAnotherDevice, nameMovedFrame, presentedClientId, NAME_MOVED } = require('./name-holder');
+const { orgIsSuspended, SESSION_UNAVAILABLE } = require('./org-standing');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -661,6 +662,13 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
       ProjectionExpression: COUNT_PROJECTION
     }));
     const answerOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+    // A SUSPENDED ORGANISATION'S ROOM TAKES NO NEW ANSWERS (org-standing.js).
+    // Refused like a round that is no longer on screen — nothing is stored,
+    // and the phone's `answerReceived` says not kept, with the plain sentence.
+    if (await orgIsSuspended(db, process.env.TABLE_NAME, answerOrgId)) {
+      console.log(`⚠️ Answer refused for game ${gameId}: its organisation is suspended`);
+      return { status: 'refused', round: questionNumber, code: SESSION_UNAVAILABLE.code, message: SESSION_UNAVAILABLE.message };
+    }
     const itemToStore = answerOrgId
       ? await encryptItem(answerOrgId, 'answer', answerRecord)
       : answerRecord;
@@ -868,6 +876,7 @@ async function handlePlayerMessage(gameId, playerName, messageType, rawMessageDa
           questionNumber: outcome.round,
           kept: outcome.status !== 'refused',
           late: outcome.status === 'late',
+          ...(outcome.code ? { code: outcome.code, message: outcome.message } : {}),
         });
       }
       if (outcome && outcome.status !== 'stored') {

@@ -1,0 +1,54 @@
+/*
+  THE SUSPENDED SCREEN (SuspendedScreen.jsx, #40) — one centred card on dusk.
+
+  Scoped under `.susp`, which no other stylesheet declares. Colour is tokens
+  only (--bg, --surface, --surface-2, --text, --muted, --primary); the dark
+  theme is declared on the root element, never inherited. Type follows the
+  laptop ladder: 24 title, 15 body.
+
+  Measured (WCAG): --text #F4EDE4 on --surface #1B2942 12.53:1; --muted
+  #9BA8BE on #1B2942 6.06:1. Buttons are the shared ui/Button (action for
+  "Go to…", quiet otherwise), which carries its own measured palette.
+*/
+.susp {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 48px 16px;
+  box-sizing: border-box;
+}
+
+.susp-card {
+  margin: auto;
+  width: min(560px, 100%);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 32px;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.susp-title {
+  font-size: 24px;
+  line-height: 1.25;
+  margin: 16px 0 12px;
+  color: var(--text);
+}
+
+.susp-body {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.susp-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
