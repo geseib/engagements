@@ -138,7 +138,7 @@ import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
 import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
-import { needsYou, markHandoverRequested, NEEDS_ACTIONS } from './config/needsYou';
+import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS } from './config/needsYou';
 import NeedsYouLine from './components/needs/NeedsYouLine';
 import ConsolePulse from './components/console/ConsolePulse';
 import TimeChip from './components/console/TimeChip';
@@ -9512,6 +9512,19 @@ Focus on actionable business strategy insights.`;
       <Stage
         profile={profile}
         phase={BAR_PHASE[hostPhase] || 'lobby'}
+        /* THE CLUTTER STEPS ASIDE ON ONE SCREEN (owner, 3 Nov 2026): this
+           laptop is the room's screen, so after a few seconds without the
+           mouse the top bar, Your part now and the Needs-you line fade, and
+           the mouse brings them back; a clicker's keys and the phone Remote
+           do not. Never on two screens (a private laptop). The rows keep
+           their height, so nothing the room sees moves (Stage.jsx). Held up
+           while the Session menu or the Needs-you sheet is open, or the host
+           is writing or confirming a question. `urgent` is the count of Now
+           items: a dot and the number in the corner while the chrome is
+           away, never a name. */
+        autoHide={!twoSurfaces}
+        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal}
+        urgent={((needs && needs.items) || []).filter((i) => i.level === NEEDS_LEVELS.NOW).length}
         /* The fitter's deps live in Stage but the content that changes lives
            here. Without this a question arriving, an answer list growing or a
            reveal flipping would re-render the stage and never re-measure it. */

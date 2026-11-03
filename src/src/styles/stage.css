@@ -172,6 +172,52 @@ body, .stage-ladder-table{
 .stage-needs .ny{--ny-line-h:36px}
 .stage-needs .ny.ny-line{padding:0 12px 0 14px;border-radius:10px}
 
+/* ------------------------------------- THE CHROME STEPS ASIDE (one screen)
+   Owner, 3 Nov 2026: after a few seconds without the mouse the host's chrome
+   fades; the mouse brings it back (hooks/useChromeAutoHide.js says when;
+   Stage.jsx puts `data-chrome` on `.stage`, only on one screen).
+
+   OPACITY ONLY. The rows keep their height, so `.main`'s box, the fitter's
+   scale and every line of the room's content are the same shown and hidden.
+   Measured in Chromium on the real host page, every phase of the five
+   one-screen types, 1280x720 and 1920x1080, Room and TV: collapsing the 135px
+   frame would refit the content in 17 of 56 states (by up to 28%) and lift the
+   question 67-178px on every show and every hide; floating the frame over a
+   full-height stage would cover the rail (78-99px: the code, the round) every
+   time the mouse moved, and the first line of content in 5 states. Keeping
+   the band costs no movement at all.
+
+   Pointer events are off while hidden, so a tap that wakes the chrome cannot
+   also press an invisible button; Tab still reaches every control, and focus
+   landing in the chrome shows it. Out quicker than in is the wrong way round
+   for a room: out slow (.6s), back fast (.15s). */
+.stage-top,.stage-now,.stage-needs,.stage .fn-controls{transition:opacity .15s ease-out}
+.stage[data-chrome="hidden"] > .stage-top,
+.stage[data-chrome="hidden"] > .stage-now,
+.stage[data-chrome="hidden"] > .stage-needs,
+.stage[data-chrome="hidden"] .fn-controls{opacity:0;pointer-events:none;transition:opacity .6s ease-in}
+
+/* SOMETHING NEEDS YOU WHILE THE CHROME IS AWAY: a dot and the count in the
+   bell's corner, never a name (the public line already shows the count by
+   kind). Host chrome at the laptop ladder (15px), not the room's. */
+.stage-cue{position:absolute;z-index:20;top:12px;right:calc(1.2vw + 8px);
+  display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 10px;
+  border-radius:999px;background:var(--surface);border:1px solid var(--accent);
+  pointer-events:none;animation:stage-cue-in .5s ease-out}
+.stage-cue-dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.stage-cue-n{font-size:15px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
+@keyframes stage-cue-in{0%{opacity:0;transform:scale(.6)}60%{opacity:1;transform:scale(1.15)}100%{transform:scale(1)}}
+
+/* Reduced motion: shown and hidden at once, no fade and no pop. */
+@media (prefers-reduced-motion: reduce){
+  .stage-top,.stage-now,.stage-needs,.stage .fn-controls,
+  .stage[data-chrome="hidden"] > .stage-top,
+  .stage[data-chrome="hidden"] > .stage-now,
+  .stage[data-chrome="hidden"] > .stage-needs,
+  .stage[data-chrome="hidden"] .fn-controls{transition:none}
+  .stage-cue{animation:none}
+}
+
 /* YOUR PART NOW — Dock.jsx with `lead`. Slim: a card with the amber edge the
    console's .hc-now carries, one line, the main button at its right. The
    .dock rules above still apply (one line, the crowded steps, the fixed

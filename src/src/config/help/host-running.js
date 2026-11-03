@@ -65,6 +65,28 @@ const running = {
         },
       ],
     },
+    /* hooks/useChromeAutoHide.js, Stage.jsx `autoHide` (owner, 3 Nov 2026). */
+    {
+      id: 'bar-steps-aside',
+      title: 'When the bar steps aside',
+      icon: 'EyeSlash',
+      blocks: [
+        {
+          t: 'p',
+          text: 'On one screen, after about three seconds without the mouse, the top bar, Your part now and the Needs-you line fade, so the room sees only the stage. Nothing on the stage moves when they do.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Bring them back', text: 'Move the mouse, touch the screen, or Tab to a control.' },
+            { title: 'Clicker and phone', text: 'A clicker\'s keys and your phone Remote leave them hidden, so the room is not shown the bar each time you move on.' },
+            { title: 'They stay up', text: 'While a menu or sheet is open, while the pointer rests on them, or while you are typing.' },
+            { title: 'Something needs you', text: 'While they are hidden, a small dot with a number shows top right (a count, never a name). Move the mouse to see it.' },
+            { title: 'Two screens', text: 'Your laptop is private there, so nothing fades.' },
+          ],
+        },
+      ],
+    },
     /*
       GameHostPage.jsx ~8515 (LOBBY: "Scan to join · no app, no account", QR,
       address, "Session code"/"Event code"); meter heading "In the room" (~7411)
@@ -813,7 +835,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'On one screen the room can see the laptop',
-          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting it says **Nothing needs you now.** The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way.',
+          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting it says **Nothing needs you now.** The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way. While the bar is faded, a dot with the count shows top right.',
         },
       ],
     },
