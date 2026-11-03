@@ -20,7 +20,7 @@
  *                 link, Look here privately, the keys.
  *   Joining       the codes and the demo; More: names on the room meter.
  *
- * End session and Main menu are the foot, in every section; ✕ closes.
+ * End session and Main menu are the foot, in every section; the X closes it.
  *
  * It holds nothing of its own but which tab is up. The page owns the roster
  * (useBuildPlayers) and every action; this draws them. A button that opens a
