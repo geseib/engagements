@@ -133,9 +133,16 @@ describe('the person row\'s one added fact (§3.2b)', () => {
     expect(after.Sam.mark).toBe('wrong');
     expect(after.Dana.mark).toBeNull();
   });
-  it('Poll and Wavelength add nothing', () => {
+  it('Poll, Wavelength and Survey add nothing', () => {
     expect(personFactsFor({ gameType: 'poll', players })).toBeNull();
     expect(personFactsFor({ gameType: 'wavelength', players })).toBeNull();
+    expect(personFactsFor({ gameType: 'survey', players })).toBeNull();
+  });
+  // rejects: owner, dev 3 Nov — C&A scores gone from the two-screen People list.
+  it('Call & Answer: the score, and never a mark', () => {
+    expect(personFactsFor({ gameType: 'call-and-answer', players, marks: { Priya: true } })).toEqual({
+      Priya: { score: 340, mark: null }, Sam: { score: 320, mark: null }, Dana: { score: 0, mark: null },
+    });
   });
   it('the rail draws the fact at the row\'s end, the mark before the score', () => {
     const facts = personFactsFor({ gameType: 'trivia', players, marks: { Priya: true, Sam: false } });
