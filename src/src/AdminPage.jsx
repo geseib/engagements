@@ -29,6 +29,7 @@ import ScoreCard from './components/ScoreCard';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
+import { standingFromOrgs, notifySuspended } from './auth/suspension';
 import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
@@ -426,9 +427,19 @@ function AdminPage() {
     (async () => {
       try {
         const res = await authFetch(adminApiUrl('orgs'));
+        /* A SUSPENDED ACCOUNT OR ORGANISATION (#40): GET /orgs is the one
+           route that says so (auth/suspension.js). Reported, and
+           ProtectedRoute swaps this page for the one suspended screen. */
+        if (res.status === 403) {
+          const refused = await res.json().catch(() => ({}));
+          const found = standingFromOrgs(403, refused);
+          if (found) { notifySuspended(found); return; }
+        }
         if (!res.ok) throw new Error(`orgs returned ${res.status}`);
         const data = await res.json();
         if (cancelled) return;
+        const orgSuspended = standingFromOrgs(200, data);
+        if (orgSuspended) { notifySuspended(orgSuspended); return; }
         const list = Array.isArray(data.orgs) ? data.orgs : [];
         setOrgs(list);
         setFeatures(data.features && typeof data.features === 'object' ? data.features : {});

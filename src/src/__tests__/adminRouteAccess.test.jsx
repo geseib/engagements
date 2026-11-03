@@ -42,6 +42,8 @@ jest.mock('../GameHostPage', () => ({ __esModule: true, default: () => <div /> }
 jest.mock('../PlayerPage', () => ({ __esModule: true, default: () => <div /> }));
 
 import App from '../App';
+import { act } from 'react';
+import { notifySuspended, clearSuspension } from '../auth/suspension';
 
 const openAdmin = (groups) => {
   mockUser = { username: 'u', groups, attributes: {} };
@@ -77,5 +79,27 @@ describe('/admin', () => {
   it('does not open for an account in no group at all', () => {
     openAdmin([]);
     expect(screen.queryByTestId('admin-console')).toBeNull();
+  });
+});
+
+/* A SUSPENDED ACCOUNT OR ORGANISATION (#40): ProtectedRoute swaps the page
+   for the one suspended screen the moment auth/suspension.js hears of it. */
+describe('a suspension', () => {
+  afterEach(() => act(() => clearSuspension()));
+
+  it('replaces the console with the suspended screen, and lifts with it', () => {
+    openAdmin(['hosts']);
+    expect(screen.getByTestId('admin-console')).toBeInTheDocument();
+    act(() => notifySuspended({ code: 'ACCOUNT_SUSPENDED', orgId: '' }));
+    expect(screen.getByRole('heading', { name: 'This account is suspended' })).toBeInTheDocument();
+    expect(screen.queryByTestId('admin-console')).toBeNull();
+    act(() => clearSuspension());
+    expect(screen.getByTestId('admin-console')).toBeInTheDocument();
+  });
+
+  it('names a suspended organisation', () => {
+    openAdmin(['hosts']);
+    act(() => notifySuspended({ code: 'ORG_SUSPENDED', orgId: 'org_T', orgName: 'Northwind', elsewhere: [] }));
+    expect(screen.getByRole('heading', { name: 'Northwind is suspended' })).toBeInTheDocument();
   });
 });

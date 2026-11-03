@@ -314,8 +314,9 @@ function whenLabel(iso) {
 
 /**
  * SUSPEND, ASKED FIRST (#40). It acted on one click with nothing saying why.
- * The dialog says what Suspend does today, and no more: the organisation is
- * marked Suspended, and nothing yet stops its members working. A written
+ * The dialog says what Suspend does: since 2026-11-03 it is enforced at the
+ * authorizer (auth/standing.js) — the members are refused anything acting for
+ * the organisation, and its sessions stop admitting players. A written
  * reason is required; it goes to the server, onto the row and into the audit
  * log. X and Cancel share one close; Escape and the backdrop are held while a
  * reason is typed or the change is in flight.
@@ -361,8 +362,9 @@ export function SuspendOrgDialog({ org, onCancel, onSuspend }) {
       closeOnBackdrop={() => !dirty && !busy}
       closeOnEscape={() => !dirty && !busy}
     >
-      <DialogHead className="porgs-modal-head" titleId="porgs-suspend-title" title={<>Suspend {org.name}?</>} titlesClassName="porgs-grow" sub="This marks the organisation Suspended on this list. Nothing else changes yet: its members
-            can still sign in and run sessions. Reinstate lifts it." subClassName="porgs-dim" onClose={requestClose} closeDisabled={busy} closeClassName="porgs-x" />
+      <DialogHead className="porgs-modal-head" titleId="porgs-suspend-title" title={<>Suspend {org.name}?</>} titlesClassName="porgs-grow" sub="Its members stop being able to use it at once: no hosting, no question sets, no reports, and its
+            sessions stop taking new players and answers. Their other spaces are unaffected and nothing is deleted.
+            Reinstate, on this row, puts everything back." subClassName="porgs-dim" onClose={requestClose} closeDisabled={busy} closeClassName="porgs-x" />
       <div className="porgs-modal-body">
         <label className="porgs-field">
           <span className="porgs-lab">Reason <span className="porgs-dim">(required)</span></span>

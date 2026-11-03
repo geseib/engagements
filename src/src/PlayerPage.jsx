@@ -1263,6 +1263,12 @@ function PlayerPage({ event = null } = {}) {
       // Refused because this device no longer holds the name: the `nameMoved`
       // frame that follows stops the page, so no late notice here.
       if (data && data.code === 'NAME_MOVED') return;
+      // The session's organisation is suspended (#40, org-standing.js): the
+      // answer was not taken, and the server's plain sentence says so.
+      if (data && data.code === 'SESSION_UNAVAILABLE') {
+        setLateNotice(data.message || 'This session is not available right now.');
+        return;
+      }
       if (!data || !data.late) return;
       setLateNotice(/^VOTE#/.test(String(gameStateRef.current || ''))
         ? 'Voting has started. Your answer is kept with this round, but it is not in the vote.'

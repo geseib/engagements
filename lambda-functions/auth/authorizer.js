@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 const jwkToPem = require('jwk-to-pem');
 const axios = require('axios');
 const { pickActiveOrg } = require('./pick-active-org');
+const { decideStanding, profileSuspended, orgRowSuspended } = require('./standing');
 
 // Cache for Cognito JWKs (persists across warm invocations)
 let cachedJwks = null;
@@ -162,19 +163,53 @@ async function getUserMemberships(sub) {
  * one membership never reaches the tie-break anyway, and a caller with several
  * gets an explicit choice via `x-engage-org` rather than a guess.
  */
-async function getDefaultOrgId(sub) {
-  if (!TABLE_NAME || !sub) return '';
+async function getProfile(sub) {
+  if (!TABLE_NAME || !sub) return null;
   try {
     const res = await dynamodb.send(new GetCommand({
       TableName: TABLE_NAME,
       Key: { PK: `USER#${sub}`, SK: 'PROFILE' },
     }));
-    const v = res.Item && res.Item.defaultOrgId;
-    return typeof v === 'string' ? v.trim() : '';
+    return (res && res.Item) || null;
   } catch (error) {
     console.error('Error fetching user profile:', error);
-    return '';
+    return null;
   }
+}
+
+function defaultOrgIdOf(profile) {
+  const v = profile && profile.defaultOrgId;
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+async function getDefaultOrgId(sub) {
+  return defaultOrgIdOf(await getProfile(sub));
+}
+
+/**
+ * Which of these organisations are suspended (standing.js). One GetItem per
+ * membership, in parallel — memberships per person are a handful, and the
+ * same reads list-my-orgs.js already makes for the switcher. A read that
+ * fails counts as NOT suspended and is logged: see standing.js on why a blip
+ * here must not become an outage.
+ */
+async function getSuspendedOrgIds(orgIds) {
+  if (!TABLE_NAME || !orgIds.length) return [];
+  const rows = await Promise.all(orgIds.map(async (orgId) => {
+    try {
+      const res = await dynamodb.send(new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: `ORG#${orgId}`, SK: 'METADATA' },
+        ProjectionExpression: '#s',
+        ExpressionAttributeNames: { '#s': 'status' },
+      }));
+      return orgRowSuspended(res && res.Item) ? orgId : '';
+    } catch (error) {
+      console.error(`Error reading the standing of ${orgId}:`, error);
+      return '';
+    }
+  }));
+  return rows.filter(Boolean);
 }
 
 /**
@@ -214,6 +249,31 @@ async function resolveOrgContext(sub, requestedOrgId) {
     orgRole: active ? active.role : '',
     orgIds: memberships.map((m) => String(m.orgId).trim()).filter(Boolean).join(','),
   };
+}
+
+/**
+ * The org context AND the caller's standing (standing.js), from one set of
+ * reads: memberships and PROFILE in parallel, then each member org's status.
+ * Returns what `decideStanding` answers.
+ */
+async function resolveCallerStanding(sub, requestedOrgId, { groups, requiredGroups, method, path }) {
+  const [memberships, profile] = await Promise.all([
+    getUserMemberships(sub),
+    getProfile(sub),
+  ]);
+  const active = pickActiveOrg(memberships, requestedOrgId, defaultOrgIdOf(profile));
+  const orgIds = [...new Set(memberships.map((m) => String(m.orgId).trim()).filter(Boolean))];
+  const suspendedOrgIds = await getSuspendedOrgIds(orgIds);
+  return decideStanding({
+    accountSuspended: profileSuspended(profile),
+    suspendedOrgIds,
+    active,
+    memberships,
+    groups,
+    requiredGroups,
+    method,
+    path,
+  });
 }
 
 // Check if user has required permissions
@@ -881,6 +941,19 @@ async function agentKeyContext(event, token) {
   }
   if (key.ttl && Number(key.ttl) * 1000 < Date.now()) return null;
   const orgId = meta.orgId || '';
+  // A SUSPENSION STOPS THE SESSION KEY TOO (standing.js). The key is the
+  // host's Claude Code acting for the session's organisation and on the
+  // minting host's behalf, so either being suspended closes it. Read only once
+  // the key itself has checked out; a failed read does not deny (standing.js).
+  const minter = typeof key.MintedBy === 'string' ? key.MintedBy.trim() : '';
+  const [orgSuspendedIds, minterProfile] = await Promise.all([
+    orgId ? getSuspendedOrgIds([orgId]) : Promise.resolve([]),
+    minter ? getProfile(minter) : Promise.resolve(null),
+  ]);
+  if (orgSuspendedIds.length || profileSuspended(minterProfile)) {
+    console.log(`Authorization denied: session key for ${keyGameId}: ${orgSuspendedIds.length ? 'ORG_SUSPENDED' : 'ACCOUNT_SUSPENDED'}`);
+    return null;
+  }
   return {
     agent: 'build',
     agentGameId: keyGameId,
@@ -966,7 +1039,17 @@ exports.handler = async (event) => {
     // the caller does not belong to yields NO org — never a substitute one; see
     // pick-active-org.js for why that direction is the only safe one.
     const requestedOrgId = event.headers?.['x-engage-org'] || '';
-    const org = await resolveOrgContext(decoded.sub, requestedOrgId);
+    // ...and whether the caller and that organisation are in good standing
+    // (standing.js — the one place a suspension is enforced). A refusal here
+    // is API Gateway's bare 403: the console learns the code from GET /orgs,
+    // which standing.js admits for exactly that reason.
+    const org = await resolveCallerStanding(decoded.sub, requestedOrgId, {
+      groups, requiredGroups, method, path,
+    });
+    if (org.refuse) {
+      console.log(`Authorization denied: ${username} ${org.refuse}${org.suspendedOrgId ? ` (${org.suspendedOrgId})` : ''} for ${event.routeKey}`);
+      return { isAuthorized: false };
+    }
 
     return {
       isAuthorized: true,
@@ -985,7 +1068,12 @@ exports.handler = async (event) => {
         // Read by game/tenant.js: callerOrgId / callerOrgRole / callerOrgIds.
         orgId: org.orgId,
         orgRole: org.orgRole,
-        orgIds: org.orgIds
+        orgIds: org.orgIds,
+        // Set ONLY on the standing route (GET /orgs) for a suspended caller:
+        // ACCOUNT_SUSPENDED or ORG_SUSPENDED, and which org. Every other
+        // route refused such a caller above.
+        suspension: org.suspension,
+        suspendedOrgId: org.suspendedOrgId,
       }
     };
   } catch (error) {
@@ -1005,3 +1093,6 @@ module.exports.requiredGroupsForRoute = requiredGroupsForRoute;
 module.exports.getUserMemberships = getUserMemberships;
 module.exports.getDefaultOrgId = getDefaultOrgId;
 module.exports.resolveOrgContext = resolveOrgContext;
+module.exports.resolveCallerStanding = resolveCallerStanding;
+module.exports.getSuspendedOrgIds = getSuspendedOrgIds;
+module.exports.getProfile = getProfile;

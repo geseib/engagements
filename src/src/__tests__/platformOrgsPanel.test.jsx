@@ -167,9 +167,11 @@ describe('Suspend asks first, with a reason (#40)', () => {
   it('the row\'s Suspend opens a dialog and sends nothing', async () => {
     const posts = [];
     const dialog = await openDialog(posts);
-    // Says what it does today, and promises nothing stronger.
-    expect(dialog).toHaveTextContent(/marks the organisation Suspended/);
-    expect(dialog).toHaveTextContent(/members can still sign in and run sessions/);
+    // Says what it does: enforced since 2026-11-03 (auth/standing.js), and
+    // undone by Reinstate on the same row.
+    expect(dialog).toHaveTextContent(/members stop being able to use it at once/);
+    expect(dialog).toHaveTextContent(/Reinstate, on this row, puts everything back/);
+    expect(dialog).not.toHaveTextContent(/can still sign in and run sessions/);
     expect(posts).toHaveLength(0);
   });
 
