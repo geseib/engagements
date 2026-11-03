@@ -875,9 +875,8 @@ function GameHostPage() {
     }
   }, [gameId]);
 
-  useEffect(() => {
-    if (setupPanelOpen) loadRounds();
-  }, [setupPanelOpen, lessonNumber, loadRounds]);
+  // Read with the queue and the plan by loadRoundPlan (below), on load, on
+  // every round and when the Session menu opens — the rail lists them too.
   // The ENDED stage for wavelength aggregates every round's stored word
   // analysis into the session vocabulary — which lives in the report the
   // Sessions panel also reads. Fetch it on arrival at ENDED, or the band
@@ -1136,6 +1135,7 @@ function GameHostPage() {
   const [ownNotice, setOwnNotice] = useState(null);
   // The socket handlers are registered before loadQueue exists; they read it here.
   const loadQueueRef = useRef(() => {});
+  const loadUpNextRef = useRef(() => {});
 
   // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
   // Mounted in both places Sign out is offered: the start screen's early
@@ -3338,7 +3338,7 @@ Focus on actionable business strategy insights.`;
       console.log('🔌 Question queue notification:', data);
       // An edit to one of the host's own questions (edit-own) carries no
       // list: the words changed, not the order. Re-read the queue route.
-      if (data && data.own && !Array.isArray(data.queue)) { loadQueueRef.current(); return; }
+      if (data && data.own && !Array.isArray(data.queue)) { loadQueueRef.current(); loadUpNextRef.current(); return; }
       const list = data?.queue ?? null;
       if (!Array.isArray(list)) return;
       // A question the other surface wrote arrives as a bare `own:` key: read
@@ -3346,6 +3346,9 @@ Focus on actionable business strategy insights.`;
       if (list.some((k) => isOwnKey(k))) loadQueueRef.current();
       setQuestionQueue(normaliseQueue(list));
       setQueueVersion(Number(data.version) || 0);
+      // The rail's planned rounds are the PLAN, not the list: re-read it, or
+      // the rail keeps the old order while the Running order shows the new.
+      loadUpNextRef.current();
     });
 
     /*
@@ -4803,30 +4806,51 @@ Focus on actionable business strategy insights.`;
     }
   }, [gameId]);
 
-  /*
-    Read it when the panel opens, alongside the questions themselves. Not on
-    mount: a host who never opens the console never needs the list, and the
-    drain happens server-side either way.
-  */
-  useEffect(() => {
-    if (setupPanelOpen) { loadQueue(); loadUpNext(); }
-    /*
-      AND ON EVERY ROUND, because the plan is a function of what has already
-      been asked. Without `currentQuestionId` here the panel would keep showing
-      the question the room just answered as still "coming up" — the preview
-      going stale in the one way a host would certainly notice.
-    */
-  }, [setupPanelOpen, currentQuestionId, loadQueue, loadUpNext]);
+  loadUpNextRef.current = loadUpNext;
 
   /*
-    ONCE PER SESSION, the running order and the host's own questions
-    (impromptu ask): Your part now and the rail name a queued own question
-    before the host has opened the Session menu, including straight after a
-    reload. One GET; every later change arrives by op, frame or round start.
+    ONE LOADER FOR THE ROUNDS, used by the rail's Round queue and the Session
+    menu's Running order alike, so the two lists are drawn from the same reads:
+    the running order and the host's own questions (GET /queue), the plan
+    (GET /up-next) and, once a round has been played, the rounds played
+    (POST /report, which the rail numbers from).
+
+    THE BUG THIS REPLACES (owner, dev, 3 Nov 2026): "when i refresh the host
+    screen in 2 screen mode, the rounds list doesn't list correctly. only when
+    i click rounds and questions". The plan and the rounds played were read
+    only when the Session menu opened (and the plan again on a round start's
+    socket frame), so a reload left the rail with the round on screen and
+    nothing either side of it until the menu was opened.
   */
+  const loadRoundPlan = useCallback(({ history = false } = {}) => {
+    if (!gameId) return;
+    loadQueue();
+    loadUpNext();
+    if (history) loadRounds();
+  }, [gameId, loadQueue, loadUpNext, loadRounds]);
+
+  /*
+    ON LOAD (a reload included) AND ON EVERY ROUND, because the plan is a
+    function of what has already been asked: without `currentQuestionId` the
+    lists would keep the question the room just answered as still "coming up".
+    The rounds played are read once one has been played (before round 1 the
+    report route has nothing to say), and on load only where the rail shows
+    them — the console, on two screens. POST /report rewrites the session's
+    REPORT snapshot, so one screen, with no rail, keeps reading it only when
+    the Session menu opens. `lessonNumber` is their trigger rather than
+    `gameState`, because a round's ASK, VOTE and RESULTS change nothing in
+    that list.
+  */
+  const roundsPlayedKnown = useConsole && (lessonNumber > 0 || gameState === 'ENDED');
   useEffect(() => {
-    if (gameId) loadQueue();
-  }, [gameId, loadQueue]);
+    if (gameId) loadRoundPlan({ history: roundsPlayedKnown });
+  }, [gameId, currentQuestionId, lessonNumber, roundsPlayedKnown, loadRoundPlan]);
+
+  /* AND WHEN THE SESSION MENU OPENS, so what it shows is fresh. */
+  useEffect(() => {
+    if (setupPanelOpen) loadRoundPlan({ history: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupPanelOpen]);
 
   /**
    * One op, applied locally, sent, then reconciled.
@@ -9031,8 +9055,8 @@ Focus on actionable business strategy insights.`;
   ) : null;
   /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
-    on screen, and what the server's plan says comes next (`upNext`, read on
-    every round start and whenever the Session panel opens). Capped at the
+    on screen, and what the server's plan says comes next (`upNext`). All
+    three come from loadRoundPlan, on load, every round and menu open. Capped at the
     set's size so "2 of 6" never counts a plan longer than the set.
   */
   const consoleRounds = (() => {

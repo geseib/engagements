@@ -980,7 +980,9 @@ describe('the Rounds tab is wired to the page', () => {
   //          fetches — which is exactly how the Questions tab shipped once.
   test('the page loads rounds when the panel opens', () => {
     const host = strip(read('GameHostPage.jsx'));
-    expect(host).toMatch(/if \(setupPanelOpen\) loadRounds\(\)/);
+    // Through the one loader the rail shares (loadRoundPlan), with the rounds.
+    expect(host).toMatch(/if \(setupPanelOpen\) loadRoundPlan\(\{ history: true \}\)/);
+    expect(host).toMatch(/if \(history\) loadRounds\(\)/);
     expect(host).toMatch(/rounds=\{rounds\}/);
     expect(host).toMatch(/onOpenRound=\{setPastRoundIndex\}/);
   });

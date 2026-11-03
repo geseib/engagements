@@ -61,18 +61,27 @@ export function consolePeopleFor(args = {}) {
   THE ONE ADDED FACT (experience plan §3.2b, step 2g): a format adds one fact
   at the end of the row and never anything else. Trivia: the running score,
   with ✓ or ✗ in front of it once the answer is out (`marks`, name → true or
-  false from the round's results, passed only after the reveal). Poll and
-  Wavelength add none: null, and the slot stays empty. (Call & Answer's score
-  is its own step; this returns null for it today.)
+  false from the round's results, passed only after the reveal). Call &
+  Answer: the running score, never a mark. Poll, Wavelength and Survey add
+  none: null, and the slot stays empty.
+
+  CALL & ANSWER WAS LEFT OUT (owner, dev, 3 Nov 2026: "before the scores
+  showed up in the hosts screen 2 screen mode in the people list, but not
+  now"). The two-screen host read C&A scores in the Session menu's Players
+  list ("N pts"); 15022a303 folded that list into a view behind People's
+  "All N" and left the rail's People column as the place to read them, but
+  this returned null for every format except Trivia.
 */
+const SCORED = new Set(['trivia', 'call-and-answer']);
 export function personFactsFor({ gameType, players = [], marks = null } = {}) {
-  if (gameType !== 'trivia') return null;
+  if (!SCORED.has(gameType)) return null;
+  const marked = gameType === 'trivia' ? marks : null;
   const out = {};
   (players || []).forEach((p) => {
     const name = (p && (p.name || p.playerName)) || '';
     if (!name) return;
     const score = Number(p.score !== undefined ? p.score : p.totalScore) || 0;
-    const mark = marks && Object.prototype.hasOwnProperty.call(marks, name) ? (marks[name] ? 'right' : 'wrong') : null;
+    const mark = marked && Object.prototype.hasOwnProperty.call(marked, name) ? (marked[name] ? 'right' : 'wrong') : null;
     out[name] = { score, mark };
   });
   return out;
