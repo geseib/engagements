@@ -52,7 +52,14 @@ export default function EventSummaryDocument({ data }) {
             <div className="rpt-fact"><dt>Held</dt><dd>{data.day}{when && <><br /><span className="rpt-fact-quiet">{when}</span></>}</dd></div>
           )}
           {data.place && <div className="rpt-fact"><dt>Place</dt><dd>{data.place}</dd></div>}
-          <div className="rpt-fact"><dt>Reports</dt><dd>Reports › {data.title}</dd></div>
+          {data.hostName ? (
+            <div className="rpt-fact rpt-ev-host">
+              <dt>Hosted by</dt>
+              <dd>{data.hostName}{data.teamName && <><br /><span className="rpt-fact-quiet">{data.teamName}</span></>}</dd>
+            </div>
+          ) : data.teamName ? (
+            <div className="rpt-fact rpt-ev-host"><dt>Team</dt><dd>{data.teamName}</dd></div>
+          ) : null}
         </dl>
         <div className="rpt-strip rpt-ev-strip">
           <div className="rpt-strip-count"><span className="rpt-strip-n">{counts.items}</span><span className="rpt-strip-l">{counts.items === 1 ? 'Item' : 'Items'}</span></div>

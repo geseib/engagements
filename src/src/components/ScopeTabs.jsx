@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { useKeepOnScreen } from '../buildroom/keepOnScreen';
 import {
   scopeList, tabCounts, splitTeams, initialsOf, roleWord, PLATFORM_KEY,
@@ -257,7 +258,7 @@ export default function ScopeTabs({
           >
             <div className="scp-sheet-in" data-theme="dark">
               <div className="scp-grab" aria-hidden="true" />
-              <div className="scp-mh">Where you work</div>
+              <DialogHead className="scp-mh-head" titleClassName="scp-mh" title="Where you work" onClose={() => setSheetOpen(false)} />
               {[personal, ...teams].filter(Boolean).map((s) => (
                 <button key={s.key} type="button" className={`scp-it${s.key === activeKey ? ' is-on' : ''}`} aria-current={s.key === activeKey ? 'page' : undefined} onClick={() => choose(s)}>
                   <Tile scope={s} />
@@ -284,7 +285,7 @@ export default function ScopeTabs({
               {onCreatePersonal && (
                 <button type="button" className="scp-it scp-it--add" onClick={() => { setSheetOpen(false); onCreatePersonal(); }}>+ Personal space</button>
               )}
-              <button type="button" className="scp-close" onClick={() => setSheetOpen(false)}>Close</button>
+              <DialogFoot className="scp-foot"><button type="button" className="scp-close" onClick={() => setSheetOpen(false)}>Close</button></DialogFoot>
             </div>
           </Modal>
         )}

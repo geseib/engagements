@@ -38,7 +38,7 @@ export function claudeWords(room, now, { quote = true } = {}) {
     key: st.key,
     headline: st.headline,
     // Sent to Claude (I9): beside an open ask the one line is what was sent, word for word; never a hidden send's.
-    line: quote && st.key === 'sent' && st.sent && st.sent.text && !st.sent.hidden && st.sent.verb !== 'decided' ? `\u201c${st.sent.text}\u201d` : (st.line || ''),
+    line: quote && st.key === 'sent' && st.sent && st.sent.text && !st.sent.hidden && st.sent.verb !== 'decided' ? (st.sent.plain ? st.sent.text : `\u201c${st.sent.text}\u201d`) : (st.line || ''),
     dur: st.doing && !st.doing.stale ? st.doing.dur : '',
     helperLine: st.helperLine || '',
   };

@@ -14,7 +14,7 @@
            <h2 id="x-title" className="ui-dialog-title">Delete this set?</h2>
            <p className="ui-dialog-sub">Two saved reports use it.</p>
          </div>
-         <button className="ui-dialog-x" aria-label="Close" onClick={requestClose}>×</button>
+         <button className="ui-dialog-x" aria-label="Close" onClick={requestClose}><Icon name="X" /></button>
        </header>
        <div className="ui-dialog-body">…</div>
        <footer className="ui-dialog-foot">…Cancel…Delete…</footer>
@@ -53,6 +53,10 @@
 
    Contrast (uiDialogPalette.test.js, every skin x theme): --text, --muted and
    --accent-text on --surface; --text on the X's hover (--surface + --row-hover).
+   Since step 5b every Modal caller draws this head and foot through
+   components/ui/DialogParts.jsx (DialogHead, DialogFoot): the X is the
+   Icon X, never a text glyph, and the foot puts the way back on the left
+   and the action on the right.
    ============================================================ */
 
 .ui-scrim {
@@ -158,3 +162,43 @@
   border-top: 1px solid var(--rule);
 }
 .ui-dialog-foot > :first-child { margin-left: auto; }
+
+/* THE SHARED FOOT (components/ui/DialogParts.jsx, experience plan step 5b):
+   the way back on the left, the action on the right. With a cancel slot the
+   first child is the left group and stays put; the right group takes the
+   auto margin, and both wrap rather than overflow (hard rule 9). */
+.ui-dialog-foot > .ui-dialog-foot-start:first-child { margin-left: 0; }
+.ui-dialog-foot-start + .ui-dialog-foot-end { margin-left: auto; }
+.ui-dialog-foot-start,
+.ui-dialog-foot-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+/* THE SMALL CONFIRM (components/ConfirmDialog.jsx): above every other
+   overlay, since it is asked from inside them; the arrow hints the host
+   stage's early-advance confirm wears on its two buttons. */
+.ui-scrim.ui-scrim--top { z-index: 10100; }
+.ui-dialog.ui-confirm .ui-dialog-foot kbd {
+  font-family: inherit;
+  font-size: .85em;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  opacity: .8;
+}
+
+/* The eyebrow over a title (experience plan §5.1 "Heading"): 12px capitals,
+   muted. */
+.ui-dialog-eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}

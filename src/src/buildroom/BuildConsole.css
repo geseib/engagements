@@ -9,20 +9,18 @@
    under text. */
 
 /* The rail: the Build Room's queue cards are wider than C&A's rows. */
-.hc--build.hc--side { grid-template-columns: 280px minmax(0, 1fr) 260px; }
-@media (min-width: 1600px) { .hc--build.hc--side { grid-template-columns: 300px minmax(0, 1fr) 320px; } }
+/* THE PEOPLE COLUMN IS 340px, as Call & Answer's (experience plan 2e, §3.2b): the person row's
+   five slots fit at 15px there. The side column gives way instead. */
+.hc--build.hc--side { grid-template-columns: 340px minmax(0, 1fr) 260px; }
+@media (min-width: 1600px) { .hc--build.hc--side { grid-template-columns: 340px minmax(0, 1fr) 320px; } }
 .hc--build .bc-slot { padding: 0 14px 12px; min-width: 0; }
 .hc--build .bc-slot .brm-queue, .hc--build .bc-slot .brm-lp { font-size: 13px; }
 .hc--build .bc-slot .brm-idea-acts { flex-wrap: wrap; }
-.hc--build .bc-people { padding: 0 0 8px; }
-.hc--build .bc-people li[data-state="not-yet"] { color: var(--muted); }
-.hc--build .bc-tag { margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--muted); border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 6px; padding: 0 6px; }
+/* People: the shared person row (components/people/PersonRow.css) in a plain list. */
+.hc--build .bc-people { list-style: none; margin: 0; padding: 0 0 8px; display: grid; gap: 0; }
 .hc--build .bc-links { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin: 0; font-size: 12px; color: var(--muted); }
-.hc--build .bc-links .hc-link, .hc--build .bc-session .hc-link { padding: 0; }
-.hc--build .bc-session .hc-list { padding: 0 0 8px; }
-.hc--build .bc-session li { flex-wrap: wrap; }
-.hc--build .bc-subh { margin: 4px 0 6px; }
-.hc--build .bc-end { color: var(--danger-text); }
+.hc--build .bc-links .hc-link { padding: 0; }
+.hc--build .bc-links { padding: 0 14px 10px 16px; }
 
 /* The top line holds one row at 1366: nothing in it wraps; the session's
    name gives way (ellipsis, the full name in its title); under 1500px the
@@ -37,7 +35,16 @@
 @media (max-width: 1500px) {
   .hc--build .hc-brand { display: none; }
   .hc--build .bc-chip kbd { display: none; }
+  /* The shared top bar's bell and Session menu (experience plan 2e) take the room the name
+     needs: under 1500px "The room sees:" goes (the group keeps it as its accessible name). */
+  .hc--build .bc-sees-k { display: none; }
+  /* ...and the room's window's "No second display?" line, the widest thing on the bar: Open as
+     a tab stays beside the status, and Session menu, Settings, Screens says the line in full. */
+  .hc--build .hc-top .rws-note { display: none; }
+  .hc--build .hc-top, .hc--build .bc-topx { gap: 8px; }
 }
+/* The name never vanishes: it keeps a word or two before it ellipsises. */
+.hc--build .hc-top > .hc-name { min-width: 6em; }
 
 /* The top line's own parts after the room's window. */
 .hc--build .bc-topx { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
@@ -52,6 +59,11 @@
 
 /* The card's held slot keeps the card's height steady with or without a button. */
 .hc--build .hc-now { min-height: 76px; }
+/* The card sits above the scrolling main area, so a move focused in it lands below the
+   main area's top edge with its row and heading in view, never cut off under the card
+   (QA walk on test, 31 Oct 2026, screen 162: half of What's next's first row was hidden). */
+.hc--build .hc-main { scroll-padding-top: 16px; }
+.hc--build .hc-main .brm-wn .ui-btn { scroll-margin-top: 56px; }
 
 /* The ask: the board, and beside it the moment's panel. */
 .hc--build .bc-askcols { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
@@ -96,7 +108,7 @@
 .hc--build .hc-main > .brm-panel, .hc--build .hc-main > .brm-notice { margin: 0; }
 .hc--build .bc-inmain { display: grid; gap: 10px; }
 .hc--build .bc-inmain-h { display: flex; align-items: center; gap: 12px; }
-.hc--build .bc-inmain-h .brm-btn { margin-left: auto; }
+.hc--build .bc-inmain-h .ui-btn { margin-left: auto; }
 .hc--build .bc-point .hc-cols { grid-template-columns: minmax(0, 1fr) 280px; }
 
 /* The request strip (a name asked for) and the error bars sit above the main area's work. */

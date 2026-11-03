@@ -1,17 +1,26 @@
 /**
- * THE BUILD ROOM'S SESSION PANEL (docs/design/build-room-sidebar, S1-S6).
+ * THE BUILD ROOM'S SESSION MENU (docs/design/build-room-sidebar, S1-S6;
+ * experience plan 2e, §3.2a, §3.2b: "same + Build settings").
  *
- * The same side panel the other engagements open from SESSION or the backslash
- * key (components/stage/SessionSetupPanel.jsx), with two tabs and no more:
+ * The Session menu every format opens from the top bar's labelled button, top
+ * right, or the backslash key (components/stage/SessionSetupPanel.jsx), named
+ * and closed in the same words (config/hostWords.js). On the two-screen
+ * console it opens as a sheet over the content area (HostConsole's sheet
+ * host), never over Your part now or the Needs-you line.
  *
- *   Players   everyone in the room, one list shared with the other engagements
- *             (components/stage/PlayersList.jsx): Unlock name / Let them take
- *             it, Lock again, Not now, Remove, Bring back. Only the right-hand
- *             column differs: ideas sent here, a lane for a builder.
- *   Settings  everything that used to hide in the header's three-dot menu, in
- *             groups that answer one question each, in the order a host
- *             meets them: Screens (the room's window, parity PLAN §2.7), The
- *             room, Claude, Crew, This session. End session is last and alone.
+ * THE SAME NAMES AS EVERY FORMAT (docs/design/session-menu D10, approved 3
+ * Nov 2026, with People in every version):
+ *
+ *   Claude        the chip, Connect Claude Code, the Continue prompt, the auto
+ *                 switch, the posts gate; More: plugin version, the crew,
+ *                 Back to the opening.
+ *   Asks so far   the report first, Wrap up, the history.
+ *   People        everyone, in the rail's person row, and who left.
+ *   Screens       where the room watches, the room's window; More: size, New
+ *                 link, Look here privately, the keys.
+ *   Joining       the codes and the demo; More: names on the room meter.
+ *
+ * End session and Main menu are the foot, in every section; the X closes it.
  *
  * It holds nothing of its own but which tab is up. The page owns the roster
  * (useBuildPlayers) and every action; this draws them. A button that opens a
@@ -26,8 +35,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import HelpButton from '../components/HelpButton';
+import HW from '../config/hostWords';
 import { helpFor } from '../config/help/screens';
-import PlayersList from '../components/stage/PlayersList';
+import PersonRow, { PERSON_WORDS } from '../components/people/PersonRow';
+import MoreOptions from '../components/stage/MoreOptions';
+import { NEEDS_ACTIONS } from '../config/needsYou';
+import '../components/stage/SessionMenu.css';
 import { copyText } from '../utils/copyText';
 import { RunCrewCodeSwitch } from './BuildCrew';
 import { CodeBox, DemoTile, AppList, QuietWarning, demoSlotOf, demoOnStage } from './BuildWifiShare';
@@ -36,6 +49,7 @@ import { W } from './words';
 import { DISPLAY_PROFILES, ScreenChoiceRow, RoomWindowRow } from '../components/stage/ScreensGroup';
 import { SCREEN_WORDS, screenWordsFor } from '../config/roomScreen';
 import { presentHref } from '../config/surfaces';
+import Button from '../components/ui/Button';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -153,9 +167,9 @@ export function HandoverStrip({ asking, busy, onGrant, onRefuse, onSee }) {
         )}
       </div>
       <div className="brm-strip-acts">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={onSee}>{W.seeInPlayers}</button>
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</button>}
-        {one && <button type="button" className="brm-btn brm-btn--sm brm-btn--solid" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</button>}
+        <Button type="button" size={36} className="brm-tight" onClick={onSee}>{W.seeInPlayers}</Button>
+        {one && <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipHandoverNotNow(name)} onClick={() => onRefuse(name)}>{W.notNow}</Button>}
+        {one && <Button type="button" size={36} className="brm-tight" disabled={busy} title={W.tipTakeIt} onClick={() => onGrant(name)}>{W.letThemTakeIt}</Button>}
       </div>
     </section>
   );
@@ -227,7 +241,7 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
           </p>
           {!ended && (
             <div className="brm-codes-acts">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={copyLink}>Copy join link</button>
+              <Button type="button" size={36} className="brm-tight" onClick={copyLink}>Copy join link</Button>
               {copied && <span className="brm-hint" role="status">{copied}</span>}
             </div>
           )}
@@ -239,12 +253,12 @@ export function RoomCodes({ room, now, ended, busy, run, api, wifiLink = '', onS
       {(st === 'on' || st === 'quiet') && <AppList map={lan.map || []} />}
       {!ended && (
         <div className="brm-sp-row">
-          <button type="button" className={`brm-btn${stageLeads ? ' brm-btn--primary' : ''}`} onClick={onShowCodes}>
+          <Button type="button" variant={stageLeads ? 'primary' : 'secondary'} size={36} className="brm-ctl" onClick={onShowCodes}>
             {both ? W.showBothOnStage : W.shareShowOnStage}
-          </button>
+          </Button>
           {(st === 'starting' || st === 'waiting') && <span className="brm-hint">{W.demoJoinsWhenLive}</span>}
           {st === 'quiet' && (
-            <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={() => run(() => api.share({ on: false }))}>{W.stopSharing}</button>
+            <Button type="button" variant="primary" size={36} className="brm-ctl brm-push" disabled={busy} onClick={() => run(() => api.share({ on: false }))}>{W.stopSharing}</Button>
           )}
         </div>
       )}
@@ -270,7 +284,7 @@ export const ARM_MS = 6000;
  * a laptop with no second display read as Call & Answer's do (B9, 19 Oct).
  * The window's row is drawn whichever is chosen: it is never taken away.
  */
-export function WallScreens({ room, busy, run, api, ended, choice = null, onChoose = null }) {
+export function WallScreens({ room, busy, run, api, ended, choice = null, onChoose = null, extra = null, sizeInMore = false }) {
   const [armed, setArmed] = useState(false);
   const [said, setSaid] = useState('');
   useEffect(() => {
@@ -288,17 +302,9 @@ export function WallScreens({ room, busy, run, api, ended, choice = null, onChoo
     const out = await run(() => api.wall({ rotate: true }));
     if (out !== undefined) setSaid(W.wallNewLinkDone);
   };
-  return (
-    <div className="brm-sp-grp" data-group="screens" data-capability="screens">
-      <div className="brm-sp-gh"><h3>{W.screensGroup}</h3><span>{W.screensScope}</span></div>
-      <div className="scr">
-        {/* One screen or two (parity PLAN §2.7, B9): the same choice and the same
-            stored value as Call & Answer's, and the Host screen's first question. */}
-        {typeof onChoose === 'function' && href && (
-          <ScreenChoiceRow choice={choice === 'two' ? 'two' : 'classic'} onChoose={onChoose} words={screenWordsFor('build')} />
-        )}
-        <RoomWindowRow href={href} detail={detail} linkProps={{ title: W.wallOpenHint, 'data-capability': 'room-window' }} />
-        {href && <p className="scr-hint brm-sp-note">{W.wallFollows}</p>}
+  /* The size and New link: the menu draws them in Screens · More options. */
+  const tuning = (
+    <>
         <div className="scr-row">
           <div className="scr-k">
             <label className="scr-label" htmlFor="brm-wall-size">{SCREEN_WORDS.size}</label>
@@ -314,24 +320,165 @@ export function WallScreens({ room, busy, run, api, ended, choice = null, onChoo
               <span className="scr-label">{W.wallNewLinkLabel}</span>
               <span className="scr-hint" role={armed || said ? 'status' : undefined}>{armed ? W.wallNewLinkWhy : (said || W.wallNewLinkHint)}</span>
             </div>
-            <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</button>
+            <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={rotate}>{armed ? W.wallNewLinkArmed : W.wallNewLink}</Button>
           </div>
         )}
+    </>
+  );
+  return (
+    <div className="brm-sp-grp" data-group="screens" data-capability="screens">
+      <div className="brm-sp-gh"><h3>{W.screensGroup}</h3><span>{W.screensScope}</span></div>
+      <div className="scr">
+        {/* One screen or two (parity PLAN §2.7, B9): the same choice and the same
+            stored value as Call & Answer's, and the Host screen's first question. */}
+        {typeof onChoose === 'function' && href && (
+          <ScreenChoiceRow choice={choice === 'two' ? 'two' : 'classic'} onChoose={onChoose} words={screenWordsFor('build')} />
+        )}
+        <RoomWindowRow href={href} detail={detail} linkProps={{ title: W.wallOpenHint, 'data-capability': 'room-window' }} />
+        {href && <p className="scr-hint brm-sp-note">{W.wallFollows}</p>}
+        {sizeInMore ? null : tuning}
       </div>
+      {typeof extra === 'function' ? extra(tuning) : extra}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ panel -- */
 
+/* ------------------------------------------------------------------ panel -- */
+
+/**
+ * THE BUILD ROOM'S SECTIONS (docs/design/session-menu D10, with the owner's
+ * one change: People in every version). The same names as every other
+ * format's menu: Claude · Asks so far · People · Screens · Joining.
+ */
+export const BUILD_MENU_TABS = Object.freeze([
+  { id: 'claude', label: 'Claude' },
+  { id: 'asks', label: 'Asks so far' },
+  { id: 'people', label: 'People' },
+  { id: 'screens', label: 'Screens' },
+  { id: 'joining', label: 'Joining' },
+]);
+
+/* The old ids, still asked for (the rail's links, the request strip's See in
+   People, the top bar's SESSION): where each one lives now. */
+const BUILD_LEGACY = Object.freeze({ players: 'people', settings: 'claude' });
+
+/* A group asked for by name (the Wi-Fi chip, Claude's status): its section. */
+const GROUP_TAB = Object.freeze({
+  screens: 'screens',
+  room: 'joining',
+  'share-demo': 'joining',
+  wifi: 'joining',
+  demo: 'joining',
+  joining: 'joining',
+  claude: 'claude',
+  crew: 'claude',
+  build: 'claude',
+  session: 'asks',
+  report: 'asks',
+});
+
+/** Which Build Room section a tab and group ask for. */
+export function buildMenuSection(tab = '', group = '') {
+  const id = BUILD_LEGACY[tab] || tab;
+  if (id === 'claude' && GROUP_TAB[group]) return GROUP_TAB[group];
+  return BUILD_MENU_TABS.some((t) => t.id === id) ? id : 'claude';
+}
+
+/** The People filters a rail link can ask for (`group`). */
+const PEOPLE_FILTERS = [
+  { id: 'here', label: 'Here', test: (r) => r.here },
+  { id: 'away', label: 'Away', test: (r) => !r.here },
+  { id: 'builders', label: 'Builders', test: (r) => r.builder },
+];
+
+/**
+ * PEOPLE, IN THE RAIL'S PERSON ROW (components/people/PersonRow.jsx): dot,
+ * name, Builder and lane or here/away, ideas sent, ⋯ (Move to a new device,
+ * Lock name, Remove from session; the Build Room has no Rename). An asker's
+ * row turns amber with Let them / Not now. Who left, with Bring back. Search
+ * and Here / Away / Builders once the room is past twelve people.
+ */
+function BuildPeople({ rows, departed, summary, ended, filter: initialFilter = '', actions }) {
+  const [query, setQuery] = useState('');
+  const [filterId, setFilterId] = useState(PEOPLE_FILTERS.some((f) => f.id === initialFilter) ? initialFilter : 'all');
+  const searchable = rows.length > 12 || filterId !== 'all';
+  const active = PEOPLE_FILTERS.find((f) => f.id === filterId);
+  const needle = query.trim().toLowerCase();
+  const shown = rows
+    .filter((r) => (active ? active.test(r) : true))
+    .filter((r) => (needle ? r.name.toLowerCase().includes(needle) : true))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => Number(b.handoverRequested && !b.handoverOpen) - Number(a.handoverRequested && !a.handoverOpen));
+  const menuFor = (r) => (ended ? [] : [
+    r.handoverOpen
+      ? { id: 'lock', label: PERSON_WORDS.lock, onSelect: () => actions.onLock(r.name) }
+      : { id: 'move', label: PERSON_WORDS.move, onSelect: () => (r.handoverRequested ? actions.onGrant(r.name, true) : actions.onUnlock(r.name)) },
+    { id: 'remove', label: PERSON_WORDS.remove, danger: true, onSelect: () => actions.onRemove(r.name) },
+  ]);
+  const needsFor = (r) => (!ended && r.handoverRequested && !r.handoverOpen ? {
+    id: `name:${r.name}`, kind: 'name-request', name: r.name, actions: [NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW],
+  } : null);
+  const onNeedsAct = (item, a) => (a === NEEDS_ACTIONS.LET ? actions.onGrant(item.name, true) : actions.onRefuse(item.name));
+  return (
+    <>
+      <p className="brm-hint brm-sp-note" data-testid="brm-people-count">{`${rows.length} in the room · ${summary}`}</p>
+      {searchable ? (
+        <div className="brm-sp-row brm-sp-filters">
+          <input type="search" className="brm-sp-search" placeholder="Search names…" aria-label="Search names" value={query} onChange={(e) => setQuery(e.target.value)} />
+          {[{ id: 'all', label: 'All' }, ...PEOPLE_FILTERS].map((f) => (
+            <Button key={f.id} type="button" size={36} variant={filterId === f.id ? 'primary' : 'secondary'} className="brm-tight" aria-pressed={filterId === f.id} onClick={() => setFilterId(f.id)}>{f.label}</Button>
+          ))}
+        </div>
+      ) : null}
+      {rows.length === 0 ? <p className="brm-hint">Nobody has joined yet.</p> : (
+        <ul className="bc-people brm-sp-people" aria-label="Everyone in the room">
+          {shown.map((r) => (
+            <PersonRow
+              key={r.name}
+              name={r.name}
+              status={r.here ? 'here' : 'away'}
+              doing={r.builder ? (r.lane ? `Builder · ${r.lane}` : 'Builder') : (r.here ? 'Here' : 'Away')}
+              fact={ideasText(r.ideas)}
+              menu={menuFor(r)}
+              needsItem={needsFor(r)}
+              onNeedsAct={onNeedsAct}
+            />
+          ))}
+        </ul>
+      )}
+      {departed.length ? (
+        <div className="brm-sp-left" data-testid="brm-people-left">
+          <h4 className="brm-sp-sh">Left the session</h4>
+          <p className="brm-hint brm-sp-note">{W.departedNote}</p>
+          <ul className="bc-people brm-sp-people" aria-label="Left the session">
+            {departed.map((r) => (
+              <PersonRow
+                key={r.name}
+                name={r.name}
+                status="left"
+                doing={`Removed${r.removedAt ? ` ${timeOf(r.removedAt)}` : ''}`}
+                fact={ideasText(r.ideas)}
+                menu={[{ id: 'restore', label: 'Bring back', onSelect: () => actions.onRestore(r.name) }]}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export default function BuildSessionPanel({
   room, now, ended, busy, run, api, connected = true,
   roster, reloadPlayers,
-  tab, onTab, focusGroup = '', onClose,
+  tab: tabAsked, onTab, focusGroup = '', onClose,
   topLine = null, slots = {},
   listNames, onListNames,
   onConnect, onUpdatePlugin, onCrew, onWrap, onReport, onEnd, onShowCodes, wifiLink = '',
   roomChoice = null, onRoomChoice = null,
+  onLook = null, continueSlot = null, inSheet = false,
 }) {
   const panelRef = useRef(null);
   const rootRef = useRef(null);
@@ -339,6 +486,7 @@ export default function BuildSessionPanel({
   const crew = room.crew && room.crew.enabled ? room.crew : null;
   const { rows, departed, summary } = useMemo(() => rosterOf(room, roster), [room, roster]);
   const asking = askingOf(roster.players);
+  const tab = buildMenuSection(tabAsked, focusGroup);
 
   // Where focus came from, so it can go back (a keyboard host who opens this
   // and closes it must not be dropped at the top of the page).
@@ -390,9 +538,9 @@ export default function BuildSessionPanel({
     return () => window.removeEventListener('resize', place);
   }, [tab, topLine]);
 
-  // Settings opened at a group (the Wi-Fi chip, Claude's status): bring it into view.
+  // Opened at a group (the Wi-Fi chip, Claude's status): bring it into view.
   useEffect(() => {
-    if (tab !== 'settings' || !focusGroup) return;
+    if (!focusGroup) return;
     const g = panelRef.current && panelRef.current.querySelector(`[data-group="${focusGroup}"]`);
     if (g && typeof g.scrollIntoView === 'function') g.scrollIntoView({ block: 'start' });
   }, [tab, focusGroup]);
@@ -426,10 +574,10 @@ export default function BuildSessionPanel({
 
   const pick = (fn) => () => { onClose(); fn(); };
   const opening = room.opening && room.opening.phase === 'building';
+  const ids = BUILD_MENU_TABS.map((t) => t.id);
 
   // Arrow keys, Home and End move between the tabs (the tabs pattern); the selected one is the tab stop.
   const tabKeys = (e) => {
-    const ids = ['players', 'settings'];
     const at = ids.indexOf(tab);
     let next = null;
     if (e.key === 'ArrowRight') next = ids[(at + 1) % ids.length];
@@ -443,20 +591,26 @@ export default function BuildSessionPanel({
     if (el) el.focus();
   };
 
-  const tabs = [
-    { id: 'players', label: W.players, count: rows.length, flag: asking.length ? `${asking.length} asking` : '' },
-    { id: 'settings', label: W.settings },
+  const tabs = BUILD_MENU_TABS.map((t) => (t.id === 'people'
+    ? { ...t, count: rows.length, flag: asking.length ? `${asking.length} asking` : '' }
+    : t));
+
+  const builders = crew ? (crew.builders || []).filter((b) => !b.closed) : [];
+  const claudeMore = [
+    !ended && room.plugin ? { label: 'Plugin version' } : null,
+    { label: 'Crew' },
+    !ended && opening ? { label: 'Back to the opening' } : null,
   ];
 
   return (
-    <div className="brm-sp-root" ref={rootRef}>
+    <div className={`brm-sp-root${inSheet ? ' is-sheet' : ''}`} ref={rootRef}>
       <div className="brm-sp-scrim" onClick={onClose} aria-hidden="true" />
-      <aside className="brm-sp" ref={panelRef} role="dialog" aria-modal="true" aria-label="Session" tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
+      <aside className="brm-sp smenu" ref={panelRef} role="dialog" aria-modal="true" aria-label={HW.sessionMenu} tabIndex={-1} onKeyDown={trapFocus} data-capability="settings">
         <div className="brm-sp-head">
-          <h2 className="brm-sp-title">Session</h2>
+          <h2 className="brm-sp-title">{HW.sessionMenu}</h2>
           <span className={`brm-sp-ws${connected ? ' is-up' : ''}`} aria-live="polite">{connected ? 'Connected' : 'Connecting…'}</span>
           {/* Help and close, the two things you reach for when lost, as on the
-              other engagements' Session panel (Help Phase 3). */}
+              other engagements' Session menu (Help Phase 3). */}
           <HelpButton
             {...helpFor('build-session-panel')}
             variant="inline"
@@ -465,12 +619,12 @@ export default function BuildSessionPanel({
             className="help-button-quiet"
             reports={{ context: 'host', gameId: room.gameId }}
           />
-          <button type="button" className="brm-sp-x" aria-label="Close the session panel" onClick={onClose}><Icon name="X" size={16} /></button>
+          <button type="button" className="brm-sp-x" aria-label={HW.closeSessionMenu} onClick={onClose}><Icon name="X" size={16} /></button>
         </div>
 
         {topLine && <div className="brm-sp-top" data-testid="brm-sp-top">{topLine}</div>}
 
-        <div className="brm-sp-tabs" role="tablist" aria-label="Session sections">
+        <div className="brm-sp-tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -492,70 +646,32 @@ export default function BuildSessionPanel({
         </div>
 
         <div className="brm-sp-body">
-          {tab === 'players' && (
-            <section id="brm-sp-pane-players" role="tabpanel" aria-labelledby="brm-sp-tab-players" className="brm-sp-pane" data-capability="players">
-              <PlayersList
-                rows={rows}
-                departed={departed}
-                sortBy="name"
-                askingFirst
-                searchAfter={12}
-                filters={[
-                  { id: 'here', label: 'Here', test: (r) => r.here },
-                  { id: 'away', label: 'Away', test: (r) => !r.here },
-                  { id: 'builders', label: 'Builders', test: (r) => r.builder },
-                ]}
-                countLabel={(n) => `${n} in the room`}
-                summary={summary}
-                departedNote={W.departedNote}
-                emptyText="Nobody has joined yet."
-                renderBadge={(r) => (r.builder ? <span className="brm-chip brm-chip--live brm-sp-tag">Builder</span> : null)}
-                renderMeta={(r, gone) => (gone
-                  ? [`Removed${r.removedAt ? ` ${timeOf(r.removedAt)}` : ''}`, ideasText(r.ideas)].join(' · ')
-                  : [r.here ? 'Here' : 'Away', r.joinedAt ? `joined ${timeOf(r.joinedAt)}` : '', ideasText(r.ideas), r.lane ? `on ${r.lane}` : ''].filter(Boolean).join(' · '))}
-                {...players}
-              />
-            </section>
-          )}
-
-          {tab === 'settings' && (
-            <section id="brm-sp-pane-settings" role="tabpanel" aria-labelledby="brm-sp-tab-settings" className="brm-sp-pane">
-              <WallScreens room={room} busy={busy} run={run} api={api} ended={ended} choice={roomChoice} onChoose={onRoomChoice} />
-
-              <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
-                <div className="brm-sp-gh"><h3>The room</h3><span>Who can get in, and what they can open</span></div>
-                <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
-                <Switch
-                  label="List names on the room meter"
-                  tag="new"
-                  checked={Boolean(listNames)}
-                  onChange={onListNames}
-                  note={W.roomMeterNote}
-                />
-              </div>
-
+          {/* CLAUDE: the chip, Connect Claude Code, the Continue prompt, the
+              auto switch and the posts gate; the plugin version, the crew and
+              Back to the opening in More options. */}
+          {tab === 'claude' && (
+            <section id="brm-sp-pane-claude" role="tabpanel" aria-labelledby="brm-sp-tab-claude" className="brm-sp-pane">
               <div className="brm-sp-grp" data-group="claude" data-capability="claude-status">
-                <div className="brm-sp-gh"><h3>Claude</h3></div>
                 <div className="brm-sp-row">
                   {slots.agentChip}
                   {!ended && (
-                    <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={pick(onConnect)}>
+                    <Button type="button" size={36} className="brm-tight brm-push" onClick={pick(onConnect)}>
                       <Icon name="Lock" size={14} /> Connect Claude Code
-                    </button>
+                    </Button>
                   )}
                 </div>
-                {/* Which plugin Claude runs, always (owner, 18 Oct): the version, and whether it is the latest. */}
-                {!ended && room.plugin && <PluginVersion plugin={room.plugin} />}
-                {/* The plugin is older than the current one: one line, here only (never the Stage or a device). */}
+                {/* The plugin is older than the current one: one line, here only. */}
                 {!ended && room.plugin && room.plugin.outdated && (
                   <p className="brm-hint brm-sp-note" data-testid="brm-plugin-out">
                     {W.pluginOutdated}{' '}
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--link" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</button>
+                    <Button type="button" variant="tertiary" size={36} className="brm-tight" onClick={pick(onUpdatePlugin)}>{W.pluginUpdate}</Button>
                   </p>
                 )}
+                {/* Claude is away: the prompt that brings it back. */}
+                {!ended && continueSlot}
                 {!ended && slots.autoSwitch}
                 {!ended && <p className="brm-hint brm-sp-note">{W.autoNote}</p>}
-                {/* THE RELEASE GATE (owner, 17 Oct 2026; parity PLAN §2c): Claude's posts and screenshots wait for the host. */}
+                {/* THE RELEASE GATE (owner, 17 Oct 2026): Claude's posts and screenshots wait for the host. */}
                 {!ended && (
                   <div data-capability="release-posts">
                     <Switch
@@ -568,56 +684,117 @@ export default function BuildSessionPanel({
                   </div>
                 )}
               </div>
-
-              <div className="brm-sp-grp" data-group="crew" data-capability="crew">
-                <div className="brm-sp-gh"><h3>Crew</h3></div>
-                {crew ? (
-                  <>
-                    <div className="brm-sp-row">
-                      <span className="brm-sp-lab">{`${(crew.builders || []).filter((b) => !b.closed).length} ${plural((crew.builders || []).filter((b) => !b.closed).length, 'builder', 'builders')}`}</span>
-                      <span className="brm-hint">{(crew.builders || []).filter((b) => !b.closed).map((b) => b.name).join(', ')}</span>
-                      {!ended && <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={pick(onCrew)}>Crew</button>}
-                    </div>
-                    {!ended && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
-                  </>
-                ) : (
-                  <>
-                    <p className="brm-hint brm-sp-note">{W.crewNote}</p>
-                    {!ended && <div className="brm-sp-row"><button type="button" className="brm-btn brm-btn--sm" onClick={pick(onCrew)}>Open to a crew</button></div>}
-                  </>
-                )}
-              </div>
-
-              <div className="brm-sp-grp" data-group="session" data-capability="report">
-                <div className="brm-sp-gh"><h3>This session</h3><span>Going back, finishing, stopping</span></div>
+              <MoreOptions section="build-claude" groups={claudeMore}>
+                {!ended && room.plugin ? <PluginVersion plugin={room.plugin} /> : null}
+                <div className="brm-sp-sub" data-group="crew" data-capability="crew">
+                  <h4 className="brm-sp-sh">Crew</h4>
+                  {crew ? (
+                    <>
+                      <div className="brm-sp-row">
+                        <span className="brm-sp-lab">{`${builders.length} ${plural(builders.length, 'builder', 'builders')}`}</span>
+                        <span className="brm-hint">{builders.map((b) => b.name).join(', ')}</span>
+                        {!ended && <Button type="button" size={36} className="brm-tight brm-push" onClick={pick(onCrew)}>Crew</Button>}
+                      </div>
+                      {!ended && <RunCrewCodeSwitch crew={crew} busy={busy} run={run} api={api} />}
+                    </>
+                  ) : (
+                    <>
+                      <p className="brm-hint brm-sp-note">{W.crewNote}</p>
+                      {!ended && <div className="brm-sp-row"><Button type="button" size={36} className="brm-tight" onClick={pick(onCrew)}>Open to a crew</Button></div>}
+                    </>
+                  )}
+                </div>
                 {!ended && opening && (
                   <div className="brm-sp-row" data-capability="opening">
-                    <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</button>
+                    <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={pick(() => run(() => api.openingAction('resume', {})))}>Back to the opening</Button>
                     <span className="brm-hint">{W.startUndoNote}</span>
                   </div>
                 )}
-                <div className="brm-sp-row">
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onWrap)}>Wrap up</button>
-                  <button type="button" className="brm-btn brm-btn--sm" onClick={pick(onReport)}><Icon name="FileText" size={14} /> Report</button>
-                </div>
-                {!ended && (
-                  <div className="brm-sp-row brm-sp-end">
-                    <button type="button" className="brm-btn brm-btn--sm brm-btn--ghostdanger" onClick={pick(onEnd)}>End session</button>
-                    <span className="brm-hint">{W.endsForAll}</span>
-                  </div>
-                )}
-              </div>
+              </MoreOptions>
+            </section>
+          )}
 
-              <p className="brm-hint brm-sp-keys">
-                <kbd>1</kbd>{'–'}<kbd>4</kbd> screens {'·'} <kbd>P</kbd> Host and back {'·'} <kbd>Space</kbd> the lead move {'·'} <kbd>\</kbd> this panel {'·'} <kbd>Esc</kbd> close
-              </p>
+          {/* ASKS SO FAR: the report first, then Wrap up, then the history. */}
+          {tab === 'asks' && (
+            <section id="brm-sp-pane-asks" role="tabpanel" aria-labelledby="brm-sp-tab-asks" className="brm-sp-pane">
+              <div className="brm-sp-grp" data-group="session" data-capability="report">
+                <div className="smenu-report">
+                  <Icon name="FileText" size={22} />
+                  <div className="smenu-report__t">
+                    <b>Session report</b>
+                    <span className="brm-hint">Every ask, what the room chose, and what Claude built.</span>
+                  </div>
+                  <Button type="button" size={36} className="brm-tight" onClick={pick(onReport)}><Icon name="FileText" size={14} /> Report</Button>
+                </div>
+                <div className="brm-sp-row">
+                  <Button type="button" size={36} className="brm-tight" onClick={pick(onWrap)}>Wrap up</Button>
+                  {typeof onLook === 'function' && (
+                    <Button type="button" size={36} className="brm-tight" data-capability="history" onClick={pick(() => onLook('history'))}>{W.lookHistory}</Button>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {tab === 'people' && (
+            <section id="brm-sp-pane-people" role="tabpanel" aria-labelledby="brm-sp-tab-people" className="brm-sp-pane" data-capability="players">
+              <BuildPeople rows={rows} departed={departed} summary={summary} ended={ended} filter={focusGroup} actions={players} />
+            </section>
+          )}
+
+          {/* SCREENS: where the room watches, the room's window; the size, New
+              link, Look here privately and the keys in More options. */}
+          {tab === 'screens' && (
+            <section id="brm-sp-pane-screens" role="tabpanel" aria-labelledby="brm-sp-tab-screens" className="brm-sp-pane">
+              <WallScreens
+                room={room} busy={busy} run={run} api={api} ended={ended} choice={roomChoice} onChoose={onRoomChoice}
+                extra={(tuning) => (
+                  <MoreOptions section="build-screens" groups={[{ label: 'Screen size' }, room.wallKey && !ended ? { label: 'New link' } : null, typeof onLook === 'function' ? { label: W.lookHere } : null, { label: 'Keys' }]}>
+                    <div className="scr">{tuning}</div>
+                    {typeof onLook === 'function' ? (
+                      // LOOK HERE, PRIVATELY: Build or History on this laptop alone.
+                      <div className="brm-sp-row brm-sp-look">
+                        <span className="brm-sp-lab">{W.lookHere}</span>
+                        <Button type="button" size={36} className="brm-tight" data-capability="build-screen" onClick={pick(() => onLook('build'))}>{W.lookBuild}</Button>
+                        <Button type="button" size={36} className="brm-tight" onClick={pick(() => onLook('history'))}>{W.lookHistory}</Button>
+                      </div>
+                    ) : null}
+                    <p className="brm-hint brm-sp-keys">
+                      <kbd>1</kbd>{'–'}<kbd>4</kbd> screens {'·'} <kbd>P</kbd> Host and back {'·'} <kbd>Space</kbd> the lead move {'·'} <kbd>\</kbd> this menu {'·'} <kbd>Esc</kbd> close
+                    </p>
+                  </MoreOptions>
+                )}
+                sizeInMore
+              />
+            </section>
+          )}
+
+          {/* JOINING: the codes; the demo on this Wi-Fi and the meter's names in More options. */}
+          {tab === 'joining' && (
+            <section id="brm-sp-pane-joining" role="tabpanel" aria-labelledby="brm-sp-tab-joining" className="brm-sp-pane">
+              <div className="brm-sp-grp" data-group="room" data-capability="share-demo">
+                <RoomCodes room={room} now={now} ended={ended} busy={busy} run={run} api={api} wifiLink={wifiLink} onShowCodes={pick(onShowCodes)} />
+              </div>
+              <MoreOptions section="build-joining" groups={[{ label: 'List names on the room meter' }]}>
+                <Switch
+                  label="List names on the room meter"
+                  checked={Boolean(listNames)}
+                  onChange={onListNames}
+                  note={W.roomMeterNote}
+                />
+              </MoreOptions>
             </section>
           )}
         </div>
 
-        <div className="brm-sp-foot">
-          <span className="brm-hint"><kbd>\</kbd> opens and closes this panel</span>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brm-push" onClick={onClose}>Close</button>
+        {/* THE FOOT, as on every other format: End session and Main menu, in every section. */}
+        <div className="brm-sp-foot" data-testid="brm-sp-foot">
+          {!ended && (
+            <Button type="button" size={36} className="brm-tight brm-danger" title={HW.endSessionHint} onClick={pick(onEnd)}>{`${HW.endSession}…`}</Button>
+          )}
+          <Button as="a" size={36} className="brm-tight brm-push" href="/" title={HW.mainMenuHint}>
+            <Icon name="House" size={14} /> {HW.mainMenu}
+          </Button>
         </div>
       </aside>
     </div>

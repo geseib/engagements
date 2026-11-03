@@ -211,17 +211,54 @@ export default function useStageFit(stageRef, deps = []) {
      * Measuring is the only honest answer; `--dock-h` stays as the fallback
      * for the first paint, before this has run.
      */
+    /*
+     * AND THE HOST'S FRAME ABOVE THE STAGE (experience plan 2h). Where "Your
+     * part now" sits under the top bar (`.dock--part` inside `.stage-now`)
+     * there is no bottom dock, so `--dock-measured` is 0 and the panels run to
+     * the bottom edge; instead they start below the frame, at
+     * `--stage-now-bottom` (the Needs-you line's bottom edge, or Your part
+     * now's), because the Session menu opens "over the content area, never
+     * over Your part now" (PLAN §3.2b) and must leave the main button live.
+     */
     const publishDockHeight = () => {
-      const dock = root.querySelector('.dock');
-      if (!dock) return;
-      const h = Math.ceil(dock.getBoundingClientRect().height);
-      if (h > 0) document.documentElement.style.setProperty('--dock-measured', `${h}px`);
+      const rootStyle = document.documentElement.style;
+      const dock = root.querySelector('.dock:not(.dock--part)');
+      if (dock) {
+        const h = Math.ceil(dock.getBoundingClientRect().height);
+        if (h > 0) rootStyle.setProperty('--dock-measured', `${h}px`);
+      } else if (root.querySelector('.dock--part')) {
+        rootStyle.setProperty('--dock-measured', '0px');
+      }
+      const frame = root.querySelector('.stage-needs') || root.querySelector('.stage-now');
+      if (frame) {
+        const b = Math.ceil(frame.getBoundingClientRect().bottom);
+        if (b > 0) rootStyle.setProperty('--stage-now-bottom', `${b}px`);
+      }
     };
+
+    /*
+     * CONTENT THAT GROWS AFTER THE FIT (experience plan 2h, measured in
+     * Chromium). A reveal that lands a beat after its render (trivia's
+     * RESULTS: the split and the CORRECT mark arrive ~1.5s later, with no new
+     * fitKey) grew `.content` 36px past its box at TV 1280x720 and nothing
+     * re-fitted. It used to be rescued by accident: the bottom dock's status
+     * changed height at about the same moment and its observer refitted. With
+     * Your part now on top, at one fixed height, that accident is gone, so the
+     * content's own box is watched: `settled` is each fitbox's height as the
+     * last run left it, and only a change from THAT refits. A run is
+     * deterministic, so the run it triggers leaves the same heights and the
+     * observer goes quiet (no loop).
+     */
+    const fitboxes = Array.prototype.slice.call(root.querySelectorAll('.content > .fitbox'));
+    const contents = fitboxes.map((el) => el.parentNode).filter(Boolean);
+    const settled = new Map();
+    const remember = () => fitboxes.forEach((el) => settled.set(el, Math.round(el.getBoundingClientRect().height)));
 
     const run = () => {
       root.querySelectorAll('.content').forEach(fitContent);
       root.querySelectorAll('.rail, .meter').forEach(fitChrome);
       publishDockHeight();
+      remember();
     };
 
     run();
@@ -241,24 +278,67 @@ export default function useStageFit(stageRef, deps = []) {
     // useCrowded, which runs after this) the stage loses height and the fit
     // taken before it is stale (walk of dev 92f8b24d: TV results at 1366x768
     // left at --fit 1 with 86px over). Refit when the dock's height changes.
-    let dockH = null;
-    const dockEl = root.querySelector('.dock');
-    const ro = dockEl && typeof ResizeObserver === 'function'
+    // The frame's rows above the stage (2h) are auto rows too: a top bar or a
+    // Your part now that changes height changes `.main`'s box the same way.
+    // `.main` itself too: it is the box every row above and below takes from.
+    // The heights are taken NOW, not at the observer's first callback: a row
+    // that settled between this effect and that callback (measured: a frame
+    // row 6px taller once its fonts were in, TV 1366x768) was otherwise
+    // recorded as the baseline and never refitted.
+    // And the meter, by its WIDTH: a count or a name list arriving widens its
+    // column and narrows the content's, which then wraps taller (measured:
+    // a closed survey at TV 1366x768 left 2px over). A meter the fitter hides
+    // changes size too; the refit lands where the first did and goes quiet.
+    const watched = Array.prototype.slice.call(root.querySelectorAll('.dock, .stage-top, .stage-now, .stage-needs, .main, .meter'));
+    const sizeOf = (el) => { const b = el.getBoundingClientRect(); return `${Math.round(b.width)}x${Math.round(b.height)}`; };
+    const heights = new Map(watched.map((el) => [el, sizeOf(el)]));
+    const ro = watched.length && typeof ResizeObserver === 'function'
       ? new ResizeObserver(() => {
-        const h = Math.round(dockEl.getBoundingClientRect().height);
-        if (dockH !== null && h !== dockH) run();
-        dockH = h;
+        let changed = false;
+        watched.forEach((el) => {
+          const h = sizeOf(el);
+          if (heights.has(el) && heights.get(el) !== h) changed = true;
+          heights.set(el, h);
+        });
+        if (changed) run();
       })
       : null;
-    if (ro) ro.observe(dockEl);
+    if (ro) watched.forEach((el) => ro.observe(el));
+    let grewRaf = 0;
+    const grew = fitboxes.length && typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+        if (grewRaf) return;
+        grewRaf = requestAnimationFrame(() => {
+          grewRaf = 0;
+          if (!live) return;
+          const moved = fitboxes.some((el) => settled.has(el)
+            && Math.abs(Math.round(el.getBoundingClientRect().height) - settled.get(el)) > 1);
+          // A FIT TAKEN AT THE EDGE (measured on the merge of 2h with 2f/2g:
+          // Trivia answering at TV 1280x720 fitted with its box at 444px and
+          // 445px of content, inside the 1px tolerance; the box then settled
+          // a sub-pixel shorter, 443px, which no rounded size above shows,
+          // and stayed 2px over). So the content boxes are watched too, and
+          // one that is over and not clamped refits. A run always ends clean
+          // or clamped, and a clamped box is over by design, so this cannot
+          // loop.
+          const edge = contents.some((box) => box.dataset.clamped !== 'on' && over(box));
+          if (moved || edge) run();
+        });
+      })
+      : null;
+    if (grew) fitboxes.forEach((el) => grew.observe(el));
+    if (grew) contents.forEach((el) => grew.observe(el));
     return () => {
       live = false;
       cancelAnimationFrame(raf);
+      if (grewRaf) cancelAnimationFrame(grewRaf);
       window.removeEventListener('resize', run);
       if (ro) ro.disconnect();
+      if (grew) grew.disconnect();
       // Nothing else removes a property set on the document root, and a stale
       // one would size a panel on a page that has no dock at all.
       document.documentElement.style.removeProperty('--dock-measured');
+      document.documentElement.style.removeProperty('--stage-now-bottom');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

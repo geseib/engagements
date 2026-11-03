@@ -1,0 +1,344 @@
+/* skin-allowance: colour=0 font=0 primary=0 */
+/* ============================================================================
+   THE SESSIONS LIST — components/SessionList.jsx (experience plan 4a/4b)
+
+   One list in three places: Library & team's Sessions, the host's "Your
+   sessions" dialog, and Home's Rejoin and recent rows. Scoped `.slist`. It is
+   the `.sp` table (SessionsPanel.css), which is itself cut from the
+   question-set screen: the same ladder, the same 36px row, the same token set.
+   Nothing here paints a new colour — every pairing is --text or --muted on
+   --bg or --surface, measured in __tests__/adminTabsPalette.test.js, and the
+   danger copy is --danger-text (6.08:1 on --surface), never --danger.
+
+   THE ACTIONS ARE ALWAYS SHOWN. `.sp-rowact` hid them until hover; a touch
+   laptop has no hover and the actions are why the list is opened. One primary
+   button and a ⋯ menu fit a fixed column, so nothing wraps or staggers, and
+   the group starts with `margin-left: auto`, never `justify-content:
+   flex-end` (hard rule 9).
+
+   THE MENU IS position: fixed, placed from its button in JS: a cell, the
+   scroll box and the dialog all clip, and the last row's menu would be cut
+   off by any of them.
+   ========================================================================== */
+
+.slist {
+  --slist-t-floor: 12px;
+  --slist-t-label: 13px;
+  --slist-t-body: 15px;
+  --slist-t-head: 19px;
+  --slist-row-h: 36px;
+
+  --slist-rule: rgb(var(--slate-rgb) / .20);
+  --slist-rule-strong: rgb(var(--slate-rgb) / .34);
+  --slist-row-hover: var(--row-hover);
+  --slist-success-text: var(--success-text);
+  --slist-danger-wash: rgb(var(--danger-rgb) / .12);
+
+  color: var(--text);
+  font: 400 var(--slist-t-body)/1.45 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.slist *,
+.slist *::before,
+.slist *::after { box-sizing: border-box; }
+
+.slist :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 3px; }
+
+.slist-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.slist-empty { color: var(--muted); margin: 6px 0; }
+.slist-dim { color: var(--muted); font-size: var(--slist-t-label); }
+
+/* -------------------------------------------------------------- controls --- */
+
+.slist-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+.slist-search { position: relative; flex: 0 1 300px; min-width: 170px; display: flex; align-items: center; }
+.slist-search > svg { position: absolute; left: 9px; pointer-events: none; }
+.slist-input {
+  font: 400 var(--slist-t-body)/1.4 var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--slist-rule-strong);
+  border-radius: 6px;
+  padding: 6px 9px 6px 29px;
+  min-height: 32px;
+  width: 100%;
+}
+.slist-select { padding-left: 9px; width: auto; min-width: 138px; }
+.slist-input::placeholder { color: var(--muted); opacity: .62; }
+.slist-count { font-size: var(--slist-t-label); color: var(--muted); white-space: nowrap; margin-left: auto; }
+
+/* --------------------------------------------------------------- buttons --- */
+
+/* Every action here is the shared ui/Button (experience plan §5.1, step 5c):
+   no button family of this list's own. Only the row geometry is the list's:
+   30px beside the 36px row at the label step, the ⋯ square. */
+.slist .slist-act,
+.slist .slist-lead {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 6px;
+  font-size: var(--slist-t-label);
+  min-width: 0;
+}
+/* THE ROW'S ONE PRIMARY is the shared ui/Button (quiet, sm), outlined in the
+   action colour here so a list of forty rows is not forty amber blocks (one
+   orange per screen, "One look"). Sized to sit beside ⋯ at the label step. */
+.slist .slist-lead {
+  border-color: var(--action);
+  color: var(--accent-text);
+}
+.slist .slist-lead:hover:not(:disabled):not([aria-disabled="true"]) { background: rgb(var(--accent-rgb) / .12); border-color: var(--action); }
+.slist .slist-act > span,
+.slist .slist-lead > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.slist .slist-more { width: 30px; padding: 0; }
+.slist .slist-clear { font-size: var(--slist-t-label); padding: 0; min-height: 0; text-decoration: underline; }
+
+/* -------------------------------------------------------------- no match --- */
+
+.slist-nomatch { padding: 8px 0 0; }
+.slist-nomatch h3 {
+  font-family: var(--font-display);
+  font-size: var(--slist-t-head);
+  font-weight: 700;
+  margin: 0 0 7px;
+}
+.slist-nomatch > p { color: var(--muted); margin: 0 0 14px; }
+.slist-drops { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.slist-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--slist-rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--slist-t-label)/1 var(--font-ui);
+  cursor: pointer;
+}
+.slist-drop em { color: var(--muted); font-style: normal; font-weight: 400; }
+
+/* ----------------------------------------------------------------- table --- */
+
+.slist-scroll { min-width: 0; }
+
+.slist-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--slist-t-body);
+}
+.slist-tbl th {
+  text-align: left;
+  font-size: var(--slist-t-floor);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px 7px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--slist-rule-strong);
+}
+.slist-tbl td {
+  padding: 5px 10px;
+  height: var(--slist-row-h);
+  border-bottom: 1px solid var(--slist-rule);
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.slist-tbl tbody tr:hover td { background: var(--slist-row-hover); }
+.slist-busy td { opacity: .55; }
+.slist-row--done td,
+.slist-row--now td { background: rgb(var(--accent-rgb) / .07); }
+
+/* Five columns, adding to 100%. */
+.slist-c-name  { width: 41%; }
+.slist-c-kind  { width: 15%; }
+.slist-c-state { width: 15%; }
+.slist-c-when  { width: 12%; }
+.slist-c-acts  { width: 17%; }
+.slist-tbl td.slist-c-acts { overflow: visible; }
+
+.slist-namerow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* A single text node with min-width: 0 — the only shape text-overflow works
+   on (hard rule 8). The full string is in title=. */
+.slist-nm {
+  font-weight: 600;
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slist-sub {
+  display: block;
+  font-size: var(--slist-t-label);
+  color: var(--muted);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slist-c-when { font-size: var(--slist-t-label); color: var(--muted); }
+
+.slist-flag {
+  flex: none;
+  font-size: var(--slist-t-floor);
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--slist-rule-strong);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 1.6;
+}
+.slist-flag--now { color: var(--accent-text); border-color: var(--accent); }
+
+.slist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  font-size: var(--slist-t-floor);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--slist-rule-strong);
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.slist-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.slist-chip--type { color: var(--text); }
+.slist-chip--on   { color: var(--slist-success-text); border-color: rgb(var(--slate-rgb) / .34); }
+.slist-chip--off  { color: var(--muted); border-style: dashed; }
+
+.slist-disclose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.slist-disclose > svg { flex: none; color: var(--muted); }
+.slist-disclose:hover .slist-nm { text-decoration: underline; }
+.slist-subrow td { font-size: var(--slist-t-label); }
+.slist-subrow td:first-child { padding-left: 30px; }
+.slist-subrow .slist-nm { font-weight: 500; }
+
+/* The action group: the primary, then ⋯. */
+.slist-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.slist-acts > :first-child { margin-left: auto; }
+.slist-acts > .slist-lead { flex: 0 1 auto; }
+
+/* ------------------------------------------------------------ the ⋯ menu --- */
+
+.slist-menuwrap { display: inline-flex; }
+.slist-menu {
+  position: fixed;
+  z-index: 10050;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--slist-rule-strong);
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgb(var(--shade-rgb) / .5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.slist-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: 500 var(--slist-t-body)/1.2 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.slist-menu-item > svg { flex: none; color: var(--muted); }
+.slist-menu-item:hover,
+.slist-menu-item:focus-visible { background: var(--slist-row-hover); outline: none; }
+.slist-menu-item--danger,
+.slist-menu-item--danger > svg { color: var(--danger-text); }
+/* Not offered to this caller: says who may, in the muted voice, and does
+   nothing when pressed. */
+.slist-menu-item[aria-disabled="true"] { flex-wrap: wrap; cursor: not-allowed; color: var(--muted); padding-block: 6px; }
+.slist-menu-item[aria-disabled="true"] > svg { color: var(--muted); }
+.slist-menu-why { flex: 1 0 100%; font-size: var(--slist-t-label); color: var(--muted); white-space: normal; padding-left: 24px; }
+
+/* --------------------------------------------------- the delete confirm --- */
+
+.slist-tbl .slist-confirmrow td { height: auto; padding: 10px 12px 14px; background: var(--slist-row-hover); white-space: normal; }
+.slist-confirm { display: grid; gap: 10px; max-width: 640px; }
+.slist-confirm-q { margin: 0; line-height: 1.5; }
+.slist-confirm-label { font-size: var(--slist-t-label); font-weight: 600; color: var(--muted); display: block; margin: 0 0 5px; }
+.slist-field textarea.slist-input { padding: 8px 9px; resize: vertical; font: inherit; }
+.slist-confirm-err { margin: 0; color: var(--danger-text); }
+.slist-confirm-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.slist-confirm-acts > :first-child { margin-left: auto; }
+
+/* ---------------------------------------------------------------- compact --- */
+
+/* Home: no header row to read, the rows speak for themselves at five. */
+.slist--compact .slist-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.slist--compact .slist-tbl tbody tr:first-child td { border-top: 1px solid var(--slist-rule); }
+
+/* ----------------------------------------------------------------- phone --- */
+
+@media (max-width: 600px) {
+  .slist .slist-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  /* Blocks, not a table: a table keeps its min-content width and pushes the
+     page sideways at 390. */
+  .slist .slist-tbl,
+  .slist .slist-tbl tbody { display: block; width: 100%; }
+  .slist .slist-tbl tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--slist-rule);
+  }
+  .slist .slist-tbl td { display: block; height: auto; padding: 0; border: 0; width: auto; min-width: 0; max-width: 100%; }
+  .slist .slist-tbl td.slist-c-name { flex: 1 1 100%; min-width: 0; }
+  .slist .slist-tbl td.slist-c-acts { flex: 1 1 auto; }
+  .slist .slist-nm { white-space: normal; }
+  .slist .slist-act,
+  .slist .slist-lead { min-height: 44px; }
+  .slist .slist-more { width: 44px; }
+  .slist .slist-menu-item { min-height: 44px; }
+  .slist .slist-subrow td:first-child { padding-left: 16px; }
+}

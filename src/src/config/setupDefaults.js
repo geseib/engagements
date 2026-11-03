@@ -34,9 +34,15 @@ const NAMES_PHRASE = {
 };
 
 /**
- * @returns {{ changed: string[], defaults: string[], lead: string, rest: string }}
+ * @returns {{ changed: string[], defaults: string[], lead: string, rest: string, brief: string }}
  *   `changed` and `defaults` are the fragments; `lead` ("Changed: …." or '')
  *   is drawn in amber, `rest` follows it in muted.
+ *
+ *   `brief` (New engagement round 4, README "Density cuts"): the CLOSED line.
+ *   With a change it is `lead` alone; untouched it names only the defaults a
+ *   host checks ("Defaults: questions shuffled, Workie’s standard summary"),
+ *   leaving out the names rule when `namesStated` says a names card beside it
+ *   already states it (design-system hard rule 5: never say one fact twice).
  */
 export function advancedSummary({
   gameType,
@@ -52,23 +58,29 @@ export function advancedSummary({
   personas = [],
   promptChoices = [],
   setPromptWillBeUsed = false,
+  namesStated = false,
 } = {}) {
   const type = normalizeGameType(gameType);
   const isSurvey = type === 'survey';
   const changed = [];
   const room = [];     // the defaults about the room: responses and questions
+  const responses = []; // which of `room` are the names rule
 
   // ── Responses
   if (isSurvey) {
     const setDefault = namesDefault ? namesMode(namesDefault).id : NAMES_DEFAULT;
     const chosen = namesMode(names || setDefault).id;
     if (chosen !== setDefault) changed.push(NAMES_PHRASE[chosen]);
-    else room.push(namesDefault && setDefault !== NAMES_DEFAULT
-      ? `${NAMES_PHRASE[chosen]} (this set’s default)`
-      : NAMES_PHRASE[chosen]);
+    else {
+      const phrase = namesDefault && setDefault !== NAMES_DEFAULT
+        ? `${NAMES_PHRASE[chosen]} (this set’s default)`
+        : NAMES_PHRASE[chosen];
+      room.push(phrase);
+      responses.push(phrase);
+    }
   } else if (anonymityApplies(type)) {
     if (anonymousResponses === false) changed.push('answers named from the start');
-    else room.push('answers anonymous until voting closes');
+    else { room.push('answers anonymous until voting closes'); responses.push('answers anonymous until voting closes'); }
   }
 
   // ── Questions
@@ -102,12 +114,22 @@ export function advancedSummary({
 
   const defaults = [...room, ...workieDefaults.map((d) => d.phrase)];
 
+  // THE CLOSED LINE: the room's defaults (less a names rule stated beside it)
+  // and, where Workie sums up, which summary.
+  const briefParts = room.filter((phrase) => !(namesStated && responses.includes(phrase)));
+  if (!promptId && !isSurvey) {
+    briefParts.push(setPromptWillBeUsed ? 'this set’s own summary approach' : 'Workie’s standard summary');
+  }
+  const briefDefaults = briefParts.length ? `Defaults: ${briefParts.join(', ')}` : 'Using the defaults';
+
   if (changed.length === 0) {
     // Nothing touched: the full sentence, Workie's two defaults read as one
     // clause ("Workie adapts its voice and gives the standard … summary").
     const [voice, approach] = workieDefaults;
     const workie = voice && approach ? `; ${voice.phrase} and ${approach.verb} ${approach.phrase}` : '';
-    return { changed, defaults, lead: '', rest: `Using the defaults — ${room.join(', ')}${workie}.` };
+    return {
+      changed, defaults, lead: '', rest: `Using the defaults — ${room.join(', ')}${workie}.`, brief: briefDefaults,
+    };
   }
 
   return {
@@ -115,5 +137,6 @@ export function advancedSummary({
     defaults,
     lead: `Changed: ${changed.join(', ')}.`,
     rest: defaults.length ? `Otherwise the defaults — ${defaults.join(', ')}.` : '',
+    brief: `Changed: ${changed.join(', ')}.`,
   };
 }

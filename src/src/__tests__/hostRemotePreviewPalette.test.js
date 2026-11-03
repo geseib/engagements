@@ -169,11 +169,10 @@ const AA = 4.5;
    this pane that paints anything (`.hr-body` and `.hrq` paint nothing). */
 const REMOTE = [groundOf(HOST_CSS, '.hr', DUSK)];
 const CONTROL = [...REMOTE, groundOf(HRQ_CSS, '.hrqp-seg', DUSK)];
-/* The way back wears `.hr-btn--ghost`, so its ground is read from the rule that
-   really paints it. Reading `.hrqp-back` instead would find no background and
-   measure the button against the remote's field — a stack that is wrong in the
-   direction that passes. */
-const BACK = [...REMOTE, groundOf(HOST_CSS, '.hr-btn--ghost', DUSK)];
+/* The way back wears ui/Button's secondary since step 5a, which paints no ground
+   of its own (an outline only): it sits on the remote's field. Read, not assumed. */
+const BUTTON_CSS = read('components', 'ui', 'Button.css');
+const BACK = [...REMOTE, groundOf(BUTTON_CSS, '.ui-btn--quiet', DUSK)].filter(Boolean);
 const SCREEN_GROUND = [...REMOTE, groundOf(HRQ_CSS, '.hrqp-screen', DUSK)];
 const OPTION = [...SCREEN_GROUND, stageLayer('.opt')];
 
@@ -383,28 +382,28 @@ describe('the sheet itself', () => {
      rect zero, so a rendered assertion about a tap target passes against a
      deleted stylesheet. This pins that the contract has not been reverted, not
      that the surface works in a hand — only a phone can say that. */
-  test('every control the preview adds clears the remote\'s OWN 48px floor', () => {
-    // 48, not the bare 44 accessibility floor: `.hr-btn` is what every other
-    // button on this phone stands at, and a control 4px shorter than its
-    // neighbours is a control the thumb finds second.
-    expect(ruleBody(HOST_CSS, '.hr-btn')).toMatch(/min-height:\s*48px/);
-    expect(ruleBody(HRQ_CSS, '.hrqp-seg-btn')).toMatch(/min-height:\s*48px/);
+  test('every control the preview adds clears the system\'s 44px touch height', () => {
+    // ui/Button's 44px (experience plan §5.1) is what every other button on this
+    // phone stands at since step 5a, and a control shorter than its neighbours is
+    // a control the thumb finds second.
+    expect(ruleBody(BUTTON_CSS, '.ui-btn--h44')).toMatch(/min-height:\s*44px/);
+    expect(ruleBody(HRQ_CSS, '.hrqp-seg-btn')).toMatch(/min-height:\s*44px/);
     const shorter = [];
     for (const { head, body } of PREVIEW_RULES) {
       for (const m of body.matchAll(/min-height:\s*([\d.]+)px/g)) {
-        if (Number(m[1]) < 48) shorter.push(`${head} (${m[1]}px)`);
+        if (Number(m[1]) < 44) shorter.push(`${head} (${m[1]}px)`);
       }
     }
     expect(shorter).toEqual([]);
   });
 
   test('the way back wears the ghost button instead of repainting it', () => {
-    // rejects: a second hand-rolled ghost. `.hr-btn--ghost` owns the ground, the
-    // hairline, the colour, the radius and the floor; restating them is how this
-    // control ended up 4px short of every other button on the remote, and how a
-    // later change to the ghost would leave one button behind.
+    // rejects: a second hand-rolled ghost. ui/Button's secondary owns the outline,
+    // the colour, the radius and the height; restating them is how this control
+    // once ended up 4px short of every other button on the remote, and how a later
+    // change to the ghost would leave one button behind.
     expect(read('components', 'RemoteQuestionBrowser.jsx'))
-      .toMatch(/className="hr-btn hr-btn--ghost hrqp-back"/);
+      .toMatch(/variant="secondary" size=\{44\} className="hrqp-back"/);
     const rule = ruleBody(HRQ_CSS, '.hrqp-back');
     for (const prop of ['background', 'border', 'border-radius', 'color', 'min-height',
       'font-size', 'font-weight', 'padding']) {

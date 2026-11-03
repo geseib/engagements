@@ -7,11 +7,12 @@ import React, { useState } from 'react';
 import DeleteReasonField from '../../components/DeleteReasonField';
 import BuildImage from '../BuildImage';
 import { W } from '../words';
-import { claudeKindLabel } from '../buildScreens';
+import { claudeKindLabel, plainPromptLine } from '../buildScreens';
 import { safeHref } from '../links';
 import {
   byLabel, clockTime, entryTone, SafeLink, continueCommand,
 } from './common';
+import Button from '../../components/ui/Button';
 
 /** Said on a Delete or Remove this host may not press (the owner's delete rule, 2026-10-04). */
 export const NOT_YOURS = 'Only the host who created this room, or an owner or admin of its team, can delete from it.';
@@ -22,6 +23,8 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
   const [reason, setReason] = useState('');
   const asStaff = deleteAs === 'platform-admin';
   const [text, setText] = useState(entry.text);
+  // A prompt Engage wrote reads as its plain line here too (QA walk on test, 31 Oct 2026); it is not the host's to edit.
+  const plain = plainPromptLine(entry);
   const save = async () => {
     const ok = await run(() => api.logAction(entry.logId, { action: 'edit', text }));
     if (ok !== undefined) setEditing(false);
@@ -35,14 +38,14 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
           <div className="brm-tl-edit">
             <textarea className="brm-input brm-ta brm-ta--sm" aria-label="Edit entry" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
             <div className="brm-row brm-gap">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => { setEditing(false); setText(entry.text); }}>Cancel</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy || !text.trim()} onClick={save}>Save</button>
+              <Button type="button" size={36} className="brm-tight" onClick={() => { setEditing(false); setText(entry.text); }}>Cancel</Button>
+              <Button type="button" size={36} className="brm-tight" disabled={busy || !text.trim()} onClick={save}>Save</Button>
             </div>
           </div>
         ) : (
           <>
             <span className="brm-by">{byLabel(entry)}</span>
-            <span className="brm-tl-text">{entry.hidden && !entry.text ? W.historyNotShown : entry.text}</span>
+            <span className="brm-tl-text">{entry.hidden && !entry.text ? W.historyNotShown : plain || entry.text}</span>
             {entry.detail && !['direction', 'image'].includes(entry.kind) && <span className="brm-tl-detail">{entry.detail}</span>}
             {entry.kind === 'image' && <BuildImage imageId={entry.detail} alt={entry.text} className="brm-shot brm-shot--tl" />}
             {safeHref(entry.link) && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
@@ -61,13 +64,13 @@ function TimelineEntry({ entry, host, stopped = false, busy, ended, run, api, de
                 {asStaff && (
                   <DeleteReasonField id={`brm-reason-${entry.logId}`} value={reason} onChange={setReason} scope="brm" labelClass="brm-lbl" inputClass="brm-input brm-ta brm-ta--sm" hintClass="brm-hint" />
                 )}
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setConfirming(false)}>Keep</button>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete', ...(asStaff ? { reason: reason.trim() } : {}) }))}>Delete</button>
+                <Button type="button" size={36} className="brm-tight" onClick={() => setConfirming(false)}>Keep</Button>
+                <Button type="button" variant="danger" size={36} className="brm-tight" disabled={busy || (asStaff && !reason.trim())} onClick={() => run(() => api.logAction(entry.logId, { action: 'delete', ...(asStaff ? { reason: reason.trim() } : {}) }))}>Delete</Button>
               </>
             ) : (
               <>
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</button>
-                {!ended && <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete "${entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</button>}
+                {!plain && <Button type="button" variant="tertiary" size={36} className="brm-tight" aria-label={`Edit "${entry.text}"`} onClick={() => setEditing(true)}>Edit</Button>}
+                {!ended && <Button type="button" variant="tertiary" size={36} className="brm-tight brm-danger" aria-label={`Delete "${plain || entry.text}"`} disabled={deleteAs === ''} title={deleteAs === '' ? NOT_YOURS : undefined} onClick={() => { setReason(''); setConfirming(true); }}>Delete</Button>}
               </>
             )}
           </span>

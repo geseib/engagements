@@ -3,6 +3,8 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { encryptItem } = require('./tenant-crypto');
 const { displayToCanonical } = require('./answer-order');
+const { heldByAnotherDevice, presentedClientId, nameMovedMessage, NAME_MOVED } = require('./name-holder');
+const { orgIsSuspended, sessionUnavailableResponse } = require('./org-standing');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -38,6 +40,35 @@ exports.handler = async (event) => {
         body: JSON.stringify({ error: 'Game not found' }),
         headers: { 'Access-Control-Allow-Origin': '*' }
       };
+    }
+
+    // FROM A DEVICE THAT NO LONGER HOLDS THE NAME (experience plan step 1d).
+    // The host let "Sam" move to a new phone; the old phone's ballot would
+    // otherwise overwrite the new one's (one VOTE row per name). Asked before
+    // the phase check so the old phone learns why it has stopped even when
+    // voting has closed. Only when the body presents a client id: a page
+    // loaded before this shipped sends none and votes as it always has
+    // (name-holder.js lists every shape that is let through).
+    if (presentedClientId(body.clientId)) {
+      const holder = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+        ProjectionExpression: 'ClientId, AttendeeId',
+        ConsistentRead: true
+      }));
+      if (heldByAnotherDevice(holder.Item, body.clientId)) {
+        console.log(`📵 Vote refused in game ${gameId}: the name has moved to another device`);
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'Name moved',
+            code: NAME_MOVED,
+            playerName,
+            message: nameMovedMessage(playerName)
+          }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
     }
 
     const currentState = gameState.Item.State;
@@ -124,6 +155,10 @@ exports.handler = async (event) => {
       ProjectionExpression: 'orgId'
     }));
     const voteOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+    // A suspended organisation's room takes no new ballots (org-standing.js).
+    if (await orgIsSuspended(db, process.env.TABLE_NAME, voteOrgId)) {
+      return sessionUnavailableResponse();
+    }
 
     await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,

@@ -125,6 +125,9 @@ function reset() {
       attendeeCount: 0, liveItemId: '', endedAt: null,
       // When it may go (31 Oct 2026): the row's ttl as a time, checked below.
       expiresAt: 'x',
+      // Who made it (31 Oct 2026): this token carries no name or email; the
+      // team's name is its METADATA row's.
+      hostName: '', teamName: TEAM, createdBy: 'u_host',
     });
     const metaRow = table.get(`EVENT#${event.code}`, 'METADATA');
     assert.strictEqual(event.expiresAt, new Date(metaRow.ttl * 1000).toISOString());
@@ -155,6 +158,47 @@ function reset() {
     assert.strictEqual(meta.AttendeeReports, 'anonymous');
     assert.strictEqual(meta.CreatedBy, 'u_host');
   });
+  /*
+    WHO MADE IT, for the event summary PDF's "Hosted by" (2026-10-31): the
+    creator's display name from the authorizer, and the team's name when the
+    event is a team's. A person's own space has no team to name. Both are
+    sealed like the title: they name a person and a team.
+  */
+  await check('the creator\'s name and the team\'s are kept, sealed, and come back to the host', async () => {
+    const res = await post(DETAILS, TEAM, { authorizer: { lambda: {
+      userId: 'u_dana', groups: 'hosts', orgId: TEAM, orgIds: TEAM, orgRole: 'member', name: 'Dana Whitfield', email: 'dana@example.com',
+    } } });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    const ev = bodyOf(res).event;
+    assert.strictEqual(ev.hostName, 'Dana Whitfield');
+    assert.strictEqual(ev.teamName, TEAM);
+    const row = table.get(`EVENT#${ev.code}`, 'METADATA');
+    assert.ok(isEnvelope(row.HostName) && isEnvelope(row.TeamName), 'host and team are sealed');
+    assert.ok(!JSON.stringify(row).includes('Dana'), 'the name is not at rest in plaintext');
+    assert.strictEqual(plainRow(TEAM, row).HostName, 'Dana Whitfield');
+    const list = table.get(`ORG#${TEAM}#EVENTS`, `EVENT#${ev.code}`);
+    assert.strictEqual(list.HostName, undefined, 'the list row does not carry it');
+  });
+  await check('no name in the token: given and family names, else the email before the @', async () => {
+    const viaClaims = await post(DETAILS, TEAM, { authorizer: { lambda: { userId: 'u1', groups: 'hosts', orgId: TEAM, orgIds: TEAM, orgRole: 'member' },
+      jwt: { claims: { given_name: 'Ada', family_name: 'Lovelace' } } } });
+    // The Lambda authorizer's context wins where it has a field; the claims fill the gap.
+    assert.strictEqual(bodyOf(viaClaims).event.hostName, 'Ada Lovelace');
+    const viaEmail = await post(DETAILS, TEAM, { authorizer: { lambda: {
+      userId: 'u2', groups: 'hosts', orgId: TEAM, orgIds: TEAM, orgRole: 'member', email: 'grace.liu@example.com',
+    } } });
+    assert.strictEqual(bodyOf(viaEmail).event.hostName, 'grace.liu');
+  });
+  await check('a personal space names no team', async () => {
+    seedOrg(table, 'org_me', { plan: 'standard', type: 'personal', name: 'George\'s space' });
+    const res = await post(DETAILS, 'org_me', { authorizer: { lambda: {
+      userId: 'u3', groups: 'hosts', orgId: 'org_me', orgIds: 'org_me', orgRole: 'owner', name: 'George',
+    } } });
+    assert.strictEqual(res.statusCode, 201, res.body);
+    assert.strictEqual(bodyOf(res).event.teamName, '');
+    assert.strictEqual(table.get(`EVENT#${bodyOf(res).event.code}`, 'METADATA').TeamName, undefined);
+  });
+
   // rejects: session-ttl's creation clock, which would expire an event booked
   // for next month weeks after its day — and rows on different clocks.
   await check('all three rows are kept until 90 days after the event\'s day', () => {

@@ -7,7 +7,8 @@ import {
   hasSummary, snippetOf, podiumAnswers, roundIsAttributed,
 } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
-import { anchorLabelFor, excerptOf, plainOf } from '../config/comments';
+import { anchorLabelShown, plainOf, SUMMARY_LABEL } from '../config/comments';
+import RoundReportSections from './RoundReportSections';
 import ReportFollowUps from './ReportFollowUps';
 import ReportLate from './ReportLate';
 import './RoundReport.css';
@@ -92,8 +93,8 @@ function CommentList({ comments, showAnchor = false }) {
               position up again, so a comment on a response that has since
               expired out of the report still reads correctly.
             */}
-            {showAnchor && comment.anchorLabel && (
-              <span className="rr-c__anchor">{comment.anchorLabel}</span>
+            {showAnchor && anchorLabelShown(comment) && (
+              <span className="rr-c__anchor">{anchorLabelShown(comment)}</span>
             )}
             {/*
               THE EXCERPT — quoted material the comment is ABOUT, never the
@@ -123,16 +124,6 @@ function CommentList({ comments, showAnchor = false }) {
         ))}
       </ol>
     </div>
-  );
-}
-
-/** The affordance that opens the composer for one section. */
-function CommentButton({ label, onClick }) {
-  return (
-    <button type="button" className="rr-c__add" onClick={onClick} aria-label={`Comment on ${label}`}>
-      <Icon name="ChatCircleText" size={16} />
-      <span>Comment</span>
-    </button>
   );
 }
 
@@ -166,8 +157,22 @@ export default function RoundReport({
    * Optional, and its absence is the READ-ONLY case: the host's review dialog
    * shows comments and offers no way to add one, because the host is reading a
    * finished round rather than taking part in a feedback round.
+   *
+   * ITS PRESENCE CHOOSES THE PHONE'S LAYOUT (phone-comments D1–D10, experience
+   * plan 3b): three sections with real headings — Workie's read, the
+   * responses one card each, "Anything else about this round?" — each with
+   * its own named action, drawn by `RoundReportSections`. The host's dialog
+   * passes no handler and keeps the layout below, unchanged.
    */
   onComment,
+  /** Phone only: the target key of the open compose sheet ('summary', 'round',
+   *  'row:<i>'), outlined on the page while the sheet is open. */
+  commentTarget = null,
+  /** Phone only: the confirmation for the comment just posted,
+   *  `{ key, lead, rest, commentId }`, shown inside that target's card. */
+  sent = null,
+  /** Phone only: whose phone this is, so their own comments read "You". */
+  playerName = '',
   /**
    * Show the "Workie had: …" hint (question-background spec §4). Off by
    * default, and NO CALLER PASSES IT TODAY, because both surfaces this renderer
@@ -214,6 +219,20 @@ export default function RoundReport({
   roundNoun = null,
 }) {
   if (!round) return null;
+  if (onComment) {
+    return (
+      <RoundReportSections
+        round={round}
+        comments={comments}
+        onComment={onComment}
+        commentTarget={commentTarget}
+        sent={sent}
+        playerName={playerName}
+        answersEmptyText={answersEmptyText}
+        onRetryAnswers={onRetryAnswers}
+      />
+    );
+  }
 
   const summary = round.aiSummary || {};
   const showSummary = hasSummary(round);
@@ -233,16 +252,11 @@ export default function RoundReport({
   const summaryComments = all.filter((c) => c && c.anchorKind === 'summary');
   const resultsComments = all.filter((c) => c && (c.anchorKind === 'results' || c.anchorKind === 'response'));
 
-  /** Build the anchor for one section, once, where the facts are to hand. */
-  const anchorFor = (anchorKind, anchorRef, excerptSource) => ({
-    anchorKind,
-    anchorRef,
-    anchorLabel: anchorLabelFor({ anchorKind, anchorRef }, { answers }),
-    anchorExcerpt: excerptOf(excerptSource),
-  });
-
   return (
-    <div className="past-round__body">
+    /* `rr-c-root` carries the comment block's colour and type locals
+       (RoundReport.css), so a Comment button in a section head or a response
+       row — outside any `.rr-c` — inherits them too. */
+    <div className="past-round__body rr-c-root">
       {/* THE QUESTION. Shown, not just the results — a results screen with no
           question on it is unreadable a quarter of an hour later. */}
       <section className="past-round__question">
@@ -285,12 +299,6 @@ export default function RoundReport({
       <section className="past-round__results">
         <div className="rr-c__section-head">
           <h4>{byQuestion ? 'Results by question' : 'Responses'}</h4>
-          {onComment && (
-            <CommentButton
-              label="the results"
-              onClick={() => onComment(anchorFor('results', '', round.title))}
-            />
-          )}
         </div>
         {answers.length === 0 ? (
           /* A round with no responses is a real outcome and has to read as one.
@@ -348,19 +356,6 @@ export default function RoundReport({
                   </button>
                   <span className="past-round__answer">{snippetOf(answer.answer)}</span>
                   {who && <span className="past-round__who">{who}</span>}
-                  {/*
-                    THE ANCHOR IS THE ROW'S POSITION `i`, never the rank printed
-                    on the badge beside it. Equal scores get equal ranks
-                    (1, 1, 3), so two rows can both read "1" and an anchor taken
-                    from the badge files every comment on the second against the
-                    first — silently, and only on ties.
-                  */}
-                  {onComment && (
-                    <CommentButton
-                      label={byQuestion ? `question ${i + 1}` : `response ${i + 1}`}
-                      onClick={() => onComment(anchorFor('response', String(i), answer.answer))}
-                    />
-                  )}
                 </li>
               );
             })}
@@ -404,16 +399,7 @@ export default function RoundReport({
       */}
       <section className="past-round__summary">
         <div className="rr-c__section-head">
-          <h4>AI summary</h4>
-          {onComment && (
-            <CommentButton
-              label="the AI summary"
-              onClick={() => onComment(anchorFor(
-                'summary', '',
-                summary.markdownResponse || summary.summaryText || '',
-              ))}
-            />
-          )}
+          <h4>{SUMMARY_LABEL}</h4>
         </div>
         {showSummary ? (
           <>

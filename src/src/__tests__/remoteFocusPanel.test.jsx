@@ -306,13 +306,15 @@ function block(selector) {
 }
 
 describe('the stylesheet contract', () => {
-  test('the small button narrows its padding, never its height', () => {
+  test('the row button takes a smaller type, never a smaller height', () => {
     // rejects: shrinking below the 44px touch floor on the surface a hurried
-    // thumb uses most, with a room watching.
-    const small = block('.hr-btn--small');
-    expect(small).toMatch(/padding:/);
-    expect(small).not.toMatch(/min-height:/);
-    expect(block('.hr-btn')).toMatch(/min-height:\s*48px/);
+    // thumb uses most, with a room watching. The height is ui/Button's 44px
+    // (step 5a); the row's rule sets type only.
+    const small = block('.hr-focus__show');
+    expect(small).toMatch(/--ui-size:/);
+    expect(small).not.toMatch(/min-height:|height:/);
+    const buttonCss = fs.readFileSync(src('components/ui/Button.css'), 'utf8');
+    expect(buttonCss).toMatch(/\.ui-btn--h44 \{[^}]*min-height: 44px/);
   });
 
   test('the response text is clamped in CSS, so the full string stays readable', () => {

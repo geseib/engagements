@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const { spendHostTicket } = require('./host-tickets');
+const { heldByAnotherDevice, presentedClientId } = require('./name-holder');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -24,6 +25,9 @@ exports.handler = async (event) => {
     : null;
   const playerName = isViewer ? null : event.queryStringParameters?.playerName;
   const askedForHost = !isViewer && event.queryStringParameters?.isHost === 'true';
+  // The player page's per-browser id (joinResult.js getClientId). Optional:
+  // a page loaded before it was sent connects exactly as it always did.
+  const clientId = isViewer ? null : presentedClientId(event.queryStringParameters?.clientId);
 
   try {
     // `isHost=true` is a REQUEST, never a fact. This route has no authorizer,
@@ -57,6 +61,48 @@ exports.handler = async (event) => {
     // "Connected" badge. Silent, and it strands the host screen for the rest of
     // the session. Reproduced on dev: of two isHost sockets, the evicted one
     // got neither questionStarted nor votingStarted.
+    /*
+      DOES THIS DEVICE STILL HOLD THE NAME? (experience plan §4.4; dev QA
+      1 Nov). The name-dedup below retires every older row under this
+      PlayerName. When the host has let "Sam" move to a new phone and Sam's
+      OLD phone reconnects after a network drop while still on its live page,
+      that dedup used to delete the NEW phone's row — and the new phone,
+      which never noticed, stopped hearing the room ("Answer received" until
+      a reload).
+
+      So a named player socket that presents a client id is checked against
+      the PLAYER# row first (the one rule, name-holder.js). If another
+      browser holds the name, this socket is NOT registered as the player's
+      live connection and retires nothing. The handshake is still accepted:
+      the page's reconnect handler sends NAME_CHECK straight after, and
+      message.js answers it with the `nameMoved` frame (a $connect cannot
+      post to its own socket — the connection does not exist until this
+      returns). No id, a host, a viewer or an event seat: today's behaviour.
+
+      A failed read is not a reason to delete: the row is written and the
+      dedup is skipped, because two live rows are harmless and one wrong
+      deletion is not.
+    */
+    let skipDedup = false;
+    if (gameId && playerName && clientId && !isHost) {
+      try {
+        const holder = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+          ProjectionExpression: 'ClientId, AttendeeId',
+          ConsistentRead: true,
+        }));
+        if (heldByAnotherDevice(holder && holder.Item, clientId)) {
+          console.log(`📵 Connect ${connectionId} in game ${gameId}: this device no longer holds its name; `
+            + 'not registered, nothing retired');
+          return { statusCode: 200, body: 'Connected' };
+        }
+      } catch (holderError) {
+        console.error('⚠️ Name-holder read failed at connect (registering, skipping dedup):', holderError);
+        skipDedup = true;
+      }
+    }
+
     const connectedAt = new Date().toISOString();
     const ttl = Math.floor(Date.now() / 1000) + (2 * 60 * 60); // 2 hours TTL
     await db.send(new PutCommand({
@@ -83,7 +129,7 @@ exports.handler = async (event) => {
     // superseded this one, and deleting it is exactly the defect above. Equal
     // stamps (same millisecond) retire nobody — two live rows are harmless,
     // both get every broadcast, whereas one wrong deletion is unrecoverable.
-    if (gameId) {
+    if (gameId && !skipDedup) {
       try {
         const existing = await db.send(new QueryCommand({
           TableName: process.env.TABLE_NAME,

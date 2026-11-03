@@ -192,7 +192,7 @@ describe("a host can see what Workie will do with the set they are editing", () 
     // game-type one).
     await openDialog();
     await openEditor();
-    expect(screen.getByText(/prompts? for other game types are hidden/i)).toBeTruthy();
+    expect(screen.getByText(/prompts? for other formats are hidden/i)).toBeTruthy();
   });
 
   test('choosing a voice and a summary approach saves both', async () => {

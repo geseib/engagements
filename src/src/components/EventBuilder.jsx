@@ -7,6 +7,7 @@ import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import { deleteEvent, getEvent, reorderItems, updateItem } from '../utils/eventsApi';
 import { offersRunningOrder, runningOrderHref, RUNNING_ORDER_LABEL } from '../config/runningOrder';
 import './EventBuilder.css';
+import Button from './ui/Button';
 
 /**
  * ONE EVENT'S AGENDA — docs/design/agenda-redesign/02-builder.html and
@@ -443,21 +444,27 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
           <span className="evb-v">{Number(event.attendeeCount) || 0}</span>
         </div>
         <div className="evb-fact evb-facts-acts">
-          <button type="button" className="evb-btn" onClick={() => setDetailsOpen(true)}>
+          <Button variant="secondary" size={36} onClick={() => setDetailsOpen(true)}>
             <Icon name="PencilSimple" weight="bold" size={14} color="currentColor" /> Edit details
-          </button>
+          </Button>
           {/* RUN THE EVENT (events M3): the event on the wall, in its own tab
               so this builder stays where it is. The stage starts, pauses and
               ends each item; phones follow by themselves. */}
-          <a
-            className="evb-btn evb-btn--primary"
+          {/* A door, not this screen's main action (experience plan §5.1, step
+              5c): Add item is the one primary here, so this is the outlined
+              secondary, edged in the action colour. */}
+          <Button
+            as="a"
+            variant="secondary"
+            size={36}
+            className="evb-lead"
             href={`/host/event/${encodeURIComponent(event.code)}`}
             target="_blank"
             rel="noopener noreferrer"
           >
             <Icon name="Monitor" weight="bold" size={14} color="currentColor" />
             {event.state === 'LIVE' ? ' Open the stage' : event.state === 'ENDED' ? ' The stage' : ' Run the event'}
-          </a>
+          </Button>
         </div>
       </div>
 
@@ -466,16 +473,15 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
           <h2>Agenda</h2>
           <p className="evb-note">The host starts each item. Times are the plan, not a timer.</p>
           <div className="evb-menuwrap" ref={menuRef}>
-            <button
+            <Button
               ref={addBtnRef}
-              type="button"
-              className="evb-btn evb-btn--primary"
+              variant="primary" size={36}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
             >
               <Icon name="Plus" weight="bold" size={14} color="currentColor" /> Add item
-            </button>
+            </Button>
             {menuOpen && (
               <div className="evb-menu" role="menu" aria-label="Add to the agenda">
                 {/* THE CAP, SAID WHERE YOU ADD (02b; events M1b). At 16 items
@@ -625,19 +631,22 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                     <td>
                       <div className="evb-rowact">
                         {newer && (
-                          <button type="button" className="evb-btn evb-btn--sm" disabled={pinningId !== null} onClick={() => pinLatest(item)}>
+                          <Button variant="secondary" size="sm" className="evb-act" disabled={pinningId !== null} onClick={() => pinLatest(item)}>
                             Use v{item.set.latestVersion}
-                          </button>
+                          </Button>
                         )}
-                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${shown} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
+                        <Button variant="secondary" size="sm" className="evb-act evb-icon" aria-label={`Move ${shown} up`} disabled={index === 0} onClick={() => move(index, index - 1)}>
                           <Icon name="ArrowUp" weight="bold" size={13} color="currentColor" />
-                        </button>
-                        <button type="button" className="evb-btn evb-btn--sm evb-btn--icon" aria-label={`Move ${shown} down`} disabled={index === rows.length - 1} onClick={() => move(index, index + 1)}>
+                        </Button>
+                        <Button variant="secondary" size="sm" className="evb-act evb-icon" aria-label={`Move ${shown} down`} disabled={index === rows.length - 1} onClick={() => move(index, index + 1)}>
                           <Icon name="ArrowDown" weight="bold" size={13} color="currentColor" />
-                        </button>
+                        </Button>
                         {!unreadable && offersRunningOrder(item, event) && (
-                          <a
-                            className="evb-btn evb-btn--sm"
+                          <Button
+                            as="a"
+                            variant="secondary"
+                            size="sm"
+                            className="evb-act"
                             href={runningOrderHref(event.code, item)}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -646,28 +655,26 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                             data-testid="agenda-running-order"
                           >
                             <Icon name="ListNumbers" weight="bold" size={13} color="currentColor" /> Order
-                          </a>
+                          </Button>
                         )}
                         {unreadable ? (
-                          <button
-                            type="button"
-                            className="evb-btn evb-btn--sm evb-btn--ghostdanger"
+                          <Button
+                            variant="secondary" size="sm" className="evb-act evb-del"
                             aria-label={isBreak ? `Remove the break at ${item.at}, which could not be read` : `Remove item ${n}, which could not be read`}
                             onClick={() => setDialog({ mode: 'edit', type: item.type, item })}
                           >
                             Remove
-                          </button>
+                          </Button>
                         ) : (
-                          <button
-                            type="button"
-                            className="evb-btn evb-btn--sm"
+                          <Button
+                            variant="secondary" size="sm" className="evb-act"
                             aria-label={`Edit ${item.title}`}
                             disabled={Boolean(RUN_WORDS[item.state])}
                             title={RUN_WORDS[item.state] ? 'This item has started, so it cannot be changed.' : undefined}
                             onClick={() => setDialog({ mode: 'edit', type: item.type, item })}
                           >
                             Edit
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>
@@ -691,7 +698,7 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
             <p>
               Delete “{event.title}”? Its agenda, its join code, {event.code}, and the sessions its items ran go with it. Saved reports are kept. This cannot be undone.
             </p>
-            <button type="button" ref={keepRef} className="evb-btn" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</button>
+            <Button ref={keepRef} variant="secondary" size={36} onClick={() => setConfirmingDelete(false)} disabled={deleting}>Keep it</Button>
             {event.deleteAs === 'platform-admin' && (
               <DeleteReasonField
                 id="evb-delete-reason"
@@ -702,26 +709,24 @@ export default function EventBuilder({ code, sets = [], onTitle, onDeleted }) {
                 hintClass="evb-dim"
               />
             )}
-            <button
-              type="button"
-              className="evb-btn evb-btn--ghostdanger"
+            <Button
+              variant="danger" size={36}
               onClick={removeEvent}
               disabled={deleting || (event.deleteAs === 'platform-admin' && !deleteReason.trim())}
             >
               {deleting ? 'Deleting…' : 'Delete event'}
-            </button>
+            </Button>
           </div>
         ) : (
-          <button
-            type="button"
+          <Button
             ref={deleteOpenerRef}
-            className="evb-btn evb-btn--ghostdanger"
+            variant="secondary" size={36} className="evb-del"
             onClick={() => { setDeleteError(''); setDeleteReason(''); setConfirmingDelete(true); }}
             disabled={event.deleteAs === ''}
             title={event.deleteAs === '' ? 'Only the host who created this event, or an owner or admin of this team, can delete it.' : undefined}
           >
             <Icon name="Trash" weight="bold" size={14} color="currentColor" /> Delete event…
-          </button>
+          </Button>
         )}
         {deleteError && <p className="evb-error" role="alert">{deleteError}</p>}
       </div>

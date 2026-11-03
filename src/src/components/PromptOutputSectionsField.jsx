@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from './Icon';
 import { DEFAULT_OUTPUT_HEADINGS } from './PromptShapePreview';
 
 /**
@@ -75,7 +76,7 @@ export default function PromptOutputSectionsField({ value, onChange }) {
                 title={`Remove heading ${i + 1}`}
                 onClick={() => remove(i)}
               >
-                ×
+                <Icon name="X" weight="bold" size={14} color="currentColor" />
               </button>
             </li>
           ))}

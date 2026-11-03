@@ -164,3 +164,23 @@ export function autoRetryDelayMs(attempt) {
   const step = 2000 * (2 ** Math.max(0, attempt));
   return Math.min(step, 15000);
 }
+
+/**
+ * ONE SPELLING OF A ROUND for the summary read (dev QA 2 Nov: the host asked
+ * for questionId=1 and questionId=001, two reads of one round, and the server
+ * read a bare "1" as the round on screen). A bare round number is padded to
+ * three places; anything else (a question id, SURVEY_ROUND's "000") passes.
+ */
+export function summaryRoundId(questionId) {
+  const text = String(questionId === null || questionId === undefined ? '' : questionId).trim();
+  return /^\d{1,3}$/.test(text) ? text.padStart(3, '0') : text;
+}
+
+/**
+ * The quiet read's "not written yet" (`?quiet=1` answers 200 with
+ * `{ status: 'not_ready' }` where it once answered 404): the expected state
+ * while Workie writes, never a summary and never a failure.
+ */
+export function summaryNotReady(body) {
+  return Boolean(body && body.status === 'not_ready' && !body.summary && !body.markdownResponse);
+}

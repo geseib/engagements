@@ -164,7 +164,7 @@ async function connect() {
 }
 
 const openPanel = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: /players & rounds/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /^people$/i }));
   return screen.findByRole('tablist', { name: /session/i });
 };
 
@@ -185,7 +185,7 @@ describe('the players list the owner asked for', () => {
     await connect();
     await openPanel();
 
-    const pane = screen.getByRole('tabpanel', { name: /players/i });
+    const pane = screen.getByRole('tabpanel', { name: /people/i });
     expect(within(pane).getByText('Ada')).toBeInTheDocument();
     expect(within(pane).getByText('Dana')).toBeInTheDocument();
   });
@@ -197,7 +197,7 @@ describe('the players list the owner asked for', () => {
     serve({ state: 'STARTED', players: [person('Ada')] });
     await connect();
     await openPanel();
-    expect(screen.getByRole('tabpanel', { name: /players/i })).toHaveAttribute(
+    expect(screen.getByRole('tabpanel', { name: /people/i })).toHaveAttribute(
       'data-list-kind', 'joined',
     );
   });
@@ -211,7 +211,7 @@ describe('the players list the owner asked for', () => {
     await connect();
     await openPanel();
 
-    const pane = screen.getByRole('tabpanel', { name: /players/i });
+    const pane = screen.getByRole('tabpanel', { name: /people/i });
     expect(pane).toHaveAttribute('data-list-kind', 'everyone');
     // BOTH names, unlike the waiting chips on the round view, which name only
     // who is holding the room up. This list is the desktop session tab's.
@@ -227,7 +227,7 @@ describe('the players list the owner asked for', () => {
     serve({ state: 'CREATED', players: [] });
     await connect();
     await openPanel();
-    const pane = screen.getByRole('tabpanel', { name: /players/i });
+    const pane = screen.getByRole('tabpanel', { name: /people/i });
     expect(within(pane).getByText(/nobody has joined yet/i)).toBeInTheDocument();
     expect(within(pane).getByText(/put the QR in front of the room/i)).toBeInTheDocument();
   });
@@ -241,7 +241,7 @@ describe('the rounds list', () => {
     const posts = serve({ state: 'RESULTS#002' });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
 
     await screen.findByText('Where does time go?');
     expect(posts).toContain('https://api.test/games/4821/report');
@@ -262,7 +262,7 @@ describe('the rounds list', () => {
     serve({ state: 'RESULTS#002' });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
 
     const row = await screen.findByRole('button', { name: /what would you stop doing/i });
     expect(row).toHaveAttribute('aria-expanded', 'false');
@@ -281,7 +281,7 @@ describe('the rounds list', () => {
     serve({ state: 'RESULTS#002' });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
     fireEvent.click(await screen.findByRole('button', { name: /what would you stop doing/i }));
 
     const redacted = screen.getByText('The Tuesday sync').closest('li');
@@ -317,7 +317,7 @@ describe('the rounds list', () => {
     serve({ state: 'RESULTS#002', report: withFlags });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
 
     const pane = screen.getByRole('tabpanel', { name: /rounds/i });
     // Closed, the round says nothing about it.
@@ -335,7 +335,7 @@ describe('the rounds list', () => {
     serve({ state: 'RESULTS#002' });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
     fireEvent.click(await screen.findByRole('button', { name: /what would you stop doing/i }));
     expect(screen.getByText(/the room wants fewer meetings/i)).toBeInTheDocument();
     expect(screen.queryByTestId('workie-context-hint')).toBeNull();
@@ -347,8 +347,8 @@ describe('the rounds list', () => {
     serve({ state: 'STARTED', report: { report: { detailedQuestions: [] } } });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /rounds/i }));
-    expect(await screen.findByText(/no rounds yet/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /rounds so far/i }));
+    expect(await screen.findByText(/appear here once a round has been played/i)).toBeInTheDocument();
   });
 });
 
@@ -359,7 +359,7 @@ describe('the questions tab is the browser that already existed', () => {
     serve({ state: 'ASK#002' });
     await connect();
     await openPanel();
-    fireEvent.click(screen.getByRole('tab', { name: /questions/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /up next/i }));
 
     expect(await screen.findByText('Which pricing change?')).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
@@ -371,10 +371,10 @@ describe('the questions tab is the browser that already existed', () => {
   it('is where Choose next question lands', async () => {
     serve({ state: 'ASK#002' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
 
     const tabs = await screen.findByRole('tablist', { name: /session/i });
-    expect(within(tabs).getByRole('tab', { name: /questions/i }))
+    expect(within(tabs).getByRole('tab', { name: /up next/i }))
       .toHaveAttribute('aria-selected', 'true');
   });
 });
@@ -411,7 +411,7 @@ describe('the primary action survives a list being open', () => {
 
     fireEvent.click(back);
     expect(screen.queryByRole('tablist', { name: /session/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /players & rounds/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^people$/i })).toBeInTheDocument();
   });
 
   // Rejects: leaving the panel open after a choice, and rejects a back button
@@ -421,7 +421,7 @@ describe('the primary action survives a list being open', () => {
   it('closes itself when a question is asked from the Questions tab', async () => {
     serve({ state: 'ASK#002' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText('Which pricing change?');
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));

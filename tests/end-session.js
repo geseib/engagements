@@ -220,26 +220,27 @@ function seed(gameId, { orgId = 'acme', gameType = 'trivia', state = 'ASK#003' }
   });
 
   /*
-    FIX ROUND 1, ITEM 3 — a CREATED session is one the UI never offers to end
-    (`canEndSession` refuses the lobby), and this route must refuse it too:
-    ending it would leave `Started` unset and the 90-day ttl in place, with
-    STATE reading ENDED for a session that never opened.
+    A CREATED SESSION ENDS (dev QA 2 Nov: two lobby sessions could not be
+    ended; it was refused 409 until then). ENDED and the END frame, like any
+    other end, but it is not STARTED by it: Started and the ttl are untouched.
   */
-  console.log('\n6. a CREATED session has not started — refused, not ended');
+  // rejects: dev QA 2 Nov — End session was unreachable before round 1.
+  console.log('\n6. a CREATED session ends, and is not started by it');
   seed('5401', { state: 'CREATED' });
   gets = []; updates = []; sent = [];
   const created = await endSession('5401');
-  check('409, not ended', () => {
-    assert.strictEqual(created.statusCode, 409, created.body);
-    assert.strictEqual(stateOf('5401').State, 'CREATED');
+  check('200, ENDED', () => {
+    assert.strictEqual(created.statusCode, 200, created.body);
+    assert.strictEqual(stateOf('5401').State, 'ENDED');
+    assert.strictEqual(JSON.parse(created.body).beforeFirstRound, true);
   });
-  check('says plainly that it has not started', () => {
-    const body = JSON.parse(created.body);
-    assert.ok(/has not started yet/i.test(`${body.error} ${body.message}`), JSON.stringify(body));
+  check('the room hears END', () => {
+    assert.ok(sent.some((m) => m.message && m.message.messageType === 'END'), JSON.stringify(sent));
   });
-  check('nothing written, nothing broadcast', () => {
-    assert.strictEqual(updates.length, 0);
-    assert.strictEqual(sent.length, 0);
+  check('only STATE is written: no Started flag, no ttl rewrite', () => {
+    const touched = updates.map((u) => `${u.Key.PK}|${u.Key.SK}`);
+    assert.deepStrictEqual(touched, ['GAME#5401|STATE'], touched.join(', '));
+    assert.ok(!/Started|ttl/.test(updates[0].UpdateExpression), updates[0].UpdateExpression);
   });
 
   /*

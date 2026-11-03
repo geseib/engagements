@@ -54,7 +54,7 @@ async function describeFailure(response) {
 export async function postComment({
   fetchFn = fetch, apiBase, gameId,
   questionNumber, playerName, clientId,
-  anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
+  anchorKind, anchorRef, anchorBasis, anchorLabel, anchorExcerpt, text,
 }) {
   let response;
   try {
@@ -64,6 +64,8 @@ export async function postComment({
       body: JSON.stringify({
         questionNumber, playerName, clientId,
         anchorKind, anchorRef, anchorLabel, anchorExcerpt, text,
+        // 'ballot' when the ref is the response's ballot number (B1).
+        ...(anchorBasis === 'ballot' ? { anchorBasis } : {}),
       }),
     });
   } catch (e) {
@@ -85,6 +87,8 @@ export async function postComment({
 /**
  * The one round the host has opened for feedback, with its comments.
  *
+ * Asked quietly (`?quiet=1`): the server answers "not open" as a 200 with
+ * `open: false`. An older server's 409 means the same and reads the same.
  * A 409 is NOT an error here — it is the ordinary state of a session that is
  * not in a feedback round, which is most of the time. It comes back as
  * `ok: true` with `round: null` so a caller can render "not open" without
@@ -95,7 +99,9 @@ export async function fetchFeedbackRound({ fetchFn = fetch, apiBase, gameId }) {
   let response;
   try {
     response = await fetchFn(
-      `${apiBase}games/${encodeURIComponent(gameId)}/feedback-round`,
+      // `quiet=1`: "no round open" comes back as a 200 with `open: false`
+      // rather than a 409 the browser logs on every poll (dev QA 2 Nov).
+      `${apiBase}games/${encodeURIComponent(gameId)}/feedback-round?quiet=1`,
       { method: 'GET' },
     );
   } catch (e) {
@@ -111,6 +117,9 @@ export async function fetchFeedbackRound({ fetchFn = fetch, apiBase, gameId }) {
 
   try {
     const body = await response.json();
+    if (body && body.open === false) {
+      return { ok: true, round: null, questionNumber: null, notOpen: true, error: null };
+    }
     return {
       ok: true,
       round: body.round || null,

@@ -30,22 +30,33 @@ export const HELP_FOR_SCREEN = {
   /* ---- host: setting up ---- */
   'host-create': { guide: 'host-game-setup', section: 'create-engagement' },    // GameSetupDialog head
   'host-create-advanced': { guide: 'host-game-setup', section: 'advanced' },     // SessionOptions (the Advanced fold, also in EventItemDialog)
-  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // QuickstartMenu header
+  'host-quick-start': { guide: 'host-game-setup', section: 'quick-start' },      // GameSetupDialog's Quick start lane
+  'host-before-start': { guide: 'host-quick-start', section: 'step-2-start' },   // SetupBeforeStart (where a created session lands)
   'host-question-sets': { guide: 'host-game-setup', section: 'choosing-question-set' }, // HostQuestionSetsDialog header
+  'host-set-editor': { guide: 'host-game-setup', section: 'editing-a-set' },     // QuestionSetPage bar (/sets/<id>)
   'host-sessions': { guide: 'host-game-setup', section: 'sessions-list' },       // SessionHistoryPanel header
   'host-reports': { guide: 'host-reporting', section: 'saving-report' },         // HostReportsDialog header; AdminPage Reports
   'host-room-screen-chooser': { guide: 'host-game-setup', section: 'one-or-two-screens' }, // RoomScreenChooser head
 
   /* ---- host: running the room (one screen) ----
-     No entry for the stage itself: the room sees it. Its help is the dock's,
-     the host's own control, and the dock opens What we heard or the survey's
-     section while those are up (GameHostPage `dockHelp`). */
-  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // Dock (GameHostPage)
+     No entry for the stage itself: the room sees it. Its help is the top
+     bar's `?` (experience plan 2h; it was the dock's), the host's own control,
+     and it opens What we heard or the survey's section while those are up
+     (GameHostPage `dockHelp`). */
+  'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // the stage's top bar ? (GameHostPage)
   // The Session panel's header `?` opens the tab that is showing.
+  // The Session menu's sections (SessionSetupPanel TAB_HELP; the redesign,
+  // docs/design/session-menu, 3 Nov 2026). The event line, the phone and End
+  // session have no section of their own now: the host-session-panel guide
+  // names them, with links to the event-day and ending sections.
+  'host-session-up-next': { guide: 'host-session-panel', section: 'choosing-ask-next' },
+  'host-session-history': { guide: 'host-session-panel', section: 'going-back-over-round' },
+  'host-session-screens': { guide: 'host-session-panel', section: 'settings-tab' },
+  'host-session-joining': { guide: 'host-session-panel', section: 'settings-tab' },
+  'host-session-run': { guide: 'host-session-panel', section: 'settings-tab' },
+  'host-session-close': { guide: 'host-surveys', section: 'warning-and-closing' },
+  'host-session-results': { guide: 'host-surveys', section: 'report' },
   'host-session-players': { guide: 'host-player-management', section: 'players-tab' },
-  'host-session-questions': { guide: 'host-session-panel', section: 'choosing-ask-next' },
-  'host-session-rounds': { guide: 'host-session-panel', section: 'going-back-over-round' },
-  'host-session-settings': { guide: 'host-session-panel', section: 'settings-tab' },
   'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' }, // LateList head
   'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' }, // dock and console, on the READ moment
   'host-session-report': { guide: 'host-reporting', section: 'session-report' }, // GameReport toolbar
@@ -117,6 +128,7 @@ export const HELP_FOR_SCREEN = {
      `player-join` while joining and `player-page` otherwise. */
   'player-join': { guide: 'player-joining', section: 'getting-in' },
   'player-name-taken': { guide: 'player-joining', section: 'name-taken' },
+  'player-name-moved': { guide: 'player-joining', section: 'name-moved' },
   'player-join-errors': { guide: 'player-joining', section: 'other-things-join-screen' },
   'player-lobby': { guide: 'player-playing', section: 'between-rounds' },
   'player-answering': { guide: 'player-playing', section: 'answering' },

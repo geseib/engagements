@@ -47,10 +47,15 @@
  * comment is prose somebody reads in runs, not a count they glance at.
  */
 
-.rr-c {
-  /* Scoped locals. An undefined custom property invalidates the WHOLE
-     declaration, so nothing here reaches for a token another stylesheet merely
-     happens to have put in the bundle. */
+/* Scoped locals, declared on the REPORT'S ROOT (RoundReport.jsx puts
+   `rr-c-root` on `.past-round__body`), not on `.rr-c`. The Comment buttons sit
+   in the section heads and in each response row — outside every `.rr-c` box —
+   and they read these too. Declared on `.rr-c` alone they were undefined
+   there, and an undefined custom property invalidates the WHOLE declaration:
+   the pill's border, colour and 12px size all fell away and the buttons drew
+   as plain inherited text. Nothing here reaches for a token another
+   stylesheet merely happens to have put in the bundle. */
+.rr-c-root {
   --rr-c-text: var(--text);
   --rr-c-muted: var(--muted);
   --rr-c-accent: var(--accent);
@@ -60,7 +65,9 @@
   --rr-c-t-floor: 12px;
   --rr-c-t-label: 13px;
   --rr-c-t-body: 15px;
+}
 
+.rr-c {
   margin-top: 16px;
   padding: 12px 14px;
   background: var(--rr-c-wash);
@@ -181,8 +188,18 @@
 }
 
 /* One per response row, so it has to sit inside a list item that is already a
-   grid of number / text / author. It goes last and stays small. */
+   grid of number / text / author (styles.css). It goes last, in its own auto
+   column on the SAME row, and stays small; the row's gap spaces it. */
 .past-round__answers .rr-c__add {
-  margin-left: 8px;
+  margin-left: 0;
   flex: 0 0 auto;
+}
+
+/* On a phone the author drops under the text (styles.css); the button keeps
+   the right-hand column and spans both lines, so it never leaves its row. */
+@media (max-width: 480px) {
+  .past-round__answers .rr-c__add {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
 }

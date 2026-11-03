@@ -8,11 +8,11 @@
  * here as pure data, and the panel renders it.
  */
 import {
-  setupPanelTabs, categoryRows, questionsRemaining,
+  setupPanelTabs, sessionMenuSection, categoryRows, questionsRemaining,
   browserRow, filterBrowserRows, rosterRows, questionKey,
 } from '../config/setupPanel';
 
-describe('setupPanelTabs — four tabs, none of them empty', () => {
+describe('setupPanelTabs — the Session menu\'s sections, none of them empty', () => {
   /**
    * THIS SAID THREE, AND THE OWNER ADDED THE FOURTH.
    *
@@ -25,12 +25,33 @@ describe('setupPanelTabs — four tabs, none of them empty', () => {
    * `toContain`, because "a tab arriving unnoticed" is the thing worth
    * catching and a fifth one should come past this line too.
    */
-  test('the four tabs are Players, Questions, Rounds and Settings, in that order', () => {
-    // rejects: reordering, renaming, or a fifth tab arriving unnoticed.
-    expect(setupPanelTabs({}).map((t) => t.id))
-      .toEqual(['players', 'questions', 'history', 'settings']);
-    expect(setupPanelTabs({}).map((t) => t.label))
-      .toEqual(['Players', 'Questions', 'Rounds', 'Settings']);
+  // rejects: the 2 Nov restructure that stacked Questions, Rounds and the run
+  // settings in one "Rounds" scroll (docs/design/session-menu §1). The
+  // redesign approved 3 Nov 2026: the same six names on every round type,
+  // People in every version.
+  test('Up next, Rounds so far, People, Screens, Joining, How it runs, with or without a People column', () => {
+    const six = ['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs'];
+    expect(setupPanelTabs({ peopleColumn: true }).map((t) => t.label)).toEqual(six);
+    expect(setupPanelTabs({}).map((t) => t.label)).toEqual(six);
+  });
+  test('an event adds a line, not a tab: no Agenda, no End session tab', () => {
+    expect(setupPanelTabs({ event: true, peopleColumn: true }).map((t) => t.id))
+      .toEqual(['up-next', 'history', 'people', 'screens', 'joining', 'run']);
+  });
+  test('a survey swaps the first two for its own: Close survey, Survey results', () => {
+    expect(setupPanelTabs({ survey: true, peopleColumn: true }).map((t) => t.label))
+      .toEqual(['Close survey', 'Survey results', 'People', 'Screens', 'Joining', 'How it runs']);
+  });
+  test('the old names still land: players is People, questions Up next, history Rounds so far, settings How it runs', () => {
+    const tabs = setupPanelTabs({ peopleColumn: true });
+    expect(sessionMenuSection('players', tabs)).toBe('people');
+    expect(sessionMenuSection('questions', tabs)).toBe('up-next');
+    expect(sessionMenuSection('history', tabs)).toBe('history');
+    expect(sessionMenuSection('running-order', tabs)).toBe('up-next');
+    expect(sessionMenuSection('settings', tabs)).toBe('run');
+    expect(sessionMenuSection('', tabs)).toBe('up-next');
+    expect(sessionMenuSection('', tabs, { ended: true })).toBe('history');
+    expect(sessionMenuSection('', setupPanelTabs({ event: true }))).toBe('up-next');
   });
 
   test('no tab is ever emitted empty', () => {

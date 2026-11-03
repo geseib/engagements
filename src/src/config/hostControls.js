@@ -450,15 +450,17 @@ export function eventHasStarted(event, items = []) {
  * A survey has its own way out — CLOSED's own primary, SURVEY#CLOSED ->
  * ENDED only — so offering this control on a survey would either duplicate
  * that route or contradict its rule; the backend route (end-session.js)
- * refuses a survey outright, 400, pointed at survey/end. Before the session
- * has started there is nothing running to stop (Back to Menu already leaves
- * a CREATED session untouched), and once it is ENDED the stage's own primary
- * — Open Session Report — is the way on.
+ * refuses a survey outright, 400, pointed at survey/end. Once it is ENDED
+ * the stage's own primary — Open Session Report — is the way on.
+ *
+ * THE LOBBY TOO (dev QA 2 Nov: two lobby sessions could not be ended, and
+ * PLAN §3.2a puts End session in every phase). Main menu leaves a lobby
+ * session open on the server with its code taken; ending it closes it for
+ * anyone who joined. end-session.js accepts a CREATED session since.
  */
 export function canEndSession(gameType, gameState) {
   if (isSurveyType(gameType)) return false;
-  if (gameState === 'ENDED') return false;
-  return !isLobbyState(gameState);
+  return gameState !== 'ENDED';
 }
 
 /** A survey's end — SURVEY#CLOSED → ENDED (survey-host.js), from any beat of CLOSED. */

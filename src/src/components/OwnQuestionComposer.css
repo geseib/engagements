@@ -1,0 +1,209 @@
+/* WRITE A QUESTION — the impromptu ask's composer (docs/design/impromptu-ask,
+   frames 1, 2 and 5). Derived from the mockup's sheet step, on dusk tokens.
+
+   Two geometries, one markup: `oq--panel` is the laptop's inline step inside
+   the Session menu's Rounds (ladder 12/13/15/19, inputs at 15px, rows 36px,
+   dialog foot 44px); `oq--touch` is the phone Remote's full-height sheet
+   (inputs at 16px, 44px targets, the 56px foot).
+
+   Colour is tokens only (styles.css), on the dusk the Session menu and the
+   Remote both declare. Contrast, measured against --surface #1B2942:
+     --text  #F4EDE4   12.9:1     --muted #9BA8BE   6.9:1
+     --info  #7CA7E6   6.0:1 (the back link)
+   The selected place is edged in --info, never the one orange (R2). */
+.oq {
+  --oq-t-floor: 12px;
+  --oq-t-label: 13px;
+  --oq-t-body: 15px;
+  --oq-t-head: 19px;
+  --oq-rule: rgb(var(--glow-rgb) / .14);
+  --oq-rule-strong: rgb(var(--glow-rgb) / .28);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--oq-rule);
+  border-radius: 14px;
+  font-size: var(--oq-t-body);
+}
+.oq--touch {
+  --oq-t-body: 16px;
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+}
+.oq-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--oq-rule);
+}
+.oq-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--info);
+  font: inherit;
+  font-size: var(--oq-t-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+.oq-title { margin: 0; font-size: var(--oq-t-head); font-weight: 700; text-align: center; }
+.oq-x {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--oq-rule-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.oq--touch .oq-x, .oq--touch .oq-back { min-height: 44px; }
+.oq--touch .oq-x { width: 44px; height: 44px; }
+.oq-body { display: grid; gap: 12px; padding: 14px; overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.oq-field { display: grid; gap: 6px; }
+.oq-label-row { display: flex; align-items: baseline; gap: 8px; }
+.oq-label { margin: 0; font-size: var(--oq-t-label); font-weight: 700; color: var(--text); }
+.oq-opt { font-weight: 400; color: var(--muted); }
+.oq-count { margin-left: auto; font-size: var(--oq-t-floor); color: var(--muted); font-variant-numeric: tabular-nums; }
+.oq-count.is-over { color: var(--danger-text); font-weight: 700; }
+.oq-input, .oq-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--oq-rule-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--oq-t-body);
+}
+.oq--touch .oq-input, .oq--touch .oq-select { min-height: 44px; }
+.oq-input--q { resize: vertical; line-height: 1.4; }
+.oq-input:focus-visible, .oq-select:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
+.oq-input::placeholder { color: var(--muted); }
+.oq-never { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--oq-t-floor); color: var(--muted); }
+.oq-runs {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: var(--oq-t-label);
+  color: var(--muted);
+}
+.oq-runs b { color: var(--text); }
+.oq-where { display: grid; gap: 8px; }
+.oq-places {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--oq-rule-strong);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.oq-place {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-right: 1px solid var(--oq-rule);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oq-place:last-child { border-right: 0; }
+.oq-place.is-on { box-shadow: inset 0 0 0 2px var(--info); background: rgb(var(--info-rgb) / .12); }
+.oq-place.is-off { cursor: not-allowed; }
+.oq-place.is-off .oq-place-k { color: var(--muted); }
+.oq-place:focus-visible { outline: 2px solid var(--info); outline-offset: -4px; }
+.oq-place-k { font-size: var(--oq-t-label); font-weight: 700; }
+.oq-place-l { font-size: var(--oq-t-floor); color: var(--muted); }
+.oq-after { display: flex; align-items: center; gap: 8px; }
+.oq-after-k { font-size: var(--oq-t-label); color: var(--muted); }
+.oq-hint { margin: 0; font-size: var(--oq-t-label); color: var(--muted); }
+.oq-preview { display: grid; gap: 6px; }
+.oq-preview-k { margin: 0; font-size: var(--oq-t-floor); color: var(--muted); font-weight: 700; }
+.oq-preview-card { padding: 10px 12px; border: 1px dashed var(--oq-rule-strong); border-radius: 10px; }
+.oq-preview-n { margin: 0 0 2px; font-size: var(--oq-t-floor); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.oq-preview-t { margin: 0; font-weight: 700; }
+.oq-preview-d { margin: 2px 0 0; font-size: var(--oq-t-label); color: var(--muted); }
+.oq-confirm { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--oq-rule-strong); background: var(--surface-2); }
+.oq-confirm-t { margin: 0; font-size: var(--oq-t-label); }
+.oq-confirm-acts { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
+.oq-error { margin: 0; font-size: var(--oq-t-label); color: var(--danger-text); font-weight: 700; }
+.oq-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-top: 1px solid var(--oq-rule);
+}
+.oq-foot-gap { flex: 1 1 auto; }
+.oq-reason { font-size: var(--oq-t-floor); color: var(--muted); }
+.oq .oq-commit { --ui-size: var(--oq-t-body); gap: 6px; }
+/* THE LAPTOP'S COMMIT IS STRONG PLAIN, NOT ORANGE (reviews W-1, R2): a
+   heavier edge in --text on the quiet button. */
+.oq .oq-commit--strong { border: 2px solid var(--text); font-weight: 700; }
+.oq-choice .oq-commit--strong { border: 2px solid var(--text); font-weight: 700; --ui-size: 15px; }
+.oq--touch .oq-foot .ui-btn { flex: 1 1 0; }
+
+/* ONE SCREEN'S CHOICE (D8, frame 5): a small dialog over the room's view.
+   A scrim scrolls and the card centres by margin (engage-design hard rule 10). */
+.oq-choice-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 48px 16px;
+  background: var(--scrim);
+}
+.oq-choice {
+  margin: auto;
+  width: min(680px, 100%);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid rgb(var(--glow-rgb) / .14);
+  border-radius: 14px;
+  font-size: 15px;
+}
+.oq-choice-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .14); }
+.oq-choice-t { margin: 0; font-size: 19px; font-weight: 700; flex: 1 1 auto; }
+.oq-choice-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--info);
+  background: rgb(var(--info-rgb) / .14);
+  font-size: 13px;
+}
+.oq-choice-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgb(var(--glow-rgb) / .14);
+}
+.oq-choice-what { display: grid; gap: 2px; min-width: 0; }
+.oq-choice-k { font-weight: 600; }
+.oq-choice-l { font-size: 13px; color: var(--muted); }
+.oq--touch .oq-foot .oq-foot-gap { display: none; }

@@ -40,7 +40,7 @@ export default function SentStage({ room, now, card = null, typing = '', rc }) {
   return (
     <section className={`brm-stage brm-sentstage${card.hidden ? ' is-hidden' : ''}`} aria-label={card.head} data-testid="brm-sentcard">
       <span className="brm-eyebrow"><b>{card.head}</b>{at ? ` · ${at}` : ''}</span>
-      <h2 className="brm-q brm-sentq">{card.hidden ? card.text : `“${card.text}”`}</h2>
+      <h2 className="brm-q brm-sentq">{card.hidden || card.plain ? card.text : `“${card.text}”`}</h2>
       {card.pick && <p className="brm-sentpick">{card.pick}</p>}
       <ClaudeStatus rc={rc} under />
       {work && <WorkRow work={work} />}

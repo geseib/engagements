@@ -112,8 +112,8 @@ describe("the host's door to the summary", () => {
   it('reads the debug prompt on the host route with authFetch, and the plain read stays public', () => {
     const body = functionBody('fetchAISummary');
     expect(body).not.toBeNull();
-    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?debug=true&questionId=\$\{encodeURIComponent\(questionId\)\}`\)/);
-    expect(body).toMatch(/(?<![\w.])fetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\?questionId=\$\{encodeURIComponent\(questionId\)\}`\)/);
+    expect(body).toMatch(/authFetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\/host\?debug=true&questionId=\$\{encodeURIComponent\(questionId\)\}&quiet=1`\)/);
+    expect(body).toMatch(/(?<![\w.])fetch\(`\$\{API_BASE\}games\/\$\{gameId\}\/ai-summary\?questionId=\$\{encodeURIComponent\(questionId\)\}&quiet=1`\)/);
   });
 
   // rejects: a ready frame for ANOTHER round landing on the stage. Once the
@@ -142,7 +142,8 @@ describe("the host's door to the summary", () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^[ \t]*\/\/.*$/gm, '');
     const publicWithParams = code.match(
-      /\/ai-summary(?!\/host)(\?(?!questionId=\$\{encodeURIComponent\(questionId\)\}`)|\$\{debugParam\})/g,
+      // quiet=1 (dev QA 2 Nov) is not host-only: it turns the not-ready 404 into a 200.
+      /\/ai-summary(?!\/host)(\?(?!questionId=\$\{encodeURIComponent\(questionId\)\}(&quiet=1)?`)|\$\{debugParam\})/g,
     ) || [];
     expect(publicWithParams).toEqual([]);
   });

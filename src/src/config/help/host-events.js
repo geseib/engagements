@@ -6,16 +6,16 @@
   (a small event, 4698, built, run and ended by the QA host in a team on a
   paid plan). Sources, by section:
 
-    what-an-event-is   WelcomeEvents.jsx ("Run an event", "New event", "See how",
+    what-an-event-is   WelcomeEvents.jsx ("Run an event", "See how", no door of its own since 4c,
                        two shown, "N more in the console's Events list");
                        utils/eventsAccess.js (paid plan, any member);
                        agenda-rules.js MAX_ITEMS 16, MAX_ENGAGEMENTS 8, breaks
                        not counted. Billing is host-plan#other-things-counted.
-    new-event          EventDetailsDialog.jsx (Name, Date, Starts, Time zone,
-                       Place, Who can join, Reports for attendees, afterwards,
-                       Create event, "The join code is chosen when you create
-                       it."); GameSetupDialog.jsx EVENT_KIND "Continue to the
-                       event" → GameHostPage newEventTitle → the same dialog.
+    new-event          GameSetupDialog.jsx EVENT_KIND (experience plan 4c):
+                       "Next: the agenda", EventFields.jsx (Date, Starts; fold
+                       "Time zone, place, reports"), "Create the event" →
+                       GameHostPage handleChooseOther → createEvent → the
+                       agenda. The console's New event: EventDetailsDialog.jsx.
                        Attendee reports are stored on the event; nothing yet
                        hands them to attendees, so the help names the choice only.
     the-agenda-page    HostEventAgenda.jsx (Main screen, Save event summary (PDF) —
@@ -53,14 +53,27 @@
                        (moving on finishes the live item; an open survey
                        pauses), End confirm ("End it", "Keep it"), survey refusal.
     session-on-the-day GameHostPage eventCode: lobby shows the event code,
-                       Dock AGENDA, "Back to the agenda" as the leave primary,
-                       no two-screen console or room-screen chooser in events.
+                       "Back to the agenda" as the leave primary. Since
+                       experience plan 2d: a Call & Answer item on two screens
+                       gets the console (config/surfaces.js consoleFor), with
+                       "‹ Agenda" as the strip's first crumb (WorkflowStrip
+                       `agenda`), the Session menu's first row "This event":
+                       Agenda and Bring everyone here (SessionSetupPanel
+                       `event`; first in the menu since 2h, on one screen too),
+                       the Needs-you item "The event moved on to Item N" with
+                       Bring everyone here (config/needsYou.js eventMoved,
+                       config/eventAgenda.js eventMovedOn), a latecomer's
+                       "from item N" in People (latecomersFrom), Main menu
+                       always home, asking first with people in the room
+                       (requestLeave / leaveToMainMenu, 2h), and Setup once
+                       per event day (eventScreensSet / markEventScreens).
     talks-on-the-day   EventStage deck: ← → PageUp PageDown, Full screen / F,
                        Space and click while full screen, Esc; the "Just
                        arrived? Open" join block and "Coming up".
     breaks-on-the-day  EventStage break: Back at, countdown, +5 min, End the break.
     ending-the-event   EventStage EXIT ("Leave the stage, or end the event?":
-                       Leave — the event keeps going / End the event / Stay),
+                       Leave — the event keeps going (to /host, the start
+                       screen) / End the event / Stay),
                        "End the event?" (Keep going / End the event),
                        REOPEN ("Reopen the event?": Not now / Reopen the
                        event; run.js reopenEvent, refused past the ttl),
@@ -104,10 +117,10 @@ const eventAgenda = {
         {
           t: 'steps',
           items: [
-            { title: 'Start it', text: 'Press **New event** under **Run an event** on your start screen. Or, in **Create engagement**, pick the Event format and press **Continue to the event**; your title comes with you.' },
-            { title: 'Say when and where', text: 'Give it a **Name**, a **Date**, a start time (**Starts**) and a **Time zone**. **Place** is optional and shows on the agenda.' },
+            { title: 'Start it', text: 'Press **New engagement** on your start screen, name it, and pick the **Event** format. (In the console, Events has its own **New event**.)' },
+            { title: 'Say when and where', text: 'Under **Next: the agenda**, set the **Date** (today to begin with) and **Starts**. The fold below holds the **Time zone**, an optional **Place** for the agenda, and the reports default.' },
             { title: 'Choose the reports default', text: 'Under **Reports for attendees, afterwards**, pick **Full**, **Anonymous** or **Not shared**: the default for every item\'s report.' },
-            { title: 'Create it', text: 'Press **Create event**. Engage chooses the four-digit join code, and the agenda page opens, empty.' },
+            { title: 'Create it', text: 'Press **Create the event**. Engage chooses the four-digit join code, and the agenda page opens, empty.' },
           ],
         },
         {
@@ -137,7 +150,7 @@ const eventAgenda = {
             { title: '**Edit details**', text: 'Change the name, date, time, place or the reports default.' },
             { title: '**Run the event**', text: 'Opens the event\'s stage in a new tab, so the agenda stays open here. Once the event is running it reads **Open the stage**. **Open the stage** at the top right goes there in this tab.' },
             { title: '**Add item**', text: 'Adds to the agenda; see the next section.' },
-            { title: '**Save event summary (PDF)**', text: 'Downloads a short PDF of the event: its date, place and agenda, who leads each item, each item\'s state, and for every session whether its report is saved, auto-built, not made yet or gone with its expired session, with the report\'s name and where it is filed (Reports, under the event). Nothing from inside the sessions. It is not kept in Reports; make it again whenever you need it.' },
+            { title: '**Save event summary (PDF)**', text: 'Downloads a short PDF of the event: its date, place, who hosted it and for which team, and its agenda, who leads each item, each item\'s state, and for every session whether its report is saved, auto-built, not made yet or gone with its expired session, with the report\'s name and where it is filed (Reports, under the event). Nothing from inside the sessions. It is not kept in Reports; make it again whenever you need it.' },
             { title: '**Main screen**', text: 'Back to your start screen.' },
           ],
         },
@@ -265,7 +278,7 @@ const eventAgenda = {
           t: 'list',
           items: [
             { title: 'Start screen', text: '**Run an event** lists up to two events that are running or still to come, each with **Open** (its stage). Past events are not listed there.' },
-            { title: 'Sessions', text: 'An event is one row labelled Event, with **Edit** (the agenda), **Open** (the stage) and **Link** (copies the attendees\' join link). Click its name to see its items; a session item has **Report** and **Continue**.' },
+            { title: 'Sessions', text: 'In the sessions list (Library & team › Sessions, or the full list from a session), an event is one row labelled Event, with **Open** (the stage) and, under **⋯**, **Edit the agenda** and **Copy join link** (the attendees\' link). Press its name to see its items; a session item has **Continue** and **Report**.' },
             { title: 'The console', text: 'The Events list shows every event in the space or team: see Sessions and events.' },
           ],
         },
@@ -296,7 +309,7 @@ const eventDay = {
           items: [
             { title: 'The top line', text: 'Where the day is (**Starting soon**, **Live now**, **Between items**), the event\'s name, how many items are done, and **JOIN** with the address and the event code.' },
             { title: 'The rows', text: 'Each item with its time and its state (**Live**, **Paused**, **Done**), and the buttons that fit it: **Open**, **Go live**, **Resume**, **Pause**, **End**.' },
-            { title: 'The dock', text: 'The next step on its main button (Space presses it), **EDIT AGENDA**, **QR** (a large join code for the room) and **EXIT** (leave the stage, or end the event).' },
+            { title: 'The dock', text: 'The next step on its main button (the small **Space** on the button says that key presses it too), **EDIT AGENDA**, **QR** (a large join code for the room) and **EXIT** (leave the stage, or end the event).' },
           ],
         },
         {
@@ -320,11 +333,11 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** on the dock. From there, **Set the running order** chooses which questions come first.',
+          text: '**Open** is for rehearsing and checking. Opening a session that has not run yet shows its lobby, its questions and its Session panel, with **Preview — the phones are not here yet** in Your part now. From there, **Set the running order** chooses which questions come first.',
         },
         {
           t: 'p',
-          text: 'When you are ready, press **Bring everyone here** on that item\'s dock (**Bring everyone back** on a paused one), or **Go live** on its row.',
+          text: 'When you are ready, press **Bring everyone here**, the main button in that item\'s Your part now (**Bring everyone back** on a paused one), or **Go live** on its row.',
         },
         {
           t: 'p',
@@ -362,19 +375,29 @@ const eventDay = {
       blocks: [
         {
           t: 'p',
-          text: 'A session item opens on its own stage and runs like any session: see Running the room. In an event it differs in three ways.',
+          text: 'A session item runs like any session: see Running the room. A Call & Answer, Trivia or Poll item on two screens gets the same console as a session on its own: the top bar, Your part now, the Needs-you line, the pulse and People. Other items run on their stage. In an event it differs in these ways.',
         },
         {
           t: 'list',
           items: [
-            { title: 'The event\'s code', text: 'Its lobby shows the event code, not a session code. Late arrivals join the event and land in this session.' },
-            { title: '**AGENDA** on the dock', text: 'Back to the event\'s stage. It does not pause anything: the phones stay where they are.' },
-            { title: 'At the end', text: 'When the session ends, the dock offers **Back to the agenda**.' },
+            { title: 'The event\'s code', text: 'Its lobby and **Join** show the event code, not a session code. Late arrivals join the event and land in this session; in People a latecomer reads **from item 2** (the item they arrived in) where others show what they are doing.' },
+            { title: '**‹ Agenda**', text: 'One line under the **Session menu**\'s header (top right), in every section, on one screen or two: **This event**, item 3 of 6, and "the room is on item 2" while the room is elsewhere, with **Bring everyone here** beside it then. There is no Agenda tab. On two screens **‹ Agenda** is also the first step on the steps strip. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Main menu**, top left or at the menu\'s foot, still goes to your start screen, asking first when people are in the room.' },
+            { title: 'At the end', text: 'When the session ends, Your part now offers **Back to the agenda**.' },
           ],
         },
+      ],
+    },
+    {
+      id: 'event-item-setup',
+      title: 'Setup once a day, and when the event moves on',
+      icon: 'Monitor',
+      blocks: [
         {
-          t: 'p',
-          text: 'In an event every item runs on its stage; the two-screen console is not used.',
+          t: 'list',
+          items: [
+            { title: 'Setup, once a day', text: 'The first Call & Answer, Trivia or Poll item of the day opens on Setup and asks where the room watches. Later items that day skip the question and the check: on one screen they open on the lobby, on two screens at the room joining once the room\'s window shows the item.' },
+            { title: 'When the event moves on', text: 'If another item goes live while you are on this one, the Needs-you line says **The event moved on to Item 3**, with **Bring everyone here**, which brings the phones back to this item. The same button is in the Session menu.' },
+          ],
         },
       ],
     },
@@ -442,11 +465,11 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join; open the event again from **Events** in the console. **Stay** closes the question.',
+          text: 'To step away without ending anything, press **EXIT** and choose **Leave — the event keeps going**. Phones stay where they are and people can still join. You land on your start screen, where the event is listed (**Running**) with a button back to its stage. **Stay** closes the question.',
         },
         {
           t: 'p',
-          text: 'Ended too soon? While the event is still kept, its stage offers **REOPEN**. **Reopen the event?** says what it does: people can join again with the same code, and items that never ran can go live. What finished stays finished; those sessions are over and their reports are kept.',
+          text: 'Ended too soon? While the event is still kept, its stage offers **REOPEN**: people can join again with the same code, and items that never ran can go live. What finished stays finished, its report kept.',
         },
         {
           t: 'p',
@@ -454,7 +477,7 @@ const eventDay = {
         },
         {
           t: 'p',
-          text: 'Each session item\'s report is in Sessions on your start screen, under the event\'s row: see The session report.',
+          text: 'Each session item\'s report is in the sessions list (Library & team › Sessions), under the event\'s row: see The session report.',
         },
       ],
     },

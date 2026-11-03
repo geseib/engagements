@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import { useConfirm } from './ConfirmDialog';
 import Icon from './Icon';
 import { formatWhen } from '../config/tableCells';
 import { planNameOf } from './PlanRequestDialog';
@@ -159,9 +161,10 @@ export function DecideRequestDialog({ request, onCancel, onDecided }) {
   const [error, setError] = useState('');
   const dirty = note.trim().length > 0;
 
-  const requestClose = () => {
+  const [askConfirm, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without deciding? The note you typed will be lost.')) return;
+    if (dirty && !(await askConfirm({ title: 'Close without deciding?', message: 'The note you typed will be lost.', confirmText: 'Close', cancelText: 'Keep editing' }))) return;
     onCancel();
   };
 
@@ -192,15 +195,7 @@ export function DecideRequestDialog({ request, onCancel, onDecided }) {
       closeOnBackdrop={() => !dirty && !busy}
       closeOnEscape={() => !dirty && !busy}
     >
-      <header className="preq-modal-head">
-        <div className="preq-grow">
-          <h2 id="preq-decide-title">Decide: {request.orgName}</h2>
-          <p className="preq-dim">
-            Asked {formatWhen(request.requestedAt)}{request.code ? ` with code ${request.code}` : ''} · {planMove(request)}
-          </p>
-        </div>
-        <button type="button" className="preq-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="preq-modal-head" titleId="preq-decide-title" title={<>Decide: {request.orgName}</>} titlesClassName="preq-grow" sub={<>Asked {formatWhen(request.requestedAt)}{request.code ? ` with code ${request.code}` : ''} · {planMove(request)}</>} subClassName="preq-dim" onClose={requestClose} closeDisabled={busy} closeClassName="preq-x" />
       <div className="preq-modal-body">
         {request.note && <blockquote className="preq-quote">“{request.note}”</blockquote>}
         <div className="preq-sum">
@@ -230,8 +225,7 @@ export function DecideRequestDialog({ request, onCancel, onDecided }) {
         </label>
         {error && <p className="preq-alert" role="alert">{error}</p>}
       </div>
-      <footer className="preq-modal-foot">
-        <button type="button" className="preq-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="preq-modal-foot" cancel={<button type="button" className="preq-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button
           type="button"
           className={`preq-btn ${decision === 'approved' ? 'preq-btn--primary' : 'preq-btn--danger'}`}
@@ -241,7 +235,8 @@ export function DecideRequestDialog({ request, onCancel, onDecided }) {
         >
           {busy ? 'Saving…' : decision === 'approved' ? 'Approve' : 'Decline'}
         </button>
-      </footer>
+      </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }

@@ -25,6 +25,7 @@ import { useNextFocus } from './useNextFocus';
 import {
   pointVoteRows, rowIsLive, highlightOf, tiedAtCut, sendHighlighted, runRunning, askPathSummaries,
 } from './buildScreens';
+import Button from '../components/ui/Button';
 
 export default function BuildPointsResults({
   ask, room, override, onToggle, busy, ended, said = '', onMove, quiet = false,
@@ -79,19 +80,19 @@ export default function BuildPointsResults({
         )}
         {!ended && (live.length > 0 ? (
           <ActionRow space={!said && n > 0} hint={said || (n > 0 ? W.spaceTo('send') : '')}>
-            <button type="button" className="brm-btn" disabled={busy || rest < 1} onClick={() => onMove('later-rest')}>{W.saveRest}</button>
-            <button
-              type="button" className="brm-btn" disabled={busy || n < 2 || listBusy}
+            <Button type="button" size={36} className="brm-ctl" disabled={busy || rest < 1} onClick={() => onMove('later-rest')}>{W.saveRest}</Button>
+            <Button
+              type="button" size={36} className="brm-ctl" disabled={busy || n < 2 || listBusy}
               title={listBusy ? W.runRefused : n < 2 ? W.workNeedsTwo : undefined}
               onClick={() => onMove('run')}
             >
               {W.workInTurn}
-            </button>
-            <button type="button" className={`brm-btn${quiet ? '' : ' brm-btn--primary'}`} data-next-primary disabled={busy || n < 1} onClick={() => onMove('send')}>{sendHighlighted(n)}</button>
+            </Button>
+            <Button type="button" variant={quiet ? 'secondary' : 'primary'} size={36} className="brm-ctl" data-next-primary disabled={busy || n < 1} onClick={() => onMove('send')}>{sendHighlighted(n)}</Button>
           </ActionRow>
         ) : (
           <ActionRow hint={W.movedForwardDone}>
-            <button type="button" className={`brm-btn${quiet ? '' : ' brm-btn--primary'}`} data-next-primary disabled={busy} onClick={() => onMove('close')}>{W.closeThisVote}</button>
+            <Button type="button" variant={quiet ? 'secondary' : 'primary'} size={36} className="brm-ctl" data-next-primary disabled={busy} onClick={() => onMove('close')}>{W.closeThisVote}</Button>
           </ActionRow>
         ))}
       </Step>

@@ -16,6 +16,11 @@ import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
   GameHostPage under a full parallel suite. jest.config.js's rule is that a
   limit fires for a hung test, never a slow one, and stays under its 30s
   testTimeout: 15s is both.
+
+  The misses that followed (15s, then 30s, "Received 0") were not slowness:
+  the rows arrived before the VOTE render committed, the page judged them
+  stale against a lagging gameStateRef and never asked again. Fixed in
+  GameHostPage's setGameState (2 Nov); the 30s raise is reverted.
 */
 const LOAD_WAIT = 15000;
 
@@ -67,11 +72,14 @@ beforeAll(() => {
   global.ResizeObserver = global.ResizeObserver || class { observe() {} disconnect() {} unobserve() {} };
 });
 
-let answersDelay = 50;
+// 0 by default, on purpose: the rows land before the page has committed the
+// VOTE render, which used to drop them (see LOAD_WAIT above). The "Gathering
+// responses…" test sets its own delay to see the in-between.
+let answersDelay = 0;
 let answersFail = false;
 
 beforeEach(() => {
-  answersDelay = 50;
+  answersDelay = 0;
   answersFail = false;
   localStorage.clear();
   sessionStorage.clear();
@@ -94,8 +102,6 @@ beforeEach(() => {
         presentDetail: { open: true, fullscreen: true, visible: true, statusAt: new Date().toISOString() },
       });
     }
-    // A network's worth of delay: the page lets VOTE rows in only once the
-    // stage is on that vote, which a same-tick mock would beat.
     if (u.includes(`games/${GAME}/answers/host`)) {
       await new Promise((r) => setTimeout(r, answersDelay));
       return answersFail ? { ok: false, status: 500, json: async () => ({}), text: async () => '' } : ok({ answers: ANSWERS });

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import Button from '../ui/Button';
 import { PlayerShell } from '../PlayerShell';
 import Icon from '../Icon';
+import SendButton from '../SendButton';
 import { namesMode } from '../../config/surveyNames';
 import { getClientId } from '../joinResult';
 import { getRespondentId } from './respondent';
@@ -15,6 +17,10 @@ import ChoiceInput from './ChoiceInput';
 import YesNoInput from './YesNoInput';
 import RankInput from './RankInput';
 import TextInput from './TextInput';
+import PlayerEnded, { PlayerEndedDock } from '../PlayerEnded';
+import {
+  ENDED, LOOK_UP, RECEIPT, SENT, WAIT,
+} from '../../config/playerWords';
 
 /**
  * A SURVEY, ON THE PHONE OF SOMEBODY WHO HAS JOINED ONE.
@@ -134,6 +140,8 @@ export default function SurveyRunner({
   online = true,
   banner = null,
   storage,
+  // AN EVENT'S ITEM (experience plan 3e): `{ onAgenda, nextTitle }`, or null.
+  event = null,
 }) {
   const doFetch = fetchFn || ((...args) => fetch(...args));
   const [load, setLoad] = useState({ status: 'loading', error: null });
@@ -352,17 +360,25 @@ export default function SurveyRunner({
   );
 
   /* ---- ENDED: every session type ends; a survey's shows no score ---------- */
+  /* ONE ENDED SCREEN (experience plan 3a/3e): the game's end draws the same
+     component. A survey scores nothing; inside an event the item is finished,
+     the page stays open for the next one and the agenda is in the dock (audit
+     C P5: it used to say "You can close this page" mid-event). */
   if (current === 'ENDED' || current === 'END') {
-    return shell({ phase: 'done', volume: 'watch', ctx: 'Session complete', centre: true }, (
-      <>
-        <p className="plr-lab">That&apos;s a wrap</p>
-        <h1 className="plr-h1">Thanks for taking part, {playerName}.</h1>
-        <p className="plr-lede plr-muted">The session is over. You can close this page.</p>
-        <LookUpCue>
-          If your host shares what the room said, it will be on the main screen — they will send
-          anything more themselves.
-        </LookUpCue>
-      </>
+    const inEvent = Boolean(event);
+    return shell({
+      phase: 'done',
+      volume: 'watch',
+      ctx: inEvent ? ENDED.itemCtx : ENDED.ctx,
+      centre: true,
+      dock: inEvent && typeof event.onAgenda === 'function' ? <PlayerEndedDock event={event} /> : null,
+    }, (
+      <PlayerEnded
+        name={playerName}
+        scored={false}
+        event={inEvent ? event : null}
+        lookUp={<LookUpCue>{ENDED.lookUp}</LookUpCue>}
+      />
     ));
   }
 
@@ -377,9 +393,7 @@ export default function SurveyRunner({
             ? `Thanks, ${playerName}. Everything you answered counts, whether or not you pressed Send.`
             : 'Your host has closed it, so there is nothing more to answer.'}
         </p>
-        <LookUpCue>
-          Your host may put the results on the main screen. Nobody’s name is shown there.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.surveyClosed}</LookUpCue>
       </>
     ));
   }
@@ -389,11 +403,10 @@ export default function SurveyRunner({
     if (load.status === 'not-started') {
       return shell({ phase: 'quiet', volume: 'rest', ctx: 'Survey', centre: true }, (
         <>
-          <p className="plr-lab">You&apos;re in</p>
-          <h1 className="plr-h1 plr-h1--primary">Joined as {playerName}.</h1>
-          <p className="plr-lede plr-muted">
-            The survey opens when your host is ready. This page will change on its own.
-          </p>
+          {/* ONE WAY TO SAY WAIT (experience plan 3a). */}
+          <p className="plr-lab">{WAIT.lobbyEyebrow(playerName)}</p>
+          <h1 className="plr-h1 plr-h1--primary">{WAIT.heading}</h1>
+          <p className="plr-lede plr-muted">{WAIT.surveyLede} {WAIT.line}</p>
         </>
       ));
     }
@@ -404,9 +417,9 @@ export default function SurveyRunner({
         ctx: 'Survey',
         centre: true,
         dock: (
-          <button type="button" className="plr-btn" onClick={() => { setLoad({ status: 'loading', error: null }); setAttempt((a) => a + 1); }}>
+          <Button variant="primary" size={56} onClick={() => { setLoad({ status: 'loading', error: null }); setAttempt((a) => a + 1); }}>
             Try again
-          </button>
+          </Button>
         ),
       }, (
         <>
@@ -420,20 +433,37 @@ export default function SurveyRunner({
     ));
   }
 
-  /* ---- SENT (rest volume: no dock, no amber) ----------------------------- */
+  /* ---- SENT (rest volume, no amber: the one way back in is in the dock) -- */
   if (view.screen === 'sent') {
-    return shell({ phase: 'quiet', volume: 'rest', ctx: 'Sent', centre: true }, (
+    /* ONE RECEIPT (experience plan 3a): the "Sent" eyebrow and "Your <thing>
+       is in." heading every type's receipt carries. "Change my answers" is
+       the one thing left to do, so it is in the dock (3d, principle 8), plain
+       rather than main: the participant is done, and amber would say not. */
+    return shell({
+      phase: 'quiet',
+      volume: 'rest',
+      ctx: `Survey · ${SENT}`,
+      centre: true,
+      sent: true,
+      /* "Sent" where "Send my answers" was (owner, 3 Nov 2026), beside the
+         way back in: "Change my answers" opens the review, whose Send is
+         live again. */
+      dock: (
+        <div className="plr-pair">
+          <Button variant="secondary" size={56} onClick={() => goTo('review')}>
+            Change my answers
+          </Button>
+          <SendButton sent />
+        </div>
+      ),
+    }, (
       <>
-        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>Thanks, {playerName} — that’s everything.</h1>
+        <p className="plr-lab plr-lab--good">{SENT}</p>
+        <h1 className="plr-h1 plr-h1--primary" ref={headingRef} tabIndex={-1}>{RECEIPT.answers}</h1>
         <p className="plr-lede plr-muted">
-          Your answers are in. You can still change them from here until the host closes the survey.
+          Thanks, {playerName}. {RECEIPT.changeable}
         </p>
-        <button type="button" className="plr-linkish plr-linkish--quiet" onClick={() => goTo('review')}>
-          Change my answers
-        </button>
-        <LookUpCue>
-          When the survey closes, your host may put the results on the main screen.
-        </LookUpCue>
+        <LookUpCue>{LOOK_UP.surveySent}</LookUpCue>
       </>
     ));
   }
@@ -464,23 +494,21 @@ export default function SurveyRunner({
             <p className="plr-note" id={reasonId}>{reason}</p>
           )}
           <div className="plr-pair">
-            <button
-              type="button"
-              className="plr-btn plr-btn--ghost"
+            <Button
+              variant="secondary" size={56}
               disabled={total === 0}
               onClick={() => goTo('answering', Math.max(0, total - 1))}
             >
               Back
-            </button>
-            <button
-              type="button"
-              className="plr-btn"
+            </Button>
+            <Button
+              variant="primary" size={56}
               disabled={blocked || total === 0}
               aria-describedby={reason ? reasonId : undefined}
               onClick={send}
             >
               {sending ? 'Sending…' : 'Send my answers'}
-            </button>
+            </Button>
           </div>
         </>
       ),
@@ -557,7 +585,8 @@ export default function SurveyRunner({
   return shell({
     phase: 'ask',
     volume: 'act',
-    ctx: `${index + 1} of ${total}`,
+    // The bar says where you are (§3.4): "Question 3 of 8".
+    ctx: `Question ${index + 1} of ${total}`,
     progress: (index * 100) / total,
     dock: (
       <>
@@ -572,23 +601,21 @@ export default function SurveyRunner({
           </p>
         )}
         <div className="plr-pair">
-          <button
-            type="button"
-            className="plr-btn plr-btn--ghost"
+          <Button
+            variant="secondary" size={56}
             disabled={index === 0 && !view.fromReview}
             onClick={() => (view.fromReview && index === 0 ? goTo('review') : goTo('answering', index - 1, view.fromReview))}
           >
             Back
-          </button>
-          <button
-            type="button"
-            className="plr-btn"
+          </Button>
+          <Button
+            variant="primary" size={56}
             disabled={held}
             aria-describedby={held || notice ? reasonId : undefined}
             onClick={forward}
           >
             {primaryLabel}
-          </button>
+          </Button>
         </div>
       </>
     ),

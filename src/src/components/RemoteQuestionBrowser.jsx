@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './RemoteQuestionBrowser.css';
 import Icon from './Icon';
+import Button from './ui/Button';
 import QuestionCard from './QuestionCard';
 import { remoteQuestionRow, questionForCard, filterRemoteRows } from '../config/hostRemote';
 import { canReveal, revealText, stepSelection } from '../config/questionPreview';
@@ -274,24 +275,24 @@ export default function RemoteQuestionBrowser({
     const nowWord = mine('now') ? 'Working…' : (armed ? 'Tap again to ask now' : 'Ask now');
     return (
       <>
-        <button
-          className="hr-btn hrq-next"
-          type="button"
+        <Button
+          variant="secondary" size={44} className="hrq-next"
           disabled={busy || asking !== null || position === 1}
           aria-label={`${nextWord} “${row.title}”`}
           onClick={() => ask('next', row)}
         >
           {nextWord}
-        </button>
-        <button
-          className={`hr-btn hrq-now ${armed ? 'is-armed' : ''}`}
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size={44}
+          className={`hrq-now ${armed ? 'is-armed' : ''}`}
           disabled={busy || asking !== null}
           aria-label={`${nowWord} “${row.title}”`}
           onClick={() => ask('now', row)}
         >
           {nowWord}
-        </button>
+        </Button>
       </>
     );
   };
@@ -373,19 +374,18 @@ export default function RemoteQuestionBrowser({
             could no longer see. Above it, the thumb stays put and the question
             changes where the eye already is. */}
         <div className="hrqp-bar">
-          {/* `.hr-btn--ghost` IS THE GHOST TREATMENT, so this wears it rather
-              than repainting it: the ground, the hairline border, the colour, the
-              radius and the remote's own 48px touch floor all come from
-              HostRemote.css. `.hrqp-back` adds only `flex: none`, which is the one
-              thing about it that is this bar's business. */}
-          <button
-            className="hr-btn hr-btn--ghost hrqp-back"
-            type="button"
+          {/* ui/Button's secondary IS THE GHOST TREATMENT, so this wears it
+              rather than repainting it: the outline, the colour, the radius and
+              the 44px touch height all come from components/ui/Button.css.
+              `.hrqp-back` adds only `flex: none`, which is the one thing about
+              it that is this bar's business. */}
+          <Button
+            variant="secondary" size={44} className="hrqp-back"
             onClick={() => setPreviewId(null)}
           >
             <Icon name="ArrowLeft" weight="bold" size={18} color="currentColor" />
             All questions
-          </button>
+          </Button>
           {revealable && (
             <div className="hrqp-seg" role="group" aria-label="What the card shows">
               <button
@@ -416,9 +416,8 @@ export default function RemoteQuestionBrowser({
             disappearing, which would make the chrome change shape as a search
             narrows. */}
         <div className="hrqp-step">
-          <button
-            className="hr-btn hr-btn--ghost"
-            type="button"
+          <Button
+            variant="secondary" size={44}
             disabled={single}
             title={single ? ONLY_ONE : undefined}
             aria-describedby={single ? heldId : undefined}
@@ -426,13 +425,12 @@ export default function RemoteQuestionBrowser({
           >
             <Icon name="CaretLeft" weight="bold" size={16} color="currentColor" />
             Previous
-          </button>
+          </Button>
           <span className="hrqp-pos" data-testid="hrq-preview-position">
             {`${shown.indexOf(open) + 1} / ${shown.length}`}
           </span>
-          <button
-            className="hr-btn hr-btn--ghost"
-            type="button"
+          <Button
+            variant="secondary" size={44}
             disabled={single}
             title={single ? ONLY_ONE : undefined}
             aria-describedby={single ? heldId : undefined}
@@ -440,7 +438,7 @@ export default function RemoteQuestionBrowser({
           >
             Next
             <Icon name="CaretRight" weight="bold" size={16} color="currentColor" />
-          </button>
+          </Button>
         </div>
 
         {/* PRINTED, NOT HOVERED. `title=` is the one channel a mouse has and the
@@ -564,14 +562,13 @@ export default function RemoteQuestionBrowser({
             <Icon name="Warning" weight="fill" size={18} color="currentColor" />
             {failure.message}
           </p>
-          <button
-            className="hr-btn hr-btn--ghost hrq-retry"
-            type="button"
+          <Button
+            variant="secondary" size={44} className="hrq-retry"
             onClick={() => setReloadKey((n) => n + 1)}
           >
             <Icon name="ArrowClockwise" weight="bold" size={16} color="currentColor" />
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
@@ -618,15 +615,14 @@ export default function RemoteQuestionBrowser({
               round; Ask now moves the room. Every label carries the question's
               title so a screen reader hears which of thirty rows it is on. */}
           <div className="hrq-actions">
-            <button
-              className="hr-btn hr-btn--ghost"
-              type="button"
+            <Button
+              variant="secondary" size={44}
               aria-label={`Preview “${row.title}”`}
               onClick={() => setPreviewId(row.id)}
             >
               <Icon name="Eye" weight="bold" size={16} color="currentColor" />
               Preview
-            </button>
+            </Button>
             {askPair(row)}
           </div>
         </article>

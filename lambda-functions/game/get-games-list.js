@@ -187,6 +187,7 @@ function eventRow(event, itemSessions) {
         roundsPlayed: session.roundsPlayed,
         lastPlayedAt: session.lastPlayedAt || null,
         surveyClosed: session.surveyClosed,
+        ...(session.ended !== undefined ? { ended: session.ended } : {}),
       } : null,
       sessionGone: Boolean(item.gameId) && !session,
     };
@@ -363,6 +364,10 @@ exports.handler = async (event) => {
       // round 1). false, never null, on a failed or absent read: an unreadable
       // state is not evidence of results existing.
       game.surveyClosed = game.gameType === 'survey' && SURVEY_RESULTS_STATES.has(states.get(game.gameId));
+      // Whether the host pressed End (experience plan 4b): Home's Rejoin offers
+      // started sessions that have not ended. Absent, never false, on a failed
+      // read: "we could not read it" must not make a session look live.
+      if (states.has(game.gameId)) game.ended = states.get(game.gameId) === 'ENDED';
     });
 
     const events = orgEvents.map((row) => ({

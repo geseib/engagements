@@ -221,7 +221,7 @@ describe('the shell owns the wait, so the button is never dead', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('create-report returned 502.');
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
     expect(onRetry).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getAllByRole('button', { name: /all session reports/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /your sessions/i })[0]);
     expect(onBrowseAll).toHaveBeenCalledTimes(1);
   });
 
@@ -231,7 +231,7 @@ describe('the shell owns the wait, so the button is never dead', () => {
   test('the history list is still reachable from the report', () => {
     const onBrowseAll = jest.fn();
     render(<GameReport reportData={reportData} status="ready" onClose={() => {}} onBrowseAll={onBrowseAll} />);
-    fireEvent.click(screen.getByRole('button', { name: /all session reports/i }));
+    fireEvent.click(screen.getByRole('button', { name: /your sessions/i }));
     expect(onBrowseAll).toHaveBeenCalledTimes(1);
   });
 
@@ -426,7 +426,18 @@ describe('comments in the session report', () => {
     expect(within(container.querySelector('.report-comments')).getByText('Comments')).toBeInTheDocument();
   });
 
+  test('the count says "on this round", since comments on Workie’s read are among them', () => {
+    // rejects: "2 comments on this round’s results" when one of the two is on
+    // Workie's read.
+    const { container } = render(<ReportDocument reportData={withComments} />);
+    const block = container.querySelector('.report-comments');
+    expect(block.textContent).toMatch(/2 comments on this round(?!’s results)/);
+    expect(block.textContent).not.toMatch(/on this round’s results/);
+  });
+
   test('each states which section it is about', () => {
+    // rejects: "On AI summary" under the Workie's read heading, and the
+    // phone's "Response N" printed beside a report that numbers by placement.
     /*
       In the SESSION report a comment is read a long way from the round it
       belongs to — often on paper. "Too internal" against nothing is not a
@@ -436,8 +447,13 @@ describe('comments in the session report', () => {
     */
     const { container } = render(<ReportDocument reportData={withComments} />);
     const block = container.querySelector('.report-comments');
-    expect(block.textContent).toContain('Response 1 — Ada');
-    expect(block.textContent).toContain('AI summary');
+    // Stored labels, mapped at render: a response by its author's name (the
+    // report prints placements, never the phone's positions), and an older
+    // "AI summary" label under the name the report gives that section.
+    expect(block.textContent).toContain('On the responses');
+    expect(block.textContent).toContain('Ada’s response');
+    expect(block.textContent).toContain('On Workie’s read');
+    expect(block.textContent).not.toContain('AI summary');
   });
 
   test('one the host put on the wall says so', () => {
@@ -456,7 +472,8 @@ describe('comments in the session report', () => {
   test('each is attributed', () => {
     const { container } = render(<ReportDocument reportData={withComments} />);
     const authors = [...container.querySelectorAll('.comment-author')].map((n) => n.textContent);
-    expect(authors).toEqual(['Lee Chen', 'Dana']);
+    // Grouped as the phone is: Workie's read first, then the responses.
+    expect(authors).toEqual(['Dana', 'Lee Chen']);
   });
 
   test('each carries the excerpt of what it is about, not just the label', () => {

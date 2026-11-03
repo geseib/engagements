@@ -146,3 +146,40 @@ describe('the defaults are the ones a create actually sends', () => {
     expect(advancedSummary(untouched('call-and-answer')).changed).toEqual([]);
   });
 });
+
+/*
+  THE CLOSED LINE (New engagement round 4, README "Density cuts"; review Sam 2:
+  "I check 'shuffled' before every create"). Closed, the fold names the
+  defaults a host checks, leaving out a names rule the names card beside it
+  already states; with a change it is the amber lead alone.
+*/
+describe('brief: the closed Advanced line', () => {
+  test('Call & Answer with its names card: the shuffle and the summary, not the names rule', () => {
+    const s = advancedSummary(untouched('call-and-answer', { namesStated: true }));
+    expect(s.brief).toBe('Defaults: questions shuffled, Workie’s standard summary');
+    // rejects: the names rule said twice on one screen (hard rule 5)
+    expect(s.brief).not.toMatch(/anonymous/);
+    // The full sentence is unchanged, for the inside of the fold.
+    expect(s.rest).toMatch(/^Using the defaults — answers anonymous until voting closes/);
+  });
+
+  test('without a names card beside it, the names rule stays in', () => {
+    expect(advancedSummary(untouched('call-and-answer')).brief)
+      .toBe('Defaults: answers anonymous until voting closes, questions shuffled, Workie’s standard summary');
+  });
+
+  test('a set whose own approach will be used is named as such', () => {
+    expect(advancedSummary(untouched('trivia', { setPromptWillBeUsed: true })).brief)
+      .toBe('Defaults: questions shuffled, this set’s own summary approach');
+  });
+
+  test('a survey with its names card has nothing left to list', () => {
+    expect(advancedSummary(untouched('survey', { namesStated: true })).brief).toBe('Using the defaults');
+  });
+
+  test('a change: the lead alone', () => {
+    const s = advancedSummary(untouched('call-and-answer', { randomizeQuestions: false, namesStated: true }));
+    expect(s.brief).toBe('Changed: questions asked in order.');
+    expect(s.brief).toBe(s.lead);
+  });
+});

@@ -274,6 +274,29 @@ const isQueueWrite = (command) =>
     // other surface's list and leave it there until the next poll disagreed.
     assert.strictEqual(sent.length, 0, `${sent.length} frame(s) went out`));
 
+  console.log('\n5. the laptop writes a question while the phone reorders — both land (impromptu ask, README risk 6)');
+
+  seed(['a', 'b']);
+  // The laptop's add-own is a TRANSACTION (the OWNQ row and its place); hold it
+  // mid-flight, after it has read version 1 and built its list.
+  const latch5 = table.hold((command) => command.type === 'transactWrite');
+  const laptop = post({ op: 'add-own', place: 'next', question: { title: 'What would have to be true?' } });
+  await latch5.reached;
+  const phoneMove = await post({ op: 'later', questionKey: 'a' });
+  await check('the phone\'s reorder lands first', () =>
+    assert.deepStrictEqual(bodyOf(phoneMove).queue, ['b', 'a']));
+  latch5.release();
+  const laptopRes = await laptop;
+  const ownKey = bodyOf(laptopRes).key;
+  await check('the laptop\'s add-own also succeeds, re-applied to the phone\'s list', () => {
+    assert.strictEqual(laptopRes.statusCode, 200, laptopRes.body);
+    assert.deepStrictEqual(queueRow().Queue, [ownKey, 'b', 'a']);
+  });
+  await check('exactly one OWNQ row was written for the one press', () => {
+    const rows = [...store.keys()].filter((k) => k.includes('|OWNQ#'));
+    assert.strictEqual(rows.length, 1, JSON.stringify(rows));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   suiteFinished();
   process.exit(fail === 0 ? 0 : 1);

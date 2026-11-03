@@ -1,12 +1,44 @@
 /* THE HOST CONSOLE (host console spec). Two screens only; private laptop chrome.
    Laptop ladder 12 / 13 / 15 / 19 / 24px; dusk tokens; scope hc-. */
-.hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); grid-template-columns: 260px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail now" "rail main"; background: var(--bg); color: var(--text); font-size: 15px; }
-.hc-top { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
-.hc-brand { font-weight: 800; }
-.hc-name { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE PEOPLE COLUMN IS 340px (experience plan §3.2b): the person row's five
+   slots fit at 15px, "joined 2 min ago" beside a score. The pulse has its own
+   row under the Needs-you line (Phase 2 step 2c). */
+.hc { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto auto auto auto minmax(0, 1fr); grid-template-columns: 340px minmax(0, 1fr); grid-template-areas: "top top" "loop loop" "rail now" "rail needs" "rail pulse" "rail main"; background: var(--bg); color: var(--text); font-size: 15px; }
+/* THE TOP BAR (experience plan §3.2, step 2a): fixed slots, Main menu top
+   left, the Session menu top right, in one row that never wraps. */
+.hc-top { grid-area: top; display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); min-width: 0; }
+.hc-top > * { flex: none; }
+.hc-top > .hc-name { flex: 0 1 auto; }
+.hc-top > .hc-spacer { flex: 1 1 0; }
+.hc-name { color: var(--text); font-size: 15px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 10px; border-left: 1px solid rgb(var(--glow-rgb) / .12); }
+/* Main menu, Join and the Session menu are ui/Button (secondary, 36px;
+   experience plan §5.1, step 5a). Only their type and the open state are
+   the bar's: 13px, and the open Session menu edged in the accent. */
+.hc-top .hc-leave, .hc-top .hc-code, .hc-top .hc-menu { --ui-size: 13px; }
+.hc-top .hc-menu[aria-expanded="true"] { border-color: var(--accent); background: rgb(var(--glow-rgb) / .08); }
+.hc-top .rws .ui-btn { --ui-size: 13px; }
+.hc-bell, .hc-helpslot { display: inline-flex; align-items: center; }
+/* The connection, only when it is broken (PLAN §4.2 row 7): amber edge, the text stays --text. */
+.hc-conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text); border: 1px solid var(--warn); background: rgb(var(--warn-rgb) / .14); border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
 .hc-spacer { margin-left: auto; }
-.hc-code, .hc-btn { font: inherit; font-size: 13px; font-weight: 700; color: var(--text); background: transparent; border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
 .hc-code b { color: var(--accent-text); letter-spacing: .06em; margin-left: 4px; }
+/* THE JOIN CODE ON THIS LAPTOP (owner, 3 Nov 2026; JoinCodeChip.jsx): hover,
+   focus or a click shows the join QR in a card under the code; the room's
+   toggle is the card's own button. The card is the laptop's, never the room's.
+   The QR sits on --text, near-white on dusk (the code must scan; SessionSetup.css .hsetup-qr does the same), everything else on dusk tokens. */
+.hc-join { position: relative; display: inline-flex; }
+.hc-join.is-up .hc-code { border-color: var(--accent); }
+.hc-join-up { display: inline-flex; margin-left: 6px; color: var(--accent-text); }
+.hc-joincard { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 60; margin-top: 0; padding: 18px 18px 14px; width: 260px; box-sizing: border-box; display: grid; justify-items: center; gap: 8px; background: var(--surface); color: var(--text); border: 1px solid rgb(var(--glow-rgb) / .22); border-radius: 14px; box-shadow: 0 12px 32px rgb(var(--shade-rgb) / .45); }
+.hc-joincard::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; height: 10px; } /* the hover bridge from the code to the card */
+.hc-joincard.is-pinned { border-color: var(--accent); }
+.hc-joincard-qr { background: var(--text); padding: 10px; border-radius: 10px; line-height: 0; }
+.hc-joincard-qr svg { width: 200px; height: 200px; display: block; }
+.hc-joincard-code { margin: 4px 0 0; font-size: 24px; font-weight: 800; letter-spacing: .1em; color: var(--accent-text); line-height: 1.1; }
+.hc-joincard-url { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; text-align: center; }
+.hc-joincard .hc-joincard-room { --ui-size: 13px; margin-top: 4px; }
+.hc-joincard-x { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+.hc-joincard-x:hover, .hc-joincard-x:focus-visible { background: rgb(var(--glow-rgb) / .12); }
 .hc-winstat { font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; border: 1px solid rgb(var(--glow-rgb) / .22); color: var(--text); text-decoration: none; }
 .hc-winstat.is-success { border-color: var(--success); background: rgb(var(--success-rgb) / .14); }
 .hc-winstat.is-warn { border-color: var(--warn); background: rgb(var(--warn-rgb) / .14); }
@@ -14,31 +46,82 @@
 .hc-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .hc-winstat.is-success .hc-dot { background: var(--success); }
 .hc-winstat.is-warn .hc-dot { background: var(--warn); }
+/* ONE SCREEN (experience plan §3.3, 2h): "The room sees this screen" is a
+   status in the room's-screen slot, edged in the info blue (never the one
+   orange); the bell is the count-only Needs-you button, outlined like the
+   Session menu, its count on the amber accent. Text stays --text. */
+.hc-roomsees { border-color: var(--info); background: rgb(var(--info-rgb) / .14); }
+.hc-roomsees .hc-dot { background: var(--info); }
+.hc-top .hc-needsbtn { --ui-size: 13px; }
+.hc-top .hc-needsbtn.is-lit { border-color: var(--accent); }
+.hc-needs-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .hc-loop { grid-area: loop; border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
 .hc-loop .wfs { border-bottom: 0; }
 .hc-rail { grid-area: rail; border-right: 1px solid rgb(var(--glow-rgb) / .12); overflow: auto; padding: 8px 0; }
 .hc-sec { border-bottom: 1px solid rgb(var(--glow-rgb) / .12); }
-.hc-sec summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 13px; font-weight: 700; }
+/* THE HEADERS, OPEN AND CLOSED (docs/design/console-rail; owner, 3 Nov 2026).
+   A caret in a fixed first column (D2), the title, then the summary, which
+   truncates (its whole sentence is the summary's aria-label and title=).
+   data-level paints it: "now" wears the Needs-you line's own amber edge and
+   8% warn wash over the rail's --bg, with the dot and the name in
+   --accent-text (D3); "soon" (Late) is a dot and text colour, never amber
+   (fork 7). Measured on the rail's --bg #0F1A2E (consoleRailPalette.test.js):
+   --text 14.97:1, on the wash 13.10:1; --muted 7.24:1 / 6.33:1;
+   --accent-text 8.86:1 / 7.75:1 (Present 9.14:1 / 8.00:1). */
+.hc-sec summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 12px auto minmax(0, 1fr); align-items: center; column-gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 14px 0 11px; border-left: 3px solid transparent; font-size: 13px; font-weight: 700; }
 .hc-sec summary::-webkit-details-marker { display: none; }
-.hc-count { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; }
+.hc-caret { display: inline-flex; width: 12px; height: 12px; color: var(--muted); }
+.hc-caret svg { display: block; transition: transform 120ms ease-out; }
+.hc-sec[open] > summary .hc-caret svg { transform: rotate(90deg); }
+.hc-sec-title { white-space: nowrap; }
+.hc-count { justify-self: end; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-size: 13px; color: var(--muted); font-weight: 600; }
+.hc-count b { color: var(--text); font-weight: 700; }
 .hc-count.is-alert { color: var(--accent-text); }
+.hc-count .hc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+.hc-sec summary[data-level="now"] { border-left-color: var(--accent); background: linear-gradient(rgb(var(--warn-rgb) / .08), rgb(var(--warn-rgb) / .08)), var(--bg); }
+.hc-sec summary[data-level="now"] .hc-count { color: var(--text); }
+.hc-sec summary[data-level="now"] .hc-who { color: var(--accent-text); font-weight: 700; }
+.hc-sec summary[data-level="now"] .hc-dot { width: 8px; height: 8px; }
+/* THE ONE MOTION (D4; owner fork 3): the mark fades in once, 240ms, in the
+   same commit as the Needs-you line's (useArrival). Paint only: the edge
+   from transparent and a --bg veil fading off the wash; the words are there
+   at once. One iteration, never alternate, never infinite. */
+.hc-sec summary[data-level="now"][data-arrived] { animation: hc-arrive 240ms ease-out 1 both; }
+.hc-sec summary[data-level="now"][data-arrived] .hc-dot { animation: hc-arrive-dot 240ms ease-out 1 both; }
+@keyframes hc-arrive { from { border-left-color: transparent; box-shadow: inset 0 0 0 100vmax var(--bg); } }
+@keyframes hc-arrive-dot { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .hc-sec summary[data-level="now"][data-arrived], .hc-sec summary[data-level="now"][data-arrived] .hc-dot { animation: none; }
+  .hc-caret svg { transition: none; }
+}
+/* People's rows are the shared PersonRow (rail density): the row owns its padding. */
+.hc-list.hc-people { padding: 0 0 8px; gap: 0; font-size: 15px; }
+/* The columns' heads, on the row's own grid (PersonRow.css .prow--rail). */
+.hc-colhd { display: grid; grid-template-columns: 8px minmax(0, 1fr) 20px 48px 28px; column-gap: 10px; padding: 0 12px 4px 19px; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+.hc-colhd span:nth-child(3) { text-align: center; }
+.hc-colhd span:nth-child(4) { text-align: right; }
 .hc-list { list-style: none; margin: 0; padding: 0 14px 10px; display: grid; gap: 6px; font-size: 13px; }
 .hc-list li { display: flex; gap: 8px; align-items: baseline; }
 .hc-n { width: 20px; height: 20px; border-radius: 6px; background: var(--surface-2); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
 .hc-list li.is-now .hc-n { background: var(--info); color: var(--bg); }
 .hc-meta { color: var(--muted); font-size: 12px; }
-.hc-tick { color: var(--success-text); font-weight: 800; }
-.hc-wait { color: var(--muted); }
 .hc-empty { margin: 0; padding: 0 14px 10px; font-size: 13px; color: var(--muted); }
 .hc-link { font: inherit; font-size: 12px; font-weight: 700; color: var(--info); background: transparent; border: 0; padding: 0 14px 10px; cursor: pointer; text-align: left; }
 .hc-list .hc-link { padding: 0; font-size: 13px; }
+/* THE IMPROMPTU ASK in the Round queue (README D2, D5): "Write a question" is
+   a quiet link (never the orange), and a round the host wrote wears Yours. */
+.hc-write { display: inline-flex; align-items: center; gap: 4px; }
+.hc-list .hc-yours { align-self: center; }
+/* A section's link (ui/Button, tertiary) at the section's foot. */
+.hc-sec > .hc-sec-link { --ui-size: 12px; margin: 0 8px 10px; }
+.hc-late-acts .ui-btn { --ui-size: 13px; min-height: 0; padding-top: 0; padding-bottom: 0; }
 .hc-link:disabled { opacity: .5; cursor: default; }
 /* The slice of Workie's read the wall shows now (owner, 16 Oct 2026). */
 .hc-read-page { border-left: 3px solid transparent; padding-left: 12px; margin-left: -15px; scroll-margin-block: 12px; }
 .hc-read-page.is-onwall { border-left-color: var(--accent); }
 .hc-onwall-k { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 .hc-board { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 14px 10px; }
-.hc-board .hc-btn:disabled { opacity: .5; cursor: default; }
+.hc-board .ui-btn { --ui-size: 13px; }
 .hc-main { grid-area: main; overflow: auto; padding: 16px 20px; display: grid; gap: 14px; align-content: start; container-type: size; }
 /* WHAT THE HOST DOES NEXT (owner, 18 Oct 2026): a card at the top of the
    centre, the sentence large, the buttons beside it. Was the footer. */
@@ -46,24 +129,45 @@
 .hc-now-text { min-width: 0; flex: 1; display: grid; gap: 4px; }
 .hc-part-k { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
 .hc-part { margin: 0; font-size: 19px; line-height: 1.3; color: var(--text); max-width: 60ch; }
-.hc-status { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+/* One line held even when empty: the counts moved to the pulse (2c), and the
+   card must not change height when a status line comes and goes. */
+.hc-status { min-height: 1.5em; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .hc-status b { color: var(--text); font-weight: 700; }
 .hc-status-link { font: inherit; color: var(--info); background: transparent; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .hc-status-link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .hc-next { margin: 0; font-size: 13px; color: var(--muted); }
-.hc-error { color: var(--danger); }
+/* Refusal copy in --danger-text: --danger never carries text (engage-design §1). */
+.hc-error { color: var(--danger-text); }
 .hc-late-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px; }
 .hc-bullet { color: var(--muted); }
 .hc-action { color: var(--accent-text); }
 .hc-acts { flex: none; }
+/* THE NEEDS-YOU LINE'S ROW (experience plan §4.3): under the card, at the
+   line's one height (components/needs/NeedsYou.css), so the main area below
+   never moves when something arrives. */
+/* Workie's read that did not arrive (experience plan §4.2 row 5): the card
+   with a danger edge, never danger text (--danger carries no text). */
+.hc-failcard { border-left: 4px solid var(--danger); }
+.hc-fail-h { margin: 0; font-size: 15px; color: var(--text); }
+.hc-fail-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.hc-fail-acts .ui-btn { --ui-size: 13px; }
+.hc-needs { grid-area: needs; margin: 10px 20px 0; min-width: 0; }
+/* THE PULSE'S ROW (step 2c): under the Needs-you line, above the main area. */
+.hc-pulse { grid-area: pulse; margin: 12px 20px 0; min-width: 0; }
+/* THE SESSION MENU'S SHEET HOST (experience plan §3.2b): exactly the content
+   area, from the pulse's row to the foot of the main area, in the centre
+   column. Your part now and the Needs-you line are rows above it, so the
+   sheet can never cover them. Empty, it lets every click through. */
+.hc-sheet { grid-column: 2; grid-row: pulse-start / main-end; position: relative; z-index: 20; min-height: 0; min-width: 0; pointer-events: none; overflow: hidden; }
+.hc-sheet:empty { display: none; }
+.hc-sheet > * { pointer-events: auto; }
+.hc-sheet .setup-panel-scrim { position: absolute; inset: 0; z-index: 0; }
+.hc-sheet .setup-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 1; max-width: 100%; min-width: 0; }
 /* A second card under Your part now (`extra`): the row wraps and the card takes a line of its own. */
 .hc-now--extra { flex-wrap: wrap; }
 .hc-now--extra .hc-now-text { flex: 1 1 0; }
 .hc-now-extra { flex: 1 1 100%; min-width: 0; }
 .hc-now-extra:empty { display: none; }
-/* The way out, on the top line (owner, 18 Oct 2026). */
-.hc-leave { font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); background: transparent; border: 0; padding: 4px 6px; cursor: pointer; }
-.hc-leave:hover { color: var(--text); }
 .hc-acts .host-action-bar__status { display: none; }
 
 /* The bar is position:fixed with a paper background by default (styles.css
@@ -74,11 +178,19 @@
 /* The bar's own sizes are rem/em on the 16px root (0.7rem = 11px, under the
    floor); inside the console they are pinned to the laptop ladder. */
 .hc-acts .host-action-bar__hint, .hc-acts .host-action-bar__armed { font-size: 13px; }
-.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary { font-size: 15px; }
-.hc-acts .host-action-bar__kbd, .hc-acts .host-action-bar__keyhint { font-size: 12px; }
+.hc-acts .host-action-bar__primary, .hc-acts .host-action-bar__secondary, .hc-acts .host-action-bar__tertiary, .hc-acts .host-action-bar__addtime { font-size: 15px; }
 
-/* Keyboard focus, as WorkflowStrip.css draws it. */
-.hc-sec summary:focus-visible, .hc-leave:focus-visible, .hc-link:focus-visible, .hc-code:focus-visible, .hc-btn:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* ONE ORANGE MAIN BUTTON, IN EVERY STATE (PLAN §2 principle 4; dev QA 2 Nov:
+   it went blue in some states and orange in others). Since step 5a the bar's
+   buttons are ui/Button and no longer carry the global .btn-primary /
+   .btn-secondary that the Bootstrap-blue leaks painted, so the console states
+   no paint of its own: ui/Button.css draws the --action fill, the grey wash
+   when disabled, and the quiet look for the rest (mainButtonPalette.test.js).
+   The armed ring is styles.css's. */
+.hc-acts .host-action-bar__keyhint, .hc-acts .host-action-bar__primary .keycap { font-size: 12px; }
+
+/* Keyboard focus, as WorkflowStrip.css draws it. ui/Button draws its own. */
+.hc-sec summary:focus-visible, .hc-link:focus-visible, .hc-winstat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Responses panel (host console spec 3.4) */
 .hc-panel { display: grid; gap: 12px; }
@@ -164,10 +276,39 @@ button.hc-resp:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc .askstage .askstage-idea em { font-size: 13px; }
 .hc .hc-panel > .qdetail { font-size: 15px; max-width: none; }
 
+/* TRIVIA AND POLL IN THE CONTENT AREA (experience plan 2g; frames p-2, p-6).
+   Trivia: the options two up, each with its live count and a bar (the count
+   relative to the most-picked option), the right one with a success edge, and
+   the private answer under them in one locked line. Poll: the survey's board
+   (PollBoard, .svw) pinned to the laptop ladder, as the room question is. */
+.hc-opts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hc-opt { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "l t n" "l bar bar"; column-gap: 12px; row-gap: 8px; align-items: center; padding: 12px 14px; border-radius: 10px; background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .12); }
+.hc-opt-l { grid-area: l; width: 32px; height: 32px; border-radius: 8px; display: inline-grid; place-items: center; font-size: 15px; font-weight: 800; background: var(--surface-2); color: var(--text); }
+.hc-opt-t { grid-area: t; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.hc-opt-n { grid-area: n; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.hc-opt-bar { grid-area: bar; display: block; height: 6px; border-radius: 999px; background: rgb(var(--glow-rgb) / .12); overflow: hidden; }
+.hc-opt-bar i { display: block; height: 100%; background: var(--info); border-radius: inherit; }
+.hc-opt.is-correct { border-color: var(--success); box-shadow: inset 0 0 0 1px var(--success); }
+.hc-opt.is-correct .hc-opt-l { background: var(--success); color: var(--bg); }
+.hc-private { margin: 0; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid rgb(var(--glow-rgb) / .22); font-size: 15px; color: var(--text); }
+.hc-private svg { flex: none; color: var(--muted); }
+.hc-private b { font-weight: 700; }
+.hc .hc-poll .svw { --svr-t-floor: 12px; --svr-t-label: 13px; --svr-t-body: 15px; --svr-t-head: 19px; --svr-t-numeral: 24px; font-size: 15px; gap: 10px; }
+.hc .hc-poll .svw .rule-note { margin: 0; font-size: 13px; color: var(--muted); }
+
 /* ONE CONSOLE, OTHER USES (parity PLAN §2.6, B8). A side column right of the
    centre (the Build Room's folds): it runs from the next-step card's row to
    the foot and scrolls inside itself. Call & Answer has none: unchanged. */
-.hc.hc--side { grid-template-columns: 260px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail main side"; }
+.hc.hc--side { grid-template-columns: 340px minmax(0, 1fr) 280px; grid-template-areas: "top top top" "loop loop loop" "rail now side" "rail needs side" "rail pulse side" "rail main side"; }
+/* SETUP IS THE LOBBY (experience plan 2b, session-start F7): no rail until
+   round 1, so Setup takes the full width. */
+.hc.hc--setup { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "loop" "now" "needs" "pulse" "main"; }
+@media (max-width: 760px) {
+  .hc.hc--setup .hc-now { flex-wrap: wrap; margin: 12px 12px 0; }
+  .hc.hc--setup .hc-now-text { flex-basis: 100%; }
+  .hc.hc--setup .hc-main { padding: 12px; }
+  .hc.hc--setup .hc-top { overflow-x: auto; }
+}
 .hc-side { grid-area: side; min-height: 0; overflow: auto; border-left: 1px solid rgb(var(--glow-rgb) / .12); padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
 /* The strip with nothing live (answer (c)): kept, dimmed; its label stays readable. */
 .hc-loop.is-idle .wfs-loop .wfs-step { opacity: .55; }

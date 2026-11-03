@@ -199,7 +199,9 @@ describe('where F is bound', () => {
     // Above the page's first early return, like every key hook there.
     const call = host.indexOf('useFullscreenKey();');
     expect(call).toBeGreaterThan(0);
-    expect(call).toBeLessThan(host.indexOf('if (showQuickstartMenu) {'));
+    // The first early return is the report's since Quick start's menu went (4c).
+    expect(host.indexOf('if (showReport) {')).toBeGreaterThan(0);
+    expect(call).toBeLessThan(host.indexOf('if (showReport) {'));
     expect(read('components', 'event', 'HostEventAgenda.jsx')).toMatch(/useFullscreenKey\(\);/);
     // F waits while any of the stage's asks is open (the go-live ask, EXIT
     // and REOPEN joined them, 31 Oct 2026).

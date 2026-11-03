@@ -94,7 +94,7 @@ const overDock = () => { fireEvent.mouseEnter(document.querySelector('footer.doc
 const leaveDock = () => { fireEvent.mouseLeave(document.querySelector('footer.dock')); };
 /** The SPACE cap: 'on' when Space presses the main button, 'off' (kept, hidden) when it does nothing. */
 const spaceCap = () => {
-  const k = document.querySelector('.dock .kbd');
+  const k = document.querySelector('.dock .keycap');
   if (!k) return null;
   return k.hasAttribute('data-off') ? 'off' : k.textContent;
 };
@@ -109,9 +109,10 @@ describe('R3: the Stage at results', () => {
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     // Same order as the Host: the change is to the left of the main button.
-    const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.trim());
+    // The label without the main button's keycap (KeyCap, aria-hidden).
+    const names = [...document.querySelectorAll('footer.dock button')].map((b) => b.textContent.replace(/Space$/, '').trim());
     expect(names.indexOf('Change before sending')).toBeLessThan(names.indexOf('Send B to Claude'));
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
     expect(dock().getByRole('button', { name: 'Send B to Claude' })).toHaveAttribute('aria-keyshortcuts', 'Space ArrowRight');
     expect(document.querySelector('.dock .brm-dockhint')).toBeNull();
   });
@@ -168,7 +169,7 @@ describe('R3: the Stage at results', () => {
     expect(dock().getByRole('button', { name: 'Change before sending' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toBeInTheDocument();
     expect(dock().getByRole('button', { name: 'Spin the wheel' })).toHaveClass('host-action-bar__primary');
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
   });
 
   test('a set that says Later: the same button as the Host, Save for later, and nothing goes to Claude', async () => {
@@ -190,7 +191,7 @@ describe('R3: the Stage at results', () => {
     expect(link).toHaveAttribute('href', 'http://localhost:5173/');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.closest('.status')).not.toBeNull();
-    expect(link.className).not.toMatch(/\bbtn\b|brm-btn/);
+    expect(link.className).not.toMatch(/\bbtn\b|ui-btn/);
     expect(within(footer).queryByRole('button', { name: /live build/i })).toBeNull();
   });
 
@@ -204,7 +205,7 @@ describe('R3: the Stage at results', () => {
     await openStage(mk());
     // The Stage's orange is the shared bar's main button (D1), or a Build Room primary; count the whole Stage.
     const orange = [...document.querySelectorAll('.brm-room button')]
-      .filter((b) => b.classList.contains('host-action-bar__primary') || b.classList.contains('brm-btn--primary') || (b.classList.contains('btn') && !b.classList.contains('ghost')));
+      .filter((b) => b.classList.contains('host-action-bar__primary') || b.classList.contains('ui-btn--action') || (b.classList.contains('btn') && !b.classList.contains('ghost')));
     expect(orange.map((b) => b.textContent.trim())).toHaveLength(1);
     expect(dock().queryByRole('button', { name: 'Edit' })).toBeNull();
   });
@@ -258,7 +259,7 @@ describe('R3: the Stage at results', () => {
     // A wheel already still on arrival is settled.
     await waitFor(() => expect(dock().getByRole('button', { name: 'Send B to Claude' })).toBeEnabled());
     expect(dock().getByRole('button', { name: 'Spin again' })).toBeInTheDocument();
-    expect(spaceCap()).toBe('or press Space');
+    expect(spaceCap()).toBe('Space');
   });
 
   test('a rating sends its average', async () => {
@@ -295,10 +296,10 @@ describe('R4: the Change before sending window', () => {
     const win = await openEdit();
     expect(within(win).getByRole('heading', { name: 'Change before sending' })).toBeInTheDocument();
     expect(within(win).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Do now', 'Keep in mind', 'Ask Claude']);
-    const foot = [...win.querySelectorAll('.brm-sd-foot > button')].map((b) => b.textContent.trim());
+    const foot = [...win.querySelectorAll('.brm-sd-foot button')].map((b) => b.textContent.trim());
     expect(foot).toEqual(['Close', 'Discard', 'Ask again…', 'Save for later', 'Send B to Claude']);
-    expect(win.querySelectorAll('.brm-sd-foot .brm-btn--primary')).toHaveLength(1);
-    expect(win.querySelector('.brm-sd-foot .brm-btn--primary').textContent.trim()).toBe('Send B to Claude');
+    expect(win.querySelectorAll('.brm-sd-foot .ui-btn--action')).toHaveLength(1);
+    expect(win.querySelector('.brm-sd-foot .ui-btn--action').textContent.trim()).toBe('Send B to Claude');
   });
 
   test('Send to Claude posts the kind chosen; Save for later posts kind later', async () => {

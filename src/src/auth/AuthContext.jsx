@@ -24,6 +24,9 @@ const getUserPool = () => {
   return new CognitoUserPool(poolData);
 };
 
+/* Completed by the address LoginForm appends, like the other mapped messages. */
+export const SUSPENDED_SIGN_IN = 'This account is suspended. Contact the Engage team to have it reinstated:';
+
 const AuthContext = createContext();
 
 export const useAuth = () => {
@@ -232,7 +235,11 @@ export const AuthProvider = ({ children }) => {
             // LoginForm appends the address the user just typed, so these read
             // as a sentence about a specific account.
             let errorMessage = err.message;
-            if (err.code === 'NotAuthorizedException') {
+            if (err.code === 'NotAuthorizedException' && /disabled/i.test(String(err.message || ''))) {
+              // Cognito's "User is disabled." — what a suspended account gets
+              // once its last token runs out (#40; manage-users.js Suspend).
+              errorMessage = SUSPENDED_SIGN_IN;
+            } else if (err.code === 'NotAuthorizedException') {
               errorMessage = 'That password does not match';
             } else if (err.code === 'UserNotFoundException') {
               // Deliberately the SAME sentence as a wrong password. Saying "no

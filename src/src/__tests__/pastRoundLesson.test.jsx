@@ -123,15 +123,19 @@ describe('RoundReport and FeedbackRoundPanel', () => {
     );
     expect(document.querySelector('textarea').value).toBe('half a thought');
     fireEvent.change(document.querySelector('textarea'), { target: { value: 'a whole thought' } });
-    expect(saves[saves.length - 1]).toEqual({ anchor, text: 'a whole thought' });
+    // The restored anchor gains the sheet's words (heading, quote); its
+    // identity — kind, ref, label — is what was saved.
+    expect(saves[saves.length - 1]).toEqual({ anchor: expect.objectContaining(anchor), text: 'a whole thought' });
+    // With words in the box Cancel asks first (phone-comments D5).
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(saves[saves.length - 1]).toBeNull();
   });
 });
 
 /* -------------------------------------------------- the real player page */
 
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 
 function makeServer() {
@@ -209,10 +213,10 @@ async function resync() {
 async function arriveAtTheEnd(server) {
   installFetch(server);
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
   server.state = 'ENDED';
   await resync();
@@ -241,21 +245,22 @@ describe('the end screen\'s rounds', () => {
     await waitFor(() => expect(roundButton(/Honest Design/)).toBeInTheDocument());
     fireEvent.click(roundButton(/Honest Design/));
     await waitFor(() => expect(screen.getByText(LESSON_1)).toBeInTheDocument());
-    expect(screen.getByRole('heading', { name: 'Honest Design' })).toBeInTheDocument();
+    // The question is a plain title, not a section heading (phone-comments D10).
+    expect(document.querySelector('.fbr-q__title').textContent).toBe('Honest Design');
     expect(screen.getByText('Your turn')).toBeInTheDocument();
     expect(screen.getByText('Name one product that oversells itself.')).toBeInTheDocument();
     // Above the responses, in document order.
     const lesson = screen.getByText(LESSON_1);
-    const responses = screen.getByRole('heading', { name: 'Responses' });
+    const responses = screen.getByRole('heading', { name: /^The responses/ });
     // eslint-disable-next-line no-bitwise
     expect(lesson.compareDocumentPosition(responses) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(document.body.textContent).toMatch(/Round 1 · Feedback/);
+    expect(document.body.textContent).toMatch(/Round 1 · Comments/);
   });
 
   test('a round with no lesson opens under its number, with no "Your turn"', async () => {
     await arriveAtTheEnd(makeServer());
     fireEvent.click(roundButton(/^Round 3$/));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Round 3' })).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector('.fbr-q__title')?.textContent).toBe('Round 3'));
     expect(screen.queryByText('Your turn')).toBeNull();
   });
 
@@ -267,7 +272,7 @@ describe('the end screen\'s rounds', () => {
     // Start a comment on round 1, then go back without posting it.
     fireEvent.click(roundButton(/Honest Design/));
     await waitFor(() => expect(screen.getByText(LESSON_1)).toBeInTheDocument());
-    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment on /i })[0]);
     await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
     fireEvent.change(document.querySelector('textarea'), { target: { value: 'About round one' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]);
@@ -277,9 +282,9 @@ describe('the end screen\'s rounds', () => {
 
     // Round 2 opens with an empty composer: round 1's words are not here.
     fireEvent.click(roundButton(/Form Follows Function/));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Form Follows Function' })).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector('.fbr-q__title')?.textContent).toBe('Form Follows Function'));
     expect(document.querySelector('textarea')).toBeNull();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment on /i })[0]);
     await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
     expect(document.querySelector('textarea').value).toBe('');
     fireEvent.change(document.querySelector('textarea'), { target: { value: 'About round two' } });

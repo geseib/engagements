@@ -40,9 +40,14 @@ describe('the page actually mounts the extracted screen', () => {
     // rejects: dropping one of the five on the way through the rewrite — the
     // component renders all five controls whether or not the page passes
     // anything, so an unpassed prop is silent at both ends.
-    expect(host).toMatch(/onQuickStart=\{\(\) => setShowQuickstartMenu\(true\)\}/);
+    // Quick start has no door of its own since 4c (it is inside New engagement).
+    expect(host).not.toMatch(/onQuickStart=/);
+    expect(host).not.toMatch(/QuickstartMenu/);
     expect(host).toMatch(/onCreateEngagement=\{handleWelcomeNewGame\}/);
-    expect(host).toMatch(/onViewHistory=\{handleViewGameHistory\}/);
+    // Home's sessions (experience plan 4b): the list, its actions, and the
+    // full list's place in Library & team (a link in the component).
+    expect(host).toMatch(/sessions=\{homeSessionsLoaded \? gamesList : null\}/);
+    expect(host).toMatch(/rowActions=\{homeRowActions\}/);
     expect(host).toMatch(/onSignOut=\{handleSignOut\}/);
     expect(host).toMatch(/onContinue=\{handleContinueGame\}/);
     expect(host).toMatch(/onContinueGameIdChange=\{setContinueGameId\}/);

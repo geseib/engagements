@@ -29,10 +29,10 @@ export const BUILDER_FORM_FIELDS = {
     // realistically fills in on its own. Named so the panel can point at it.
     seed: 'context',
     fields: [
-      { key: 'customTitle', label: 'Question Set Title' },
-      { key: 'context', label: 'Context/Background' },
-      { key: 'audience', label: 'Target Audience' },
-      { key: 'mustHaveCategories', label: 'Must Have Categories' },
+      { key: 'customTitle', label: 'Set title' },
+      { key: 'context', label: 'Context or background' },
+      { key: 'audience', label: 'Audience' },
+      { key: 'mustHaveCategories', label: 'Categories it must include' },
       { key: 'customPrompt', label: 'Your additions' },
     ],
   },
@@ -40,20 +40,20 @@ export const BUILDER_FORM_FIELDS = {
     formId: 'trivia',
     seed: 'topic',
     fields: [
-      { key: 'topic', label: 'Topic/Subject' },
-      { key: 'audience', label: 'Target Audience' },
-      { key: 'mustHaveCategories', label: 'Must Have Categories' },
-      { key: 'customPrompt', label: 'Additional Requirements' },
+      { key: 'topic', label: 'Topic or subject' },
+      { key: 'audience', label: 'Audience' },
+      { key: 'mustHaveCategories', label: 'Categories it must include' },
+      { key: 'customPrompt', label: 'Anything else it should know' },
     ],
   },
   poll: {
     formId: 'poll',
     seed: 'topic',
     fields: [
-      { key: 'topic', label: 'Topic/Subject' },
+      { key: 'topic', label: 'Topic or subject' },
       { key: 'category', label: 'Category' },
-      { key: 'audience', label: 'Target Audience' },
-      { key: 'customPrompt', label: 'Additional Requirements' },
+      { key: 'audience', label: 'Audience' },
+      { key: 'customPrompt', label: 'Anything else it should know' },
     ],
   },
 };

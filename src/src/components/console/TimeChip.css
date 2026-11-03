@@ -1,0 +1,138 @@
+/* ============================================================================
+   THE TIME CHIP — components/console/TimeChip.jsx (session-start D4, frame
+   1-b6; experience plan 2f). A chip before the opening move, and its short
+   list of presets with two ticks.
+
+   Dusk: it sits inside the console (HostConsole declares data-theme="dark")
+   and the stage's dock (dusk). Roles only, no literal (timeChipPalette.test.js).
+   Laptop ladder 12 / 13 / 15px: chip text at the label step, the list's
+   title at body, notes at the floor; nothing under 12px.
+
+   Measured on dusk --surface-2 #25375A (the popover) over --bg #0F1A2E:
+     --text on --surface-2            10.20:1
+     --muted on --surface-2            4.93:1
+     --on-action on --action (chosen preset) as Button's action pairing
+   ========================================================================== */
+.tchip {
+  --tchip-t-floor: 12px;
+  --tchip-t-label: 13px;
+  --tchip-t-body: 15px;
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.tchip .tchip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--tchip-t-label);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tchip .tchip-toggle.is-set {
+  border-color: var(--info);
+}
+.tchip .tchip-toggle:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+}
+.tchip .tchip-caret {
+  color: var(--muted);
+}
+.tchip .tchip-pop {
+  position: absolute;
+  right: 0;
+  z-index: 40;
+  width: min(330px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 12px 32px rgb(var(--shade-rgb) / .6);
+  text-align: left;
+}
+.tchip .tchip-pop--down {
+  top: calc(100% + 8px);
+}
+.tchip .tchip-pop--up {
+  bottom: calc(100% + 8px);
+}
+.tchip .tchip-title {
+  margin: 0;
+  font-size: var(--tchip-t-body);
+  font-weight: 800;
+  color: var(--text);
+}
+.tchip .tchip-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tchip .tchip-preset {
+  position: relative;
+  display: inline-flex;
+}
+.tchip .tchip-preset input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.tchip .tchip-preset span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  font-size: var(--tchip-t-label);
+  font-weight: 700;
+  color: var(--text);
+}
+.tchip .tchip-preset.is-on span {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
+}
+.tchip .tchip-preset input:focus-visible + span {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+}
+.tchip .tchip-tick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: var(--tchip-t-label);
+  color: var(--text);
+  cursor: pointer;
+}
+.tchip .tchip-tick input {
+  margin: 2px 0 0;
+  accent-color: var(--info);
+}
+.tchip .tchip-tick small {
+  display: block;
+  font-size: var(--tchip-t-floor);
+  color: var(--muted);
+}
+.tchip .tchip-tick.is-off {
+  opacity: .6;
+  cursor: default;
+}
+.tchip .tchip-note {
+  margin: 0;
+  font-size: var(--tchip-t-floor);
+  color: var(--muted);
+}

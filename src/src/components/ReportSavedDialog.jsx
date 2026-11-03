@@ -14,6 +14,7 @@
  */
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import CopyField from './CopyField';
 import {
@@ -61,12 +62,7 @@ export default function ReportSavedDialog({
       labelledBy="rshare-saved-title"
       theme="light"
     >
-      <div className="rshare-dialog-head">
-        <h2 id="rshare-saved-title" className="rshare-head">Report saved</h2>
-        <button type="button" className="rshare-x" onClick={onClose} aria-label="Close">
-          <Icon name="X" weight="bold" size={20} />
-        </button>
-      </div>
+      <DialogHead className="rshare-dialog-head" titleId="rshare-saved-title" title="Report saved" titleClassName="rshare-head" onClose={onClose} closeClassName="rshare-x" />
 
       <p className="rshare-lead">
         To share it with someone who is not signed in, send them the link <strong>and</strong> the
@@ -96,7 +92,7 @@ export default function ReportSavedDialog({
         </p>
       )}
 
-      <div className="rshare-actions">
+      <DialogFoot className="rshare-actions">
         <button type="button" className="rshare-btn" onClick={downloadNow} disabled={download === 'pending'}>
           <Icon name="DownloadSimple" weight="bold" size={18} />
           {download === 'pending' ? 'Downloading…' : 'Download PDF'}
@@ -104,7 +100,7 @@ export default function ReportSavedDialog({
         <button type="button" className="rshare-btn rshare-btn--primary" onClick={onClose}>
           Done
         </button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

@@ -7,7 +7,7 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws
 const { isAnswerCorrect, slotForSubmitted, correctSlots, drawnOptions } = require('./trivia-answer');
 const {
   resolvePersona, buildOutputContract, hasCustomOutputShape, describeOutputShape,
-  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove,
+  buildContextBlock, buildHostDirective, buildVoiceDirective, buildBriefingLayer, withholdBriefing, resolveOutputSections, pickOpeningMove, promptOwnsOpening,
   backgroundLine, withholdBackground, HONESTY_RULE,
 } = require('./personas');
 const { normalizeGameType } = require('./game-types');
@@ -16,6 +16,7 @@ const { isUsableSummaryPrompt, summaryPromptDefect, normalizeAngleWeights } = re
 const { houseWeightsFor, availableAngles, pickAngle, buildAngleDirective } = require('./round-angles');
 const { extractVariableTokens } = require('./template-variables');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
+const { readRoundQuestion, OWN_TASK, OWN_NO_LESSON } = require('./round-question');
 const { isHidden } = require('./anonymity');
 const { lateIncludedLine } = require('./late-labels');
 
@@ -972,7 +973,7 @@ const handle = async (event, context) => {
   // persist, and broadcast the result over WebSocket.
   const workerMode = event.__workerMode === true;
   try {
-    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps, redo;
+    let gameId, questionId, generateNew, debug, promptDebug, model, variants, followUps, redo, quiet;
     // The follow-up suggestions alone, from the read already stored (the
     // host's "make them again"). Never the read itself.
     const followUpsOnly = workerMode && event.followUpsOnly === true;
@@ -988,7 +989,7 @@ const handle = async (event, context) => {
     } else {
       ({ gameId } = event.pathParameters || {});
       const queryParams = event.queryStringParameters || {};
-      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps, redo } = queryParams);
+      ({ questionId, generateNew, debug, promptDebug, model, variants, followUps, redo, quiet } = queryParams);
     }
 
     if (!gameId) {
@@ -1066,9 +1067,13 @@ const handle = async (event, context) => {
     // Extract the question number from questionId (e.g., "002" from questionId or from current state)
     let paddedQuestionNumber = targetQuestionId;
     
-    // If questionId looks like a sequential number, use it directly
-    if (/^\d{3}$/.test(targetQuestionId)) {
-      paddedQuestionNumber = targetQuestionId;
+    // If questionId looks like a sequential number, use it directly. A bare
+    // round number ("1") is the same round as "001" (dev QA 2 Nov: the host
+    // asked for both, and "1" fell through to the CURRENT round below, which
+    // on a later round is the wrong one).
+    if (/^\d{1,3}$/.test(String(targetQuestionId))) {
+      paddedQuestionNumber = String(targetQuestionId).padStart(3, '0');
+      targetQuestionId = paddedQuestionNumber;
     } else {
       // Try to extract from current state if it's in RESULTS#002 format
       const currentState = gameState.Item.State;
@@ -1224,8 +1229,14 @@ const handle = async (event, context) => {
         // Cache miss (non-generateNew, no item): tell the client it's not ready
         // yet. The client already treats 404 as "not ready" and will fire generateNew.
         console.log(`ℹ️ AI SUMMARY: cache miss for ${gameId}:${paddedQuestionNumber} — returning 404 (not generating inline)`);
+        /*
+          THE QUIET FORM (dev QA 2 Nov): "not written yet" is the expected
+          answer while Workie writes, so a caller that sends `?quiet=1` hears
+          it as a 200 with the same body and nothing lands in its console.
+          Without the flag, the 404 stands for every older reader.
+        */
         return {
-          statusCode: 404,
+          statusCode: quiet === '1' || quiet === 'true' ? 200 : 404,
           body: JSON.stringify({ status: 'not_ready', gameId, questionId: targetQuestionId }),
           headers: { 'Access-Control-Allow-Origin': '*' }
         };
@@ -1328,6 +1339,8 @@ const handle = async (event, context) => {
     let question = null;
     let questionSetId = null;
     let questionSetVersion = null;
+    // A round the host wrote during the session (impromptu ask, README D7).
+    let ownRound = false;
 
     /*
       A CLOSED SURVEY IS READ WHOLE, FROM ITS FROZEN RESULTS (the owner, 27
@@ -1386,42 +1399,20 @@ const handle = async (event, context) => {
       }));
       
       if (questionRef.Item) {
-        const sourceQuestionId = questionRef.Item.SourceQuestionId;
-        questionSetId = questionRef.Item.SetId;
-        
-        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
-        
-        // Read the VERSION this round was served from (the REF row records it),
-        // falling through to activeVersion and then the legacy partition.
-        // AnswerDetails — the reveal — lives on the question row, so reading the
-        // wrong version would narrate the wrong answer at RESULTS.
+        // THE ONE RESOLVER (round-question.js). A set round is read through the
+        // VERSION it was served from (AnswerDetails — the reveal — lives on the
+        // question row, so the wrong version would narrate the wrong answer)
+        // and DECRYPTED with the SET's org the REF pinned, never the caller's:
+        // this read once never opened the envelopes and {questionTitle}
+        // reached Workie as "[object Object]" on every org session. A round
+        // the HOST WROTE during the session reads its OWNQ# row instead.
+        const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+        questionSetId = read.setId;
         questionSetVersion = questionRef.Item.SetVersion;
-        const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionSetVersion
-        );
-
-        // Get the actual question from the question set (same as get-results.js)
-        const questionResponse = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: {
-            PK: resolvedSet.pk,
-            SK: sourceQuestionId
-          }
-        }));
-        question = questionResponse.Item;
-        // DECRYPTED, with the SET's org — the one the REF row pinned, exactly as
-        // get-question.js does. ENCRYPTED_FIELDS.question puts Title, Detail,
-        // the options and the reveal on an org set's rows as envelopes, and
-        // this read was the one question read that never opened them, so
-        // {questionTitle} reached Workie as "[object Object]" on every org
-        // session. Platform and public sets are never encrypted and pass
-        // through untouched (a non-envelope is returned as-is).
-        const questionSetRef = refSetRef(questionRef.Item, questionSetId);
-        const questionOrgId = questionSetRef.scope === ORG ? questionSetRef.orgId : '';
-        if (question && questionOrgId) {
-          question = await decryptItem(questionOrgId, 'question', question);
-        }
-        console.log(`📋 Question data fetched from question set:`, question ? 'Success' : 'Not found');
+        question = read.question;
+        ownRound = read.own;
+        console.log(`📋 Found question reference: ${read.sourceQuestionId} from ${read.own ? 'the host' : `set ${questionSetId}`}`);
+        console.log(`📋 Question data fetched:`, question ? 'Success' : 'Not found');
       } else if (!isSurveySummary) {
         console.log(`❌ Question reference not found: QUESTION#${paddedQuestionNumber}#REF`);
       }
@@ -1479,6 +1470,24 @@ const handle = async (event, context) => {
       // an envelope that failed to open is not material, it is nothing.
       const rawBackground = question.background ?? question.Background;
       question.background = typeof rawBackground === 'string' ? rawBackground.trim() : '';
+
+      /*
+        A QUESTION THE HOST WROTE (impromptu ask, README D7). No new prompt and
+        no new variable: {questionDetail} is the line for the room with the
+        plain fact that there is no lesson text behind it (or "None." and that
+        fact, when there is no line), so Workie does not invent a story; the
+        task is the fixed one the phones showed; the host's private note is the
+        question's Background, which the read already withholds from players.
+        No category: it has none.
+      */
+      if (ownRound) {
+        const line = typeof question.questionDetail === 'string' ? question.questionDetail.trim() : '';
+        question.questionDetail = line ? `${line} (${OWN_NO_LESSON})` : `None. ${OWN_NO_LESSON}`;
+        question.customInstructions = OWN_TASK;
+        question.CustomInstructions = OWN_TASK;
+        question.category = '';
+        question.Category = '';
+      }
 
       console.log(`🔧 AFTER NORMALIZATION: title ${shapeForLog(question.title)}, `
         + `correctAnswer ${shapeForLog(question.correctAnswer)}, optionA ${shapeForLog(question.optionA)}, `
@@ -1772,7 +1781,9 @@ const handle = async (event, context) => {
         // on an org's set: the log says they were found and how long they are,
         // never what they say. See shapeForLog.
         if (setResult.Item) {
-          if (setResult.Item.customInstruction) {
+          // A host-written round takes NOTHING of the set's own framing (README
+          // D6/D7): its task is the fixed one and there is no lesson behind it.
+          if (setResult.Item.customInstruction && !ownRound) {
             customInstruction = setResult.Item.customInstruction;
             console.log(`📋 Found the set's custom instruction for the AI prompt: ${shapeForLog(customInstruction)}`);
             promptProvenance.hierarchy.push({
@@ -1781,7 +1792,7 @@ const handle = async (event, context) => {
               value: customInstruction
             });
           }
-          if (setResult.Item.aiContextInstruction) {
+          if (setResult.Item.aiContextInstruction && !ownRound) {
             questionSetAiContext = setResult.Item.aiContextInstruction;
             console.log(`🎯 Found the question set's AI context: ${shapeForLog(questionSetAiContext)}`);
             promptProvenance.hierarchy.push({
@@ -1874,6 +1885,8 @@ const handle = async (event, context) => {
 
     // Prepare data for AI
     const aiData = {
+      // A question the host wrote during the session (round-question.js).
+      ownQuestion: ownRound,
       // The scoped key for this session's set, resolved once here where the
       // session row is in scope. generateAISummary reads the same row again for
       // the report context and cannot derive it — it is handed `gameId` and a
@@ -2451,7 +2464,7 @@ function modelFailureReason(e) {
 }
 exports.modelFailureReason = modelFailureReason;
 
-async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null, modelChoice = null, recordModel = false, lateAnswers = [] }) {
+async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, sessionCreatedAt = '', gameAiContext, eventDetails, questionSetAiContext, customInstruction, promptId, questionSetPromptId = '', promptProvenance, debugMode, questionId, question, answers, results, votes, gameId, questionSetId, paddedQuestionNumber, scoringConfig, hostPersonaId, setPersonaId, hidden, storedResults, orgId = '', briefing = '', survey = null, modelChoice = null, recordModel = false, lateAnswers = [], ownQuestion = false }) {
   // ANONYMITY: while hidden, nothing that ties this round's answer to its
   // author may reach the model — not just the deterministic fallback below.
   // The model's OWN generated summary is built from the template variables
@@ -2727,6 +2740,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
   } catch (error) {
     console.log('⚠️ Could not fetch question set metadata:', error.message);
   }
+  // A host-written round (impromptu ask): the set's description is not the
+  // question's story, and Workie must not read it as one (README D7).
+  if (ownQuestion) questionSetDescription = '';
   
   // Get current scores and leaderboard
   let leaderboard = [];
@@ -3581,7 +3597,9 @@ async function generateAISummary({ setKey, setScope = '', eventTitle, gameType, 
     machinery.
   */
   const openingMove = pickOpeningMove();
-  console.log(`🎬 OPENING MOVE: ${openingMove}`);
+  // buildOutputContract drops the move when the prompt names its own first
+  // line (personas.js promptOwnsOpening); the log says which happened.
+  console.log(`🎬 OPENING MOVE: ${promptOwnsOpening(promptData) ? 'none (the prompt names its own opening)' : openingMove}`);
 
   /*
     THIS ROUND'S ANGLE — question, race, event or fact, drawn per round

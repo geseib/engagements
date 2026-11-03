@@ -12,6 +12,7 @@ import BuildImage from './BuildImage';
 import { SafeLink } from './screens/common';
 import { postImageId } from './buildScreens';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 const clock = (iso) => {
   if (!iso) return '';
@@ -35,10 +36,10 @@ export function QueuePost({ entry, busy, ended, run, api }) {
       {entry.link && <SafeLink className="brm-lnk brm-block" href={entry.link}>{entry.link}</SafeLink>}
       {!ended && (
         <div className="brm-idea-acts">
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => act('release')}>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => act('release')}>
             <Icon name="Eye" size={14} /> {W.postRelease}
-          </button>
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => act('keep')}>{W.postKeep}</button>
+          </Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => act('keep')}>{W.postKeep}</Button>
         </div>
       )}
     </div>
@@ -51,9 +52,9 @@ export function ReleaseAll({ posts, busy, ended, run, api }) {
   return (
     <div className="brm-row brm-gap brm-ackall" data-capability="release-posts">
       <span className="brm-hint">{W.postsWaiting(posts.length)}</span>
-      <button type="button" className="brm-btn brm-btn--sm brm-push" disabled={busy} onClick={() => run(() => api.postsAction('release', posts.map((p) => p.logId)))}>
+      <Button type="button" size={36} className="brm-tight brm-push" disabled={busy} onClick={() => run(() => api.postsAction('release', posts.map((p) => p.logId)))}>
         {W.postReleaseAll(posts.length)}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -7,6 +7,15 @@ import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import BrandMark from './BrandMark';
 import WelcomeEvents from './WelcomeEvents';
+import Icon from './Icon';
+import Button from './ui/Button';
+import SessionList from './SessionList';
+import { kindOf, kindLabel } from '../config/engagementKinds';
+import { formatWhen } from '../config/tableCells';
+import {
+  LIBRARY_NAME, LIBRARY_SESSIONS_PATH, HOME_PATH, RECENT_COUNT, isRejoinable, recentSessions, rowDate,
+} from '../config/sessionRows';
+import { hostListHandlers, startLabelFor } from '../config/hostSessionActions';
 
 /**
  * The host's front door: the screen before any session exists.
@@ -47,6 +56,14 @@ import WelcomeEvents from './WelcomeEvents';
  * `setupPanelCallSite.test.js` plus this component's own test both hold that
  * line. It sits in the top strip, where account chrome lives, rather than
  * glued under the buttons in a grey box.
+ *
+ * HOME (experience plan 4b, §3.1; the owner's decision 6, 1 Nov 2026). This
+ * screen is the host's one home. It holds New (one button), Rejoin (the
+ * host's live sessions), the five most recent sessions — rows of the same
+ * SessionList that Library & team's Sessions place shows in full, with the
+ * same actions — and events. "See all" opens Library & team's Sessions in
+ * place. The console is no longer a second home: it is Library & team, and
+ * it is called that wherever it is linked.
  */
 
 const CODE_LENGTH = 4;
@@ -65,14 +82,29 @@ export default function WelcomeScreen({
   continueGameId = '',
   onContinueGameIdChange,
   onContinue,
-  onQuickStart,
   onCreateEngagement,
-  onViewHistory,
   onReports,
   onQuestionSets,
   onSignOut,
   /** A plain line about why the host is here, e.g. the session they opened no longer exists. */
   notice = '',
+  /**
+   * The host's sessions (GET /games, merged with events), or null while they
+   * load. Home shows the live ones under Rejoin and the newest five below.
+   */
+  sessions = null,
+  /** For each row's set name. Optional. */
+  questionSets = [],
+  /**
+   * What a row's actions do — the page's own callbacks, the shape
+   * SessionHistoryPanel takes: { onStart, onEdit, onOpen, onReport,
+   * onResults, onInvite, onCopyPlayerUrl, onDelete }.
+   */
+  rowActions = {},
+  /** Where the room watches, remembered (2b): Start says "Start · two screens". */
+  roomScreen = null,
+  /** Injectable for tests: where a link-like action goes. */
+  navigate,
 }) {
   const code = digitsOnly(continueGameId).slice(0, CODE_LENGTH);
   const complete = code.length === CODE_LENGTH;
@@ -94,16 +126,25 @@ export default function WelcomeScreen({
 
   const cells = Array.from({ length: CODE_LENGTH }, (_, index) => index);
 
+  /* ONE SET OF HANDLERS for both Home lists and the full dialog
+     (config/hostSessionActions.js), so a row here does what it does there. */
+  const on = hostListHandlers({ ...rowActions, roomScreen, ...(navigate ? { navigate } : {}) });
+  const loaded = Array.isArray(sessions);
+  const live = loaded ? sessions.filter((row) => isRejoinable(row)) : [];
+  const recent = loaded ? recentSessions(sessions, RECENT_COUNT) : [];
+
   return (
     <div className="wel-page" data-theme="dark">
       <header className="wel-pad">
         <div className="wel-shell wel-top">
-          {/* THE MARK IS THE WAY HOME. `/home`, not `/`: this screen IS `/` for
-              anybody signed in. Safe here because this screen renders only when
-              no session is open — the stage and the player page deliberately do
-              not link their brand, where one stray tap would take a projector
-              or a participant out of a live round. */}
-          <a className="wel-brand" href="/home">
+          {/* THE MARK IS THE WAY HOME, AND HOME IS IN THE APP (experience
+              plan 4b; audit E S3). Signed in, that is this screen, `/`; it
+              used to leave for the marketing page at /home. Signed out (only
+              in tests and previews) there is no Home to go to, so it keeps
+              /home. Safe because this screen renders only when no session is
+              open — the stage and the player page deliberately do not link
+              their brand. */}
+          <a className="wel-brand" href={currentUser ? HOME_PATH : '/home'}>
             <BrandMark size={24} />
             Engagements {env && <span className="wel-env">{env}</span>}
           </a>
@@ -142,12 +183,17 @@ export default function WelcomeScreen({
                   host manages their question sets, their team and their plan.
                   Gating the link on staff kept every customer out of the screen
                   built for them. */}
-              <a className="wel-btn wel-btn-quiet" href="/admin">
-                {isAdmin ? 'Admin console' : 'Question sets & team'}
-              </a>
-              <button type="button" className="wel-btn wel-btn-quiet" onClick={() => onSignOut?.()}>
+              {/* ONE NAME FOR IT (experience plan 4b): "Library & team" for
+                  everyone. It was "Admin console" for staff and "Question
+                  sets & team" for everyone else (audit E S2). */}
+              {/* The account corner's two are ui/Button, tertiary: text that
+                  moves the host elsewhere, never a second main action (5c). */}
+              <Button as="a" variant="tertiary" size={36} className="wel-corner" href="/admin">
+                {LIBRARY_NAME}
+              </Button>
+              <Button variant="tertiary" size={36} className="wel-corner" onClick={() => onSignOut?.()}>
                 Sign out
-              </button>
+              </Button>
               {/* THE ONE `?` ON THIS SCREEN — and until 2026-09-21 there was none.
                   The host guides were reachable only from inside a running
                   session's side panel, and reporting a bug from here meant
@@ -191,60 +237,72 @@ export default function WelcomeScreen({
               waiting, which is almost always. */}
           <PendingInvites />
 
+          {notice && <p className="wel-notice" role="status">{notice}</p>}
+
           <div className="wel-split">
 
-          {/* Starting something is why a host opens this page, so it is first
-              in the DOM at every width and the wide column when there is one. */}
+          {/* NEW, ONE BUTTON, ONE DOOR (experience plan 4c; audit E N1).
+              Starting something is why a host opens this page, so it is first
+              in the DOM at every width. Quick start, the Build Room and a new
+              event used to be doors of their own here, each landing somewhere
+              different; all three are inside New engagement now (Quick start
+              as its fast lane, Build Room and Event as formats), and every
+              one lands on its own Setup or page. */}
           <section className="wel-start">
-            <p className="wel-kicker">New session</p>
+            <p className="wel-kicker">Home</p>
             <h1>Start an engagement</h1>
             <p className="wel-muted wel-lede">
-              Two ways in. Either one puts a four&#8209;digit code on the screen for the
-              room to join with.
+              Every format puts a four&#8209;digit code on the screen for the room to join with.
             </p>
-            {notice && <p className="wel-notice" role="status">{notice}</p>}
 
             <div className="wel-stack">
-              {/* THE ONE AMBER THING ON THE PAGE. Four full-width buttons of
-                  equal weight is what the old card had, and it made the host
-                  read all four every time. */}
-              <button type="button" className="wel-action is-primary" onClick={() => onCreateEngagement?.()}>
-                <span className="wel-action-name">Create engagement</span>
+              {/* THE ONE PRIMARY ON HOME (experience plan §5.1, step 5c): the
+                  shared ui/Button in the orange look, its sentence inside. */}
+              <Button variant="primary" size={44} className="wel-action" onClick={() => onCreateEngagement?.()}>
+                <span className="wel-action-name">New engagement</span>
                 <span className="wel-action-note">
-                  Choose the format, the question set and which categories the room gets.
+                  A session, a survey, a Build Room or an event. In a hurry? Quick start is inside.
                 </span>
-              </button>
-
-              <button type="button" className="wel-action" onClick={() => onQuickStart?.()}>
-                <span className="wel-action-name">Quick start</span>
-                <span className="wel-action-note">
-                  Launch a ready-made set straight into a live room. No decisions to make.
-                </span>
-              </button>
-
-              {/* THE BUILD ROOM (docs/design/build-room/PLAN.md). Its own page,
-                  so a real link: App.jsx routes on pathname. */}
-              <a className="wel-action wel-action--link" href="/build">
-                <span className="wel-action-name">Build Room</span>
-                <span className="wel-action-note">
-                  Build something with your Claude Code. The room suggests and votes; you decide.
-                </span>
-              </a>
+              </Button>
             </div>
-
-            {/* An organisation's events, each one door to its agenda and stage
-                (events, 27 Sep 2026). Draws nothing when there are none. */}
-            <WelcomeEvents />
           </section>
 
-          {/* Quieter, but a real column rather than a link in a corner: a host
-              who reloaded mid-session needs this findable in one look. */}
-          <aside className="wel-resume">
+          {/* REJOIN: the host's own live sessions, each one press from its
+              stage, then a code for anybody else's. A host who reloaded
+              mid-session finds it here in one look. */}
+          <aside className="wel-resume" aria-labelledby="wel-rejoin-title">
             <p className="wel-kicker">Already running</p>
-            <h2>Rejoin a session</h2>
+            <h2 id="wel-rejoin-title">Rejoin</h2>
+
+            {loaded && live.length > 0 && (
+              <ul className="wel-live" data-testid="wel-rejoin">
+                {live.map((row) => (
+                  <li key={row.gameId} className="wel-live-row">
+                    <span className="wel-ev-main">
+                      <span className="wel-ev-name" title={row.title || 'Untitled session'}>{row.title || 'Untitled session'}</span>
+                      <span className="wel-ev-meta">
+                        {[kindLabel(kindOf(row)), row.gameId, formatWhen(rowDate(row))].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size={36}
+                      className="wel-line"
+                      onClick={() => on.continue && on.continue(row)}
+                      aria-label={`Rejoin ${row.title || 'the session'}`}
+                    >
+                      <Icon name="Play" weight="fill" size={14} color="currentColor" /> Rejoin
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {loaded && live.length === 0 && (
+              <p className="wel-meta wel-live-none">Nothing of yours is running right now.</p>
+            )}
 
             <form className="wel-codeblock" onSubmit={handleContinue}>
-              <label className="wel-label" htmlFor="wel-code">Session code</label>
+              <label className="wel-label" htmlFor="wel-code">Or type a session code</label>
 
               {/* ONE input behind four painted cells — the same idiom the
                   participant meets on RootPage, because it is literally the
@@ -281,68 +339,62 @@ export default function WelcomeScreen({
                 />
               </div>
 
-              <button type="submit" className="wel-btn wel-btn-ghost" disabled={!complete}>
+              <Button type="submit" variant="secondary" size={44} className="wel-continue" disabled={!complete}>
                 Continue
-              </button>
+              </Button>
             </form>
-
-            {/* THE TWO THINGS A HOST OWNS BETWEEN SESSIONS.
-                Question sets were reachable from exactly one place — the set
-                picker inside the create screen — so "fix the typo in the set I
-                made last week" meant starting an engagement you did not want.
-                It is the same <HostQuestionSetsDialog>; only the door is new.
-
-                Both are OUTLINED now. The history control was `wel-btn-quiet`:
-                muted text, no border, pulled 12px left to sit flush — which is
-                a link's appearance, and it was read as one.
-                *"the button for game histroy should be more obviousd that its a
-                button (doesnt need to be bigger though)"* — so the border and
-                the text colour change and the metrics do not. */}
-            <div className="wel-aside-more">
-              <p className="wel-kicker">Your library</p>
-
-              <div className="wel-links">
-                <div className="wel-link">
-                  <button type="button" className="wel-btn wel-btn-line" onClick={() => onQuestionSets?.()}>
-                    Question sets
-                  </button>
-                  <p className="wel-meta">
-                    Make one, rename one, or upload your own — the questions a session asks come
-                    from here.
-                  </p>
-                </div>
-
-                <div className="wel-link">
-                  {/* "Sessions", not "Session history": the list's first job
-                      is sessions that have not happened yet — the owner's
-                      point when asking for the rename. Parallel in form to
-                      the "Question sets" control above it. */}
-                  <button type="button" className="wel-btn wel-btn-line" onClick={() => onViewHistory?.()}>
-                    Sessions
-                  </button>
-                  <p className="wel-meta">
-                    Every session you have created or run — edit one before anyone joins, start
-                    it, or read its report.
-                  </p>
-                </div>
-
-                {onReports && (
-                  <div className="wel-link">
-                    {/* Sessions expire a week after they start; a saved report
-                        does not. This is where it is found afterwards. */}
-                    <button type="button" className="wel-btn wel-btn-line" onClick={() => onReports()}>
-                      Reports
-                    </button>
-                    <p className="wel-meta">
-                      Every report you saved — still here after the session itself has expired.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
           </aside>
 
           </div>
+
+          {/* RECENT SESSIONS: five rows of the very list Library & team shows
+              in full — same row, same actions (experience plan 4a/4b). "See
+              all" opens that list, in place. */}
+          <section className="wel-recent" aria-labelledby="wel-recent-title">
+            <div className="wel-evhead">
+              <h2 id="wel-recent-title">Recent sessions</h2>
+              <Button as="a" variant="secondary" size={36} className="wel-line" href={LIBRARY_SESSIONS_PATH}>
+                See all <span className="wel-meta wel-seeall-in">in {LIBRARY_NAME}</span>
+              </Button>
+            </div>
+            {!loaded && <p className="wel-meta wel-recent-wait">Loading your sessions…</p>}
+            {loaded && (
+              <SessionList
+                rows={recent}
+                questionSets={questionSets}
+                on={on}
+                startLabel={startLabelFor(roomScreen)}
+                compact
+                label="Recent sessions"
+                idPrefix="wel-recent"
+                emptyText="No sessions yet. Press New engagement to make your first."
+              />
+            )}
+          </section>
+
+          {/* An organisation's events, each one door to its agenda and stage
+              (events, 27 Sep 2026). Draws nothing when there are none. */}
+          <WelcomeEvents />
+
+          {/* THE LIBRARY, ONE PRESS AWAY. The sets and saved reports open
+              over this screen (the same dialogs as always); the rest of the
+              library — the team, the plan, every session — is Library & team. */}
+          <section className="wel-library" aria-label="Your library">
+            <p className="wel-kicker">Your library</p>
+            <div className="wel-library-row">
+              <Button variant="secondary" size={36} className="wel-line" onClick={() => onQuestionSets?.()}>
+                Question sets
+              </Button>
+              {onReports && (
+                /* Sessions expire a week after they start; a saved report
+                   does not. This is where it is found afterwards. */
+                <Button variant="secondary" size={36} className="wel-line" onClick={() => onReports()}>
+                  Reports
+                </Button>
+              )}
+              <Button as="a" variant="tertiary" size={36} className="wel-corner" href="/admin">{LIBRARY_NAME}</Button>
+            </div>
+          </section>
         </div>
       </main>
     </div>

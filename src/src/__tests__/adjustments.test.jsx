@@ -107,16 +107,21 @@ describe('the grant dialog (mockup 17)', () => {
     expect(grantBody('RATE_OVERRIDE', f, '2026-09')).toMatchObject({ rate: { baseCents: 400 }, months: 2 });
     expect(grantBody('CREDIT_UNITS', f, '2026-09')).toMatchObject({ units: { sessions: 10, sets: 0 } });
   });
-  it('X and Cancel share one close; a typed reason is confirmed first', () => {
+  it('X and Cancel share one close; a typed reason is confirmed first (in the small confirm dialog)', async () => {
     const onCancel = jest.fn();
     render(<GrantAdjustmentDialog org={org} plan={pricing.STANDARD_PLAN} usage={USAGE} rows={[]} period="2026-09" onCancel={onCancel} onGranted={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onCancel).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(2));
     fireEvent.change(screen.getByTestId('obill-reason'), { target: { value: 'typed' } });
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const browser = jest.spyOn(window, 'confirm');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const ask = await screen.findByRole('dialog', { name: 'Close without granting?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Close without granting?' })).toBeNull());
     expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(browser).not.toHaveBeenCalled();
+    browser.mockRestore();
   });
 });
 

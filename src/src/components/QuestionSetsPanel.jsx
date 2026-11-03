@@ -34,6 +34,7 @@ import {
 import { classifySetTopic } from '../config/topicKeywords';
 import './QuestionSetsPanel.css';
 import { formatWhen } from '../config/tableCells';
+import Button from './ui/Button';
 
 /**
  * THE QUESTION SETS LIST.
@@ -351,18 +352,18 @@ export default function QuestionSetsPanel({
                 and they are not equivalent.
               </p>
               <div className="qsets-paths">
-                <button type="button" className="qsets-btn qsets-btn--lg qsets-btn--primary" onClick={() => onCreate('ai')}>
+                <Button variant="primary" size={44} onClick={() => onCreate('ai')}>
                   <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" />
                   Generate with AI
-                </button>
-                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('csv')}>
+                </Button>
+                <Button variant="secondary" size={44} onClick={() => onCreate('csv')}>
                   <Icon name="UploadSimple" weight="bold" size={16} color="currentColor" />
                   Upload a CSV
-                </button>
-                <button type="button" className="qsets-btn qsets-btn--lg" onClick={() => onCreate('template')}>
+                </Button>
+                <Button variant="secondary" size={44} onClick={() => onCreate('template')}>
                   <Icon name="FileText" weight="bold" size={16} color="currentColor" />
                   Start from a template
-                </button>
+                </Button>
               </div>
             </>
           ) : (
@@ -390,10 +391,10 @@ export default function QuestionSetsPanel({
           {onCreate && (
             <div className="qsets-head">
               <span className="qsets-head-grow" />
-              <button type="button" className="qsets-btn qsets-btn--primary" onClick={() => onCreate('new')}>
+              <Button variant="primary" size={36} onClick={() => onCreate('new')}>
                 <Icon name="Plus" weight="bold" size={14} color="currentColor" />
                 New set
-              </button>
+              </Button>
             </div>
           )}
 
@@ -552,9 +553,9 @@ export default function QuestionSetsPanel({
                   </button>
                 ))}
               </div>
-              <button type="button" className="qsets-btn qsets-btn--link" onClick={clearAll}>
+              <Button variant="tertiary" size="sm" className="qsets-clear" onClick={clearAll}>
                 Clear all filters
-              </button>
+              </Button>
             </div>
           ) : (
             /*
@@ -809,36 +810,33 @@ export default function QuestionSetsPanel({
                                     action in that state, because it is the only
                                     thing anyone should be doing to it.
                                   */}
-                                  <button
-                                    type="button"
-                                    className={`qsets-btn qsets-btn--sm${set.isAIGenerated && set.active === false && !set.aiReviewedAt ? ' qsets-btn--primary' : ''}`}
+                                  <Button
+                                    variant="secondary" size="sm" className={`qsets-act${set.isAIGenerated && set.active === false && !set.aiReviewedAt ? ' qsets-lead' : ''}`}
                                     onClick={() => onEdit && onEdit(set)}
                                     title={set.isAIGenerated && set.active === false && !set.aiReviewedAt
                                       ? 'Read what the generator wrote, then switch it on'
                                       : 'Edit this question set'}
                                   >
                                     {set.isAIGenerated && set.active === false && !set.aiReviewedAt ? 'Review' : 'Edit'}
-                                  </button>
+                                  </Button>
                                   {rowCanShare(set) && (
-                                    <button
-                                      type="button"
-                                      className="qsets-btn qsets-btn--sm"
+                                    <Button
+                                      variant="secondary" size="sm" className="qsets-act"
                                       onClick={() => onShare(set)}
                                       title="Submit the active version for the content check; it goes public if it passes"
                                     >
                                       Share
-                                    </button>
+                                    </Button>
                                   )}
                                 </>
                               )}
-                              <button
-                                type="button"
-                                className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
+                              <Button
+                                variant="secondary" size="sm" className="qsets-act qsets-del"
                                 onClick={() => onDelete && onDelete(set)}
                                 title="Delete this question set"
                               >
                                 Delete
-                              </button>
+                              </Button>
                             </>
                           ) : (
                             <>
@@ -857,23 +855,21 @@ export default function QuestionSetsPanel({
                                   withheld above. */}
                               {!isUnreadableSet(set) && (
                                 <>
-                                  <button
-                                    type="button"
-                                    className="qsets-btn qsets-btn--sm"
+                                  <Button
+                                    variant="secondary" size="sm" className="qsets-act"
                                     onClick={() => onEdit && onEdit(set)}
                                     title="Open it. Saving makes your organisation its own copy."
                                   >
                                     Open
-                                  </button>
+                                  </Button>
                                   {onCopy && (
-                                    <button
-                                      type="button"
-                                      className="qsets-btn qsets-btn--sm"
+                                    <Button
+                                      variant="secondary" size="sm" className="qsets-act"
                                       onClick={() => onCopy(set)}
                                       title="Take a copy now, without opening it"
                                     >
                                       Copy
-                                    </button>
+                                    </Button>
                                   )}
                                 </>
                               )}
@@ -903,22 +899,20 @@ export default function QuestionSetsPanel({
                             {filingHere.topic === filingHere.suggested && (
                               <span className="qsets-filing-note">(suggested from its name)</span>
                             )}
-                            <button
-                              type="button"
-                              className="qsets-btn qsets-btn--primary"
+                            <Button
+                              variant="secondary" size={36} className="qsets-lead"
                               disabled={filingHere.busy}
                               onClick={() => fileAndSwitchOn(set)}
                             >
                               {filingHere.busy ? 'Saving…' : 'Save topic and switch on'}
-                            </button>
-                            <button
-                              type="button"
-                              className="qsets-btn"
+                            </Button>
+                            <Button
+                              variant="secondary" size={36}
                               disabled={filingHere.busy}
                               onClick={() => setFiling(null)}
                             >
                               Cancel
-                            </button>
+                            </Button>
                           </div>
                           {filingHere.error && (
                             <p className="qsets-filing-err" role="alert">{filingHere.error}</p>

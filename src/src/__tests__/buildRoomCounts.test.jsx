@@ -199,7 +199,7 @@ test('one panel before the opening, and no choice to make before it: one orange,
   expect(screen.queryByRole('button', { name: 'Help me pick' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Use two screens' })).toBeInTheDocument();
   // Connect or the opening is not a choice either: Connect is the one orange button.
-  const orange = [...root.querySelectorAll('.brm-btn--primary')];
+  const orange = [...root.querySelectorAll('.ui-btn--action')];
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Connect']);
 });
 
@@ -217,14 +217,15 @@ test('the default opening is five steps: the core on the path, the other four on
 
 test('a connected first view: one press, the orange one, puts the first opening ask live', async () => {
   const { root } = await open({ state: connectedFirstView });
-  const orange = [...root.querySelectorAll('.brm-btn--primary')];
+  const orange = [...root.querySelectorAll('.ui-btn--action')];
   expect(orange.map((b) => b.textContent.trim())).toEqual(['Ask the room to pick']);
 });
 
 test('between asks with three ideas, one screen: no more than 39 controls (76 in the plan, 58 after phase 1, 40 after phase 2)', async () => {
   const { controls } = await open({ state: betweenAsks });
   // The right column (owner, 28 Oct 2026): History's chips in place of the folds, Decided folded (38);
-  // phase 3 adds What's next's Wrap up, its last move (39).
+  // phase 3 adds What's next's Wrap up, its last move (39). Experience plan 2e: the shared top bar's
+  // bell comes in and the header's "N joined" goes (no such top-bar slot; the Players tab counts), 39.
   expect(controls).toBeLessThanOrEqual(39);
 });
 
@@ -232,7 +233,11 @@ test('between asks with three ideas, two screens: the console takes the same cut
   // The console's top line and rail are Call & Answer's and were left as they are (phase 1 did
   // the same); its own panels take every phase 2 cut. Held where it landed, so it cannot drift.
   const { controls } = await open({ two: true, state: betweenAsks });
-  expect(controls).toBeLessThanOrEqual(45);
+  // EXPERIENCE PLAN 2e (45 to 46): the shared frame adds the bell (Needs you), the labelled
+  // Session menu button and the Needs-you line's Review (the three ideas, a Soon item). Moving
+  // the rail's Session slot into the Session menu did not pay for them: that slot was a closed
+  // fold here, so its doors were never counted; only its summary goes. Net +1, held there.
+  expect(controls).toBeLessThanOrEqual(46);
 });
 
 test("an idea's card carries three routes and its tick (eight and the tick before); its words open Consider", async () => {
@@ -283,7 +288,7 @@ test('writing your own ask is two decisions: the kind, then Ask the room (what C
   // Outside the fold: the kind and the one orange, Ask the room; everything else is typing.
   const choices = [...form.querySelectorAll('[role="radiogroup"]')].filter((g) => !g.closest('details:not([open])'));
   expect(choices.map((g) => g.getAttribute('aria-label'))).toEqual(['Kind of ask']);
-  expect([...form.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent)).toEqual(['Ask the room']);
+  expect([...form.querySelectorAll('.ui-btn--action')].map((b) => b.textContent)).toEqual(['Ask the room']);
 });
 
 test('a Yes/No form is smaller still: its two answers start as Yes and No', async () => {
@@ -298,7 +303,7 @@ test('wrap-up saved, one screen: the lead move is Check the report, then End ses
   const now = screen.getByTestId('brm-wrappednow');
   const moves = [...now.querySelectorAll('.brm-wn')].map((li) => li.querySelector('b').textContent);
   expect(moves).toEqual(['Check the report', 'End the session']);
-  expect([...root.querySelectorAll('.brm-btn--primary')].map((b) => b.textContent.trim())).toEqual(['Report']);
+  expect([...root.querySelectorAll('.ui-btn--action')].map((b) => b.textContent.trim())).toEqual(['Report']);
   expect(now.querySelector('[data-next-primary]').textContent).toBe('Report');
 });
 

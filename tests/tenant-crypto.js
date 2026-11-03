@@ -683,8 +683,10 @@ check('decryptItem refuses an unknown entity too', async () =>
 // Everything the builder and the public agenda arithmetic reads (when, how
 // long, what kind, which set) stays plaintext.
 console.log('\n7b. an event and its items');
-check('event seals exactly its title and place', () =>
-  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['Place', 'Title']));
+// Who made it (31 Oct 2026, the summary PDF's "Hosted by") names a person and
+// a team, so both are sealed with the title and place.
+check('event seals exactly its title, place, host name and team name', () =>
+  assert.deepStrictEqual([...C.ENCRYPTED_FIELDS.event].sort(), ['HostName', 'Place', 'TeamName', 'Title']));
 // A presentation's slides (27 Sep 2026): the file's name is the host's
 // words, sealed; where it is stored, its size and the page shown are not.
 check('item seals exactly its title, description, leader, session options and slides\' file name', () =>

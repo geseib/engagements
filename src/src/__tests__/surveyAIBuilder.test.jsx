@@ -295,17 +295,19 @@ describe('every way out is one requestClose', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  test('with typed material it asks first, and keeps the work on No', () => {
+  test('with typed material it asks first, and keeps the work on No', async () => {
     mockApi();
     const { onClose } = draw();
     fireEvent.change(material(), { target: { value: 'A long outline' } });
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    // The app's small confirm (experience plan 5e), not window.confirm.
     fireEvent.click(screen.getByRole('button', { name: /Close the survey generator/i }));
-    expect(confirm).toHaveBeenCalled();
+    let ask = await screen.findByRole('dialog', { name: /Close the survey generator\?/ });
+    fireEvent.click(within(ask).getByRole('button', { name: /Keep working/ }));
     expect(onClose).not.toHaveBeenCalled();
-    confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    ask = await screen.findByRole('dialog', { name: /Close the survey generator\?/ });
+    fireEvent.click(within(ask).getByRole('button', { name: /Close and lose it/ }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -362,14 +364,16 @@ describe('when there is no set yet (an older job, or a creation that failed)', (
 
   test('a switch that would throw something away asks first, naming it', async () => {
     await review(jobPayload());
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind of question 1' }), { target: { value: 'text' } });
-    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/“Not useful”[\s\S]*“Very useful”/));
+    let ask = await screen.findByRole('dialog', { name: /Make question 1/ });
+    expect(ask).toHaveTextContent(/“Not useful”[\s\S]*“Very useful”/);
+    fireEvent.click(within(ask).getByRole('button', { name: /Keep it as it is/ }));
     expect(screen.getByRole('combobox', { name: 'Kind of question 1' })).toHaveValue('rating');
 
-    confirm.mockReturnValue(true);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind of question 1' }), { target: { value: 'text' } });
-    expect(screen.getByRole('combobox', { name: 'Kind of question 1' })).toHaveValue('text');
+    ask = await screen.findByRole('dialog', { name: /Make question 1/ });
+    fireEvent.click(within(ask).getByRole('button', { name: /Change it/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Kind of question 1' })).toHaveValue('text'));
   });
 
   test('the mix line counts the kept questions and their minutes', async () => {
@@ -387,8 +391,10 @@ describe('when there is no set yet (an older job, or a creation that failed)', (
   // importer would skip it (review finding, 2026-09-23).
   test('Save waits while a kept question could not be imported, and says why', async () => {
     await review(jobPayload());
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind of question 1' }), { target: { value: 'choice' } });
+    const ask = await screen.findByRole('dialog', { name: /Make question 1/ });
+    fireEvent.click(within(ask).getByRole('button', { name: /Change it/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Kind of question 1' })).toHaveValue('choice'));
     const save = screen.getByRole('button', { name: /as a draft survey/ });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute('title', expect.stringMatching(/leave it out|leave them out/i));

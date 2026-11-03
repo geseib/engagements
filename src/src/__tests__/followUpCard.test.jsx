@@ -33,7 +33,9 @@ test('Choose: pick one, send, and it says the answer can change until results', 
   fireEvent.click(screen.getByText('Shadow invoices'));
   fireEvent.click(send);
   await waitFor(() => expect(onSend).toHaveBeenCalledWith([1]));
-  expect(await screen.findByRole('status')).toHaveTextContent(/change it until the results are shown/);
+  // The line says what "Sent" allows; the card's live region says "Sent" once.
+  expect(await screen.findByText(/change it until the results are shown/)).toBeInTheDocument();
+  expect(document.querySelector('[data-sent-live]')).toHaveTextContent(/^Sent$/);
 });
 
 test('Ideas: the words are trimmed before they are sent', async () => {

@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console rail mockups</title>
+<style>
+/* THE CONSOLE'S LEFT RAIL, closed and open (3 Nov 2026). Mockup only; no application code.
+   Warm Summit dusk, Classic skin unless a frame says Present: tokens from styles/skins/classic.css
+   and present.css through styles/roles.css. Laptop ladder 12/13/15/19/24/30. Rows 36px.
+   --danger never carries text. Annotation pins are violet so they cannot be read as product UI.
+   Sample content invented. Every frame has a fixed size so the PNGs are honest.
+   Contrast, composited (see README §7): --text on rail --bg 14.97, on the 8% amber wash 13.10;
+   --muted on --bg 7.24, on the wash 6.33; --accent-text 8.86 / 7.75; --success-text 9.30. */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --accent:#F6A94C;--accent-text:#F6A94C;--action:#F6A94C;--on-action:#1B2942;--info:#7CA7E6;
+  --warn:#F6A94C;--warn-rgb:246 169 76;--success:#4FB286;--success-rgb:79 178 134;--success-text:#6FD0A4;
+  --danger:#E5645E;--danger-text:#EF8C86;--glow-rgb:244 237 228;
+  --rule:rgb(var(--glow-rgb) / .12);--rule-2:rgb(var(--glow-rgb) / .22);
+  --pin:#8B6CF6;
+}
+/* Present skin: the accent is periwinkle, warn stays amber (styles/skins/present.css:31,57,75). */
+.sk-present{--accent:#7CA7E6;--accent-text:#9CBEF0;--action:#7CA7E6}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.doc{max-width:1300px;margin:0 auto;padding:24px 16px 80px}
+.doc>h1{font-size:30px;margin:0 0 6px}
+.doc>p{color:var(--muted);max-width:980px;margin:0 0 8px}
+.doc>p b{color:var(--text)}
+.cap{margin:40px 0 10px;max-width:1100px}
+.cap h2{font-size:19px;margin:0 0 6px}
+.cap p,.cap ol{color:var(--muted);font-size:13px;margin:0 0 6px}
+.cap ol{padding-left:22px}
+.cap b{color:var(--text)}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-con{width:1240px;height:700px}
+.f-sheet{width:1240px}
+.pin{position:absolute;z-index:20;width:22px;height:22px;border-radius:50%;background:var(--pin);color:#fff;font:800 12px/22px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #0a1220}
+.pin.in{position:static;display:inline-block;vertical-align:middle;margin-right:6px}
+
+/* ---- the console, cut to the rail and the centre's top rows ---- */
+.top{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--rule);font-size:13px}
+.chip{border:1px solid var(--rule-2);border-radius:10px;padding:6px 12px;font-weight:700;white-space:nowrap}
+.chip b{color:var(--accent-text);letter-spacing:.06em;margin-left:4px}
+.sname{font-size:15px;font-weight:700;padding-left:10px;border-left:1px solid var(--rule);white-space:nowrap}
+.sp{flex:1}
+.bell{display:inline-flex;align-items:center;gap:6px}
+.bell .n{min-width:20px;height:20px;border-radius:999px;background:var(--accent);color:var(--on-action);font-size:12px;font-weight:800;display:inline-grid;place-items:center;padding:0 6px}
+.bell.is-lit{border-color:var(--accent)}
+.body{display:grid;grid-template-columns:340px minmax(0,1fr);height:calc(100% - 48px)}
+.centre{display:grid;align-content:start;gap:12px;padding:16px 20px;min-width:0}
+.now{display:flex;align-items:center;gap:20px;padding:14px 18px;border-radius:12px;background:var(--surface);border-left:4px solid var(--accent)}
+.now .k{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.now .t{margin:2px 0 0;font-size:19px}
+.now .txt{flex:1;min-width:0}
+.btn{font:inherit;font-size:15px;font-weight:700;border-radius:10px;padding:9px 16px;border:1px solid var(--rule-2);background:transparent;color:var(--text);white-space:nowrap}
+.btn.main{background:var(--action);color:var(--on-action);border-color:var(--action)}
+.btn.sm{font-size:13px;padding:6px 12px}
+.btn .kc{font-size:12px;opacity:.75;margin-left:6px}
+.ny{height:56px;display:flex;align-items:center;gap:16px;padding:0 18px;border-radius:12px;background:var(--surface);border-left:4px solid transparent;color:var(--muted);font-size:15px;overflow:hidden}
+.ny.is-now{border-left-color:var(--accent);background:linear-gradient(rgb(var(--warn-rgb) / .08),rgb(var(--warn-rgb) / .08)),var(--surface);color:var(--text)}
+.ny .main{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ny .ago{color:var(--muted);font-size:13px;margin-left:8px}
+.ny .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.pulse{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+.tile{padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--rule);display:grid;gap:4px;align-content:start;min-width:0}
+.tile .e{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tile .num{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.tile .num small{font-size:19px;color:var(--muted);font-weight:700}
+.tile .val{font-size:24px;font-weight:800;line-height:1.15}
+.tile .sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--info)}
+.tile.is-in{border-color:var(--success);background:linear-gradient(rgb(var(--success-rgb) / .10),rgb(var(--success-rgb) / .10)),var(--surface)}
+.tile.is-in .bar i{background:var(--success)}
+.tile.is-in .sub{color:var(--success-text);font-weight:700}
+.mainarea{border-radius:12px;background:var(--surface);padding:14px 18px;display:grid;gap:10px}
+.mainarea h4{margin:0;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.resp{padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:15px}
+.resp .by{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ---- THE RAIL (proposed) ---- */
+.rail{border-right:1px solid var(--rule);overflow:hidden;padding:8px 0}
+.sec{border-bottom:1px solid var(--rule)}
+.hd{position:relative;display:grid;grid-template-columns:12px auto minmax(0,1fr);align-items:center;column-gap:8px;min-height:40px;padding:0 14px;font-size:13px;font-weight:700;border-left:3px solid transparent}
+.hd .car{width:12px;height:12px;color:var(--muted)}
+.hd .car svg{display:block;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .12s}
+.sec.is-open .hd .car svg{transform:rotate(90deg)}
+.hd .sum{justify-self:end;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;font-weight:600;color:var(--muted);text-align:right}
+.hd .sum b{color:var(--text);font-weight:700}
+.hd .sum .soon{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:1px}
+/* the mark on the thing (PLAN §4.1 Now): the Needs-you line's own edge and wash, not a second alarm */
+.hd.is-now{border-left-color:var(--accent);background:linear-gradient(rgb(var(--warn-rgb) / .08),rgb(var(--warn-rgb) / .08)),var(--bg)}
+.hd.is-now .sum{color:var(--text)}
+.hd.is-now .sum .who{color:var(--accent-text);font-weight:700}
+.hd.is-now .sum .soon{width:8px;height:8px}
+.list{list-style:none;margin:0;padding:0 0 8px}
+/* one person row (PersonRow.css): dot · name · doing · fact · ⋯ */
+.pr{display:grid;grid-template-columns:8px minmax(0,1fr) 20px 48px 28px;column-gap:10px;align-items:center;min-height:36px;padding:0 12px 0 16px;font-size:15px;border-left:3px solid transparent}
+.pr .d{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.pr .d.away{background:var(--muted)}
+.pr .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pr .do{text-align:center;font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .do.ok{color:var(--success-text);font-weight:700}
+.pr .fx{font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.pr .fx.live{color:var(--text);font-weight:700}
+.pr .fx .r{color:var(--success-text);font-weight:800;margin-right:4px}
+.pr .fx .w{color:var(--danger-text);font-weight:800;margin-right:4px}
+.pr .mo{width:28px;height:28px;border:1px solid var(--rule-2);border-radius:8px;display:grid;place-items:center;color:var(--muted);font-size:13px;line-height:1}
+.pr.is-asking{border-left-color:var(--accent);background:linear-gradient(rgb(var(--warn-rgb) / .08),rgb(var(--warn-rgb) / .08)),var(--bg)}
+.pr.is-asking .d{background:var(--accent)}
+.askline{display:flex;align-items:center;gap:8px;padding:0 12px 8px 37px;font-size:13px;border-left:3px solid var(--accent);background:linear-gradient(rgb(var(--warn-rgb) / .08),rgb(var(--warn-rgb) / .08)),var(--bg)}
+.askline span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.colhd{display:grid;grid-template-columns:8px minmax(0,1fr) 20px 48px 28px;column-gap:10px;padding:0 12px 4px 16px;font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.colhd span:nth-child(4){text-align:right}
+.q{list-style:none;margin:0;padding:0 14px 8px;display:grid;gap:6px;font-size:13px}
+.q li{display:flex;gap:8px;align-items:center;min-width:0}
+.q .n{width:20px;height:20px;border-radius:6px;background:var(--surface-2);display:inline-grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.q li.is-now .n{background:var(--info);color:var(--bg)}
+.q .m{color:var(--muted);font-size:12px}
+.q .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.yours{font-size:12px;font-weight:700;color:var(--info);border:1px solid rgb(124 167 230 / .45);border-radius:999px;padding:0 6px;line-height:18px;flex:none}
+.seclink{display:block;margin:0 14px 10px;font-size:12px;font-weight:700;color:var(--info)}
+.board{padding:0 14px 10px}
+.late{list-style:none;margin:0;padding:0 14px 8px;font-size:13px;display:grid;gap:6px}
+.late .m{color:var(--muted);font-size:12px}
+.late .acts{display:flex;gap:12px;font-size:13px;font-weight:700;color:var(--info);margin-top:2px}
+
+/* ---- sheet frames (headers, formats) ---- */
+.sheet{padding:20px 24px;display:grid;gap:18px}
+.sheet h3{margin:0;font-size:15px}
+.sheet .note{margin:0;font-size:13px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:8px 14px;align-items:center}
+.grid .gh{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.grid .gm{font-size:13px;font-weight:700}
+.grid .gm small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.mini{width:100%;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--bg)}
+.mini .hd{min-height:38px}
+.motion{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.motion .st{display:grid;gap:6px}
+.motion .lab{font-size:12px;color:var(--muted);font-weight:700}
+.fmt{display:grid;grid-template-columns:170px repeat(2,minmax(0,1fr));gap:8px 14px;align-items:center}
+.fmt .mini .pr{border-bottom:1px solid var(--rule);grid-template-columns:8px minmax(0,1fr) 96px 56px 28px}
+.fmt .mini .pr .do{text-align:left;font-size:13px}
+.fmt .mini.rail-w{width:340px}
+.fmt .mini.rail-w .pr{grid-template-columns:8px minmax(0,1fr) 20px 48px 28px}
+.fmt .mini.rail-w .pr .do{text-align:center;font-size:15px}
+.fmt .mini .pr:last-child{border-bottom:0}
+</style>
+</head>
+<body>
+<div class="doc">
+<h1>The console's left rail, closed and open</h1>
+<p>Two-screen console only (the laptop is private; on one screen there is no rail, PLAN §3.3). Each section's header carries <b>one line worth reading when the section is closed</b>, and never a fact the pulse tiles already state in the same viewport. The person rows become the shared <b>PersonRow</b> slots. Attention uses the Needs-you line's own amber edge, never a second alarm. Read README.md for the decisions and forks.</p>
+
+<!-- ============================== 1 ============================== -->
+<div class="cap"><h2>1 · Answering, People open</h2>
+<p>Call &amp; Answer, round 2 of 21. Tile 1 owns the count (5 of 6). The rail owns the names.</p>
+<ol><li><b>Every header has a caret</b> (right = closed, down = open). Today a header gives no sign it opens.</li>
+<li><b>Open, the People header says only "6 here".</b> The count of answered is the tile's; the rows say who.</li>
+<li><b>The rail draws the doing-now slot as a glyph</b>: ✓ (answered, success text) or … (still writing, muted); the word is the glyph's accessible name and tooltip. Shape, not colour, tells them apart. The full-width row (Session menu, phone remote) keeps the words. At the shipped 92px word slot a 340px rail leaves a name about 90px: "Priya Ra…".</li>
+<li><b>Score always shown</b> in a scored format, muted while the room answers (it cannot change mid-round).</li>
+<li>Rows never re-sort during a round: Marcus stays where he was when he finishes.</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-1">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Q4 offsite: strategy</span><span class="chip">Join<b>7924</b></span><span class="sp"></span><span class="chip bell">Needs you</span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum" title="Round 2 of 21. Next: Pricing for the EU launch">2 of 21 · next: Pricing for the EU launch</span></div></div>
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div>
+    <div class="colhd"><span></span><span>Name</span><span title="This round">✓</span><span>Score</span><span></span></div>
+    <ul class="list">
+     <li class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do ok" title="answered" aria-label="answered">✓</span><span class="fx">30</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do" title="still writing" aria-label="still writing">…</span><span class="fx">20</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Ana Lucía Ortega</span><span class="do ok" title="answered" aria-label="answered">✓</span><span class="fx">20</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Sam Okafor</span><span class="do ok" title="answered" aria-label="answered">✓</span><span class="fx">10</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Jordan Lee</span><span class="do ok" title="answered" aria-label="answered">✓</span><span class="fx">10</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Lee Chen</span><span class="do ok" title="answered" aria-label="answered">✓</span><span class="fx">0</span><span class="mo">⋯</span></li>
+    </ul>
+    <span class="seclink">All 6, and who left</span>
+   </div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Start voting when the room is done.</p></div><button class="btn main">Start voting <span class="kc">Space</span></button></div>
+   <div class="ny"><span class="main">Nothing needs you now.</span></div>
+   <div class="pulse">
+    <div class="tile"><span class="e">Answered</span><span class="num">5 <small>of 6</small></span><div class="bar"><i style="width:83%"></i></div><span class="sub">1 still writing</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Open 1:24</span><span class="sub">No limit set</span></div>
+    <div class="tile"><span class="e">Since this round opened</span><span class="val">No one new</span></div>
+   </div>
+   <div class="mainarea"><h4>Responses · hidden from the room until voting</h4>
+    <div class="resp">Cut the second warehouse and put the money into onboarding.<div class="by">Priya Raman</div></div>
+    <div class="resp">A shared roadmap the customer can see, not a deck.<div class="by">Ana Lucía Ortega</div></div>
+    <div class="resp">Two launches a year, not six.<div class="by">Sam Okafor</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:330px;top:58px">1</span> <span class="pin" style="left:330px;top:98px">2</span> <span class="pin" style="left:214px;top:128px">3</span> <span class="pin" style="left:296px;top:128px">4</span> <span class="pin" style="left:330px;top:240px">5</span>
+</div></div>
+
+<!-- ============================== 2 ============================== -->
+<div class="cap"><h2>2 · Answering, People closed</h2>
+<p>The host folded People to see the queue. The closed header says <b>who</b> is still out, which the tile cannot.</p>
+<ol><li><b>"6 here · waiting on Marcus"</b>: one or two names in full; three or more as "Marcus, Ana +3", the whole list in <code>title=</code>. Never "5/6": that is tile 1, 400px to the right, at 30px.</li>
+<li><b>Round queue open</b>: its header drops "next:" because the list below says it (one fact once).</li>
+<li><b>Late, closed, Soon level</b>: a small accent dot and "2 to review" in text colour. No edge, no wash: Soon is never amber (PLAN §4.1).</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-2">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Q4 offsite: strategy</span><span class="chip">Join<b>7924</b></span><span class="sp"></span><span class="chip bell">Needs you</span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">2 of 21</span></div>
+    <ul class="q">
+     <li><span class="n">1</span><span class="t">Where do we lose customers?<span class="m"> · done</span></span></li>
+     <li class="is-now"><span class="n">2</span><span class="t">One bet for next year<span class="m"> · now</span></span></li>
+     <li><span class="n">3</span><span class="yours">Yours</span><span class="t">Pricing for the EU launch<span class="m"> · next</span></span></li>
+     <li><span class="n">4</span><span class="t">What should we stop doing?</span></li>
+     <li><span class="n">5</span><span class="t">Who is the customer in 2028?</span></li>
+    </ul>
+    <span class="seclink">+ Write a question</span><span class="seclink">Rounds and questions</span>
+   </div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum" title="Still writing: Marcus Webb">6 here · <b>waiting on Marcus</b></span></div></div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum"><i class="soon"></i><b>2 to review</b></span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Start voting when the room is done.</p></div><button class="btn main">Start voting <span class="kc">Space</span></button></div>
+   <div class="ny is-soon" style="color:var(--text)"><span class="main">2 to review when you can</span><button class="btn sm">Review</button></div>
+   <div class="pulse">
+    <div class="tile"><span class="e">Answered</span><span class="num">5 <small>of 6</small></span><div class="bar"><i style="width:83%"></i></div><span class="sub">1 still writing</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Open 2:02</span><span class="sub">No limit set</span></div>
+    <div class="tile"><span class="e">Since this round opened</span><span class="val">No one new</span><span class="sub">2 arrived late</span></div>
+   </div>
+   <div class="mainarea"><h4>Responses · hidden from the room until voting</h4>
+    <div class="resp">Cut the second warehouse and put the money into onboarding.<div class="by">Priya Raman</div></div>
+    <div class="resp">A shared roadmap the customer can see, not a deck.<div class="by">Ana Lucía Ortega</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:316px;top:318px">1</span>
+ <span class="pin" style="left:316px;top:62px">2</span>
+ <span class="pin" style="left:316px;top:358px">3</span>
+</div></div>
+
+<!-- ============================== 3 ============================== -->
+<div class="cap"><h2>3 · Voting</h2>
+<p>Four people this time (the owner's "1 of 4 voted"). Tile 1 says it; the rail lists who has not.</p>
+<ol><li><b>Status slot:</b> ✓ voted / … not yet. Same slot, same glyphs as answering; Sam's grey dot says away.</li>
+<li><b>Closed, it would read</b> "4 here · waiting on Ana, Lee +1" (drawn in frame 7).</li>
+<li>Scores stay muted: voting does not change them until Results.</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-3">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Team retro</span><span class="chip">Join<b>3150</b></span><span class="sp"></span><span class="chip bell">Needs you</span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">4 of 8 · next: What do we keep?</span></div></div>
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">4 here</span></div>
+    <div class="colhd"><span></span><span>Name</span><span title="This round">✓</span><span>Score</span><span></span></div>
+    <ul class="list">
+     <li class="pr"><span class="d"></span><span class="nm">Ana Lucía Ortega</span><span class="do" title="not yet" aria-label="not yet">…</span><span class="fx">40</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Jordan Lee</span><span class="do ok" title="voted" aria-label="voted">✓</span><span class="fx">30</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Lee Chen</span><span class="do" title="not yet" aria-label="not yet">…</span><span class="fx">30</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d away"></span><span class="nm">Sam Okafor</span><span class="do" title="not yet" aria-label="not yet">…</span><span class="fx">20</span><span class="mo">⋯</span></li>
+    </ul>
+    <span class="seclink">All 4, and who left</span>
+   </div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Show results when the votes are in.</p></div><button class="btn main">Show results <span class="kc">Space</span></button></div>
+   <div class="ny"><span class="main">Nothing needs you now.</span></div>
+   <div class="pulse">
+    <div class="tile"><span class="e">Voted</span><span class="num">1 <small>of 4</small></span><div class="bar"><i style="width:25%"></i></div><span class="sub">3 still voting</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Open 0:38</span><span class="sub">Answering took 2:10</span></div>
+    <div class="tile"><span class="e">Since this round opened</span><span class="val">No one new</span></div>
+   </div>
+   <div class="mainarea"><h4>Responses · the room is voting</h4>
+    <div class="resp">Fewer meetings on Fridays.<div class="by">hidden until results</div></div>
+    <div class="resp">Write the decision down where we made it.<div class="by">hidden until results</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:214px;top:128px">1</span> <span class="pin" style="left:330px;top:58px">2</span> <span class="pin" style="left:296px;top:128px">3</span>
+</div></div>
+
+<!-- ============================== 4 ============================== -->
+<div class="cap"><h2>4 · Everyone's in</h2>
+<p>The last answer lands. <b>One place celebrates it: tile 1</b>, which settles from blue to the theme's success green once (600ms) and stays green. The rail does not repeat it.</p>
+<ol><li><b>Tile 1:</b> success edge and a 10% success wash, "✓ Everyone's in" in success text, announced once (the tile's existing <code>aria-live</code>).</li>
+<li><b>Rail, closed:</b> the "waiting on" clause simply leaves, so the header reads "6 here". The empty state is the calm state.</li>
+<li><b>Not orange.</b> Orange (Classic's accent) means "someone needs you"; Everyone's in is good news and asks nothing of the host the main button does not already say.</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-4">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Q4 offsite: strategy</span><span class="chip">Join<b>7924</b></span><span class="sp"></span><span class="chip bell">Needs you</span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">2 of 21</span></div>
+    <ul class="q">
+     <li><span class="n">1</span><span class="t">Where do we lose customers?<span class="m"> · done</span></span></li>
+     <li class="is-now"><span class="n">2</span><span class="t">One bet for next year<span class="m"> · now</span></span></li>
+     <li><span class="n">3</span><span class="yours">Yours</span><span class="t">Pricing for the EU launch<span class="m"> · next</span></span></li>
+     <li><span class="n">4</span><span class="t">What should we stop doing?</span></li>
+    </ul>
+    <span class="seclink">Rounds and questions</span>
+   </div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div></div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Everyone has answered. Start voting.</p></div><button class="btn main">Start voting <span class="kc">Space</span></button></div>
+   <div class="ny"><span class="main">Nothing needs you now.</span></div>
+   <div class="pulse">
+    <div class="tile is-in"><span class="e">Answered</span><span class="num">6 <small>of 6</small></span><div class="bar"><i style="width:100%"></i></div><span class="sub">✓ Everyone's in</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Open 2:31</span><span class="sub">No limit set</span></div>
+    <div class="tile"><span class="e">Since this round opened</span><span class="val">No one new</span></div>
+   </div>
+   <div class="mainarea"><h4>Responses · hidden from the room until voting</h4>
+    <div class="resp">Cut the second warehouse and put the money into onboarding.<div class="by">Priya Raman</div></div>
+    <div class="resp">Make the support queue everyone's job for a week a quarter.<div class="by">Marcus Webb</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:396px;top:240px">1</span>
+ <span class="pin" style="left:316px;top:258px">2</span>
+ <span class="pin" style="left:610px;top:96px">3</span>
+</div></div>
+
+<!-- ============================== 5 ============================== -->
+<div class="cap"><h2>5 · Someone needs you, People closed</h2>
+<p>Sam asks for their name on a new phone while the host has People folded. Three placements, one item, one look (PLAN §4.3): the bell's number, the Needs-you line with the buttons, and the mark on the thing, which here is the closed People header.</p>
+<ol><li><b>The Needs-you line</b> carries the words, the time and the buttons, as shipped.</li>
+<li><b>The People header</b> takes the line's own edge and wash, with Sam's name in the accent text. No buttons in the header: the line has them, and "See in People" opens the section.</li>
+<li><b>People no longer forces itself open and refuses to close</b> (ConsoleRail.jsx:81,114): it opens once when the request arrives; if the host closes it, the header holds the mark.</li>
+<li><b>One motion:</b> the line and the header fade their amber in together, once, 240ms. No repeat, no flashing; reduced motion draws it at once.</li>
+<li>The bell's number: Now items only.</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-5">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Q4 offsite: strategy</span><span class="chip">Join<b>7924</b></span><span class="sp"></span><span class="chip bell is-lit">Needs you <span class="n">1</span></span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">2 of 21</span></div>
+    <ul class="q">
+     <li><span class="n">1</span><span class="t">Where do we lose customers?<span class="m"> · done</span></span></li>
+     <li class="is-now"><span class="n">2</span><span class="t">One bet for next year<span class="m"> · now</span></span></li>
+     <li><span class="n">3</span><span class="yours">Yours</span><span class="t">Pricing for the EU launch<span class="m"> · next</span></span></li>
+    </ul>
+    <span class="seclink">Rounds and questions</span>
+   </div>
+   <div class="sec"><div class="hd is-now"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum" title="Sam Okafor wants their name on a new device"><i class="soon"></i><span class="who">Sam needs you</span> · 6 here</span></div></div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Start voting when the room is done.</p></div><button class="btn main">Start voting <span class="kc">Space</span></button></div>
+   <div class="ny is-now"><span class="dot"></span><span class="main"><b>Sam wants their name on a new device</b><span class="ago">0:20 ago</span></span><button class="btn sm">Let them</button><button class="btn sm">Not now</button><button class="btn sm">See in People</button></div>
+   <div class="pulse">
+    <div class="tile"><span class="e">Answered</span><span class="num">4 <small>of 6</small></span><div class="bar"><i style="width:66%"></i></div><span class="sub">2 still writing</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Open 1:05</span><span class="sub">No limit set</span></div>
+    <div class="tile"><span class="e">Since this round opened</span><span class="val">No one new</span></div>
+   </div>
+   <div class="mainarea"><h4>Responses · hidden from the room until voting</h4>
+    <div class="resp">Cut the second warehouse and put the money into onboarding.<div class="by">Priya Raman</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:1210px;top:150px">1</span>
+ <span class="pin" style="left:316px;top:236px">2</span>
+ <span class="pin" style="left:8px;top:236px">3</span>
+ <span class="pin" style="left:380px;top:150px">4</span>
+ <span class="pin" style="left:1150px;top:30px">5</span>
+</div></div>
+
+<!-- ============================== 6 ============================== -->
+<div class="cap"><h2>6 · Results, with scores (Trivia)</h2>
+<p>After Show results. The score slot steps up from muted to text colour: this is the moment the host reads it aloud. Trivia's ✓/✗ sits in front of it, as shipped.</p>
+<ol><li><b>Fact slot:</b> ✓ 40 / ✗ 20, in text colour now. The status glyph empties: there is nothing to do.</li>
+<li><b>Closed, People reads</b> "6 here · top: Priya, 40" (frame 7): the one results fact the laptop otherwise only shows behind S.</li>
+<li><b>Order stays put.</b> Ranking is the scoreboard's job, one S away; the host finds Marcus where Marcus was.</li>
+<li>Show scoreboard sits at the section's foot, as shipped.</li></ol></div>
+<div class="scroll"><div class="frame f-con" id="f-6">
+ <div class="top"><span class="chip">Main menu</span><span class="sname">Friday quiz</span><span class="chip">Join<b>5518</b></span><span class="sp"></span><span class="chip bell">Needs you</span><span class="chip">?</span><span class="chip">Session menu</span></div>
+ <div class="body">
+  <aside class="rail">
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">3 of 12 · next: Capital cities</span></div></div>
+   <div class="sec is-open"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div>
+    <div class="colhd"><span></span><span>Name</span><span></span><span>Score</span><span></span></div>
+    <ul class="list">
+     <li class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do"></span><span class="fx live"><span class="r" aria-label="Got it right">✓</span>40</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do"></span><span class="fx live"><span class="w" aria-label="Got it wrong">✗</span>20</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Ana Lucía Ortega</span><span class="do"></span><span class="fx live"><span class="r">✓</span>30</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Sam Okafor</span><span class="do"></span><span class="fx live"><span class="r">✓</span>20</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Jordan Lee</span><span class="do"></span><span class="fx live"><span class="w">✗</span>10</span><span class="mo">⋯</span></li>
+     <li class="pr"><span class="d"></span><span class="nm">Lee Chen</span><span class="do"></span><span class="fx live">0</span><span class="mo">⋯</span></li>
+    </ul>
+    <div class="board"><button class="btn sm">Show scoreboard</button></div>
+    <span class="seclink">All 6, and who left</span>
+   </div>
+   <div class="sec"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+  </aside>
+  <div class="centre">
+   <div class="now"><div class="txt"><p class="k">Your part now</p><p class="t">Talk it through, then the next question.</p></div><button class="btn main">Next question <span class="kc">Space</span></button></div>
+   <div class="ny"><span class="main">Nothing needs you now.</span></div>
+   <div class="pulse">
+    <div class="tile"><span class="e">This round</span><span class="num">6 <small>answered</small></span><span class="sub">6 here</span></div>
+    <div class="tile"><span class="e">Time</span><span class="val">Took 0:52</span></div>
+    <div class="tile"><span class="e">Correct so far</span><span class="num">3 <small>of 6</small></span><span class="sub">only you see this</span></div>
+   </div>
+   <div class="mainarea"><h4>The answer · on the room's screen</h4>
+    <div class="resp">B · Canberra<div class="by">3 of 6 got it</div></div>
+   </div>
+  </div>
+ </div>
+ <span class="pin" style="left:296px;top:128px">1</span> <span class="pin" style="left:330px;top:98px">2</span> <span class="pin" style="left:330px;top:240px">3</span> <span class="pin" style="left:150px;top:384px">4</span>
+</div></div>
+
+<!-- ============================== 7 ============================== -->
+<div class="cap"><h2>7 · Every header, closed, in every moment, and the one motion</h2>
+<p>What each section says when it is folded. A cell left "—" means the header shows its open text: there is nothing more worth saying. Present skin at the foot: attention follows the theme's accent (periwinkle), success stays green in both skins.</p></div>
+<div class="scroll"><div class="frame f-sheet" id="f-7"><div class="sheet">
+ <div class="grid">
+  <span class="gh">Moment</span><span class="gh">Round queue</span><span class="gh">People</span><span class="gh">Late &amp; not reviewed</span>
+
+  <span class="gm">Lobby<small>before round 1</small></span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">21 rounds · first: Where do we…</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+
+  <span class="gm">Answering<small>3 still out</small></span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">2 of 21 · next: Pricing for…</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum" title="Still writing: Marcus Webb, Ana Lucía Ortega, Lee Chen">6 here · <b>waiting on Marcus, Ana +1</b></span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum"><i class="soon"></i><b>2 to review</b></span></div></div>
+
+  <span class="gm">Voting<small>1 of 4 voted</small></span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">4 of 8 · next: What do we keep?</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">4 here · <b>waiting on Ana, Lee +1</b></span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum">none</span></div></div>
+
+  <span class="gm">Everyone's in</span>
+  <span class="note">—</span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div></div>
+  <span class="note">—</span>
+
+  <span class="gm">Results<small>scored formats</small></span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">3 of 12 · next: Capital cities</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here · <b>top: Priya, 40</b></span></div></div>
+  <span class="note">—</span>
+
+  <span class="gm">Someone needs you<small>Now level</small></span>
+  <span class="note">—</span>
+  <div class="mini"><div class="hd is-now"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum"><i class="soon"></i><span class="who">Sam needs you</span> · 6 here</span></div></div>
+  <span class="note">Late stays Soon: a dot, never the edge.</span>
+
+  <span class="gm">Ended</span>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Round queue</span><span class="sum">12 of 12 · done</span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 took part · <b>top: Priya, 90</b></span></div></div>
+  <div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum"><i class="soon"></i><b>1 to review</b></span></div></div>
+
+  <span class="gm">Present skin<small>same moments</small></span>
+  <div class="mini sk-present"><div class="hd is-now"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum"><i class="soon"></i><span class="who">Sam needs you</span> · 6 here</span></div></div>
+  <div class="mini sk-present"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>Late &amp; not reviewed</span><span class="sum"><i class="soon"></i><b>2 to review</b></span></div></div>
+  <div class="tile is-in sk-present" style="padding:6px 12px"><span class="sub">✓ Everyone's in (green in both skins)</span></div>
+ </div>
+ <h3>The one motion: the amber arriving (Needs-you line and People header together)</h3>
+ <div class="motion">
+  <div class="st"><span class="lab">0 ms · request arrives</span><div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div></div></div>
+  <div class="st"><span class="lab">120 ms · fading in</span><div class="mini"><div class="hd" style="border-left-color:rgb(246 169 76 / .5);background:linear-gradient(rgb(246 169 76 / .04),rgb(246 169 76 / .04)),var(--bg)"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum"><i class="soon" style="opacity:.5"></i><span class="who">Sam needs you</span> · 6 here</span></div></div></div>
+  <div class="st"><span class="lab">240 ms · held, until it clears</span><div class="mini"><div class="hd is-now"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum"><i class="soon"></i><span class="who">Sam needs you</span> · 6 here</span></div></div></div>
+  <div class="st"><span class="lab">Let them / Not now · cleared, no fade-out</span><div class="mini"><div class="hd"><span class="car"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4"/></svg></span><span>People</span><span class="sum">6 here</span></div></div></div>
+ </div>
+ <p class="note">Words arrive at once (only the paint fades). Never repeats, never loops, never flashes. <code>prefers-reduced-motion: reduce</code> draws the 240 ms state immediately. Everyone's in uses the same shape on tile 1 only, 600 ms, blue to green.</p>
+</div></div></div>
+
+<!-- ============================== 8 ============================== -->
+<div class="cap"><h2>8 · The person row, by format and phase: when a score shows</h2>
+<p>One row, five slots (PersonRow, PLAN §3.2b), drawn here at full width. A format fills the fact slot or leaves it empty; it never adds a slot. The rail's compact density is the next-to-last row.</p></div>
+<div class="scroll"><div class="frame f-sheet" id="f-8"><div class="sheet">
+ <div class="fmt">
+  <span class="gh" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Format</span>
+  <span class="gh" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Answering / voting</span>
+  <span class="gh" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Results</span>
+
+  <span class="gm" style="font-size:13px;font-weight:700">Call &amp; Answer<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">score, muted, then text</small></span>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do ok">✓ answered</span><span class="fx">30</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do">writing…</span><span class="fx">20</span><span class="mo">⋯</span></div></div>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do"></span><span class="fx live">40</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do"></span><span class="fx live">20</span><span class="mo">⋯</span></div></div>
+
+  <span class="gm" style="font-size:13px;font-weight:700">Trivia<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">score; ✓/✗ after Reveal</small></span>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do ok">✓ answered</span><span class="fx">30</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Lee Chen</span><span class="do">answering…</span><span class="fx">–</span><span class="mo">⋯</span></div></div>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do"></span><span class="fx live"><span class="r">✓</span>40</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Lee Chen</span><span class="do"></span><span class="fx live"><span class="w">✗</span>0</span><span class="mo">⋯</span></div></div>
+
+  <span class="gm" style="font-size:13px;font-weight:700">Poll · Wavelength<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">no score exists: slot empty</small></span>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do ok">✓ answered</span><span class="fx"></span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do">answering…</span><span class="fx"></span><span class="mo">⋯</span></div></div>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do"></span><span class="fx"></span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do"></span><span class="fx"></span><span class="mo">⋯</span></div></div>
+
+  <span class="gm" style="font-size:13px;font-weight:700">Survey<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">progress, not a score</small></span>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do ok">✓ done</span><span class="fx">9 of 9</span><span class="mo">⋯</span></div><div class="pr"><span class="d away"></span><span class="nm">Marcus Webb</span><span class="do">away</span><span class="fx">6 of 9</span><span class="mo">⋯</span></div></div>
+  <span class="note">No results phase: the survey closes on its schedule.</span>
+
+  <span class="gm" style="font-size:13px;font-weight:700">In the 340px rail<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">same row, status as a glyph</small></span>
+  <div class="mini rail-w"><div class="pr"><span class="d"></span><span class="nm">Ana Lucía Ortega</span><span class="do ok" title="answered">✓</span><span class="fx">20</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do" title="still writing">…</span><span class="fx">20</span><span class="mo">⋯</span></div></div>
+  <span class="note">The word slot (92px) would leave a name ~90px. The glyph gives the name ~170px; the word stays the glyph's aria-label and title.</span>
+
+  <span class="gm" style="font-size:13px;font-weight:700">Names lag the count<small style="display:block;font-weight:400;color:var(--muted);font-size:12px">hidden round, waitingRoster null</small></span>
+  <div class="mini"><div class="pr"><span class="d"></span><span class="nm">Priya Raman</span><span class="do">—</span><span class="fx">30</span><span class="mo">⋯</span></div><div class="pr"><span class="d"></span><span class="nm">Marcus Webb</span><span class="do">—</span><span class="fx">20</span><span class="mo">⋯</span></div></div>
+  <span class="note">Today the whole list vanishes (consoleRail.js:110). Keep the names; blank only the status until the names catch up. Never a wrong "writing…".</span>
+ </div>
+</div></div></div>
+
+</div>
+</body>
+</html>

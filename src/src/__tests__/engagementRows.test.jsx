@@ -26,6 +26,7 @@ import {
   kindOf, typeOptions, mergeSessions, groupReports, itemKindLabel,
 } from '../config/engagementKinds';
 import { authFetch } from '../auth/authFetch';
+import { clickRowAction } from '../testUtils/sessionRows';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -110,7 +111,7 @@ describe("the console's Sessions list", () => {
   }
   async function mount(props = {}, opts) {
     api(opts);
-    render(<SessionsPanel environment={{ id: 'dev', label: 'DEV' }} {...props} />);
+    render(<SessionsPanel environment={{ id: 'dev', label: 'DEV' }} navigate={jest.fn()} {...props} />);
     await waitFor(() => expect(screen.queryByText(/Loading sessions/i)).toBeNull());
   }
   const table = () => screen.getByRole('table');
@@ -127,25 +128,28 @@ describe("the console's Sessions list", () => {
   });
 
   test("opening the event shows each item with its kind and state; an item's session opens on the stage inside the event", async () => {
-    await mount();
+    const navigate = jest.fn();
+    await mount({ navigate });
     expect(screen.queryAllByTestId('event-item-row')).toHaveLength(0);
-    const toggle = within(screen.getByTestId('event-row')).getByRole('button', { name: /Q4 Kickoff/ });
+    const toggle = within(screen.getByTestId('event-row')).getByRole('button', { name: 'Q4 Kickoff' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const items = screen.getAllByTestId('event-item-row');
     expect(items).toHaveLength(3);
-    expect(within(items[0]).getByRole('link', { name: 'Open session' })).toHaveAttribute('href', '/host?gameId=7657&event=4821');
+    fireEvent.click(within(items[0]).getByRole('button', { name: /Continue/ }));
+    expect(navigate).toHaveBeenLastCalledWith('/host?gameId=7657&event=4821');
     expect(within(items[1]).getByText('Presentation')).toBeInTheDocument();
-    expect(within(items[1]).queryByRole('link')).toBeNull();
+    expect(within(items[1]).queryByRole('button')).toBeNull();
     expect(within(items[2]).getByText('Session expired')).toBeInTheDocument();
+    expect(within(items[2]).queryByRole('button')).toBeNull();
   });
 
   test('the item sessions are not rows of their own: 7657 appears only under its event', async () => {
     await mount();
-    expect(within(table()).queryByText('7657')).toBeNull();
-    fireEvent.click(within(screen.getByTestId('event-row')).getByRole('button', { name: /Q4 Kickoff/ }));
-    expect(within(table()).getAllByText('7657')).toHaveLength(1);
+    expect(within(table()).queryByText(/7657/)).toBeNull();
+    fireEvent.click(within(screen.getByTestId('event-row')).getByRole('button', { name: 'Q4 Kickoff' }));
+    expect(within(table()).getAllByText(/7657/)).toHaveLength(1);
   });
 
   test('Type filters events and Build Rooms like any format', async () => {
@@ -160,7 +164,7 @@ describe("the console's Sessions list", () => {
 
   test('a search finds an event by one of its items', async () => {
     await mount();
-    fireEvent.change(screen.getByPlaceholderText(/Search title/), { target: { value: 'slows us' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: /Search sessions/ }), { target: { value: 'slows us' } });
     expect(within(table()).getAllByRole('row').slice(1)).toHaveLength(1);
     expect(screen.getByTestId('event-row')).toBeInTheDocument();
   });
@@ -179,14 +183,14 @@ describe("the console's Sessions list", () => {
   });
 
   test('Delete goes through the event route, and a refusal is said in the server\'s words', async () => {
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     await mount({}, { deleteStatus: 409 });
-    fireEvent.click(within(screen.getByTestId('event-row')).getByRole('button', { name: 'Delete' }));
+    clickRowAction(screen.getByTestId('event-row'), /^Delete/);
+    const ask = screen.getByTestId('delete-confirm');
+    expect(ask).toHaveTextContent(/Saved reports are kept/);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('End it on the stage');
-    expect(confirm.mock.calls[0][0]).toMatch(/Saved reports are kept/);
     expect(authFetch.mock.calls.some(([u, o]) => /\/events\/4821$/.test(u) && o.method === 'DELETE')).toBe(true);
     expect(screen.getByTestId('event-row')).toBeInTheDocument();
-    confirm.mockRestore();
   });
 
   test('AdminPage wires Open to the Events place', () => {
@@ -212,18 +216,18 @@ describe("the host's Your sessions", () => {
     expect(rowActions(EVENT)).toMatchObject({ open: true, edit: true, start: false, continue: false });
     const h = mount();
     const row = screen.getByTestId('event-row');
-    fireEvent.click(within(row).getByRole('button', { name: /Open/ }));
+    clickRowAction(row, /^Open/);
     expect(h.navigate).toHaveBeenLastCalledWith('/host/event/4821');
-    fireEvent.click(within(row).getByRole('button', { name: /Edit/ }));
+    clickRowAction(row, /^Edit the agenda/);
     expect(h.navigate).toHaveBeenLastCalledWith('/host/event/4821/agenda');
-    fireEvent.click(within(row).getByRole('button', { name: /Link/ }));
+    clickRowAction(row, /^Copy join link/);
     expect(h.onCopyPlayerUrl).toHaveBeenCalledWith('4821', { event: true });
     expect(h.onEdit).not.toHaveBeenCalled();
   });
 
   test("its items: a played one continues on the stage and opens its report; an expired one says so", () => {
     const h = mount();
-    fireEvent.click(within(screen.getByTestId('event-row')).getByRole('button', { name: /Q4 Kickoff/ }));
+    fireEvent.click(within(screen.getByTestId('event-row')).getByRole('button', { name: 'Q4 Kickoff' }));
     const items = screen.getAllByTestId('event-item-row');
     fireEvent.click(within(items[0]).getByRole('button', { name: /Continue/ }));
     expect(h.navigate).toHaveBeenLastCalledWith('/host?gameId=7657&event=4821');

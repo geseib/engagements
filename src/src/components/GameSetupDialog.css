@@ -1,4 +1,4 @@
-/* skin-allowance: colour=25 font=0 primary=0 */
+/* skin-allowance: colour=24 font=0 primary=0 */
 /* ============================================================================
    THE CREATE / EDIT ENGAGEMENT DIALOG — dusk, at last.
 
@@ -225,7 +225,7 @@
 .gsd .gsd-head { padding-right: 132px; }
 @media (max-width: 600px) {
   .gsd .gsd-head { padding: 14px 112px 12px 16px; }
-  .gsd .gsd-head-acts .gsd-btn { display: none; }
+  .gsd .gsd-head-acts .gsd-act { display: none; }
 }
 
 /* The Advanced fold's own `?`, at the head of the open fold. */
@@ -339,9 +339,9 @@
 .gsd .dialog-help-text.gsd-goal-problem { color: var(--danger-text); }
 
 /* ----------------------------------------------------------- the three steps
-   Name it → Format → Questions (README §3.1), numbered, ticking as each is
-   done. Step 3 is visible from the first frame, in muted text — never
-   dimmed with opacity (visual review: "dimmed step 3" was under AA). */
+   Name it → Format → Question set (README §3.1). Round 4: no numbers and no
+   ticks — a finished section shows its answer, and that is the tick — and a
+   section appears only when the decision above it is made. */
 .gsd .gsd-step { display: flex; flex-direction: column; gap: 10px; padding: 14px 0 16px; border-bottom: 1px solid var(--gsd-rule); }
 .gsd .gsd-step:last-child { border-bottom: 0; }
 .gsd .gsd-step-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -356,22 +356,6 @@
   color: var(--gsd-text);
 }
 .gsd .gsd-step-h label { margin: 0; font: inherit; color: inherit; }
-.gsd .gsd-step-n {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--gsd-primary);
-  font-size: var(--gsd-t-floor);
-  font-weight: 800;
-  color: var(--gsd-primary);
-}
-/* Done: the success fill with the card's navy tick — a shape as well as a colour. */
-.gsd .gsd-step-n.is-done { border-color: var(--gsd-success); background: var(--gsd-success); color: var(--gsd-card); }
-.gsd .gsd-step.is-later .gsd-step-n { border-color: var(--gsd-rule-strong); color: var(--gsd-muted); }
-.gsd .gsd-later { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
 .gsd .gsd-req {
   padding: 1px 8px;
   border: 1px solid var(--gsd-rule-strong);
@@ -448,7 +432,6 @@
 .gsd .gsd-fmt--gallery { border-radius: 12px; padding: 8px 8px 12px; gap: 8px; }
 .gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 7px 7px 11px; }
 .gsd .gsd-fmt--gallery .gsd-fmt-top { padding: 0 6px; font-size: var(--gsd-t-body); color: var(--gsd-text); }
-.gsd .gsd-fmt-art { position: relative; display: block; }
 .gsd .gsd-fmt-chosen {
   /* In the name row, never over the preview (live dev test 1 V8). */
   margin-left: auto;
@@ -464,16 +447,6 @@
 }
 .gsd .gsd-fmt-desc { display: flex; flex-direction: column; gap: 4px; padding: 0 6px; font-size: var(--gsd-t-label); line-height: 1.4; color: var(--gsd-text); }
 .gsd .gsd-fmt-good { color: var(--gsd-muted); }
-.gsd .gsd-fmt-own {
-  align-self: flex-start;
-  margin-top: 2px;
-  padding: 1px 8px;
-  border: 1px solid var(--gsd-rule-strong);
-  border-radius: 6px;
-  font-size: var(--gsd-t-floor);
-  font-weight: 600;
-  color: var(--gsd-text);
-}
 
 /* "Planning a…" — meeting chips (MeetingTypeChips.jsx). Solid borders:
    dashed means only "placeholder or annotation" (visual review). */
@@ -524,16 +497,6 @@
 .gsd .gsd-namesline.is-compact { align-items: center; padding: 10px 14px; }
 .gsd .gsd-namesline.is-compact b { display: inline; }
 
-.gsd .gsd-optional-h {
-  margin: 10px 0 4px;
-  padding-top: 14px;
-  border-top: 1px solid var(--gsd-rule);
-  font-size: var(--gsd-t-floor);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--gsd-muted);
-}
 .gsd .gsd-brief-intro { margin: -4px 0 10px; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
 
 /* Compact: the briefing as one line until opened (frame 3b). */
@@ -1059,39 +1022,32 @@
   color: var(--gsd-muted);
 }
 
-.gsd .gsd-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border: 1px solid var(--gsd-rule-strong);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--gsd-text);
-  font: inherit;
-  font-size: var(--gsd-t-label);
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
+/* EVERY BUTTON IN THE DIALOG IS ui/Button (experience plan §5.1, step 5c):
+   Create the one primary, Cancel / Keep editing / Back and every in-form
+   action the outlined secondary, the text links tertiary, Discard danger.
+   The dialog keeps no button family of its own (the scoped .gsd-btn and the
+   re-skinned global .btn-primary / .btn-secondary are gone).
+
+   The card is dusk whatever <html> says, and it declares no data-theme, so
+   the button's roles are re-pointed at this scope's own measured tokens on
+   the button itself: the ink, the muted ink, the rule and the link ink are
+   the dialog's, and every ratio this file already measured still holds. The
+   orange (--action / --on-action) and the danger are theme-invariant. */
+.gsd .ui-btn {
+  --text: var(--gsd-text);
+  --muted: var(--gsd-muted);
+  --rule-strong: var(--gsd-rule-strong);
+  --row-hover: var(--gsd-wash);
+  --ui-btn-link-ink: var(--gsd-secondary);
+  --ui-size: var(--gsd-t-label);
+  transition: none;
 }
-
-.gsd .gsd-btn:hover { border-color: var(--gsd-primary); }
-
-.gsd .gsd-btn:focus-visible {
-  outline: 2px solid var(--gsd-focus);
-  outline-offset: 2px;
-}
-
-.gsd .gsd-btn--link {
-  padding: 0;
-  border: 0;
-  color: var(--gsd-secondary);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.gsd .gsd-btn--link:hover { color: var(--gsd-text); }
+/* The foot's three are the body step (15px), as they were. */
+.gsd .gsd-foot-act,
+.gsd .gsd-guide-use { --ui-size: var(--gsd-t-body); }
+.gsd .gsd-act { gap: 7px; }
+.gsd .gsd-link { text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.gsd .gsd-link:hover:not(:disabled) { color: var(--gsd-text); }
 
 .gsd .gsd-brief.is-working,
 .gsd .gsd-brief.is-ready {
@@ -1373,9 +1329,7 @@
    375px) and the padding tightens. */
 @media (max-width: 480px) {
   .gsd .dialog-actions { padding: 10px 16px 12px; gap: 8px; }
-  .gsd .dialog-actions .btn-secondary,
-  .gsd .dialog-actions .btn-primary,
-  .gsd .dialog-actions .gsd-discard { min-width: 0; flex: 1 1 auto; }
+  .gsd .dialog-actions .gsd-foot-act { min-width: 0; flex: 1 1 auto; }
   .gsd .gsd-foot-note { flex-basis: 100%; }
 }
 
@@ -1416,70 +1370,18 @@
 
 .gsd .gsd-confirm-t b { font-weight: 700; }
 
-/* Filled deep danger carrying the dialog's text: 5.2:1. --danger itself never
-   carries words (skill §1). */
-.gsd .gsd-discard {
-  min-width: 120px;
-  padding: 10px 18px;
-  border: 1px solid var(--danger-deep);
-  border-radius: 8px;
-  background: var(--danger-deep);
-  color: var(--gsd-text);
-  font: inherit;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-}
+/* Discard is ui/Button's danger look: filled --danger-deep carrying the glow
+   ink, 5.16:1 (uiButtonPalette.test.js). --danger itself never carries words
+   (skill §1). Only its width is the foot's. */
+.gsd .gsd-discard { min-width: 120px; }
 
-.gsd .gsd-discard:hover { filter: brightness(1.08); }
-
-.gsd .btn-primary,
-.gsd .btn-secondary {
-  font: inherit;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  padding: 10px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-/* Filled amber carries DARK text: white on #F6A94C is 1.9:1 in either theme.
-   `transition: none` answers styles.css's `transition: all .3s`, which faded
-   "Loading topics…" from amber for 300ms (live dev test M1, B12). */
-.gsd .btn-primary {
-  border: 1px solid var(--gsd-primary);
-  background: var(--gsd-primary);
-  color: #1B2942;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-  transition: none;
-}
-
-.gsd .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
-/* styles.css lifts a primary 2px with a shadow on hover; not here. */
-.gsd .btn-primary:hover { transform: none; box-shadow: none; }
-
-/* NOT YET: OUTLINED, NOT DIMMED (README §9, visual review: a dimmed amber
-   block was under AA and read as broken). A dashed amber outline with the
-   muted label, 7.0:1 on the card. `opacity: 1` answers styles.css's 0.6,
-   which had brought the label down to 3.5:1 (live dev test M1). */
-.gsd .btn-primary:disabled {
-  border: 1px dashed var(--gsd-primary);
-  background: transparent;
-  color: var(--gsd-muted);
-  cursor: not-allowed;
-  opacity: 1;
-  transform: none;
-}
-
-.gsd .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+/* CREATE is ui/Button primary: --on-action on --action, the library's hover,
+   no lift and no fade (`transition: none` above answers the old 300ms fade,
+   live dev test M1). NOT YET, disabled or aria-disabled, is the library's
+   slate wash with the muted label: it spends no orange and is never a dimmed
+   amber block (README §9; experience plan §2 principle 4). Measured over the
+   card in gameSetupPalette.test.js. */
+.gsd .gsd-create { gap: 8px; }
 
 /* The shortcut, at full opacity, inheriting the button's colour (compact only). */
 .gsd .gsd-kbd {
@@ -1491,19 +1393,6 @@
   font-weight: 700;
 }
 
-.gsd .btn-secondary {
-  border: 1px solid var(--gsd-rule-strong);
-  background: transparent;
-  color: var(--gsd-text);
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: var(--gsd-t-body);
-  font-weight: 700;
-  cursor: pointer;
-  transition: none;
-}
-
-.gsd .btn-secondary:hover { border-color: var(--gsd-muted); background: transparent; color: var(--gsd-text); }
 
 /* THE HELP "?" (live dev test H6): HelpButton.css's quiet re-tint reads the
    page roles, which resolve to PAPER here (this card has no dusk ancestor),
@@ -1608,8 +1497,7 @@
 .gsd .gsd-side-pvhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .gsd .gsd-side-pvhead .gsd-side-h { margin: 0 auto 0 0; }
 .gsd .gsd-side-tabs { display: inline-flex; gap: 6px; }
-.gsd .gsd-side-tabs .gsd-btn[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); padding: 6px 11px; }
-.gsd .gsd-btn:disabled { cursor: not-allowed; color: var(--gsd-muted); border-style: dashed; }
+.gsd .gsd-side-tabs .gsd-act[aria-pressed="true"] { border: 2px solid var(--gsd-secondary); }
 .gsd .gsd-side-example { display: flex; gap: 8px; margin: 12px 0 10px; font-size: var(--gsd-t-label); line-height: 1.45; color: var(--gsd-text); }
 .gsd .gsd-side-example svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
 .gsd .gsd-stage {
@@ -1786,6 +1674,49 @@
 .gsd .gsd-handoff-note svg { flex: none; margin-top: 3px; color: var(--gsd-secondary); }
 .gsd .gsd-handoff-note a { color: var(--gsd-secondary); }
 
+/* ============================================ BUILD ROOM AND EVENT FIELDS
+   BuildRoomFields.jsx, EventFields.jsx (experience plan 4c): the Build Room's
+   four setup fields fold into an Optional line like Advanced (`.gsd-adv`
+   above gives the summary, the chevron and the body); an event's day sits
+   open above its own fold. Body-size inputs, label-size legends, the colours
+   the rest of the form already measures (--gsd-text on --gsd-card). */
+.gsd .gsd-xfields { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gsd .gsd-xfield { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.gsd .gsd-xfield > legend,
+.gsd .gsd-xlabel { padding: 0; margin-bottom: 2px; font-size: var(--gsd-t-label); font-weight: 700; color: var(--gsd-text); }
+.gsd .gsd-xgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.gsd .gsd-xcheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+  font-size: var(--gsd-t-body);
+  line-height: 1.45;
+  color: var(--gsd-text);
+  cursor: pointer;
+}
+.gsd .gsd-xcheck input { flex: none; margin-top: 4px; accent-color: var(--gsd-primary); }
+.gsd .gsd-xcheck .dialog-help-text { margin-top: 2px; }
+
+/* =============================================================== QUICK START
+   The fast lane (config/quickStart.js): one quiet line above Name it, its
+   button outlined like the dialog's other secondary buttons, so Create stays
+   the one filled button in the foot. */
+.gsd .gsd-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 2px 0 4px;
+  padding: 10px 14px;
+  border: 1px dashed var(--gsd-rule-strong);
+  border-radius: 10px;
+}
+.gsd .gsd-quick-line { flex: 1 1 260px; min-width: 0; margin: 0; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
+.gsd .gsd-quick-line b { color: var(--gsd-text); }
+.gsd .gsd-quick-lead { font-weight: 700; color: var(--gsd-text); }
+.gsd .gsd-quick-go { margin-left: auto; }
+
 /* ================================================================== PHONE
    44px targets throughout (frame 10). */
 @media (max-width: 600px) {
@@ -1793,11 +1724,8 @@
   .gsd .gsd-fmt--chips,
   .gsd .gsd-meet-chip,
   .gsd .category-button,
-  .gsd .gsd-btn,
-  .gsd .btn-primary,
-  .gsd .btn-secondary { min-height: 44px; }
+  .gsd .ui-btn:not(.gsd-link) { min-height: 44px; }
   .gsd .gsd-fmt-group--gallery { grid-template-columns: 1fr; }
-  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
   .gsd .gsd-step-acts { margin-left: 0; }
 }
 
@@ -1863,7 +1791,7 @@
 .gsd .gsd-fmt-wrap--chips .gsd-fmt-more { margin-top: 0; }
 
 /* Text links get a real target (devtest 3 L3). */
-.gsd .gsd-btn--link,
+.gsd .gsd-link,
 .gsd .gsd-setlink,
 .gsd .gsd-handoff-note a { padding-block: 4px; }
 
@@ -1892,9 +1820,7 @@
   .gsd .gsd-meet { display: none; }
   .gsd .dialog-actions { flex-wrap: wrap; padding: 10px 16px 12px; gap: 8px; }
   .gsd .dialog-actions .gsd-foot-note { flex: 1 0 100%; margin: 0; }
-  .gsd .dialog-actions .btn-secondary,
-  .gsd .dialog-actions .btn-primary,
-  .gsd .dialog-actions .gsd-discard {
+  .gsd .dialog-actions .gsd-foot-act {
     flex: 1 1 0;
     min-width: 0;
     min-height: 44px;
@@ -1945,12 +1871,6 @@
   }
 }
 
-/* SHORT LAPTOPS (1366×768, 1280×720; devtest 7 R3): the gallery cards drop
-   their small picture, so step 3 shows on first open. No words go; the
-   walkthrough beside the gallery draws each step larger. */
-@media (max-height: 800px) {
-  .gsd .gsd-fmt-group--gallery .gsd-fmt-art { display: none; }
-}
 
 /* STEP 3 ON THE FIRST SCREEN AT 1440×900 (README §3.2; devtest 6 M4): the
    head and the steps a step tighter — the cards keep their words. */
@@ -1962,8 +1882,6 @@
 .gsd .gsd-fmt-group--gallery { gap: 8px; }
 .gsd .gsd-fmt--gallery { padding: 5px 5px 8px; gap: 5px; }
 .gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 4px 4px 7px; }
-.gsd .gsd-fmt--gallery .gsd-fmt-own { margin-top: 0; padding: 0 6px; }
-.gsd .gsd-step.is-later { padding-bottom: 4px; }
 .gsd .gsd-step .dialog-help-text { margin-top: 0; }
 
 /* ============================================================ ROUND 2, OWNER
@@ -2128,11 +2046,6 @@
 
 /* The pane: the walkthrough scrolls, the status line stays at the foot. */
 .gsd .gsd-side .gsd-side-pv { padding-top: 16px; }
-.gsd .gsd-stat { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 12px 0 0; list-style: none; font-size: var(--gsd-t-label); color: var(--gsd-text); }
-.gsd .gsd-stat li { display: inline-flex; align-items: center; gap: 5px; }
-.gsd .gsd-stat-mark { display: inline-grid; place-items: center; width: 14px; color: var(--gsd-muted); font-weight: 800; }
-.gsd .gsd-stat li.is-done .gsd-stat-mark { color: var(--gsd-success-text); }
-.gsd .gsd-stat-not { color: var(--gsd-muted); }
 
 /* THE FORMAT GUIDE (decision 6; components/FormatCompare.jsx). */
 .gsd .gsd-main.is-compare { display: flex; flex-direction: column; }
@@ -2228,8 +2141,7 @@
   border-top: 1px solid var(--gsd-rule);
   background: var(--gsd-card);
 }
-.gsd .gsd-guide-foot .btn-secondary,
-.gsd .gsd-guide-foot .btn-primary { flex: 1 1 0; min-height: 44px; justify-content: center; }
+.gsd .gsd-guide-foot .ui-btn { flex: 1 1 0; min-height: 44px; justify-content: center; }
 .gsd.gsd--guide.gsd--phone .dialog-actions { display: none; }
 
 
@@ -2361,3 +2273,107 @@
 
 /* Nothing chosen yet: one plain line under the heading (live check, round 3). */
 .gsd .gsd-wt-note { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* ============================================================ ROUND 4, OWNER
+   README "Round 4 — show the next decision, not all of them". The owner: "i
+   wonder if it would be less daunting if we revealed the sections as
+   needed?". Last in the sheet, so the equal-weight rules above cannot undo it.
+
+   MEASURED (gameSetupPalette.test.js composites them):
+     "Still needed:" text on the card             12.5:1
+     the hand-off cell's 12px muted line, card     7.0:1
+     Create not ready: muted in a dashed outline   7.0:1 (the disabled style) */
+
+/* The title's help beside its label, which saves a line. */
+.gsd .gsd-title-row { flex-wrap: wrap; align-items: baseline; gap: 2px 16px; }
+.gsd .gsd-title-row .gsd-title-help { margin: 0; font-size: var(--gsd-t-label); color: var(--gsd-muted); }
+
+/* THE ENTRANCE (README round 4, "Motion"): the base style IS the end state;
+   the fade and 4px rise are declared only for a viewer who has not asked for
+   reduced motion. Nothing animates height or moves other content. */
+.gsd .gsd-slot { min-width: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .gsd .gsd-reveal { animation: gsd-reveal-in 180ms ease-out both; }
+}
+@keyframes gsd-reveal-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* THE GALLERY AS TEXT CARDS, THREE ACROSS (the pictures live, larger, in
+   the pane). Build Room and Event share the sixth cell as two quiet rows. */
+.gsd .gsd-fmt-group--gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gsd .gsd-fmt--gallery { gap: 3px; padding: 8px 12px 10px; }
+.gsd .gsd-fmt--gallery[aria-checked="true"] { padding: 7px 11px 9px; }
+.gsd .gsd-fmt--gallery .gsd-fmt-top { font-size: var(--gsd-t-body); flex-wrap: nowrap; }
+.gsd .gsd-fmt--gallery .gsd-fmt-desc { font-size: var(--gsd-t-label); line-height: 1.4; }
+.gsd .gsd-fmt-other {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--gsd-rule);
+  border-radius: 12px;
+}
+.gsd .gsd-fmt-other-k { font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-muted); }
+.gsd .gsd-fmt--row {
+  gap: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.gsd .gsd-fmt--row:hover:not(:disabled) { border-color: var(--gsd-secondary); }
+.gsd .gsd-fmt--row[aria-checked="true"] { padding: 1px 5px; }
+.gsd .gsd-fmt--row .gsd-fmt-top { font-size: var(--gsd-t-label); color: var(--gsd-text); }
+.gsd .gsd-fmt--row .gsd-fmt-desc { display: block; padding-left: 21px; font-size: var(--gsd-t-floor); line-height: 1.3; color: var(--gsd-muted); }
+.gsd .gsd-fmt-other-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 0;
+  font-size: var(--gsd-t-floor);
+  color: var(--gsd-muted);
+}
+@media (max-width: 600px) {
+  .gsd .gsd-fmt-group--gallery { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* THE QUIET PANE (Fork 1 A): one sentence, one plain line, one labelled
+   example stage. */
+.gsd .gsd-wt-welcome { margin: 0; font-size: var(--gsd-t-body); line-height: 1.45; color: var(--gsd-text); }
+.gsd .gsd-wt-ex { display: flex; align-items: flex-start; gap: 6px; line-height: 1.45; }
+.gsd .gsd-wt-ex svg { flex: none; margin-top: 2px; color: var(--gsd-secondary); }
+.gsd .gsd-wt-ex b { color: var(--gsd-text); }
+.gsd .gsd-wt-exlbl { font-size: var(--gsd-t-floor); font-weight: 700; color: var(--gsd-muted); }
+
+/* TWO QUIET FOLD LINES where the uppercase "Optional" header was. */
+.gsd .gsd-optional { margin-top: 4px; }
+.gsd .gsd-optional .gsd-adv { margin-top: 0; }
+.gsd .gsd-optional .gsd-adv,
+.gsd .gsd-optional .gsd-brief-fold { border-bottom: 1px solid var(--gsd-rule); }
+/* The two labels in plain words at body size, as frame 4d draws them — the
+   uppercase small caps went with the header they sat under. */
+.gsd .gsd-optional .gsd-adv-k { font-size: var(--gsd-t-body); letter-spacing: 0; text-transform: none; }
+.gsd .gsd-adv-full { margin: 0 0 8px; font-size: var(--gsd-t-label); line-height: 1.5; color: var(--gsd-muted); }
+.gsd .gsd-adv-full b { color: var(--gsd-primary); font-weight: 700; }
+
+/* STILL NEEDED: plain text beside Create (not a live region, review A5). */
+.gsd .gsd-foot-need { color: var(--gsd-text); }
+.gsd .gsd-foot-need b { font-weight: 700; }
+
+/* CREATE NOT READY: aria-disabled, so it stays reachable (review A1), drawn
+   in ui/Button's disabled-primary wash (Button.css), never dimmed. */
+
+/* SEVEN CHIPS ON ONE ROW AT 1280 WIDE, PANE OPEN (revision, 31 Oct). At
+   1280×720 the form column is ~8px narrower than at 1440 and scrolls, so its
+   scrollbar takes the rest: "Event" wrapped to a second line (seen live).
+   Between the pane's breakpoint and 1440 the chips, their gaps and the form's
+   side padding take a step in; the words stay at 13px and the "last" tag at
+   the 12px floor. */
+@media (min-width: 901px) and (max-width: 1440px) {
+  .gsd .gsd-body.has-side .dialog-content { padding-left: 24px; padding-right: 24px; }
+  .gsd .gsd-body.has-side .gsd-fmt-group--chips { gap: 4px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips { padding: 0 8px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips[aria-checked="true"] { padding: 0 7px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips .gsd-fmt-top { gap: 4px; }
+  .gsd .gsd-body.has-side .gsd-fmt--chips .gsd-fmt-last { padding-left: 5px; }
+  .gsd .gsd-body.has-side .gsd-fmt-sep { margin: 4px 1px; }
+}

@@ -38,23 +38,39 @@ describe('§1 the dialog is mounted where each opener can see it', () => {
     Asserting only "it is rendered somewhere" is exactly the assertion that
     lets a dead history button ship.
   */
-  test('it is mounted inside the session-history early return AND in the main tree', () => {
+  test('it is mounted inside Setup\'s, Home\'s and the session-history early returns AND in the main tree', () => {
+    // Home's rows offer Invite too since the experience plan's 4a, and a new
+    // session's Setup since 4c; each is an early return of its own: four
+    // mounts, one per place that can open it.
+    const setup = HOST.indexOf('if (createdSetup) {');
+    const home = HOST.indexOf('if (showWelcomeScreen) {');
     const guard = HOST.indexOf('if (showReportsModal) {');
     const mounts = [...HOST.matchAll(/<InviteDialog/g)].map((m) => m.index);
+    expect(setup).toBeGreaterThan(-1);
+    expect(home).toBeGreaterThan(-1);
     expect(guard).toBeGreaterThan(-1);
-    expect(mounts).toHaveLength(2);
-    // One before the early return closes, one after it.
+    expect(mounts).toHaveLength(4);
+    const setupEnd = HOST.indexOf('\n  }\n', setup);
+    const homeEnd = HOST.indexOf('\n  }\n', home);
     const historyEnd = HOST.indexOf('\n  }\n', guard);
-    expect(mounts[0]).toBeGreaterThan(guard);
-    expect(mounts[0]).toBeLessThan(historyEnd);
-    expect(mounts[1]).toBeGreaterThan(historyEnd);
+    expect(mounts[0]).toBeGreaterThan(setup);
+    expect(mounts[0]).toBeLessThan(setupEnd);
+    expect(mounts[1]).toBeGreaterThan(home);
+    expect(mounts[1]).toBeLessThan(homeEnd);
+    expect(mounts[2]).toBeGreaterThan(guard);
+    expect(mounts[2]).toBeLessThan(historyEnd);
+    expect(mounts[3]).toBeGreaterThan(historyEnd);
   });
 });
 
 describe('§2 both buttons open the one dialog', () => {
   test('the history list and the setup panel both set the same state', () => {
     // "identical mech" is this: two openers, one piece of state, one component.
-    expect([...HOST.matchAll(/setInviteTarget\(\{/g)]).toHaveLength(2);
+    // The lists' rows (Home's and the dialog's) build the target with the
+    // one helper Library & team uses too (config/sessionRows.js).
+    expect([...HOST.matchAll(/setInviteTarget\(\{/g)]).toHaveLength(1);
+    // The lists' rows and a new session's Setup (4c).
+    expect([...HOST.matchAll(/setInviteTarget\(inviteTargetFor\(/g)]).toHaveLength(3);
     expect(HOST).toMatch(/onInvite=\{\(session\) =>/);
     expect(HOST).toMatch(/onInvite=\{\(\) =>/);
   });

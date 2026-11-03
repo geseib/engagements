@@ -495,6 +495,40 @@ function roomHiddenOf(body) {
   if (typeof v !== 'boolean') return { error: 'hideFromRoom must be true or false' };
   return { value: v };
 }
+/**
+ * ENGAGE'S OWN PROMPTS (QA walk on test, 31 Oct 2026). Start building pressed
+ * before Claude connected put "The room has framed the build. Plan 3 to 6
+ * steps, post the plan with post_update…" on every phone and the Stage: it
+ * was an ordinary direction, so the room's `sent` carried its words. A prompt
+ * Engage writes for Claude is stored with one of these keys (`EngagePrompt`).
+ * Claude gets the words; the host's read keeps them and names the key; the
+ * room's reads carry the key alone. The page draws the plain line for a key
+ * (buildScreens plainPromptLine), the same in the report and on every screen.
+ */
+const ENGAGE_PROMPTS = Object.freeze(['start-building', 'back-to-opening', 'draft-brief', 'preview', 'wrap-up', 'mockups']);
+/** The server's own prompts, by their opening words: a row written before the key still reads as one. */
+const ENGAGE_PROMPT_STARTS = Object.freeze([
+  ['start-building', 'The room has framed the build. Plan '],
+  ['back-to-opening', 'The host has gone back to the opening '],
+  ['mockups', 'Before ask '],
+]);
+/** `engagePrompt` in a host send's body: absent is none. → `{value}` or `{error}`. */
+function engagePromptOf(body) {
+  const v = (body || {}).engagePrompt;
+  if (v === undefined || v === null) return { value: null };
+  if (!ENGAGE_PROMPTS.includes(v)) return { error: `engagePrompt must be one of ${ENGAGE_PROMPTS.join(', ')}` };
+  return { value: v };
+}
+/** The key a log row carries, or the one its words show it was written with (an older row); else null. */
+function engagePromptOfRow(r) {
+  if (!r) return null;
+  if (ENGAGE_PROMPTS.includes(r.EngagePrompt)) return r.EngagePrompt;
+  if (r.Kind !== 'direction' || r.By !== 'host') return null;
+  const t = String(r.Text || '');
+  const hit = ENGAGE_PROMPT_STARTS.find(([k, start]) => t.startsWith(start) && (k !== 'mockups' || / make a quick mockup of /.test(t)));
+  return hit ? hit[0] : null;
+}
+
 /** A logView entry as the room may read it: a hidden send keeps its place and stamps, never its words. */
 const roomSafeEntry = (l) => (l && l.hidden ? { ...l, text: '', detail: '', why: '', roomWords: '' } : l);
 
@@ -1130,6 +1164,8 @@ function logView(r) {
     sentAs: r.SentAs || null,
     // Don't show the room: the host's copy keeps the words; the room's reads blank them (roomSafeEntry).
     ...(r.RoomHidden ? { hidden: true } : {}),
+    // A prompt Engage wrote (QA walk on test, 31 Oct 2026): the page reads its plain line, not its words.
+    ...(engagePromptOfRow(r) ? { engagePrompt: engagePromptOfRow(r) } : {}),
     deliveredAt: r.DeliveredAt || null,
     createdAt: r.CreatedAt || null,
     editedAt: r.EditedAt || null,
@@ -1330,9 +1366,15 @@ function normalizeOutcome(body, by, now) {
   if (!summary) return { error: 'A wrap-up needs a summary' };
   const links = (Array.isArray(b.links) ? b.links : [])
     .map((l) => (typeof l === 'string' ? { label: '', url: l } : (l || {})))
-    .map((l) => ({ label: cleanText(l.label, LIMITS.label), url: safeUrl(l.url) }))
+    .map((l) => ({ label: cleanText(l.label, LIMITS.label), url: safeUrl(l.url), demo: l.demo === true }))
     .filter((l) => l.url)
-    .slice(0, LIMITS.links);
+    .slice(0, LIMITS.links)
+    // THE BUILD IS MARKED, NOT GUESSED (QA walk on test, 31 Oct 2026): at most one link is the build
+    // (the first marked); the rest are links. Unmarked, none is: Open the build waits for Claude's.
+    .map((l, i, all) => {
+      const { demo, ...rest } = l;
+      return demo && all.findIndex((x) => x.demo) === i ? { ...rest, demo: true } : rest;
+    });
   return {
     value: {
       summary,
@@ -2496,9 +2538,12 @@ function sentView(room, hide = () => false, { forRoom = false } = {}) {
   // something went; the host's read keeps the words, marked.
   const hidden = Boolean(best.RoomHidden);
   const pick = hidden && forRoom ? null : sentPickOf(room, best);
+  // ENGAGE'S OWN PROMPT (QA walk on test, 31 Oct 2026): the room's reads get its key, never
+  // its words (a hidden one, nothing); the host's keeps both, and the page shows the plain line.
+  const engage = hidden && forRoom ? null : engagePromptOfRow(best);
   return {
     verb: best.Kind === 'decision' ? 'decided' : as === 'ask' ? 'asked' : 'told',
-    text: (hidden && forRoom) || hide(text) ? '' : text,
+    text: (hidden && forRoom) || (engage && forRoom) || hide(text) ? '' : text,
     askId: best.AskId || null,
     at: best.CreatedAt || null,
     pickedAt: best.DeliveredAt || null,
@@ -2506,6 +2551,7 @@ function sentView(room, hide = () => false, { forRoom = false } = {}) {
     // so nothing has reached it yet. Every screen says "Queued for Claude" instead.
     ...(room && room.state && room.state.AgentSeenAt ? {} : { queued: true }),
     ...(hidden ? { hidden: true } : {}),
+    ...(engage ? { engagePrompt: engage } : {}),
     ...(pick ? { pick } : {}),
   };
 }
@@ -2707,7 +2753,7 @@ module.exports = {
   IMAGE_MAX_BYTES, IMAGE_KINDS, MAX_IMAGES, sniffImage, imageKey, imageView, optionImages, labelFor, newId, entityForSk,
   mintKey, hashKey, parseKey,
   normalizeAsk, applyEdit, transition, normalizeOutcome,
-  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView, heldBack, roomHiddenOf, roomSafeEntry,
+  ACTIVITY_KINDS, ACTIVITY_KEEP, normalizeActivity, mergeActivity, activityView, sentView, heldBack, roomHiddenOf, roomSafeEntry, ENGAGE_PROMPTS, engagePromptOf, engagePromptOfRow,
   DOING_MAX_CHARS, DOING_STALE_MS, DOING_B_FRESH_MS, DOING_SOURCES, cleanDoingLine, applyDoing, doingView, doingPublicView,
   roomFromRows, tally, askView, ideaOutcome, HOST_VOTER, hostVoteOf, logView, ideaView, threadView, threadRefusal, IDEA_THREAD_MAX, outcomeView, agentStatus, settingsOf, seenOf, normalizeSeen, mergeSeen, SEEN_MAX_IDS,
   LATEST_PLUGIN, PLUGIN_OUTDATED_NOTE, PLUGIN_OUTDATED_NOTE_CREW, OPENING_BY_KIND, openingStepsFor, BUILD_KINDS, BUILD_KIND_KEYS, kindKeyOf, QSET_LIMITS, normalizeClaudeSet, claudeSetView, BUILDER_REQUEST_KINDS, buildKindOf, READY_LIMITS, normalizeReady, readyView, cleanPluginVersion, pluginVersionOf, folderOf, pluginNoteFor, pluginView,

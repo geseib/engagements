@@ -54,6 +54,7 @@ import Icon from './Icon';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import './GameSetupDialog.css';
+import Button from './ui/Button';
 
 /** "None picked, so all 4 are in · 12 questions" — what will be asked, not the chips. */
 const questionsIn = (list) => {
@@ -109,7 +110,7 @@ export function SessionCategories({
         ) : (
           <div className="gsd-cat-error" role="alert">
             <span>{error} Nothing from the previous set is kept.</span>
-            {onRetry && <button type="button" className="gsd-btn" onClick={onRetry}>Retry</button>}
+            {onRetry && <Button variant="secondary" size={36} className="gsd-act" onClick={onRetry}>Retry</Button>}
           </div>
         )}
       </div>
@@ -121,7 +122,7 @@ export function SessionCategories({
         <span className="gsd-label" id={labelId}>{label}</span>
         {hint && <span className="gsd-cats-hint">{hint}</span>}
         {onAllOn && categories.length > 0 && picked.length < categories.length && selected.size > 0 && (
-          <button type="button" className="gsd-btn gsd-btn--link gsd-cats-all" onClick={onAllOn}>Turn all on</button>
+          <Button variant="tertiary" size="sm" className="gsd-link gsd-cats-all" onClick={onAllOn}>Turn all on</Button>
         )}
       </div>
       <div className="category-selection">
@@ -244,6 +245,13 @@ export default function SessionOptions({
   shuffleLocked = false,
   questionCount = 0,
   boundBySize = true,
+  /* THE CLOSED LINE IS SHORT (New engagement round 4): the fold shows the
+     summary's `brief`, and the full sentence moves to the top of the open
+     body. `namesStated`: a names card beside the fold already says the names
+     rule, so the brief leaves it out. Off, as the event item dialog uses it,
+     the closed line is the full sentence, as before. */
+  briefSummary = false,
+  namesStated = false,
 }) {
   const isSurvey = normalizeGameType(gameType) === 'survey';
   const anonymous = value.anonymousResponses !== false;
@@ -334,21 +342,36 @@ export default function SessionOptions({
     personas,
     promptChoices: promptList,
     setPromptWillBeUsed,
+    namesStated,
   });
 
   return (
     <details className="gsd-adv">
       <summary>
         <span className="gsd-adv-k"><i className="gsd-chev" aria-hidden="true" />Advanced</span>
-        <span className="gsd-adv-s" data-testid="gsd-adv-summary">
-          {summary.lead && <b>{summary.lead}</b>}
-          {summary.lead && summary.rest ? ' ' : ''}
-          {summary.rest}
-          {!summary.lead && <span className="gsd-adv-open-only"> Change any of them here.</span>}
-        </span>
+        {briefSummary ? (
+          <span className="gsd-adv-s" data-testid="gsd-adv-summary">
+            {summary.lead ? <b>{summary.brief}</b> : summary.brief}
+          </span>
+        ) : (
+          <span className="gsd-adv-s" data-testid="gsd-adv-summary">
+            {summary.lead && <b>{summary.lead}</b>}
+            {summary.lead && summary.rest ? ' ' : ''}
+            {summary.rest}
+            {!summary.lead && <span className="gsd-adv-open-only"> Change any of them here.</span>}
+          </span>
+        )}
       </summary>
 
       <div className="gsd-adv-body">
+        {briefSummary && (
+          <p className="gsd-adv-full" data-testid="gsd-adv-full">
+            {summary.lead && <b>{summary.lead}</b>}
+            {summary.lead && summary.rest ? ' ' : ''}
+            {summary.rest}
+            {!summary.lead && ' Change any of them here.'}
+          </p>
+        )}
         {/* The fold's own guide section (Help Phase 3). Inside the open fold,
             not in the summary: a button in a <summary> toggles the fold. */}
         <div className="gsd-adv-help">

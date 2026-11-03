@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../Modal';
+import { DialogHead, DialogFoot } from '../ui/DialogParts';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { useKeepOnScreen } from '../../buildroom/keepOnScreen';
 import './ModelCompare.css';
@@ -150,10 +151,7 @@ export default function ModelCompare({ variants = [], pending = {}, models = [],
       label="Compare model reads"
       theme="dark"
     >
-      <div className="mcmp-head">
-        <h2 className="mcmp-title">Compare model reads</h2>
-        <button type="button" className="mcmp-x" aria-label="Close" onClick={onClose}>×</button>
-      </div>
+      <DialogHead className="mcmp-head" title="Compare model reads" titleClassName="mcmp-title" onClose={onClose} closeClassName="mcmp-x" />
       {variants.length === 0 && writing.length === 0 ? (
         <p className="mcmp-empty">
           No model reads of this round yet. Use Redo with… to write one.
@@ -178,9 +176,9 @@ export default function ModelCompare({ variants = [], pending = {}, models = [],
           ))}
         </div>
       )}
-      <div className="mcmp-actions">
+      <DialogFoot className="mcmp-actions">
         <button type="button" className="mcmp-btn" onClick={onClose}>Close</button>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

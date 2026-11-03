@@ -61,7 +61,7 @@ describe('looking at another step (session flow v3 §4.8)', () => {
     expect(screen.getByText('Relay expansion')).toBeInTheDocument();
     expect(screen.getAllByText(/From the next round/)).toHaveLength(3);
     expect(screen.getByText(/never change from the settings/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'All settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
     expect(onAll).toHaveBeenCalled();
   });
 
@@ -75,7 +75,9 @@ describe('looking at another step (session flow v3 §4.8)', () => {
 
   test('the host page swaps the main button for Back to the room and stops the arrows paging while looking', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
-    expect(page).toMatch(/controls=\{dockControls\}/);
+    // The stage's Your part now takes dockControls less a LEAVE button (2h).
+    expect(page).toMatch(/controls=\{stageControls\}/);
+    expect(page).toMatch(/const stageControls = splitLeave\(dockControls\)\.controls;/);
     expect(page).toMatch(/intent: HOST_INTENTS\.BACK_TO_ROOM/);
     expect(page).toMatch(/hostPhase !== 'FIELD_NOTES' \|\| viewing\) return false/);
     expect(page).toMatch(/const viewing = twoSurfaces && workflow/);
@@ -132,9 +134,13 @@ describe('the external review of test (15 Oct)', () => {
   test('the voice note says "active this round" once the next round starts', () => {
     expect(page).toMatch(/is active this round\./);
   });
-  test('the phone says "Answer received." for a Call & Answer response', () => {
+  // Plain words, as the review asked; since experience plan 3a every type's
+  // receipt is the word list's one sentence (config/playerWords.js RECEIPT).
+  test('the phone says "Your answer is in." for a Call & Answer response', () => {
     const player = fs.readFileSync(path.join(__dirname, '..', 'PlayerPage.jsx'), 'utf8');
-    expect(player).toMatch(/'Answer received\.'/);
+    const words = fs.readFileSync(path.join(__dirname, '..', 'config', 'playerWords.js'), 'utf8');
+    expect(words).toMatch(/answer: 'Your answer is in\.'/);
+    expect(player).toMatch(/receiptFor\(gameType/);
     expect(player).not.toMatch(/Application Submitted!/);
   });
 });

@@ -45,6 +45,7 @@ import { unexpectedSaveMessage } from '../config/reportPdf';
 import { safeHref, apiBase } from './buildHostApi';
 import { askOutcome, claudeEverConnected, plainPromptLine, briefRows } from './buildScreens';
 import './BuildReport.css';
+import Button from '../components/ui/Button';
 
 const KIND_LABEL = { suggest: 'Ideas', choice: 'Choose', rating: 'Rate 1–5' };
 const IDEA_STATUS = { new: 'New', promoted: 'Used', acknowledged: 'Acknowledged', later: 'Saved for later, not sent', dismissed: 'Dismissed' };
@@ -318,24 +319,26 @@ export default function BuildReport({ state, onBack }) {
     <div className="brr" data-theme="light">
       <div className="brr-printbar">
         {onBack && (
-          <button type="button" className="brr-btn brr-btn--ghost" onClick={onBack}>
+          <Button type="button" size={36} onClick={onBack}>
             <Icon name="ArrowLeft" size={14} /> Back to room
-          </button>
+          </Button>
         )}
-        <button type="button" className="brr-btn brr-btn--ghost" onClick={() => window.print()}>
+        <Button type="button" size={36} onClick={() => window.print()}>
           <Icon name="Printer" size={14} /> Print
-        </button>
+        </Button>
         {s.gameId && (
-          <button
+          <Button
             type="button"
-            className="brr-btn"
+            /* The report's one main action; while the keep choice is open its Save holds the orange. */
+            variant={choosing ? 'secondary' : 'primary'}
+            size={36}
             onClick={() => { setSaveError(''); setChoosing(true); }}
             disabled={saving || choosing}
             aria-expanded={choosing}
             aria-controls="brr-keep"
           >
             <Icon name="FloppyDisk" size={14} /> {saving ? 'Saving…' : 'Save report'}
-          </button>
+          </Button>
         )}
       </div>
       {choosing && (
@@ -350,8 +353,8 @@ export default function BuildReport({ state, onBack }) {
             <span><b>Keep for 1 year</b> Deleted automatically a year after you save it.</span>
           </label>
           <div className="brr-keep-acts">
-            <button type="button" className="brr-btn brr-btn--ghost" onClick={() => setChoosing(false)} disabled={saving}>Cancel</button>
-            <button type="button" className="brr-btn" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+            <Button type="button" size={36} onClick={() => setChoosing(false)} disabled={saving}>Cancel</Button>
+            <Button type="button" variant="primary" size={36} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
           </div>
           {saveError && <p className="brr-keep-err" role="alert">{saveError}</p>}
         </div>
@@ -445,7 +448,7 @@ export default function BuildReport({ state, onBack }) {
               <tbody>
                 {log.map((l) => {
                   // Engage's own prompt to Claude reads as one plain line, its detail with it.
-                  const plain = plainPromptLine(l.text);
+                  const plain = plainPromptLine(l);
                   return (
                   <tr key={l.logId}>
                     <td>{hhmm(l.createdAt)}</td>

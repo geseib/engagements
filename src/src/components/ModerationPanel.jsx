@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
@@ -158,16 +159,14 @@ function ReviewDialog({ sk, onClose, onDecided }) {
   const uncertain = questions.filter((q) => q.findings.length).length;
   return (
     <Modal overlayClassName="modq modq-scrim" contentClassName="modq-card modq-card--tall" labelledBy="modq-title" onClose={requestClose} closeOnBackdrop={() => !busy && !note.trim()} closeOnEscape={() => !busy && !note.trim()}>
-      <header className="modq-head">
-        <h2 id="modq-title">{title}</h2>
+      <DialogHead className="modq-head" titleId="modq-title" title={<>{title}</>} onClose={requestClose} closeLabel="Close review" closeDisabled={busy} closeClassName="modq-x">
         {/* aria-label reads "Close review" rather than the bare "Close" the rest
             of the app's X buttons use: the footer exit below is also literally
             labelled "Close" (Stage 2's copy, not "Cancel"), and two buttons in
             one dialog sharing one accessible name is not two exits — it is one
             exit a screen reader or getByRole('button', { name }) cannot pick
             between. See task-9-report.md for how this was found. */}
-        <button type="button" className="modq-x" onClick={requestClose} aria-label="Close review" title="Close review" disabled={busy}>×</button>
-      </header>
+      </DialogHead>
       <div className="modq-body">
         {state === 'loading' && <p className="modq-fine">Opening…</p>}
         {state === 'error' && <StatusMessage message={error} tone="error" className="modq-alert" />}
@@ -236,8 +235,7 @@ function ReviewDialog({ sk, onClose, onDecided }) {
           </>
         )}
       </div>
-      <footer className="modq-foot">
-        <button type="button" className="modq-btn" onClick={requestClose} disabled={busy}>Close</button>
+      <DialogFoot className="modq-foot" cancel={<button type="button" className="modq-btn" onClick={requestClose} disabled={busy}>Close</button>}>
         {/*
           R21: undecided → both. A resumable 409 → ONLY the one the server is
           waiting for; offering the other would send a decision it refuses as
@@ -251,7 +249,7 @@ function ReviewDialog({ sk, onClose, onDecided }) {
         {state === 'ready' && (!verdict || resume === 'approve') && (
           <button type="button" className="modq-btn modq-btn--primary" onClick={() => decide('approve')} disabled={busy || !item || !item.snapshot}>Approve</button>
         )}
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

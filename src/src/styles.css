@@ -319,7 +319,14 @@ body {
   padding-left: 0.6em;
   border-left: 3px solid var(--warn);
 }
-.host-action-bar button.is-armed {
+/* THE MAIN BUTTON STAYS ORANGE WHEN ARMED (PLAN principle 4; dev QA 2 Nov:
+   it switched colour from state to state). An armed primary keeps its fill
+   and takes the warn ring; only a quiet button takes the warn wash. */
+.host-action-bar .host-action-bar__primary.is-armed {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / 0.55);
+}
+.host-action-bar button.is-armed:not(.host-action-bar__primary) {
   color: var(--text);
   background: rgb(var(--warn-rgb) / 0.22);
   border-color: var(--warn);
@@ -339,10 +346,8 @@ body {
   gap: 8px;
 }
 
-.host-action-bar__primary {
-  padding: 14px 28px;
-  font-size: 1.05rem;
-}
+/* The bar's buttons are ui/Button since experience plan step 5a: their
+   height and padding are the library's (36px), not set here. */
 
 /* The phase-specific key legend under the buttons. Muted and floor-adjacent —
    it is a glanced legend, not copy — but never below the 12px floor: unlike
@@ -355,14 +360,30 @@ body {
   text-align: right;
 }
 
-.host-action-bar__kbd {
-  /* A hint in words, never a box beside the main button (owner, 25 Oct). */
+/* THE KEY ON THE BUTTON (components/stage/KeyCap.jsx; owner, 31 Oct 2026:
+   "i dont like the word SPACE just dangling outside the button"). A small
+   cap at the button's trailing edge, drawn in the button's own text colour
+   so it keeps the button's contrast, quieter by size and weight. Sized in em,
+   so it scales with whatever button it sits in, on every display profile.
+   Off (the key does nothing right now) it keeps its width, invisible: the
+   button never changes size under the pointer. */
+.keycap {
+  display: inline-block;
+  margin-left: 0.6em;
+  padding: 0.08em 0.42em;
+  border: 1px solid currentColor;
+  border-radius: 0.3em;
   font-family: var(--font-ui);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--muted);
+  /* Never under the laptop floor: .62em of a 15px console button is 9px. */
+  font-size: max(12px, 0.62em);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  vertical-align: 0.12em;
+  opacity: 0.72;
   white-space: nowrap;
 }
+.keycap[data-off] { visibility: hidden; }
 
 /* The strip the bar occupies is reserved, never stolen: content can always be
    scrolled clear of it. */
@@ -377,7 +398,7 @@ body {
   }
   .host-action-bar__status,
   .host-action-bar__hint,
-  .host-action-bar__kbd { display: none; }
+  .host-action-bar .keycap { display: none; }
   .host-action-bar__actions { flex: 1 1 auto; justify-content: center; }
 }
 
@@ -400,9 +421,9 @@ body {
   justify-content: center;
 }
 
-/* The stage already prints its own "n of m answered" line inside the phase. */
+/* The stage already prints its own "n of m answered" line inside the phase.
+   The keycap stays: it is on the button, and the dock no longer draws one. */
 .host-action-bar.big-screen-mode .host-action-bar__status,
-.host-action-bar.big-screen-mode .host-action-bar__kbd,
 .host-action-bar.big-screen-mode .host-action-bar__hint { display: none; }
 
 .host-action-bar.big-screen-mode .host-action-bar__actions { gap: 18px; }
@@ -463,9 +484,13 @@ body {
    disabled — with the panel open there was no way to advance the session at
    all.
    --------------------------------------------------------------------------- */
+/* `--stage-now-bottom` (useStageFit, experience plan 2h): where the host
+   stage draws its frame on top (top bar, Your part now, the Needs-you line),
+   the panel and its scrim start below it, so Your part now stays live with
+   the menu open, as the console's sheet does. 0 everywhere else. */
 .setup-panel-scrim {
   position: fixed;
-  top: 0;
+  top: var(--stage-now-bottom, 0px);
   left: 0;
   right: 0;
   bottom: var(--dock-measured, var(--dock-h, 0px));
@@ -476,10 +501,10 @@ body {
 
 .setup-panel {
   position: fixed;
-  top: 0;
+  top: var(--stage-now-bottom, 0px);
   right: 0;
   bottom: var(--dock-measured, var(--dock-h, 0px));
-  width: min(560px, 44vw);
+  width: min(600px, 46vw);
   min-width: 320px;
   z-index: 1000;
   transition: width 160ms ease;
@@ -584,6 +609,26 @@ body {
   cursor: pointer;
 }
 
+/* AN EVENT'S ITEM (experience plan 2d; first in the menu, 2h): Agenda, up
+   one level and never instead of Main menu (top left on the bar), and Bring
+   everyone here while the room is elsewhere, above the tabs so they are there
+   whichever tab is open. The buttons take the panel's own button paint. */
+.setup-panel__event {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgb(var(--glow-rgb) / .16);
+}
+.setup-panel__event-k {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
 /* Wraps: at 660px and below the panel is its 320px minimum and the four tabs
    need ~430px, so SETTINGS sat past the screen's edge, unreachable (walk of
    dev 92f8b24d, 16 Oct 2026). */
@@ -596,13 +641,14 @@ body {
   border-bottom: 1px solid rgba(155, 168, 190, 0.22);
 }
 
+/* Sentence case since the Session menu redesign (docs/design/session-menu):
+   six plain names in one row of a 600px sheet at 13px. */
 .setup-panel__tab {
   font: inherit;
   font-weight: 700;
   font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 9px 14px;
+  letter-spacing: 0.01em;
+  padding: 9px 10px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -699,7 +745,11 @@ body {
 /* `.setup-ask` (Ask next / Ask now) is exempt too: the two must read as two
    DIFFERENT actions, and this repaint would draw them as one navy button —
    which is how the Queue / Ask next pair looked the same for its whole life. */
-.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button) {
+/* ui/Button is exempt (`[class~="ui-btn"]`, the class written as an
+   attribute so this sheet declares nothing under the library's own class):
+   the Session menu's actions are ui/Button (experience plan §5.1, step 5a),
+   which paints itself from the roles. */
+.setup-panel button:not(.setup-panel__close):not(.setup-panel__tab):not(.setup-chip):not(.setup-roster__act):not(.setup-panel__help):not(.help-menu-item):not(.setup-ask):not(.scr-seg-btn):not(.help-button):not([class~="prow-item"]):not(.smenu-more__toggle):not(.smenu-rowmenu__item):not([class~="ui-btn"]) {
   font: inherit;
   font-weight: 600;
   padding: 8px 12px;
@@ -1141,6 +1191,14 @@ body {
   border: 1px solid rgba(246, 169, 76, 0.28);
   border-radius: 10px;
   background: rgba(246, 169, 76, 0.05);
+  /* The action tracks (see `.setup-q__acts`): zero until the list's
+     `setup-q--c-*` classes say the caller can do that thing. */
+  --setup-q-primary: 0px;
+  --setup-q-move: 0px;
+  --setup-q-drop: 0px;
+  --setup-q-out: 0px;
+  --setup-q-btn: 26px;
+  --setup-q-track: 30px;
 }
 
 .setup-q__head {
@@ -1196,6 +1254,39 @@ body {
 }
 
 .setup-q__row:last-child { border-bottom: 0; }
+
+/* THE HOST'S OWN QUESTION (impromptu ask): "Write a question" in the head
+   (after the count, margin-left on the count already pushes both right), and
+   a Yours row's Remove armed in place — the question, Keep it, Remove — on a
+   line of its own under the title, wrapping on the phone. */
+.setup-q__head .setup-q__write { --ui-size: 13px; gap: 6px; order: 3; }
+.setup-q__acts .setup-q__edit { --ui-size: 13px; }
+.setup-q__arm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  --ui-size: 13px;
+}
+.setup-q__arm-t { flex: 1 1 100%; font-size: 13px; line-height: 1.4; color: var(--text); white-space: normal; }
+/* The confirmation with Undo, and one screen's door outside the reveal. The
+   success edge is a rule, never the text colour: the words stay --text. */
+.setup-own-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--success);
+  background: rgb(var(--success-rgb) / .12);
+  font-size: 13px;
+  color: var(--text);
+}
+.setup-own-notice .setup-own-undo { margin-left: auto; --ui-size: 13px; }
+.setup-own-write { --ui-size: 13px; gap: 6px; margin-bottom: 10px; }
+.setup-own { margin-bottom: 12px; }
 
 .setup-q__pos {
   font-size: 12px;
@@ -1318,18 +1409,68 @@ body {
 }
 
 
+/* THE ACTION COLUMNS, FIXED (owner, 3 Nov 2026: "the Yours row's ↑ ↓ don't
+   align with the others'"). Every row with actions draws the same five cells
+   (QueueList actsCells) into the same NAMED tracks, and a cell with nothing in
+   it stays — empty, not collapsed. A track's width is a fact about the LIST
+   (the `setup-q--c-*` classes on the section, from what the caller can do),
+   never about the row, so the columns are identical down the panel.
+
+   No column gap: each button track carries its own 4px lead (30px track, 26px
+   button at its right edge), so a list with no ↑↓ leaves no stray gaps.
+   The primary track is wide enough for "Ask next · Ask now" (measured in
+   Chromium at 13px/700: 159px with the 4px between and the lead); Edit sits
+   at its right edge, where Ask now ends. */
+.setup-q--c-asks { --setup-q-primary: 168px; }
+.setup-q--c-edit { --setup-q-primary: 76px; }
+.setup-q--c-move { --setup-q-move: var(--setup-q-track); }
+.setup-q--c-drop { --setup-q-drop: var(--setup-q-track); }
+.setup-q--c-out { --setup-q-out: var(--setup-q-track); }
+
 .setup-q__acts {
-  display: flex;
-  gap: 4px;
+  display: grid;
+  grid-template-columns:
+    [primary] var(--setup-q-primary)
+    [up] var(--setup-q-move)
+    [down] var(--setup-q-move)
+    [drop] var(--setup-q-drop)
+    [out] var(--setup-q-out);
+  column-gap: 0;
   align-items: center;
+  justify-items: end;
+}
+
+.setup-q__cell { display: flex; align-items: center; min-width: 0; }
+.setup-q__cell--primary { grid-column: primary; justify-self: stretch; gap: 4px; }
+/* Right-aligned by margin, never `justify-content: flex-end` (hard rule 9):
+   an overflow toward the start would be unreachable. */
+.setup-q__cell--primary > :first-child { margin-left: auto; }
+.setup-q__cell--up { grid-column: up; }
+.setup-q__cell--down { grid-column: down; }
+.setup-q__cell--drop { grid-column: drop; }
+.setup-q__cell--out { grid-column: out; }
+
+/* THE ROUND ON SCREEN, the list's first row (QueueList `nowRound`): its
+   number, its title, the word Now, and no actions — so two tracks. Quiet:
+   the queued Next row below is the one the eye should land on. */
+.setup-q__row--now {
+  grid-template-columns: auto minmax(0, 1fr);
+  opacity: 0.82;
+}
+.setup-q__row--now .setup-q__name { font-weight: 500; }
+.setup-q__flag--now { color: var(--muted); font-weight: 700; }
+.setup-q__list--now {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
 }
 
 .setup-q__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: var(--setup-q-btn);
+  height: var(--setup-q-btn);
   padding: 0;
   border-radius: 6px;
   border: 1px solid rgba(155, 168, 190, 0.34);
@@ -1344,9 +1485,6 @@ body {
    the action column's width per row and move the remaining buttons under the
    host's finger every time the list reorders. */
 .setup-q__btn:disabled { opacity: 0.3; cursor: default; }
-
-/* Holds the fourth slot's width on rows that have no fourth action. */
-.setup-q__btn--slot { visibility: hidden; cursor: default; }
 
 .setup-q__btn--drop:hover:not(:disabled) {
   border-color: rgba(229, 100, 94, 0.55);
@@ -1435,10 +1573,20 @@ body {
   font-size: 15px;
 }
 
+/* The same five named tracks on the phone, at 44px: the primary track takes
+   what is left of the line (the asks share it, Edit sits at its right edge),
+   each button track a 44px target plus its 8px lead. */
+.setup-q--touch {
+  --setup-q-btn: 44px;
+  --setup-q-track: 52px;
+}
+.setup-q--touch.setup-q--c-asks,
+.setup-q--touch.setup-q--c-edit { --setup-q-primary: minmax(0, 1fr); }
+
 .setup-q--touch .setup-q__acts {
   grid-column: 1 / -1;
-  gap: 8px;
 }
+.setup-q--touch .setup-q__cell--primary { gap: 8px; }
 
 .setup-q--touch .setup-ask {
   flex: 1 1 0;
@@ -1455,7 +1603,6 @@ body {
   height: 44px;
   border-radius: 8px;
 }
-
 .setup-loading { color: #B6C2D4; font-size: 13px; }
 
 /* skin-allowance SC-02: colour=102 font=1 primary=29 */
@@ -11900,9 +12047,16 @@ body {
   gap: 8px;
 }
 
+/* ONE ROW PER RESPONSE, however many children it has: number, text, then an
+   auto-sized column each for the author and (in a feedback round) the Comment
+   button. The fixed `28px 1fr auto` had three tracks for four children, so
+   the Comment button wrapped onto a row of its own, under the NEXT
+   response's number. Column flow puts every child on the one row. */
 .past-round__answers li {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
@@ -11973,6 +12127,25 @@ body {
   font-size: 0.85rem;
   opacity: 0.75;
   white-space: nowrap;
+}
+
+/* A PHONE (360px): number, text and Comment button side by side would leave
+   the text a sliver, so the author drops under the text and the number and
+   the button span both lines. The button's own placement is in
+   RoundReport.css, which owns the button. */
+@media (max-width: 480px) {
+  .past-round__answers li {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .past-round__answers li > .past-round__rank { grid-column: 1; grid-row: 1 / span 2; }
+  .past-round__answers li > .past-round__answer { grid-column: 2; grid-row: 1; }
+  .past-round__answers li > .past-round__who {
+    grid-column: 2;
+    grid-row: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 .past-round__empty {

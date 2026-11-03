@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import Button from './ui/Button';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import AIScenarioBuilder from './AIScenarioBuilder';
@@ -10,7 +12,7 @@ import SurveyAIBuilder from './SurveyAIBuilder';
 import SetImageBadge from './SetImageBadge';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
 import QuestionSetDeleteDialog from './QuestionSetDeleteDialog';
-import QuestionSetEditor from './QuestionSetEditor';
+import { QuestionSetPlace, setPath } from './QuestionSetPage';
 import { authFetch } from '../auth/authFetch';
 import {
   isUnreadableSet, unreadableSetName,
@@ -126,6 +128,66 @@ export default function HostQuestionSetsDialog({
   // editor is holding an unsaved working copy.
   const [editingQuestions, setEditingQuestions] = useState(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  /*
+    THE SET'S ADDRESS (experience plan 5e). Opening a set moves the address bar
+    to `/sets/<id>` (pushState, so nothing reloads and this shelf keeps its
+    state), and the browser's Back returns here. A reload or a pasted link lands
+    on the same page through App.jsx's `/sets/<id>` route. `pushedFrom` is the
+    address to return to, and says the history entry is ours to pop.
+  */
+  const pushedFrom = useRef(null);
+  const placeBack = useRef(null);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = editorDirty;
+  const editingId = editingQuestions ? editingQuestions.id : '';
+  const editingScope = editingQuestions ? editingQuestions.scope : '';
+  useEffect(() => {
+    if (!editingId || typeof window === 'undefined' || !window.history?.pushState) return;
+    if (pushedFrom.current !== null) return;
+    pushedFrom.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.pushState({ engageSetPlace: editingId }, '', setPath({ id: editingId, scope: editingScope }));
+  }, [editingId, editingScope]);
+  /** Leave the set's page for the shelf, and give the address bar back. */
+  const closeSetPlace = useCallback(() => {
+    setEditingQuestions(null);
+    setEditorDirty(false);
+    if (pushedFrom.current !== null && typeof window !== 'undefined') {
+      const from = pushedFrom.current;
+      pushedFrom.current = null;
+      // Ours to pop while it is still the entry on top; otherwise only say
+      // where we are, without spending a history entry.
+      if (window.history.state && window.history.state.engageSetPlace) window.history.back();
+      else window.history.replaceState(window.history.state, '', from);
+    }
+  }, []);
+  /* The browser's Back while the set is open returns to the shelf. With an
+     unsaved working copy the page is put back and the editor ASKS, exactly as
+     its own exits do — the browser's Back must not be the one way out that
+     drops an afternoon's work without a word. */
+  useEffect(() => {
+    if (!editingId) return undefined;
+    const onPop = () => {
+      if (pushedFrom.current === null) return;
+      if (dirtyRef.current) {
+        window.history.pushState({ engageSetPlace: editingId }, '', setPath({ id: editingId, scope: editingScope }));
+        if (placeBack.current) placeBack.current();
+        return;
+      }
+      pushedFrom.current = null;
+      setEditingQuestions(null);
+      setEditorDirty(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [editingId, editingScope]);
+  /* Unmounted with the set open (the screen behind closed): put the address
+     bar back where it was. */
+  useEffect(() => () => {
+    if (pushedFrom.current !== null && typeof window !== 'undefined' && window.history?.replaceState) {
+      window.history.replaceState(null, '', pushedFrom.current);
+      pushedFrom.current = null;
+    }
+  }, []);
   /** What the search box holds. One box over both lists, not one each. */
   const [search, setSearch] = useState('');
   /** The id of the set whose quickstart flag is currently in flight, or null. */
@@ -385,9 +447,9 @@ export default function HostQuestionSetsDialog({
   const noMatch = (sentence, testId) => (
     <div className="qsets-nomatch" data-testid={testId}>
       <p>{sentence}</p>
-      <button type="button" className="qsets-btn qsets-btn--link" onClick={() => setSearch('')}>
+      <Button variant="tertiary" size="sm" className="qsets-clear" onClick={() => setSearch('')}>
         Clear the search
-      </button>
+      </Button>
     </div>
   );
 
@@ -510,6 +572,121 @@ export default function HostQuestionSetsDialog({
   /** Opened on a make-a-set route: the panel goes above the shelf. */
   const newFirst = initialRoute === 'manual' || initialRoute === 'template';
 
+  /*
+    ONE THING ON SCREEN AT A TIME, NOT A STACK (experience plan 5e; audit E
+    §1.5 Q1). The builders, a draft's review and the set editor used to open
+    as dialogs INSIDE this one — four layers from the start screen to one
+    question. Each now REPLACES the shelf while it is open, and the shelf comes
+    back as it was when it closes: this component stays mounted, so the search,
+    the notice and the list survive underneath.
+
+    THE CONSOLE'S OWN BUILDERS, not host copies: the console owns them, and a
+    host copy of four large components would be four places to fix.
+  */
+  if (builder === 'scenario') {
+    return (
+      <AIScenarioBuilder
+        engagementType={newSetType}
+        onClose={() => setBuilder(null)}
+        onScenariosGenerated={finishBuilder}
+        onDraftReady={openDraftReview}
+      />
+    );
+  }
+  if (builder === 'trivia') {
+    return <TriviaAIBuilder onClose={() => setBuilder(null)} onTriviaGenerated={finishBuilder} onDraftReady={openDraftReview} />;
+  }
+  if (builder === 'poll') {
+    return <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} onDraftReady={openDraftReview} />;
+  }
+  if (builder === 'survey') {
+    /* THE PHASE 0 FIX (surveys phases 0+1, fix 2): a finished survey run
+       creates a draft set like the other three, so it finishes through the
+       same finishBuilder. */
+    return <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={finishBuilder} onDraftReady={openDraftReview} />;
+  }
+
+  if (reviewDraft) {
+    /* THE ONE REVIEW SCREEN (components/DraftReview.jsx): accept, discard or
+       restore. Accepting a new set lands it in the list; nothing is saved
+       until then. */
+    const closeReview = () => { setReviewDraft(null); refreshDrafts(); };
+    return (
+      <Modal
+        overlayClassName="qsets qsets-scrim qsets-scrim--over"
+        contentClassName="qsets-modal qsets-modal--wide"
+        labelledBy="host-draft-review-title"
+        onClose={closeReview}
+        theme="dark"
+      >
+        <DialogHead titleId="host-draft-review-title" title="Review AI draft" titlesClassName="qsets-grow" sub="Nothing is saved until you accept." subClassName="qsets-dim" icon={<Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />} onClose={closeReview} closeLabel="Close the review" closeClassName="qs-dialog-close" />
+        <div className="qsets-modal-body">
+          <DraftReview
+            draftId={reviewDraft.draftId}
+            libraryKey={reviewDraft.libraryKey}
+            onClose={closeReview}
+            onChanged={() => { load(); refreshDrafts(); }}
+          />
+        </div>
+        <DialogFoot cancel={<Button size={44} onClick={closeReview}>Back to your question sets</Button>} />
+      </Modal>
+    );
+  }
+
+  if (editingQuestions) {
+    /*
+      THE SET IS A PLACE (components/QuestionSetPage.jsx): a page with its own
+      address, `/sets/<id>`, that replaces this shelf instead of opening inside
+      it. The same editor the console uses, with the host's three flags off
+      (HOST_EDITOR_FLAGS: versions, download and AI drafting are admins-only
+      routes and Bedrock spend), and the two Workie lists this shelf already
+      read — so the set's Workie can be chosen here too.
+
+      Inside `Modal` only for its behaviour — Escape, the Tab trap, focus
+      restore — on an opaque full-viewport scrim, so it reads as a page.
+      ESCAPE IS GATED ON THE WORKING COPY: the editor's own exits ask before
+      dropping unsaved questions; Escape declines while there is something to
+      lose.
+    */
+    return (
+      <Modal
+        overlayClassName="qsp-scrim"
+        contentClassName="qsp-frame"
+        labelledBy="qsp-title"
+        theme="dark"
+        closeOnBackdrop={false}
+        closeOnEscape={() => !editorDirty}
+        onClose={closeSetPlace}
+      >
+        <QuestionSetPlace
+          questionSet={editingQuestions}
+          backLabel="Your question sets"
+          onBack={closeSetPlace}
+          backRef={placeBack}
+          /* The shelf's banner travels with the host: a set the generator just
+             made opens here, and the sentence about it must not wait behind. */
+          notice={notice && !notice.limit ? notice : null}
+          onDismissNotice={() => setNotice(null)}
+          editorProps={{
+            setAllowance,
+            availableSets: sets,
+            availablePrompts,
+            availablePersonas,
+            onDirtyChange: setEditorDirty,
+            onSaved: (message) => { closeSetPlace(); load(message); },
+            onChanged: async () => {
+              const all = await load();
+              const fresh = (all || []).find((item) => item.id === editingQuestions.id);
+              // Re-point rather than close: a questions save is not a reason to
+              // put the host back on the shelf, but the counts come off this object.
+              if (fresh) setEditingQuestions(fresh);
+            },
+          }}
+        />
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       /* DUSK, LIKE THE TWO SCREENS THAT OPEN IT. This was `.qsets--onlight` — a
@@ -525,15 +702,7 @@ export default function HostQuestionSetsDialog({
       labelledBy="hqs-title"
       onClose={() => onClose && onClose()}
     >
-      <header>
-        <Icon name="Books" weight="duotone" size={20} color="var(--primary)" />
-        <div className="qsets-grow">
-          <h2 id="hqs-title">Your question sets</h2>
-          <p className="qsets-dim">
-            Sets you made. You can rename or delete these; everything else in the library stays
-            as your administrator left it.
-          </p>
-        </div>
+      <DialogHead titleId="hqs-title" title="Your question sets" titlesClassName="qsets-grow" sub="Sets you made. You can rename or delete these; everything else in the library stays as your administrator left it." subClassName="qsets-dim" icon={<Icon name="Books" weight="duotone" size={20} color="var(--primary)" />} onClose={() => onClose && onClose()} closeLabel="Close your question sets" closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "hqs-close" }}>
         {/* The setup guide's question-set section (Help Phase 3). */}
         <HelpButton {...helpFor('host-question-sets')} variant="inline" size="small" tooltip="Help: question sets" className="help-button-quiet" />
         {/*
@@ -543,17 +712,7 @@ export default function HostQuestionSetsDialog({
           spelling the control differently — and the corner is where people look
           first, so it is the one that has to be predictable.
         */}
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={() => onClose && onClose()}
-          aria-label="Close your question sets"
-          title="Close your question sets"
-          data-testid="hqs-close"
-        >
-          ×
-        </button>
-      </header>
+      </DialogHead>
 
       <div className="qsets-modal-body">
         {/* A PLAN LIMIT (`notice.limit`) is the shared notice — what ran out and
@@ -725,22 +884,20 @@ export default function HostQuestionSetsDialog({
                         />
                       </div>
                       <div className="qsets-actions">
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--primary"
+                        <Button
+                          variant="secondary" size={36} className="qsets-lead"
                           disabled={editing.busy || !editing.name.trim()}
                           onClick={saveEdit}
                         >
                           {editing.busy ? 'Saving…' : 'Save'}
-                        </button>
-                        <button
-                          type="button"
-                          className="qsets-btn"
+                        </Button>
+                        <Button
+                          variant="secondary" size={36}
                           disabled={editing.busy}
                           onClick={() => setEditing(null)}
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -883,16 +1040,14 @@ export default function HostQuestionSetsDialog({
                         */}
                         {!isUnreadableSet(set) && (
                           <>
-                            <button
-                              type="button"
-                              className={`qsets-btn qsets-btn--sm${!set.active && set.isAIGenerated && !set.aiReviewedAt ? ' qsets-btn--primary' : ''}`}
+                            <Button
+                              variant="secondary" size="sm" className={`qsets-act${!set.active && set.isAIGenerated && !set.aiReviewedAt ? ' qsets-lead' : ''}`}
                               onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                             >
                               {!set.active && set.isAIGenerated && !set.aiReviewedAt ? 'Review' : 'Edit questions'}
-                            </button>
-                            <button
-                              type="button"
-                              className="qsets-btn qsets-btn--sm"
+                            </Button>
+                            <Button
+                              variant="secondary" size="sm" className="qsets-act"
                               onClick={() => setEditing({
                                 id: set.id,
                                 name: set.name || '',
@@ -901,16 +1056,15 @@ export default function HostQuestionSetsDialog({
                               })}
                             >
                               Rename
-                            </button>
+                            </Button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          className="qsets-btn qsets-btn--sm qsets-btn--ghostdanger"
+                        <Button
+                          variant="secondary" size="sm" className="qsets-act qsets-del"
                           onClick={() => setDeleting(set)}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -984,14 +1138,13 @@ export default function HostQuestionSetsDialog({
                       <td className="qsets-col-qs">{set.totalQuestions || 0}</td>
                       <td className="qsets-col-acts">
                         <div className="qsets-rowact">
-                          <button
-                            type="button"
-                            className="qsets-btn qsets-btn--sm"
+                          <Button
+                            variant="secondary" size="sm" className="qsets-act"
                             onClick={() => { setEditorDirty(false); setEditingQuestions(set); }}
                             title={`Take your own copy of ${set.name || set.id} and edit it`}
                           >
                             Copy and edit
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1004,14 +1157,13 @@ export default function HostQuestionSetsDialog({
 
         <div className="qsets-head">
           <span className="qsets-head-grow" />
-          <button
-            type="button"
-            className="qsets-btn qsets-btn--primary"
+          <Button
+            variant="primary" size={36}
             onClick={() => setCreating(!creating)}
           >
             <Icon name="Plus" weight="bold" size={14} color="currentColor" />
             {creating ? 'Hide new set' : 'New question set'}
-          </button>
+          </Button>
         </div>
 
         {!newFirst && createPanel}
@@ -1026,162 +1178,12 @@ export default function HostQuestionSetsDialog({
         discoverable and neither exists on a tablet. `.qsets-modal footer`
         already carries the layout; it was simply never used on this dialog.
       */}
-      <footer>
+      <DialogFoot>
         <span className="qsets-grow" />
-        <button type="button" className="qsets-btn" onClick={() => onClose && onClose()}>
+        <Button variant="secondary" size={44} onClick={() => onClose && onClose()}>
           Close
-        </button>
-      </footer>
-
-      {builder && (
-        /*
-          THE CONSOLE'S OWN BUILDERS, MOUNTED HERE — not host copies, for the
-          same reason the editor below is not one.
-
-          A DOM DESCENDANT of this dialog, deliberately. Each builder renders its
-          own `.modal-overlay` (z-index 9999), and `.qsets-scrim--over` is a
-          fixed, z-indexed STACKING CONTEXT — so a positioned child paints inside
-          it whatever its z-index. Hoisted out, 9999 would land beside
-          `.new-game-overlay`'s 10000 and the builder would paint BEHIND the
-          dialog that opened it. The editor's comment below works through the
-          same reasoning at more length.
-        */
-        <>
-          {builder === 'scenario' && (
-            <AIScenarioBuilder
-              engagementType={newSetType}
-              onClose={() => setBuilder(null)}
-              onScenariosGenerated={finishBuilder}
-              onDraftReady={openDraftReview}
-            />
-          )}
-          {builder === 'trivia' && (
-            <TriviaAIBuilder onClose={() => setBuilder(null)} onTriviaGenerated={finishBuilder} onDraftReady={openDraftReview} />
-          )}
-          {builder === 'poll' && (
-            <PollAIBuilder onClose={() => setBuilder(null)} onPollGenerated={finishBuilder} onDraftReady={openDraftReview} />
-          )}
-          {builder === 'survey' && (
-            /* THE PHASE 0 FIX (surveys phases 0+1, fix 2). This used to be
-               `() => setBuilder(null)`: survey only exported JSON, so closing
-               was the whole callback and a finished generation opened nothing.
-               The survey worker now creates a draft set like the other three,
-               so it finishes through the same finishBuilder. */
-            <SurveyAIBuilder onClose={() => setBuilder(null)} onSurveyGenerated={finishBuilder} onDraftReady={openDraftReview} />
-          )}
-        </>
-      )}
-
-      {reviewDraft && (
-        /* THE ONE REVIEW SCREEN (components/DraftReview.jsx), over this
-           dialog the way the builders are. Accepting a new set lands it in
-           the list below; nothing is saved until then. */
-        <Modal
-          overlayClassName="qsets qsets-scrim qsets-scrim--over"
-          contentClassName="qsets-modal qsets-modal--wide"
-          labelledBy="host-draft-review-title"
-          onClose={() => { setReviewDraft(null); refreshDrafts(); }}
-          theme="dark"
-        >
-          <header>
-            <Icon name="Sparkle" weight="duotone" size={20} color="currentColor" />
-            <div className="qsets-grow">
-              <h2 id="host-draft-review-title">Review AI draft</h2>
-              <p className="qsets-dim">Nothing is saved until you accept.</p>
-            </div>
-            <button type="button" className="qs-dialog-close" aria-label="Close the review" title="Close"
-              onClick={() => { setReviewDraft(null); refreshDrafts(); }}>×</button>
-          </header>
-          <div className="qsets-modal-body">
-            <DraftReview
-              draftId={reviewDraft.draftId}
-              libraryKey={reviewDraft.libraryKey}
-              onClose={() => { setReviewDraft(null); refreshDrafts(); }}
-              onChanged={() => { load(); refreshDrafts(); }}
-            />
-          </div>
-          <footer>
-            <button type="button" className="qsets-btn" onClick={() => { setReviewDraft(null); refreshDrafts(); }}>Close</button>
-          </footer>
-        </Modal>
-      )}
-
-      {editingQuestions && (
-        /*
-          THE ADMIN EDITOR, MOUNTED HERE — not a host copy of it. The owner:
-          *"expose the same style (maybe the same modal etc) to the host question
-          set screens. why recreate everything."* So this is
-          `components/QuestionSetEditor.jsx` verbatim, with three flags off.
-
-          A DOM DESCENDANT OF `.qsets-scrim--over`, DELIBERATELY, and not hoisted
-          out through `afterContent`. `.qsets-scrim--over` is `position: fixed`
-          with z-index 10001, so it is its own STACKING CONTEXT, and a positioned
-          child of it stacks inside that context whatever its z-index — which is
-          why `.qsets-scrim`'s 60 paints above the dialog here and why the delete
-          dialog below already works. Hoisted, this scrim would land beside
-          `.new-game-overlay`'s 10000 instead of inside it, and the question
-          dialog the editor opens (`.modal-overlay`, z-index 9999) would paint
-          BEHIND the host dialog. `Modal.topmostEntry()` decides by DOM
-          containment for the same reason, so hoisting would also degrade Escape
-          to its mount-order tiebreak.
-
-          `.qsets-modal`'s `overflow: auto` does not clip any of it: every layer
-          from here down is `position: fixed`, whose containing block is the
-          viewport, so overflow on an ancestor cannot reach it. That is also what
-          keeps `CategoryPicker`'s absolutely-positioned `.qs-cat-list` safe —
-          it sits inside the question dialog, which is fixed.
-
-          ESCAPE IS GATED ON THE WORKING COPY. The editor's Cancel already asks
-          before dropping unsaved questions; Escape is answered by this Modal,
-          which cannot reach that dialog, so it simply declines while there is
-          something to lose. Same predicate shape as QuestionsPanel's own
-          `closeOnEscape={() => !aiBusy}`.
-        */
-        <Modal
-          overlayClassName="qsets-scrim"
-          contentClassName="qsets-editor-frame"
-          label={`Edit ${editingQuestions.name || editingQuestions.id}`}
-          closeOnBackdrop={false}
-          closeOnEscape={() => !editorDirty}
-          onClose={() => setEditingQuestions(null)}
-        >
-          <QuestionSetEditor
-            questionSet={editingQuestions}
-            setAllowance={setAllowance}
-            availableSets={sets}
-            /*
-              OFF, AND EACH FOR A ROUTE REASON. Download and the three version
-              routes are admins-only in `auth/authorizer.js`; AI generation is
-              admins-only AND Bedrock spend, which is the owner's call to make,
-              not this component's. The flags mean that call is one boolean.
-            */
-            showVersions={false}
-            showDownload={false}
-            showAIAssist={false}
-            /*
-              ON, AND NOT A FLAG AT ALL — two lists the editor already asks for
-              and already knows what to do with. This is the answer to "where
-              does the Workie selection map to a question set, and how does a
-              host change it?": the same two controls the console has, on the
-              same component, now with something in them. Read-only routes a
-              host is already granted; see the state above.
-            */
-            availablePrompts={availablePrompts}
-            availablePersonas={availablePersonas}
-            onDirtyChange={setEditorDirty}
-            onSaved={(message) => { setEditingQuestions(null); load(message); }}
-            onChanged={async () => {
-              const all = await load();
-              const fresh = (all || []).find((item) => item.id === editingQuestions.id);
-              // Re-point rather than close: a questions save is not a reason to
-              // put the host back on the shelf, but the header's counts and the
-              // next version number come off this object.
-              if (fresh) setEditingQuestions(fresh);
-            }}
-            onCancel={() => setEditingQuestions(null)}
-          />
-        </Modal>
-      )}
+        </Button>
+      </DialogFoot>
 
       {deleting && (
         /*

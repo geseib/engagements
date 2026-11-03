@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Icon from '../Icon';
+import Button from '../ui/Button';
 import {
-  setupPanelTabs, categoryRows, questionsRemaining,
+  setupPanelTabs, sessionMenuSection, categoryRows, questionsRemaining, categoriesSummary,
   browserRow, filterBrowserRows, rosterRows, departedRows, questionKey,
-  scoreboardButton,
+  scoreboardButton, eventPlace,
 } from '../../config/setupPanel';
 import {
   anonymityApplies, anonymityActive, waitingNamesCaution,
@@ -12,9 +13,11 @@ import {
 import { roundSubtitle, hasSummary } from '../../config/sessionHistory';
 import { queuePosition } from '../../config/questionQueue';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
-import { canEndSession } from '../../config/hostControls';
-import QueueList from './QueueList';
-import PlayersList from './PlayersList';
+import { canEndSession, isLobbyState, isSurveyType } from '../../config/hostControls';
+import QueueList, { PutAsideList } from './QueueList';
+import OwnQuestionComposer from '../OwnQuestionComposer';
+import { ownQuestionWords as OQW } from '../../config/ownQuestion';
+import YoursMark from '../YoursMark';
 import WorkieSettings from './WorkieSettings';
 import { nextRoundPickersApply } from '../../config/workieOptions';
 import HelpButton from '../HelpButton';
@@ -23,52 +26,116 @@ import LateList from '../LateList';
 import LW from '../../config/lateWords';
 import BrandMark from '../BrandMark';
 import RW from '../../config/roundWords';
-import ScreensGroup from './ScreensGroup';
-import { TWO_SURFACE_TYPES } from '../../config/surfaces';
+import ScreensGroup, { ScreenSizeRow } from './ScreensGroup';
+import { TWO_SURFACE_TYPES, oneScreenWhy } from '../../config/surfaces';
+import PrivateReveal from '../needs/PrivateReveal';
+import HW, { SESSION_MENU_WORDS as SMW } from '../../config/hostWords';
+import { EVENT_WORDS } from '../../config/eventAgenda';
+import MoreOptions, { moreOptionsStored } from './MoreOptions';
+import RowMenu from './RowMenu';
+import SessionPeople from './SessionPeople';
+import './SessionMenu.css';
 
-/** The header `?`'s section for each tab (config/help/screens.js). */
+/** The late list's count for the room's eyes: a number, never a text or a name. */
+export function lateSummary(late) {
+  const items = (late && Array.isArray(late.rounds) ? late.rounds : [])
+    .flatMap((r) => (Array.isArray(r.items) ? r.items : []))
+    .filter((it) => !it.reviewed);
+  if (!items.length) return 'Nothing late to review';
+  return items.length === 1 ? '1 late item to review' : `${items.length} late items to review`;
+}
+
+/** The header `?`'s section for each section (config/help/screens.js). */
 export const TAB_HELP = {
-  players: 'host-session-players',
-  questions: 'host-session-questions',
-  history: 'host-session-rounds',
-  settings: 'host-session-settings',
+  'up-next': 'host-session-up-next',
+  history: 'host-session-history',
+  people: 'host-session-players',
+  screens: 'host-session-screens',
+  joining: 'host-session-joining',
+  run: 'host-session-run',
+  close: 'host-session-close',
+  results: 'host-session-results',
 };
 
+/** The words this menu says that no other surface does. */
+export const MENU_WORDS = Object.freeze({
+  upNext: 'Up next',
+  backToUpNext: '‹ Up next',
+  choose: 'Choose from the set',
+  categories: 'Categories',
+  change: 'Change',
+  categorySwitches: 'Category switches',
+  putAside: (n) => `Put aside this session (${n})`,
+  putAsideNote: 'Never asked unless you restore it.',
+  goal: 'Goal',
+  oneScreenWrite: 'Write a question asks where first: on your phone, or here where the room will see.',
+  reportTitle: 'Session report',
+  reportSoFar: (n) => (n === 1 ? 'Round 1 so far, with Workie\'s read. It grows as you go.' : `Rounds 1–${n} so far, with Workie's reads. It grows as you go.`),
+  reportEnded: (n) => (n === 1 ? 'The one round played, with Workie\'s read.' : `All ${n} rounds, with Workie's reads.`),
+  openReport: 'Open the report',
+  noRoundsYet: 'The report and each round appear here once a round has been played.',
+  loadingRounds: 'Loading rounds…',
+  rounds: 'Rounds',
+  roundsHint: 'Press one to read it again',
+  review: 'Review',
+  hideLate: 'Hide',
+  lateInReport: 'Late items in the report',
+  phoneHeading: 'Your phone as a remote',
+  phoneNote: 'Drive the room from your own phone. You sign in once.',
+  connectPhone: 'Connect your phone',
+  hidePhone: 'Hide the code',
+  scoreboard: 'Scoreboard',
+  scoreboardLook: 'Scoreboard look',
+  screenSize: 'Screen size',
+  howItWorks: 'Show how this works',
+  howItWorksButton: 'Show how this works on the room\'s screen →',
+  keys: 'Keys',
+  joinAt: 'Players join at',
+  code: 'Code',
+  calendarInvite: 'Calendar invite',
+  names: 'Names',
+  pace: 'Pace',
+  whoWaiting: 'Who is still waiting',
+  wallComments: 'Comments on the wall',
+  workie: 'Workie\'s voice and approach',
+  redo: 'Redo Workie\'s read',
+  results: 'Survey results',
+  resultsReady: 'The report is ready once the survey closes.',
+  resultsOpen: 'The survey\'s report: every question, its counts and Workie\'s read.',
+  surveyEndFirst: 'Close the survey first',
+  afterClose: 'After it closes',
+});
+
 /**
- * Everything the host needs and the room does not, behind one dock button.
+ * Everything the host needs and the room does not, behind one top-bar button:
+ * the Session menu (docs/design/session-menu, approved 3 Nov 2026).
  *
- * Built from `docs/design/host-redesign/11-console.html` and
- * `18-question-browser.html` — the mockups own the chrome, the geometry, the
- * type and the copy. What changed is the ORGANISATION: the owner ruled three
- * tabs in place of the mockup's nine-section scroll, so the mockup's content
- * redistributes rather than being redrawn.
- *
- * IT REPLACES BOTH EDGE TABS AND BOTH SIDE PANELS. Owner ruling: *"As much as I
- * like the pull tab, I think they somewhat distract from the game."* Along with
- * them go the how-to-play document (which rendered for only three of five game
- * types — a wavelength or survey host opened it and saw a heading, nothing, and
- * a Sign Out button) and both identity blocks, which printed the signed-in
- * name, email and Administrator badge twice over. THE ROOM MUST NEVER SEE AN
- * EMAIL ADDRESS, and this panel is a surface the room can watch.
+ * SIX SECTIONS AS TABS (fork F1), the same names on every round type:
+ * Up next · Rounds so far · People · Screens · Joining · How it runs. A survey
+ * swaps the first two for Close survey · Results. Each opens on a short
+ * default view and one "More options" line that names what it holds (README
+ * D2): the owner's complaint was one long scroll with "a ton of options at the
+ * bottom". An event's item adds one line above the tabs (item N of M, ‹
+ * Agenda, Bring everyone here), not a tab; End session and Main menu are the
+ * sheet's foot, in every section (fork F2). Sign out and Admin are not in the
+ * live menu (fork F5): Home has both, one press away through Main menu, which
+ * leaves the session running.
  *
  * A SIBLING OF <Stage>, NOT A CHILD, and the geometry is not negotiable:
  * `position: fixed` with `bottom: var(--dock-measured, var(--dock-h, 0px))`,
  * the rule reasoned out at styles.css:400-447. `.stage` is `height:100dvh` and
  * this is an overlay, so mounting it outside the measured subtree is what keeps
- * `useStageFit` from re-entering — a list of unknown length inside the fitter's
- * world drives the scale search to its floor. The dock is a no-overlay zone
- * (audit A6), which is why the offset is `--dock-measured` (the dock outgrows
- * its token: 100px measured against 82.8px at 1280x720 in Table) and not
- * `--dock-h`.
+ * `useStageFit` from re-entering.
  *
- * IT DOES NOT JOIN `anyOverlayOpen`. The dock's SPACE chip renders exactly when
- * nothing is suppressing, so blanket suppression would make the host watch the
- * affordance blink out while looking at a button that still works — and blanket
- * suppression is what produced the unadvanceable state that rule was written to
- * fix. The narrower hazard is real and handled elsewhere: SPACE landing on a
- * focused button in here would advance the round instead of pressing it, so
- * HostActionBar ignores SPACE whose target is inside `.setup-panel`. THAT CLASS
- * NAME IS LOAD-BEARING — renaming it disables the guard silently.
+ * IT DOES NOT JOIN `anyOverlayOpen`. SPACE landing on a focused button in here
+ * would advance the round instead of pressing it, so HostActionBar ignores
+ * SPACE whose target is inside `.setup-panel`. THAT CLASS NAME IS
+ * LOAD-BEARING — renaming it disables the guard silently.
+ *
+ * THE ROOM MUST NEVER SEE AN EMAIL ADDRESS, and on one screen the room sees
+ * this panel: its private parts (the running order's titles, the late list,
+ * Workie's settings, name requests and the people list) draw only after
+ * "Show on this screen" (components/needs/PrivateReveal.jsx).
  *
  * The word "Console" is the internal name for this thing and stays internal.
  */
@@ -78,10 +145,12 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 /* Why an asked question's Queue and Ask next are held — see the browser row. */
 const ALREADY_ASKED = 'Already asked this session. The running order skips asked questions — use Ask again now.';
 
+/* The running order's default view: the round on screen and four more. */
+const ORDER_ROWS = 4;
+
 export default function SessionSetupPanel({
   onClose = () => {},
   wsConnected = false,
-
   // Players
   players = [],
   gameState = '',
@@ -159,6 +228,27 @@ export default function SessionSetupPanel({
   /* The disable/restore pair for the per-session veto list. */
   onDisableQuestion = () => {},
   onRestoreQuestion = () => {},
+  /* THE HOST'S OWN QUESTION (impromptu ask, README D2): the composer is an
+     inline second step of Rounds → Running order, never a modal over this
+     sheet. `ownComposer` is the composer's props from the page (null =
+     closed); `onWriteQuestion` opens it (the page decides whether one screen
+     needs its choice first); `ownQuestions`, `onEditOwn`, `onRemoveOwn` are
+     the queue's Yours rows. */
+  ownQuestions = [],
+  /* ONE NUMBERING WITH THE RAIL (config/roundNumbers.js): the round the
+     session is on, and the round on screen as { title, key }. QueueList. */
+  queueRoundBase = null,
+  queueNowRound = null,
+  ownComposer = null,
+  onWriteQuestion = null,
+  onEditOwn = null,
+  onRemoveOwn = null,
+  /* The status line that confirms an own question, with Undo (D5): { text, rest, undoKey }. */
+  ownNotice = null,
+  onOwnUndo = null,
+  /* While the composer is open its own Escape is the way out (one
+     requestClose), so this panel's Esc and `\\` stand down, as for a dialog. */
+  composing = false,
 
   // Settings
   gameId = '',
@@ -241,6 +331,12 @@ export default function SessionSetupPanel({
   onViewReports = () => {},
   onShowHowToPlay = () => {},
   onSwitchGame = () => {},
+  /* AN EVENT'S ITEM (experience plan §3.2a "Session menu: same + Agenda";
+     2d, first in the menu since 2h): `{ onAgenda, onBringHere, busy }`.
+     Agenda is always there in an event, up one level, never instead of Main
+     menu (which means home); Bring everyone here only while the room is
+     somewhere else (a preview, or the event moved on). Null outside an event. */
+  event = null,
   // Task 4, 2026-09-26 bug sweep: what pressing "End session" does. Whether
   // it is offered at all is `canEndSession(gameType, gameState)` below, from
   // the two props this panel already carries — the same pattern
@@ -248,16 +344,11 @@ export default function SessionSetupPanel({
   // confirm lives on the action the page builds, not here — this panel stays
   // presentational.
   onEndSession = () => {},
-  onSignOut = () => {},
-  // Whether to offer the Admin link at all. Derived by the page from the
-  // signed-in user's Cognito groups, not read here, so the panel stays a
-  // presentational component with no auth dependency — GameHostPage is the
-  // only thing that can reach `useAuth`.
-  isAdmin = false,
+  /* Sign out and Admin are not in the live menu (docs/design/session-menu
+     fork F5): Home has both. `onSignOut` and `isAdmin` are no longer read. */
   /* The rounds played so far, already normalised by config/sessionHistory.js.
      Props rather than a fetch: this panel is presentational by rule, and the
-     page owns the request — the same reason `isAdmin` arrives as a prop rather
-     than from a `useAuth` call in here. */
+     page owns the request. */
   rounds = [],
   historyLoading = false,
   onOpenRound = () => {},
@@ -265,14 +356,21 @@ export default function SessionSetupPanel({
      or null. The Questions tab says "Question 3 of 5" — the host's, not
      the room's, which is why it is here and not on the rail. */
   goal = null,
-  /* WHERE IT OPENS (QA drive 2026-09-29, finding #4). Players, as it always
-     has — unless the page was asked for the running order ("Set the running
-     order" from the event's agenda or the preview lobby; ?panel=questions,
-     config/runningOrder.js). Then it opens on Questions and brings the
-     running order into view, past the category switches, without moving
-     anything for anyone who opened it the usual way. */
-  initialTab = 'players',
+  /* WHERE IT OPENS (fork F7): Up next during play, Rounds so far once ended,
+     unless a place was asked for. A section id or an old name
+     (config/setupPanel.js LEGACY_SECTIONS: players, questions, history,
+     settings, running-order, agenda, rounds, remote, phone, end). The running
+     order asked for by name ("Set the running order"; ?panel=questions,
+     config/runningOrder.js) opens Up next with the whole order in view. */
+  initialTab = '',
   focusRunningOrder = false,
+  /* THE FRAME DRAWS PEOPLE (the console mid-session): the People column is
+     the at-a-glance view, and its "All N, and who left" opens this menu's
+     People section, which is there in every version. */
+  peopleColumn = false,
+  /* A SURVEY'S CLOSE AND END, from the page's own controls (hostControls):
+     `{ close, warn, end, closed, onAct }`, each control or null. */
+  surveyActs = null,
   /* WORKIE'S HOST OPTIONS (QA drive #21): the voice, the approach, the
      briefing note and Redo, moved here off the room-facing What We Heard
      beat. The page's state and handlers, passed through to WorkieSettings;
@@ -283,6 +381,18 @@ export default function SessionSetupPanel({
      reads and the writes; null draws nothing. In the Rounds tab, so one
      screen (the dock's count) and two (the rail's "Review them") reach it. */
   late = null,
+  /* THE ROOM CAN SEE THIS PANEL (experience plan §2 principle 3, step 1e;
+     audit B §2.3). On one screen the laptop IS the room's screen and this
+     panel opens over it, so its private parts — a name request with its
+     name, the late answers and their authors, Workie's voice, briefing and
+     read-check warning, the upcoming question titles — draw only after "Show
+     on this screen" for that one part (components/needs/PrivateReveal.jsx).
+     What stays: counts, the roster and scores (owner, 25 Sep), the settings. */
+  oneScreen = false,
+  /* Not now and Lock again for every round type (experience plan 1a): wired
+     where the page passes them, as the Build Room always has. */
+  onRefuseHandover = null,
+  onLockHandover = null,
 }) {
   const screenChoiceOffered = typeof onRoomScreenChange === 'function'
     && TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer');
@@ -292,9 +402,10 @@ export default function SessionSetupPanel({
   const shownNameWaiting = heldOr('nameWaiting', nameWaitingWhenAnonymous);
   const shownWallComments = heldOr('wallComments', wallComments);
   const shownBoardStyle = heldOr('scoreboardStyle', scoreboard.style);
-  /** A section's scope, and "waiting for round N" when a change is held. */
+  /** A group's scope: only the exception is printed (review R4), "From the
+      next round", plus "waiting for round N" while a change is held. */
   const scope = (keys) => {
-    if (!keys) return <span className="setup-scope">{` · ${RW.view.appliesNow}`}</span>;
+    if (!keys) return null;
     const waiting = settingsRoundLive && keys.some((k) => Object.prototype.hasOwnProperty.call(held, k));
     return (
       <span className="setup-scope">
@@ -303,9 +414,20 @@ export default function SessionSetupPanel({
       </span>
     );
   };
-  const [tab, setTab] = useState(
-    () => (setupPanelTabs().some((t) => t.id === initialTab) ? initialTab : 'players'),
-  );
+  const survey = isSurveyType(gameType);
+  const hasAgenda = Boolean(event && typeof event.onAgenda === 'function');
+  const tabs = setupPanelTabs({ survey });
+  const ended = gameState === 'ENDED';
+  const [tab, setTab] = useState(() => sessionMenuSection(initialTab, tabs, { ended: ended || Boolean(survey && surveyActs && surveyActs.closed) }));
+  /* Up next › Choose from the set: an inline step with "‹ Up next" (D4). */
+  const [choosing, setChoosing] = useState(false);
+  /* Up next's More options, controlled: "Change" opens it on the switches. */
+  const [upMore, setUpMore] = useState(() => moreOptionsStored('up-next'));
+  const [focusCats, setFocusCats] = useState(false);
+  /* The phone's QR, inline in Screens; open at once when the phone was asked for. */
+  const [phoneOpen, setPhoneOpen] = useState(() => ['remote', 'phone'].includes(initialTab));
+  /* Rounds so far's late line: Review opens the list in place. */
+  const [lateOpen, setLateOpen] = useState(false);
   const [search, setSearch] = useState('');
   /* "Include items not reviewed" said it failed, rather than flipping back in silence. */
   const [includeFailed, setIncludeFailed] = useState(false);
@@ -314,10 +436,11 @@ export default function SessionSetupPanel({
     const r = await onIncludeNotReviewedChange(include);
     if (r && r.ok === false) setIncludeFailed(true);
   };
+  /* The Choose step's one Category select: '' all, '__on' the categories
+     that are on (the old "Enabled only"), or one category's name. */
   const [filterCategory, setFilterCategory] = useState('');
-  const [unaskedOnly, setUnaskedOnly] = useState(false);
-  /* "a button that has enabled categories only" — see filterBrowserRows. */
-  const [enabledOnly, setEnabledOnly] = useState(false);
+  /* "Hide asked", on by default in the Choose step (README §3 row). */
+  const [hideAsked, setHideAsked] = useState(true);
 
   const panelRef = useRef(null);
   // Where focus came from, so it can go back. A keyboard host who opens this
@@ -334,60 +457,67 @@ export default function SessionSetupPanel({
     };
   }, []);
 
-  // Esc and `\` both close, because `\` is what opened it.
+  // Esc and `\` both close, because `\` is what opened it. Inside the Choose
+  // step Escape goes back to Up next first, as the composer's does.
   useEffect(() => {
-    const onKeyDown = (event) => {
-      // A dialog this panel opened is on top. This listener is on `document`
-      // and hand-rolled, so `Modal`'s topmost-by-containment check cannot see
-      // it — without this bail, one Escape closes the dialog AND the panel
-      // under it, and `\` shuts the panel out from under an open dialog.
+    const onKeyDown = (e) => {
+      // A dialog this panel opened is on top: its Escape is its own.
       if (suppressKeys) return;
-      if (event.key === 'Escape' || event.key === '\\') {
-        event.preventDefault();
+      if (composing) return;
+      if (e.key === 'Escape' && choosing) {
+        e.preventDefault();
+        setChoosing(false);
+        return;
+      }
+      if (e.key === 'Escape' || e.key === '\\') {
+        if (e.key === '\\' && e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        e.preventDefault();
         onClose();
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, suppressKeys]);
+  }, [onClose, suppressKeys, composing, choosing]);
 
   /**
    * Focus stays inside while it is open. Without this, Tab walks out of the
    * panel and onto the dock's primary action, where the next Space or Enter
    * advances a live round the host was still setting up.
    */
-  const trapFocus = (event) => {
-    if (event.key !== 'Tab') return;
+  const trapFocus = (e) => {
+    if (e.key !== 'Tab') return;
     const panel = panelRef.current;
     if (!panel) return;
     const focusables = Array.from(panel.querySelectorAll(FOCUSABLE));
     if (focusables.length === 0) return;
     const firstEl = focusables[0];
     const lastEl = focusables[focusables.length - 1];
-
-    if (event.shiftKey && document.activeElement === firstEl) {
-      event.preventDefault();
+    if (e.shiftKey && document.activeElement === firstEl) {
+      e.preventDefault();
       lastEl.focus();
-    } else if (!event.shiftKey && document.activeElement === lastEl) {
-      event.preventDefault();
+    } else if (!e.shiftKey && document.activeElement === lastEl) {
+      e.preventDefault();
       firstEl.focus();
     }
   };
 
-  /*
-    THE RUNNING ORDER, IN VIEW. Scrolled to its top inside the panel's own
-    scrolling body; again if the category switches above it arrive late and
-    push it down. Only on the landing that asked for it — a host who opened
-    SESSION and chose Questions starts at the top as before.
-  */
-  const orderCats = categories.length;
+  /* THE RUNNING ORDER, IN VIEW, on the landing that asked for it
+     ("Set the running order"; ?panel=questions). */
   useEffect(() => {
-    if (!focusRunningOrder || tab !== 'questions') return;
+    if (!focusRunningOrder || tab !== 'up-next') return;
     const order = panelRef.current && panelRef.current.querySelector('.setup-q');
     if (order && typeof order.scrollIntoView === 'function') {
       order.scrollIntoView({ block: 'start', behavior: 'auto' });
     }
-  }, [focusRunningOrder, tab, orderCats]);
+  }, [focusRunningOrder, tab]);
+
+  /* "Change" opened More options: put focus on the first category switch. */
+  useEffect(() => {
+    if (!focusCats || !upMore) return;
+    const first = panelRef.current && panelRef.current.querySelector('[data-testid="category-toggle"]');
+    if (first && typeof first.focus === 'function') first.focus();
+    setFocusCats(false);
+  }, [focusCats, upMore]);
 
   const roster = rosterRows({ players, gameState, playersWhoAnswered, playersWhoVoted });
   const sbButton = scoreboardButton({ board: scoreboard, availability: scoreboardAvailability });
@@ -399,18 +529,11 @@ export default function SessionSetupPanel({
   );
   const remaining = questionsRemaining(catRows);
 
-  // The projection is what reaches the DOM; the original is what goes back to
-  // the caller. Keeping them paired here is what lets `Ask now` hand
-  // `selectQuestion` a question the next-question endpoint will accept while
-  // the row on screen carries no answer.
   /*
-    WHICH CATEGORIES ARE ON, derived from the rows the chips above already use
-    so the tag and the chip can never disagree.
-
-    `null` when there is nothing live to read — before a game starts there are
-    no masks — because `browserRow` treats an absent set as "cannot tell" rather
-    than "everything is off". Passing an empty Set instead would mark every
-    question in the set disabled on the setup screen.
+    WHICH CATEGORIES ARE ON, derived from the rows the switches use so the tag
+    and the switch can never disagree. `null` when there is nothing live to
+    read (before a game starts there are no masks): `browserRow` treats an
+    absent set as "cannot tell" rather than "everything is off".
   */
   const activeCategoryNames = useMemo(() => {
     if (!catRows.length) return null;
@@ -418,9 +541,9 @@ export default function SessionSetupPanel({
   }, [catRows]);
 
   // The projection is what reaches the DOM; the original is what goes back to
-  // the caller. Keeping them paired here is what lets `Ask now` hand
-  // `selectQuestion` a question the next-question endpoint will accept while
-  // the row on screen carries no answer.
+  // the caller. Keeping them paired is what lets `Ask now` hand
+  // `selectQuestion` a question the endpoint accepts while the row on screen
+  // carries no answer.
   const rows = useMemo(
     () => questions.map((question) => ({
       row: browserRow(question, {
@@ -430,234 +553,447 @@ export default function SessionSetupPanel({
     })),
     [questions, usedQuestionIds, activeCategoryNames],
   );
-  /*
-    THE ROWS WITH A QUEUE REQUEST IN FLIGHT, canonicalised through the SAME
-    `questionKey` the queue itself uses. Both spellings of a question id are on
-    the wire — `QUESTION#c005#001` from `get-question.js` and the bare form from
-    the browsing endpoint — so a raw Set membership test would leave the button
-    live on exactly the surface that spells it the other way, which is the fault
-    that killed the "Unasked only" filter for its whole life (setupPanel.js:154).
-  */
+  /* The rows with a queue request in flight, canonicalised through the same
+     `questionKey` the queue uses (both spellings are on the wire). */
   const queueBusy = useMemo(
     () => new Set(queueBusyKeys.map((key) => questionKey(String(key)))),
     [queueBusyKeys],
   );
 
-  /*
-    "Ask now" FROM THE RUNNING ORDER hands `onSelectQuestion` a question, as
-    the browser rows do, so the page has one ask-now path rather than two. The
-    row only carries a key; the loaded question is found by the same canonical
-    key, and when the set has not loaded it the key itself is enough — the
-    next-question endpoint reads nothing but the id.
-  */
+  /* "Ask now" from the running order hands `onSelectQuestion` a question, as
+     the browser rows do, so the page has one ask-now path. */
   const askNowByKey = (key, { title = '' } = {}) => {
     const found = questions.find((q) => questionKey(String(q?.id ?? '')) === key);
     onSelectQuestion(found || { id: key, title });
   };
 
   const visible = useMemo(() => {
+    const onlyOn = filterCategory === '__on';
     const filtered = filterBrowserRows(rows.map((r) => r.row), {
-      search, category: filterCategory, unaskedOnly, enabledOnly,
+      search,
+      category: onlyOn ? '' : filterCategory,
+      unaskedOnly: hideAsked,
+      enabledOnly: onlyOn,
     });
     const keep = new Set(filtered.map((r) => r.id));
     return rows.filter(({ row }) => keep.has(row.id));
-  }, [rows, search, filterCategory, unaskedOnly, enabledOnly]);
+  }, [rows, search, filterCategory, hideAsked]);
 
-  return (
-    <>
-      <div className="setup-panel-scrim" onClick={onClose} aria-hidden="true" />
-      {/* Wide only on Questions. `18-question-browser.html` renders the panel
-          as `console console--wide` for exactly this screen: a question's text
-          wraps rather than truncating, so at the default 44vw a long prompt
-          became a five-line row and comparing two of them meant scrolling.
-          The other two tabs are short rows that would sit in an empty column,
-          and every pixel of panel is a pixel of projected stage the room
-          loses. */}
-      {/* data-theme="dark": the panel is painted dusk (#111D33, styles.css),
-          so its tokens must be dusk too. Under a light page (data-theme=light)
-          the Screens group and the remote's sign-in words drew --text as dark
-          ink on navy (walk of dev 92f8b24d, 16 Oct 2026). */}
-      <aside
-        className={`setup-panel${tab === 'questions' ? ' setup-panel--wide' : ''}`}
-        data-theme="dark"
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Session setup"
-        onKeyDown={trapFocus}
-      >
-        <div className="setup-panel__header">
-          {/* The mark, NOT a link: a tap here must never leave a live round. */}
-          <BrandMark size={20} />
-          <h2 className="setup-panel__title">Session setup</h2>
-          {/* THE FIRST THING A HOST LOOKS AT WHEN THE ROOM STOPS UPDATING, so
-              it is in the header rather than behind a tab. It is also the only
-              WebSocket status anywhere on the host page. The `useWebSocket ===
-              false` polling branch that used to sit beside it is gone:
-              `useWebSocket` has been hardcoded true since the polling loop was
-              removed, so the branch was an unreachable second answer. */}
-          <span
-            className={`setup-panel__ws ${wsConnected ? 'connected' : 'connecting'}`}
-            aria-live="polite"
+  const lateCount = (late && Array.isArray(late.rounds) ? late.rounds : [])
+    .flatMap((r) => (Array.isArray(r.items) ? r.items : []))
+    .filter((it) => !it.reviewed).length;
+
+  const goWrite = () => { setChoosing(false); if (onWriteQuestion) onWriteQuestion(); };
+
+  /* ------------------------------------------------------------ the parts */
+
+  /* WHO IS STILL WAITING (How it runs · More): the switch and its caution. */
+  const waitingGroup = anonymityApplies(gameType) && anonymityActive({ gameType, anonymousUntilReveal }) ? (
+    <section className="setup-group" aria-labelledby="setup-g-waiting">
+      <h4 className="setup-h setup-h--sub" id="setup-g-waiting">{MENU_WORDS.whoWaiting}{scope(['nameWaiting'])}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="name-waiting"
+          checked={shownNameWaiting !== false}
+          onChange={(e) => onNameWaitingChange(e.target.checked)}
+        />
+        <span>Name who is still waiting</span>
+      </label>
+      <p className="setup-note">
+        The room meter can list who has not responded yet — only while you
+        hover or click it, and never who has.
+      </p>
+      {(() => {
+        const caution = waitingNamesCaution({
+          answerCount, gameType, anonymousUntilReveal, authorsRevealed,
+        });
+        if (!caution) return null;
+        return (
+          <p
+            className={`setup-note${caution.strong ? ' setup-note--warn' : ''}`}
+            data-testid="waiting-caution"
+            data-strong={String(caution.strong)}
           >
-            <Icon
-              name={wsConnected ? 'Broadcast' : 'WifiSlash'}
-              weight="bold"
-              size={15}
-              color={wsConnected ? 'var(--success)' : 'var(--muted)'}
-            />
-            {wsConnected ? ' Connected' : ' Connecting…'}
-          </span>
-          {/*
-            THE HOST GUIDES, IN THE HEADER.
+            {'Naming who is still waiting also names who has answered — the room '
+              + 'can subtract one list from the other. '}
+            {caution.text}
+          </p>
+        );
+      })()}
+    </section>
+  ) : null;
 
-            The first version of this put it in the Settings tab, under a
-            "Session" heading — the FOURTH tab, the FIFTH block down. That is
-            not an entry point, it is a hiding place, and the owner's report
-            was "i dont see the help anywhere". A control nobody can find is
-            the same as the placeholder screens this whole change removed.
+  /* COMMENTS ON THE WALL (How it runs · More). */
+  const wallGroup = (
+    <section className="setup-group" aria-labelledby="setup-g-wall">
+      <h4 className="setup-h setup-h--sub" id="setup-g-wall">{MENU_WORDS.wallComments}{scope(['wallComments'])}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="wall-comments"
+          checked={shownWallComments !== false}
+          onChange={(e) => onWallCommentsChange(e.target.checked)}
+        />
+        <span>Show comments on the wall as they arrive</span>
+      </label>
+      <p className="setup-note">
+        In a feedback round the room meter shows the latest comments — what
+        they say and what they are about, never who wrote them. Press one to
+        put it up for everyone with its author. Off, the wall shows only the count.
+      </p>
+    </section>
+  );
 
-            Beside Close because the header is the one part of this panel that
-            is on screen whichever tab is open, and because help and close are
-            the two things you reach for when you are lost. It is NOT on the
-            dock: the dock faces the room, and the room does not need this.
+  /* WORKIE (How it runs · More): the voice, the approach, the briefing note,
+     and the copy of Redo kept while a read is up (fork F4: Redo also sits
+     beside the read itself on a private laptop). Behind Show on this screen
+     on one screen, as before. */
+  const workieGroup = workie ? (
+    <PrivateReveal oneScreen={oneScreen} testId="private-workie" summary="Workie's voice, approach and briefing">
+      <WorkieSettings
+        {...workie}
+        showNextRound={nextRoundPickersApply({
+          gameType,
+          gameState,
+          remaining: catRows.length ? remaining : null,
+        })}
+      />
+    </PrivateReveal>
+  ) : null;
+  const workieShows = Boolean(workie) && (
+    nextRoundPickersApply({ gameType, gameState, remaining: catRows.length ? remaining : null })
+    || workie.briefed || typeof workie.onRedo === 'function'
+  );
 
-            `onShowHowToPlay` stays where it is in Settings and is a different
-            thing — that one puts an explanation on the PROJECTOR for everyone
-            to read. This one is documentation on the host's own screen.
+  /* INCLUDE ITEMS NOT REVIEWED (Rounds so far / Results · More): it changes
+     only the report. */
+  const reportGroup = (
+    <section className="setup-group" aria-labelledby="setup-g-report">
+      <h4 className="setup-h setup-h--sub" id="setup-g-report">{LW.report.settingHeading}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="include-not-reviewed"
+          checked={includeNotReviewed !== false}
+          onChange={(e) => changeInclude(e.target.checked)}
+        />
+        <span>{LW.report.settingLabel}</span>
+      </label>
+      {includeFailed && <p className="setup-note" role="alert">{LW.report.settingFailed}</p>}
+      <p className="setup-note">{LW.report.settingNote}</p>
+    </section>
+  );
 
-            ITS GUIDES OPEN AT THE TAB THAT IS SHOWING (Help Phase 3): one `?`
-            in the header, never a second inside a tab, and it answers "what
-            do I do here" for whichever tab the host is looking at.
-          */}
-          <HelpButton
-            {...helpFor(TAB_HELP[tab] || 'host-session-panel')}
-            variant="inline"
-            size="small"
-            tooltip="Help and feedback"
-            className="setup-panel__help"
-            reports={{ context: 'host', gameId }}
-          />
-          <button
-            type="button"
-            className="setup-panel__close"
-            onClick={onClose}
-            aria-label="Close setup"
-          >
-            ✕
-          </button>
+  /* PACE (How it runs · default). */
+  const paceGroup = (
+    <section className="setup-group" aria-labelledby="setup-g-pace">
+      <h4 className="setup-h setup-h--sub" id="setup-g-pace">{MENU_WORDS.pace}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="auto-mode"
+          checked={autoMode === true}
+          onChange={(e) => onAutoModeChange(e.target.checked)}
+        />
+        <span>Auto-advance when everyone has responded</span>
+      </label>
+      <p className="setup-note">
+        Once every player has answered — and voted, on formats that vote — the
+        session moves on by itself after a short beat, paging responses and the
+        AI summary at reading pace. Opening anything pauses it, and your own
+        controls always work.
+      </p>
+    </section>
+  );
+
+  /* NAMES (How it runs · default, where it applies): the one control that
+     changes what the room learns about a colleague. */
+  const namesGroup = anonymityApplies(gameType) ? (
+    <section className="setup-group" aria-labelledby="setup-g-names">
+      <h4 className="setup-h setup-h--sub" id="setup-g-names">{MENU_WORDS.names}{scope(['anonymousUntilReveal', 'nameWaiting'])}</h4>
+      <label className="setup-toggle">
+        <input
+          type="checkbox"
+          data-testid="attribute-authors"
+          checked={shownAnonymous === false}
+          onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
+        />
+        <span>Show who wrote each response from the start</span>
+      </label>
+      {/* WHAT OFF DOES, and the trade-off stated before the press: closing the
+          vote reveals the round (get-results.js enterResultsState). */}
+      <p className="setup-note">
+        Off (the default), responses are numbered while the room answers and
+        votes; when voting closes, each shows its author and points.{' '}
+        <b>Turning it on shows names to everyone and cannot be taken back.</b>{' '}
+        Turning it off again takes them off the room&apos;s screen; it does not un-send them.
+      </p>
+    </section>
+  ) : null;
+
+  /* THE PHONE AS A REMOTE (Screens, D7). The word "join" must not appear
+     here: this QR is behind the host sign-in. */
+  const phoneGroup = remoteUrl ? (
+    <section className="setup-group setup-remote" aria-labelledby="setup-g-remote" data-testid="screens-phone">
+      <div className="smenu-line">
+        <div className="smenu-line__k">
+          <h4 className="setup-h setup-h--sub" id="setup-g-remote">{MENU_WORDS.phoneHeading}</h4>
+          <p className="setup-note">{MENU_WORDS.phoneNote}</p>
         </div>
-
-        <div className="setup-panel__tabs" role="tablist" aria-label="Session setup sections">
-          {setupPanelTabs().map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              id={`setup-tab-${t.id}`}
-              aria-selected={tab === t.id}
-              aria-controls={`setup-panel-${t.id}`}
-              className={`setup-panel__tab ${tab === t.id ? 'is-active' : ''}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="setup-panel__body">
-          {tab === 'players' && (
-            <section
-              className="setup-players"
-              role="tabpanel"
-              id="setup-panel-players"
-              aria-labelledby="setup-tab-players"
-            >
-              {/* EVERY PLAYER, IN SCORE ORDER — the owner's ruling, against a
-                  design review that wanted this on the phone. His reason:
-                  "the anonymity is just for preventing people voting for an
-                  answer based on who said it. thats it." config/anonymity.js
-                  already argues the same position, and get-results.js sets
-                  AuthorsRevealed unconditionally on entering RESULTS, so there
-                  is no state in which a cumulative total attributes an
-                  unrevealed answer. */}
-              {/* THE SCOREBOARD — the full standings on the room's screen,
-                  above the list it would put there. Owner, 2026-09-25: open
-                  it "from the remote, a keyboard shortcut, or a button on the
-                  Players tab". */}
-              {sbButton.show && (
-                <div className="setup-row setup-scoreboard">
-                  <button
-                    type="button"
-                    data-testid="scoreboard-toggle"
-                    aria-pressed={Boolean(scoreboard.open)}
-                    disabled={sbButton.disabled}
-                    onClick={() => {
-                      const opening = !scoreboard.open;
-                      onToggleScoreboard(opening);
-                      // The menu stands over the stage with a scrim; put it
-                      // away so the room sees the board it just asked for.
-                      if (opening) onClose();
-                    }}
-                  >
-                    {sbButton.label}
-                  </button>
-                  {sbButton.reason && <p className="setup-note">{sbButton.reason}</p>}
-                </div>
-              )}
-              {/* The list itself is the shared PlayersList (the Build Room's
-                  Session panel renders the same one). Everything below is this
-                  panel's own right-hand column: points, and the per-round tick.
-                  `searchAfter={Infinity}`: this tab has never had a search box,
-                  and moving the rows must not change what the host sees. */}
-              <PlayersList
-                rows={roster}
-                departed={departed}
-                searchAfter={Infinity}
-                onGrant={onGrantHandover}
-                onRemove={onRemovePlayer}
-                onRestore={onRestorePlayer}
-                renderExtra={(player, gone) => (gone ? (
-                  <span className="setup-roster__score">{`${player.score} pts`}</span>
-                ) : (
-                  <>
-                    <span className="setup-roster__score" data-testid="roster-score">{`${player.score} pts`}</span>
-                    {player.done !== null && (
-                      <Icon
-                        name={player.done ? 'CheckCircle' : 'Timer'}
-                        weight={player.done ? 'fill' : 'bold'}
-                        size={16}
-                        color={player.done ? 'var(--success)' : 'var(--muted)'}
-                      />
-                    )}
-                  </>
-                ))}
-              />
-            </section>
+        <Button variant="secondary" size={36} aria-expanded={phoneOpen} onClick={() => setPhoneOpen((v) => !v)} data-testid="connect-phone">
+          <Icon name="DeviceMobile" weight="bold" size={15} color="currentColor" />
+          {` ${phoneOpen ? MENU_WORDS.hidePhone : MENU_WORDS.connectPhone}`}
+        </Button>
+      </div>
+      {phoneOpen ? (
+        <div className="smenu-phone" data-testid="phone-qr">
+          <QRCodeSVG value={remoteUrl} size={160} />
+          <p className="setup-note">Scan with your own phone to drive the room from it.</p>
+          <p className="setup-url">{remoteUrl}</p>
+          {remoteWho ? (
+            <div className="setup-remote__who">
+              <p>{remoteWho.lead}<b>{remoteWho.who}</b>{remoteWho.tail}</p>
+              {remoteWho.laptop ? <p>{remoteWho.laptop}</p> : null}
+            </div>
+          ) : (
+            <p className="setup-note">You will be asked to sign in.</p>
           )}
+        </div>
+      ) : null}
+    </section>
+  ) : null;
 
-          {tab === 'questions' && (
-            <section
-              className="setup-questions"
-              role="tabpanel"
-              id="setup-panel-questions"
-              aria-labelledby="setup-tab-questions"
+  /* ------------------------------------------------------------ sections */
+
+  const upNextSection = () => {
+    if (ownComposer) {
+      return (
+        <section className="setup-questions setup-own" aria-label="Write a question">
+          <OwnQuestionComposer {...ownComposer} />
+        </section>
+      );
+    }
+    if (choosing) {
+      return (
+        <section className="setup-choose" aria-label={MENU_WORDS.choose} data-testid="choose-step">
+          <Button variant="tertiary" size={36} className="smenu-back" onClick={() => setChoosing(false)} data-testid="choose-back">
+            {MENU_WORDS.backToUpNext}
+          </Button>
+          <PrivateReveal
+            oneScreen={oneScreen}
+            testId="private-browser"
+            summary={`${rows.length} questions in the set`}
+          >
+            <div className="setup-qb__tools">
+              <label className="setup-qb__searchlbl">
+                <span className="setup-visually-hidden">Search titles</span>
+                <input
+                  className="setup-qb__search"
+                  type="search"
+                  placeholder="Search titles…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <label className="smenu-select">
+                <span className="setup-visually-hidden">Category</span>
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} data-testid="choose-category">
+                  <option value="">All categories</option>
+                  {activeCategoryNames ? <option value="__on">Categories that are on</option> : null}
+                  {catRows.map((row) => <option key={row.name} value={row.name}>{row.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <label className="setup-toggle smenu-hide-asked">
+              <input type="checkbox" checked={hideAsked} onChange={(e) => setHideAsked(e.target.checked)} data-testid="hide-asked" />
+              <span data-testid="browser-count">{`Hide asked · showing ${visible.length} of ${rows.length}`}</span>
+            </label>
+            {/* Enforced, not promised: browserRow is an allow-list and
+                setupPanel.test.js fails if a row carries the answer. */}
+            <p className="setup-qb__privacy">
+              <b>Correct answers are not on this screen.</b> The room may be watching it.
+            </p>
+            {loadingQuestions ? (
+              <div className="setup-loading"><span className="spinner" /> Loading questions…</div>
+            ) : rows.length === 0 ? (
+              <p className="setup-empty">No questions are available for this set.</p>
+            ) : (
+              <div className="setup-qb__list">
+                {visible.map(({ row, question }) => {
+                  const pos = queuePosition(questionQueue, row.id);
+                  const key = questionKey(String(row.id));
+                  return (
+                    <div
+                      key={row.id}
+                      className={`setup-qb__row ${row.used ? 'is-used' : ''} ${row.disabled ? 'is-disabled' : ''}`}
+                      data-testid="browser-row"
+                    >
+                      <div className="setup-qb__main">
+                        <div className="setup-qb__title">
+                          {row.title}
+                          {/* Tags in the admin question sets' shape, beside the title. */}
+                          {row.used && (
+                            <span className="setup-qb__tag setup-qb__tag--asked" title="Already asked this session">Asked</span>
+                          )}
+                          {row.disabled && (
+                            <span className="setup-qb__tag setup-qb__tag--off" title="This category is switched off, so the game will not serve it">Off</span>
+                          )}
+                          {pos > 0 && (
+                            <span className="setup-qb__tag setup-qb__tag--queued" title="This question is in the running order" data-testid="browser-queued-tag">
+                              {`Queued #${pos}`}
+                            </span>
+                          )}
+                        </div>
+                        {row.detail && <div className="setup-qb__detail">{row.detail}</div>}
+                        <div className="setup-qb__meta">
+                          {row.category && <span className="setup-qb__cat">{row.category}</span>}
+                          {row.difficulty && <span className="setup-qb__diff">{row.difficulty}</span>}
+                          <span className="setup-qb__kind">{row.responseKind}</span>
+                        </div>
+                      </div>
+                      {/* QUEUE AND ASK NEXT ON THE ROW, the point of this step;
+                          Ask now, the one that interrupts, behind ⋯ (fork F3).
+                          An asked question cannot be queued, only asked again
+                          now: the drain drops a queued asked entry. */}
+                      <div className="setup-qb__acts">
+                        <button
+                          type="button"
+                          className="setup-qb__queue"
+                          disabled={queueBusy.has(key) || (row.used && pos === 0)}
+                          title={row.used ? ALREADY_ASKED : 'Add it to the end of the running order.'}
+                          onClick={() => (pos > 0 ? onQueueRemove(row.id) : onQueueQuestion(question))}
+                        >
+                          {pos > 0 ? 'Unqueue' : 'Queue'}
+                        </button>
+                        <button
+                          type="button"
+                          className="setup-qb__next setup-ask setup-ask--next"
+                          disabled={queueBusy.has(key) || row.used || pos === 1}
+                          title={row.used
+                            ? ALREADY_ASKED
+                            : 'Put it at the top of the running order. The round on screen carries on; this is asked when you end it.'}
+                          onClick={() => onQueueFirst(key)}
+                        >
+                          Ask next
+                        </button>
+                        <RowMenu
+                          label={`More for ${row.title}`}
+                          testId="browser-row-menu"
+                          items={[
+                            {
+                              id: 'ask-now',
+                              label: row.used ? 'Ask again now' : 'Ask now',
+                              note: 'Ends the round on screen and asks this.',
+                              onSelect: () => onSelectQuestion(question),
+                            },
+                            !row.used && {
+                              id: 'put-aside',
+                              label: 'Put aside for this session',
+                              disabled: queueBusy.has(key),
+                              onSelect: () => onDisableQuestion(key, { queued: pos > 0 }),
+                            },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </PrivateReveal>
+        </section>
+      );
+    }
+    const asideRows = onRestoreQuestion ? upNextExcluded : [];
+    const moreGroups = [
+      catRows.length ? { label: MENU_WORDS.categorySwitches } : null,
+      asideRows.length ? { label: MENU_WORDS.putAside(asideRows.length) } : null,
+      goal && goal.progress ? { label: MENU_WORDS.goal } : null,
+    ];
+    return (
+      <section className="setup-questions" aria-label="What comes next">
+        {/* The status line that confirms an own question, with Undo (D5). */}
+        {ownNotice ? (
+          <p className="setup-own-notice" role="status" data-testid="own-notice">
+            <Icon name="Check" weight="bold" size={14} color="currentColor" />
+            <span><b>{ownNotice.text}</b>{ownNotice.rest ? ` ${ownNotice.rest}` : ''}</span>
+            {onOwnUndo ? (
+              <Button variant="tertiary" className="setup-own-undo" onClick={onOwnUndo} data-testid="own-undo">{OQW.undo}</Button>
+            ) : null}
+          </p>
+        ) : null}
+        <PrivateReveal
+          oneScreen={oneScreen}
+          testId="private-questions"
+          shown={focusRunningOrder}
+          summary={`${questionQueue.length} in the running order · ${remaining} questions left`}
+        >
+          <QueueList
+            rowMenu
+            limit={focusRunningOrder ? null : ORDER_ROWS}
+            showExcluded={false}
+            queue={questionQueue}
+            questions={questions}
+            busyKeys={queueBusyKeys}
+            upNext={upNext}
+            blocked={upNextBlocked}
+            advisories={upNextAdvisories}
+            excludedRows={upNextExcluded}
+            onMove={onQueueMove}
+            onRemove={onQueueRemove}
+            onAutoMove={onAutoMove}
+            onDisable={onDisableQuestion}
+            onRestore={onRestoreQuestion}
+            onAskNext={onQueueFirst}
+            onAskNow={askNowByKey}
+            ownQuestions={ownQuestions}
+            onWrite={null}
+            onEditOwn={onEditOwn}
+            onRemoveOwn={onRemoveOwn}
+            base={queueRoundBase}
+            nowRound={queueNowRound}
+          />
+        </PrivateReveal>
+        {/* THE TWO WAYS TO ADD A ROUND (D4). Write a question is not behind
+            the reveal: on one screen the page answers it with the host-only
+            choice first (impromptu ask D8). */}
+        <div className="setup-row smenu-adds">
+          {onWriteQuestion ? (
+            <Button variant="secondary" size={36} onClick={goWrite} data-testid="queue-write">
+              <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+              {OQW.write}
+            </Button>
+          ) : null}
+          <Button variant="secondary" size={36} onClick={() => setChoosing(true)} data-testid="up-next-choose">
+            <Icon name="MagnifyingGlass" weight="bold" size={14} color="currentColor" />
+            {MENU_WORDS.choose}
+          </Button>
+        </div>
+        {oneScreen && onWriteQuestion ? <p className="setup-note">{MENU_WORDS.oneScreenWrite}</p> : null}
+        {catRows.length && !upMore ? (
+          <div className="smenu-cats" data-testid="categories-summary">
+            <span><b>{MENU_WORDS.categories}</b>{` · ${categoriesSummary(catRows)}`}</span>
+            <Button
+              variant="tertiary"
+              size={36}
+              className="smenu-cats__change"
+              onClick={() => { setUpMore(true); setFocusCats(true); }}
+              data-testid="categories-change"
             >
-              <h3 className="setup-h">Categories</h3>
-              <p className="setup-note" data-testid="questions-remaining">
-                {`${remaining} questions remaining`}
-              </p>
-              {goal && goal.progress && (
-                <p className="setup-note" data-testid="goal-progress">
-                  {goal.reached ? `${goal.progress} · goal reached` : goal.progress}
-                </p>
-              )}
-              {/* The bitmask arithmetic behind these numbers is
-                  config/setupPanel.js's, ported from the shipped panel where it
-                  existed twice, byte for byte. The mockup drew `7 left · on` as
-                  static text; the shipped number moves, and `exhausted` at zero
-                  is the thing that stops a host enabling a category which
-                  cannot yield a question. */}
+              {MENU_WORDS.change}
+            </Button>
+          </div>
+        ) : null}
+        <MoreOptions section="up-next" groups={moreGroups} open={upMore} onOpenChange={setUpMore}>
+          {catRows.length ? (
+            <section className="setup-group" aria-labelledby="setup-g-cats">
+              <h4 className="setup-h setup-h--sub" id="setup-g-cats">
+                {MENU_WORDS.categories}
+                <span className="setup-scope" data-testid="questions-remaining">{` · ${remaining} questions left`}</span>
+              </h4>
+              {/* The bitmask arithmetic is config/setupPanel.js's; `exhausted`
+                  at zero stops a host enabling a category that cannot yield. */}
               <div className="setup-cats">
                 {catRows.map((row) => (
                   <button
@@ -672,675 +1008,473 @@ export default function SessionSetupPanel({
                   >
                     <span className="setup-cat__name">{row.name}</span>
                     <span className="setup-cat__count">{`${row.remaining} left`}</span>
-                    {/* The state in words, not only in colour. Amber-vs-hollow
-                        reads instantly for most people and not at all for a
-                        colour-blind host — and this row gets scanned under
-                        pressure with a room waiting. `11-console.html` prints
-                        it the same way: "Pricing Power · 7 left · on". */}
+                    {/* The state in words, not only in colour. */}
                     <span className="setup-cat__state">{row.enabled ? 'on' : 'off'}</span>
                   </button>
                 ))}
               </div>
-
-              {/*
-                THE RUNNING ORDER, ABOVE THE BROWSER THAT FILLS IT.
-
-                This order is the reading order: what is coming up, then where
-                to add to it. Putting the queue below a list of sixty questions
-                would mean the host scrolls past everything they might add to
-                reach the thing that says what they already chose.
-
-                It renders when EMPTY too — see QueueList. A queue that appears
-                only once it is in use is a feature that has to be explained
-                somewhere else, and the empty line is where the difference
-                between Ask next and Ask now is stated.
-              */}
-              <QueueList
-                queue={questionQueue}
-                questions={questions}
-                busyKeys={queueBusyKeys}
-                upNext={upNext}
-                blocked={upNextBlocked}
-                advisories={upNextAdvisories}
-                excludedRows={upNextExcluded}
-                onMove={onQueueMove}
-                onRemove={onQueueRemove}
-                onAutoMove={onAutoMove}
-                onDisable={onDisableQuestion}
-                onRestore={onRestoreQuestion}
-                onAskNext={onQueueFirst}
-                onAskNow={askNowByKey}
-              />
-
-              {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the
-                  only way in was the per-category magnifier, which scoped the
-                  fetch to one category — so a host could never see the whole
-                  set at once. The chips below filter what is already here. */}
-              <h3 className="setup-h">Choose the next question</h3>
-              <div className="setup-qb__tools">
-                <label className="setup-qb__searchlbl">
-                  <span className="setup-visually-hidden">Search titles</span>
-                  <input
-                    className="setup-qb__search"
-                    type="search"
-                    placeholder="Search titles…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className={`setup-chip ${filterCategory === '' ? 'on' : ''}`}
-                  onClick={() => setFilterCategory('')}
-                >
-                  All
-                </button>
-                {catRows.map((row) => (
-                  <button
-                    key={row.name}
-                    type="button"
-                    className={`setup-chip ${filterCategory === row.name ? 'on' : ''}`}
-                    onClick={() => setFilterCategory(filterCategory === row.name ? '' : row.name)}
-                  >
-                    {row.name}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`setup-chip ${unaskedOnly ? 'on' : ''}`}
-                  aria-pressed={unaskedOnly}
-                  onClick={() => setUnaskedOnly((v) => !v)}
-                >
-                  Unasked only
-                </button>
-                {/* The complement of the category chips, not one more of them:
-                    those pick ONE category, this drops every switched-off one
-                    at once. Offered only when there is a live mask to read —
-                    before a game starts nothing is switched off, so the button
-                    would filter nothing and imply otherwise. */}
-                {activeCategoryNames && (
-                  <button
-                    type="button"
-                    className={`setup-chip ${enabledOnly ? 'on' : ''}`}
-                    aria-pressed={enabledOnly}
-                    onClick={() => setEnabledOnly((v) => !v)}
-                  >
-                    Enabled only
-                  </button>
-                )}
-              </div>
-
-              {/* The mockup's line, kept verbatim, because it is enforced
-                  rather than promised: browserRow is an allow-list and
-                  setupPanel.test.js fails if any value in a row equals the
-                  question's correct answer. */}
-              <p className="setup-qb__privacy">
-                <b>Correct answers are not on this screen.</b>{' '}
-                The stage is a shared surface in every display profile, so an answer shown
-                here is an answer shown to the room. Open the browser on your phone to see them.
+            </section>
+          ) : null}
+          {asideRows.length ? (
+            <section className="setup-group" aria-labelledby="setup-g-aside">
+              <h4 className="setup-h setup-h--sub" id="setup-g-aside">
+                {MENU_WORDS.putAside(asideRows.length).replace(/ \(\d+\)$/, '')}
+                <span className="setup-scope">{` · ${MENU_WORDS.putAsideNote}`}</span>
+              </h4>
+              <PrivateReveal oneScreen={oneScreen} testId="private-aside" summary={MENU_WORDS.putAside(asideRows.length)}>
+                <PutAsideList rows={asideRows} onRestore={onRestoreQuestion} />
+              </PrivateReveal>
+            </section>
+          ) : null}
+          {goal && goal.progress ? (
+            <section className="setup-group" aria-labelledby="setup-g-goal">
+              <h4 className="setup-h setup-h--sub" id="setup-g-goal">{MENU_WORDS.goal}</h4>
+              <p className="setup-note" data-testid="goal-progress">
+                {goal.reached ? `${goal.progress} · goal reached` : goal.progress}
               </p>
-
-              {loadingQuestions ? (
-                <div className="setup-loading"><span className="spinner" /> Loading questions…</div>
-              ) : rows.length === 0 ? (
-                <p className="setup-empty">No questions are available for this set.</p>
-              ) : (
-                <>
-                  <p className="setup-qb__count" data-testid="browser-count">
-                    {`Showing ${visible.length} of ${rows.length}`}
-                  </p>
-                  <div className="setup-qb__list">
-                    {visible.map(({ row, question }) => (
-                      <div
-                        key={row.id}
-                        className={`setup-qb__row ${row.used ? 'is-used' : ''} ${row.disabled ? 'is-disabled' : ''}`}
-                        data-testid="browser-row"
-                      >
-                        <div className="setup-qb__main">
-                          <div className="setup-qb__title">
-                            {row.title}
-                            {/*
-                              TAGS, in the shape the owner pointed at: *"small
-                              tags like are used in the admin question sets for
-                              active and ai those are nice tags."* Same
-                              `qsets-chip` classes as that list, so the two
-                              screens read as one product rather than as two
-                              takes on a badge.
-
-                              Beside the TITLE, not down in the meta line. The
-                              meta line is where `· already asked` used to
-                              live, in the same grey as the category and the
-                              difficulty — which is why the owner asked for
-                              this despite it technically existing. A status
-                              worth filtering on is worth seeing at a glance.
-
-                              NOT LITERALLY `.qsets-chip`, and that is not
-                              laziness. Those rules read `--qsets-t-floor` and
-                              `--qsets-rule-strong`, which are declared on
-                              `.qsets` (QuestionSetsPanel.css:52) and exist
-                              nowhere else — so the class applied here would
-                              render with no border colour and no font size.
-                              `.setup-qb__tag` copies the treatment using this
-                              panel's own variables.
-                            */}
-                            {row.used && (
-                              <span className="setup-qb__tag setup-qb__tag--asked" title="Already asked this session">
-                                Asked
-                              </span>
-                            )}
-                            {row.disabled && (
-                              <span className="setup-qb__tag setup-qb__tag--off" title="This category is switched off, so the game will not serve it">
-                                Off
-                              </span>
-                            )}
-                            {/*
-                              QUEUED, AND WHERE. The position lives in the tag
-                              rather than on the button because the button has
-                              to say what pressing it DOES — a control reading
-                              "Queued #2" that removes on press is the shape
-                              that gets pressed by mistake in front of a room.
-                              Same pill treatment as Asked and Off, which is
-                              the idiom the owner picked out by name.
-                            */}
-                            {queuePosition(questionQueue, row.id) > 0 && (
-                              <span
-                                className="setup-qb__tag setup-qb__tag--queued"
-                                title="This question is in the running order"
-                                data-testid="browser-queued-tag"
-                              >
-                                {`Queued #${queuePosition(questionQueue, row.id)}`}
-                              </span>
-                            )}
-                          </div>
-                          {row.detail && <div className="setup-qb__detail">{row.detail}</div>}
-                          <div className="setup-qb__meta">
-                            {row.category && <span className="setup-qb__cat">{row.category}</span>}
-                            {row.difficulty && <span className="setup-qb__diff">{row.difficulty}</span>}
-                            <span className="setup-qb__kind">{row.responseKind}</span>
-                          </div>
-                        </div>
-                        {/*
-                          THREE ACTIONS, AND THE DIFFERENCE BETWEEN THEM IS THE
-                          FEATURE. `Queue` adds to the END of the running
-                          order; `Ask next` puts the question at the TOP of it;
-                          neither touches the round in flight. `Ask now`
-                          interrupts — it puts the question on the room's
-                          screen straight away. That last one used to be
-                          labelled "Ask next", and the owner: *"'ask next' in
-                          most people's mind means put it at the top of the
-                          queue, not run it now."*
-
-                          ORDERED BY HOW MUCH THEY DISTURB: the reversible ones
-                          first, the one that ends a round last and in the
-                          interrupting tone.
-
-                          AN ASKED QUESTION CANNOT BE QUEUED, only asked again
-                          now. The drain in next-question.js drops any queued
-                          entry that has already been asked, so a Queue or Ask
-                          next on one would vanish at the end of the round with
-                          nothing on screen to say why — held, with the reason.
-                        */}
-                        <div className="setup-qb__acts">
-                          <button
-                            type="button"
-                            className="setup-qb__queue"
-                            disabled={queueBusy.has(questionKey(String(row.id)))
-                              || (row.used && queuePosition(questionQueue, row.id) === 0)}
-                            title={row.used ? ALREADY_ASKED : 'Add it to the end of the running order.'}
-                            onClick={() => (
-                              queuePosition(questionQueue, row.id) > 0
-                                ? onQueueRemove(row.id)
-                                : onQueueQuestion(question)
-                            )}
-                          >
-                            {queuePosition(questionQueue, row.id) > 0 ? 'Unqueue' : 'Queue'}
-                          </button>
-                          <button
-                            type="button"
-                            className="setup-qb__next setup-ask setup-ask--next"
-                            disabled={queueBusy.has(questionKey(String(row.id)))
-                              || row.used
-                              || queuePosition(questionQueue, row.id) === 1}
-                            title={row.used
-                              ? ALREADY_ASKED
-                              : 'Put it at the top of the running order. The round on screen carries on; this is asked when you end it.'}
-                            onClick={() => onQueueFirst(questionKey(String(row.id)))}
-                          >
-                            Ask next
-                          </button>
-                          <button
-                            type="button"
-                            className="setup-qb__use setup-ask setup-ask--now"
-                            title="Put it on the room's screen straight away. The round on screen ends."
-                            onClick={() => onSelectQuestion(question)}
-                          >
-                            {row.used ? 'Ask again now' : 'Ask now'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
             </section>
-          )}
+          ) : null}
+        </MoreOptions>
+      </section>
+    );
+  };
 
-          {tab === 'history' && (
-            <section
-              className="setup-history"
-              role="tabpanel"
-              id="setup-panel-history"
-              aria-labelledby="setup-tab-history"
+  /* THE SESSION REPORT, FIRST (D3; the owner's "move the report button to
+     the rounds page, at the top"). Before round 1 it says so and draws no
+     dead button (review R5). */
+  const reportCard = (count, { survey: forSurvey = false } = {}) => (
+    <div className="smenu-report" data-testid="session-report">
+      <Icon name="FileText" weight="duotone" size={22} color="var(--primary)" />
+      <div className="smenu-report__t">
+        <b>{MENU_WORDS.reportTitle}</b>
+        <span className="setup-note">
+          {forSurvey
+            ? (surveyActs && surveyActs.closed) || ended ? MENU_WORDS.resultsOpen : MENU_WORDS.resultsReady
+            : ended ? MENU_WORDS.reportEnded(count) : MENU_WORDS.reportSoFar(count)}
+        </span>
+      </div>
+      {(!forSurvey || (surveyActs && surveyActs.closed) || ended) ? (
+        <Button variant="secondary" size={36} onClick={onViewReports} data-testid="open-report">{MENU_WORDS.openReport}</Button>
+      ) : null}
+    </div>
+  );
+
+  const lateLine = late ? (
+    <div className="late-section smenu-late" data-testid="late-line">
+      <div className="late-heading-row">
+        <h4 className="late-heading smenu-late__h">{LW.heading}</h4>
+        <span className="smenu-late__t">{` · ${lateSummary(late)}`}</span>
+        <HelpButton {...helpFor('host-late-items')} variant="inline" size="small" tooltip={`Help: ${LW.heading}`} className="setup-panel__help" />
+        {lateCount > 0 || lateOpen ? (
+          <Button variant="tertiary" size={36} className="smenu-late__review" aria-expanded={lateOpen} onClick={() => setLateOpen((v) => !v)} data-testid="late-review">
+            {lateOpen ? MENU_WORDS.hideLate : MENU_WORDS.review}
+          </Button>
+        ) : null}
+      </div>
+      {lateOpen ? (
+        <PrivateReveal oneScreen={oneScreen} testId="private-late" summary={lateSummary(late)}>
+          <LateList {...late} />
+        </PrivateReveal>
+      ) : null}
+    </div>
+  ) : null;
+
+  const historySection = () => (
+    <section className="setup-history" aria-label="Rounds so far">
+      {rounds.length === 0 ? (
+        <p className="setup-empty" data-testid="history-empty">
+          {historyLoading ? MENU_WORDS.loadingRounds : MENU_WORDS.noRoundsYet}
+        </p>
+      ) : reportCard(rounds.length)}
+      {lateLine}
+      {rounds.length ? (
+        <>
+          <h4 className="setup-h setup-h--sub" id="setup-g-history">
+            {MENU_WORDS.rounds}<span className="setup-scope">{` · ${MENU_WORDS.roundsHint}`}</span>
+          </h4>
+          <ul className="setup-history__list" aria-labelledby="setup-g-history">
+            {rounds.map((round, i) => (
+              <li key={round.number}>
+                <button type="button" className="setup-history__row" onClick={() => onOpenRound(i)}>
+                  <span className="setup-history__num">{round.ordinal}</span>
+                  <span className="setup-history__text">
+                    <span className="setup-history__title">{round.title}</span>
+                    <span className="setup-history__sub">{roundSubtitle(round)}</span>
+                  </span>
+                  {/* Yours (D5), not on one screen, where the room is never told (F6). */}
+                  {round.own && !oneScreen ? <YoursMark /> : null}
+                  {hasSummary(round) && (
+                    <span className="setup-history__badge" title="Has an AI summary">AI</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <MoreOptions section="history" groups={[{ label: MENU_WORDS.lateInReport }]}>
+        {reportGroup}
+      </MoreOptions>
+    </section>
+  );
+
+  const resultsSection = () => (
+    <section className="setup-history" aria-label={MENU_WORDS.results}>
+      {reportCard(0, { survey: true })}
+      {lateLine}
+      <MoreOptions section="results" groups={[{ label: MENU_WORDS.lateInReport }]}>
+        {reportGroup}
+      </MoreOptions>
+    </section>
+  );
+
+  const closeSection = () => (
+    <section className="setup-group" aria-labelledby="setup-g-close">
+      <h3 className="setup-h" id="setup-g-close">{SMW.closeSurvey}</h3>
+      {surveyActs && surveyActs.close ? (
+        <>
+          <p className="setup-note">{SMW.closeNote}</p>
+          <div className="setup-row">
+            {surveyActs.warn ? (
+              <Button variant="secondary" size={36} onClick={() => surveyActs.onAct(surveyActs.warn)}>{surveyActs.warn.label}</Button>
+            ) : null}
+            <Button variant="secondary" size={36} data-testid="session-menu-close-survey" onClick={() => surveyActs.onAct(surveyActs.close)}>{surveyActs.close.label}</Button>
+          </div>
+        </>
+      ) : (
+        <p className="setup-note">{surveyActs && surveyActs.closed ? SMW.surveyClosed : SMW.surveyNotOpen}</p>
+      )}
+    </section>
+  );
+
+  const screensMoreGroups = [
+    { label: MENU_WORDS.screenSize },
+    scoreboardAvailability.show ? { label: MENU_WORDS.scoreboardLook } : null,
+    { label: MENU_WORDS.howItWorks },
+    { label: MENU_WORDS.keys },
+  ];
+  const screensSection = () => (
+    <>
+      {/* One screen: Connect your phone near the top (PLAN §3.3). */}
+      {oneScreen ? phoneGroup : null}
+      <section className="setup-group setup-group--screens" aria-labelledby="setup-g-screens">
+        <h3 className="setup-h" id="setup-g-screens">Screens</h3>
+        <ScreensGroup
+          choice={roomScreen === 'two' ? 'two' : 'classic'}
+          offerChoice={screenChoiceOffered}
+          why={oneScreenWhy(gameType)}
+          onChoose={(choice) => onRoomScreenChange && onRoomScreenChange(choice)}
+          presentHref={presentHref}
+          presentDetail={presentDetail}
+          profile={profile}
+          onProfileChange={onProfileChange}
+          showSize={false}
+        />
+      </section>
+      {!oneScreen ? phoneGroup : null}
+      {sbButton.show ? (
+        <section className="setup-group setup-group--scoreboard" aria-labelledby="setup-g-scoreboard">
+          <div className="smenu-line">
+            <div className="smenu-line__k">
+              <h4 className="setup-h setup-h--sub" id="setup-g-scoreboard">{MENU_WORDS.scoreboard}</h4>
+              <p className="setup-note">
+                {sbButton.reason || 'The full standings on the room\'s screen. Key S.'}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size={36}
+              data-testid="scoreboard-toggle"
+              aria-pressed={Boolean(scoreboard.open)}
+              disabled={sbButton.disabled}
+              onClick={() => {
+                const opening = !scoreboard.open;
+                onToggleScoreboard(opening);
+                // The menu stands over the stage; put it away so the room
+                // sees the board it just asked for.
+                if (opening) onClose();
+              }}
             >
-              {/*
-                THE SESSION REPORT, AT THE TOP OF THE ROUNDS IT REPORTS ON.
+              {sbButton.label}
+            </Button>
+          </div>
+        </section>
+      ) : null}
+      <MoreOptions section="screens" groups={screensMoreGroups}>
+        <section className="setup-group" aria-label={MENU_WORDS.screenSize}>
+          <div className="scr"><ScreenSizeRow profile={profile} onProfileChange={onProfileChange} /></div>
+        </section>
+        {scoreboardAvailability.show ? (
+          <section className="setup-group" aria-labelledby="setup-g-sblook">
+            <h4 className="setup-h setup-h--sub" id="setup-g-sblook">{MENU_WORDS.scoreboardLook}{scope(['scoreboardStyle'])}</h4>
+            <label className="setup-field">
+              <span>Scoreboard style</span>
+              <select value={shownBoardStyle || 'departure'} onChange={(e) => onScoreboardStyle(e.target.value)}>
+                {SCOREBOARD_STYLES.map((style) => (
+                  <option key={style} value={style}>{STYLE_LABELS[style]}</option>
+                ))}
+              </select>
+            </label>
+            <p className="setup-note">How the standings look on the room&apos;s screen. Press V to change it while the board is up.</p>
+          </section>
+        ) : null}
+        <section className="setup-group" aria-label={MENU_WORDS.howItWorks}>
+          {/* Puts an explanation on the ROOM'S screen; the host guides are
+              the header's `?`. */}
+          <div className="setup-row">
+            <Button variant="secondary" size={36} onClick={onShowHowToPlay}>{MENU_WORDS.howItWorksButton}</Button>
+          </div>
+        </section>
+        <section className="setup-group" aria-labelledby="setup-g-keys">
+          <h4 className="setup-h setup-h--sub" id="setup-g-keys">{MENU_WORDS.keys}</h4>
+          <ul className="setup-keys">
+            <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
+            <li><kbd>←</kbd> step back a beat</li>
+            {hasScoreboard(gameType) && (
+              <>
+                <li><kbd>S</kbd> show or hide the scoreboard</li>
+                <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
+              </>
+            )}
+            <li><kbd>\</kbd> open and close this menu</li>
+            <li><kbd>Esc</kbd> close</li>
+          </ul>
+        </section>
+      </MoreOptions>
+    </>
+  );
 
-                The owner: *"i would like to [move] the report button to the
-                rounds page, at the top. as it fits well with that section."*
+  const joiningSection = () => (
+    <>
+      <section className="setup-group setup-group--joining smenu-join" aria-labelledby="setup-g-joining">
+        <div className="smenu-join__qr">{playUrl ? <QRCodeSVG value={playUrl} size={112} /> : null}</div>
+        <div className="smenu-join__t">
+          <h3 className="setup-h" id="setup-g-joining">{MENU_WORDS.joinAt}</h3>
+          <p className="setup-url">{playUrl}</p>
+          {gameId && <p className="setup-note smenu-join__code">{`Session code ${gameId}`}</p>}
+        </div>
+      </section>
+      <div className="setup-row">
+        <Button variant="secondary" size={36} onClick={onCopyJoinLink}>
+          {joinLinkCopied ? 'Copied!' : 'Copy join link'}
+        </Button>
+        <Button variant="secondary" size={36} onClick={onShowJoinCode}>{HW.showJoinCode}</Button>
+      </div>
+      <MoreOptions section="joining" groups={[{ label: MENU_WORDS.calendarInvite }]}>
+        <section className="setup-group" aria-label={MENU_WORDS.calendarInvite}>
+          {/* A calendar-invite blob, not a url — distinct from the link above. */}
+          <div className="setup-row">
+            <Button variant="secondary" size={36} onClick={onInvite}>{'Invite…'}</Button>
+          </div>
+        </section>
+      </MoreOptions>
+    </>
+  );
 
-                It used to sit under "Display" in the Settings tab, between the
-                display-profile select and the join links — filed with the
-                plumbing, three items away from the only list on this screen it
-                describes. The report IS the rounds, read end to end, so it
-                belongs above them.
+  const runMoreGroups = [
+    waitingGroup ? { label: MENU_WORDS.whoWaiting } : null,
+    { label: MENU_WORDS.wallComments },
+    workieShows ? { label: workie && typeof workie.onRedo === 'function' ? `${MENU_WORDS.workie} · ${MENU_WORDS.redo}` : MENU_WORDS.workie } : null,
+  ];
+  const runSection = () => (
+    <>
+      {/* Changes during a round wait for the next one (D8, the lede). */}
+      {settingsRoundLive ? <p className="setup-note setup-scope-note">{RW.view.settingsScope}</p> : null}
+      {survey ? <h3 className="setup-h">{MENU_WORDS.afterClose}</h3> : null}
+      {namesGroup}
+      {survey ? null : paceGroup}
+      <MoreOptions section="run" groups={runMoreGroups}>
+        {waitingGroup}
+        {wallGroup}
+        {workieGroup}
+      </MoreOptions>
+    </>
+  );
 
-                ABOVE THE LIST RATHER THAN BESIDE THE TAB, because the list is
-                what it summarises and a host scanning rounds is exactly the
-                host who wants the whole thing. It stays a single row so it
-                cannot be mistaken for one of the rounds beneath it.
-              */}
-              <div className="setup-row setup-history__actions">
-                <button type="button" onClick={onViewReports}>Session report</button>
-              </div>
+  const sections = {
+    'up-next': upNextSection,
+    history: historySection,
+    people: () => (
+      <SessionPeople
+        rows={roster}
+        departed={departed}
+        players={players}
+        gameState={gameState}
+        oneScreen={oneScreen}
+        peopleColumn={peopleColumn}
+        onGrant={onGrantHandover}
+        onRefuse={onRefuseHandover}
+        onLock={onLockHandover}
+        onRemove={onRemovePlayer}
+        onRestore={onRestorePlayer}
+      />
+    ),
+    screens: screensSection,
+    joining: joiningSection,
+    run: runSection,
+    close: closeSection,
+    results: resultsSection,
+  };
+  const draw = sections[tab] || sections[tabs[0].id];
 
-              {late ? (
-                <div className="late-section">
-                  {/* The late list has a guide of its own, so its heading
-                      carries a `?` that opens it (Help Phase 3); the header's
-                      `?` opens the Rounds tab's. */}
-                  <div className="late-heading-row">
-                    <h3 className="late-heading">{LW.heading}</h3>
-                    <HelpButton {...helpFor('host-late-items')} variant="inline" size="small" tooltip={`Help: ${LW.heading}`} className="setup-panel__help" />
-                  </div>
-                  <LateList {...late} />
-                </div>
+  /* THE FOOT (fork F2): End session and Main menu, in every section. */
+  const endButton = (() => {
+    if (survey) {
+      const end = surveyActs && surveyActs.end;
+      return (
+        <Button
+          variant="secondary"
+          size={36}
+          className="smenu-end"
+          data-testid="session-menu-end"
+          disabled={!end}
+          title={end ? SMW.endSurveyNote : (ended ? SMW.ended : SMW.endSurveyFirst)}
+          onClick={end ? () => surveyActs.onAct(end) : undefined}
+        >
+          {end ? `${end.label}…` : (ended ? HW.endSession : `${HW.endSession}…`)}
+        </Button>
+      );
+    }
+    if (!canEndSession(gameType, gameState)) return null;
+    return (
+      <Button
+        variant="secondary"
+        size={36}
+        className="smenu-end"
+        data-testid="session-menu-end"
+        onClick={onEndSession}
+        title={isLobbyState(gameState) ? SMW.endLobbyNote : SMW.endNote}
+      >
+        {`${HW.endSession}…`}
+      </Button>
+    );
+  })();
+
+  const place = hasAgenda ? eventPlace(event || {}) : '';
+
+  return (
+    <>
+      <div className="setup-panel-scrim" onClick={onClose} aria-hidden="true" />
+      {/* Wide only in the Choose step: a question's text wraps rather than
+          truncating (18-question-browser.html's `console--wide`). The other
+          sections are short rows, and every pixel of panel is a pixel of
+          projected stage the room loses. data-theme="dark": the panel is
+          painted dusk, so its tokens must be dusk too. */}
+      <aside
+        className={`setup-panel smenu${choosing && tab === 'up-next' ? ' setup-panel--wide' : ''}`}
+        data-theme="dark"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={HW.sessionMenu}
+        onKeyDown={trapFocus}
+      >
+        <div className="setup-panel__header">
+          {/* The mark, NOT a link: a tap here must never leave a live round. */}
+          <BrandMark size={20} />
+          <h2 className="setup-panel__title">{HW.sessionMenu}</h2>
+          {/* The only WebSocket status on the host page, in the header so it
+              is there whichever section is open. */}
+          <span
+            className={`setup-panel__ws ${wsConnected ? 'connected' : 'connecting'}`}
+            aria-live="polite"
+          >
+            <Icon
+              name={wsConnected ? 'Broadcast' : 'WifiSlash'}
+              weight="bold"
+              size={15}
+              color={wsConnected ? 'var(--success)' : 'var(--muted)'}
+            />
+            {wsConnected ? ' Connected' : ' Connecting…'}
+          </span>
+          {/* THE HOST GUIDES, beside Close: one `?`, opening the guide for the
+              section on show (Help Phase 3). */}
+          <HelpButton
+            {...helpFor(TAB_HELP[tab] || 'host-session-panel')}
+            variant="inline"
+            size="small"
+            tooltip="Help and feedback"
+            className="setup-panel__help"
+            reports={{ context: 'host', gameId }}
+          />
+          <button
+            type="button"
+            className="setup-panel__close"
+            onClick={onClose}
+            aria-label={HW.closeSessionMenu}
+          >
+            <Icon name="X" weight="bold" size={18} color="currentColor" />
+          </button>
+        </div>
+
+        {/* AN EVENT'S ITEM (D5): one line, in every section, instead of an
+            Agenda tab. ‹ Agenda goes up one level (never instead of Main
+            menu); Bring everyone here only while the room is elsewhere. */}
+        {hasAgenda ? (
+          <div className="setup-panel__event" role="group" aria-label={EVENT_WORDS.menuK} data-testid="session-menu-event">
+            <span className="setup-panel__event-t">
+              <b className="setup-panel__event-k">{EVENT_WORDS.menuK}</b>
+              {place ? <span className="setup-panel__event-place">{` · ${place}`}</span> : null}
+            </span>
+            <span className="setup-panel__event-acts">
+              {typeof event.onBringHere === 'function' ? (
+                <Button variant="tertiary" size={36} onClick={event.onBringHere} disabled={Boolean(event.busy)} title={EVENT_WORDS.bringHereHint} data-testid="session-menu-bring">
+                  {EVENT_WORDS.bringHere}
+                </Button>
               ) : null}
+              <Button
+                variant="tertiary"
+                size={36}
+                onClick={event.onAgenda}
+                disabled={Boolean(event.busy)}
+                title={EVENT_WORDS.agendaHint}
+                aria-label={EVENT_WORDS.agenda}
+                data-testid="session-menu-agenda"
+              >
+                {EVENT_WORDS.agendaCrumb}
+              </Button>
+            </span>
+          </div>
+        ) : null}
 
-              {/*
-                THE ROUNDS PLAYED SO FAR. The list is one half of what the owner
-                asked for; the arrows inside <PastRound> are the other.
-
-                `rounds` and `onOpenRound` are props rather than a fetch, because
-                this panel is presentational by rule — the same rule that keeps
-                `isAdmin` a prop rather than a `useAuth` call in here. The page
-                owns the request.
-              */}
-              {rounds.length === 0 ? (
-                <p className="setup-empty">
-                  {historyLoading
-                    ? 'Loading rounds…'
-                    : 'No rounds yet. They appear here once a round has been played.'}
-                </p>
-              ) : (
-                <ul className="setup-history__list">
-                  {rounds.map((round, i) => (
-                    <li key={round.number}>
-                      <button
-                        type="button"
-                        className="setup-history__row"
-                        onClick={() => onOpenRound(i)}
-                      >
-                        <span className="setup-history__num">{round.ordinal}</span>
-                        <span className="setup-history__text">
-                          <span className="setup-history__title">{round.title}</span>
-                          <span className="setup-history__sub">{roundSubtitle(round)}</span>
-                        </span>
-                        {/* The badge answers the question the host actually has
-                            when scanning this list — which of these has a
-                            summary I can read out — rather than decorating. */}
-                        {hasSummary(round) && (
-                          <span className="setup-history__badge" title="Has an AI summary">AI</span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )}
-
-          {tab === 'settings' && (
-            <section
-              className="setup-settings"
-              role="tabpanel"
-              id="setup-panel-settings"
-              aria-labelledby="setup-tab-settings"
+        <div className="setup-panel__tabs" role="tablist" aria-label={`${HW.sessionMenu} sections`}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`setup-tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`setup-panel-${t.id}`}
+              className={`setup-panel__tab ${tab === t.id ? 'is-active' : ''}`}
+              onClick={() => { setTab(t.id); setChoosing(false); }}
             >
-              {settingsRoundLive ? <p className="setup-note setup-scope-note">{RW.view.settingsScope}</p> : null}
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-              {/* FOUR GROUPS, MOST USED FIRST (owner, 16 Oct;
-                  docs/design/settings-consolidation, tab 1): Screens, the
-                  phone as a remote, the rounds, joining. Session and Keys fold
-                  away. Every section keeps its own scope label. */}
-              <section className="setup-group setup-group--screens" aria-labelledby="setup-g-screens">
-                <h3 className="setup-h" id="setup-g-screens">Screens{scope(null)}</h3>
-                <ScreensGroup
-                  choice={roomScreen === 'two' ? 'two' : 'classic'}
-                  offerChoice={screenChoiceOffered}
-                  onChoose={(choice) => onRoomScreenChange && onRoomScreenChange(choice)}
-                  presentHref={presentHref}
-                  presentDetail={presentDetail}
-                  profile={profile}
-                  onProfileChange={onProfileChange}
-                />
-              </section>
+        <div className="setup-panel__body">
+          <div
+            className={`setup-settings smenu-pane smenu-pane--${tab}`}
+            role="tabpanel"
+            id={`setup-panel-${tab}`}
+            aria-labelledby={`setup-tab-${tab}`}
+          >
+            {draw()}
+          </div>
+        </div>
 
-              {/* THE HOST'S OWN PHONE. The word "join" must not appear in this
-                  section: this QR is behind the host sign-in, and shipped once
-                  under a "Join In" heading — so a host who told a latecomer to
-                  "scan the QR in the panel" sent that player to a login for an
-                  account they will never have. The room-facing join QR is the
-                  rail's, and has exactly one home.
-
-                  WHO MAY SIGN IN (owner, 16 Oct): the words come from
-                  config/remoteSignIn.js, which follows the server's
-                  callerMayDriveSession. */}
-              <section className="setup-group setup-remote" aria-labelledby="setup-g-remote">
-                <h3 className="setup-h" id="setup-g-remote">Your phone as a remote</h3>
-                <QRCodeSVG value={remoteUrl} size={180} />
-                <p className="setup-note">
-                  Scan with your own phone to drive the room from it.
-                </p>
-                <p className="setup-url">{remoteUrl}</p>
-                {remoteWho ? (
-                  <div className="setup-remote__who">
-                    <p>{remoteWho.lead}<b>{remoteWho.who}</b>{remoteWho.tail}</p>
-                    {remoteWho.laptop ? <p>{remoteWho.laptop}</p> : null}
-                  </div>
-                ) : (
-                  <p className="setup-note">You will be asked to sign in.</p>
-                )}
-              </section>
-
-              <section className="setup-group setup-group--rounds" aria-labelledby="setup-g-rounds">
-                <h3 className="setup-h" id="setup-g-rounds">The rounds</h3>
-                {/* NAMES FIRST, ahead of Display and the join links, because it
-                    is the only thing in this tab that changes what the room can
-                    learn about a colleague. The rest of the tab is plumbing. */}
-                {anonymityApplies(gameType) && (
-                  <>
-                    <h4 className="setup-h setup-h--sub">Names{scope(['anonymousUntilReveal', 'nameWaiting'])}</h4>
-
-                    <label className="setup-toggle">
-                      <input
-                        type="checkbox"
-                        data-testid="attribute-authors"
-                        checked={shownAnonymous === false}
-                        onChange={(e) => onAnonymousUntilRevealChange(!e.target.checked)}
-                      />
-                      <span>Show who wrote each response from the start</span>
-                    </label>
-                    {/* WHAT OFF ACTUALLY DOES. This said "names nobody, all
-                        session", which was never true: closing the vote reveals
-                        the round (get-results.js enterResultsState) and the
-                        results show each author with the points they earned
-                        (anonymity.js authorsHiddenNow). The owner, 2026-09-23:
-                        "keep anonymous until after people vote … they get points
-                        for upvoting." */}
-                    <p className="setup-note">
-                      Off (the default), responses are labelled “Response 1”, “Response 2”
-                      while the room answers and votes. When voting closes, each one shows
-                      who wrote it and the points it earned. On, every response carries its
-                      author from the start.
-                    </p>
-                    {/* THE TRADE-OFF, STATED, NOT ENFORCED. The two directions are
-                        genuinely not symmetric — one crosses the wire and one does
-                        not — and a host standing in front of a room deserves to
-                        know which is which BEFORE they press it, rather than
-                        afterwards. */}
-                    <p className="setup-note">
-                      <b>Turning this on shows the names to everyone and cannot be taken back.</b>{' '}
-                      Turning it off again takes them off the stage; it does not un-send them.
-                    </p>
-
-                    {anonymityActive({ gameType, anonymousUntilReveal }) && (
-                      <>
-                        <label className="setup-toggle">
-                          <input
-                            type="checkbox"
-                            data-testid="name-waiting"
-                            checked={shownNameWaiting !== false}
-                            onChange={(e) => onNameWaitingChange(e.target.checked)}
-                          />
-                          <span>Name who is still waiting</span>
-                        </label>
-                        <p className="setup-note">
-                          The room meter can list who has not responded yet — only while you
-                          hover or click it, and never who has.
-                        </p>
-                        {(() => {
-                          const caution = waitingNamesCaution({
-                            answerCount, gameType, anonymousUntilReveal, authorsRevealed,
-                          });
-                          if (!caution) return null;
-                          return (
-                            <p
-                              className={`setup-note${caution.strong ? ' setup-note--warn' : ''}`}
-                              data-testid="waiting-caution"
-                              data-strong={String(caution.strong)}
-                            >
-                              {'Naming who is still waiting also names who has answered — the room '
-                                + 'can subtract one list from the other. '}
-                              {caution.text}
-                            </p>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </>
-                )}
-
-                <h4 className="setup-h setup-h--sub">Feedback{scope(['wallComments'])}</h4>
-                <label className="setup-toggle">
-                  <input
-                    type="checkbox"
-                    data-testid="wall-comments"
-                    checked={shownWallComments !== false}
-                    onChange={(e) => onWallCommentsChange(e.target.checked)}
-                  />
-                  <span>Show comments on the wall as they arrive</span>
-                </label>
-                <p className="setup-note">
-                  In a feedback round the room meter shows the latest comments — what
-                  they say and what they are about, never who wrote them. Press one to
-                  put it up for everyone with its author. Off, the wall shows only the count.
-                </p>
-
-                <h4 className="setup-h setup-h--sub">{LW.report.settingHeading}{scope(null)}</h4>
-                <label className="setup-toggle">
-                  <input
-                    type="checkbox"
-                    data-testid="include-not-reviewed"
-                    checked={includeNotReviewed !== false}
-                    onChange={(e) => changeInclude(e.target.checked)}
-                  />
-                  <span>{LW.report.settingLabel}</span>
-                </label>
-                {includeFailed && <p className="setup-note" role="alert">{LW.report.settingFailed}</p>}
-                <p className="setup-note">{LW.report.settingNote}</p>
-
-                {workie && (
-                  <WorkieSettings
-                    {...workie}
-                    showNextRound={nextRoundPickersApply({
-                      gameType,
-                      gameState,
-                      remaining: catRows.length ? remaining : null,
-                    })}
-                  />
-                )}
-
-                {/* PACE, between Names and Display: it changes what the room
-                    experiences, not what a colleague can be identified by, so it
-                    ranks below Names — but it is not plumbing either. */}
-                <h4 className="setup-h setup-h--sub">Pace{scope(null)}</h4>
-                <label className="setup-toggle">
-                  <input
-                    type="checkbox"
-                    data-testid="auto-mode"
-                    checked={autoMode === true}
-                    onChange={(e) => onAutoModeChange(e.target.checked)}
-                  />
-                  <span>Auto-advance when everyone has responded</span>
-                </label>
-                <p className="setup-note">
-                  Once every player has answered — and voted, on formats that vote — the
-                  session moves forward on its own after a short beat. Responses and the
-                  AI summary page through at reading pace before the next round starts.
-                  Opening anything (a response, the QR, a dialog) pauses it, and your own
-                  controls always work.
-                </p>
-
-                {/* THE SCOREBOARD'S LOOK. Owner: "for now the setting sits under
-                    'Scoreboard' and nothing else" — a later overall theme may
-                    take it over. Applied live if the board is up. */}
-                {scoreboardAvailability.show && (
-                  <>
-                    <h4 className="setup-h setup-h--sub">Scoreboard{scope(['scoreboardStyle'])}</h4>
-                    <label className="setup-field">
-                      <span>Scoreboard style</span>
-                      <select
-                        value={shownBoardStyle || 'departure'}
-                        onChange={(e) => onScoreboardStyle(e.target.value)}
-                      >
-                        {SCOREBOARD_STYLES.map((style) => (
-                          <option key={style} value={style}>{STYLE_LABELS[style]}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <p className="setup-note">
-                      How the standings look on the room&apos;s screen. Press V to change it
-                      while the board is up.
-                    </p>
-                  </>
-                )}
-
-              </section>
-
-              <section className="setup-group setup-group--joining" aria-labelledby="setup-g-joining">
-                <h3 className="setup-h" id="setup-g-joining">Joining</h3>
-                <h4 className="setup-h setup-h--sub">Players join at</h4>
-                <p className="setup-url">{playUrl}</p>
-                {gameId && <p className="setup-note">{`Session code ${gameId}`}</p>}
-                <div className="setup-row">
-                  <button type="button" onClick={onCopyJoinLink}>
-                    {joinLinkCopied ? 'Copied!' : 'Copy join link'}
-                  </button>
-                  {/* A calendar-invite blob, not a url — distinct from the link
-                      above, and the mockup only drew the link. */}
-                  <button type="button" onClick={onInvite}>
-                    {'Invite…'}
-                  </button>
-                  <button type="button" onClick={onShowJoinCode}>
-                    Put the join code back on the stage
-                  </button>
-                </div>
-
-              </section>
-
-              <details className="setup-fold">
-                <summary>Session: back to menu, end it, sign out</summary>
-                <div className="setup-row">
-                  {/* The host guides used to be here, which is why nobody found
-                      them. They are in the panel header now, beside Close. This
-                      control is a different thing: it puts an explanation on the
-                      PROJECTOR, for the room. */}
-                  <button type="button" onClick={onShowHowToPlay}>Show how this works on the stage →</button>
-                  {/*
-                    "BACK TO MENU", NOT "EXIT", AND THE DIFFERENCE IS FACTUAL.
-
-                    The owner proposed Exit. The trouble is that this button does
-                    not end anything: `handleSwitchGame` resets this page's state
-                    and shows the welcome screen, while the SESSION STAYS LIVE on
-                    the server, keeps its game id, and is rejoinable through
-                    Continue. Nothing here writes ENDED.
-
-                    So Exit would claim a consequence the button does not have,
-                    and it would misfire in both directions — a host who wanted to
-                    step away might not press it for fear of killing the room's
-                    session, and a host who wanted to finish might press it and
-                    believe they had. "Back to Menu" names where you land and
-                    claims nothing about what happens to the session, which is
-                    exactly the amount this button knows.
-
-                    Same label on ENDED's new secondary and on the phone remote,
-                    because it is the same act on all three.
-                  */}
-                  <button type="button" onClick={onSwitchGame}>Back to Menu</button>
-                  {/*
-                    "END SESSION", AND UNLIKE ITS NEIGHBOUR, THIS ONE DOES WRITE
-                    ENDED. Task 4, 2026-09-26 bug sweep: before this, a trivia,
-                    poll, call-and-answer or wavelength session reached ENDED
-                    only when the question pool ran dry — a host who wanted to
-                    stop after round 4 of 10 had no way to. `canEndSession`
-                    (config/hostControls.js) keeps this off a survey (its own
-                    CLOSED phase carries the equivalent control), the lobby
-                    (nothing running to stop), and an already-ENDED session (the
-                    stage's own primary is the way on). The confirm is on the
-                    action `onEndSession` builds, not here.
-                  */}
-                  {canEndSession(gameType, gameState) && (
-                    <button type="button" className="btn-danger" onClick={onEndSession}>End session</button>
-                  )}
-                  {/*
-                    ADMIN OPENS IN A NEW TAB, AND THAT IS THE WHOLE POINT.
-
-                    `App.jsx` is a `window.location.pathname` switch with no
-                    client-side navigation, so navigating here in-place would be
-                    a full page load — which tears down the host's WebSocket and
-                    the entire in-memory session, mid-round, in front of a room.
-                    `target="_blank"` is the only safe shape for this link.
-
-                    `rel="noopener"` because the new tab must not get a handle on
-                    this one: `window.opener.location` from an admin tab pointed
-                    at the live projector is a foot-gun with no upside.
-
-                    Admins only — `admins` is the group AdminPage's own
-                    ProtectedRoute requires, so showing it to a host would be
-                    offering a door that opens onto Access Denied.
-                  */}
-                  {isAdmin && (
-                    <a
-                      className="setup-link"
-                      href="/admin"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Admin ↗
-                    </a>
-                  )}
-                  <button type="button" onClick={onSignOut}>Sign out</button>
-                </div>
-
-              </details>
-
-              <details className="setup-fold">
-                <summary>Keyboard shortcuts</summary>
-                <ul className="setup-keys">
-                  <li><kbd>Space</kbd> or <kbd>→</kbd> advance</li>
-                  <li><kbd>←</kbd> step back a beat</li>
-                  {hasScoreboard(gameType) && (
-                    <>
-                      <li><kbd>S</kbd> show or hide the scoreboard</li>
-                      <li><kbd>V</kbd> change the scoreboard&apos;s look, while it is up</li>
-                    </>
-                  )}
-                  <li><kbd>\</kbd> open and close this panel</li>
-                  <li><kbd>Esc</kbd> close</li>
-                </ul>
-              </details>
-            </section>
-          )}
+        <div className="setup-panel__foot" data-testid="session-menu-foot">
+          {endButton}
+          {/* MAIN MENU, NOT "EXIT", AND THE DIFFERENCE IS FACTUAL: this does
+              not end anything. The page shows Home while the SESSION STAYS
+              LIVE on the server and is rejoinable through Continue. The
+              "Leave without ending" explanation is its tooltip (D6). */}
+          <Button variant="secondary" size={36} className="smenu-main" onClick={onSwitchGame} title={HW.mainMenuHint} data-testid="session-menu-main">
+            <Icon name="House" weight="bold" size={15} color="currentColor" />
+            {` ${HW.mainMenu}`}
+          </Button>
         </div>
       </aside>
     </>

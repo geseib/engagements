@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import webSocketClient from '../WebSocketClient';
 import { startPresentStatus } from './presentStatusReporter';
+import { noteServerNow } from '../utils/serverClock';
 
 // The window's own report (PRESENT_STATUS) is shared with the Build Room wall.
 export { presentStatusPayload, FIRST_REPORT_EVERY_MS, FIRST_REPORT_TRIES } from './presentStatusReporter';
@@ -46,6 +47,8 @@ export const FOLLOW_FRAMES = [
   'gameEnded', 'playerJoined', 'playerAnswered', 'playerVoted', 'stageBeatChanged',
   'stageFocusChanged', 'stageProfileChanged', 'scoreboardChanged', 'aiSummaryReady',
   'commentFeatured', 'authorsRevealed', 'playerRemoved', 'followUpChanged',
+  // +1 min on the round timer (experience plan 2f): /state carries the new time.
+  'roundTimeChanged',
 ];
 
 const VIEWER_KEY = 'engage.presentViewerId';
@@ -88,12 +91,12 @@ async function readJson(res) {
 
 export default function usePresentation(gameId) {
   const [snapshot, setSnapshot] = useState(null);
-  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+  const [reads, setReads] = useState({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
   const seqRef = useRef(0);
   const appliedRef = useRef(0);
   const debounceRef = useRef(null);
   const snapshotRef = useRef(null);
-  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+  const readsKeyRef = useRef({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
 
   /** The reads the moment needs, each fetched once per round unless a frame says otherwise. */
   const refreshReads = useCallback(async (snap, force) => {
@@ -111,6 +114,24 @@ export default function usePresentation(gameId) {
             const body = await readJson(res);
             next.answers = Array.isArray(body && body.answers) ? body.answers : [];
             readsKeyRef.current.answers = key;
+          }
+        } catch (e) { /* the next poll tries again */ }
+      }
+    }
+    /*
+      A POLL'S BOARD (experience plan 2g): the public ?view=room aggregate,
+      counts only (get-answers.js). Live during ASK, on every look, since the
+      viewer socket hears no frame for an answer; once per round at RESULTS.
+    */
+    if (round && snap && snap.gameType === 'poll' && (round.phase === 'ASK' || round.phase === 'RESULTS')) {
+      const key = `${round.phase}${round.padded}`;
+      if (round.phase === 'ASK' || force || readsKeyRef.current.poll !== key) {
+        try {
+          const res = await fetch(`${base}games/${gameId}/answers?questionNumber=${round.padded}&view=room`);
+          if (res.ok) {
+            const body = await readJson(res);
+            next.poll = body && body.poll ? { ...body.poll, round: round.padded } : null;
+            readsKeyRef.current.poll = key;
           }
         } catch (e) { /* the next poll tries again */ }
       }
@@ -157,12 +178,14 @@ export default function usePresentation(gameId) {
       }
       if (snap.stageBeat === 'field-notes' && (force || readsKeyRef.current.summary !== key)) {
         try {
-          const res = await fetch(`${base}games/${gameId}/ai-summary?questionId=${encodeURIComponent(round.padded)}`);
-          if (res.ok) {
-            next.summary = await readJson(res);
+          // quiet=1: "not written yet" is a 200 { status: 'not_ready' }, not a logged 404 (dev QA 2 Nov).
+          const res = await fetch(`${base}games/${gameId}/ai-summary?questionId=${encodeURIComponent(round.padded)}&quiet=1`);
+          const body = res.ok ? await readJson(res) : null;
+          if (body && body.status !== 'not_ready') {
+            next.summary = body;
             readsKeyRef.current.summary = key;
           }
-          // 404: Workie has not written yet; aiSummaryReady or the poll brings it.
+          // Not ready (or an older server's 404): Workie has not written yet; aiSummaryReady or the poll brings it.
         } catch (e) { /* the next poll tries again */ }
       }
     }
@@ -187,9 +210,14 @@ export default function usePresentation(gameId) {
     const seq = seqRef.current;
     let snap = null;
     try {
+      const sentAt = Date.now();
       const res = await fetch(`${apiBase()}games/${gameId}/state?view=room`);
       if (res.status === 404) snap = { notFound: true };
-      else if (res.ok) snap = await readJson(res);
+      else if (res.ok) {
+        snap = await readJson(res);
+        // The server's clock: the time line measures time left against it (2f).
+        if (snap) noteServerNow(snap.serverNow, sentAt);
+      }
       else return;
     } catch (e) {
       return; // offline: the next poll, `online` or a reconnect tries again
@@ -201,8 +229,8 @@ export default function usePresentation(gameId) {
     // The end is one moment: its standings stay while it is up, read again only when forced.
     const stillEnded = snapshotRef.current && snapshotRef.current.state === 'ENDED' && snap.state === 'ENDED';
     if (!stillEnded && (!prevRound || !nowRound || prevRound.padded !== nowRound.padded)) {
-      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null, players: null };
-      setReads({ answers: null, results: null, summary: null, comments: null, ask: null, players: null });
+      readsKeyRef.current = { answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null };
+      setReads({ answers: null, results: null, summary: null, comments: null, ask: null, players: null, poll: null });
     }
     snapshotRef.current = snap;
     setSnapshot(snap);

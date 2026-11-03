@@ -82,7 +82,7 @@ describe('GameHostPage — the entry screen', () => {
   test('it offers the ways into a session', async () => {
     render(<GameHostPage />);
     expect(await screen.findByText(/start an engagement/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create engagement/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /new engagement/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /quick start/i })).toBeInTheDocument();
   });
 

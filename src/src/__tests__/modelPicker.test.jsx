@@ -132,7 +132,8 @@ describe('Compare: every model\'s latest read, each with its footer', () => {
     const onClose = jest.fn();
     render(<ModelCompare variants={VARIANTS} models={MODELS} onClose={onClose} />);
     const closes = screen.getAllByRole('button', { name: 'Close' });
-    expect(closes.map((b) => b.className)).toEqual(['mcmp-x', 'mcmp-btn']);
+    // The X is the shared dialog close (ui/DialogParts, step 5b) in this dialog's class.
+    expect(closes.map((b) => b.className)).toEqual(['ui-dialog-x mcmp-x', 'mcmp-btn']);
     closes.forEach((b) => fireEvent.click(b));
     expect(onClose).toHaveBeenCalledTimes(2);
   });

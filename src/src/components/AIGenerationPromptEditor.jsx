@@ -683,11 +683,12 @@ function AIGenerationPromptEditor({ readOnly = false }) {
                     {currentPrompt.tags?.map((tag, index) => (
                       <span key={index} className="tag">
                         {tag}
-                        <button 
+                        <button
                           type="button"
+                          aria-label={`Remove ${tag}`}
                           onClick={() => removeTag(tag, currentPrompt, isCreating)}
                         >
-                          ×
+                          <Icon name="X" weight="bold" size={14} color="currentColor" />
                         </button>
                       </span>
                     ))}

@@ -84,10 +84,10 @@ const mount = async ({ stageFocus = null } = {}) => {
       });
     }
     if (u.includes(`games/${GAME}/answers/host`)) {
-      // A network's worth of delay: the page lets VOTE rows in only once the
-      // stage is on that vote (stageAnswersKey), which a fast mock can beat
-      // under a loaded test run.
-      await new Promise((r) => setTimeout(r, 250));
+      // No delay, on purpose: the rows land before GameHostPage has committed
+      // the VOTE render. The page used to drop them then (gameStateRef lagged
+      // the commit) and this mock needed a 250ms head start; setGameState now
+      // moves the ref at once, and an instant answer pins that.
       return ok({ answers: ANSWERS });
     }
     if (u.includes(`games/${GAME}/question?role=host`)) {

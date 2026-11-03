@@ -56,7 +56,9 @@ const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 const UP = { open: true, fullscreen: true, visible: true, statusAt: NOW, ageMs: 1000 };
 
 function hostState({ presenting = 0, detail = null, wallScreen = 'stage', rev = 1, seen = true } = {}) {
-  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, ...(seen ? { AgentSeenAt: ago(6) } : {}), Phase: 'building' }]);
+  // Not seen: a new room, still in the opening, where Before the room starts lives (it leaves with the
+  // opening since the QA walk on test, 31 Oct 2026).
+  const room = S.roomFromRows([{ SK: 'BUILD#STATE', Rev: 7, ...(seen ? { AgentSeenAt: ago(6), Phase: 'building' } : {}) }]);
   const view = S.hostView({
     gameId: GAME,
     meta: { Title: 'Volunteer sign-up', Details: 'A one-page site to pick a shift in a minute.' },
@@ -264,11 +266,11 @@ describe('3. which screen the room watches', () => {
     window.localStorage.removeItem(SURFACES_KEY);
     await openRoom(hostState({ seen: false }));
     const connect = within(setup()).getByRole('button', { name: /Connect/ });
-    expect(connect).toHaveClass('brm-btn--primary');
+    expect(connect).toHaveClass('ui-btn--action');
     const two = within(setup()).getByRole('button', { name: 'Use two screens' });
-    expect(two.className).not.toMatch(/brm-btn--primary/);
+    expect(two.className).not.toMatch(/ui-btn--action/);
     expect(connect.compareDocumentPosition(two) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(document.querySelectorAll('.brm-host .brm-btn--primary')).toHaveLength(1);
+    expect(document.querySelectorAll('.brm-host .ui-btn--action')).toHaveLength(1);
   });
 
   test('Two screens: stored as Call & Answer stores it, and the room\'s window opens in the click, placed', async () => {
@@ -313,9 +315,9 @@ describe('3. which screen the room watches', () => {
     const open = jest.spyOn(window, 'open').mockImplementation(() => fakeWindow());
     try {
       await openRoom(hostState());
-      fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-      const panel = screen.getByRole('dialog', { name: 'Session' });
-      fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+      const panel = screen.getByRole('dialog', { name: 'Session menu' });
+      fireEvent.click(within(panel).getByRole('tab', { name: /^Screens/ }));
       const g = panel.querySelector('[data-group="screens"]');
       const seg = within(g).getByRole('group', { name: 'Where the room watches' });
       expect(within(seg).getByRole('button', { name: 'One screen' })).toHaveAttribute('aria-pressed', 'true');
@@ -356,9 +358,11 @@ describe('4. one laptop, no second display', () => {
   test('Settings, Screens: the same offer and line; New link says why you would press it', async () => {
     classic();
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    const panel = screen.getByRole('dialog', { name: 'Session' });
-    fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    const panel = screen.getByRole('dialog', { name: 'Session menu' });
+    fireEvent.click(within(panel).getByRole('tab', { name: /^Screens/ }));
+    // New link is in Screens · More options since the Session menu redesign.
+    fireEvent.click(panel.querySelector('[aria-controls^="smenu-more-"]'));
     const g = panel.querySelector('[data-group="screens"]');
     expect(within(g).getByRole('link', { name: 'Open as a tab' })).toHaveAttribute('href', `${WALL}&placed=1`);
     expect(g.textContent).toMatch('No second display? Open it in a tab and share that tab, or press F.');

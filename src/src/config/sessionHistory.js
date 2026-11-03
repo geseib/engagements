@@ -97,6 +97,9 @@ export function answersFrom(round) {
       ...(name ? { playerName: name } : {}),
       rank: Number.isFinite(a.rank) ? a.rank : null,
       answerIndex: Number.isFinite(a.answerIndex) ? a.answerIndex : i,
+      // The ballot number (phone-comments B1), the stable reply anchor —
+      // present only when the report carries it (create-report since 3c).
+      ...(Number.isInteger(a.ballot) && a.ballot > 0 ? { ballot: a.ballot } : {}),
       // The report keeps the three placement tallies and the score apart; the
       // dialogs want the same two numbers `GET /answers` gives them.
       points: Number(a.totalScore ?? a.points) || 0,
@@ -213,6 +216,9 @@ export function roundsFrom(payload) {
         // depending on how old the round is and whether it is trivia.
         detail: textOf(q.detail) || textOf(q.questionDetail),
         category: textOf(q.category),
+        // A round the host wrote during the session (impromptu ask, D5):
+        // Rounds so far marks it Yours.
+        own: Boolean(q.own),
         image: textOf(q.image) || null,
         school: textOf(q.school) || null,
         // Normalised here, not in the JSX: the report spells the text

@@ -70,11 +70,13 @@ describe('GameHostPage says it where the host is looking', () => {
     expect(branch).toMatch(/\.error/);
   });
 
-  test('the create dialog\'s "Open the survey" carries the reason to the sessions list it falls back to', () => {
-    const open = bodyOf('openNewSurvey');
-    expect(open).toMatch(/setHistoryNotice\(/);
-    expect(open).toMatch(/\.error/);
-    expect(open).toMatch(/setShowReportsModal\(true\)/);
+  /* 4c: a created session (survey included) lands on its Setup, and a
+     refused Start or Open is said there, where the host pressed it. */
+  test('Start or Open the survey on a new session\'s Setup says its refusal on that Setup', () => {
+    const start = bodyOf('startFromSetup');
+    expect(start).toMatch(/setSetupNotice\(`\$\{survey \? 'It did not open' : 'It did not start'\}: \$\{started\.error\}`\)/);
+    expect(start).not.toMatch(/alert\(/);
+    expect(code).toMatch(/<SetupBeforeStart[\s\S]*?notice=\{setupNotice\}/);
   });
 
   test('the sessions list\'s Start says its refusal on the list', () => {

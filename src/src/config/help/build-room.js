@@ -10,15 +10,20 @@
   Claims are taken from the code, checked on dev on 22 Oct with a session of
   our own (create, opening, an Ideas ask with one phone, decide, send, wrap
   up, report, two screens, end):
-    the create page            buildroom/BuildRoomPage.jsx BuildCreate;
-                               components/WelcomeScreen.jsx (the Build Room
-                               door); GameSetupDialog.jsx (Set up the Build Room)
+    the create page            GameSetupDialog.jsx (Build Room format, its
+                               fields in BuildRoomFields.jsx, "Create the Build
+                               Room", experience plan 4c); BuildCreate at /build
     the Host screen, header    BuildRoomPage.jsx RoomHeader/HeaderTools,
                                AgentChip, ConnectionChip; BuildSetup.jsx
                                (Before the room starts, since 26 Oct 2026)
-    the Session panel          buildroom/BuildSessionPanel.jsx (Players filters
-                               Here/Away/Builders; Settings groups Screens, The
-                               room, Claude, Crew, This session)
+    the Session menu           buildroom/BuildSessionPanel.jsx (BUILD_MENU_TABS:
+                               Claude, Asks so far, People, Screens, Joining;
+                               the foot End session… / Main menu; session-menu
+                               redesign, 3 Nov 2026; on two screens a sheet
+                               over the console)
+    the top bar and Needs you  components/console/ConsoleTop.jsx, config/hostWords.js,
+                               config/needsYou.js (build items), components/
+                               people/PersonRow.jsx (experience plan 2e)
     the opening                buildroom/BuildOpening.jsx (five core steps and four more, Start
                                building, the draft brief)
     asking                     BuildRoomPage.jsx AskComposer, ReadyLibrary,
@@ -121,12 +126,12 @@ const buildRoom = {
         {
           t: 'steps',
           items: [
-            { title: 'Open the New Build Room page', text: 'Choose **Build Room** on your start screen. In **Create engagement**, Build Room is one of the formats too: **Set up the Build Room** goes to the same page.' },
-            { title: 'Give it a title', text: 'It names the session for the room and in the report.' },
+            { title: 'Choose Build Room', text: 'Press **New engagement** on your start screen and pick **Build Room**, under Bigger than one session.' },
+            { title: 'Give it a title', text: 'It names the session for the room and in the report. The settings below are in the closed **Build Room setup** line, each with a default.' },
             { title: 'Say who sets the goal', text: 'Under What to build: **The room decides** (the room picks what to make in the opening, and Claude waits for it), or I\'ve set the goal (write it; Claude builds toward it, and the opening starts from who it is for). With the room deciding, the goal is an optional starting idea. It shows to the room and at the top of the report.' },
             { title: 'Who can join', text: '**Anyone with the code**, or **Private: an access code as well**.' },
             { title: 'Review Claude\'s questions', text: 'On to start with: Claude\'s questions wait for you before the room sees them. You can switch it in the room.' },
-            { title: 'Create room', text: '**Create room** opens the Host screen. People can join straight away.' },
+            { title: 'Create it', text: '**Create the Build Room** opens its Host screen, at the setup card. People can join straight away.' },
           ],
         },
       ],
@@ -138,12 +143,12 @@ const buildRoom = {
       blocks: [
         {
           t: 'p',
-          text: 'The Host screen is yours. Across the top: **Main menu**, the title, the four screens (Host, Stage, Build, History), **Room\'s window ↗**, then Claude\'s status (Waiting for Claude Code until it connects), the connection (Live), Join with the code, how many have joined, and **SESSION**.',
+          text: 'The Host screen is yours. The top bar is every session\'s: **Main menu**, the title, **Join**, **Room\'s window ↗**, then the four screens and Claude\'s status, the connection only when broken, the bell (**Needs you**), **?** and **Session menu**.',
         },
         {
           t: 'list',
           items: [
-            { title: 'Before the room starts', text: 'One card, three rows that turn green as they happen. **Connect Claude Code**: its **Connect** is the orange button, and the row is done only once Claude Code has called in, not when a key is made. **The room joins**: the code, and **Show the code** for the Stage. **The room watches this laptop**: one screen unless you press **Use two screens**. All done, the card folds to one line.' },
+            { title: 'Before the room starts', text: 'One card, three rows that turn green as they happen. **Connect Claude Code**: its **Connect** is the orange button, and the row is done only once Claude Code has called in, not when a key is made. **The room joins**: the code, and **Show the code** for the Stage. **The room watches this laptop**: one screen unless you press **Use two screens**. All done, the card folds to one line. It goes when the opening ends; if Claude Code is still not connected, **Claude now** has **Connect Claude Code**.' },
             { title: 'No need to wait for Claude', text: 'Start the opening straight away. Anything you send first waits, marked Queued for Claude.' },
             { title: 'The opening', text: 'Frames the build with the room before Claude writes code. See Running a Build Room.' },
             { title: 'Only what is in use', text: 'A list or fold with nothing in it is not drawn yet; it appears with its first item, in the same place. **Open the build** appears once Claude has a build to open.' },
@@ -159,18 +164,18 @@ const buildRoom = {
     },
     {
       id: 'session-panel',
-      title: 'The Session panel in a Build Room',
+      title: 'The Session menu in a Build Room',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: '**SESSION** in the header, or \\, opens it. It has two tabs.' },
+        { t: 'p', text: '**Session menu**, top right, or \\, opens it (on two screens, over the middle of the console). Its sections: **Claude**, **Asks so far**, **People**, **Screens**, **Joining**, each with one **More options** line. **End session…** and **Main menu** are at its foot.' },
         {
           t: 'list',
           items: [
-            { title: 'Players', text: 'Who has joined, filtered by **Here**, **Away** and **Builders**. Handing a name to another device and removing someone work as in any session: see Managing players.' },
-            { title: 'Settings: Screens', text: 'Where the room watches, the room\'s window and its status, room screen size, and **New link** for a link shared by mistake.' },
-            { title: 'Settings: The room', text: 'The join code, **Copy join link**, the demo\'s code once it is shared, and **List names on the room meter** (off: the Stage shows only the count).' },
-            { title: 'Settings: Claude', text: 'Claude\'s status, **Connect Claude Code**, which plugin is running, **Review Claude\'s questions** (on: they wait for you before the room sees them; off: they open as Claude asks), and **Check Claude\'s posts before the room sees them**.' },
-            { title: 'Settings: Crew and This session', text: '**Open to a crew**. Then **Back to the opening** (once building has started), **Wrap up**, **Report** and **End session**.' },
+            { title: 'Claude', text: 'Its status, **Connect Claude Code**, **Copy the Continue prompt** while Claude is away, **Review Claude\'s questions** and **Check Claude\'s posts before the room sees them**. More options: the plugin, the crew (**Open to a crew**), **Back to the opening**.' },
+            { title: 'Asks so far', text: '**Report** first, then **Wrap up** and **History**.' },
+            { title: 'People', text: 'Everyone, in the People column\'s person row, and who left: **Let them** / **Not now** on a name request; ⋯ for **Move to a new device**, **Lock name**, **Remove from session**; **Bring back**. Past twelve people, a search and **Here**, **Away**, **Builders**.' },
+            { title: 'Screens', text: 'Where the room watches and the room\'s window. More options: size, **New link** for a link shared by mistake, **Look here, privately**, the keys.' },
+            { title: 'Joining', text: 'The join code, **Copy join link**, the demo\'s code once shared. More options: **List names on the room meter**.' },
           ],
         },
       ],
@@ -207,7 +212,7 @@ const running = {
             { keys: 'P', text: 'Host and back' },
             { keys: 'Space', text: 'The lead move: the orange button' },
             { keys: 'Ctrl Enter', text: 'Sends what you wrote (Cmd Enter on a Mac)' },
-            { keys: '\\', text: 'The Session panel' },
+            { keys: '\\', text: 'The Session menu' },
             { keys: 'J', text: 'The join code on and off' },
             { keys: 'Esc', text: 'Closes a panel' },
           ],
@@ -231,7 +236,7 @@ const running = {
             'After the fifth, the card says the core is framed: start building, or ask one of the four.',
             '**Ask Claude to draft the brief** has Claude write a headline and a short summary in the room\'s words. Edit it, then **Use this draft**.',
             'A button beside Start building shows the brief to the room.',
-            '**Start building** whenever you like, even with steps open: it asks first, saying how many core steps are framed, and Claude gets the brief as it is. **Back to the opening**, in the Session panel, returns to the steps and tells Claude to pause.',
+            '**Start building** whenever you like, even with steps open: it asks first, saying how many core steps are framed, and Claude gets the brief as it is. **Back to the opening**, in the Session menu, returns to the steps and tells Claude to pause.',
           ],
         },
       ],
@@ -322,7 +327,7 @@ const running = {
           ],
         },
         { t: 'p', text: 'When Claude\'s mockups for a Choose question are all in, a **Claude\'s mockups are ready** card shows above what you are running, with the pictures. **Put to the room now** opens it (asking first if an ask is open); **Next, after this ask** opens it when the open ask closes, and leads during the opening. On the Stage the dock shows **Mockups ready**.' },
-        { t: 'p', text: 'To let Claude\'s questions open straight away, switch review off in the Session panel, Settings, Claude.' },
+        { t: 'p', text: 'To let Claude\'s questions open straight away, switch review off in the Session menu\'s **Claude**.' },
       ],
     },
     {
@@ -447,7 +452,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, and in History\'s Asks and Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Click a mark to open History at that entry, on All.',
+          text: 'Anything that reached Claude says so where you see it: in the ideas, in Waiting for you, on a vote\'s options, and in History\'s Asks and Decided. The mark reads **Sent to Claude**, **Sent to Claude, reworded**, or **Saved for later, not sent**; **Queued for the room** means it waits to be put to the room. Until Claude Code has connected, a sent mark reads **Queued for Claude** instead, as the line after a send does. Click a mark to open History at that entry, on All.',
         },
         {
           t: 'p',
@@ -531,7 +536,7 @@ const running = {
           t: 'p',
           text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the stage or the room\'s window at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. History, under **Claude**, marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
         },
-        { t: 'p', text: 'To let posts straight through, switch it off in the Session panel, Settings, Claude.' },
+        { t: 'p', text: 'To let posts straight through, switch it off in the Session menu\'s **Claude**.' },
       ],
     },
     {
@@ -575,7 +580,7 @@ const running = {
         {
           t: 'steps',
           items: [
-            'In the Session panel, Settings, Crew: **Open to a crew**.',
+            'In the Session menu\'s **Claude**, More options: **Open to a crew**.',
             'Claude shares the repository. If it has not, the window says so and gives the command to type into Claude Code.',
             'Builders join with the code as usual, tap **I have Claude Code** on their phone, and type the line it shows into their own Claude Code.',
             'They take tasks and share early looks. Early looks wait for you: you decide what the room sees, and only you merge.',
@@ -675,7 +680,7 @@ const sharing = {
             'It goes through Cloudflare, who can see the demo. It closes when you turn it off or the session ends.',
             'Each person\'s button carries their own key. The panel lists who opened it, on how many devices, and whether on this network or elsewhere. **Remove**, beside anyone on more than one device, ends that person\'s link.',
             'The first time, the laptop downloads a small tool from Cloudflare, and some company networks block it.',
-            'Update the plugin first: the Session panel, Settings, Claude says which plugin is running.',
+            'Update the plugin first: the Session menu\'s **Claude**, More options, says which plugin is running.',
           ],
         },
       ],
@@ -706,7 +711,7 @@ const twoScreens = {
             'The room sees: Stage, Build, History, like 2, 3, 4 and P, change only the room\'s window; your laptop stays where it is. **See it here** shows that screen on the laptop, and 1 comes back.',
             'The window needs no sign-in, has nothing to press, and shows no names unless **List names on the room meter** is on.',
             '**Show my typing to the room**, beside the send boxes, puts your words on the room\'s window\'s Stage as you write a direction, under The host is writing to Claude. Never the Why. It is off until you turn it on, and this browser remembers it for the session. It shows on the room\'s window opened from this laptop only; on another device the room sees the words once you send.',
-            'Link shared by mistake? In the Session panel, Settings, Screens, press **New link** twice: it cuts off every window opened with the old link.',
+            'Link shared by mistake? In the Session menu\'s **Screens**, More options, press **New link** twice: it cuts off every window opened with the old link.',
           ],
         },
       ],
@@ -723,9 +728,22 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'The top line', text: '← **Main menu** (the start screen; the session keeps running), the title, Join (shows the join code to the room; press it again, J or Esc takes it down), Share demo, **Room\'s window ↗** and its status, The room sees, **See it here**, the connection, and the bell.' },
+            { title: 'The top bar', text: 'The same as Call & Answer\'s: **Main menu** (the start screen; the session keeps running), the title, **Join** (shows the join code to the room; press it again, J or Esc takes it down), **Room\'s window ↗** and its status, then Share demo, The room sees and **See it here**, the connection only when it is broken, the bell (**Needs you**), **?** and **Session menu**.' },
             { title: 'The strip', text: 'Where the ask is: Opening, then Ask, Collect, Settle, Send to Claude, then Wrap up. Between asks it stays, dimmed, and says what is happening instead (Between asks, or the run list with how many are done).' },
-            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now** (What\'s next below has the moves); wrapped up, **Check the report**. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
+            { title: 'Your part now', text: 'Top centre: what to do next, and the main button, which Space presses; a move made early asks you to press again. Between asks it says **No main move now**, or **Connect Claude Code** while that leads What\'s next; wrapped up, **Check the report**. On a result the decide panel is already open beside the board: change the words or pick another option there.' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'console-needs',
+      title: 'Needs you on the console',
+      icon: 'Bell',
+      blocks: [
+        {
+          t: 'list',
+          items: [
+            { title: 'Needs you', text: 'A line under Your part now, always there: calm when nothing waits; amber with **Decide** when Claude has asked or its mockups are ready; the room\'s ideas and Claude\'s held posts with **Review**; someone\'s name on a new device with **Let them** and **Not now**. The bell counts the same list.' },
             { title: 'Mockups ready', text: 'When Claude\'s mockups are all in, a card under Your part now shows them, with **Put to the room now** and **Next, after this ask**. It never replaces the main button.' },
           ],
         },
@@ -739,8 +757,9 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Left', text: 'Waiting for you (open it in the middle for more room), People (who has answered, by name, while the room answers or votes, never what they chose), Later, with Points inside once Claude has posted one or you asked (What\'s next\'s **Ask Claude for points** opens it in the middle), and Session.' },
-            { title: 'Session', text: 'Connect Claude, Claude\'s plugin, **Copy the Continue prompt** while Claude is away, the crew, Build and History to look at privately, the Session panel, **Back to the opening**, **Wrap up**, **Report** and **End session**.' },
+            { title: 'Left', text: 'Waiting for you (open it in the middle for more room), People, and Later, with Points inside once Claude has posted one or you asked (What\'s next\'s **Ask Claude for points** opens it in the middle).' },
+            { title: 'People', text: 'One row per person, as in every session: here or away, the name, what they are doing now (answered, voted, not yet; never what they chose), the ideas they gave, and **⋯**: **Move to a new device**, **Lock name**, **Remove from session** (press it twice).' },
+            { title: 'The Session menu', text: 'What the old Session list held is in the **Session menu**: Connect Claude, the plugin and the crew under **Claude**; Wrap up and Report under **Asks so far**; Look here under **Screens**; End session at its foot.' },
             { title: 'Right', text: 'As on one screen: **Claude now** on top, which is also where Claude\'s status is on the console, then **The brief** and **History** with its chips, each once it has something in it.' },
           ],
         },
@@ -768,7 +787,7 @@ const wrapUp = {
         },
         {
           t: 'p',
-          text: 'Without Claude, or to write it yourself, **Write it myself** (or **Wrap up** in the Session panel) opens the form filled in from the session: the brief\'s headline as the summary, the decisions Claude got as What we built, and the latest build as the demo link. Each link is two boxes, a label and the address; **Add a link** adds a row. Check it, then **Save wrap-up**.',
+          text: 'Without Claude, or to write it yourself, **Write it myself** (or **Wrap up** in the Session menu) opens the form filled in from the session: the brief\'s headline as the summary (with no headline from Claude, the opening\'s Good looks like, else The problem, else Making, and it says which), the decisions Claude got as What we built, and the build Claude showed as the demo link. Each link is two boxes, a label and the address, and **The build** beside them marks the one link that is the build (Open the build, in the header and on the room\'s window, opens it; the others are just links). **Add a link** adds a row. Check it, then **Save wrap-up**.',
         },
         {
           t: 'p',
@@ -783,7 +802,7 @@ const wrapUp = {
       blocks: [
         {
           t: 'p',
-          text: 'Once the wrap-up is saved, What\'s next on the Host screen has two moves: **Check the report** (Report, the one Space presses), then **End the session**. On two screens, Your part now has the same two: **Check the report** as its main button and **End session** beside it. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out.',
+          text: 'Once the wrap-up is saved, What\'s next on the Host screen has two moves: **Check the report** (Report, the one Space presses), then **End the session**. On two screens, Your part now has the same two: **Check the report** as its main button and **End session** beside it. **End session** asks first: the room and Claude stop, and you can still edit the report. **Keep it running** backs out. Ended, the header reads **Session ended** in place of Live and Claude\'s status.',
         },
         {
           t: 'p',
@@ -796,13 +815,13 @@ const wrapUp = {
       title: 'The report',
       icon: 'FileText',
       blocks: [
-        { t: 'p', text: '**Report** (in the Session panel, or Check the report once the wrap-up is saved) opens it. **Back to room** returns.' },
+        { t: 'p', text: '**Report** (in the Session menu, or Check the report once the wrap-up is saved) opens it. **Back to room** returns.' },
         {
           t: 'list',
           items: [
             'Build brief: the headline, the opening\'s answers, who it is for and Keep in mind. Then What we built, then Decisions: each ask, how the room answered, and the direction Claude got. A decision the wheel settled says **Settled by the wheel**; one saved for later or recorded only says it was not sent to Claude.',
             'Screenshots along the way, and Version history: each commit Claude made on your laptop.',
-            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what. What Engage itself told Claude reads as a plain line, such as **Start building: Claude got the brief**, never the prompt Claude was given.',
+            'Timeline, Unprompted ideas, and Who took part. With a crew, Who built what. What Engage itself told Claude reads as a plain line, such as **Start building: Claude got the brief**, never the prompt Claude was given, here as on the phones, the Stage and Claude now.',
             'Host notes are left out, because a report gets handed round.',
             '**Save report** keeps it as a PDF, listed in Reports, as for any session: see The session report › Saving and sharing a report.',
           ],

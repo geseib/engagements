@@ -5,16 +5,37 @@
  * The owner: "a great user experience creating a new engagement when the user
  * has very little experience with the site. also a user with lots of
  * experience, doesn't feel like its too overbearing". Three decisions, then
- * Create: Name it → Format → Questions, on one page; everything else sits
- * under "Optional — every one has a safe default".
+ * Create: Name it → Format → Question set, on one page.
+ *
+ *   SHOW THE NEXT DECISION, NOT ALL OF THEM (round 4; the owner: "less
+ *            daunting if we revealed the sections as needed"). One rule for
+ *            every host, derived from the decisions on screen: Name it and
+ *            Format always; Question set once a format is chosen; the names
+ *            card, Background for Workie and Advanced once a set has been
+ *            picked in this dialog. Nothing shown is taken away again while
+ *            the dialog is open. Every new engagement opens with no format
+ *            chosen and the gallery, a host with history too (revision 31
+ *            Oct): their last format's card says "You used it last." and is
+ *            the group's tab stop. A reveal never moves
+ *            focus; it fades in once (180ms, none under reduced motion) and
+ *            says so once in the one polite live region. Create stays in the
+ *            foot, aria-disabled with "Still needed: …"; pressed early, it
+ *            takes the focus to the first gap.
+ *
+ *   ONE NEW DOOR (experience plan 4c): Quick start is a lane at the top
+ *            (config/quickStart.js): one press, every default, said before
+ *            the press. Build Room and Event carry their own fields here (the
+ *            Build Room's four folded into an Optional line; an event's day)
+ *            and are created from this dialog. Every created session lands on
+ *            its own Setup (SetupBeforeStart), with Start and Edit there.
  *
  *   ONE LAYOUT (owner round 3, option A) min(1240px, 100vw−48px): the form
  *            on the left and a 420px pane, "How <format> runs", a storyboard
- *            to scroll through (components/FormatWalkthrough) over a one-line
- *            status. Its Hide folds it to a 56px rail, "Show how <format>
- *            runs", remembered in this browser; the form takes the width. A
- *            first-time host gets a gallery of cards with "Planning a…"
- *            meeting chips; a host with history gets chips. On a phone the
+ *            to scroll through (components/FormatWalkthrough); before a
+ *            format is chosen, one quiet example stage. Its Hide folds it to a 56px rail, "Show how <format>
+ *            runs", remembered in this browser; the form takes the width.
+ *            Every host gets a gallery of cards with "Planning a…" meeting
+ *            chips until a set is picked, then chips. On a phone the
  *            storyboard is a fold under Format.
  *   GUIDE    "Compare formats" opens the Format guide: the card widens to min(1760px,
  *            100vw−48px) for the walkthrough and seven format cards
@@ -53,7 +74,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PICKER_GAME_TYPES, gameTypeMeta, normalizeGameType } from '../config/gameTypes';
 import { NAMES_DEFAULT, namesMode } from '../config/surveyNames';
-import { anonymityApplies } from '../config/anonymity';
 import Icon from './Icon';
 import { setRefKey, parseSetRefKey, sameSetRef, DEFAULT_SCOPE } from '../utils/setRef';
 import {
@@ -63,6 +83,8 @@ import HostQuestionSetsDialog from './HostQuestionSetsDialog';
 import SessionOptions, { SessionCategories, SessionBriefing } from './SessionOptions';
 import goalRules from '../../../lambda-functions/websocket/session-goal';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import Button from './ui/Button';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import PlanLimitNotice from './PlanLimitNotice';
@@ -81,19 +103,29 @@ import MeetingTypeChips from './MeetingTypeChips';
 import CreateSummary from './CreateSummary';
 import FormatWalkthrough from './FormatWalkthrough';
 import OtherFormatHandoff from './OtherFormatHandoff';
+import { walkthroughFor } from '../config/formatWalkthrough';
+import { setOwnerTag, YOURS } from '../utils/setOwnerTag';
+import BuildRoomFields from './BuildRoomFields';
+import EventFields, { eventDefaults, eventFieldsFor, eventProblem } from './EventFields';
+import { BUILD_SETUP_DEFAULTS, buildSetupProblem } from '../buildroom/buildHostApi';
+import {
+  QUICK_WORDS, quickFormat, quickSet, quickTitle,
+} from '../config/quickStart';
 import './GameSetupDialog.css';
 
 const EMPTY_USES = new Map();
 
 /*
-  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04), each with its own
-  setup screen: picking one hands the title over (`onChooseOther`). Create
-  mode only; Event only while events are switched on for the tier
-  (`eventsAccess.enabled`), and on Free it says which plan brings them.
+  EVENT AND BUILD ROOM ARE FORMATS HERE TOO (2026-10-04). Since experience
+  plan 4c their setup fields are in this dialog (the Build Room's four in its
+  Optional section, an event's day under "Next: the agenda"), and Create makes
+  the thing and hands it to the page (`onChooseOther`), which lands it on its
+  own page. Create mode only; Event only while events are switched on for the
+  tier (`eventsAccess.enabled`), and on Free it says which plan brings them.
 */
 const OTHER_LABELS = Object.freeze({
-  [BUILD_KIND]: 'Set up the Build Room',
-  [EVENT_KIND]: 'Continue to the event',
+  [BUILD_KIND]: 'Create the Build Room',
+  [EVENT_KIND]: 'Create the event',
 });
 
 /** True while the window is at most `px` wide (false where there is no window). */
@@ -115,12 +147,50 @@ function useNarrow(px) {
 
 /** The fold that the names line's "Change" opens, and the control it focuses. */
 function openAdvancedAt(root, selector) {
-  const fold = root && root.querySelector('details.gsd-adv');
+  const fold = root && root.querySelector('details.gsd-adv:not(.gsd-xfold)');
   if (!fold) return;
   fold.open = true;
   const target = fold.querySelector(selector);
   if (target && target.focus) target.focus();
   if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center' });
+}
+
+function prefersReducedMotion() {
+  try {
+    return typeof window !== 'undefined' && Boolean(window.matchMedia)
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) {
+    return false;
+  }
+}
+
+/*
+  THE ENTRANCE, ONCE PER SECTION PER DIALOG (README round 4, "Motion"). A
+  section that arrives after the dialog opened carries `gsd-reveal` for the
+  length of its fade, then lets go of it, so swapping its contents later (a
+  format change, a hand-off and back) never plays it again. A section on
+  screen at open never fades. Under reduced motion the class is never put on
+  (and the stylesheet declares the animation only under no-preference).
+*/
+function Reveal({ id, seen, ready, className = '', children, ...rest }) {
+  const [animate, setAnimate] = useState(() => ready.current && !seen.current.has(id) && !prefersReducedMotion());
+  useEffect(() => {
+    seen.current.add(id);
+    if (!animate) return undefined;
+    const t = setTimeout(() => setAnimate(false), 400);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className={`gsd-slot${className ? ` ${className}` : ''}${animate ? ' gsd-reveal' : ''}`} data-reveal={id} {...rest}>
+      {children}
+    </div>
+  );
+}
+
+/** "a title, a format and a question set" — the foot's list of what is missing. */
+function neededWords(parts) {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 export default function GameSetupDialog({
@@ -134,7 +204,12 @@ export default function GameSetupDialog({
   initialValues = null,
   /** { enabled, canCreate, offerPlanName } from utils/eventsAccess.js, or null. */
   eventsAccess = null,
-  /** (kind, { title }) => void — Event or Build Room chosen. Absent, neither is offered. */
+  /**
+   * (kind, { title, fields }) => void — create an Event or a Build Room from
+   * this dialog: `fields` is the Build Room's four ({ goal, decides,
+   * visibility, accessCode, review }) or the event's (agenda-rules'
+   * checkEventFields shape). Absent, neither is offered.
+   */
   onChooseOther,
   isFirstEngagement = true,
   eventTitle = '',
@@ -143,14 +218,19 @@ export default function GameSetupDialog({
      it, on purpose — the owner retired remembering the last set. */
   initialSetId = '',
   initialSetScope = '',
+  /* The same kind of seam for the format: no caller passes it (a new
+     engagement opens with no format chosen, revision 31 Oct). The tests use
+     it to open past the format decision. */
+  initialFormat = '',
   questionSets = [],
   /** The host's own recent uses of sets: the chooser's "Used by you lately". */
   recentSetUses = EMPTY_USES,
   /**
    * WHAT THE HOST'S HISTORY SAYS (README §6), derived by the page from the
-   * GET /games read it already makes: has this account created a session
-   * (chips, not the gallery) and the newest one's format (chosen on open). A novice
-   * gets no format chosen and the full layout.
+   * GET /games read it already makes: has this account created a session,
+   * and the newest one's format. Since 31 Oct they decide only which format
+   * is marked as used last (and is the format group's tab stop): never the
+   * gallery or chips, and never a format chosen on open.
    */
   hasCreated = false,
   lastFormat = '',
@@ -213,6 +293,11 @@ export default function GameSetupDialog({
   /* No room beside the form: "How it runs" is a fold under Format (frame
      3-A-recommended-390), following the same remembered choice. */
   const narrow = useNarrow(900);
+  /* ROUND 4: on a phone the storyboard fold starts CLOSED (review A7): open,
+     its stacked stages put the revealed Question set two screens down. Its
+     own state, not the remembered Hide, so opening it on a phone never
+     changes the pane on a laptop. */
+  const [foldOpen, setFoldOpen] = useState(false);
   /* NOTHING CHOSEN YET IS WHEN THE STORYBOARD HELPS MOST (live check, round
      3): the pane shows the gallery card under the pointer or focus, and
      otherwise Call & Answer, said plainly to be an example. Debounced both
@@ -225,20 +310,17 @@ export default function GameSetupDialog({
   };
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
-  // Seeded once, not controlled. A novice opens with NO format chosen (README
-  // §3.1: a novice never asked to choose never learns a choice exists); a
-  // host with history opens on their last one.
+  // Seeded once, not controlled. EVERY NEW ENGAGEMENT OPENS WITH NO FORMAT
+  // CHOSEN (README round 4, "Revision, 31 Oct"): the owner, "we need to
+  // support those that forgot or clicked ahead". A host with history used to
+  // open on their last format, with Question set already showing and no
+  // example in the pane; now everyone sees the first-timer state. The last
+  // format keeps its "last" tag and is the group's tab stop (FormatPicker),
+  // so Title → Tab → Enter still picks it in one key.
   const [engagementType, setEngagementType] = useState(() => {
     if (isEdit) return seed.gameType || 'call-and-answer';
-    return offeredIds.includes(lastFormat) ? lastFormat : '';
+    return offeredIds.includes(initialFormat) ? initialFormat : '';
   });
-  const formatTouched = useRef(false);
-  // The history read may land after the dialog opened: apply it then, unless
-  // the host has already chosen.
-  useEffect(() => {
-    if (isEdit || formatTouched.current || engagementType) return;
-    if (lastFormat && offeredIds.includes(lastFormat)) setEngagementType(lastFormat);
-  }, [lastFormat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /*
     THE SELECTION IS A PAIR, held as the encoded key (utils/setRef.js):
@@ -252,6 +334,20 @@ export default function GameSetupDialog({
   /* THE SET, PER FORMAT, WHILE THE DIALOG IS OPEN (README §6): arrowing
      C&A → Trivia → C&A restores the C&A set instead of clearing it. */
   const setByFormat = useRef({});
+  /* THE REVEAL LATCH (README round 4): true from the first time a set is
+     picked in this dialog, and never false again while it is open. Seeded
+     true on an edit, where everything shows from the start. */
+  const [revealLatch, setRevealLatch] = useState(isEdit || Boolean(newGameSetId));
+  const revealed = revealLatch || Boolean(newGameSetId);
+  useEffect(() => { if (newGameSetId && !revealLatch) setRevealLatch(true); }, [newGameSetId, revealLatch]);
+  /* Which sections have been on screen (each fades in once), and whether the
+     dialog has drawn its first frame (what is there at open never fades). */
+  const seenSections = useRef(new Set());
+  const dialogReady = useRef(false);
+  useEffect(() => { dialogReady.current = true; }, []);
+  /* The Question set reveal is announced once per dialog (review A2). A slot
+     already on screen (an `initialFormat` seed) has nothing to announce. */
+  const setAnnounced = useRef(false);
   const [eventDetails, setEventDetails] = useState(isEdit ? (seed.details || '') : '');
   const [gameAiContext, setGameAiContext] = useState(isEdit ? (seed.aiContext || '') : '');
   const [newGamePersonaId, setNewGamePersonaId] = useState(isEdit ? (seed.personaId || '') : '');
@@ -267,6 +363,11 @@ export default function GameSetupDialog({
   const [briefing, setBriefing] = useState(isEdit ? (seed.briefing || null) : null);
   const [briefingWorking, setBriefingWorking] = useState(false);
   const [target, setTarget] = useState(isEdit && Number.isInteger(seed.target) ? seed.target : null);
+  /* THE BUILD ROOM'S FOUR FIELDS AND AN EVENT'S DAY (experience plan 4c),
+     kept while the dialog is open even if the format moves away and back. */
+  const [buildFields, setBuildFields] = useState(() => ({ ...BUILD_SETUP_DEFAULTS }));
+  const [buildFoldOpen, setBuildFoldOpen] = useState(false);
+  const [eventFields, setEventFields] = useState(() => eventDefaults());
   const pickNames = (id) => {
     namesTouched.current = true;
     setNamesChoice(namesMode(id).id);
@@ -354,8 +455,12 @@ export default function GameSetupDialog({
   // A draft still being written would be lost by a Create pressed now; a goal
   // the set cannot meet would only be refused; topics still loading would be
   // the wrong set's.
+  const isBuild = engagementType === BUILD_KIND;
+  const otherProblem = !isOther ? ''
+    : isBuild ? buildSetupProblem({ title, ...buildFields })
+      : (eventBlocked ? '' : eventProblem(title, eventFields));
   const canCreate = isOther
-    ? !eventBlocked
+    ? !eventBlocked && !otherProblem
     : hasFormat && Boolean(newGameSetId) && title.trim().length > 0
       && !(isCallAndAnswer && briefingWorking) && !goalProblem && !categoriesLoading;
 
@@ -363,6 +468,8 @@ export default function GameSetupDialog({
   /* Everything but the topics is ready: the one case a create may wait for. */
   const readyButTopics = !isOther && hasFormat && Boolean(newGameSetId) && title.trim().length > 0
     && !(isCallAndAnswer && briefingWorking) && !goalProblem && categoriesLoading;
+
+  useEffect(() => { if (hasFormat && !isOther) setAnnounced.current = true; });
 
   // The page reloads the voices that suit this format.
   useEffect(() => {
@@ -392,9 +499,23 @@ export default function GameSetupDialog({
     }
   });
 
-  const chooseFormat = (typeId) => {
+  /*
+    WHAT A FORMAT CHOICE SAYS (README round 4, "Announcements"): "Question set
+    is below." the first time it appears, "Next: the … page, below." on each
+    swap to a hand-off format, and nothing otherwise — returning to a session
+    format, or arrowing between two, says nothing new.
+  */
+  const formatMessage = (typeId) => {
+    if (isHandoffFormat(typeId)) {
+      return `Next: ${typeId === BUILD_KIND ? 'the Build Room page' : 'the agenda'}, below.`;
+    }
+    if (setAnnounced.current || isEdit) return '';
+    setAnnounced.current = true;
+    return 'Question set is below.';
+  };
+  const chooseFormat = (typeId, lead = '') => {
     if (typeId === engagementType) return;
-    formatTouched.current = true;
+    setAnnounce([lead, formatMessage(typeId)].filter(Boolean).join(' '));
     setPendingCreate(false);
     if (engagementType) {
       setByFormat.current[engagementType] = newGameSetKey;
@@ -482,10 +603,66 @@ export default function GameSetupDialog({
     if ('eventDetails' in patch) setEventDetails(patch.eventDetails);
   };
 
-  const submit = () => {
-    if (!canCreate || busy) return;
+  /*
+    CREATE PRESSED EARLY (README round 4; review A1): the button is never
+    inert. Click, Enter or ⌘/Ctrl+Enter takes the focus to the first gap — the
+    title, then the format's tab stop, then the set search — and says which.
+    Everything in but the topics queues the create, as ⌘↵ always has.
+  */
+  const pressEarly = () => {
     if (isOther) {
-      onChooseOther?.(engagementType, { title: title.trim() });
+      if (eventBlocked) { setAnnounce(`Events come with the ${(eventsAccess && eventsAccess.offerPlanName) || 'paid plan'}, so there is nothing to create.`); return; }
+      /* The gap, in the order the form reads: the title, then the field the
+         problem names (the Build Room's open their fold first). */
+      const root = bodyRef.current;
+      if (!title.trim()) {
+        setTimeout(() => titleRef.current?.focus(), 0);
+      } else if (isBuild) {
+        setBuildFoldOpen(true);
+        const sel = buildFields.decides === 'host' && !String(buildFields.goal).trim() ? '#gsd-build-goal' : '#gsd-build-code';
+        setTimeout(() => { const el = root && root.querySelector(sel); if (el) el.focus(); }, 0);
+      } else {
+        const el = root && root.querySelector('#gsd-event-date');
+        if (el) el.focus();
+      }
+      if (otherProblem) setAnnounce(otherProblem);
+      return;
+    }
+    if (readyButTopics) {
+      setPendingCreate(true);
+      setAnnounce('Waiting for this set’s topics. It will be created as soon as they arrive.');
+      return;
+    }
+    const root = bodyRef.current;
+    if (!title.trim()) {
+      if (chooserOpen) setChooserClose((n) => n + 1);
+      setTimeout(() => titleRef.current?.focus(), 0);
+      setAnnounce('Add a title first.');
+      return;
+    }
+    if (!hasFormat) {
+      focusFormat();
+      setAnnounce('Pick a format first.');
+      return;
+    }
+    if (!newGameSetId) {
+      const search = root && root.querySelector('#gsd-set-search');
+      if (search) search.focus();
+      setAnnounce('Pick a question set first.');
+      return;
+    }
+    if (isCallAndAnswer && briefingWorking) { setAnnounce('Waiting for Workie to finish the briefing.'); return; }
+    if (goalProblem) setAnnounce(goalProblem);
+  };
+
+  const submit = () => {
+    if (busy) return;
+    if (!canCreate) { pressEarly(); return; }
+    if (isOther) {
+      onChooseOther?.(engagementType, {
+        title: title.trim(),
+        fields: isBuild ? { ...buildFields } : eventFieldsFor(title, eventFields),
+      });
       return;
     }
     // An edit that deselected every category is refused HERE.
@@ -522,12 +699,9 @@ export default function GameSetupDialog({
     newGamePersonaId, newGamePromptId, randomizeQuestions, anonymousResponses, namesChoice, target,
     isEdit ? Array.from(editCategoryNames).sort() : null,
     briefing ? briefing.text : null, briefingWorking,
+    buildFields, eventFields,
   ]);
   const openedAs = useRef(snapshot);
-  // The history read choosing the last format is not the host's work.
-  useEffect(() => {
-    if (!formatTouched.current && !isEdit) openedAs.current = snapshot;
-  }, [engagementType]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = snapshot !== openedAs.current;
 
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -553,8 +727,7 @@ export default function GameSetupDialog({
   };
 
   const requestClose = () => {
-    // Read now, not from the render: the history read can re-baseline the form
-    // in an effect after this render was drawn.
+    // Read now, not from the render.
     if (snapshot === openedAs.current) { onCancel?.(); return; }
     setConfirmingClose(true);
   };
@@ -609,8 +782,9 @@ export default function GameSetupDialog({
   const shortcut = createShortcutLabel(mac);
   const latest = useRef({});
   latest.current = {
-    canCreate, busy, isOther, confirmingClose, submit, readyButTopics, eventBlocked,
+    canCreate, busy, isOther, confirmingClose, submit, readyButTopics, eventBlocked, pressEarly,
     planName: (eventsAccess && eventsAccess.offerPlanName) || 'paid plan',
+    otherLabel: OTHER_LABELS[engagementType] || '',
   };
   useEffect(() => {
     const onKey = (event) => {
@@ -630,18 +804,17 @@ export default function GameSetupDialog({
       // there navigates. A disabled Continue takes no focus, so it says why.
       if (now.isOther) {
         if (now.eventBlocked) {
-          setAnnounce(`Events come with the ${now.planName}, so there is nothing to continue to.`);
+          setAnnounce(`Events come with the ${now.planName}, so there is nothing to create.`);
           return;
         }
         primaryRef.current?.focus();
-        setAnnounce(`${shortcut} moved to Continue. Press Enter there to go.`);
+        setAnnounce(`${shortcut} moved to ${now.otherLabel}. Press Enter there to create it.`);
         return;
       }
-      if (now.canCreate && !now.busy) { now.submit(); return; }
-      if (now.readyButTopics) {
-        setPendingCreate(true);
-        setAnnounce('Waiting for this set’s topics. It will be created as soon as they arrive.');
-      }
+      if (now.busy) return;
+      if (now.canCreate) { now.submit(); return; }
+      // Not ready: the same path as pressing Create (the topics queue first).
+      now.pressEarly();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -663,14 +836,20 @@ export default function GameSetupDialog({
       icon: handoff ? kindIcon(id) : gameTypeMeta(id).icon,
       // The card's one sentence (frame 2-03); "Good for" lives in the guide.
       short: guide.col,
+      // A hand-off's three-word line under "Bigger than one session" (round 4).
+      tag: guide.tag || '',
       handoff,
       lastUsed: !isEdit && hasCreated && id === lastFormat,
     };
   });
   const meetingTypes = MEETING_TYPES.filter((m) => offeredIds.includes(m.format));
+  /* A chip's reason and the reveal are ONE message (review A2): two polite
+     messages from one press interrupt each other. */
   const pickMeeting = (m) => {
     setMeeting(m.id);
-    chooseFormat(m.format);
+    const reason = `For a ${m.label.toLowerCase()}: ${kindLabel(m.format)}. ${m.reason}`;
+    if (m.format === engagementType) setAnnounce(reason);
+    else chooseFormat(m.format, reason);
   };
   /* Any other way of choosing a format lets go of a meeting chip that no
      longer describes the choice (live dev test 1 B4: "Use Trivia" from
@@ -681,58 +860,61 @@ export default function GameSetupDialog({
     chooseFormat(id);
   };
   const meetingReason = meeting ? MEETING_TYPES.find((m) => m.id === meeting) : null;
-  /* The gallery is for someone who has never created a session (README
-     round 2, decision 2); a host who has gets chips, in either view. */
-  const showGallery = !isEdit && !galleryDone && !hasCreated;
+  /* The gallery is for everyone until the first set is picked (owner, 31 Oct:
+     "we need to support those that forgot or clicked ahead"). It replaced
+     round 2's rule that only a host who had never created a session got it. */
+  const showGallery = !isEdit && !galleryDone;
 
   /* ── the foot ─────────────────────────────────────────────────────────── */
   let footNote = null;
   let footIcon = 'Lock';
-  if (isEdit) footNote = 'This session has not started, so nobody can join it yet.';
-  else if (isSurvey) { footNote = 'People can answer as soon as you open it. There is no separate Start.'; footIcon = 'Warning'; }
-  else if (isOther) { footNote = `Nothing is created yet. ${shortcut} moves to Continue; press Enter there to go.`; footIcon = 'Info'; }
+  /* STILL NEEDED (README round 4): beside the button it is about, read through
+     its aria-describedby, and NOT a live region (review A5) — it changes with
+     every keystroke that empties or fills the title. */
+  /* A Build Room or an event needs its own few things (experience plan 4c). */
+  let needed;
+  if (isBuild) {
+    needed = [
+      ...(title.trim() ? [] : ['a title']),
+      ...(buildFields.decides === 'host' && !String(buildFields.goal).trim() ? ['the goal'] : []),
+      ...(buildFields.visibility === 'private' && !String(buildFields.accessCode).trim() ? ['an access code'] : []),
+    ];
+  } else if (isOther) {
+    needed = eventBlocked ? [] : [
+      ...(title.trim() ? [] : ['a title']),
+      ...(eventFields.date && eventFields.time ? [] : ['a date and start time']),
+    ];
+  } else {
+    needed = [
+      ...(title.trim() ? [] : ['a title']),
+      ...(hasFormat ? [] : ['a format']),
+      ...(newGameSetId ? [] : ['a question set']),
+    ];
+  }
+  const showNeed = !canCreate && !isEdit && view !== 'compare' && needed.length > 0;
+  /* WHERE CREATE LANDS, SAID BESIDE IT (experience plan 4c, the owner's
+     decision 7): every format lands on its own Setup, with Start there. */
+  if (showNeed) { footNote = null; footIcon = 'Info'; }
+  else if (isEdit) footNote = 'This session has not started, so nobody can join it yet.';
+  else if (isSurvey) footNote = 'Nobody can answer until you open it. You land on its Setup, with Open the survey there.';
+  else if (isBuild) { footNote = 'Creates the room and opens its page: connect Claude Code there, then the room joins.'; footIcon = 'Info'; }
+  else if (isOther && otherProblem && !eventBlocked) { footNote = otherProblem; footIcon = 'Info'; }
+  else if (isOther) { footNote = 'Creates the event and opens its agenda, where you add the items.'; footIcon = 'Info'; }
   else if (view === 'compare') { footNote = 'Choosing a format. Use one, or go back to the form.'; footIcon = 'Info'; }
-  else footNote = 'Nobody can join until you start it.';
+  else footNote = 'Nobody can join until you start it. You land on its Setup, ready to start.';
 
   let primaryLabel;
-  if (busy) primaryLabel = isEdit ? 'Saving…' : (isSurvey ? 'Opening…' : 'Creating…');
+  if (busy) primaryLabel = isEdit ? 'Saving…' : 'Creating…';
   else if (isEdit) primaryLabel = 'Save changes';
   else if (OTHER_LABELS[engagementType]) primaryLabel = OTHER_LABELS[engagementType];
   else if (pendingCreate) primaryLabel = 'Waiting for topics…';
   else if (categoriesLoading) primaryLabel = 'Loading topics…';
-  else if (isSurvey) primaryLabel = 'Open the survey';
   // Frame 10: one word where the foot is a phone's width.
   else primaryLabel = phone ? 'Create' : 'Create engagement';
   let primaryTitle;
   if (isCallAndAnswer && briefingWorking) primaryTitle = 'Waiting for Workie to finish the briefing';
   else if (goalProblem) primaryTitle = goalProblem;
 
-  /* ── the side pane's rows ─────────────────────────────────────────────── */
-  const topicCount = shownCategories.length;
-  const pickedTopics = shownCategories.filter((c) => selectedCats.has(c.name));
-  const topicWords = () => {
-    if (!chosenSet) return 'Not yet';
-    const qs = `${chosenCount} question${chosenCount === 1 ? '' : 's'}`;
-    if (isSurvey || topicCount === 0) return qs;
-    if (pickedTopics.length === 0 || pickedTopics.length === topicCount) return `${qs}, all ${topicCount} topics`;
-    return `${pickedTopics.length} of ${topicCount} topics`;
-  };
-  const advancedChanged = randomizeQuestions !== true || (anonymityApplies(engagementType) && !anonymousResponses)
-    || Boolean(newGamePersonaId || newGamePromptId || gameAiContext || eventDetails) || target !== null
-    || (isSurvey && namesChoice !== NAMES_DEFAULT);
-  const createRows = isOther ? [
-    { label: 'Title', value: title.trim() ? 'Goes with you' : 'On the next page', done: Boolean(title.trim()) },
-    { label: 'Format', value: formatLabel, done: true },
-    ...(engagementType === BUILD_KIND
-      ? [{ label: 'Goal', value: 'On the next page' }, { label: 'Claude Code', value: 'Connected on the next page' }]
-      : [{ label: 'Day and place', value: 'On the next page' }, { label: 'Agenda', value: 'On the next page' }]),
-  ] : [
-    { label: 'Title', value: title.trim() ? 'Done' : 'Not yet', done: Boolean(title.trim()) },
-    { label: 'Format', value: formatLabel || 'Not yet', done: hasFormat },
-    { label: 'Questions', value: topicWords(), done: Boolean(chosenSet) },
-    ...(isCallAndAnswer ? [{ label: 'Background for Workie', value: briefing && briefing.text ? 'Added' : 'Not added — that’s fine' }] : []),
-    ...(hasFormat ? [{ label: 'Advanced', value: advancedChanged ? 'Changed — see the Advanced line' : 'Defaults' }] : []),
-  ];
   const editChanged = [];
   if (isEdit) {
     if (title !== (seed.title || '')) editChanged.push('title');
@@ -757,12 +939,10 @@ export default function GameSetupDialog({
   const paneFormat = hasFormat ? engagementType : (hovered || 'call-and-answer');
   let panePreview = '';
   if (!hasFormat) panePreview = hovered ? 'hover' : 'example';
+  /* Fork 1 A: nothing chosen and nothing pointed at — the quiet pane. */
+  const paneExampleOnly = !hasFormat && !hovered;
   const paneLabel = isHandoffFormat(paneFormat) ? kindLabel(paneFormat) : gameTypeMeta(paneFormat).label;
-  const stepMark = (n, done) => (
-    <span className={`gsd-step-n${done ? ' is-done' : ''}`} aria-hidden="true">
-      {done ? <Icon name="Check" size={13} weight="bold" /> : n}
-    </span>
-  );
+  const paneStages = (walkthroughFor(paneFormat) || { stages: [] }).stages.length;
   const headingText = isEdit ? 'Edit session' : (isFirstEngagement ? 'New engagement' : 'Start a new engagement');
 
   /* ── the make-your-own routes (frame 5c) ──────────────────────────────── */
@@ -774,15 +954,14 @@ export default function GameSetupDialog({
   // ONE SENTENCE FOR ALL THREE (live dev test 1 C8: the note and the cards disagreed).
   const routesNote = 'Whichever way you make it, the new set is picked for this engagement once it is saved and switched on. A set Workie drafts waits for your review first.';
 
-  /* ── the Questions step (step 3) ──────────────────────────────────────── */
-  const questionsStep = !hasFormat ? (
-    <section className="gsd-step is-later">
-      <h3 className="gsd-step-h" id="gsd-step3">{stepMark(3, false)}Questions</h3>
-      <p className="gsd-later">Choose a format first, then pick a ready-made set or make your own.</p>
-    </section>
-  ) : isOther ? (
-    <section className="gsd-step">
-      <h3 className="gsd-step-h" id="gsd-step3">{stepMark(3, false)}Next: {engagementType === BUILD_KIND ? 'the Build Room page' : 'the event page'}</h3>
+  /* ── the Question set slot (README round 4) ──────────────────────────────
+     Not drawn until a format is chosen. A hand-off format puts its "Next:"
+     panel in the SAME slot; a session format brings the set back. */
+  const ownsSetOfFormat = setsForType.some((set) => setOwnerTag(set) === YOURS);
+  const setIntro = 'The questions you will ask. Start from a ready-made set; you can switch topics off once it is picked.';
+  const questionsStep = !hasFormat ? null : isOther ? (
+    <section className="gsd-step" aria-labelledby="gsd-next-label">
+      <h3 className="gsd-step-h" id="gsd-next-label">Next: {engagementType === BUILD_KIND ? 'the Build Room page' : 'the agenda'}</h3>
       <OtherFormatHandoff
         kind={engagementType}
         title={title}
@@ -790,11 +969,24 @@ export default function GameSetupDialog({
         planName={eventsAccess && eventsAccess.offerPlanName}
         billingHref={billingHref}
       />
+      {/* THEIR FIELDS, HERE (experience plan 4c; audit E N2): no second form,
+          no page load. The Build Room's four fold into Optional; an event's
+          day is asked here and the rest folds. */}
+      {isBuild ? (
+        <BuildRoomFields
+          value={buildFields}
+          onChange={(patch) => setBuildFields((prev) => ({ ...prev, ...patch }))}
+          open={buildFoldOpen}
+          onToggle={(event) => setBuildFoldOpen(event.currentTarget.open)}
+        />
+      ) : !eventBlocked ? (
+        <EventFields value={eventFields} onChange={(patch) => setEventFields((prev) => ({ ...prev, ...patch }))} />
+      ) : null}
     </section>
   ) : (
-    <section className="gsd-step">
+    <section className="gsd-step" aria-labelledby="gsd-set-label">
       <h3 className="gsd-step-h" id="gsd-set-label">
-        {stepMark(3, Boolean(chosenSet) || (isEdit && Boolean(newGameSetId)))}Question set
+        Question set
         {chooserOpen && <span className="gsd-req">Required</span>}
       </h3>
       {/* THE SET CHOOSER (issue #41): pair keys, the refusal of an unreadable
@@ -828,6 +1020,7 @@ export default function GameSetupDialog({
         makeRoutesNote={routesNote}
         shortPlaceholder={phone}
         recentsFirst={!isEdit}
+        intro={isEdit ? '' : setIntro}
         ownerLabels={{ [ENGAGE]: 'Ready-made' }}
         ownerHeading="Whose"
         hideUnfiled
@@ -837,19 +1030,19 @@ export default function GameSetupDialog({
         wide
         onOpenChange={setChooserOpen}
       />
-      {/* THE ENTRY POINT, always offered in create mode — "fix the title on
-          the set I made last week" is as common as "I have none". */}
-      {/* While the chooser is open it carries its own Make a new set. */}
+      {/* THE ENTRY POINT in create mode. "Your question sets" only for a host
+          who owns a set of this format; otherwise one link (round 4). While
+          the chooser is open it carries its own Make a new set. */}
       {!isEdit && !chooserOpen && (
         <p className="gsd-setlinks">
-          <button type="button" className="gsd-setlink" onClick={() => openSets('')}>
-            {setsForType.length === 0 ? 'Make a question set' : 'Your question sets'}
-          </button>
-          {setsForType.length > 0 && (
+          {ownsSetOfFormat ? (
             <>
+              <button type="button" className="gsd-setlink" onClick={() => openSets('')}>Your question sets</button>
               <span aria-hidden="true"> · </span>
               <button type="button" className="gsd-setlink" onClick={() => openSets('template')}>Make a new set</button>
             </>
+          ) : (
+            <button type="button" className="gsd-setlink" onClick={() => openSets('template')}>Make your own set</button>
           )}
         </p>
       )}
@@ -890,7 +1083,7 @@ export default function GameSetupDialog({
   /* ── the names, stated plainly where the decision is made (README §6) ─── */
   const advRoot = () => bodyRef.current;
   let namesBlock = null;
-  if (isCallAndAnswer && !chooserOpen) {
+  if (isCallAndAnswer && !chooserOpen && revealed) {
     namesBlock = (
       <div className="gsd-namesline" data-testid="gsd-namesline">
         <Icon name={anonymousResponses ? 'EyeSlash' : 'Eye'} size={16} />
@@ -902,46 +1095,42 @@ export default function GameSetupDialog({
               : ' Every answer carries its author’s name from the moment voting opens.'}
           </span>
         </div>
-        <button
-          type="button"
-          className="gsd-btn"
+        <Button
+          variant="secondary" size={36} className="gsd-act"
           aria-label="Change how names are shown"
           onClick={() => openAdvancedAt(advRoot(), '.gsd-opt-head input[type="checkbox"]')}
         >
           Change
-        </button>
+        </Button>
       </div>
     );
-  } else if (isSurvey && !chooserOpen) {
+  } else if (isSurvey && !chooserOpen && revealed) {
     namesBlock = (
       <div className="gsd-namesline is-compact" data-testid="gsd-namesline">
         <Icon name="EyeSlash" size={16} />
         <div><b>Names: {namesMode(namesChoice).label}</b> · locked when it opens</div>
-        <button
-          type="button"
-          className="gsd-btn"
+        <Button
+          variant="secondary" size={36} className="gsd-act"
           aria-label="Change the names rule"
           onClick={() => openAdvancedAt(advRoot(), '.gsd-three-opt[aria-checked="true"]')}
         >
           Change
-        </button>
+        </Button>
       </div>
     );
   }
 
   const workieIntro = 'Workie is Engage’s AI assistant: after each round it sums up what the room said. Background makes that summary speak to your situation.';
-  const optionalBlock = hasFormat && !isOther ? (
-    <div hidden={chooserOpen || undefined}>
-      <h3 className="gsd-optional-h">Optional — every one has a safe default</h3>
-      {/* ONE QUIET LINE until opened, in both layouts (frame 3b; live dev
-          tests V4: the large dashed box was the heaviest thing on the form
-          for an optional field). Open on its own when it holds a briefing. */}
+  const optionalBlock = hasFormat && !isOther && revealed ? (
+    <div className="gsd-optional" hidden={chooserOpen || undefined}>
+      {/* TWO QUIET FOLD LINES (round 4: no "Optional — every one has a safe
+          default" header). Open on its own when it holds a briefing. */}
       {isCallAndAnswer && (
         <details className="gsd-brief-fold" open={Boolean((briefing && briefing.text) || briefingWorking) || undefined}>
           <summary>
             <span className="gsd-adv-k"><i className="gsd-chev" aria-hidden="true" />Background for Workie</span>
             <span className="gsd-adv-s">
-              {briefing && briefing.text ? 'added · Workie will use it' : 'optional · add a document or write key points'}
+              {briefing && briefing.text ? 'added · Workie will use it' : 'Optional'}
             </span>
           </summary>
           <SessionBriefing value={briefing} onChange={setBriefing} onWorkingChange={setBriefingWorking} heading="Background for Workie" intro={workieIntro} />
@@ -967,8 +1156,71 @@ export default function GameSetupDialog({
         shuffleLocked={isEdit}
         questionCount={chosenCount}
         boundBySize={!isEdit}
+        briefSummary
+        namesStated={isCallAndAnswer || isSurvey}
       />
     </div>
+  ) : null;
+
+  /* ── QUICK START, THE FAST LANE (experience plan 4c; config/quickStart.js) ──
+     One press: the format chosen here (else the last one, else Call & Answer),
+     the set picked here (else the one used lately, else a ready-made one),
+     the title typed (else "Quick <format>: <set>"), every other default. It
+     creates like Create does and lands on the session's Setup. The line says
+     exactly what it will make before the press; with no set to start from,
+     there is no lane. */
+  const quickFmt = isEdit ? '' : quickFormat({
+    chosen: engagementType, lastFormat, offered: PICKER_GAME_TYPES.map((t) => t.id), isHandoff: isHandoffFormat,
+  });
+  const quickPick = quickFmt ? quickSet({
+    sets: sessionSets,
+    format: quickFmt,
+    chosenKey: engagementType === quickFmt ? newGameSetKey : '',
+    recent: recentSetUses,
+    keyOf: setRefKey,
+    isUnreadable: isUnreadableSet,
+  }) : null;
+  const quickLabel = quickFmt ? gameTypeMeta(quickFmt).label : '';
+  const showQuick = !isEdit && !isOther && Boolean(quickPick) && view === 'form' && !chooserOpen;
+  const quickStart = () => {
+    if (busy || !quickPick) return;
+    const kind = normalizeGameType(quickFmt);
+    const ref = parseSetRefKey(setRefKey(quickPick));
+    setAnnounce(QUICK_WORDS.announce(quickLabel, quickPick.name));
+    onCreate?.({
+      title: quickTitle(title, quickLabel, quickPick.name),
+      gameType: quickFmt,
+      setId: ref.id,
+      setScope: ref.scope,
+      // Every topic: an empty list is "all of them" to create-game.js.
+      categoryIds: [],
+      eventDetails: '',
+      aiContext: '',
+      personaId: '',
+      promptId: '',
+      randomizeQuestions: kind !== 'survey',
+      anonymousResponses: true,
+      ...(kind === 'survey' ? { names: namesMode(quickPick.namesDefault).id } : { target: null }),
+      ...(kind === 'call-and-answer' ? { briefing: null } : {}),
+      quick: true,
+    });
+  };
+  const quickLane = showQuick ? (
+    <section className="gsd-quick" data-testid="gsd-quick" aria-label={QUICK_WORDS.button}>
+      <p className="gsd-quick-line" id="gsd-quick-line">
+        <span className="gsd-quick-lead">{QUICK_WORDS.lead}</span>{' '}
+        <b>{quickLabel}</b> with “{quickPick.name}”, {QUICK_WORDS.every}. {QUICK_WORDS.lands}
+      </p>
+      <Button
+        variant="secondary" size={36} className="gsd-act gsd-quick-go"
+        onClick={quickStart}
+        disabled={busy}
+        aria-describedby="gsd-quick-line"
+      >
+        <Icon name="Lightning" size={14} /> {QUICK_WORDS.button}
+      </Button>
+      <HelpButton {...helpFor('host-quick-start')} variant="inline" size="small" tooltip="Help: Quick start" className="help-button-quiet" />
+    </section>
   ) : null;
 
   /* ── the format step (step 2) ─────────────────────────────────────────── */
@@ -982,9 +1234,9 @@ export default function GameSetupDialog({
      nothing between them (live dev test 5 N1). It opens the Format guide. */
   const formatActs = !isEdit && (
     <span className="gsd-step-acts">
-      <button type="button" className="gsd-btn gsd-btn--link gsd-compare-link" onClick={openCompare}>
+      <Button variant="tertiary" size="sm" className="gsd-link gsd-compare-link" onClick={openCompare}>
         <Icon name="ListBullets" size={14} /> {phone ? 'Compare' : 'Compare formats'}
-      </button>
+      </Button>
     </span>
   );
   /* Enter on a format goes on to the questions, as Enter in the title does
@@ -998,13 +1250,14 @@ export default function GameSetupDialog({
   };
   const formatStep = (
     <section className="gsd-step gsd-step--format">
-      <h3 className="gsd-step-h" id="gsd-format-label">{stepMark(2, hasFormat)}{showGallery ? 'Pick a format' : 'Format'}</h3>
+      <h3 className="gsd-step-h" id="gsd-format-label">{showGallery ? 'Pick a format' : 'Format'}</h3>
       {formatActs}
       {showGallery && !phone && (
         <MeetingTypeChips types={meetingTypes} value={meeting} onPick={pickMeeting} />
       )}
       {showGallery && meetingReason && (
-        <p className="gsd-reason" aria-live="polite">
+        /* Spoken through the one live region, joined to the reveal (A2). */
+        <p className="gsd-reason">
           For a {meetingReason.label.toLowerCase()}: <b>{kindLabel(meetingReason.format)}</b>. {meetingReason.reason}
         </p>
       )}
@@ -1026,14 +1279,16 @@ export default function GameSetupDialog({
       {narrow && !isEdit && (
         <details
           className="gsd-how-fold"
-          open={!howHidden}
-          onToggle={(event) => {
-            const open = event.currentTarget.open;
-            if (open === howHidden) { setHowHidden(!open); writeHowHidden(!open); }
-          }}
+          open={foldOpen}
+          onToggle={(event) => setFoldOpen(event.currentTarget.open)}
         >
-          <summary><i className="gsd-chev" aria-hidden="true" />How {paneLabel} runs{hasFormat ? '' : ' — an example'}</summary>
-          <FormatWalkthrough key={paneFormat} format={paneFormat} label={paneLabel} preview={hasFormat ? '' : 'example'} layout="phone" idPrefix="gsd-fold-wt" />
+          <summary>
+            <i className="gsd-chev" aria-hidden="true" />
+            {hasFormat ? `How ${paneLabel} runs, ${paneStages} stages` : 'How it runs — an example'}
+          </summary>
+          {foldOpen && (
+            <FormatWalkthrough key={paneFormat} format={paneFormat} label={paneLabel} preview={hasFormat ? '' : 'example'} exampleOnly={!hasFormat} layout="phone" idPrefix="gsd-fold-wt" />
+          )}
         </details>
       )}
       {isEdit && (
@@ -1049,10 +1304,13 @@ export default function GameSetupDialog({
 
   const titleStep = (
     <section className="gsd-step">
-      <h3 className="gsd-step-h">
-        {stepMark(1, Boolean(title.trim()))}
-        <label id="gsd-title-label" htmlFor="gsd-title">Name it</label>
-      </h3>
+      {/* The help beside its label, which saves a line (round 4). */}
+      <div className="gsd-step-row gsd-title-row">
+        <h3 className="gsd-step-h">
+          <label id="gsd-title-label" htmlFor="gsd-title">Name it</label>
+        </h3>
+        <small className="dialog-help-text gsd-title-help" id="gsd-title-help">The room sees this on the main screen and on their phones.</small>
+      </div>
       <input
         ref={titleRef}
         id="gsd-title"
@@ -1064,7 +1322,6 @@ export default function GameSetupDialog({
         className="dialog-input"
         aria-describedby="gsd-title-help"
       />
-      <small className="dialog-help-text" id="gsd-title-help">The room sees this on the main screen and on their phones.</small>
     </section>
   );
 
@@ -1075,21 +1332,28 @@ export default function GameSetupDialog({
       <b>{title.trim() || 'Untitled'}</b>
       <span aria-hidden="true">·</span>
       <span>{formatLabel}</span>
-      <button type="button" className="gsd-btn gsd-btn--link" onClick={() => setChooserClose((n) => n + 1)}>Edit</button>
+      <Button variant="tertiary" size="sm" className="gsd-link" onClick={() => setChooserClose((n) => n + 1)}>Edit</Button>
     </p>
   );
 
   const form = (
     <>
       {chooserOpen ? foldedLine : null}
+      {quickLane}
       <div hidden={chooserOpen || undefined}>
         {titleStep}
         {formatStep}
       </div>
-      {questionsStep}
+      {questionsStep && (
+        <Reveal id="set" seen={seenSections} ready={dialogReady}>{questionsStep}</Reveal>
+      )}
       {topicsBlock}
-      {namesBlock}
-      {optionalBlock}
+      {(namesBlock || optionalBlock) && (
+        <Reveal id="after" seen={seenSections} ready={dialogReady}>
+          {namesBlock}
+          {optionalBlock}
+        </Reveal>
+      )}
     </>
   );
 
@@ -1114,22 +1378,21 @@ export default function GameSetupDialog({
       ) : null}
     >
       {/* THE HEAD STAYS, so the X is always on screen. */}
-      <div className="gsd-head">
-        <h2 id="gsd-heading">{phone && view === 'compare' ? 'Format guide' : headingText}</h2>
+      {/* The shared head (ui/DialogParts, experience plan 5b). THE X goes
+          through requestClose(), exactly like Cancel and Escape. */}
+      <DialogHead
+        className="gsd-head"
+        titleId="gsd-heading"
+        title={phone && view === 'compare' ? 'Format guide' : headingText}
+        onClose={requestClose}
+        closeLabel={isEdit ? 'Close without saving changes' : 'Close without creating'}
+        closeClassName="gsd-close"
+        closeProps={{ title: isEdit ? 'Close without saving changes' : 'Close without creating' }}
+      >
         <span className="gsd-head-acts">
           <HelpButton {...helpFor('host-create')} variant="inline" size="small" tooltip="Help: creating an engagement" className="help-button-quiet" />
-          {/* THE X goes through requestClose(), exactly like Cancel and Escape. */}
-          <button
-            type="button"
-            className="gsd-close"
-            onClick={requestClose}
-            aria-label={isEdit ? 'Close without saving changes' : 'Close without creating'}
-            title={isEdit ? 'Close without saving changes' : 'Close without creating'}
-          >
-            ×
-          </button>
         </span>
-      </div>
+      </DialogHead>
 
       <div
         className={`gsd-body${showSide && !(howHidden && !isEdit) ? ' has-side' : ''}${showSide && howHidden && !isEdit ? ' has-rail' : ''}`}
@@ -1166,12 +1429,13 @@ export default function GameSetupDialog({
             format={paneFormat}
             label={paneLabel}
             preview={panePreview}
+            exampleOnly={paneExampleOnly}
             notice={refusalNode}
             rowsHeading="Editing this session"
             rows={isEdit ? [
               { label: 'Status', value: 'Created, not started: nobody can join', done: true },
               { label: 'Changed', value: editChanged.length ? editChanged.join(', ') : 'Nothing yet', done: editChanged.length > 0 },
-            ] : createRows}
+            ] : []}
           />
         )}
       </div>
@@ -1192,46 +1456,61 @@ export default function GameSetupDialog({
       <p className="gsd-sr" aria-live="polite">{announce}</p>
 
       {confirmingClose ? (
-        <div className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
+        <DialogFoot className="dialog-actions is-confirm" role="alertdialog" aria-labelledby="gsd-confirm-t">
           <p className="gsd-confirm-t" id="gsd-confirm-t">
             {isEdit
               ? <><b>Discard your changes?</b> The session stays as it was.</>
               : <><b>Discard this engagement?</b> Nothing has been created yet, and what you filled in is lost.</>}
           </p>
-          <button type="button" className="btn-secondary" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
+          <Button variant="secondary" size={44} className="gsd-foot-act" ref={keepEditingRef} onClick={() => setConfirmingClose(false)}>
             Keep editing
-          </button>
+          </Button>
           {/* DISCARD MEANS DISCARD (devtest 7 R1 / 8 R3-2): in create mode the
               title is the page's, so it outlived the dialog and reopened
               ticked done, with new typing appended to it. Empty it first. */}
-          <button
-            type="button"
-            className="gsd-discard"
+          <Button
+            variant="danger"
+            size={44}
+            className="gsd-foot-act gsd-discard"
             onClick={() => { if (!isEdit) onEventTitleChange?.(''); onCancel?.(); }}
           >
             Discard
-          </button>
-        </div>
+          </Button>
+        </DialogFoot>
       ) : (
-        <div className="dialog-actions">
+        <DialogFoot className="dialog-actions">
+          {showNeed && (
+            <p className="gsd-foot-note gsd-foot-need" id="gsd-need">
+              <Icon name="Info" weight="bold" size={14} color="currentColor" />
+              <span><b>Still needed:</b> {neededWords(needed)}.</span>
+            </p>
+          )}
           {footNote && (
             <p className="gsd-foot-note">
               <Icon name={footIcon} weight="bold" size={14} color="currentColor" />
               <span>{footNote}</span>
             </p>
           )}
-          <button type="button" className="btn-secondary" ref={cancelRef} onClick={requestClose}>
+          <Button variant="secondary" size={44} className="gsd-foot-act" ref={cancelRef} onClick={requestClose}>
             Cancel
-          </button>
+          </Button>
           {/* The guard: no set, no questions; no title, nothing to name. A
-              survey is created AND opened by this press. */}
-          <button
-            type="button"
+              survey is created AND opened by this press.
+              ONE PRIMARY PER SCREEN (experience plan §5.1, step 5c): while the
+              Format guide is up its "Use <format>" is the main action, so
+              Create steps down to the outlined look until the form is back. */}
+          <Button
             ref={primaryRef}
-            className="btn-primary"
+            variant={view === 'compare' ? 'secondary' : 'primary'}
+            size={44}
+            className="gsd-foot-act gsd-create"
             onClick={submit}
-            disabled={!canCreate || busy}
-            aria-describedby={goalProblem ? 'gsd-blocked-reason' : undefined}
+            /* NEVER INERT (review A1): aria-disabled keeps it in the Tab order
+               and described by its reason; pressed early, it takes the focus
+               to the gap. Truly disabled only while a create is in flight. */
+            disabled={busy}
+            aria-disabled={(!canCreate && !busy) || undefined}
+            aria-describedby={[showNeed ? 'gsd-need' : '', goalProblem ? 'gsd-blocked-reason' : ''].filter(Boolean).join(' ') || undefined}
             aria-keyshortcuts={isEdit || isOther ? undefined : 'Meta+Enter Control+Enter'}
             title={primaryTitle}
           >
@@ -1243,8 +1522,8 @@ export default function GameSetupDialog({
             {!isEdit && !isOther && !busy && (
               <kbd className="gsd-kbd" aria-hidden="true">{shortcut}</kbd>
             )}
-          </button>
-        </div>
+          </Button>
+        </DialogFoot>
       )}
     </Modal>
   );

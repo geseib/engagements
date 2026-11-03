@@ -39,7 +39,7 @@ const heard = {
         {
           t: 'list',
           items: [
-            'While Workie writes, the dock shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
+            'While Workie writes, Your part now shows **Show the read** greyed out and **Workie is writing**, so Space or a clicker cannot skip it.',
             'A long read comes in pages ("Reading page 1 of 4"). **Next page** or → turns the page; ← goes back, and from the first page back to the results.',
             'The second button, "Start round 2", skips the rest. If Workie suggested questions you have not asked, it asks for a second press first.',
             'On the last page, **Ask the room** opens the composer when suggestions are waiting ("1 ask ready"); otherwise the main button starts the next round. Where Ask the room is not offered, see Asking the room a quick question.',
@@ -84,7 +84,7 @@ const heard = {
       blocks: [
         {
           t: 'p',
-          text: 'In Call & Answer, **Ask the room** opens a composer. Some sites do not offer it; there you get **Request feedback** instead (A round of comments, below). Open it from the dock on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
+          text: 'In Call & Answer, **Ask the room** opens a composer. Some sites do not offer it; there you get **Request feedback** instead (A round of comments, below). Open it from Your part now on the read\'s last page, or from a small icon beside a point Workie suggests asking about.',
         },
         {
           t: 'steps',
@@ -167,7 +167,8 @@ const heard = {
   THE SESSION REPORT. Opened by the Rounds tab's "Session report"
   (SessionSetupPanel ~940 → handleViewReports → this session's report), the
   ENDED primary RW.openReport, or the Sessions list (W2). GameReport.jsx
-  toolbar: "Back to session", "All session reports", "Print", "Save report";
+  toolbar: "Back to session", "Your sessions" (the sessions list; "Reports"
+  means saved PDFs only, experience plan 4c), "Print", "Save report";
   a cover (Held = startedAt else createdAt, Hosted by, Format, the result
   strip), "About this session", "Who was here", per round (the opener, the
   task, "Workie's read", "What the room said" ranked with points,
@@ -189,7 +190,7 @@ const reporting = {
       blocks: [
         {
           t: 'p',
-          text: 'Open it from **Session report** at the top of the Rounds tab, from **Open session report** when the session ends, or from Sessions on your start screen. It is built fresh each time, so you can open it during the session as often as you like; opening it ends nothing.',
+          text: 'Open it from **Open the report** in the Session menu\'s **Rounds so far**, from **Open session report** at the end, or from **Report** on its row in your sessions list. It is built fresh each time; opening it ends nothing.',
         },
         {
           t: 'p',
@@ -201,7 +202,7 @@ const reporting = {
         },
         {
           t: 'p',
-          text: 'Along the top: **Back to session**, **All session reports**, **Print** and **Save report**.',
+          text: 'Along the top: **Back to session**, **Your sessions** (the list, for another session\'s report), **Print** and **Save report**.',
         },
       ],
     },

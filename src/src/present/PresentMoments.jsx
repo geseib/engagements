@@ -21,7 +21,9 @@ import Heading from '../components/ui/Heading';
 import Pips from '../components/ui/Pips';
 import NumberBadge from '../components/ui/NumberBadge';
 import Card from '../components/ui/Card';
+import RoomTimeLine from '../components/RoomTimeLine';
 import TallyRow from '../components/ui/TallyRow';
+import PollBoard from '../components/stage/PollBoard';
 import FW, { KINDS as ASK_KINDS, endsOf, scaleLabel } from '../config/followUpWords';
 import {
   shows, roleOf, sizeOf, textOf, dropRank, ROLE,
@@ -61,11 +63,17 @@ export function Meter({ done, of }) {
   return <Pips variant="meter" done={done} of={of} className="present-meter" />;
 }
 
-function CountsFoot({ counts }) {
+/*
+  THE TIME LINE sits in the foot beside the pips (session-start D4, frame
+  1-b7): words and a draining bar, never seconds, only when the host left
+  "show the time" on (experience plan 2f).
+*/
+function CountsFoot({ counts, time = null }) {
   return (
     <div className="present-foot">
       <Meter done={counts.done} of={counts.of} />
       <span>{counts.line}</span>
+      {time ? <RoomTimeLine time={time} className="present-time" /> : null}
     </div>
   );
 }
@@ -82,12 +90,16 @@ const WIPE = {
   VOTING: { word: 'Voting', line: `Vote on your ${deviceWords}`, tone: 'live' },
   RESULTS: { word: 'Results', line: 'Look up', tone: 'results' },
 };
-const AFTER_RESULTS = ['RESPONSES', 'READ', 'READ_WAIT', 'FEEDBACK', 'ROOM_QUESTION', 'ROOM_RESULTS'];
+const AFTER_RESULTS = ['RESPONSES', 'READ', 'READ_WAIT', 'FEEDBACK', 'ROOM_QUESTION', 'ROOM_RESULTS', 'TRIVIA_REVEAL', 'POLL_RESULTS'];
+const ANSWERING_TOO = ['TRIVIA_QUESTION', 'POLL_ASK'];
 export function PhaseWipe({ moment }) {
   // Everything the round does after its results is still the results phase: a
   // read that lands after "Workie is writing" (READ_WAIT → READ) replayed the
   // "Results · Look up" wipe over Workie's first page (walk of dev eed66685).
-  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING' : AFTER_RESULTS.includes(moment) ? 'RESULTS' : moment;
+  // Trivia's and Poll's own moments wipe as answering and results (2g).
+  const phase = moment === 'VOTE_RESPONSE' ? 'VOTING'
+    : AFTER_RESULTS.includes(moment) ? 'RESULTS'
+      : ANSWERING_TOO.includes(moment) ? 'ANSWERING' : moment;
   const previous = useRef(phase);
   const [wipe, setWipe] = useState(null);
   useEffect(() => {
@@ -212,7 +224,7 @@ export function PresentAnswering({ model }) {
       <div className="present-main">
         <RoomQuestion model={model} />
       </div>
-      <CountsFoot counts={model.counts} />
+      <CountsFoot counts={model.counts} time={model.time} />
     </div>
   );
 }
@@ -250,6 +262,7 @@ export function PresentVoting({ model }) {
           <Meter done={model.counts.done} of={model.counts.of} />
           <span className="present-foot-count">{model.counts.line}</span>
           {shows(rc, 'cue') ? <span {...rcAttrs(rc, 'cue')}>{model.lead}</span> : null}
+          {model.time ? <RoomTimeLine time={model.time} className="present-time" /> : null}
         </div>
       </div>
     );
@@ -263,7 +276,7 @@ export function PresentVoting({ model }) {
         <TaskLine task={model.task} rc={rc} />
         <p className="present-rc-lead is-primary" data-rc-size="primary" {...rcAttrs(rc, 'cue')}>{model.lead}</p>
       </div>
-      <CountsFoot counts={model.counts} />
+      <CountsFoot counts={model.counts} time={model.time} />
     </div>
   );
 }
@@ -687,6 +700,104 @@ export function PresentEnded({ model }) {
   );
 }
 
+/* ------------------------------------------------- Trivia and Poll (2g) */
+
+/** The question's head: the category eyebrow, the title, the full prompt under it. */
+function QuestionHead({ model }) {
+  return (
+    <>
+      {model.category ? <Eyebrow className="present-eyebrow">{model.category}</Eyebrow> : null}
+      {model.title ? <Heading level={1} size="primary" balance className="present-h2 present-reminder">{model.title}</Heading> : null}
+      {model.prompt ? <p className="present-qprompt" data-drop="1">{model.prompt}</p> : null}
+    </>
+  );
+}
+
+/**
+ * TRIVIA, ANSWERING (experience plan §3.3, "The room sees: the options,
+ * nothing marked and no split, until Show the answer"). The question and its
+ * lettered options; the count at the foot. The model carries no answer here,
+ * so there is nothing to mark.
+ */
+export function PresentTriviaQuestion({ model }) {
+  return (
+    <div className="present-moment present-frame" data-type="trivia">
+      <Top model={model} right="Answering" />
+      <div className="present-main">
+        <QuestionHead model={model} />
+        <ol className="present-opts" aria-label="Options">
+          {(model.options || []).map((o) => (
+            <li key={o.letter} className="present-opt">
+              <NumberBadge as="span" n={o.letter} tone="muted" className="present-opt-l" />
+              <span className="present-opt-t">{o.text}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <CountsFoot counts={model.counts} time={model.time} />
+    </div>
+  );
+}
+
+/**
+ * TRIVIA, THE REVEAL: the right option marked with the word, the rest quiet,
+ * each option's share of the room as the fill behind it. A share beside a
+ * letter names nobody. Until the public results read lands, the options stand
+ * unmarked and the foot says the answer is coming.
+ */
+export function PresentTriviaReveal({ model }) {
+  const tallied = !model.loading;
+  return (
+    <div className="present-moment present-frame" data-type="trivia">
+      <Top model={model} right="The answer" />
+      <div className="present-main">
+        <QuestionHead model={model} />
+        <ol className={`present-opts${tallied ? ' is-revealed' : ''}`} aria-label="Options">
+          {(model.options || []).map((o) => (
+            <li
+              key={o.letter}
+              className={`present-opt${tallied && o.correct ? ' is-correct' : ''}${tallied && !o.correct ? ' is-dim' : ''}`}
+            >
+              {tallied && o.share !== null ? <span className="present-opt-fill" style={{ width: `${o.share}%` }} /> : null}
+              <NumberBadge as="span" n={o.letter} tone="muted" className="present-opt-l" />
+              <span className="present-opt-t">{o.text}</span>
+              {tallied && o.correct ? <span className="present-opt-flag">Correct</span> : null}
+              {tallied && o.share !== null ? <span className="present-opt-pct present-n">{`${o.share}%`}</span> : null}
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div className="present-foot">
+        {tallied
+          ? <span><b>{model.gotIt}</b>{` of ${model.answered} got it`}</span>
+          : <span>The answer is coming up</span>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A POLL: the live board, as the one-screen stage draws it (PollBoard, the
+ * survey's own renderers), filling in while the room answers and still at the
+ * results. Counts and nameless open answers only (get-answers.js ?view=room).
+ */
+export function PresentPoll({ model }) {
+  return (
+    <div className="present-moment present-frame" data-type="poll">
+      <Top model={model} right={model.live ? 'Answering' : RW.stepResults} />
+      <div className="present-main">
+        <QuestionHead model={model} />
+        <div className="present-poll">
+          <PollBoard question={model.question} tally={model.tally} live={model.live} />
+        </div>
+      </div>
+      {model.live
+        ? <CountsFoot counts={model.counts} time={model.time} />
+        : <div className="present-foot"><span><b>{(model.tally && model.tally.n) || 0}</b> answered</span></div>}
+    </div>
+  );
+}
+
 /** The one moment for each model, with the QR beside it when the host put it up. */
 export function PresentMoment({ model }) {
   const moment = <MomentFor model={model} />;
@@ -715,6 +826,10 @@ function MomentFor({ model }) {
     case 'ROOM_QUESTION':
     case 'ROOM_RESULTS': return <PresentAsk model={model} />;
     case 'QUESTION_FOCUS': return <PresentQuestionFocus model={model} />;
+    case 'TRIVIA_QUESTION': return <PresentTriviaQuestion model={model} />;
+    case 'TRIVIA_REVEAL': return <PresentTriviaReveal model={model} />;
+    case 'POLL_ASK':
+    case 'POLL_RESULTS': return <PresentPoll model={model} />;
     case 'ENDED': return model.played ? <PresentEnded model={model} /> : <PresentQuiet model={model} eyebrow="Complete" line="Thank you. This session has ended." />;
     case 'OTHER': return <PresentQuiet model={model} line="This session shows on the host's screen." />;
     case 'NOT_FOUND': return <PresentQuiet model={model} line="This session has ended or the code is wrong." />;

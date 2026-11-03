@@ -59,6 +59,7 @@ const db = DynamoDBDocumentClient.from(client);
 // too — see stage-beats.js for why a second reader moved it there.
 const { BEATS, STAGE_PROFILES } = require('./stage-beats');
 const { applyNotes } = require('./stage-notes');
+const { timerView, extendedAfterPlusOne, STEP_MS } = require('./round-timer');
 
 /** The beat a page of the read can only be turned on. */
 const READ_BEAT = 'field-notes';
@@ -77,7 +78,7 @@ const respond = (statusCode, body) => ({
  * runs, and reporting a failure would train the host to tap again — the second
  * tap being the one that looks broken.
  */
-const broadcastToGame = async (gameId, message) => {
+const broadcastToGame = async (gameId, message, { hostsOnly = false } = {}) => {
   try {
     const apigateway = new ApiGatewayManagementApiClient({
       endpoint: process.env.WEBSOCKET_API_ENDPOINT
@@ -88,7 +89,8 @@ const broadcastToGame = async (gameId, message) => {
       ExpressionAttributeValues: { ':pk': `GAME#${gameId}`, ':sk': 'CONNECTION#' }
     }));
 
-    const connections = res.Items || [];
+    // `hostsOnly`: a frame no phone may see (a timer the room is not shown).
+    const connections = (res.Items || []).filter((c) => !hostsOnly || c.ConnectionType === 'HOST');
     if (connections.length === 0) {
       console.log(`⚠️ STAGE BEAT: no active connections for game ${gameId}`);
       return;
@@ -149,18 +151,25 @@ exports.handler = async (event) => {
   }
 
   /*
-    THREE WRITES SHARE THIS ROUTE (two-surface PLAN 1.9), one per body:
+    FOUR WRITES SHARE THIS ROUTE (two-surface PLAN 1.9; the timer, experience
+    plan 2f), one per body:
       { beat, questionNumber }                  the beat (unchanged)
       { notesPage | step | notesPlan, questionNumber }  Workie's page
       { profile }                               the session's display profile
+      { addTime: true, phase }                  +1 min on the round's timer
     One shape per body. Mixing them is refused rather than half-applied.
+    +1 min rides here rather than on a route of its own: the stack is near
+    CloudFormation's 500-resource limit, and this is already the host-only
+    "change what the room sees, not the round" door, with the socket grant.
   */
   const turnsPage = NOTES_SHAPES.some((k) => k in body);
   const setsProfile = 'profile' in body;
-  if ([beat !== undefined, turnsPage, setsProfile].filter(Boolean).length > 1) {
-    return respond(400, { error: 'Send a beat, a page or a profile, one at a time' });
+  const addsTime = 'addTime' in body;
+  if ([beat !== undefined, turnsPage, setsProfile, addsTime].filter(Boolean).length > 1) {
+    return respond(400, { error: 'Send a beat, a page, a profile or more time, one at a time' });
   }
   if (setsProfile) return setProfile(event, gameId, body.profile);
+  if (addsTime) return addMinute(event, gameId, body);
   if (turnsPage) return turnPage(event, gameId, body);
 
   // `ask` comes with a question: only sending one (followups.js) opens it.
@@ -379,6 +388,72 @@ async function setProfile(event, gameId, profile) {
   } catch (error) {
     console.error('❌ Stage profile error:', error);
     return respond(500, { error: 'Failed to set the display profile' });
+  }
+}
+
+/**
+ * +1 MIN (session-start D4): one more minute on the timer of the phase that is
+ * on, timed by THIS server's clock (round-timer.js extendedAfterPlusOne). The
+ * caller names the phase it saw (`ASK#002`), so a press that lands after the
+ * room has moved on adds nothing to the next phase. Conditioned on the
+ * extension it read, so two screens pressing together add two minutes, not
+ * one lost write; a lost race reads again.
+ */
+async function addMinute(event, gameId, body) {
+  if (body.addTime !== true) return respond(400, { error: 'addTime must be true' });
+  const phase = typeof body.phase === 'string' ? body.phase.trim() : '';
+  if (!/^(ASK|VOTE)#\d{3}$/.test(phase)) {
+    return respond(400, { error: 'Name the phase to give more time to, like ASK#002' });
+  }
+  try {
+    if (!(await mayDrive(event, gameId))) return respond(404, { error: 'Game not found' });
+    for (let attempt = 0; attempt < NOTES_ATTEMPTS; attempt += 1) {
+      const read = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+      }));
+      const state = read.Item;
+      if (!state) return respond(404, { error: 'Game not found' });
+      if (state.State !== phase || state.TimePhase !== phase) {
+        return respond(409, { error: 'The room has moved on', state: state.State || null });
+      }
+      const nowMs = Date.now();
+      const extended = extendedAfterPlusOne(state, nowMs);
+      if (extended === null) return respond(409, { error: 'This round has no time limit' });
+      const had = Math.max(0, Number(state.TimeExtendedMs) || 0);
+      const nowIso = new Date(nowMs).toISOString();
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+          UpdateExpression: 'SET #ext = :ext, #updatedAt = :now',
+          ConditionExpression: state.TimeExtendedMs === undefined
+            ? '#state = :phase AND #timePhase = :phase AND attribute_not_exists(#ext)'
+            : '#state = :phase AND #timePhase = :phase AND #ext = :had',
+          ExpressionAttributeNames: { '#ext': 'TimeExtendedMs', '#updatedAt': 'UpdatedAt', '#state': 'State', '#timePhase': 'TimePhase' },
+          ExpressionAttributeValues: {
+            ':ext': extended, ':now': nowIso, ':phase': phase,
+            ...(state.TimeExtendedMs === undefined ? {} : { ':had': had })
+          }
+        }));
+      } catch (err) {
+        if (isConditionFailure(err)) continue; // another screen pressed too, or the room moved; read again
+        throw err;
+      }
+      const after = { ...state, TimeExtendedMs: extended };
+      const hostTime = timerView(after, { host: true });
+      const roomTime = timerView(after);
+      // The room's screens hear it when they are shown the time; the host's
+      // screens always do (the laptop when the Remote pressed, and back).
+      await broadcastToGame(gameId, {
+        type: 'roundTimeChanged', gameId, time: roomTime || hostTime, serverNow: Date.now()
+      }, { hostsOnly: !roomTime });
+      return respond(200, { status: 'OK', gameId, phase, stepMs: STEP_MS, hostTime, serverNow: Date.now() });
+    }
+    return respond(409, { error: 'The time was changed from another screen. Try again.' });
+  } catch (error) {
+    console.error('❌ Add time error:', error);
+    return respond(500, { error: 'Failed to add a minute' });
   }
 }
 

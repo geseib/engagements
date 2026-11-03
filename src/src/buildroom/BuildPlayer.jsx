@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Button from '../components/ui/Button';
 import { createPortal } from 'react-dom';
 import BuildImage, { ImageLoader, ImageViewer } from './BuildImage';
 import { PlayerShell } from '../components/PlayerShell';
@@ -14,6 +15,7 @@ import CrewSection, { BaseNotice, lastBaseEntry } from './BuildPlayerCrew';
 import { TalkItOver, RunBlock } from './BuildPlayerPoints';
 import './BuildPlayer.css';
 import { MARK_WORDS } from './sentMarks';
+import { ENDED } from '../config/playerWords';
 
 /**
  * A BUILD ROOM, ON THE PHONE OF SOMEBODY WHO HAS JOINED ONE.
@@ -48,7 +50,7 @@ import { MARK_WORDS } from './sentMarks';
  * never in the way of answering. The base-moved notice rides in the feed.
  *
  * It draws in PlayerShell, so it sits in the `.plr` scope and reuses the
- * player's own controls (`.plr-opt`, `.plr-inp`, `.plr-btn`, RatingInput's
+ * player's own controls (`.plr-opt`, `.plr-inp`, ui/Button at 56px, RatingInput's
  * `.plr-scale`); what is particular to a Build Room is under `.bpl`
  * (BuildPlayer.css).
  */
@@ -272,9 +274,9 @@ function SuggestAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!text || full || busy} onClick={submit}>
+      <Button variant="primary" size={56} disabled={!text || full || busy} onClick={submit}>
         {full ? `${MAX_SUGGESTIONS} of ${MAX_SUGGESTIONS} sent` : busy ? 'Sending…' : 'Suggest'}
-      </button>
+      </Button>
       <p className="plr-note plr-note--after bpl-center">{W.votingSoon}</p>
     </>
   );
@@ -377,9 +379,9 @@ function ChoiceAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!picks.length || unchanged || busy} onClick={submit}>
+      <Button variant="primary" size={56} disabled={!picks.length || unchanged || busy} onClick={submit}>
         {label}
-      </button>
+      </Button>
       <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
@@ -438,7 +440,7 @@ function RatingAsk({ ask, mine, api, onResult, shell }) {
 
   const dock = (
     <>
-      <button type="button" className="plr-btn" disabled={!value || unchanged || busy} onClick={submit}>{label}</button>
+      <Button variant="primary" size={56} disabled={!value || unchanged || busy} onClick={submit}>{label}</Button>
       <p className="plr-note plr-note--after bpl-center">{W.changeUntilClose}</p>
     </>
   );
@@ -494,7 +496,7 @@ function VoteAsk({ ask, mine, api, onResult, shell }) {
       <div className="bpl-slots" aria-hidden="true">
         {Array.from({ length: max }, (_, i) => <i key={i} className={i < sel.length ? 'bpl-slot--on' : ''} />)}
       </div>
-      <button type="button" className="plr-btn" disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</button>
+      <Button variant="primary" size={56} disabled={(!sel.length && !voted) || unchanged || busy} onClick={submit}>{label}</Button>
     </>
   );
 
@@ -669,7 +671,7 @@ function SentCard({ card }) {
   return (
     <section className="bpl-latest bpl-sentcard" aria-label={card.head} data-testid="bpl-sentcard">
       <h2 className="bpl-kind bpl-kind--amber">{card.head}</h2>
-      <p className="bpl-text bpl-latest-tx">{card.hidden ? card.text : `\u201c${card.text}\u201d`}</p>
+      <p className="bpl-text bpl-latest-tx">{card.hidden || card.plain ? card.text : `\u201c${card.text}\u201d`}</p>
       {card.pick ? <p className="plr-help bpl-sentpick">{card.pick}</p> : null}
     </section>
   );
@@ -858,7 +860,7 @@ function OpenDemo({ lan, who = null }) {
     }
     return (
       <section className="bpl-open" aria-label={W.openDemo}>
-        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+        <a className="bpl-send bpl-open-go" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
       </section>
     );
   }
@@ -877,7 +879,7 @@ function OpenDemo({ lan, who = null }) {
     }
     return (
       <section className="bpl-open" aria-label={W.openDemo}>
-        <a className="bpl-send bpl-open-btn" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
+        <a className="bpl-send bpl-open-go" href={open} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" onClick={() => setTried(open)}>{W.openDemo} ↗</a>
         <p className="plr-help bpl-open-note">{remote === 'starting' ? `${W.sameWifiOnly} ${W.remoteSoon}` : W.sameWifiOnly}</p>
       </section>
     );
@@ -1411,11 +1413,16 @@ export default function BuildPlayer({
 
   /* ENDED: the wrap-up, and nothing to send — the server refuses every write. */
   if (isEnded) {
+    /* THE SAME ENDED GRAMMAR AS EVERY OTHER TYPE (experience plan 3a): the
+       "That's a wrap" eyebrow, the unscored thanks, the green strip. What
+       was built follows, as before. */
     return page({
       volume: 'rest',
+      phase: 'done',
       body: (
         <>
-          <h1 className="plr-h1 plr-h1--primary">That's a wrap</h1>
+          <p className="plr-lab">{ENDED.eyebrow}</p>
+          <h1 className="plr-h1 plr-h1--primary">{ENDED.unscored(playerName)}</h1>
           {view.outcome ? <Outcome outcome={view.outcome} images={view.images || []} /> : <p className="plr-lede">The session has ended. Thanks for building.</p>}
           <Feed view={view} />
         </>

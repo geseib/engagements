@@ -45,7 +45,7 @@ const gettingStarted = {
       blocks: [
         {
           t: 'p',
-          text: 'Open the console from **Question sets & team** on your start screen (Engage staff see **Admin console**). The menu on the left depends on where you are working (Your space or a team) and your role there.',
+          text: 'The console is **Library & team**: open it with that link on your start screen (Home), or **See all** beside your recent sessions. The mark at the top left, and **Home ↗**, take you back to Home, where sessions are started. The menu on the left depends on where you are working (Your space or a team) and your role there.',
         },
         {
           t: 'table',
@@ -295,7 +295,7 @@ const questionSets = {
           items: [
             { title: 'Active / Inactive', text: 'Only active sets are offered to hosts. Switching one off loses nothing.' },
             { title: 'A set with no topic', text: 'A set must have a topic to be switched on. Click **Inactive** on an unfiled set and the row asks for one, with a topic already suggested from its name and description. Change it if you like, then press **Save topic and switch on**, or **Cancel**.' },
-            { title: 'Quickstart', text: 'Puts the set on the Quick start menu of the host\'s start screen, for everyone in this space. Keep that menu short enough to fit on one screen.' },
+            { title: 'Quickstart', text: 'Makes the set the one Quick start in New engagement reaches for in its format, for everyone in this space, when a host has not used another lately.' },
           ],
         },
         {
@@ -340,7 +340,7 @@ const questionSets = {
       ],
     },
     /*
-      QuestionSetEditor.jsx ("Edit Question Set"): Details (Save Changes /
+      QuestionSetEditor.jsx ("Edit question set"): Details (Save Changes /
       Save details as my copy; saved in place, the AI banner says edits "are
       live for anyone hosting from it"), Workie ("Its voice", "How it sums up
       each round"), Questions (QuestionsPanel.jsx), Versions, Images
@@ -569,12 +569,12 @@ const gameManagement = {
   summary: 'What was run in this space, deleting sessions, the events list, and what to check when a host says it went wrong.',
   sections: [
     /*
-      SessionsPanel.jsx; GET /games is scoped to the active organisation
-      (get-games-list.js callerOrgId/gamesIndexPk). Columns Session (title,
-      Set, host), Code, Type, State (Played / Never started; events Ended
-      etc.), Players, Rounds, Created, Last played. Filters: type, state,
-      sort (Recently played). Build Room rows: Open, Report. Event rows: Open,
-      a disclosure listing items (Open session / Session expired).
+      SessionsPanel.jsx renders components/SessionList.jsx, the list Home
+      uses too (experience plan 4a); GET /games is scoped to the active
+      organisation. Columns Session (title; set · code · host), Format,
+      Status (with people · rounds), Date. Actions: config/sessionRows.js
+      sessionActions; Start/Edit/Report/Survey results open the host page
+      (/host?session=…&do=…). Filters: type, state, sort. Delete all.
     */
     {
       id: 'sessions-list',
@@ -583,14 +583,15 @@ const gameManagement = {
       blocks: [
         {
           t: 'p',
-          text: 'Sessions lists what was run in the space you are working in: its title, set and host, its code, type, whether it was **Played** or **Never started**, how many players and rounds, and when it was created and last played. Search by title, code or host, or filter by type and state.',
+          text: 'Sessions lists what was run in the space you are working in: the same list, row for row, as **Recent sessions** on Home. Each row has its title, set, code and host, its format, its status (Not started, Running, Ended) with how many people and rounds, and a date. Search by title, code, host or set, or filter by type and state.',
         },
         {
           t: 'list',
           items: [
-            { title: 'Events', text: 'An event is one row. Click its name to see its items and open the session each one ran.' },
-            { title: 'Build Room', text: 'Its row has **Open** and **Report**.' },
-            { title: 'Other reports', text: 'A host opens a session\'s report from Sessions on their start screen; saved reports are under Reports there.' },
+            { title: 'The row\'s buttons', text: 'One main button (**Start**, **Continue**, **Report** or **Survey results**) and the rest under **⋯**: **Edit**, **Invite…**, **Copy join link** and **Delete…**. Start, Edit, Report and Survey results open the session on Home, ready; Continue opens its stage.' },
+            { title: 'Events', text: 'An event is one row: **Open** (and **Edit the agenda** under ⋯) opens its agenda here. Press its name to see its items, each with **Continue** and **Report**, or **Session expired**.' },
+            { title: 'Build Room', text: 'Its row has **Continue** and, under ⋯, **Report**.' },
+            { title: 'Delete', text: '**Delete…** asks on the row itself and says what goes with it. Deleting every session at once is beside the search; see below.' },
           ],
         },
         {

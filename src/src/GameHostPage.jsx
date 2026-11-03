@@ -1,5 +1,6 @@
 import { useRosterMode, rosterRevealFor } from './hooks/useRosterReveal';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import webSocketClient from './WebSocketClient';
 import { requestNextQuestion } from './utils/nextQuestion';
@@ -7,11 +8,12 @@ import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
+import { plannedRounds, sessionRoundBase } from './config/roundNumbers';
 import {
   focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus, roundOfState,
 } from './config/stageFocus';
 import RW from './config/roundWords';
-import QuickstartMenu from './components/QuickstartMenu';
+import SetupBeforeStart from './components/SetupBeforeStart';
 import GameSetupDialog from './components/GameSetupDialog';
 import WelcomeScreen from './components/WelcomeScreen';
 import HostReportsDialog from './components/HostReportsDialog';
@@ -28,6 +30,9 @@ import Icon from './components/Icon';
 import Modal from './components/Modal';
 import SetImageBadge from './components/SetImageBadge';
 import SessionHistoryPanel from './components/SessionHistoryPanel';
+import { readSessionIntent, inviteTargetFor } from './config/sessionRows';
+import { startRow, startLabelFor } from './config/hostSessionActions';
+import { deleteSessionRow } from './utils/sessionRowsApi';
 import InviteDialog from './components/InviteDialog';
 import HostActionBar from './components/HostActionBar';
 import GameReport from './components/GameReport';
@@ -38,11 +43,9 @@ import useModelPicker from './components/stage/useModelPicker';
 import Stage from './components/stage/Stage';
 import Rail from './components/stage/Rail';
 import WorkflowStrip from './components/stage/WorkflowStrip';
-import { workflowStrip, liveWhere } from './config/workflowStrip';
+import { workflowStrip, liveWhere, stepLabelFor } from './config/workflowStrip';
 import StepView from './components/stage/StepView';
-import RoomScreenChooser from './components/stage/RoomScreenChooser';
 import { storedRoomScreen, storeRoomScreen } from './config/roomScreen';
-import { setupPanelTabs } from './config/setupPanel';
 import RoomMeter from './components/stage/RoomMeter';
 import FeedbackWall from './components/stage/FeedbackWall';
 import Podium from './components/stage/Podium';
@@ -52,6 +55,7 @@ import Pager from './components/stage/Pager';
 import StageGathering from './components/stage/StageGathering';
 import StageJoinPanel from './components/stage/StageJoinPanel';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
+import Button from './components/ui/Button';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
@@ -61,7 +65,8 @@ import useStageNotesSync from './hooks/useStageNotesSync';
 import useSetCategoryLoader from './hooks/useSetCategoryLoader';
 import { nextStyle, scoreboardAvailability } from './config/scoreboard';
 import { loadProfile, saveProfile, toggleBigScreen, DEFAULT_PROFILE, PROFILES } from './config/displayProfile';
-import { twoSurfacesHere, twoSurfacesFor, presentHref, TWO_SURFACE_TYPES } from './config/surfaces';
+import { twoSurfacesHere, twoSurfacesFor, consoleFor, presentHref, TWO_SURFACE_TYPES, CONSOLE_TYPES, SETUP_TYPES, oneScreenWhy } from './config/surfaces';
+import { EVENT_WORDS, eventMovedOn, itemNumber, latecomersFrom, eventScreensSet, markEventScreens } from './config/eventAgenda';
 import {
   pageSizeFor, pageSlice, prosePageSlice, proseBudgetFor, pageCount, clampPage,
 } from './config/stagePaging';
@@ -69,7 +74,8 @@ import { placeLabel } from './config/podium';
 import { tallyOrder, navigatorLabel } from './config/navigatorOrder';
 import { autoDecision } from './config/autoMode';
 import AnswerSpotlight from './components/AnswerSpotlight';
-import ConfirmDialog from './components/ConfirmDialog';
+import ConfirmDialog, { useConfirm } from './components/ConfirmDialog';
+import { DialogHead, DialogFoot } from './components/ui/DialogParts';
 import { pageOf } from './utils/answerSpotlight';
 import PastRound from './components/PastRound';
 import { roundsFrom } from './config/sessionHistory';
@@ -82,7 +88,7 @@ import {
 } from './config/instructions';
 import { resetGameSession } from './config/gameSession';
 import {
-  classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline,
+  classifyAISummaryFailure, shouldAutoRetry, autoRetryDelayMs, isOnline, summaryRoundId, summaryNotReady,
   AI_NOTIFICATION_TIMEOUT_MS, AI_POLL_ATTEMPTS, AI_POLL_INTERVAL_MS,
 } from './utils/aiSummaryRecovery';
 import { createGameBody, updateGameBody } from './config/createGame';
@@ -107,7 +113,7 @@ import useSurveyProgress, {
 } from './hooks/useSurveyProgress';
 import { closeSurvey, warnSurvey, endSurvey } from './utils/surveyHostClient';
 import { requestHostTicket } from './utils/hostTicketClient';
-import { BUILD_GAME_TYPE, buildRoomPath } from './buildroom/buildHostApi';
+import { BUILD_GAME_TYPE, buildRoomPath, createBuildRoom } from './buildroom/buildHostApi';
 import { readStartRefusal } from './utils/startRefusal';
 import { forwardOnly, SURVEY_CLOSED } from './utils/playerPhase';
 import { NAMES_DEFAULT, namesMode } from './config/surveyNames';
@@ -126,13 +132,33 @@ import {
 import { lateRailMeta } from './config/lateWords';
 import useRoundAsks from './hooks/useRoundAsks';
 import AskComposer, { AskComposerBody } from './components/AskComposer';
-import HostConsole from './components/console/HostConsole';
+import HostConsole, { splitLeave } from './components/console/HostConsole';
+import ConsoleTop from './components/console/ConsoleTop';
+import PublicNeedsLine from './components/needs/PublicNeedsLine';
 import ResponsesPanel from './components/console/panels/ResponsesPanel';
+import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
-import { fetchReadCheck } from './utils/readCheckClient';
+import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
+import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS } from './config/needsYou';
+import NeedsYouLine from './components/needs/NeedsYouLine';
+import ConsolePulse from './components/console/ConsolePulse';
+import TimeChip from './components/console/TimeChip';
+import RoomTimeLine from './components/RoomTimeLine';
+import {
+  loadTimeChoices, saveTimeChoices, chipKindFor, timerOnPhase, mergeTimer, timeLeft, basePhase, timesUpPartFor,
+} from './config/roundTimer';
+import { noteServerNow, serverNowMs } from './utils/serverClock';
+import { arrivalsSince, withoutRoomCount, answersAreChoices } from './config/consolePulse';
+import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
-import CW from './config/consoleWords';
-import { consolePeopleFor } from './config/consoleRail';
+import SessionSetup from './components/console/panels/SessionSetup';
+import { setupStepFor, setupPartFor, SETUP_WORDS } from './config/sessionSetup';
+import { openRoomWindow, willPlace, ROOM_WINDOW_NAME } from './present/roomWindow';
+import CW, { ownQuestionWords as OQ } from './config/consoleWords';
+import { isOwnKey, OWN_KEY_PREFIX, ownNowAllowed, ownNowIsFirst, ownAtHead, withOwnNext, laterAnchors, withOwnRounds } from './config/ownQuestion';
+import OwnQuestionChoice from './components/OwnQuestionChoice';
+import useOwnQuestionKey from './components/stage/useOwnQuestionKey';
+import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
 import AskStage from './components/stage/AskStage';
@@ -149,7 +175,7 @@ import {
 import { readEventsAccess } from './utils/eventsAccess';
 import useActiveOrgs from './hooks/useActiveOrgs';
 import { recentUses } from './config/setFinder';
-import EventDetailsDialog from './components/EventDetailsDialog';
+import { createEvent } from './utils/eventsApi';
 import {
   hasRunningOrder, readPanelParam, dropParam, PANEL_PARAM, QUESTIONS_PANEL, RUNNING_ORDER_LABEL,
   expiredItemPath, goneSessionNotice,
@@ -248,7 +274,9 @@ function GameHostPage() {
   const [eventItem, setEventItem] = useState(null);
   // The rest of the event, for the go-live ask (config/hostControls.js
   // eventGoLiveConfirm): has it started, and what is live now.
-  const [eventRun, setEventRun] = useState({ started: false, liveTitle: '' });
+  // `liveItemId` and `items` (the agenda's order) say where the event is now:
+  // "The event moved on to Item 3" and a latecomer's "from item 2" (2d).
+  const [eventRun, setEventRun] = useState({ started: false, liveTitle: '', liveItemId: '', items: [] });
   const [eventRefresh, setEventRefresh] = useState(0);
   useEffect(() => {
     if (!eventCode || !gameId) {
@@ -265,6 +293,8 @@ function GameHostPage() {
         setEventRun({
           started: eventHasStarted(view.event, items),
           liveTitle: live ? (live.title || '') : '',
+          liveItemId: live ? live.itemId : '',
+          items,
         });
       })
       .catch(() => { /* the item's own stage still works; only its event door waits */ });
@@ -337,11 +367,27 @@ function GameHostPage() {
   const [pollTally, setPollTally] = useState(null);
   const [gameState, setGameStateRaw] = useState('CREATED'); // CREATED, STARTED, ASK#001, VOTE#001, RESULTS#001, etc.
   
-  // Debug wrapper for setGameState
-  const setGameState = (newState) => {
-    console.log(`🚨 DEBUG: setGameState called - changing from "${gameState}" to "${newState}"`);
+  /*
+    EVERY STATE CHANGE GOES THROUGH HERE, AND IT MOVES gameStateRef AT ONCE.
+
+    The ref used to follow `gameState` only from an effect, i.e. once React had
+    COMMITTED the render. restoreGameState sets the state and then awaits the
+    round's rows; when they land it asks the ref "is the stage still on this
+    round?" before filing them. If the response came back before the commit (a
+    fast network, a slow device, a loaded CI box: GameHostPage is a big render),
+    the ref still held the previous state, the rows were judged stale and
+    dropped, and nothing asked again: the stage sat on "Gathering responses…"
+    for good. Updating the ref here, synchronously, makes it mean "the state
+    this page has decided on", which is what every reader of it wants.
+    Functional updates are resolved against the ref so a later reader sees the
+    same value React will settle on.
+  */
+  const setGameState = (next) => {
+    const resolved = typeof next === 'function' ? next(gameStateRef.current) : next;
+    console.log(`🚨 DEBUG: setGameState called - changing from "${gameStateRef.current}" to "${resolved}"`);
     console.trace('🚨 DEBUG: setGameState call stack');
-    setGameStateRaw(newState);
+    gameStateRef.current = resolved;
+    setGameStateRaw(resolved);
   };
 
   /**
@@ -353,8 +399,10 @@ function GameHostPage() {
    * which round is on screen (`stageBeatChanged`) would otherwise compare every
    * announcement against 'CREATED' and silently ignore all of them.
    */
+  // Written by setGameState above, the only writer of `gameState`; no effect
+  // syncs it, because an effect runs after the commit and could put back a
+  // state that a later setGameState has already replaced.
   const gameStateRef = useRef(gameState);
-  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   /*
     THE ROUND'S ANSWERS, FOR THE FROZEN CLOSURES — same reason as the line above.
 
@@ -464,6 +512,52 @@ function GameHostPage() {
   // a deliberate inspection, and the dock's SETUP button is its permanent,
   // discoverable entry point (`\` is an accelerator only).
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  /*
+    THE SESSION MENU'S SHEET HOST ON THE CONSOLE (experience plan §3.2b, 2a):
+    HostConsole's box over the content area. On two screens the Session menu
+    is portalled into it, so it opens over the pulse and the main area and
+    never over Your part now. One screen keeps the fixed panel.
+  */
+  const [consoleSheetHost, setConsoleSheetHost] = useState(null);
+  /*
+    WHEN THIS PAGE SAW EACH PHASE BEGIN (the pulse's time tile, 2c): the
+    server stamps when answering opened (currentQuestion.startedAt), not when
+    voting did, so each state ('ASK#002', 'VOTE#002', …) is stamped here the
+    first time it is seen. A reload re-stamps; the round's own start still
+    comes from the server.
+  */
+  const [phaseSeenAt, setPhaseSeenAt] = useState({});
+  useEffect(() => { setPhaseSeenAt({}); }, [gameId]);
+  /*
+    THE ROUND TIMER (experience plan 2f; config/roundTimer.js, server half
+    lambda-functions/game/round-timer.js). `timeChoices` is what the time
+    chips beside the opening moves say ({ ask, vote }), remembered in this
+    browser for the next round and the next session. `roundTime` is the
+    server's timer as the host sees it (hostTime: phase, startedAt, limitMs,
+    extendedMs, onWall, closes), from the opening call's reply, the host's
+    door and roundTimeChanged frames. Time left is always worked out on the
+    SERVER's clock (utils/serverClock.js), never this laptop's alone.
+  */
+  const [timeChoices, setTimeChoices] = useState(() => loadTimeChoices());
+  const setTimeChoice = useCallback((kind, value) => {
+    setTimeChoices((cur) => {
+      const next = { ...cur, [kind]: value };
+      saveTimeChoices(next);
+      return next;
+    });
+  }, []);
+  const [roundTime, setRoundTime] = useState(null);
+  useEffect(() => { setRoundTime(null); }, [gameId]);
+  /** A reply or read that may carry the host's timer and the server's clock. */
+  const takeHostTime = useCallback((data, sentAt = null) => {
+    if (!data || typeof data !== 'object') return;
+    noteServerNow(data.serverNow, sentAt);
+    if (Object.prototype.hasOwnProperty.call(data, 'hostTime')) setRoundTime(data.hostTime || null);
+  }, []);
+  useEffect(() => {
+    if (!gameState) return;
+    setPhaseSeenAt((seen) => (seen[gameState] ? seen : { ...seen, [gameState]: Date.now() }));
+  }, [gameState]);
   // The workflow strip's step the host is LOOKING at (session flow v3 §4.8),
   // or null for the live view. Private to this laptop; nothing is sent.
   const [viewingStep, setViewingStep] = useState(null);
@@ -476,6 +570,8 @@ function GameHostPage() {
   const [setupPanelLanding, setSetupPanelLanding] = useState(null);
   useEffect(() => {
     if (!setupPanelOpen) setSetupPanelLanding(null);
+    // The composer is a step of the Session menu: closing the menu closes it.
+    if (!setupPanelOpen) setOwnComposer(null);
   }, [setupPanelOpen]);
   /** The title bar's four places (session flow v3 §4.8): the panel, at one tab. */
   const openSetupAt = useCallback((tab) => {
@@ -493,6 +589,24 @@ function GameHostPage() {
     try { return storedRoomScreen(window.localStorage); } catch (e) { return null; }
   });
   const [roomScreenOpen, setRoomScreenOpen] = useState(false);
+  /*
+    SETUP IS THE LOBBY (session-start D1; experience plan 2b). Per session, so
+    a reload or another session starts the check again: `screenCheckedFor`, the
+    session whose one screen the host said the room can read (step 2 on one
+    screen, then the join code goes up); `windowBlockedFor`, the session whose
+    Start tried to open the room's window and the browser stopped it (F5:
+    Setup then opens at step 2 and says so).
+  */
+  const [screenCheckedFor, setScreenCheckedFor] = useState(null);
+  // This browser set the screens up for this event today (2d; config/eventAgenda.js).
+  const [eventScreensOn, setEventScreensOn] = useState(() => {
+    try { return eventScreensSet(window.localStorage, eventCode); } catch (e) { return false; }
+  });
+  const [windowBlockedFor, setWindowBlockedFor] = useState(null);
+  // The session whose type the host door has told us: until then the type is
+  // the default (call-and-answer), and Setup must not flash over a trivia
+  // or poll session that is still loading.
+  const [typeKnownFor, setTypeKnownFor] = useState(null);
   const chooseRoomScreen = useCallback((choice) => {
     try { storeRoomScreen(window.localStorage, choice); } catch (e) { /* private mode: this visit only */ }
     // A ?surfaces= left in the address would override the choice on the next
@@ -711,7 +825,7 @@ function GameHostPage() {
 
     IT LIVES UP HERE BECAUSE IT IS A HOOK, and that is not a style preference.
     It was declared beside `answerPage`, ~1000 lines down and BELOW five early
-    returns (showQuickstartMenu, showWelcomeScreen, showReport, showReportsModal,
+    returns (then showQuickstartMenu, showWelcomeScreen, showReport, showReportsModal,
     showNewGameDialog). On the Quick Start menu the component returned at the
     first of those and this `useState` never ran; picking a lesson cleared the
     flag, the render carried past it, and React counted one more hook than the
@@ -762,9 +876,8 @@ function GameHostPage() {
     }
   }, [gameId]);
 
-  useEffect(() => {
-    if (setupPanelOpen) loadRounds();
-  }, [setupPanelOpen, lessonNumber, loadRounds]);
+  // Read with the queue and the plan by loadRoundPlan (below), on load, on
+  // every round and when the Session menu opens — the rail lists them too.
   // The ENDED stage for wavelength aggregates every round's stored word
   // analysis into the session vocabulary — which lives in the report the
   // Sessions panel also reads. Fetch it on arrival at ENDED, or the band
@@ -1008,10 +1121,29 @@ function GameHostPage() {
   const [upNextExcluded, setUpNextExcluded] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
+  /*
+    THE HOST'S OWN QUESTIONS (impromptu ask, docs/design/impromptu-ask). The
+    list rides every host-facing queue response (`ownQuestions`); the composer
+    is one step with three doors (the Session menu's Rounds, the rail, Q), and
+    on one screen it waits behind a host-only choice (D8). `ownNotice` is the
+    status line that confirms with Undo (D5).
+  */
+  const [ownQuestions, setOwnQuestions] = useState([]);
+  const [ownComposer, setOwnComposer] = useState(null);
+  const [ownChoiceOpen, setOwnChoiceOpen] = useState(false);
+  const [ownBusy, setOwnBusy] = useState(false);
+  const [ownError, setOwnError] = useState('');
+  const [ownNotice, setOwnNotice] = useState(null);
+  // The socket handlers are registered before loadQueue exists; they read it here.
+  const loadQueueRef = useRef(() => {});
+  const loadUpNextRef = useRef(() => {});
 
-  // Sign-out handler
-  const handleSignOut = () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
+  // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
+  // Mounted in both places Sign out is offered: the start screen's early
+  // return and the page's own (the Session menu).
+  const [askConfirm, confirmDialog] = useConfirm();
+  const handleSignOut = async () => {
+    if (await askConfirm({ title: 'Sign out?', message: 'Your sessions keep running; you can sign back in at any time.', confirmText: 'Sign out' })) {
       signOut();
       window.location.href = '/auth';
     }
@@ -1019,6 +1151,22 @@ function GameHostPage() {
 
   // Welcome Screen
   const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+  /*
+    HOME'S LISTS (experience plan 4b): Rejoin and the five recent sessions
+    read the same GET /games the sessions dialog does, each time Home comes
+    on screen. Quiet: a failed read leaves Home's lists saying they are
+    loading rather than raising an alert over the start screen.
+  */
+  const [homeSessionsLoaded, setHomeSessionsLoaded] = useState(false);
+  // Keyed on whether someone is signed in, not on the user object: a provider
+  // that hands back a fresh object each render would refetch on every render.
+  const signedIn = Boolean(currentUser);
+  useEffect(() => {
+    if (!showWelcomeScreen || !signedIn) return;
+    fetchGamesList({ quiet: true }).then((ok) => { if (ok) setHomeSessionsLoaded(true); });
+    // fetchGamesList is a plain function redeclared each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWelcomeScreen, signedIn]);
   const [continueGameId, setContinueGameId] = useState('');
   useEffect(() => {
     if (!panelLinkRef.current || !gameId || showWelcomeScreen) return;
@@ -1090,7 +1238,17 @@ function GameHostPage() {
     keeps the Create button honestly disabled until a deliberate pick is made,
     instead of enabled on a leftover.
   */
-  const [showQuickstartMenu, setShowQuickstartMenu] = useState(false);
+  /*
+    WHERE A CREATED SESSION LANDS (experience plan 4c; the owner's decision
+    7): its own Setup, not started, with Start there and Edit beside it.
+    `{ gameId, title, gameType, setId, setScope }` or null. Navigation state
+    like the flags beside it; the session itself is on the server. Quick
+    start's own menu (and its showQuickstartMenu flag) went with 4c: Quick
+    start is a lane inside New engagement and lands here too.
+  */
+  const [createdSetup, setCreatedSetup] = useState(null);
+  const [setupNotice, setSetupNotice] = useState('');
+  const [setupStarting, setSetupStarting] = useState(false);
   /*
     THE HOST'S SET SHELF, REACHED WITHOUT STARTING A SESSION.
 
@@ -1105,30 +1263,42 @@ function GameHostPage() {
   const [createRefusal, setCreateRefusal] = useState(null);
   const [eventTitle, setEventTitle] = useState('');
   /*
-    EVENT AND BUILD ROOM FROM THE CREATE SCREEN (2026-10-04). The create
-    dialog offers both as formats and hands each to its own setup screen:
-    a Build Room to /build (title carried over), an event to the new-event
-    dialog — the one WelcomeEvents and the console use — and from there to
-    its agenda. `eventsAccess` decides whether Event is offered at all (the
+    EVENT AND BUILD ROOM FROM THE CREATE SCREEN (2026-10-04; experience plan
+    4c). The create dialog offers both as formats and, since 4c, carries their
+    fields: the Build Room's four in its Optional section, an event's day.
+    Create makes the thing here and lands it on its own page: a Build Room on
+    its room page's setup, an event on its agenda. No second form, no second
+    dialog. `eventsAccess` decides whether Event is offered at all (the
     tier's switch, and the plan); read once, when the create screen first
-    opens. `newEventTitle` non-null shows the new-event dialog. Navigation
-    state, like the flags above: nothing here survives into a session.
+    opens.
   */
   const [eventsAccess, setEventsAccess] = useState(null);
-  const [newEventTitle, setNewEventTitle] = useState(null);
   useEffect(() => {
     if (!showNewGameDialog || eventsAccess) return undefined;
     let live = true;
     readEventsAccess().then((access) => { if (live) setEventsAccess(access); });
     return () => { live = false; };
   }, [showNewGameDialog, eventsAccess]);
-  const handleChooseOther = (kind, { title = '' } = {}) => {
-    if (kind === BUILD_KIND) {
-      navigateTo(title ? `/build?title=${encodeURIComponent(title)}` : '/build');
-      return;
+  const handleChooseOther = async (kind, { title = '', fields = {} } = {}) => {
+    if (creatingSessionRef.current) return;
+    creatingSessionRef.current = true;
+    setCreatingSession(true);
+    setCreateRefusal(null);
+    try {
+      if (kind === BUILD_KIND) {
+        const newId = await createBuildRoom({ ...fields, title });
+        navigateTo(buildRoomPath(newId));
+        return;
+      }
+      const event = await createEvent(fields);
+      navigateTo(eventAgendaPath(event.code));
+    } catch (err) {
+      // Said in the dialog the host is looking at, never alert().
+      setCreateRefusal({ message: (err && err.message) || 'it was not created' });
+    } finally {
+      creatingSessionRef.current = false;
+      setCreatingSession(false);
     }
-    setShowNewGameDialog(false);
-    setNewEventTitle(title);
   };
 
   // EVERY OTHER FIELD ON THE CREATE SCREEN LIVES IN <GameSetupDialog>.
@@ -1257,10 +1427,12 @@ function GameHostPage() {
   twoSurfacesRef.current = twoSurfaces;
   /*
     THE HOST CONSOLE (docs/superpowers/specs/2026-10-15-host-console-design.md).
-    On two screens, for the round types, outside an event, the laptop renders
-    the console in place of the wall-style <Stage>: the wall is /present, so
-    this screen is private and works at laptop sizes. One screen, surveys and
-    event items keep <Stage>. The console takes data and callbacks only; every
+    On two screens, for the console types (config/surfaces.js CONSOLE_TYPES:
+    Call & Answer), the laptop renders the console in place of the wall-style
+    <Stage>: the wall is /present, so this screen is private and works at
+    laptop sizes. AN EVENT'S ITEM GETS THE SAME CONSOLE (experience plan 2d):
+    the projector-style stage on a private laptop was a third layout. One
+    screen and the other types keep <Stage>. The console takes data and callbacks only; every
     hook, fetch and handler stays here.
 
     THE SPOTLIGHT IS NOT AN OVERLAY ON THE CONSOLE. On the stage a response on
@@ -1269,7 +1441,10 @@ function GameHostPage() {
     (the response is on /present), so counting it there killed Space, →, ←
     and the clicker the moment the host put a response up.
   */
-  const useConsole = twoSurfaces && !eventCode && ['call-and-answer', 'trivia', 'poll', 'wavelength'].includes(normalizeGameType(currentGameType));
+  const useConsole = consoleFor(twoSurfaces, normalizeGameType(currentGameType));
+  // On the console a pinned join code is on the room's window only and covers
+  // nothing here (experience plan 2a), so it does not hold the host's keys.
+  const qrCovers = useConsole && qrMode === 'pinned' ? null : qrMode;
   const [sessionProfile, setSessionProfile] = useState(null);
   const profile = twoSurfaces ? (sessionProfile || DEFAULT_PROFILE) : localProfile;
   const profileRef = useRef(profile);
@@ -1296,6 +1471,24 @@ function GameHostPage() {
   // The room's window and the host's notes, from the host door (host console spec §4.2).
   const [presentDetail, setPresentDetail] = useState(null);
   const [hostNotes, setHostNotes] = useState(null);
+  // Trivia's private answer, `{ round, letters }`, from the host's door only (2g).
+  const [hostAnswer, setHostAnswer] = useState(null);
+  /*
+    THE EVENT'S SCREENS, ONCE PER DAY (2d). Read again when the page learns
+    its event (a session reopened from history learns it from host-state), and
+    remembered the moment an item's Setup would reach step 3: the room's
+    window is up, or the one screen was checked. Setup's own rule decides, so
+    the two cannot disagree.
+  */
+  useEffect(() => {
+    try { setEventScreensOn(eventScreensSet(window.localStorage, eventCode)); } catch (e) { setEventScreensOn(false); }
+  }, [eventCode]);
+  useEffect(() => {
+    if (!eventCode || !gameId || eventScreensOn || !roomScreenChoice) return;
+    if (setupStepFor({ choice: roomScreenChoice, detail: presentDetail, checked: screenCheckedFor === gameId }) !== 'joins') return;
+    try { markEventScreens(window.localStorage, eventCode); } catch (e) { /* this visit only */ }
+    setEventScreensOn(true);
+  }, [eventCode, gameId, eventScreensOn, roomScreenChoice, presentDetail, screenCheckedFor]);
   /*
     WHO IS SIGNED IN HERE, AND FOR WHICH TEAM (owner, 16 Oct: "tell them in the
     help and on the setup remote box which team/person is logged in"). The
@@ -1335,9 +1528,11 @@ function GameHostPage() {
         if (!res.ok || !live) return;
         const data = await res.json();
         if (!live) return;
+        takeHostTime(data);
         setPresenting(Number(data.presenting) || 0);
         setPresentDetail(data.presentDetail || null);
         setHostNotes(data.hostNotes || null);
+        setHostAnswer(data.hostAnswer || null);
         if (PROFILES.includes(data.stageProfile)) setSessionProfile(data.stageProfile);
       } catch (e) {
         /* the next read tries again */
@@ -1348,7 +1543,7 @@ function GameHostPage() {
     const timer = setInterval(read, 10000);
     return () => { live = false; clearInterval(timer); readHostStateRef.current = () => {}; };
   // `lessonNumber`: a new round reads its own host notes now, not 10 s late.
-  }, [twoSurfaces, gameId, lessonNumber]);
+  }, [twoSurfaces, gameId, lessonNumber, takeHostTime]);
 
   /*
     THE JOIN CODE ON THE WALL (owner, 2026-10-13: "when presenting i still need
@@ -1495,6 +1690,30 @@ function GameHostPage() {
   const [includeNotReviewed, setIncludeNotReviewed] = useState(true);
   const loadLateRef = useRef(() => {});
   const lateStatus = useMemo(() => lateStatusOf(lateItems), [lateItems]);
+  /*
+    NEEDS YOU (experience plan §4, Phase 1a/1b): the list itself is worked
+    out in the render from what this page already holds (config/needsYou.js);
+    these hooks are only what the list cannot derive. `needsBusy` while a
+    name answer is in flight; `needsError` the server's sentence when one is
+    refused (it used to go to the browser console); `needsDismissed` the read
+    checks the host said "It's fine" to; `needsNow` a clock that ticks only
+    while a name is asked for or open, so "0:20 ago" and "4:10 left" move and
+    a request lapses on time. `wsEverConnected`: "Not hearing the room" means
+    the socket dropped, never that it has not opened yet.
+  */
+  const [needsBusy, setNeedsBusy] = useState(false);
+  const [needsError, setNeedsError] = useState('');
+  const [needsDismissed, setNeedsDismissed] = useState([]);
+  const [needsNow, setNeedsNow] = useState(() => Date.now());
+  const anyHandover = players.some((p) => p && p.handover && (p.handover.requested || p.handover.open));
+  useEffect(() => {
+    if (!anyHandover) return undefined;
+    setNeedsNow(Date.now());
+    const timer = setInterval(() => setNeedsNow(Date.now()), 10 * 1000);
+    return () => clearInterval(timer);
+  }, [anyHandover]);
+  const wsEverConnected = useRef(false);
+  useEffect(() => { if (wsConnected) wsEverConnected.current = true; }, [wsConnected]);
   // On load, and when the room moves (a round closing makes items late; the
   // end opens Close comments). A new session starts empty.
   useEffect(() => {
@@ -2312,8 +2531,10 @@ function GameHostPage() {
   };
 
   // Fetch AI summary for a specific question from DynamoDB
-  const fetchAISummary = async (questionId) => {
-    if (!gameId || !questionId) return null;
+  const fetchAISummary = async (rawQuestionId) => {
+    if (!gameId || !rawQuestionId) return null;
+    // One spelling of a round: "001", never "1" beside it (dev QA 2 Nov).
+    const questionId = summaryRoundId(rawQuestionId);
     
     try {
       // The prompt echo (?debug=true) is served only on the host's route,
@@ -2322,12 +2543,18 @@ function GameHostPage() {
       // The round is named rather than left to the server's CurrentQuestionId:
       // a closed survey has none (its read is 000), and a past round's
       // regenerated summary is not the current one.
+      // quiet=1: "not written yet" answers 200 { status: 'not_ready' } rather
+      // than a 404 the console logs on every look (dev QA 2 Nov).
       const response = gameDebugMode
-        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}`)
-        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}`);
+        ? await authFetch(`${API_BASE}games/${gameId}/ai-summary/host?debug=true&questionId=${encodeURIComponent(questionId)}&quiet=1`)
+        : await fetch(`${API_BASE}games/${gameId}/ai-summary?questionId=${encodeURIComponent(questionId)}&quiet=1`);
 
       if (response.ok) {
         const summaryData = await response.json();
+        if (summaryNotReady(summaryData)) {
+          console.log(`ℹ️ No AI summary exists in DB for question ${questionId} yet`);
+          return null;
+        }
         // THE READ CHECK'S NOTE is served on the host's door only
         // (utils/readCheckClient.js). The debug read already came through it.
         if (!gameDebugMode && (summaryData.markdownResponse || summaryData.summary)) {
@@ -2744,6 +2971,9 @@ Focus on actionable business strategy insights.`;
       setShowWelcomeScreen(true);
       // Load question sets for UI display (needed for set name display)
       fetchQuestionSets();
+      // A session handed over from Library & team (experience plan 4a).
+      const intent = readSessionIntent(window.location.search);
+      if (intent) runSessionIntent(intent);
     }
   }, []);
 
@@ -2838,13 +3068,17 @@ Focus on actionable business strategy insights.`;
     });
 
     /* SOMEBODY IS LOCKED OUT OF THEIR OWN NAME AND IS ASKING FOR IT BACK.
-       Refetching is the whole handling: `get-players` carries the request as a
-       flag on the roster row, so the Players tab shows "asking to take this
-       name" beside the person's name the moment this lands. There is no toast
-       — the host is running a room, and the decision belongs where the two
-       buttons that answer it already are. */
+       The frame names them, so the flag goes on their roster row in this same
+       render (config/needsYou.js markHandoverRequested): the Needs-you line,
+       the bell and their People row show it before the network answers
+       (experience plan 1a: "within a second", never reload-only). The roster
+       refetch that follows is the authority. Still no toast — the item has
+       one home, with the buttons that answer it. */
     webSocketClient.onMessage('handoverRequested', (data) => {
       console.log('🔌 Handover requested notification:', data);
+      const asker = data && (data.playerName || (data.data && data.data.playerName));
+      const expires = data && (data.requestExpiresAt || (data.data && data.data.requestExpiresAt));
+      if (asker) setPlayers((prev) => markHandoverRequested(prev, asker, new Date().toISOString(), expires || null));
       fetchPlayers('websocket-handover-request');
     });
 
@@ -2958,6 +3192,9 @@ Focus on actionable business strategy insights.`;
 
     webSocketClient.onMessage('votingStarted', (data) => {
       console.log('🔌 Voting started notification:', data);
+      // The voting timer as the room sees it, and the server's clock (2f).
+      noteServerNow(data && data.serverNow);
+      if (data && data.time) setRoundTime((held) => mergeTimer(held, data.time));
 
       // Move the phase immediately when the frame says so — it avoids a beat of
       // stale header while the restore is in flight.
@@ -3042,6 +3279,14 @@ Focus on actionable business strategy insights.`;
       applyServerBoard(data);
     });
 
+    // THE ROUND TIMER moved (+1 min from here or the Remote, or a phase opened
+    // with a time): the frame carries the timer, applied as it stands (2f).
+    webSocketClient.onMessage('roundTimeChanged', (data) => {
+      if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
+      noteServerNow(data && data.serverNow);
+      if (data && data.time) setRoundTime((held) => mergeTimer(held, data.time));
+    });
+
     // THE SESSION'S DISPLAY PROFILE, chosen on another surface (two-surface D2).
     webSocketClient.onMessage('stageProfileChanged', (data) => {
       if (data && data.gameId && String(data.gameId) !== String(activeGameIdRef.current)) return;
@@ -3092,10 +3337,19 @@ Focus on actionable business strategy insights.`;
     */
     webSocketClient.onMessage('questionQueueChanged', (data) => {
       console.log('🔌 Question queue notification:', data);
+      // An edit to one of the host's own questions (edit-own) carries no
+      // list: the words changed, not the order. Re-read the queue route.
+      if (data && data.own && !Array.isArray(data.queue)) { loadQueueRef.current(); loadUpNextRef.current(); return; }
       const list = data?.queue ?? null;
       if (!Array.isArray(list)) return;
+      // A question the other surface wrote arrives as a bare `own:` key: read
+      // the queue route once for its words, so the row is named, not blank.
+      if (list.some((k) => isOwnKey(k))) loadQueueRef.current();
       setQuestionQueue(normaliseQueue(list));
       setQueueVersion(Number(data.version) || 0);
+      // The rail's planned rounds are the PLAN, not the list: re-read it, or
+      // the rail keeps the old order while the Running order shows the new.
+      loadUpNextRef.current();
     });
 
     /*
@@ -3284,6 +3538,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('scoreboardChanged');
       webSocketClient.offMessage('presentChanged');
       webSocketClient.offMessage('stageProfileChanged');
+      webSocketClient.offMessage('roundTimeChanged');
       webSocketClient.offMessage('questionQueueChanged');
       webSocketClient.offMessage('wavelengthAnalysisReady');
       webSocketClient.offMessage('commentPosted');
@@ -3400,10 +3655,13 @@ Focus on actionable business strategy insights.`;
       // authFetch, because it carries the Cognito authorizer; the public
       // /state stopped returning the host's half on 2026-09-26
       // (get-game-state.js).
+      const restoreSentAt = Date.now();
       const stateRes = await authFetch(`${API_BASE}games/${gameId}/host-state`);
       if (superseded()) return false;
       if (stateRes.ok) {
         const gameStateData = await stateRes.json();
+        // The round's timer and the server's clock (experience plan 2f).
+        takeHostTime(gameStateData, restoreSentAt);
         console.log(`📊 HOST: Found existing game state:`, gameStateData);
 
         // Which beat of RESULTS this round is on, per the ROUND# record. The
@@ -3547,6 +3805,7 @@ Focus on actionable business strategy insights.`;
         if (gameStateData.gameMetadata) {
           setEventTitle(gameStateData.gameMetadata.title || '');
           setCurrentGameType(gameStateData.gameMetadata.gameType || 'call-and-answer');
+          setTypeKnownFor(forGameId);
           // The retention deadline is creation + 90 days, and the invite dialog
           // cannot check a chosen date without this. Already in the payload.
           setGameCreatedAt(gameStateData.gameMetadata.createdAt || null);
@@ -4100,25 +4359,50 @@ Focus on actionable business strategy insights.`;
    * its own row, because a client id is the secret get-answers.js accepts as
    * proof of identity and GET /players is public.
    */
-  const grantNameHandover = async (name, bindToRequester) => {
+  const sendHandover = async (name, body, reason) => {
+    setNeedsBusy(true);
+    setNeedsError('');
     try {
       const res = await authFetch(
         `${API_BASE}games/${gameId}/players/${encodeURIComponent(name)}/handover`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bindToRequester: Boolean(bindToRequester) }),
+          body: JSON.stringify(body),
         }
       );
       if (!res.ok) {
-        console.error(`grantNameHandover HTTP error: ${res.status}`);
-        return;
+        // THE SERVER'S SENTENCE, ON THE ITEM (experience plan §4.4: "If the
+        // grant fails, the server's sentence shows on the item (today it goes
+        // to the browser console)"). Then re-read: whoever answered first won.
+        let said = '';
+        try { const j = await res.json(); said = (j && (j.message || j.error)) || ''; } catch (e) { /* no body */ }
+        setNeedsError(said || `That did not work (${res.status}). Look again.`);
+        await fetchPlayers('after-handover-refused');
+        return false;
       }
-      await fetchPlayers('after-grant-handover');
+      await fetchPlayers(reason);
+      return true;
     } catch (e) {
-      console.error('grantNameHandover error', e);
+      console.error('handover error', e);
+      setNeedsError('That did not reach the server. Try again.');
+      return false;
+    } finally {
+      setNeedsBusy(false);
     }
   };
+  // `requestedAt`: the request time the host was shown, so a request that
+  // changed in between is refused (grant-handover.js REQUEST_CHANGED).
+  const grantNameHandover = (name, bindToRequester, requestedAt = null) => sendHandover(
+    name,
+    { bindToRequester: Boolean(bindToRequester), ...(bindToRequester && requestedAt ? { requestedAt } : {}) },
+    'after-grant-handover',
+  );
+  /* NOT NOW and LOCK AGAIN for every round type (experience plan 1a): the
+     same host-only route the Build Room uses (grant-handover.js `refuse`,
+     `lock`). */
+  const refuseNameHandover = (name) => sendHandover(name, { refuse: true }, 'after-refuse-handover');
+  const lockNameHandover = (name) => sendHandover(name, { lock: true }, 'after-lock-handover');
 
 
   const fetchQuestionSets = async (duringRestoration = false) => {
@@ -4467,7 +4751,9 @@ Focus on actionable business strategy insights.`;
     }
     setQuestionQueue(result.queue);
     setQueueVersion(result.version);
+    setOwnQuestions(result.ownQuestions || []);
   }, [gameId]);
+  loadQueueRef.current = loadQueue;
 
   /**
    * WHAT THE SESSION WILL ASK NEXT, INCLUDING THE PART NOBODY QUEUED.
@@ -4500,6 +4786,8 @@ Focus on actionable business strategy insights.`;
       // questions the host has disabled for this session.
       setUpNextAdvisories(Array.isArray(payload.advisories) ? payload.advisories : []);
       setUpNextExcluded(Array.isArray(payload.excluded) ? payload.excluded : []);
+      // The host's own questions, queued and asked (Yours on the rail too).
+      if (Array.isArray(payload.ownQuestions)) setOwnQuestions(payload.ownQuestions);
       /*
         THE SERVER'S OWN ASKED LIST corrects the watched one. Locally-watched
         ids stay (union, not replace — the round on screen is asked before the
@@ -4519,20 +4807,51 @@ Focus on actionable business strategy insights.`;
     }
   }, [gameId]);
 
+  loadUpNextRef.current = loadUpNext;
+
   /*
-    Read it when the panel opens, alongside the questions themselves. Not on
-    mount: a host who never opens the console never needs the list, and the
-    drain happens server-side either way.
+    ONE LOADER FOR THE ROUNDS, used by the rail's Round queue and the Session
+    menu's Running order alike, so the two lists are drawn from the same reads:
+    the running order and the host's own questions (GET /queue), the plan
+    (GET /up-next) and, once a round has been played, the rounds played
+    (POST /report, which the rail numbers from).
+
+    THE BUG THIS REPLACES (owner, dev, 3 Nov 2026): "when i refresh the host
+    screen in 2 screen mode, the rounds list doesn't list correctly. only when
+    i click rounds and questions". The plan and the rounds played were read
+    only when the Session menu opened (and the plan again on a round start's
+    socket frame), so a reload left the rail with the round on screen and
+    nothing either side of it until the menu was opened.
   */
+  const loadRoundPlan = useCallback(({ history = false } = {}) => {
+    if (!gameId) return;
+    loadQueue();
+    loadUpNext();
+    if (history) loadRounds();
+  }, [gameId, loadQueue, loadUpNext, loadRounds]);
+
+  /*
+    ON LOAD (a reload included) AND ON EVERY ROUND, because the plan is a
+    function of what has already been asked: without `currentQuestionId` the
+    lists would keep the question the room just answered as still "coming up".
+    The rounds played are read once one has been played (before round 1 the
+    report route has nothing to say), and on load only where the rail shows
+    them — the console, on two screens. POST /report rewrites the session's
+    REPORT snapshot, so one screen, with no rail, keeps reading it only when
+    the Session menu opens. `lessonNumber` is their trigger rather than
+    `gameState`, because a round's ASK, VOTE and RESULTS change nothing in
+    that list.
+  */
+  const roundsPlayedKnown = useConsole && (lessonNumber > 0 || gameState === 'ENDED');
   useEffect(() => {
-    if (setupPanelOpen) { loadQueue(); loadUpNext(); }
-    /*
-      AND ON EVERY ROUND, because the plan is a function of what has already
-      been asked. Without `currentQuestionId` here the panel would keep showing
-      the question the room just answered as still "coming up" — the preview
-      going stale in the one way a host would certainly notice.
-    */
-  }, [setupPanelOpen, currentQuestionId, loadQueue, loadUpNext]);
+    if (gameId) loadRoundPlan({ history: roundsPlayedKnown });
+  }, [gameId, currentQuestionId, lessonNumber, roundsPlayedKnown, loadRoundPlan]);
+
+  /* AND WHEN THE SESSION MENU OPENS, so what it shows is fresh. */
+  useEffect(() => {
+    if (setupPanelOpen) loadRoundPlan({ history: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupPanelOpen]);
 
   /**
    * One op, applied locally, sent, then reconciled.
@@ -4717,9 +5036,111 @@ Focus on actionable business strategy insights.`;
     loadUpNext();
   }, [gameId, loadQueue, loadUpNext, hostActionFailed]);
 
+  /*
+    ── THE HOST'S OWN QUESTION (impromptu ask, docs/design/impromptu-ask) ──
+
+    One composer, three doors: the Session menu's Rounds → Running order, the
+    rail's Round queue, and Q. On one screen a door opens the host-only choice
+    first (D8): the fields never draw on the room's screen unasked. The ops are
+    the queue route's own (add-own, edit-own, remove); "Now" is add-own at the
+    head and then next-question's select_own, so a refused Now leaves it next.
+  */
+  const openOwnComposer = useCallback(({ mode = 'add', key = null, initial = null, skipChoice = false } = {}) => {
+    setOwnError('');
+    setOwnNotice(null);
+    if (mode === 'add' && !twoSurfaces && !skipChoice) {
+      setOwnChoiceOpen(true);
+      return;
+    }
+    setOwnChoiceOpen(false);
+    setOwnComposer({ mode, key, initial });
+    openSetupAt('rounds');
+  }, [twoSurfaces, openSetupAt]);
+
+  const closeOwnComposer = useCallback(() => {
+    setOwnComposer(null);
+    setOwnError('');
+  }, []);
+
+  const removeOwnQuestion = useCallback(async (key) => {
+    if (!isOwnKey(key)) return;
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    const result = await postQueueOp({
+      apiBase: API_BASE, gameId, op: 'remove', questionKey: key, expectedVersion: queueVersion,
+    });
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+    if (!result.ok) {
+      hostActionFailed(`Could not remove your question: ${result.error}`);
+      return;
+    }
+    if (result.queue) { setQuestionQueue(result.queue); setQueueVersion(result.version); }
+    setOwnQuestions(result.ownQuestions || []);
+    setOwnNotice({ text: OQ.removed });
+    loadUpNext();
+  }, [gameId, queueVersion, loadUpNext, hostActionFailed]);
+
+  const submitOwnQuestion = useCallback(async (fields) => {
+    if (!ownComposer) return;
+    const editing = ownComposer.mode === 'edit';
+    setOwnBusy(true);
+    setOwnError('');
+    const result = await postQueueOp({
+      apiBase: API_BASE,
+      gameId,
+      op: editing ? 'edit-own' : 'add-own',
+      questionKey: editing ? ownComposer.key : undefined,
+      expectedVersion: queueVersion,
+      place: editing ? undefined : fields.place,
+      anchorKey: fields.anchorKey || undefined,
+      anchorRound: fields.anchorRound || undefined,
+      through: fields.through && fields.through.length ? fields.through : undefined,
+      question: { title: fields.title, detail: fields.detail, note: fields.note },
+    });
+    setOwnBusy(false);
+    if (!result.ok) {
+      setOwnError(`Could not save your question: ${result.error}`);
+      return;
+    }
+    if (result.ownQuestions) setOwnQuestions(result.ownQuestions);
+    if (result.changed === false) {
+      setOwnError(result.message || 'Nothing changed. The running order may have moved; look again.');
+      return;
+    }
+    // An edit answers with no list (the order did not move); only an add does.
+    if (!editing && result.queue) { setQuestionQueue(result.queue); setQueueVersion(result.version); }
+    setOwnComposer(null);
+    loadUpNext();
+    if (editing) { setOwnNotice({ text: OQ.saved }); return; }
+    const key = result.key;
+    if (fields.place === 'now' && key) {
+      const asked = await selectQuestion(null, { body: { action: 'select_own', ownId: key.slice(OWN_KEY_PREFIX.length) } });
+      if (asked) { setOwnNotice({ text: OQ.askedNow }); return; }
+      loadQueue();
+      setOwnNotice({ text: OQ.isNext, rest: OQ.isNextRest, undoKey: key });
+      return;
+    }
+    setOwnNotice(fields.place === 'later' && fields.anchorRound
+      ? { text: OQ.placedAfter(fields.anchorRound), undoKey: key }
+      : { text: OQ.isNext, rest: OQ.isNextRest, undoKey: key });
+  // selectQuestion is a plain function re-made each render; the latest is the one wanted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownComposer, gameId, queueVersion, loadQueue, loadUpNext]);
+
+  const editOwnQuestion = useCallback((key, row) => {
+    const own = row || ownQuestions.find((o) => o.key === key);
+    if (!own) return;
+    openOwnComposer({ mode: 'edit', key, initial: { title: own.title || '', detail: own.detail || '', note: own.note || '' }, skipChoice: true });
+  }, [ownQuestions, openOwnComposer]);
+
   // "Ask now": put one named question on the room's screen straight away.
   // "Ask next" is handleQueueFirst above — the top of the running order.
-  const selectQuestion = async (selectedQuestion) => {
+  //
+  // `override` is the impromptu ask's "Ask it now" (README D4): `{ body:
+  // { action: 'select_own', ownId } }`. Now is only offered between rounds, so
+  // it never needs the mid-round confirmation; the server refuses it in
+  // ASK#/VOTE# anyway (next-question.js).
+  const selectQuestion = async (selectedQuestion, override = null) => {
+    const overrideBody = override && override.body ? override.body : null;
     try {
       console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
 
@@ -4730,7 +5151,7 @@ Focus on actionable business strategy insights.`;
       // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
       // It names the reversible neighbour, because a host who pressed Ask now
       // mid-round most often meant "after this one" — which is Ask next.
-      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+      if (!overrideBody && (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))) {
         const proceed = await showConfirmation(
           'Ask this question now?',
           'This ends the round on screen and puts the selected question up straight away. To ask it after this round instead, use Ask next.',
@@ -4747,11 +5168,13 @@ Focus on actionable business strategy insights.`;
       console.log(`🎯 HOST: Requesting specific question, current state: ${gameState}`);
       
       // Include skip action if we're forcing advancement from ASK/VOTE states (same logic as handleNextQuestion)
-      const requestBody = {
+      const requestBody = overrideBody ? { ...overrideBody, time: timeChoices.ask } : {
         questionId: selectedQuestion.id,
-        action: 'select_specific'
+        action: 'select_specific',
+        // The answering time the chip says (experience plan 2f).
+        time: timeChoices.ask
       };
-      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+      if (!overrideBody && (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))) {
         requestBody.action = 'skip_to_specific';
       }
       
@@ -4771,6 +5194,7 @@ Focus on actionable business strategy insights.`;
       
       const nextQuestionData = await nextQuestionRes.json();
       console.log(`📝 HOST: Selected question response:`, nextQuestionData);
+      takeHostTime(nextQuestionData);
       
       const questionId = nextQuestionData.questionId;
       const lessonNumber = nextQuestionData.lessonNumber;
@@ -4810,7 +5234,8 @@ Focus on actionable business strategy insights.`;
       closeAllSidePanels();
       
       console.log(`✅ HOST: Successfully selected question ${questionId}, state: ${newState}`);
-      
+      return true;
+
     } catch (error) {
       console.error('Error selecting question:', error);
       hostActionFailed(`That question could not be asked: ${error.message}`);
@@ -4919,8 +5344,9 @@ Focus on actionable business strategy insights.`;
     try {
       console.log(`🎯 HOST: Requesting next question, forceSkip: ${forceSkip}, current state: ${gameState}`);
       
-      // Include skip action if we're forcing advancement from ASK/VOTE states
-      const requestBody = {};
+      // Include skip action if we're forcing advancement from ASK/VOTE states.
+      // `time`: what the chip beside the opening move says (experience plan 2f).
+      const requestBody = { time: timeChoices.ask };
       if ((gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) && forceSkip) {
         requestBody.action = 'skip';
       }
@@ -4951,6 +5377,7 @@ Focus on actionable business strategy insights.`;
          It shipped as a 401 on the main control of the host page: start a
          quickstart, press next, "Unauthorized". __tests__/closedRoutesUseAuthFetch
          now scans for both shapes. */
+      const nextSentAt = Date.now();
       const attempt = await requestNextQuestion({
         fetchFn: authFetch, apiBase: API_BASE, gameId, body: requestBody,
       });
@@ -4971,6 +5398,7 @@ Focus on actionable business strategy insights.`;
 
       const nextQuestionData = attempt.data;
       console.log(`📝 HOST: Next question selected:`, nextQuestionData);
+      takeHostTime(nextQuestionData, nextSentAt);
       
       const questionId = nextQuestionData.questionId;
       const lessonNumber = nextQuestionData.lessonNumber;
@@ -5149,7 +5577,14 @@ Focus on actionable business strategy insights.`;
   };
 
   const openingVoteRef = useRef(false);
-  const handleFinishQuestion = async () => {
+  /*
+    `timeUp`: the opt-in close at zero (experience plan 2f), fired by the timer
+    effect below rather than by the host. The server checks it against its own
+    clock and STATE (start-vote.js), so it answers "not yet" (409 with the time
+    left), "already moved" (another screen closed it), or opens voting. Neither
+    refusal is the host's error, so neither is said in the dock.
+  */
+  const handleFinishQuestion = async ({ timeUp = false } = {}) => {
     // For trivia and wavelength, go straight to results using the same unified mechanism as call-and-answer
     if (currentGameType === 'trivia' || currentGameType === 'wavelength' || currentGameType === 'poll') {
       // Skip voting phase for both trivia and wavelength
@@ -5168,7 +5603,7 @@ Focus on actionable business strategy insights.`;
       VOTE (its own response below, or the `votingStarted` frame, whichever
       lands first); the VOTE stage then waits for its rows (stageAnswers.js).
     */
-    if (openingVoteRef.current) return;
+    if (openingVoteRef.current) return null;
     openingVoteRef.current = true;
     setManualStateChange(true);
     setSessionActionError('');
@@ -5178,16 +5613,27 @@ Focus on actionable business strategy insights.`;
       const questionNumber = lessonNumber; // Current question number
       
       // Start the voting process using the dedicated endpoint
+      const voteSentAt = Date.now();
       const startVoteRes = await authFetch(`${API_BASE}games/${gameId}/start-vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          questionNumber: questionNumber
+          questionNumber: questionNumber,
+          // The voting time the chip says (experience plan 2f; No limit by default).
+          time: timeChoices.vote,
+          ...(timeUp ? { timeUp: true } : {})
         })
       });
-      
+
+      if (timeUp && !startVoteRes.ok) {
+        const refusal = await startVoteRes.json().catch(() => ({}));
+        noteServerNow(refusal.serverNow, voteSentAt);
+        return refusal;
+      }
       if (startVoteRes.ok) {
         const voteData = await startVoteRes.json();
+        if (voteData.alreadyMoved) return voteData;
+        takeHostTime(voteData, voteSentAt);
         console.log(`🗳️ HOST: Vote started successfully:`, voteData);
         
         // The start-vote endpoint should return the answers
@@ -5525,6 +5971,9 @@ Focus on actionable business strategy insights.`;
     is a small modal and not the type-to-confirm ceremony deletion gets.
   */
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // The one-screen Needs-you sheet (2h): the top bar's bell and the public
+  // Needs-you line's Open open this one sheet.
+  const [needsSheetOpen, setNeedsSheetOpen] = useState(false);
 
   /**
    * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
@@ -5565,17 +6014,38 @@ Focus on actionable business strategy insights.`;
     }
   };
 
-  const requestLeave = () => {
+  /*
+    MAIN MENU ALWAYS MEANS THE MAIN MENU (experience plan §3.6; Phase 2 step
+    2h settles the owner's open question from the dock fix). Inside an event
+    it used to go to the agenda, which made it a second AGENDA. Now it goes
+    home in an event too, asking first when people are in the room, and
+    Agenda is separate: the Session menu's first item, and an ended item's
+    own "Back to the agenda" primary (HOST_INTENTS.LEAVE in an event, below).
+    Leaving an event's item drops the event from this page as well, so the
+    next session opened from the start screen is not taken for one of its
+    items; the event keeps running and its agenda is one click from home.
+  */
+  const leaveToMainMenu = () => {
     if (eventCode) {
-      goToAgenda();
-      return;
+      setEventCode('');
+      setEventItem(null);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('event');
+        url.searchParams.delete('gameId');
+        window.history.replaceState(window.history.state, '', url.toString());
+      } catch (e) { /* no history API: the state reset still stands */ }
     }
+    handleSwitchGame();
+  };
+
+  const requestLeave = () => {
     const midSession = gameState !== 'CREATED' && gameState !== 'ENDED' && players.length > 0;
     if (midSession) {
       setConfirmLeave(true);
       return;
     }
-    handleSwitchGame();
+    leaveToMainMenu();
   };
 
   const handleSwitchGame = () => {
@@ -5680,6 +6150,19 @@ Focus on actionable business strategy insights.`;
    * the host reads it; nothing here reaches for alert().
    */
   const startSession = async (selectedGameId, selectedEventTitle, overrides = {}) => {
+    /*
+      A GAME ID IS A STRING (or a number), NEVER AN OBJECT. A caller once
+      passed a whole session row here and the request went out as
+      POST /games/[object Object]/start (issue #48 finding 1). Refuse anything
+      that is not a plain id rather than build a URL from it.
+    */
+    const idOk = (typeof selectedGameId === 'string' && selectedGameId.trim() !== '')
+      || (typeof selectedGameId === 'number' && Number.isFinite(selectedGameId));
+    if (!idOk) {
+      console.error('❌ startSession called without a game id:', selectedGameId);
+      return { ok: false, error: 'This page lost track of which session to start. Use the Start button on its row.' };
+    }
+    selectedGameId = String(selectedGameId).trim();
     let response;
     try {
       console.log(`🚀 HOST: Starting game ${selectedGameId}`);
@@ -5722,35 +6205,61 @@ Focus on actionable business strategy insights.`;
     return { ok: true };
   };
 
-  const startGameFromHistory = async (selectedGameId, selectedEventTitle) => {
+  /*
+    A RETURNING HOST IS ONE CLICK FASTER (session-start D2, F5; experience plan
+    2b). The row's "Start · two screens" opened a blank room's window inside
+    its own click (SessionHistoryPanel, openPendingRoomWindow); once the
+    session has started it goes to the room's window and onto the other
+    display. Blocked: Setup opens at step 2 with the Open button and says so.
+  */
+  const startGameFromHistory = async (selectedGameId, selectedEventTitle, opts = {}) => {
     setHistoryNotice('');
+    const pending = (opts && opts.pending) || null;
     const started = await startSession(selectedGameId, selectedEventTitle);
-    if (!started.ok) setHistoryNotice(`That session did not start: ${started.error}`);
+    if (!started.ok) {
+      if (pending) pending.cancel();
+      setHistoryNotice(`That session did not start: ${started.error}`);
+      return;
+    }
+    const id = String(selectedGameId).trim();
+    setWindowBlockedFor(opts && opts.blocked ? id : null);
+    if (pending) pending.go(presentHref(id));
   };
 
-  /**
-   * CREATE → OPEN → THE COLLECTING STAGE, for a survey (IMPLEMENTATION-phase-2.md
-   * §5 risk 5). The dialog's button said "Open the survey", so the create is
-   * followed straight by the start, the way QuickstartMenu creates-and-starts;
-   * there is no history modal and no lobby to fill first, matching
-   * s-01-collecting, which draws none.
-   *
-   * If the start is refused the survey still EXISTS, unopened — so the host is
-   * shown it in history, where its Start button is, rather than left on a
-   * blank screen, with the server's reason on the list (never an alert()).
-   */
-  const openNewSurvey = async (newGameId, form) => {
-    const opened = await startSession(newGameId, form.title, {
-      currentGameType: 'survey',
-      selectedSetId: form.setId,
-    });
-    if (opened.ok) return;
-    setHistoryNotice(`The survey was created but did not open: ${opened.error}`);
-    await fetchGamesList();
-    setReportsModalMode('select');
-    setShowReportsModal(true);
+  /*
+    START, FROM A NEW SESSION'S SETUP (experience plan 4c). The same start as
+    a list row's (startSession, the one caller of POST /start): two screens
+    opens the room's window inside the press (startRow, in the component's
+    click) and sends it on once the session has started; a survey's start IS
+    its open. Refused, the host stays on Setup and reads the server's reason
+    there. Started, the live frame opens at Setup's next step (2b).
+  */
+  const startFromSetup = async (opts = {}) => {
+    const target = createdSetup;
+    if (!target || setupStarting) return;
+    const pending = (opts && opts.pending) || null;
+    setSetupNotice('');
+    setSetupStarting(true);
+    const survey = isSurveyType(target.gameType);
+    const started = await startSession(target.gameId, target.title, survey
+      ? { currentGameType: 'survey', selectedSetId: target.setId }
+      : {});
+    setSetupStarting(false);
+    if (!started.ok) {
+      if (pending) pending.cancel();
+      setSetupNotice(`${survey ? 'It did not open' : 'It did not start'}: ${started.error}`);
+      return;
+    }
+    setWindowBlockedFor(opts && opts.blocked ? target.gameId : null);
+    if (pending) pending.go(presentHref(target.gameId));
+    setCreatedSetup(null);
   };
-  
+  const leaveSetup = () => {
+    setCreatedSetup(null);
+    setSetupNotice('');
+    setShowWelcomeScreen(true);
+  };
+
   /*
     EDIT A SESSION BEFORE IT STARTS, from the history list. Prefill comes from
     the server, not from the row: the list rows carry no details/aiContext/
@@ -5834,6 +6343,8 @@ Focus on actionable business strategy insights.`;
       // title in step rather than showing the old name until the next load.
       if (targetId === gameId) setEventTitle(form.title);
       if (targetId === gameId && 'target' in form) setSessionTarget(Number.isInteger(form.target) ? form.target : null);
+      // Edited from its Setup (4c): the Setup the host goes back to says the new name.
+      setCreatedSetup((prev) => (prev && prev.gameId === String(targetId) ? { ...prev, title: form.title } : prev));
       localStorage.setItem(`game_${targetId}_title`, form.title);
       // The history table reads the GAMES index row the backend just
       // mirrored onto; refetch so the list shows what actually landed.
@@ -5949,22 +6460,22 @@ Focus on actionable business strategy insights.`;
         localStorage.setItem(`game_${newGameId}_title`, form.title);
 
         /*
-          THE DIALOG CLOSES LAST. It used to close here, before the awaits
-          below, and the empty host stage showed until the session list (or
-          the survey) was ready — the owner's second flash, "after you have
-          created it and before it brings up the list of sessions". The list's
-          branch returns ahead of the dialog's, so opening it first and closing
-          the dialog after is safe in either order React commits them.
+          EVERY CREATED SESSION LANDS ON ITS OWN SETUP (experience plan 4c;
+          the owner's decision 7). A round type used to land in the Sessions
+          list ("Created … press Start"), a survey opened and went live at
+          once, and Quick start went live at once: three landings. Now all of
+          them land on Setup, not started, with Start (Open the survey) and
+          Edit there. The Setup branch returns ahead of the dialog's, so the
+          host never sees the empty stage between the two.
         */
-        if (isSurveyType(form.gameType)) {
-          await openNewSurvey(newGameId, form);
-        } else {
-          // Show game history with the new game highlighted
-          await fetchGamesList();
-          setReportsModalMode('select');
-          setShowReportsModal(true);
-          setHistoryDone({ gameId: newGameId, title: form.title, verb: 'created' });
-        }
+        setSetupNotice('');
+        setCreatedSetup({
+          gameId: String(newGameId),
+          title: form.title,
+          gameType: form.gameType,
+          setId: form.setId,
+          setScope: form.setScope || '',
+        });
         setShowNewGameDialog(false);
 
         console.log(`🎯 HOST: New game created with ID ${newGameId}, set "${form.setId}", title "${form.title}" - showing in history`);
@@ -6018,7 +6529,7 @@ Focus on actionable business strategy insights.`;
   // authFetch sends the request unauthenticated when the session has expired
   // (authFetch.js) — which is why the 401/403 is handled rather than falling
   // into the catch as an opaque "failed to load".
-  const fetchGamesList = async () => {
+  const fetchGamesList = async ({ quiet = false } = {}) => {
     try {
       const res = await authFetch(`${API_BASE}games`);
       if (res.status === 401 || res.status === 403) {
@@ -6026,19 +6537,89 @@ Focus on actionable business strategy insights.`;
         setGamesList([]);
         // A 401 is an expired sign-in, and authFetch has already put the
         // sign-in form up (auth/sessionExpiry.js) — no alert on top of it.
-        if (res.status === 401 || isSessionExpired()) return;
+        if (quiet || res.status === 401 || isSessionExpired()) return false;
         alert('This account cannot see sessions yet. Ask an admin to approve it for hosting.');
-        return;
+        return false;
       }
       const data = await res.json();
       // Sessions and events as one list: an event is ONE row with its items,
       // and its items' sessions are under it, never listed again (2026-10-04,
       // config/engagementKinds.js).
       setGamesList(mergeSessions(data));
+      return true;
     } catch (error) {
       console.error('Error fetching games list:', error);
-      alert('Failed to load games list. Please try again.');
+      if (!quiet) alert('Failed to load games list. Please try again.');
+      return false;
     }
+  };
+
+  /*
+    DELETE FROM THE HOST'S OWN LISTS (experience plan 4a): Home's rows and the
+    sessions dialog offer it as Library & team's list does, through the same
+    call (utils/sessionRowsApi.js). SessionList asks first, inline.
+  */
+  const deleteSessionFromList = async (row, reason) => {
+    await deleteSessionRow(row, reason);
+    setGamesList((prev) => prev.filter((item) => item.gameId !== row.gameId));
+  };
+
+  /*
+    HOME'S ROW ACTIONS. Report, Survey results and Edit render over Home and
+    close back to it (their early returns now come before Home's). Continue
+    and Start take the host to the stage, so Home steps aside first.
+  */
+  const homeRowActions = {
+    onStart: async (selectedGameId, title, opts = {}) => {
+      setWelcomeNotice('');
+      const pending = (opts && opts.pending) || null;
+      const started = await startSession(selectedGameId, title);
+      if (!started.ok) {
+        if (pending) pending.cancel();
+        setWelcomeNotice(`That session did not start: ${started.error}`);
+        return;
+      }
+      setShowWelcomeScreen(false);
+      const id = String(selectedGameId).trim();
+      setWindowBlockedFor(opts && opts.blocked ? id : null);
+      if (pending) pending.go(presentHref(id));
+    },
+    onOpen: (selectedGameId, title) => {
+      setShowWelcomeScreen(false);
+      selectGameFromHistory(selectedGameId, title);
+    },
+    onEdit: (selectedGameId) => editGameFromHistory(selectedGameId),
+    onReport: (selectedGameId, title) => generateReportForGame(selectedGameId, title),
+    onResults: (selectedGameId, title) => loadSurveyResults(selectedGameId, title),
+    onInvite: (row) => setInviteTarget(inviteTargetFor(row, questionSets)),
+    onCopyPlayerUrl: copyPlayerUrl,
+    onDelete: deleteSessionFromList,
+  };
+
+  /*
+    LIBRARY & TEAM HANDS A SESSION OVER (experience plan 4a): its Start, Edit,
+    Report and Survey results open this page as /host?session=1234&do=start.
+    Run once, on Home, and take the words out of the URL so a reload does not
+    start it twice.
+  */
+  const runSessionIntent = async ({ gameId: targetId, action }) => {
+    const url = new URL(window.location);
+    url.searchParams.delete('session');
+    url.searchParams.delete('do');
+    window.history.replaceState(null, '', url);
+    const title = localStorage.getItem(`game_${targetId}_title`) || '';
+    if (action === 'start') {
+      const started = await startSession(targetId, title);
+      if (!started.ok) { setWelcomeNotice(`That session did not start: ${started.error}`); return; }
+      setShowWelcomeScreen(false);
+      // Two screens remembered: the window could not open from the console's
+      // click, so Setup opens with the room's window to open (2b's blocked path).
+      if (roomScreenChoice === 'two') setWindowBlockedFor(targetId);
+      return;
+    }
+    if (action === 'edit') { editGameFromHistory(targetId); return; }
+    if (action === 'report') { generateReportForGame(targetId, title); return; }
+    if (action === 'results') loadSurveyResults(targetId, title);
   };
 
   /**
@@ -6124,7 +6705,7 @@ Focus on actionable business strategy insights.`;
    * — so the list was a menu with the answer already on it.
    *
    * The list is not gone; it moved to where it is actually a choice. From
-   * inside the report, `All session reports` reaches it (see
+   * inside the report, `Your sessions` reaches it (see
    * handleBrowseReportHistory), and it is still the fallback here for the one
    * case where the question is real: no session loaded, so there is no "this
    * one" to open.
@@ -6344,6 +6925,8 @@ Focus on actionable business strategy insights.`;
   const setupScreens = {
     choice: twoSurfaces ? 'two' : 'classic',
     offerChoice: TWO_SURFACE_TYPES.includes(currentGameType || 'call-and-answer'),
+    // Wavelength says why it is one screen (experience plan §7 decision 10).
+    why: oneScreenWhy(currentGameType),
     onChoose: chooseRoomScreen,
     presentHref: gameId ? presentHref(gameId) : '',
     presentDetail,
@@ -6449,7 +7032,7 @@ Focus on actionable business strategy insights.`;
    */
   useEffect(() => {
     if (!autoMode) return undefined;
-    if (showQuickstartMenu || showWelcomeScreen || showNewGameDialog
+    if (createdSetup || showWelcomeScreen || showNewGameDialog
         || showReport || showSurveyResults || showSurveyWalkthrough || showReportsModal || editTarget) return undefined;
     if (shortcutsSuppressed({
       showConfirmModal, showExpandedQR, showReportsModal,
@@ -6549,7 +7132,7 @@ Focus on actionable business strategy insights.`;
     return () => clearTimeout(timer);
   }, [autoMode, gameState, resultsBeat, lessonNumber, stagePage, answers,
     currentAIInsights, loadingAIInsights, profile, players.length, answeredCount,
-    playersWhoVoted.length, showQuickstartMenu, showWelcomeScreen,
+    playersWhoVoted.length, createdSetup, showWelcomeScreen,
     showNewGameDialog, showReport, showSurveyResults, showSurveyWalkthrough, showReportsModal, editTarget,
     showConfirmModal, showExpandedQR, lessonExpanded, isLoadingData, qrMode,
     spotlightIndex, pastRoundIndex, scoreboard.open, twoSurfaces, wallFocus]);
@@ -6616,7 +7199,7 @@ Focus on actionable business strategy insights.`;
   const scoreboardKeysOn = scoreboardKeysLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    lessonExpanded, isLoadingData, qrMode,
+    lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -6626,7 +7209,7 @@ Focus on actionable business strategy insights.`;
     // session?" is reachable with the session menu closed, and is a dialog
     // exactly like the others in this list, not an overlay term
     // `shortcutsSuppressed` already tracks.
-    enabled: scoreboardKeysOn && !showQuickstartMenu && !showWelcomeScreen
+    enabled: scoreboardKeysOn && !createdSetup && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
       && !editTarget && !confirmLeave && Boolean(gameId),
     open: scoreboard.open,
@@ -6659,7 +7242,7 @@ Focus on actionable business strategy insights.`;
   const sessionPanelKeyOn = sessionPanelKeyLive({
     setupPanelOpen,
     showConfirmModal, showExpandedQR, showReportsModal,
-    isLoadingData, qrMode,
+    isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
   });
@@ -6667,10 +7250,25 @@ Focus on actionable business strategy insights.`;
     // ...and never over a surface that replaced the stage — the same list
     // `useScoreboardKeys`'s own `enabled` carries above, `confirmLeave`
     // included.
-    enabled: sessionPanelKeyOn && !showQuickstartMenu && !showWelcomeScreen
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
       && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
       && !editTarget && !confirmLeave && Boolean(gameId),
     onOpen: () => setSetupPanelOpen(true),
+  });
+
+  /*
+    Q: WRITE A QUESTION (impromptu ask). The same `enabled` as the Session
+    menu's key just above — never under a dialog, never over a surface that
+    replaced the stage — and Call & Answer only, the one format whose round a
+    host-written question is. On one screen it opens the choice first (D8).
+  */
+  useOwnQuestionKey({
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId)
+      && normalizeGameType(currentGameType) === 'call-and-answer'
+      && !ownComposer && !ownChoiceOpen && gameState !== 'ENDED',
+    onWrite: () => openOwnComposer(),
   });
 
   // F: the host's screen full screen, and back (hooks/useFullscreenKey.js).
@@ -6678,77 +7276,77 @@ Focus on actionable business strategy insights.`;
   // because it only asks the browser, and Esc always leaves.
   useFullscreenKey();
 
-  // Render the quickstart menu if it's being shown
-  if (showQuickstartMenu) {
-    return (
-      <QuickstartMenu
-        onGameCreated={(gameData) => {
-          setShowQuickstartMenu(false);
-          // switchToGame clears every per-game value in the same React batch as
-          // the new gameId, so the quickstart game can never be drawn over the
-          // previous session's question/phase/answers. The [gameId] effect then
-          // restores the new game from the server onto a clean slate.
-          switchToGame(gameData.gameId, {
-            eventTitle: gameData.eventTitle,
-            currentGameType: gameData.gameType || 'call-and-answer',
-            selectedSetId: gameData.questionSetId || '',
-          });
-        }}
-        onClose={() => setShowQuickstartMenu(false)}
-        // The empty menu's way to the sets (#43): Your question sets opens over the start screen.
-        onQuestionSets={() => { setShowQuickstartMenu(false); setShowHostSets(true); }}
-        roomScreen={roomScreenChoice}
-        onRoomScreen={chooseRoomScreen}
-      />
-    );
-  }
+  /*
+    THE ROUND TIMER'S MOMENTS (experience plan 2f; session-start D4). Above
+    the early returns for hook order.
 
-  // Render the welcome screen if no game is selected.
-  //
-  // The surface itself is <WelcomeScreen> — extracted, like GameSetupDialog
-  // and SessionSetupPanel before it, because this file cannot be mounted in
-  // jsdom at all and an inline surface here is an untestable one.
-  //
-  // The heading used to read `currentGameType === 'trivia' ? 'Trivia' : ...`.
-  // It was always the second branch: nothing ever sets showWelcomeScreen back
-  // to true, so currentGameType is still its initial 'call-and-answer' every
-  // time this renders. The dead ternary went with the markup.
-  if (showWelcomeScreen) {
-    return (
-      <>
-        <WelcomeScreen
-          currentUser={currentUser}
-          continueGameId={continueGameId}
-          onContinueGameIdChange={setContinueGameId}
-          onContinue={handleContinueGame}
-          onQuickStart={() => setShowQuickstartMenu(true)}
-          onCreateEngagement={handleWelcomeNewGame}
-          onViewHistory={handleViewGameHistory}
-          onQuestionSets={() => setShowHostSets(true)}
-          onReports={() => setShowHostReports(true)}
-          onSignOut={handleSignOut}
-          notice={welcomeNotice}
-        />
-        {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
-            `position: fixed; inset: 0` with its own `data-theme="dark"`, so a
-            dialog nested inside it would inherit the dusk tokens under
-            `.qsets--onlight`'s white card and scroll with the page behind it.
-            The scrim is fixed and z-index 10001, which is above everything the
-            welcome screen paints, so a sibling lands exactly where it should.
+    `phaseTimer` is the timer of the phase that is on, or null. `timeIsUp`
+    flips once, at zero by the server's clock (one timeout, not a page-wide
+    tick: the pulse ticks itself), so Your part now can say "Time's up".
 
-            NO `onSetsChanged`. That prop exists so the create screen's picker
-            can offer a set the moment it is made; here there is no picker on
-            screen, and the page re-reads `questionSets` when the create dialog
-            opens. */}
-        {showHostSets && (
-          <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
-        )}
-        {showHostReports && (
-          <HostReportsDialog onClose={() => setShowHostReports(false)} />
-        )}
-      </>
-    );
-  }
+    THE CLOSE AT ZERO is opt-in ("Close answering at zero" on the chip). It is
+    done from here and from the phone Remote, never by a server scheduler: the
+    same start-vote the host presses, sent with `timeUp`, which the server
+    checks against its own clock and STATE (so a skewed laptop cannot close
+    early, and two screens open voting once). It does not fire on a room with
+    no answers, and a vote-less type has nothing to close into.
+  */
+  const phaseTimer = timerOnPhase(roundTime, gameState);
+  const phaseTimerKey = phaseTimer
+    ? [phaseTimer.phase, phaseTimer.startedAt, phaseTimer.limitMs, phaseTimer.extendedMs].join('|')
+    : '';
+  const phaseTimerRef = useRef(phaseTimer);
+  phaseTimerRef.current = phaseTimer;
+  const [timeUpFor, setTimeUpFor] = useState('');
+  useEffect(() => {
+    const t = phaseTimerRef.current;
+    if (!t) return undefined;
+    const tl = timeLeft(t, serverNowMs());
+    if (!tl) return undefined;
+    if (tl.up) { setTimeUpFor(phaseTimerKey); return undefined; }
+    const timer = setTimeout(() => setTimeUpFor(phaseTimerKey), tl.leftMs + 50);
+    return () => clearTimeout(timer);
+  }, [phaseTimerKey]);
+  const timeIsUp = Boolean(phaseTimerKey) && timeUpFor === phaseTimerKey;
+  const closesIntoVote = !['trivia', 'wavelength', 'poll', 'survey'].includes(currentGameType);
+  const closeAtZeroRef = useRef('');
+  const [closeRetry, setCloseRetry] = useState(0);
+  useEffect(() => {
+    const t = phaseTimerRef.current;
+    if (!timeIsUp || !t || !t.closes || !closesIntoVote) return undefined;
+    if (!String(t.phase).startsWith('ASK#') || answeredCount === 0) return undefined;
+    if (closeAtZeroRef.current === phaseTimerKey) return undefined;
+    closeAtZeroRef.current = phaseTimerKey;
+    let retry = null;
+    handleFinishQuestion({ timeUp: true }).then((reply) => {
+      // The server's clock said not yet (this laptop runs fast): try again then.
+      if (reply && reply.notDue && Number(reply.remainingMs) >= 0) {
+        retry = setTimeout(() => { closeAtZeroRef.current = ''; setCloseRetry((n) => n + 1); }, Number(reply.remainingMs) + 250);
+      }
+    }).catch(() => {});
+    return () => { if (retry) clearTimeout(retry); };
+  }, [timeIsUp, phaseTimerKey, answeredCount, closesIntoVote, closeRetry]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** +1 min: one more minute on the timer that is on, timed by the server (stage-beat.js addMinute). */
+  const addMinute = useCallback(async () => {
+    const t = phaseTimerRef.current;
+    if (!t || !gameId) return;
+    const sentAt = Date.now();
+    try {
+      // authFetch: /stage-beat carries the Cognito authorizer.
+      const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addTime: true, phase: t.phase }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) takeHostTime(data, sentAt);
+      // 409: the room moved on as the key was pressed; the next frame says so.
+      else if (res.status !== 409) hostActionFailed(`Another minute was not added: ${data.error || `HTTP ${res.status}`}`);
+    } catch (e) {
+      hostActionFailed('Another minute was not added: no connection.');
+    }
+  }, [gameId, takeHostTime, hostActionFailed]);
 
   // Render the report if it's being shown.
   //
@@ -6860,6 +7458,107 @@ Focus on actionable business strategy insights.`;
     );
   }
 
+  /*
+    A NEW SESSION'S SETUP, BEFORE START (experience plan 4c). AFTER the edit
+    branch, because Edit is pressed from here and closing the edit dialog
+    falls back to this; before Home, the list and the create dialog, so the
+    host lands here the moment Create returns.
+  */
+  if (createdSetup) {
+    const setupKind = normalizeGameType(createdSetup.gameType);
+    const setupRow = { gameId: createdSetup.gameId, gameType: createdSetup.gameType, started: false };
+    const setupSet = questionSets.find((qs) => qs.id === createdSetup.setId
+      && (!createdSetup.setScope || !qs.scope || qs.scope === createdSetup.setScope));
+    const beforeOneOnly = oneScreenWhy(setupKind);
+    return (
+      <>
+        <SetupBeforeStart
+          title={createdSetup.title}
+          code={createdSetup.gameId}
+          formatLabel={gameTypeLabel(createdSetup.gameType)}
+          setName={setupSet ? setupSet.name : ''}
+          survey={isSurveyType(createdSetup.gameType)}
+          steps={SETUP_TYPES.includes(setupKind)}
+          startLabel={isSurveyType(createdSetup.gameType) ? 'Open the survey' : startLabelFor(roomScreenChoice)(setupRow)}
+          onStart={() => startRow(setupRow, createdSetup.title, { onStart: (_id, _t, opts) => startFromSetup(opts), roomScreen: beforeOneOnly ? 'classic' : roomScreenChoice })}
+          onEdit={() => editGameFromHistory(createdSetup.gameId)}
+          onInvite={() => setInviteTarget(inviteTargetFor({ ...setupRow, title: createdSetup.title, questionSetId: createdSetup.setId }, questionSets))}
+          onMainMenu={leaveSetup}
+          busy={setupStarting}
+          notice={setupNotice}
+          choice={beforeOneOnly ? 'classic' : roomScreenChoice}
+          choosing={beforeOneOnly ? false : roomScreenOpen}
+          oneOnly={beforeOneOnly}
+          onChoose={(choice) => { setRoomScreenOpen(false); chooseRoomScreen(choice); }}
+          onChange={beforeOneOnly ? null : () => setRoomScreenOpen(true)}
+          onKeep={() => setRoomScreenOpen(false)}
+          presentHref={presentHref(createdSetup.gameId)}
+          profile={profile}
+          onProfileChange={setProfile}
+        />
+        {/* This branch is an early return, so Invite is mounted here too. */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+      </>
+    );
+  }
+
+  // Render the welcome screen if no game is selected.
+  //
+  // AFTER the report, survey results and edit branches (experience plan 4b):
+  // Home's rows open those over Home, and closing them falls back to Home.
+  // Before, Home's early return came first and would have hidden them.
+  //
+  // The surface itself is <WelcomeScreen> — extracted, like GameSetupDialog
+  // and SessionSetupPanel before it, because this file cannot be mounted in
+  // jsdom at all and an inline surface here is an untestable one.
+  //
+  // The heading used to read `currentGameType === 'trivia' ? 'Trivia' : ...`.
+  // It was always the second branch: nothing ever sets showWelcomeScreen back
+  // to true, so currentGameType is still its initial 'call-and-answer' every
+  // time this renders. The dead ternary went with the markup.
+  if (showWelcomeScreen) {
+    return (
+      <>
+        <WelcomeScreen
+          currentUser={currentUser}
+          continueGameId={continueGameId}
+          onContinueGameIdChange={setContinueGameId}
+          onContinue={handleContinueGame}
+          onCreateEngagement={handleWelcomeNewGame}
+          onQuestionSets={() => setShowHostSets(true)}
+          onReports={() => setShowHostReports(true)}
+          onSignOut={handleSignOut}
+          notice={welcomeNotice}
+          sessions={homeSessionsLoaded ? gamesList : null}
+          questionSets={questionSets}
+          rowActions={homeRowActions}
+          roomScreen={roomScreenChoice}
+        />
+        {/* A SIBLING OF THE SCREEN, NOT A CHILD. `.wel-page` is
+            `position: fixed; inset: 0` with its own `data-theme="dark"`, so a
+            dialog nested inside it would inherit the dusk tokens under
+            `.qsets--onlight`'s white card and scroll with the page behind it.
+            The scrim is fixed and z-index 10001, which is above everything the
+            welcome screen paints, so a sibling lands exactly where it should.
+
+            NO `onSetsChanged`. That prop exists so the create screen's picker
+            can offer a set the moment it is made; here there is no picker on
+            screen, and the page re-reads `questionSets` when the create dialog
+            opens. */}
+        {showHostSets && (
+          <HostQuestionSetsDialog onClose={() => setShowHostSets(false)} />
+        )}
+        {showHostReports && (
+          <HostReportsDialog onClose={() => setShowHostReports(false)} />
+        )}
+        {/* Home's rows offer Invite too (experience plan 4a); this branch is
+            an early return, so the dialog is mounted here as well. */}
+        <InviteDialog target={inviteTarget} onClose={() => setInviteTarget(null)} />
+        {confirmDialog}
+      </>
+    );
+  }
+
   // Render the game history modal if it's being shown
   if (showReportsModal) {
     /*
@@ -6921,21 +7620,14 @@ Focus on actionable business strategy insights.`;
             mode={reportsModalMode}
             questionSets={questionSets}
             onCopyPlayerUrl={copyPlayerUrl}
-            onInvite={(session) => setInviteTarget({
-              gameId: session.gameId,
-              title: session.title || session.eventTitle,
-              gameType: session.gameType,
-              setName: (questionSets.find((set) => set.id === session.questionSetId) || {}).name
-                || session.questionSetId,
-              /* null, not [] — a history row carries no category data, and []
-                 would print "All categories" onto an invite nobody checked. */
-              categories: null,
-              createdAt: session.createdAt,
-            })}
+            onInvite={(session) => setInviteTarget(inviteTargetFor(session, questionSets))}
+            onDelete={deleteSessionFromList}
             onReport={generateReportForGame}
             onResults={loadSurveyResults}
             onOpen={selectGameFromHistory}
             onStart={startGameFromHistory}
+            roomScreen={roomScreenChoice}
+            onRoomScreen={chooseRoomScreen}
             onEdit={editGameFromHistory}
             notice={historyNotice}
             done={historyDone}
@@ -6949,19 +7641,6 @@ Focus on actionable business strategy insights.`;
   // the form and nothing else, and hands back one payload — including the
   // selected category ids, which is what freed handleStartNewGame from reading
   // them out of a closure leaveCurrentGame() had already invalidated.
-  // THE NEW-EVENT DIALOG, reached from the create screen's Event format: the
-  // same dialog as everywhere else, then the event's agenda. Closing it goes
-  // back to the create screen the host came from.
-  if (newEventTitle !== null) {
-    return (
-      <EventDetailsDialog
-        initial={{ title: newEventTitle }}
-        onClose={() => { setNewEventTitle(null); setShowNewGameDialog(true); }}
-        onSaved={(event) => { setNewEventTitle(null); navigateTo(eventAgendaPath(event.code)); }}
-      />
-    );
-  }
-
   if (showNewGameDialog) {
     return (
       <GameSetupDialog
@@ -7131,7 +7810,9 @@ Focus on actionable business strategy insights.`;
     asksEnabled: roundAsks.enabled && normalizeGameType(currentGameType) === 'call-and-answer',
     // The round on screen, for "Start round 3" and the workflow strip.
     roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
-    totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
+    // Plus the host's own questions (impromptu ask, risk 5): "Round 3 of 12"
+    // becomes 13 when one is queued, and back when it is removed.
+    totalRounds: withOwnRounds(questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions, ownQuestions),
     // The late items still waiting: roundStep appends the one count to the
     // status ("· 1 late answer kept"; at the end "2 items not reviewed · Review").
     late: lateStatus,
@@ -7144,6 +7825,13 @@ Focus on actionable business strategy insights.`;
   */
   const eventWaiting = Boolean(eventCode && eventItem && (eventItem.state === 'planned' || eventItem.state === 'paused'));
   /*
+    THE EVENT MOVED ON (experience plan §4.2 row 13, 2d): this item was the
+    room's and another is live now. A Now item on the Needs-you line, and the
+    main button says the same words it does ("Bring everyone here": the room
+    is elsewhere, so "back" would be the wrong way round).
+  */
+  const eventMoved = eventCode ? eventMovedOn({ item: eventItem, items: eventRun.items, liveItemId: eventRun.liveItemId }) : null;
+  /*
     A PREVIEW'S DOOR TO ITS RUNNING ORDER (QA drive finding #4). While an
     item is only being previewed — nobody has joined, the phones are on the
     agenda — its lobby says where the order is chosen, and opens it. Not on
@@ -7152,11 +7840,11 @@ Focus on actionable business strategy insights.`;
   const previewRunningOrder = Boolean(eventCode && eventItem && eventItem.state === 'planned'
     && hasRunningOrder(eventItem.type));
   /*
-    AND NO SECOND WAY BACK. In an event, Back to Menu is the agenda
-    (requestLeave → goToAgenda), and the dock already has AGENDA — two doors
-    to one place, and the second one pushed SESSION off a 1024-wide dock
-    (measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
-    finished survey), it says where it goes.
+    AND NO SECOND WAY BACK. In an event the ways out are Main menu (the top
+    bar, home) and Agenda (the Session menu); a LEAVE round button beside them
+    would be a third door (it once pushed SESSION off a 1024-wide dock,
+    measured in Chromium, 27 Sep 2026). Where leaving is the primary (a
+    finished survey), it says where it goes: the agenda.
   */
   const eventLeave = (control) => (control && control.intent === HOST_INTENTS.LEAVE ? null : control);
   const eventControls = eventCode
@@ -7173,7 +7861,7 @@ Focus on actionable business strategy insights.`;
     ? {
       ...baseHostControls,
       primary: {
-        label: eventItem.state === 'paused' ? 'Bring everyone back' : 'Bring everyone here',
+        label: eventItem.state === 'paused' && !eventMoved ? 'Bring everyone back' : EVENT_WORDS.bringHere,
         intent: HOST_INTENTS.EVENT_GO_LIVE,
         disabled: eventBusy,
         // A PREVIEW asks before the phones move, on every route to this
@@ -7191,7 +7879,9 @@ Focus on actionable business strategy insights.`;
       secondary: null,
       tertiary: null,
       status: {
-        text: eventItem.state === 'paused'
+        text: eventMoved
+          ? `The room is on Item ${eventMoved.n}${eventMoved.title ? `, ${eventMoved.title}` : ''}`
+          : eventItem.state === 'paused'
           ? 'Paused — the phones are waiting on the agenda'
           : 'Preview — the phones are not here yet',
         tone: 'info',
@@ -7204,18 +7894,59 @@ Focus on actionable business strategy insights.`;
   // The primary is the one the dock draws (an event relabels it), so "Your
   // part now" names the button the host can see. None while an event item
   // waits to go live: that is the agenda's moment, not the round's.
-  const workflow = !eventWaiting && hostControls.step && hostControls.snapshot
+  const workflowRaw = !eventWaiting && hostControls.step && hostControls.snapshot
     ? workflowStrip({ ...hostControls.step, primary: hostControls.primary }, hostControls.snapshot)
     : null;
+  /*
+    YOUR PART NOW NAMES THE HOST'S OWN QUESTION (impromptu ask, reviews F-2,
+    R1): when the main button starts the next round and the queue's head is a
+    question the host wrote, "Next round asks your question: '…'". On two
+    screens only: on one screen the line is on the room's screen, and the
+    queued title is the host's until it runs.
+  */
+  const ownHead = ownAtHead(questionQueue, ownQuestions, upNextBlocked);
+  const workflow = workflowRaw && ownHead && twoSurfaces
+    ? { ...workflowRaw, part: withOwnNext(workflowRaw.part, ownHead, hostControls.primary && hostControls.primary.intent) }
+    : workflowRaw;
   // Looking happens only where the laptop is private: two screens (owner,
   // 14 Oct, open question 10). Pressing the live step is the way back.
   const viewing = twoSurfaces && workflow && viewingStep && viewingStep !== workflow.live ? viewingStep : null;
   const viewStep = viewing ? workflow.steps.find((st) => st.id === viewing) : null;
-  // The lobby asks where the room will watch until this browser has chosen
-  // (Call & Answer: the type two screens cover), and again when reopened.
-  const showRoomScreen = hostPhase === 'LOBBY' && Boolean(gameId) && !eventCode
-    && normalizeGameType(currentGameType) === 'call-and-answer'
-    && (roomScreenChoice === null || roomScreenOpen);
+  /*
+    SETUP IS THE LOBBY (session-start D1, F1, F6; experience plan 2b). A Call &
+    Answer, Trivia or Poll session (CONSOLE_TYPES, 2g) before round 1, in both modes: Start opens Setup, and its
+    step 1 asks where the room watches whenever this browser has not chosen,
+    on every tier (no dev-only default, config/surfaces.js). On two screens
+    Setup stays the lobby through step 3; on one screen step 3 is the stage
+    lobby itself, so the join code goes up only once the host has checked
+    the room can read this screen.
+  */
+  /*
+    IN AN EVENT, SCREENS ARE SET ONCE PER DAY (experience plan §7 decision 8,
+    2d). The first item's Setup asks; once it reaches step 3 this browser
+    remembers the event's day (config/eventAgenda.js), and every later item
+    that day opens past the check without asking again. On two screens the
+    room's window is a window per session, so a later item still opens at
+    step 2 until its own window is up, with that one button and no question.
+  */
+  const eventScreensReady = Boolean(eventCode) && eventScreensOn;
+  const setupOn = hostPhase === 'LOBBY' && Boolean(gameId)
+    && SETUP_TYPES.includes(normalizeGameType(currentGameType)) && typeKnownFor === gameId;
+  /*
+    A ONE-SCREEN-ONLY TYPE OPENS SETUP TOO (Wavelength; §7 decision 10, dev
+    QA 2 Nov): the choice is made for it, so step 1 is done and says why
+    instead of offering a chooser, and the host checks the screen and puts
+    the code up, then the one-screen lobby as for any one-screen session.
+  */
+  const setupOneOnly = setupOn ? oneScreenWhy(normalizeGameType(currentGameType)) : '';
+  const setupChoice = setupOneOnly ? 'classic' : roomScreenChoice;
+  const setupChoosing = setupOneOnly ? false : roomScreenOpen;
+  const setupStep = setupOn
+    ? setupStepFor({ choice: setupChoice, choosing: setupChoosing, detail: presentDetail, checked: screenCheckedFor === gameId || eventScreensReady })
+    : null;
+  const setupFrame = setupOn && (twoSurfaces || setupStep !== 'joins');
+  // The console's frame draws Setup on one screen too (A5), until step 3.
+  const consoleOn = useConsole || setupFrame;
   /*
     WHILE LOOKING, the one main button is "Back to the room" and nothing else
     is offered: every act stays in this bar, and none of them may fire from a
@@ -7230,6 +7961,9 @@ Focus on actionable business strategy insights.`;
       tertiary: null,
     }
     : hostControls;
+  // THE STAGE'S YOUR PART NOW (2h): the same controls without a LEAVE round
+  // button, which the top bar's Main menu already is (as on the console).
+  const stageControls = splitLeave(dockControls).controls;
 
   // A keyboard shortcut must never fire underneath something the host is
   // reading or filling in.
@@ -7258,8 +7992,9 @@ Focus on actionable business strategy insights.`;
   */
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
-    showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
-    showReportsModal, lessonExpanded, isLoadingData, qrMode,
+    // …and so is the one-screen choice before writing a question (impromptu ask).
+    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen, showExpandedQR,
+    showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
     scoreboardOpen: scoreboard.open,
@@ -7443,8 +8178,8 @@ Focus on actionable business strategy insights.`;
       case HOST_INTENTS.END:
         // Task 4, 2026-09-26 bug sweep. The settings panel's own control, not
         // the dock's — see canEndSession (config/hostControls.js) for why it
-        // is never offered on a survey, the lobby, or an already-ENDED
-        // session.
+        // is never offered on a survey or an already-ENDED session (it is in
+        // the lobby since dev QA 2 Nov).
         endSessionNow();
         break;
       case HOST_INTENTS.OPEN_SURVEY:
@@ -7482,8 +8217,13 @@ Focus on actionable business strategy insights.`;
           the session stays live and rejoinable through Continue. That is why
           the label is Back to Menu rather than Exit: see the note on the
           settings panel's copy of this button.
+
+          IN AN EVENT a LEAVE control is only ever the primary "Back to the
+          agenda" (eventControls strips every other one), so there it goes to
+          the agenda; Main menu, on the top bar, goes home (2h).
         */
-        requestLeave();
+        if (eventCode) goToAgenda();
+        else requestLeave();
         break;
       default:
         console.warn(`Unknown host action intent: ${action.intent}`);
@@ -7501,9 +8241,9 @@ Focus on actionable business strategy insights.`;
   // ---------------------------------------------------------------------
 
   const currentQuestion = questions[0] || null;
-  const roundOf = questionSets.find(
+  const roundOf = withOwnRounds(questionSets.find(
     (s) => s.id === (currentQuestion?.setId || selectedSetId)
-  )?.totalQuestions;
+  )?.totalQuestions, ownQuestions);
 
   // The phase BAR speaks in hues and knows five of them; the phase CHIP names
   // the state. FIELD_NOTES stays inside RESULTS' green — it is the same beat
@@ -7981,6 +8721,17 @@ Focus on actionable business strategy insights.`;
     setJoinOnStage(!joinPanel);
     return true;
   };
+  /*
+    THE TOP BAR'S ONE JOIN TOGGLE ON THE STAGE (experience plan §3.6, 2h):
+    "Show join code" puts it up (the side panel in a round, the QR elsewhere),
+    "Hide join code" takes it down. Not offered once joining has closed.
+  */
+  const joinCodeOpen = Boolean(gameId) && hostPhase !== 'ENDED' && hostPhase !== 'CLOSED' && gameState !== 'SURVEY#CLOSED';
+  const joinCodeUp = joinPanelAllowed ? Boolean(joinPanel) : qrMode === 'pinned';
+  const toggleJoinCode = () => {
+    if (joinPanelAllowed) setJoinOnStage(!joinPanel);
+    else setQrMode((mode) => (mode === 'pinned' ? null : 'pinned'));
+  };
 
   /**
    * Why the primary is greyed out, and the key that fires it when it is not.
@@ -8109,9 +8860,9 @@ Focus on actionable business strategy insights.`;
     dock and the console's loop and footer run the one same handler each.
   */
   const stripOnView = (id) => {
-    // In the lobby, Setup is live: pressing it reopens the choice
-    // of room screen rather than a view of itself.
-    if (id === 'setup' && workflow.live === 'setup') { setRoomScreenOpen((open) => !open); return; }
+    // In the lobby, Setup is live: pressing it reopens Setup (on one screen
+    // the stage lobby goes back to the check, step 2, where Change is).
+    if (id === 'setup' && workflow.live === 'setup') { setScreenCheckedFor(null); return; }
     // Ask opens the composer on Workie's ready questions (external
     // review of test, 15 Oct: "Ask · 1 ready" led to a generic view
     // and the host had to go back to page 4 of the read). Opening
@@ -8202,7 +8953,27 @@ Focus on actionable business strategy insights.`;
       item,
     };
   });
+  /*
+    TRIVIA ON THE CONSOLE (experience plan 2g). The answer's drawn letters:
+    the host's door's `hostAnswer` for this round while the room answers
+    (never on a public read before RESULTS), and at the reveal the question's
+    own correctAnswer, which /state then carries, read as the stage reads it.
+  */
+  const consoleTrivia = normalizeGameType(currentGameType) === 'trivia';
+  const triviaRound = String(lessonNumber || 0).padStart(3, '0');
+  const triviaRevealed = consoleTrivia && /^RESULTS#/.test(basePhase(gameState));
+  const triviaLetters = (() => {
+    if (!consoleTrivia) return null;
+    if (hostAnswer && hostAnswer.round === triviaRound && Array.isArray(hostAnswer.letters) && hostAnswer.letters.length) return hostAnswer.letters;
+    return triviaRevealed ? revealedLetters(currentQuestion) : null;
+  })();
+  // ✓/✗ in the person row, after the reveal only: the round's results rows carry isCorrect.
+  const triviaMarks = triviaRevealed && Array.isArray(answers) && answers.some((a) => a && typeof a.isCorrect === 'boolean')
+    ? Object.fromEntries(answers.filter((a) => a && (a.playerName || a.player)).map((a) => [a.playerName || a.player, a.isCorrect === true]))
+    : null;
+  const consoleChoice = answersAreChoices(normalizeGameType(currentGameType), currentQuestion);
   const consolePeople = consolePeopleFor({
+    facts: personFactsFor({ gameType: normalizeGameType(currentGameType), players, marks: triviaMarks }),
     moment: consoleMoment,
     players,
     answeredNames: playersWhoAnswered,
@@ -8212,29 +8983,132 @@ Focus on actionable business strategy insights.`;
     gameType: currentGameType,
     anonymousUntilReveal,
     authorsRevealed,
+    // Trivia and a choice poll: "still answering" (dev QA 2 Nov).
+    choice: consoleChoice,
+    // In an event, a latecomer reads "from item N" (experience plan §3.2b, 2d).
+    from: eventCode && eventItem
+      ? latecomersFrom({ players, item: eventItem, n: itemNumber(eventRun.items, eventItem.itemId) })
+      : null,
   });
   /*
+    THE PULSE (session-start D3; experience plan 2c). The round opened at the
+    server's currentQuestion.startedAt, else when this page saw ASK#n; voting
+    and results from when this page saw VOTE#n and RESULTS#n. Arrivals are the
+    people whose joinedAt is after the round opened.
+  */
+  const pulseRound = (String(gameState || '').match(/#(\d+)/) || [])[1] || null;
+  // The first time this page saw `PREFIX#n` (or a sub-state of it, `VOTE#n#…`).
+  const seenFor = (prefix) => {
+    if (!pulseRound) return null;
+    const key = `${prefix}#${pulseRound}`;
+    const ts = Object.entries(phaseSeenAt).filter(([k]) => k === key || k.startsWith(`${key}#`)).map(([, t]) => t);
+    return ts.length ? Math.min(...ts) : null;
+  };
+  const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
+  const pulseTimer = phaseTimer
+    || (roundTime && pulseRound && /^RESULTS#/.test(basePhase(gameState)) && String(roundTime.phase || '').endsWith(`#${pulseRound}`) ? roundTime : null);
+  /*
+    THE TIME CHIP beside the opening move (2f, D4): Start round N takes the
+    answering chip, Start voting the voting chip. `timeChipFor` builds it for
+    whichever bar draws the primary: the console's Your part now, Setup's, and
+    the one-screen stage's (under its top bar since 2h, so 'down' everywhere).
+  */
+  const timeChipFor = (controls, placement = 'down') => {
+    const kind = chipKindFor(controls && controls.primary);
+    if (!kind) return null;
+    const nextRound = (Number(lessonNumber) || 0) + 1;
+    return (
+      <TimeChip
+        kind={kind}
+        round={kind === 'ask' ? nextRound : null}
+        value={timeChoices[kind]}
+        onChange={(v) => setTimeChoice(kind, v)}
+        placement={placement}
+      />
+    );
+  };
+  // At zero, Your part now says so (D4): "Time's up. Start voting, or give them another minute."
+  // Everyone's in leads when the whole room has answered (dev QA 2 Nov).
+  const timesUpPart = timesUpPartFor({ timeIsUp, gameState, closesIntoVote, everyoneIn: everybodyIn });
+  const consolePulse = useConsole ? (
+    <ConsolePulse
+      moment={consoleMoment}
+      players={players.length}
+      answered={answeredCount}
+      voted={playersWhoVoted.length}
+      everyoneIn={consoleMoment === 'ANSWERING' || consoleMoment === 'VOTING' || consoleMoment === 'VOTE_RESPONSES' ? everybodyIn : null}
+      openedAt={pulseOpenedAt}
+      voteAt={seenFor('VOTE')}
+      resultsAt={seenFor('RESULTS')}
+      arrivals={arrivalsSince(players, pulseOpenedAt)}
+      late={lateCounts.notReviewed}
+      // The late count is the Needs-you item's own Review (one home for the late list).
+      onLate={openLateList}
+      // The round timer (2f): the phase's own while it is on; after the round,
+      // the last phase's, for "2:00 given".
+      timer={pulseTimer}
+      onAddMinute={phaseTimer ? addMinute : null}
+      // Trivia's tile 3, "Correct so far" (2g): host-only, from the answer letters.
+      correct={consoleTrivia && (consoleMoment === 'ANSWERING' || (consoleMoment === 'RESULTS' && stageResponsesReady)) ? correctSoFar(answers, triviaLetters) : null}
+      noVote={!closesIntoVote}
+      choice={consoleChoice}
+    />
+  ) : null;
+  /*
     THE ROUND QUEUE: the rounds played (the session history, `rounds`), the one
-    on screen, and what the server's plan says comes next (`upNext`, read on
-    every round start and whenever the Session panel opens). Capped at the
+    on screen, and what the server's plan says comes next (`upNext`). All
+    three come from loadRoundPlan, on load, every round and menu open. Capped at the
     set's size so "2 of 6" never counts a plan longer than the set.
   */
   const consoleRounds = (() => {
     const ended = hostPhase === 'ENDED';
     const liveN = !ended && hostPhase !== 'LOBBY' && lessonNumber > 0 ? lessonNumber : 0;
+    const ownAskedEarly = new Set(ownQuestions.filter((o) => o && o.askedRound).map((o) => Number(o.askedRound)));
     const played = (rounds || [])
       .filter((r) => r.ordinal > 0 && (ended || !liveN || r.ordinal < liveN))
-      .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done' }));
+      .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done', ...(ownAskedEarly.has(Number(r.ordinal)) ? { own: true } : {}) }));
     const now = liveN && currentQuestion ? [{ n: liveN, title: currentQuestion.title || currentQuestion.question || '', state: 'now' }] : [];
     if (ended) return played;
-    const lastN = Math.max(liveN, ...played.map((r) => r.n), 0);
+    // ONE NUMBERING (config/roundNumbers.js): the Session menu's Running order
+    // numbers from this same base through the same function (queueRoundBase).
+    const lastN = sessionRoundBase(liveN, played.map((r) => r.n));
     const room = roundOf > 0 ? Math.max(0, roundOf - lastN) : (upNext || []).length;
-    const planned = (upNext || [])
-      .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
-      .slice(0, room)
-      .map((row, i) => ({ n: lastN + i + 1, title: row.title || '', state: i === 0 ? 'next' : 'later' }));
-    return played.concat(now, planned);
+    const planned = plannedRounds(lastN, upNext, { currentQuestionId, room });
+    // Rounds already played or on now that the host wrote: Yours, by round.
+    const ownAsked = new Set(ownQuestions.filter((o) => o && o.askedRound).map((o) => Number(o.askedRound)));
+    const markOwn = (r) => (ownAsked.has(Number(r.n)) ? { ...r, own: true } : r);
+    return played.map(markOwn).concat(now.map(markOwn), planned);
   })();
+  /*
+    THE RUNNING ORDER'S BASE AND ITS "NOW" ROW, from the rail's own rounds so
+    the two lists cannot number apart (owner, 3 Nov 2026): the round on
+    screen is the Running order's first, quiet row, and the queue numbers on
+    from it.
+  */
+  const queueRoundBase = hostPhase === 'ENDED'
+    ? null
+    : sessionRoundBase(
+      hostPhase !== 'LOBBY' && lessonNumber > 0 ? lessonNumber : 0,
+      (rounds || []).map((r) => r.ordinal),
+    );
+  const queueNowRound = (() => {
+    const nowRow = consoleRounds.find((r) => r.state === 'now');
+    return nowRow && nowRow.title ? { title: nowRow.title, key: currentQuestionId ? String(currentQuestionId) : null } : null;
+  })();
+  /*
+    THE IMPROMPTU ASK'S DOORS (README D2): Call & Answer only, and not once the
+    session has ended. Later's anchors are the planned rounds after the one on
+    screen, each carrying the automatic keys up to it (config/ownQuestion.js).
+  */
+  const ownWritable = Boolean(gameId) && normalizeGameType(currentGameType) === 'call-and-answer' && gameState !== 'ENDED';
+  const ownLaterOptions = laterAnchors((upNext || [])
+    .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
+    .map((row, i) => ({
+      key: String(row.questionId || '').replace(/^QUESTION#/, ''),
+      n: Number(row.round) > 0 ? Number(row.round) : (lessonNumber || 0) + i + 1,
+      title: row.title || '',
+      source: row.source,
+    })));
   const consoleTask = currentQuestion ? getHostInstructionText(currentQuestion) : '';
   /*
     THE QUESTION'S WORDS FOR THE ROOM (config/roomContent.js questionRoomData),
@@ -8286,12 +9160,151 @@ Focus on actionable business strategy insights.`;
     gatheringNoun: stageGatheringNoun(gameState),
     onRetry: () => restoreGameState(),
   };
-  const consolePanel = !useConsole ? null : (() => {
+  /*
+    NEEDS YOU, WORKED OUT (config/needsYou.js; experience plan §4.1): the
+    roster's handover flags, the late list, the read's failure and check, the
+    socket. Nothing stored, so a reload or the phone Remote reads the same.
+  */
+  const readCheckText = hostPhase === 'FIELD_NOTES' && currentAIInsights ? readCheckNote(currentAIInsights.readCheck) : '';
+  const needs = needsYou({
+    players,
+    late: lateStatus,
+    readFailure: aiSummaryFailure,
+    readCheck: readCheckText,
+    readRound: lessonNumber || null,
+    connected: wsConnected || !wsEverConnected.current,
+    dismissed: needsDismissed,
+    now: needsNow,
+    eventMoved,
+  });
+  const onNeedsAct = (item, action) => {
+    switch (action) {
+      case NEEDS_ACTIONS.LET: return grantNameHandover(item.name, true, item.at);
+      case NEEDS_ACTIONS.NOT_NOW: return refuseNameHandover(item.name);
+      case NEEDS_ACTIONS.LOCK: return lockNameHandover(item.name);
+      case NEEDS_ACTIONS.REVIEW: return openLateList();
+      case NEEDS_ACTIONS.RETRY: return handleRetryAISummary();
+      case NEEDS_ACTIONS.REDO: return handleRegenerateAISummary();
+      case NEEDS_ACTIONS.FINE: return setNeedsDismissed((d) => d.concat(item.id));
+      // The event moved on: this item goes live for the room again (2d).
+      case NEEDS_ACTIONS.BRING: return goLiveHere();
+      case NEEDS_ACTIONS.SEE: {
+        // The console's People already lifts the asker; bring the row into view.
+        const row = useConsole && typeof document !== 'undefined' ? document.querySelector('[data-testid="people-asker"]') : null;
+        if (row && typeof row.scrollIntoView === 'function') { row.scrollIntoView({ block: 'nearest' }); return undefined; }
+        return openSetupAt('people');
+      }
+      default: return undefined;
+    }
+  };
+  const needsBell = { needs, onAct: onNeedsAct, busy: needsBusy, error: needsError };
+  /*
+    A SURVEY'S CLOSE AND END IN THE SESSION MENU (§3.2a: Screens · Joining ·
+    Close survey · End session). The very controls the main button carries,
+    confirm included, so the menu and the bar can never disagree.
+  */
+  const surveyControlOf = (intent) => [hostControls.primary, hostControls.secondary, hostControls.tertiary]
+    .find((c) => c && c.intent === intent) || null;
+  const sessionMenuSurveyActs = {
+    close: surveyControlOf(HOST_INTENTS.CLOSE_SURVEY),
+    warn: surveyControlOf(HOST_INTENTS.WARN_SURVEY),
+    end: surveyControlOf(HOST_INTENTS.END_SURVEY),
+    closed: /^SURVEY#CLOSED/.test(String(gameState || '')) || gameState === 'ENDED',
+    onAct: (control) => { closeAllSidePanels(); runHostAction(control); },
+  };
+  /*
+    WHERE THE SESSION MENU OPENS (experience plan §3.2b, 2a). On the console,
+    in HostConsole's sheet host: over the content area, never over Your part
+    now or the Needs-you line. On one screen, the fixed panel as before.
+  */
+  const sessionMenuWhere = (panel) => (consoleOn && consoleSheetHost ? createPortal(panel, consoleSheetHost) : panel);
+
+  /*
+    SETUP'S PANEL (session-start D1): the lobby before round 1, and the same
+    panel when Setup is pressed in the strip mid-session (`mid`, step 3 folded).
+  */
+  const setupFirst = consoleRounds.find((r) => r.state === 'next' || r.state === 'now');
+  const setupPanelFor = (step, mid = false) => (
+    <SessionSetup
+      step={step}
+      mid={mid}
+      choice={mid ? roomScreenChoice : setupChoice}
+      choosing={mid ? roomScreenOpen : setupChoosing}
+      oneOnly={mid ? '' : setupOneOnly}
+      onChoose={(choice) => { setScreenCheckedFor(null); chooseRoomScreen(choice); }}
+      onChange={setupOneOnly && !mid ? null : () => setRoomScreenOpen(true)}
+      onKeep={() => setRoomScreenOpen(false)}
+      onRecheck={() => setScreenCheckedFor(null)}
+      presentHref={gameId ? presentHref(gameId) : ''}
+      presentDetail={presentDetail}
+      blocked={windowBlockedFor === gameId}
+      profile={profile}
+      onProfileChange={setProfile}
+      players={players}
+      title={eventTitle || 'Engagements'}
+      code={eventCode || gameId}
+      joinUrl={playUrl}
+      firstUp={setupFirst ? [RW.stripRound(getHostRoundNoun(), setupFirst.n, null), setupFirst.title].filter(Boolean).join(' · ') : ''}
+      onRunningOrder={mid ? null : openRunningOrder}
+      // A question the host wrote before round 1 (impromptu ask, F8, R5).
+      firstUpOwn={Boolean(setupFirst && setupFirst.own)}
+      ownCount={ownQuestions.filter((o) => o && o.status === 'queued').length}
+      remoteAddr={`${window.location.host}/remote`}
+      onUseTwo={setupOneOnly && !mid ? null : () => chooseRoomScreen('two')}
+    />
+  );
+  /* Setup's own main button (steps 1 and 2): opening the room's window must
+     happen inside the press, so it is handled here, never through a round
+     action. Step 3's Start round 1 is roundStep's own control. */
+  const openSetupWindow = () => {
+    const href = presentHref(gameId);
+    const opened = willPlace() ? openRoomWindow(href).window : window.open(href, ROOM_WINDOW_NAME);
+    setWindowBlockedFor(opened ? null : gameId);
+  };
+  const setupOnAction = (control) => {
+    if (control && control.id === 'setup-open-window') return openSetupWindow();
+    if (control && control.id === 'setup-show-code') return setScreenCheckedFor(gameId);
+    return runHostAction(control);
+  };
+  const setupStartLabel = (hostControls.primary && hostControls.primary.label) || 'Start round 1';
+  const setupWordsRaw = setupFrame
+    ? setupPartFor(setupStep, { choice: setupChoice, detail: presentDetail, startLabel: setupStartLabel })
+    : null;
+  /* AN EVENT'S ITEM AT STEP 3 WHILE THE ROOM IS ELSEWHERE (2d): the main
+     button is Bring everyone here, so Your part now says that, and the status
+     says where the phones are (the event's own words), never "people can
+     join" while they are on another item. */
+  const setupWords = setupWordsRaw && eventWaiting && setupStep === 'joins'
+    ? {
+      part: { before: '', action: setupStartLabel, after: EVENT_WORDS.bringAfter },
+      status: (hostControls.status && hostControls.status.text) || '',
+    }
+    : setupWordsRaw;
+  const setupControls = !setupFrame ? null
+    : setupStep === 'screen'
+      ? {
+        primary: setupChoice === 'two'
+          ? { id: 'setup-open-window', label: SETUP_WORDS.openWindow, icon: 'ArrowSquareOut' }
+          : { id: 'setup-show-code', label: SETUP_WORDS.showCode, icon: 'QrCode' },
+        status: { text: '', tone: '' },
+      }
+      : setupStep === 'joins' ? dockControls : null;
+
+  /* "‹ AGENDA" (experience plan §3.6, 2d): in an event, the strip's first
+     crumb, up one level. Only navigates; the phones stay where they are. */
+  const consoleAgenda = eventCode ? { onClick: goToAgenda, disabled: eventBusy } : null;
+
+  const consolePanel = !consoleOn ? null : (() => {
+    if (setupFrame) return setupPanelFor(setupStep);
     /* Drafting a question for the room: the read with the composer beside it,
        whichever beat the wall is on (the strip marks Ask while it is open,
        and the room still sees what it saw). */
     if (consoleComposer) {
       return <ReadPanel kicker={consoleKicker(RW.stepAsk)} markdown={currentAIInsights && currentAIInsights.markdownResponse} composer={consoleComposer} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
+    }
+    // Setup pressed in the strip mid-session: the lobby's own panel (D1).
+    if (viewStep && viewStep.id === 'setup' && CONSOLE_TYPES.includes(normalizeGameType(currentGameType))) {
+      return setupPanelFor(setupStepFor({ choice: roomScreenChoice, choosing: roomScreenOpen, detail: presentDetail, checked: true }), true);
     }
     if (viewStep) {
       return (
@@ -8312,23 +9325,35 @@ Focus on actionable business strategy insights.`;
         />
       );
     }
-    if (showRoomScreen) {
+    /* TRIVIA AND POLL (experience plan 2g): their own content while the room
+       answers and at the results; the read, feedback and the end are every
+       type's. Trivia's answer is private here; the room's window shows the
+       options unmarked until the reveal. */
+    const formatKind = normalizeGameType(currentGameType);
+    if (formatKind === 'trivia' && (consoleMoment === 'ANSWERING' || consoleMoment === 'RESULTS')) {
       return (
-        <LobbyPanel
-          chooser={(
-            <RoomScreenChooser
-              current={roomScreenChoice}
-              presentHref={gameId ? presentHref(gameId) : ''}
-              onChoose={chooseRoomScreen}
-              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
-            />
-          )}
+        <TriviaPanel
+          kicker={consoleKicker(stepLabelFor(consoleMoment === 'ANSWERING' ? 'answer' : 'heard', formatKind))}
+          question={currentQuestion}
+          answers={consoleMoment === 'ANSWERING' || stageResponsesReady ? answers : []}
+          letters={triviaLetters}
+          revealed={consoleMoment === 'RESULTS'}
+        />
+      );
+    }
+    if (formatKind === 'poll' && (consoleMoment === 'ANSWERING' || consoleMoment === 'RESULTS')) {
+      return (
+        <PollPanel
+          kicker={consoleKicker(stepLabelFor(consoleMoment === 'ANSWERING' ? 'answer' : 'heard', formatKind))}
+          question={currentQuestion}
+          tally={pollTallyNow}
+          live={consoleMoment === 'ANSWERING'}
         />
       );
     }
     switch (consoleMoment) {
       case 'LOBBY':
-        return <LobbyPanel code={gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
+        return <LobbyPanel code={eventCode || gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
         return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
       case 'VOTING':
@@ -8342,7 +9367,8 @@ Focus on actionable business strategy insights.`;
         return <ResponsesPanel kicker={consoleKicker(CW.resultsTitle)} title={currentQuestion?.title || CW.resultsTitle} lesson={String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} phase="RESULTS" responses={stageResponsesReady ? answers : []} {...consoleGathering} authorsHidden={consoleAuthorsHidden} task={consoleTask} questionOnWall={spotlightIndex === null && wallFocus !== 'join'} onQuestionToWall={putQuestionOnWall} onWallIndex={spotlightIndex} onPutOnWall={openSpotlight} />;
       case 'READ':
         // page + budget: the wall's own slicing (prosePageSlice), so the panel marks the slice on the wall now.
-        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} />;
+        // A failed read is a card with Retry and Redo, never a blank (experience plan 1e).
+        return <ReadPanel kicker={consoleKicker(RW.pageOf(notesSyncPage + 1, notesSyncPages))} markdown={currentAIInsights && currentAIInsights.markdownResponse} askAddon={askAddon} afterRead={askAfter} page={notesSyncPage} budget={proseBudgetFor(profile)} readCheck={currentAIInsights && currentAIInsights.readCheck} failure={aiSummaryFailure} onRetry={handleRetryAISummary} onRedo={handleRegenerateAISummary} retrying={aiRetrying} loading={loadingAIInsights} />;
       case 'FEEDBACK':
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
@@ -8385,16 +9411,65 @@ Focus on actionable business strategy insights.`;
       {/* TWO SCREENS, A ROUND TYPE, NOT AN EVENT ITEM: the host console instead
           of the stage (host console spec §4.1). Every sibling below — the
           Session panel, the dialogs, the QR, the spotlight — still renders. */}
-      {useConsole ? (
+      {consoleOn ? (
         <HostConsole
           top={{
             title: eventTitle || 'Engagements',
-            code: gameId,
-            onJoin: () => setQrMode('pinned'),
-            presentHref: gameId ? presentHref(gameId) : '',
+            // In an event people join the day, never the item: the event's code.
+            code: eventCode || gameId,
+            // THE ONE JOIN TOGGLE (experience plan §3.6, 2a): the code on the
+            // room's window, or not; J does the same. During Setup on one
+            // screen it is step 2's own move (the code goes up only at step 3),
+            // and before a choice there is nowhere for it to go yet.
+            onJoin: setupFrame && !twoSurfaces
+              ? () => { if (setupChoice) setScreenCheckedFor(gameId); }
+              : () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
+            joinPressed: setupFrame && !twoSurfaces ? undefined : qrMode === 'pinned',
+            // TWO SCREENS (owner, 3 Nov 2026): the code's QR on this laptop on
+            // hover or click, the room's toggle inside that card (JoinCodeChip).
+            joinQr: twoSurfaces ? { playUrl, joinUrl: joinDisplayUrl } : null,
+            codeProps: setupFrame && !setupChoice
+              ? { disabled: true, title: SETUP_WORDS.part.where.after.trim() }
+              : null,
+            // One screen has no room's window (it IS the room's screen).
+            presentHref: gameId && twoSurfaces ? presentHref(gameId) : '',
             presentDetail,
+            // The state alone beside "Room's window ↗", as the Build Room's bar does, so the bar fits at 1280.
+            short: true,
             help: consoleHelp,
+            // The bell is the Needs-you door in a live session (experience plan §4.3).
+            bellSession: needsBell,
+            /* SETUP ON ONE SCREEN, ONCE CHOSEN (2h): this laptop is the room's
+               screen, so the bar says so and its bell is the count-only one,
+               the same as the stage the session moves on to. */
+            oneScreen: !twoSurfaces && setupChoice === 'classic',
+            bell: !twoSurfaces && setupChoice === 'classic' ? (
+              <OneScreenNeedsBell
+                variant="top"
+                needs={needs}
+                onAct={onNeedsAct}
+                busy={needsBusy}
+                error={needsError}
+                oneScreen
+                remoteConnected={false}
+                onConnectPhone={() => openSetupAt('remote')}
+                open={needsSheetOpen}
+                onOpenChange={setNeedsSheetOpen}
+              />
+            ) : null,
+            /* Main menu, always (2a), and always home (2h): asking first with
+               people in the room, in an event too. */
+            onLeave: requestLeave,
+            // The connection, on the top bar only when it is broken.
+            connected: wsConnected || !wsEverConnected.current,
+            // The Session menu, top right: a sheet over the content area.
+            onSessionMenu: () => setSetupPanelOpen((isOpen) => !isOpen),
+            sessionMenuOpen: setupPanelOpen,
           }}
+          // No pulse and no rail during Setup (F7): step 3 holds the count.
+          pulse={setupFrame ? null : consolePulse}
+          noRail={setupFrame}
+          sheetRef={setConsoleSheetHost}
           strip={workflow ? {
             strip: workflow,
             mode: 'full',
@@ -8403,7 +9478,8 @@ Focus on actionable business strategy insights.`;
             onView: stripOnView,
             viewingWhere: liveWhere(workflow),
             onBack: () => { setViewingStep(null); setAskComposer(null); },
-          } : null}
+            agenda: consoleAgenda,
+          } : (consoleAgenda ? { strip: null, agenda: consoleAgenda } : null)}
           rail={{
             moment: consoleMoment,
             rounds: consoleRounds,
@@ -8416,24 +9492,50 @@ Focus on actionable business strategy insights.`;
             lateWall,
             onLateShow: showLateOnWall,
             onLateMark: markLateReviewed,
-            connected: wsConnected,
             onOpenSection: openSetupAt,
+            // The impromptu ask's rail door: the same composer step (D2).
+            onWriteQuestion: ownWritable ? () => openOwnComposer() : null,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
+            // Askers lifted to the top of People, with Let them / Not now on the row.
+            asking: needs.items.filter((i) => i.kind === 'name-request' || i.kind === 'name-open'),
+            onNeedsAct,
+            needsBusy,
+            needsError,
+            // The row's ⋯, the same two the Session menu's People offers (PersonRow).
+            onPersonMove: (name) => grantNameHandover(name, false),
+            onPersonRemove: (name) => setPlayerRemoved(name, true),
           }}
-          footer={{
-            // roundStep's own status: the count, said here and in the People header only.
+          footer={setupFrame ? {
+            // SETUP'S "YOUR PART NOW" moves with the step (QA, 1 Nov: after
+            // choosing two screens it still said "Choose where the room
+            // watches"), with the step's one main button, or the held slot.
+            status: sessionActionError ? { text: sessionActionError, tone: 'error' } : { text: setupWords.status, tone: '' },
+            part: setupWords.part,
+            controls: setupControls,
+            timeChip: timeChipFor(setupControls),
+            emptyLabel: SETUP_WORDS.afterSetup(setupStartLabel),
+            onAction: setupOnAction,
+            shortcutsEnabled: !anyOverlayOpen,
+            interceptAdvance: consoleInterceptAdvance,
+            onBackKey: consoleOnBackKey,
+            onReviewLate: openLateList,
+          } : {
+            // roundStep's own status, without the room's count: the pulse says it (one fact, once).
             status: viewing
               ? { text: RW.viewingNothingMoves, tone: 'info' }
-              : (sessionActionError ? { text: sessionActionError, tone: 'error' } : hostControls.status),
+              : (sessionActionError ? { text: sessionActionError, tone: 'error' } : withoutRoomCount(hostControls.status, consoleMoment)),
             nextOnWall: consoleNext,
-            part: workflow ? workflow.part : null,
+            part: !viewing && timesUpPart ? timesUpPart : (workflow ? workflow.part : null),
             controls: dockControls,
+            timeChip: viewing ? null : timeChipFor(dockControls),
+            onAddTime: phaseTimer && !viewing ? addMinute : null,
             onAction: runHostAction,
             shortcutsEnabled: !anyOverlayOpen,
             interceptAdvance: consoleInterceptAdvance,
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
           }}
+          needs={<NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />}
         >
           {consolePanel}
         </HostConsole>
@@ -8441,6 +9543,19 @@ Focus on actionable business strategy insights.`;
       <Stage
         profile={profile}
         phase={BAR_PHASE[hostPhase] || 'lobby'}
+        /* THE CLUTTER STEPS ASIDE ON ONE SCREEN (owner, 3 Nov 2026): this
+           laptop is the room's screen, so after a few seconds without the
+           mouse the top bar, Your part now and the Needs-you line fade, and
+           the mouse brings them back; a clicker's keys and the phone Remote
+           do not. Never on two screens (a private laptop). The rows keep
+           their height, so nothing the room sees moves (Stage.jsx). Held up
+           while the Session menu or the Needs-you sheet is open, or the host
+           is writing or confirming a question. `urgent` is the count of Now
+           items: a dot and the number in the corner while the chrome is
+           away, never a name. */
+        autoHide={!twoSurfaces}
+        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal}
+        urgent={((needs && needs.items) || []).filter((i) => i.level === NEEDS_LEVELS.NOW).length}
         /* The fitter's deps live in Stage but the content that changes lives
            here. Without this a question arriving, an answer list growing or a
            reveal flipping would re-render the stage and never re-measure it. */
@@ -8461,35 +9576,33 @@ Focus on actionable business strategy insights.`;
           wavelengthFitKey, surveyFitKey,
           // The QR side panel narrows the content's column: re-measure.
           joinPanelLive ? 'join' : '',
+          // The round timer's line under the meter (2f) adds a row: re-measure.
+          phaseTimer && phaseTimer.onWall !== false ? 'time' : '',
         ].join('|')}
-        strip={workflow
+        /* NO STEPS STRIP ON ONE SCREEN (experience plan §3.3, 2h): it is
+           folded into the room's view, whose eyebrow and rail say where the
+           round is and whose meter is the count; the row it held goes back to
+           the content under the frame. A private laptop on two screens (an
+           event's item, a survey) keeps it, to look at a step. */
+        strip={workflow && twoSurfaces
           ? (
             <WorkflowStrip
               strip={workflow}
-              mode={twoSurfaces ? 'full' : 'slim'}
+              mode="full"
               // Drafting a question is looking at Ask: the room still sees the read.
               viewing={viewing || (askComposer && workflow.live !== 'ask' ? 'ask' : null)}
               onView={stripOnView}
-              places={twoSurfaces ? setupPanelTabs().map((t) => ({
-                id: t.id,
-                label: t.id === 'players' ? `${t.label} ${players.length}` : t.label,
-                onClick: () => openSetupAt(t.id),
-              })) : null}
+              /* No Session-menu doors in the strip and no second "Your part
+                 now" line (2h): the top bar has the Session menu, and Your
+                 part now is its own row under it, as on the console. */
+              places={null}
+              hidePart
               viewingWhere={liveWhere(workflow)}
               onBack={() => { setViewingStep(null); setAskComposer(null); }}
             />
           )
           : null}
-        view={showRoomScreen
-          ? (
-            <RoomScreenChooser
-              current={roomScreenChoice}
-              presentHref={gameId ? presentHref(gameId) : ''}
-              onChoose={chooseRoomScreen}
-              onClose={roomScreenChoice ? () => setRoomScreenOpen(false) : null}
-            />
-          )
-          : viewStep
+        view={viewStep
           ? (
             <StepView
               step={viewStep}
@@ -8508,56 +9621,70 @@ Focus on actionable business strategy insights.`;
             />
           )
           : null}
-        rail={(
-          <Rail
-            phase={hostPhase}
+        /* THE HOST'S FRAME, ON TOP (experience plan §3.3, Phase 2 step 2h):
+           the console's own top bar, then Your part now directly under it,
+           slim, then the Needs-you line, so the main button is in the same
+           place on one screen as on two. The bottom dock is gone: everything
+           it held has one place now (Main menu, the bell, ?, the Session menu
+           and the room's window on the bar; the status, the count, the hint
+           and the round's buttons in Your part now; Agenda in the Session
+           menu). Public-safe on one screen (PLAN principle 3): the bell and
+           the line are counts by kind, never a name. */
+        top={(
+          <ConsoleTop
             title={eventTitle || 'Engagements'}
-            context={railContext}
-            join={gameId
-              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED' || gameState === 'SURVEY#CLOSED'
-                ? { code: gameId, closed: true }
-                : {
-                    url: joinDisplayUrl,
-                    code: eventCode || gameId,
-                    /* TWO SURFACES (owner, 2026-10-13): hovering the code puts it
-                       up on every screen and it stays until a click anywhere, or
-                       J, takes it down; the classic page keeps its hover preview. */
-                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : (twoSurfaces ? 'pinned' : 'preview'))),
-                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' || twoSurfaces ? mode : null)),
-                    onPin: showJoinCode,
-                  })
-              : {}}
+            code={joinCodeOpen ? (eventCode || gameId) : ''}
+            oneScreen={!twoSurfaces}
+            onJoin={toggleJoinCode}
+            joinPressed={joinCodeUp}
+            joinQr={twoSurfaces ? { playUrl, joinUrl: joinDisplayUrl } : null}
+            presentHref={twoSurfaces && gameId ? presentHref(gameId) : ''}
+            presentDetail={presentDetail}
+            short
+            help={dockHelp}
+            onLeave={requestLeave}
+            connected={wsConnected || !wsEverConnected.current}
+            onSessionMenu={() => setSetupPanelOpen((open) => !open)}
+            sessionMenuOpen={setupPanelOpen}
+            /* NEEDS YOU (experience plan §3.3, 1b): on one screen a count and
+               never a name; its sheet starts "The room can see this screen".
+               There is no signal yet that the phone Remote is open, so the
+               sheet offers Connect your phone, never "on your phone" (§3.3:
+               only while it is connected). On two screens (an event's item,
+               a survey) the laptop is private: the session's own bell. */
+            bell={twoSurfaces ? null : (
+              <OneScreenNeedsBell
+                variant="top"
+                needs={needs}
+                onAct={onNeedsAct}
+                busy={needsBusy}
+                error={needsError}
+                oneScreen
+                remoteConnected={false}
+                onConnectPhone={() => openSetupAt('remote')}
+                open={needsSheetOpen}
+                onOpenChange={setNeedsSheetOpen}
+              />
+            )}
+            bellSession={twoSurfaces ? needsBell : null}
           />
         )}
-        meter={meter
-          ? (
-            <RoomMeter
-              phase={hostPhase} heading={meter.heading} body={meter.body}
-              complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
-              rows={meter.rows}
-              compose={meterCompose}
-            />
-          )
-          : null}
-        dock={(
+        now={(
           <Dock
+            lead={RW.yourPartLabel}
+            hint={dockHint}
+            kbd={dockKbd}
             status={dockLine}
             statusLink={dockLateLink}
             onStatusLink={openLateList}
             notice={Boolean(dockStatus) && hostControls.status.tone === 'notice' && dockStatus === hostControls.status.text}
-            hint={dockHint}
-            kbd={dockKbd}
-            onSetup={() => setSetupPanelOpen((open) => !open)}
-            help={dockHelp}
-            onAgenda={eventCode ? goToAgenda : undefined}
-            present={twoSurfaces && gameId ? { href: presentHref(gameId), presenting } : null}
             complete={everybodyIn}
             /* THE SAME ONE COUNT, NOT A SECOND ONE. This is the meter's own
-               `heading` / `body`, handed to the dock so that the fitter taking
-               the meter's COLUMN no longer takes the NUMBER with it — which is
-               the owner's "the larger views also dont have the player counts".
-               Only one of the two is ever visible and the switch is a CSS rule
-               keyed on the fitter's own `data-auto-solo`; Dock.jsx and
+               `heading` / `body`, handed to Your part now so that the fitter
+               taking the meter's COLUMN no longer takes the NUMBER with it —
+               which is the owner's "the larger views also dont have the player
+               counts". Only one of the two is ever visible and the switch is a
+               CSS rule keyed on the fitter's own `data-auto-solo`; Dock.jsx and
                styles/stage.css both carry the argument next to the mechanism.
                Passing `meter` unchanged is deliberate: two sources for one
                fraction is how they drift apart. */
@@ -8566,19 +9693,29 @@ Focus on actionable business strategy insights.`;
             {/* Not reimplemented here. HostActionBar keeps its keyboard
                 handling, its typing-target guard and its disabled hint; only
                 its positioning changes, and `bigScreen` is what makes it a
-                static element in a grid row rather than a fixed overlay. */}
+                static element in a grid row rather than a fixed overlay. A
+                LEAVE round button comes off (splitLeave): Main menu is the
+                top bar's, and one place for each thing. */}
             <HostActionBar
-              controls={dockControls}
+              controls={stageControls}
               onAction={runHostAction}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
+              /* The time chip and +1 min (2f), beside the main button as on
+                 the console: the row is under the top bar now (2h), so the
+                 chip's choices open downwards. */
+              timeChip={viewing ? null : timeChipFor(stageControls)}
+              onAddTime={phaseTimer && !viewing ? addMinute : null}
+              /* +1 min as a button beside the main one while a timer runs
+                 (dev QA 2 Nov): one screen has no pulse tile to carry it. */
+              showAddTime
               /*
                 → PAGES BEFORE IT ADVANCES. Reported: "host tend to skip the
                 extra pages of the workie response by hitting the right
                 arrow." On FIELD_NOTES with unread pages ahead, the advance
                 key turns the page; on the LAST page it advances the round —
                 the same mental model as a slide deck, where "next" moves
-                through the content before it moves past it. The dock BUTTON
+                through the content before it moves past it. The BUTTON
                 always advances: a host who clicks Next Round means it.
               */
               interceptAdvance={consoleInterceptAdvance}
@@ -8601,8 +9738,57 @@ Focus on actionable business strategy insights.`;
             />
           </Dock>
         )}
+        needs={twoSurfaces
+          ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
+          : <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />}
+        rail={(
+          <Rail
+            phase={hostPhase}
+            /* No title: the top bar names the session (one fact, once). */
+            title={null}
+            context={railContext}
+            /* The room's time (2f), mirrored for when the fitter takes the
+               meter's column; exactly one of the two shows (stage.css). */
+            time={phaseTimer && phaseTimer.onWall !== false ? <RoomTimeLine time={phaseTimer} className="rail-time" /> : null}
+            /* The code for the room to read. The top bar's Show join code is
+               the labelled toggle (§3.6); pointing at the code here still
+               previews the QR, as the owner asked (2026-10-13). */
+            join={gameId
+              ? (hostPhase === 'ENDED' || hostPhase === 'CLOSED' || gameState === 'SURVEY#CLOSED'
+                ? { code: gameId, closed: true }
+                : {
+                    url: joinDisplayUrl,
+                    code: eventCode || gameId,
+                    /* TWO SURFACES (owner, 2026-10-13): hovering the code puts it
+                       up on every screen and it stays until a click anywhere, or
+                       J, takes it down; the classic page keeps its hover preview. */
+                    onPreview: () => setQrMode((mode) => (mode === 'pinned' ? mode : (twoSurfaces ? 'pinned' : 'preview'))),
+                    onPreviewEnd: () => setQrMode((mode) => (mode === 'pinned' || twoSurfaces ? mode : null)),
+                    onPin: showJoinCode,
+                  })
+              : {}}
+          />
+        )}
+        meter={meter
+          ? (
+            <>
+              <RoomMeter
+                phase={hostPhase} heading={meter.heading} body={meter.body}
+                complete={everybodyIn} waiting={meterWaiting} arrivals={meterArrivals}
+                rows={meter.rows}
+                compose={meterCompose}
+              />
+              {/* ONE SCREEN IS THE ROOM'S SCREEN (experience plan 2f, F3): the
+                  round timer in words and a bar under the meter, never
+                  seconds, only when "show the time" is on. The seconds and
+                  +1 min live in Your part now's chip and the + key. */}
+              {phaseTimer && phaseTimer.onWall !== false ? <RoomTimeLine time={phaseTimer} className="stage-time" /> : null}
+            </>
+          )
+          : null}
         /* THE SCOREBOARD, in the stage's own layer: over the rail, bar and
-           main, with the dock still live beneath it. Mounted only while the
+           main, with the host's frame (top bar, Your part now) still live
+           above it. Mounted only while the
            server's board is open; the rows, pages and motion are its own
            (components/stage/scoreboard/Scoreboard.jsx). `refreshKey` is the
            room's state AND the last counted round, so a round scored under an
@@ -9223,6 +10409,18 @@ Focus on actionable business strategy insights.`;
                   onPage={setStagePageIndex}
                   enabled={!anyOverlayOpen}
                 />
+                {/* REDO, BESIDE THE READ IT REWRITES (docs/design/session-menu
+                    fork F4): a mid-round action, out of the menu. Only where
+                    this laptop is private (two screens): on one screen the
+                    room watches this, so Redo stays in the Session menu's How
+                    it runs · More options, which keeps a copy either way. */}
+                {twoSurfaces && currentAIInsights && !loadingAIInsights && !aiSummaryFailure ? (
+                  <div className="fn-redo">
+                    <Button variant="tertiary" size={36} onClick={handleRegenerateAISummary} data-testid="read-redo-inline" title="Rewrite the read on screen now, in the current voice">
+                      {'Redo Workie\'s read'}
+                    </Button>
+                  </div>
+                ) : null}
 
                 {/* NO HOST CONTROLS ON THIS BEAT. The Voice and Approach
                     selects, "Briefing on" and Redo were drawn here, on the
@@ -9395,6 +10593,21 @@ Focus on actionable business strategy insights.`;
           Mounted inside the stage it sat in `.main`'s stacking context (z 2),
           so the workflow strip (z 3) and the dock (z 12) painted over its
           header and its Send button. Out here its scrim covers everything. */}
+      {/* ONE SCREEN: WHERE WILL YOU TYPE IT? (impromptu ask, D8). Host-only
+          and first: the composer's fields never draw on the room's screen
+          unasked. There is no Remote-presence signal on this page (the needs
+          bell passes remoteConnected={false} for the same reason), so the
+          phone row offers Connect your phone, which opens the Session menu's
+          Phone remote; the Remote's Rounds tab has the same composer. */}
+      {ownChoiceOpen && (
+        <OwnQuestionChoice
+          remoteConnected={false}
+          onOpenPhone={() => setOwnChoiceOpen(false)}
+          onConnectPhone={() => { setOwnChoiceOpen(false); openSetupAt('remote'); }}
+          onWriteHere={() => openOwnComposer({ skipChoice: true })}
+          onClose={() => setOwnChoiceOpen(false)}
+        />
+      )}
       {askComposer && !useConsole && (
         <AskComposer
           suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
@@ -9415,13 +10628,11 @@ Focus on actionable business strategy insights.`;
         />
       )}
 
-      {setupPanelOpen && (
+      {setupPanelOpen && sessionMenuWhere(
         <SessionSetupPanel
           // A place asked for re-mounts the panel at its tab.
           key={setupPanelLanding || 'session'}
-          initialTab={setupPanelLanding === 'running-order'
-            ? 'questions'
-            : (setupPanelTabs().some((t) => t.id === setupPanelLanding) ? setupPanelLanding : 'players')}
+          initialTab={setupPanelLanding || ''}
           focusRunningOrder={setupPanelLanding === 'running-order'}
           rounds={rounds}
           historyLoading={historyLoading}
@@ -9442,6 +10653,10 @@ Focus on actionable business strategy insights.`;
           onRemovePlayer={(name) => setPlayerRemoved(name, true)}
           onRestorePlayer={(name) => setPlayerRemoved(name, false)}
           onGrantHandover={grantNameHandover}
+          onRefuseHandover={refuseNameHandover}
+          onLockHandover={lockNameHandover}
+          // The room can see this panel on one screen (experience plan 1e).
+          oneScreen={!twoSurfaces}
           scoreboard={scoreboard}
           scoreboardAvailability={scoreboardAvail}
           onToggleScoreboard={(open) => publishScoreboard({ open })}
@@ -9471,6 +10686,8 @@ Focus on actionable business strategy insights.`;
           upNextBlocked={upNextBlocked}
           upNextAdvisories={upNextAdvisories}
           upNextExcluded={upNextExcluded}
+          queueRoundBase={queueRoundBase}
+          queueNowRound={queueNowRound}
           onQueueQuestion={handleQueueQuestion}
           onQueueFirst={handleQueueFirst}
           onQueueMove={handleQueueMove}
@@ -9496,6 +10713,25 @@ Focus on actionable business strategy insights.`;
             createdAt: gameCreatedAt,
           })}
           suppressKeys={Boolean(inviteTarget)}
+          composing={Boolean(ownComposer)}
+          ownQuestions={ownQuestions}
+          onWriteQuestion={ownWritable ? () => openOwnComposer() : null}
+          onEditOwn={editOwnQuestion}
+          onRemoveOwn={removeOwnQuestion}
+          ownNotice={ownNotice}
+          onOwnUndo={ownNotice && ownNotice.undoKey ? () => removeOwnQuestion(ownNotice.undoKey) : null}
+          ownComposer={ownComposer ? {
+            mode: ownComposer.mode,
+            initial: ownComposer.initial,
+            canNow: ownNowAllowed(gameState),
+            lobby: ownNowIsFirst(gameState),
+            laterOptions: ownLaterOptions,
+            nextRound: (lessonNumber || 0) + 1,
+            busy: ownBusy,
+            error: ownError,
+            onSubmit: submitOwnQuestion,
+            onClose: closeOwnComposer,
+          } : null}
           onShowJoinCode={showJoinCode}
           profile={profile}
           onProfileChange={setProfile}
@@ -9504,6 +10740,11 @@ Focus on actionable business strategy insights.`;
           presentHref={gameId ? presentHref(gameId) : ''}
           presentDetail={presentDetail}
           remoteWho={remoteWho}
+          /* The console mid-session draws People: the full list is a view
+             opened from it, not a section (dev QA 2 Nov). A survey's Close and
+             End are the main button's own controls. */
+          peopleColumn={useConsole && !setupFrame}
+          surveyActs={isSurveyType(currentGameType) ? sessionMenuSurveyActs : null}
           /* THE TWO NAME DECISIONS, both session-level, both the host's.
              `anonymousUntilReveal` is the SAME flag the create dialog set —
              not a second one — so the setter is the same setter; the effect
@@ -9529,6 +10770,21 @@ Focus on actionable business strategy insights.`;
           onViewReports={handleViewReports}
           onShowHowToPlay={() => setLessonExpanded(true)}
           onSwitchGame={requestLeave}
+          /* AN EVENT'S ITEM (2d, with 2h's order): the Session menu's first
+             row, Agenda (up one level, never instead of Main menu) and Bring
+             everyone here while the room is elsewhere. */
+          event={eventCode ? {
+            onAgenda: () => { closeAllSidePanels(); goToAgenda(); },
+            // The event line's place (docs/design/session-menu D5): item N of
+            // M, and the room's item while the room is elsewhere.
+            n: eventItem ? itemNumber(eventRun.items, eventItem.itemId) : null,
+            total: (eventRun.items || []).length || null,
+            roomOn: eventRun.liveItemId ? itemNumber(eventRun.items, eventRun.liveItemId) : null,
+            onBringHere: eventWaiting && eventItem && (eventItem.state === 'planned' || eventMoved)
+              ? () => { closeAllSidePanels(); runHostAction(hostControls.primary); }
+              : null,
+            busy: eventBusy,
+          } : null}
           /*
             Task 4 fix round 1, item 1: CLOSE THE PANEL FIRST. `runHostAction`
             closes every side panel only AFTER `showConfirmation` resolves — it
@@ -9553,10 +10809,9 @@ Focus on actionable business strategy insights.`;
             closeAllSidePanels();
             runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() });
           }}
-          onSignOut={handleSignOut}
-          // The group AdminPage's own ProtectedRoute requires. Offering the
-          // link to a plain host would open a tab onto Access Denied.
-          isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
+          /* No Sign out and no Admin in the live menu (docs/design/session-menu
+             fork F5): both are account actions, and Home has both, one press
+             away through Main menu, which leaves the session running. */
           /* WORKIE'S HOST OPTIONS, off the stage (QA drive #21). Redo only
              while a read is on screen: anywhere else it rewrites nothing. */
           workie={{
@@ -9573,7 +10828,8 @@ Focus on actionable business strategy insights.`;
             onRedo: hostPhase === 'FIELD_NOTES' ? handleRegenerateAISummary : null,
             redoBusy: loadingAIInsights,
             modelPicker: hostPhase === 'FIELD_NOTES' ? modelPicker : null,
-            // The read check's note, beside Redo: on one screen the only host-only place for it.
+            // The read check's note, beside Redo. On one screen the panel is public,
+            // so the whole Workie section waits behind Show on this screen (1e).
             readCheck: hostPhase === 'FIELD_NOTES' && currentAIInsights ? currentAIInsights.readCheck : null,
           }}
         />
@@ -9594,28 +10850,32 @@ Focus on actionable business strategy insights.`;
           closeOnBackdrop
           closeOnEscape
         >
-          <h2>Leave this session?</h2>
+          <DialogHead title="Leave this session?" onClose={() => setConfirmLeave(false)} />
           <div className="dialog-content">
             <p className="dialog-help-text" style={{ fontSize: '15px' }}>
               {`${players.length} ${players.length === 1 ? 'person is' : 'people are'} in the room. The session stays live — their screens keep working, and you can come back to it any time with Continue.`}
             </p>
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="btn-primary"
-                autoFocus
-                onClick={() => setConfirmLeave(false)}
-              >
-                Stay in the session
-              </button>
+            <DialogFoot
+              className="dialog-actions"
+              cancel={(
+                <button
+                  type="button"
+                  className="btn-primary"
+                  autoFocus
+                  onClick={() => setConfirmLeave(false)}
+                >
+                  Stay in the session
+                </button>
+              )}
+            >
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={() => { setConfirmLeave(false); handleSwitchGame(); }}
+                onClick={() => { setConfirmLeave(false); leaveToMainMenu(); }}
               >
                 Back to Menu
               </button>
-            </div>
+            </DialogFoot>
           </div>
         </Modal>
       )}
@@ -9626,7 +10886,10 @@ Focus on actionable business strategy insights.`;
           the class's comment in styles.css for why. */}
       {/* On one screen during a round the QR is the side panel (joinPanelLive),
           so the rail's hover preview no longer covers the stage there. */}
-      {(showExpandedQR || (qrMode && !(joinPanelAllowed && qrMode === 'preview'))) && (
+      {/* On the two-screen console Join is a toggle for the room's window
+          (experience plan 2a): the code goes up there, and the host's own
+          laptop is not covered; the pressed Join says it is up. */}
+      {(showExpandedQR || (qrMode && !(joinPanelAllowed && qrMode === 'preview') && !(useConsole && qrMode === 'pinned'))) && (
         <div
           className={qrOverlayClassName(qrMode)}
           onClick={() => { setShowExpandedQR(false); setQrMode(null); }}
@@ -9757,6 +11020,7 @@ Focus on actionable business strategy insights.`;
           onCancel={confirmModalProps.onCancel}
         />
       )}
+      {confirmDialog}
 
       {/* GOING BACK THROUGH A ROUND THAT ALREADY HAPPENED.
 

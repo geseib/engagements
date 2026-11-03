@@ -1,5 +1,6 @@
 import React from 'react';
 import LW from '../config/lateWords';
+import { anchorLabelShown, plainOf } from '../config/comments';
 
 /**
  * "ARRIVED LATE", IN THE REPORTS (session flow v3 §4.4; late items Task 5).
@@ -38,11 +39,16 @@ export default function ReportLate({ late, roundNoun = null, className = 'report
       {items.map((it, i) => {
         const about = it.kind === 'askAnswer' && it.askQuestion
           ? LW.report.toQuestion(it.askQuestion)
-          : (it.kind === 'comment' && it.anchorLabel ? LW.report.on(it.anchorLabel) : '');
+          : (it.kind === 'comment' && anchorLabelShown(it) ? LW.report.on(anchorLabelShown(it)) : '');
         const when = LW.arrivedDuring(it.arrivedDuring, roundNoun);
         return (
           <div key={i} className="report-comment report-late-item report-keep" data-kind={it.kind}>
             <div className="comment-on">{[LW.kinds[it.kind], about].filter(Boolean).join(' · ')}</div>
+            {/* What the late comment is about, quoted, as an on-time one
+                shows it (create-report.js carries it since 2026-11-01). */}
+            {it.kind === 'comment' && it.anchorExcerpt && (
+              <div className="comment-excerpt">{plainOf(it.anchorExcerpt)}</div>
+            )}
             <blockquote className="comment-text">{it.text}</blockquote>
             <div className="comment-meta">
               {it.who ? <span className="comment-author">{it.who}</span> : null}

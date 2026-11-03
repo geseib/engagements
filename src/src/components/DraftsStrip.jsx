@@ -3,6 +3,7 @@ import Icon from './Icon';
 import {
   DRAFT_STATUS, waitingDrafts, restorableDrafts, draftNoun,
 } from '../utils/draftsApi';
+import Button from './ui/Button';
 
 /**
  * AI DRAFTS WAITING IN THIS LIBRARY — the strip at the top of the sets list.
@@ -54,15 +55,15 @@ export default function DraftsStrip({ drafts = [], onOpen }) {
               {d.daysLeft != null && d.status !== DRAFT_STATUS.GENERATING && (
                 <span className="qsets-dim"> · kept {d.daysLeft} more day{d.daysLeft === 1 ? '' : 's'}</span>
               )}
-              <button type="button" className="qsets-btn qsets-btn--sm qsets-btn--primary" onClick={() => onOpen && onOpen(d)}>
+              <Button variant="secondary" size="sm" className="qsets-act qsets-lead" onClick={() => onOpen && onOpen(d)}>
                 {d.status === DRAFT_STATUS.GENERATING ? 'Watch' : 'Review'}
-              </button>
+              </Button>
             </li>
           ))}
           {discarded.map((d) => (
             <li key={d.draftId} className="qsets-dim">
               <span>Discarded: {describe(d)}. Restorable for {d.daysLeft ?? 7} more day{d.daysLeft === 1 ? '' : 's'}.</span>
-              <button type="button" className="qsets-btn qsets-btn--sm" onClick={() => onOpen && onOpen(d)}>Restore…</button>
+              <Button variant="secondary" size="sm" className="qsets-act" onClick={() => onOpen && onOpen(d)}>Restore…</Button>
             </li>
           ))}
         </ul>

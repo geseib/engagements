@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Modal from '../../components/Modal';
+import { DialogClose } from '../../components/ui/DialogParts';
 import { copyText } from '../../utils/copyText';
 import { W } from '../words';
 import { shownAddress } from '../BuildWifiShare';
@@ -36,6 +37,8 @@ export function QrZoom({ playUrl, gameId, onClose, demoLink = '' }) {
     // is in the code, never in the words: the address shows host and port only.
     return (
       <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Demo QR code">
+        {/* A viewer: a tap anywhere closes it, and the one shared close says so. */}
+        <DialogClose className="brm-qrzoom-x" onClose={onClose} />
         <div className="brm-qrzoom-body" onClick={onClose}>
           <div className="brm-qrzoom-qr" role="img" aria-label="QR code to open the demo">
             <QRCodeSVG value={demoLink} size={512} level="M" includeMargin={false} />
@@ -48,6 +51,7 @@ export function QrZoom({ playUrl, gameId, onClose, demoLink = '' }) {
   }
   return (
     <Modal overlayClassName="brm-qrzoom" contentClassName="brm-qrzoom-card" onClose={onClose} label="Join QR code">
+      <DialogClose className="brm-qrzoom-x" onClose={onClose} />
       <div className="brm-qrzoom-body" onClick={onClose}>
         <div className="brm-qrzoom-qr" role="img" aria-label={`QR code to join at ${playUrl}`}>
           <QRCodeSVG value={playUrl} size={512} level="M" includeMargin={false} />

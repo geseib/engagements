@@ -1,4 +1,4 @@
-/* skin-allowance: colour=15 font=0 primary=15 */
+/* skin-allowance: colour=11 font=0 primary=13 */
 /*
  * Host Remote — phone-first.
  *
@@ -6,7 +6,7 @@
  * dim room, glancing down between sentences. So:
  *
  *   - the primary control is docked in the thumb arc and never scrolls away;
- *   - every tap target is at least 44px, and the primary one is 64px;
+ *   - every tap target is at least 44px, and the primary one is 56px (ui/Button);
  *   - type is set with clamp() against the viewport, never a fixed rem that can
  *     overflow. (A fixed `4rem` heading in this codebase once rendered ~395px
  *     wide inside a 375px phone and clipped both edges. Everything here is
@@ -18,7 +18,7 @@
 
 .hr {
   --hr-gutter: 16px;
-  /* Tallest the dock gets: 64px button + 12px padding top/bottom + the 24px
+  /* Tallest the dock gets: 64px (now 56px) button + 12px padding top/bottom + the 24px
      "N still answering" line that appears when a confirmation is armed.
      Measured at 375x812. The body reserves this PLUS the home-indicator inset,
      or the last row of More controls sits under the dock on a notched phone. */
@@ -203,7 +203,7 @@
    the sign-in action, and (only for a wrong-account refusal) the Session
    card carrying `ActiveOrgSwitcher` — while `GET /games/{id}/host-details`
    has not cleared this device to drive it. Every child reuses `.hr-flash`,
-   `.hr-btn` and `.hr-card`; this rule is only the stack between them, the
+   ui/Button and `.hr-card`; this rule is only the stack between them, the
    same gap `.hr-body` already uses between its own top-level sections. */
 .hr-access {
   display: flex;
@@ -247,6 +247,52 @@
   font-weight: 600;
   color: var(--success);
 }
+
+/* THE TIME CARD (experience plan 2f; session-start D5 C2, frame 1-c2): the
+   round timer beside the meter, with +1 min. The host's own screen, so it
+   counts seconds. Info blue while it runs, amber (--warn) once time is up;
+   never red. */
+.hr-time {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  text-align: left;
+}
+.hr-time.is-up { border-color: var(--warn); }
+.hr-time-k {
+  margin: 0 0 6px;
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hr-time-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.hr-time-ring { width: 40px; height: 40px; }
+.hr-time-ring .tring-track { stroke: var(--surface-2); }
+.hr-time-ring .tring-fill { stroke: var(--info); }
+.hr-time-v {
+  margin: 0;
+  font-size: clamp(1.375rem, 6vw, 1.625rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.hr-time.is-up .hr-time-v { color: var(--warn); }
+.hr-time-sub {
+  margin: 0;
+  font-size: .875rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.hr-time-plus { min-height: 44px; white-space: nowrap; }
 
 .hr-roster {
   margin: 16px 0 0;
@@ -446,51 +492,12 @@
 
 /* -------------------------------------------------------------- buttons */
 
-.hr-btn {
-  min-height: 48px; /* > the 44px floor, with room for the icon+label row */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: var(--radius-sm, 8px);
-  border: 1px solid transparent;
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-  transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
-}
-
-/* Present is a link (two-surface PLAN 2.14), drawn as the button beside it. */
-a.hr-btn { text-decoration: none; color: inherit; }
-
-.hr-btn:active { transform: scale(.985); }
-.hr-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
-
-.hr-btn--primary {
-  background: var(--primary);
-  color: #1B2942;
-}
-
-.hr-btn--ghost {
-  background: var(--surface);
-  border-color: color-mix(in srgb, var(--muted) 35%, transparent);
-  color: var(--text);
-}
-
-.hr-btn--danger {
-  background: transparent;
-  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
-  color: var(--danger);
-}
-
-.hr-btn--danger.is-armed {
-  background: var(--danger);
-  color: #FFF;
-  border-color: var(--danger);
-}
+/* EVERY BUTTON ON THE REMOTE IS ui/Button (experience plan §5.1, step 5a):
+   secondary at the 44px touch height for the controls, the one primary at
+   the phone dock's 56px. The library paints them from the roles; this sheet
+   sets only the remote's type size, read through --ui-size. The scoped
+   .hr-btn family and its own primary are gone. */
+.hr .ui-btn { --ui-size: .9375rem; }
 
 /* ---------------------------------------------------------------- join */
 
@@ -530,7 +537,7 @@ a.hr-btn { text-decoration: none; color: inherit; }
   max-width: 100%;
 }
 
-.hr-join .hr-btn { width: 100%; }
+.hr-join .ui-btn { width: 100%; }
 
 /* ---------------------------------------------------------------- dock */
 
@@ -620,39 +627,25 @@ a.hr-btn { text-decoration: none; color: inherit; }
   font-size: .9375rem;
 }
 
-.hr-primary {
-  min-height: 64px;
+/* The dock's main button: ui/Button primary at 56px (its fill, ink, height
+   and radius are the library's). Only its width and type are the dock's. */
+.hr .hr-primary {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100%;
   gap: 10px;
-  padding: 14px 20px;
-  border: 0;
-  border-radius: var(--radius, 16px);
-  background: var(--primary);
-  color: #1B2942;
-  font: inherit;
-  font-size: clamp(1.0625rem, 4.8vw, 1.25rem);
+  --ui-size: clamp(1.0625rem, 4.8vw, 1.25rem);
   font-weight: 700;
-  cursor: pointer;
-  transition: background-color .15s ease, transform .1s ease;
-}
-
-.hr-primary:active { transform: scale(.99); }
-
-.hr-primary:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-  transform: none;
 }
 
 /*
  * Armed state. The colour change is the load-bearing signal — the pulse is
  * decoration and is removed under prefers-reduced-motion below.
  */
+/* The main button stays orange when armed (PLAN §2 principle 4; dev QA
+   2 Nov): the second press is said by the ring and the label, never by a
+   red fill that reads as a different button. */
 .hr-primary.is-armed {
-  background: var(--danger);
-  color: #FFF;
+  box-shadow: 0 0 0 3px var(--danger);
   animation: hr-pulse 1.1s ease-in-out infinite;
 }
 
@@ -754,10 +747,10 @@ a.hr-btn { text-decoration: none; color: inherit; }
    colour: every pairing is --text or --muted on --surface, already measured for
    this surface.
 
-   The 44px touch floor is the constraint that shapes all of it. `.hr-btn` sets
-   48px and the row button below deliberately does NOT shrink under that — a
-   list of responses is exactly where a host's thumb is hurried and a room is
-   watching. `--small` narrows the padding, never the height. */
+   The 44px touch floor is the constraint that shapes all of it. ui/Button's
+   touch height is 44px and the row button below deliberately does NOT shrink
+   under that — a list of responses is exactly where a host's thumb is hurried
+   and a room is watching. It takes a smaller type, never a smaller height. */
 
 .hr-focus {
   display: flex;
@@ -841,9 +834,8 @@ a.hr-btn { text-decoration: none; color: inherit; }
 
 /* Narrower padding, SAME HEIGHT. See the note at the top of this block: the
    44px floor is not negotiable on the surface a hurried thumb uses most. */
-.hr-btn--small {
-  padding: 8px 12px;
-  font-size: .875rem;
+.hr-focus__show {
+  --ui-size: .875rem;
   align-self: flex-start;
 }
 
@@ -860,8 +852,8 @@ a.hr-btn { text-decoration: none; color: inherit; }
   gap: 8px;
   margin-top: 10px;
 }
-.hr-sb-looks .hr-btn--small { align-self: stretch; min-width: 0; }
-.hr-sb-looks .hr-btn[aria-pressed="true"] {
+.hr-sb-looks .ui-btn { align-self: stretch; min-width: 0; padding-left: 8px; padding-right: 8px; --ui-size: .875rem; }
+.hr-sb-looks .ui-btn[aria-pressed="true"] {
   border-color: var(--primary);
   color: var(--primary);
   box-shadow: inset 0 0 0 1px var(--primary);
@@ -945,3 +937,20 @@ a.hr-btn { text-decoration: none; color: inherit; }
 .hr-steps-list li.is-live, .hr-steps-list li.is-done { color: var(--text); }
 .hr-steps-now { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--info); }
 .hr-steps-explain { grid-column: 1 / -1; color: var(--muted); }
+
+/* ------------------------------------------------------------ needs you
+
+   The Needs-you card above the status card (experience plan §3.3, 1b). The
+   rows and buttons are components/needs/NeedsYou.css's; here only the
+   phone's own sizes: a card on the page's gutter, and 44px to tap. */
+.hr .hr-needs {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+}
+.hr .hr-needs .ui-btn,
+.hr .hr-needs .ny-link { min-height: 44px; --ui-size: 15px; }

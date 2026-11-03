@@ -38,7 +38,7 @@ export function releasePointerFocus(event) {
   THE WAY OUT IS NOT A ROUND CONTROL (owner, 18 Oct 2026: "the back to menu
   (which menu? this game menu, thats cool. oops it took us out of the game").
   A LEAVE control (the lobby's and the end's secondary) comes off the action
-  bar and becomes the top line's "All sessions", where it says where it goes
+  bar and becomes the top bar's Main menu (experience plan §3.6), where it says where it goes
   and never sits beside Start round 1. A LEAVE primary (a finished survey,
   "Back to the agenda") stays the primary: there it is the next step.
 */
@@ -69,22 +69,40 @@ export function splitLeave(controls) {
     onLeave     a way out that is not a round control (the Build Room's Main menu)
     stripIdle   the strip with nothing live: kept, dimmed (answer (c))
     mainLabel   the main area's accessible name
+    needs       the Needs-you line (experience plan §4.3), directly under
+                Your part now, in its own grid row so it never moves the card
+    pulse       the pulse (session-start D3; experience plan 2c): three tiles
+                in their own row under the Needs-you line
+    sheetRef    a callback ref for the Session menu's sheet host (experience
+                plan §3.2b): a box over the content area (the pulse and the
+                main area), never over Your part now or the Needs-you line.
+                The page portals the Session menu into it.
+    noRail      no left rail (Setup is the lobby, session-start F7; experience
+                plan 2b): before round 1 the rail only repeats Setup's count
+                and names, so Setup takes the full width. `hc--setup`.
 */
 export default function HostConsole({
   top, strip, rail, footer, children,
   variant = '', railSlot = null, side = null, topExtra = null, onLeave: leaveTo = null, stripIdle = false, mainLabel = undefined,
+  needs = null, pulse = null, sheetRef = null, noRail = false,
 }) {
   const { controls, leave } = splitLeave(footer && footer.controls);
-  const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : leaveTo;
-  const cls = ['hc', variant, side ? 'hc--side' : ''].filter(Boolean).join(' ');
+  // Main menu is always on the top bar (§2 principle 2): the step's own leave
+  // control when it has one, else the page's way out.
+  const pageLeave = leaveTo || (top && top.onLeave) || null;
+  const onLeave = leave && footer && typeof footer.onAction === 'function' ? () => footer.onAction(leave) : pageLeave;
+  const cls = ['hc', variant, side ? 'hc--side' : '', noRail ? 'hc--setup' : ''].filter(Boolean).join(' ');
   return (
     <div className={cls} data-theme="dark" onClick={releasePointerFocus}>
       <ConsoleTop {...top} onLeave={onLeave}>{topExtra}</ConsoleTop>
-      <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && strip.strip ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
-      {railSlot || <ConsoleRail {...rail} />}
+      <div className={`hc-loop${stripIdle ? ' is-idle' : ''}`}>{strip && (strip.strip || strip.agenda) ? <WorkflowStrip {...strip} places={null} hidePart /> : null}</div>
+      {noRail ? null : (railSlot || <ConsoleRail {...rail} />)}
       <ConsoleFooter {...footer} controls={controls} />
+      {needs ? <div className="hc-needs">{needs}</div> : null}
+      {pulse ? <div className="hc-pulse">{pulse}</div> : null}
       <main className="hc-main" aria-label={mainLabel}>{children}</main>
       {side ? <aside className="hc-side" aria-label="What happened">{side}</aside> : null}
+      {sheetRef ? <div className="hc-sheet" ref={sheetRef} data-testid="hc-sheet" /> : null}
     </div>
   );
 }

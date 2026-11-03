@@ -14,7 +14,11 @@
  * stage-beat.js is closed — an open one fails by writing a row that every
  * reader then quietly ignores, with no error anywhere in the system.
  *
- * ── A RESPONSE ANCHOR IS A POSITION, NEVER A RANK ──────────────────────────
+ * ── A RESPONSE ANCHOR IS A BALLOT NUMBER (since Phase 3c), NEVER A RANK ─────
+ *
+ * A new reply stores the response's ballot number and `anchorBasis: 'ballot'`
+ * (config/commentPlacement.js). What follows is why the older POSITION anchor
+ * was already never a rank; rows written with it are still read.
  *
  * `create-report.js` gives equal scores equal ranks (1, 1, 3), so two rows can
  * both print "1". `PastRound.jsx` already closes its spotlight handler over the
@@ -104,18 +108,62 @@ export function normalizeAnchorRef(kind, ref) {
  */
 export function anchorLabelFor(anchor, context = {}) {
   const kind = anchor && anchor.anchorKind;
-  if (kind === 'summary') return 'AI summary';
+  if (kind === 'summary') return SUMMARY_LABEL;
   if (kind === 'results') return 'Results';
   if (kind !== 'response') return '';
 
-  const position = Number(normalizeAnchorRef('response', anchor.anchorRef));
-  if (!Number.isInteger(position)) return '';
+  const ref = Number(normalizeAnchorRef('response', anchor.anchorRef));
+  if (!Number.isInteger(ref)) return '';
 
   const answers = Array.isArray(context.answers) ? context.answers : [];
-  const row = answers[position];
+  // A BALLOT anchor (phone-comments B1) names the response by the number the
+  // room voted under, so the label prints that number and finds the row by it.
+  // An older position anchor prints position + 1, as it always did.
+  const byBallot = anchor.anchorBasis === 'ballot';
+  const row = byBallot
+    ? answers.find((a) => Number(a && a.ballot) === ref)
+    : answers[ref];
   const who = row && (row.playerName || row.name);
-  const ordinal = `Response ${position + 1}`;
+  const ordinal = `Response ${byBallot ? ref : ref + 1}`;
   return who ? `${ordinal} — ${who}` : ordinal;
+}
+
+/**
+ * THE SUMMARY'S NAME, as every screen now calls it. Comments written before
+ * the rename carry the stored label "AI summary"; `anchorLabelShown` maps
+ * those at render, so nothing stored has to change.
+ */
+export const SUMMARY_LABEL = 'Workie’s read';
+
+/**
+ * A STORED anchor label, as it is printed beside a comment.
+ *
+ * Two mappings, both at render so every stored row stays as written:
+ *
+ *   - the summary is "Workie’s read", whatever label the row was stored with
+ *     (older rows say "AI summary");
+ *   - a response labelled "Response N — Name" prints as "Name’s response".
+ *     The number is dropped on purpose. It is the row's position in the list
+ *     the PHONE drew, but the report prints placements (1, 1, 3), never
+ *     positions, so "Response 2" names a number the reader cannot find; and a
+ *     comment stored before the phone and report shared one tie order
+ *     (config/responseOrder.js) may carry a position that points at the wrong
+ *     row. The name plus the excerpt printed under it identifies the response
+ *     on its own. A label with no name (a round that hid authors) has nothing
+ *     better to offer and is printed as stored.
+ */
+export function anchorLabelShown(comment) {
+  const kind = comment && comment.anchorKind;
+  const label = String((comment && comment.anchorLabel) || '').trim();
+  if (kind === 'summary' || label === 'AI summary') return SUMMARY_LABEL;
+  // Stored as "Results"; the phone calls it the whole round (phone-comments §5).
+  if (kind === 'results') return 'the whole round';
+  if (kind === 'response') {
+    const [ordinal, who] = label.split(/\s+—\s+/);
+    if (who && who.trim()) return `${who.trim()}’s response`;
+    return ordinal || '';
+  }
+  return label;
 }
 
 /**
@@ -131,8 +179,9 @@ export function anchorLabelFor(anchor, context = {}) {
 export function wallCreditFor(comment) {
   const kind = comment && comment.anchorKind;
   const label = String((comment && comment.anchorLabel) || '').trim();
-  if (kind === 'summary') return 'on the summary';
-  if (kind === 'results') return 'on the results';
+  // The phone's own words for the two sections (phone-comments §5).
+  if (kind === 'summary') return `on ${SUMMARY_LABEL}`;
+  if (kind === 'results') return 'on the whole round';
   if (kind === 'response') {
     const [ordinal, who] = label.split(/\s+—\s+/);
     if (who && who.trim()) return `on ${who.trim()}’s response`;

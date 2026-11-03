@@ -29,6 +29,7 @@ import ScoreCard from './components/ScoreCard';
 import { useAuth } from './auth/AuthContext';
 import './BuilderPage.css';
 import { authFetch } from './auth/authFetch';
+import { standingFromOrgs, notifySuspended } from './auth/suspension';
 import Icon from './components/Icon';
 import QuestionSetEditor from './components/QuestionSetEditor';
 import QuestionSetsPanel from './components/QuestionSetsPanel';
@@ -62,6 +63,7 @@ import {
 import { uploadGeneratedSet, generatedSetPendingNotice } from './utils/generatedSetUpload';
 import NotificationsBell from './components/NotificationsBell';
 import DraftReview from './components/DraftReview';
+import { useConfirm } from './components/ConfirmDialog';
 import { listDrafts, waitingDrafts } from './utils/draftsApi';
 import { librariesFrom } from './utils/libraries';
 import { destinationOf } from './utils/notificationsApi';
@@ -248,6 +250,35 @@ function urlNamesKnownSection() {
   return Boolean(asked) && ADMIN_SECTION_IDS.includes(asked);
 }
 
+/*
+  A SET'S EDITOR HAS AN ADDRESS (experience plan 5e). `?set=<id>` (and
+  `&setScope=` where ids collide across libraries) names the set open in the
+  detail place, so a reload or a pasted link reopens it and Back returns to the
+  list. A query parameter for the reason config/adminSection.js gives for
+  `?section=`: the pathname router never sees it.
+*/
+export const SET_PARAM = 'set';
+const SET_SCOPE_PARAM = 'setScope';
+/** The set the address bar names, or null. */
+export function setFromSearch(search = (typeof window !== 'undefined' ? window.location.search : '')) {
+  const params = new URLSearchParams(String(search || ''));
+  const id = params.get(SET_PARAM);
+  if (!id || id.length > 160) return null;
+  return { id, scope: params.get(SET_SCOPE_PARAM) || '' };
+}
+/** `search` with the set named — or, given null, with no set at all. Other params survive. */
+export function searchWithSet(search, set) {
+  const params = new URLSearchParams(String(search || ''));
+  params.delete(SET_PARAM);
+  params.delete(SET_SCOPE_PARAM);
+  if (set && set.id) {
+    params.set(SET_PARAM, set.id);
+    if (set.scope) params.set(SET_SCOPE_PARAM, set.scope);
+  }
+  const q = params.toString();
+  return q ? `?${q}` : '';
+}
+
 /* The sections that only exist in platform mode. Listed here rather than
    derived from `sectionsFor`, because this is used to decide whether to draw
    the acting-as strip and calling the nav builder again for that would couple
@@ -332,7 +363,7 @@ function AdminPage() {
   });
   
   // Edit mode
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(() => Boolean(setFromSearch()));
   
   /*
     Which place is open. Question sets, not AI Prompts: RATIONALE.md §9 — every
@@ -396,9 +427,19 @@ function AdminPage() {
     (async () => {
       try {
         const res = await authFetch(adminApiUrl('orgs'));
+        /* A SUSPENDED ACCOUNT OR ORGANISATION (#40): GET /orgs is the one
+           route that says so (auth/suspension.js). Reported, and
+           ProtectedRoute swaps this page for the one suspended screen. */
+        if (res.status === 403) {
+          const refused = await res.json().catch(() => ({}));
+          const found = standingFromOrgs(403, refused);
+          if (found) { notifySuspended(found); return; }
+        }
         if (!res.ok) throw new Error(`orgs returned ${res.status}`);
         const data = await res.json();
         if (cancelled) return;
+        const orgSuspended = standingFromOrgs(200, data);
+        if (orgSuspended) { notifySuspended(orgSuspended); return; }
         const list = Array.isArray(data.orgs) ? data.orgs : [];
         setOrgs(list);
         setFeatures(data.features && typeof data.features === 'object' ? data.features : {});
@@ -676,6 +717,9 @@ function AdminPage() {
     await fetchQuestionSets();
     setEditingSetId(newSetId);
     setEditingSetScope('org'); // the copy is always the caller's own
+    if (typeof window !== 'undefined' && window.history?.replaceState && setFromSearch()) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${searchWithSet(window.location.search, { id: newSetId, scope: 'org' })}`);
+    }
     setNotice({ tone: 'success', text: message });
   };
 
@@ -876,14 +920,16 @@ function AdminPage() {
   // The set being edited. Every field of the editor itself now lives in
   // components/QuestionSetEditor.jsx — this page only decides which set is open
   // and shows the confirmation after the editor closes.
-  const [editingSetId, setEditingSetId] = useState('');
+  const [editingSetId, setEditingSetId] = useState(() => (setFromSearch() || {}).id || '');
   /* WHICH LIBRARY the open set lives in. A set id is a slug and slugs collide
      across libraries by design — the public copy of a set and an org's own copy
      of it can share an id — so the id alone cannot name the set being edited.
      The list arrives platform, public, org; looked up by id alone, a public row
      shadowed the org copy an editor had just made, and the person was left on
      the public row making copy after copy (__tests__/adminCopyRebind.test.jsx). */
-  const [editingSetScope, setEditingSetScope] = useState('');
+  const [editingSetScope, setEditingSetScope] = useState(() => (setFromSearch() || {}).scope || '');
+  /* True while the history entry on top is the one opening a set pushed. */
+  const setPushedRef = useRef(false);
   /*
     ONE BANNER for everything this page does on the question-set screen's
     behalf: a save that landed, a toggle that failed, an AI-generated set that
@@ -967,9 +1013,10 @@ function AdminPage() {
 
   const defaultInstructions = "How would you apply this concept in your current role or organization? Consider the specific challenges and opportunities in your context.";
 
-  // Sign-out handler
-  const handleSignOut = () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
+  // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
+  const handleSignOut = async () => {
+    if (await askConfirm({ title: 'Sign out?', message: 'You can sign back in at any time.', confirmText: 'Sign out' })) {
       signOut();
       window.location.href = '/auth';
     }
@@ -1038,6 +1085,17 @@ function AdminPage() {
     setEditingSetScope(String(questionSet.scope || ''));
     setNotice(null);
     setActiveTab('questionsets');
+    // The set's address (experience plan 5e): pushState, so Back returns to the list.
+    if (typeof window !== 'undefined' && window.history?.pushState) {
+      const named = setFromSearch();
+      if (!named || named.id !== questionSet.id) {
+        const section = searchForSection(window.location.search, 'questionsets', landingRef.current);
+        const search = searchWithSet(section, { id: questionSet.id, scope: String(questionSet.scope || '') });
+        window.history.pushState({ [SECTION_PARAM]: 'questionsets', [SET_PARAM]: questionSet.id }, '', `${window.location.pathname}${search}`);
+        setPushedRef.current = true;
+        navigatedRef.current = true;
+      }
+    }
   };
 
   /**
@@ -1118,7 +1176,8 @@ function AdminPage() {
     setSectionAsked(true);
     navigatedRef.current = true;
     if (typeof window !== 'undefined' && window.history?.pushState) {
-      const search = searchForSection(window.location.search, sectionId, landingRef.current);
+      const search = searchWithSet(searchForSection(window.location.search, sectionId, landingRef.current), null);
+      setPushedRef.current = false;
       window.history.pushState({ [SECTION_PARAM]: sectionId }, '', `${window.location.pathname}${search}`);
     }
   };
@@ -1144,14 +1203,29 @@ function AdminPage() {
       const next = sectionFromSearch(
         window.location.search, ADMIN_SECTION_IDS, DEFAULT_ADMIN_SECTION,
       );
+      /* The set the address names, if any (experience plan 5e): Back from a
+         set's editor returns to the list; Forward reopens it. */
+      const named = setFromSearch();
+      setPushedRef.current = false;
+      if (named) {
+        setEditMode(true);
+        setEditingSetId(named.id);
+        setEditingSetScope(named.scope);
+      } else {
+        setEditMode(false);
+        setEditingSetId('');
+        setEditingSetScope('');
+      }
       /* Back to a bare /admin has to mean the landing section again, not the
          constant `next` falls back to. */
       setSectionAsked(urlNamesKnownSection());
       setActiveTab((current) => {
         if (current !== next) {
-          setEditMode(false);
-          setEditingSetId('');
-          setEditingSetScope('');
+          if (!named) {
+            setEditMode(false);
+            setEditingSetId('');
+            setEditingSetScope('');
+          }
           // The score card is the Public library's detail place, exactly as
           // the editor is Question sets'. It was the one this handler forgot,
           // so Back out of a card and Forward into it again returned to a card
@@ -1202,11 +1276,24 @@ function AdminPage() {
     // history this feature exists to build.
   }, [orgsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Leaving the set's place gives the address bar back: pop our entry, else drop the param. */
+  const dropSetFromUrl = () => {
+    if (typeof window === 'undefined' || !window.history || !setFromSearch()) return;
+    if (setPushedRef.current && window.history.state && window.history.state[SET_PARAM]) {
+      setPushedRef.current = false;
+      window.history.back();
+      return;
+    }
+    setPushedRef.current = false;
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${searchWithSet(window.location.search, null)}`);
+  };
+
   const handleCancelEdit = () => {
     setEditMode(false);
     setEditingSetId('');
     setEditingSetScope('');
     setNotice(null);
+    dropSetFromUrl();
   };
 
   /**
@@ -1219,6 +1306,7 @@ function AdminPage() {
     setEditMode(false);
     setEditingSetId('');
     setEditingSetScope('');
+    dropSetFromUrl();
     await fetchQuestionSets();
   };
 
@@ -2227,6 +2315,8 @@ function AdminPage() {
                   : undefined
               }
               totalSetCount={questionSets.length || undefined}
+              /* Each row's set name and its invite (experience plan 4a). */
+              questionSets={questionSets}
               /* An event's row opens its builder, in the Events place — the
                  one that already edits it (2026-10-04). Navigate first: it
                  closes any place, then this one opens. */
@@ -2672,6 +2762,7 @@ function AdminPage() {
       */}
 
       {/* GitHub Issue Reporting FAB */}
+      {confirmDialog}
     </>
   );
 }

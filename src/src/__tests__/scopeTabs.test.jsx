@@ -164,7 +164,8 @@ describe('a phone: one button and a sheet', () => {
     render(<ScopeTabs orgs={[ME, ...EIGHT]} activeKey="org_h" staff onSelect={onSelect} onCreateTeam={() => {}} phone />);
     fireEvent.click(screen.getByTestId('scp-current'));
     const sheet = screen.getByRole('dialog', { name: 'Where you work' });
-    const names = within(sheet).getAllByRole('button').map((b) => b.textContent);
+    // The shared X (an icon, no text) heads the sheet since step 5b; the scopes follow.
+    const names = within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean);
     expect(names[0]).toMatch(/Personal/);
     expect(names.findIndex((n) => /Engage/.test(n))).toBeGreaterThan(names.findIndex((n) => /Westfield/.test(n)));
     expect(names).toEqual(expect.arrayContaining(['+ New team', 'Close']));

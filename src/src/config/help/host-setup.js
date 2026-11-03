@@ -25,11 +25,12 @@ const quickStart = {
   summary: 'The start screen, and the path from nothing to a room playing.',
   sections: [
     /*
-      The path. Create: components/GameSetupDialog.jsx (Create engagement,
-      foot note "Nobody can join until you start it."); after a create the
-      Sessions list opens (GameHostPage.jsx handleStartNewGame, ~5850);
-      Start: SessionHistoryPanel.jsx rowActions/onStart; Quick start:
-      QuickstartMenu.jsx ("Creates the session and starts it in one press.").
+      The path (experience plan 4c). Create: components/GameSetupDialog.jsx
+      (Create engagement, foot note "Nobody can join until you start it. You
+      land on its Setup, ready to start."); a create lands on the session's
+      Setup (components/SetupBeforeStart.jsx: "Created. Nobody can join until
+      you start it.", Start / Open the survey, Edit, Invite, Main menu);
+      Quick start is the dialog's lane (config/quickStart.js).
     */
     {
       id: 'the-shape',
@@ -39,8 +40,8 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            { title: 'Create the session', text: 'On the start screen choose **Create engagement**: a title, a format and a question set. Nobody can join yet.' },
-            { title: 'Start it', text: 'Your sessions list opens. Press **Start** on the new session: the join code and QR go up, and people join from their phones.' },
+            { title: 'Create the session', text: 'On the start screen (Home) choose **New engagement**: a title, a format and a question set. Nobody can join yet.' },
+            { title: 'Start it', text: 'You land on the session\'s **Setup**, not started yet. Press **Start** there (or **Edit** first); Setup then puts the join code up and people join from their phones.' },
             { title: 'Run the rounds', text: 'You move the room on from your own screen; every phone follows. The Running the room guide covers this.' },
             { title: 'Read what the room said', text: 'Results after each round, What we heard from Workie, and the session report. See What we heard and Ask the room, and The session report.' },
           ],
@@ -49,43 +50,46 @@ const quickStart = {
           t: 'note',
           tone: 'tip',
           title: 'The fastest start',
-          text: '**Quick start** on the start screen creates a session and starts it in one press. See Quick start in Setting a session up.',
+          text: '**Quick start**, at the top of New engagement, creates a session with every default in one press and lands on its Setup. See Quick start in Setting a session up.',
         },
         {
           t: 'note',
           tone: 'info',
-          title: 'A survey starts as you create it',
-          text: 'For a survey the last button says **Open the survey**: it creates the session and opens it to answers at once. The surveys guide covers the rest.',
+          title: 'A survey opens from its Setup',
+          text: 'A survey lands on its Setup too, where **Open the survey** opens it to answers. The surveys guide covers the rest.',
         },
       ],
     },
     /*
-      components/WelcomeScreen.jsx: "Start an engagement" (h1), Create
-      engagement / Quick start / Build Room (:205-236), WelcomeEvents
-      ("Run an event", New event, See how; draws nothing without events),
-      "Rejoin a session" (:249), "Your library": Question sets / Sessions /
-      Reports (:291-330). Top line: ActiveOrgSwitcher (null with one space),
-      HostNotificationsBell, name, "Admin console" | "Question sets & team"
-      (:131), Sign out, HelpButton. PendingInvites above the split (Accept).
-      Checked on dev 22 Oct 2026 (QA host, one space: switcher shows it).
+      components/WelcomeScreen.jsx (Home, experience plan 4b): "Home" kicker,
+      "Start an engagement" (h1), New engagement (the one New door since
+      4c: Quick start, Build Room and Event live inside it); "Rejoin" (the host's live sessions with
+      Rejoin, "Nothing of yours is running right now.", "Or type a session
+      code" + Continue); "Recent sessions" (five SessionList rows) with "See
+      all in Library & team" (/admin?section=games); WelcomeEvents; "Your
+      library": Question sets / Reports / Library & team. Top line:
+      ActiveOrgSwitcher, HostNotificationsBell, name, "Library & team",
+      Sign out, HelpButton. The brand mark goes to / (Home) when signed in.
     */
     {
       id: 'start-screen',
       title: 'What is on the start screen',
       icon: 'House',
       blocks: [
-        { t: 'p', text: 'The start screen is where you land when no session is open. It has three parts.' },
+        { t: 'p', text: 'The start screen is Home: where you land when no session is open, and where the mark at the top left takes you. It has five parts.' },
         {
           t: 'list',
           items: [
-            { title: 'Start an engagement', text: '**Create engagement** sets one up field by field. **Quick start** launches a ready-made set straight into a live room. **Build Room** opens the Build Room\'s own setup. Below them, **Run an event** lists your team\'s events when your plan includes them; otherwise it says which plan does.' },
-            { title: 'Rejoin a session', text: 'Type a running session\'s four-digit code and press **Continue** to get back to it, for example after a reload.' },
-            { title: 'Your library', text: '**Question sets** opens your question sets, **Sessions** every session you have created or run, and **Reports** the reports you saved, which stay after the session has expired.' },
+            { title: 'Start an engagement', text: '**New engagement** is the one way to start anything: a session, a survey, a Build Room or an event, with **Quick start** at its top.' },
+            { title: 'Rejoin', text: 'Your sessions running now (started in the last day, not ended), each with **Rejoin**. For any other, type its code and press **Continue**.' },
+            { title: 'Recent sessions', text: 'Your five newest, as rows of the list Library & team shows in full: one main button each, the rest under **⋯**. **See all** opens the full list.' },
+            { title: 'Run an event', text: 'Your team\'s events when your plan includes them; otherwise it says which plan does. To make one, choose Event in New engagement.' },
+            { title: 'Your library', text: '**Question sets**, and **Reports** (saved reports outlive their session). **Library & team** holds the rest: every session, your team and your plan.' },
           ],
         },
         {
           t: 'p',
-          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Question sets & team** (**Admin console** if you are Engage staff), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
+          text: 'Along the top: the space you are working in (shown only if you belong to more than one; switching reloads the page with that space\'s sets and sessions), the bell, your name, **Library & team** (the console, called that for everyone), **Sign out**, and the help button, which also lets you report a problem or ask for a feature.',
         },
         {
           t: 'note',
@@ -111,7 +115,7 @@ const quickStart = {
         {
           t: 'steps',
           items: [
-            'Choose **Create engagement** on the start screen.',
+            'Choose **New engagement** on the start screen.',
             'Under **Name it**, type the session\'s name. The room sees it, so make it the name of the meeting.',
             'Pick a format, then a **Question set** of that format. Not sure which format? Press the kind of meeting under **Planning a…**, or open **Compare formats** to see how each one runs.',
             'Every topic in the set starts on. Switch off any you want to skip.',
@@ -124,9 +128,14 @@ const quickStart = {
       ],
     },
     /*
-      Start: SessionHistoryPanel.jsx (Start, title "puts it on the stage and
-      players can join"); chooser: GameHostPage.jsx:7075 showRoomScreen (C&A,
-      not events, until this browser has chosen); join URL under Settings,
+      Where a create lands: SetupBeforeStart.jsx (Setup before Start: step 1
+      can be chosen, 2 and 3 "after Start"; Start, Edit, Invite).
+      Start: SessionHistoryPanel.jsx (Start, or "Start · two screens" /
+      "Start · one screen" from the stored choice, config/sessionStart.js;
+      two screens opens the room's window in the click, openPendingRoomWindow).
+      Setup is the lobby (experience plan 2b): GameHostPage.jsx setupOn /
+      setupStepFor, components/console/panels/SessionSetup.jsx, words in
+      config/sessionSetup.js (C&A, events included since 2d). Join URL under Settings,
       "Players join at" (SessionSetupPanel.jsx Joining group).
     */
     {
@@ -136,14 +145,23 @@ const quickStart = {
       blocks: [
         {
           t: 'p',
-          text: 'A created session waits in your sessions list. Press **Start** on its row when the room is ready: the session opens with its join code and QR on screen.',
+          text: 'A new session lands on its **Setup**, not started. **Edit** changes it first. Press **Start** when the room is ready (or later, on its row in your sessions list). Setup is then the lobby: three steps, each folding to one line, with **Your part now** naming the next move.',
+        },
+        {
+          t: 'steps',
+          items: [
+            { title: 'Where the room watches', text: 'One screen or two, asked until this browser has chosen. **Change** asks again.' },
+            { title: 'Put the room\'s screen up', text: 'Two screens: **Open the room\'s window ↗**, then **Open** and **Full screen** tick. One screen: check the room can read it, and your phone\'s Remote address; then **Show the join code**.' },
+            { title: 'The room joins', text: 'Only now does the join code go up, with how many are in, who just arrived and what round 1 is. Then **Start round 1**.' },
+          ],
         },
         {
           t: 'list',
           items: [
             'People scan the QR, or go to the address on screen and type the four-digit code.',
-            'People on a video call use the join link: **Link** on the session\'s row copies it.',
-            'Call & Answer asks once where the room will watch: one screen or two. See Choosing one or two screens.',
+            'People on a video call use the join link: **Copy join link**, under **⋯** on the session\'s row, copies it.',
+            'Once chosen, Start says so: **Start · two screens** opens the room\'s window in the same click. If the browser blocks it, Setup opens at step 2. **One screen this time**, under the list, switches.',
+            'A survey opens on its lobby with the code up.',
           ],
         },
         {
@@ -169,7 +187,7 @@ const quickStart = {
         { t: 'phases', gameType: 'trivia' },
         {
           t: 'p',
-          text: 'You move the room on from the bottom of your screen, and the Session panel holds the players, the questions, past rounds and the settings. The Running the room guide covers each step, the buttons and the keys.',
+          text: 'You move the room on from Your part now, under the top bar, and the Session panel holds the players, the questions, past rounds and the settings. The Running the room guide covers each step, the buttons and the keys.',
         },
       ],
     },
@@ -202,7 +220,7 @@ const quickStart = {
             { q: 'How many people can play?', a: 'Plenty. The discussion works best somewhere between 5 and 50; past that, reading answers out stops being possible.' },
             { q: 'Can I run the same set again?', a: 'Yes. Each session is a fresh room, and playing a set does not change it.' },
             { q: 'Can I go back to a round we already did?', a: 'Yes. The Rounds tab of the Session panel holds every round played, with its answers and What we heard.' },
-            { q: 'I closed the tab mid-session.', a: 'Open the start screen, type the session\'s code under **Rejoin a session** and press **Continue**, or press **Continue** on its row in **Sessions**.' },
+            { q: 'I closed the tab mid-session.', a: 'Open the start screen (Home): your running session is under **Rejoin**; press **Rejoin**. Or type its code there and press **Continue**.' },
           ],
         },
       ],
@@ -220,25 +238,39 @@ const gameSetup = {
       GameSetupDialog.jsx (the 30 Oct 2026 redesign, docs/design/new-engagement):
       heading "New engagement" | "Start a new engagement"; one layout (owner
       round 3, option A): the form, and "How <format> runs" beside it
-      (FormatWalkthrough.jsx, config/formatWalkthrough.js) over a status
-      line, open by default; its Hide folds it to a rail "Show how <format>
-      runs" (formatGuide.js readHowHidden, localStorage); on a phone a fold
-      under Format. A first-time host gets the gallery, a host with history
-      chips. Keycaps on Create. Enter on a format chip focuses the set
-      search. Steps: "Name it" (autofocus; Enter goes to the next empty
-      step), "Pick a format" gallery with "Planning a…" chips
-      (config/formatGuide.js MEETING_TYPES), or "Format" chips; "Compare
-      formats" top right of the step; one radio group (arrows choose).
-      "Question set": the recents list ("Used by you lately", "Browse all"),
-      "Your question sets · Make a new set"; the set is remembered per format
-      while open. "Topics in this set" (all on, "Switch off any you want to
-      skip.", "Loading this set's topics…", Retry). Names line "Names are
-      hidden until the vote closes" + Change (Call & Answer), "Names: …" for a
-      survey. "Optional — every one has a safe default": Background for Workie
-      and Advanced. Build Room / Event: "Next: the Build Room page" / "the
-      event page", Set up the Build Room / Continue to the event; ⌘/Ctrl+Enter
-      moves to that button. Foot notes; requestClose -> "Discard this
-      engagement?" Keep editing / Discard. Unreadable sets offered, disabled.
+      (FormatWalkthrough.jsx, config/formatWalkthrough.js), open by default;
+      before a format is chosen it is quiet: one sentence and one example
+      stage, "Example · Call & Answer, stage 1 of 6" (round 4, Fork 1 A). Its
+      Hide folds it to a rail "Show how <format> runs" (formatGuide.js
+      readHowHidden, localStorage); on a phone a fold under Format, closed
+      until opened. A first-time host gets the gallery (text cards, Build
+      Room and Event under "Bigger than one session"), a host with history
+      chips. ROUND 4: sections appear as each decision is made — Name it and
+      Format always; Question set once a format is chosen; the names line,
+      Background for Workie and Advanced once a set is picked; nothing goes
+      away again while the dialog is open. No step numbers. Keycaps on
+      Create. Enter on a format chip focuses the set search. "Name it"
+      (autofocus; Enter goes to the next empty decision), "Pick a format"
+      gallery with "Planning a…" chips (config/formatGuide.js
+      MEETING_TYPES), or "Format" chips; "Compare formats" top right; one
+      radio group (arrows choose). "Question set": the recents list ("Used
+      by you lately", "Browse all"), or for a host with none a line on what a
+      set is and "Browse all N sets" beside the search; "Your question sets ·
+      Make a new set" for a host who owns a set of the format, else "Make
+      your own set"; the set is remembered per format while open. "Topics in
+      this set" (all on, "Switch off any you want to skip.", "Loading this
+      set's topics…", Retry). Names line "Names are hidden until the vote
+      closes" + Change (Call & Answer), "Names: …" for a survey. "Background
+      for Workie · Optional" and "Advanced · Defaults: …". Build Room /
+      Event: "Next: the Build Room page" / "Next: the agenda" in the set's
+      place with their fields (BuildRoomFields.jsx: "Build Room setup ·
+      Optional"; EventFields.jsx: Date, Starts, "Time zone, place,
+      reports"), Create the Build Room / Create the event; ⌘/Ctrl+Enter
+      moves to that button. Quick start lane (config/quickStart.js) above
+      Name it. Foot: "Still needed: …" until ready; Create
+      pressed early (or ⌘/Ctrl+Enter) moves to the first gap. requestClose
+      -> "Discard this engagement?" Keep editing / Discard. Unreadable sets
+      offered, disabled.
     */
     {
       id: 'create-engagement',
@@ -247,15 +279,15 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Everything else has a safe default and sits under **Optional**.',
+          text: 'Three decisions, then **Create engagement**: name it, pick a format, pick the questions. Each part appears once the one above it is done, and stays while the dialog is open: a format brings up **Question set**; a set brings up the names line, **Background for Workie** and **Advanced**. You always start at the format cards; your last one says **You used it last.**',
         },
         {
           t: 'list',
           items: [
-            { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required. The cursor starts here; Enter takes you to the next step you have not done.' },
-            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. The first time, each is a card with a small picture of the room and one plain sentence; later, a row of chips. Arrow keys choose; Enter moves on. See Choosing a format.' },
-            { title: 'Build Room and Event', text: 'They continue on their own page. Pick one and the third step says what that page asks for; the button becomes **Set up the Build Room** or **Continue to the event**, and takes your title with it. Event is offered when your plan includes events; otherwise it says which plan does.' },
-            { title: 'Question set', text: 'A search box, with the sets you used lately listed under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. Switch format and back, and the set you had comes back with its topics. **Your question sets** opens your sets; **Make a new set** opens the new-set panel straight away.' },
+            { title: 'Name it', text: 'What the room sees the session called, on the main screen and on phones. Required, but reveals nothing. Enter moves on.' },
+            { title: 'Format', text: 'Call & Answer, Trivia, Poll, Wavelength or Survey. A card each the first time, chips later. Arrow keys choose; Enter moves on.' },
+            { title: 'Build Room and Event', text: 'Under **Bigger than one session**. In Question set\'s place: a Build Room\'s settings, folded under **Build Room setup**, or an event\'s date and start. **Create the Build Room** opens the room; **Create the event** opens its agenda. Event needs a plan with events.' },
+            { title: 'Question set', text: 'A search box with the sets you used lately under it: click one, or press Enter for the first. Type to search, or press **Browse all**. Once picked it is one line with **Change**. **Your question sets** opens sets you own; **Make a new set** or **Make your own set** opens the new-set panel.' },
           ],
         },
         {
@@ -277,14 +309,18 @@ const gameSetup = {
         {
           t: 'list',
           items: [
-            { title: 'Topics in this set', text: 'Appears once a set is picked, every topic on, each with its question count and a tick. Switch off any you want to skip; the line underneath says how many questions are in. Change the set and the topics are the new set\'s: while they load the button reads **Loading topics…**; if they cannot load, it says so and offers **Retry**.' },
+            { title: 'Topics in this set', text: 'Every topic on, each with its question count. Switch off any you want to skip; the line underneath says how many questions are in. Change the set and the topics are the new set\'s: while they load the button reads **Loading topics…**; if they cannot load, it says so and offers **Retry**.' },
             { title: 'Names', text: 'For Call & Answer a line says **Names are hidden until the vote closes**, then shown with the results. **Change** opens the setting under Advanced. A survey shows its Names choice the same way.' },
-            { title: 'Optional', text: 'Call & Answer has Background for Workie (below), and every format has **Advanced**. Each has a safe default.' },
+            { title: 'Background for Workie and Advanced', text: 'Two closed lines. Background for Workie (Call & Answer) is optional; Advanced names the defaults worth checking, or what you changed, in amber.' },
           ],
         },
         {
           t: 'p',
-          text: 'The foot says **Nobody can join until you start it.** The button is **Create engagement**, or **Open the survey** for a survey, which opens it to answers straight away. Ctrl+Enter (⌘+Enter on a Mac) creates once the three steps are done; pressed while the topics are loading, the button reads **Waiting for topics…** and it creates as soon as they arrive; on Build Room or Event it moves to the button instead, and Enter there goes on. Afterwards Your sessions says what was created, with its code, and offers **Start it now**.',
+          text: 'Until the three decisions are made the button is outlined and the foot says what is **Still needed**. Pressing it early, or Ctrl+Enter (⌘+Enter on a Mac), takes you to the first thing missing. Once ready the foot says **Nobody can join until you start it. You land on its Setup, ready to start.**',
+        },
+        {
+          t: 'p',
+          text: 'The button is **Create engagement**, a survey included. Pressed while the topics load, it reads **Waiting for topics…** and creates when they arrive. On Build Room or Event, Ctrl+Enter moves to the button; Enter there creates. Every session lands on its own Setup with **Start** (**Open the survey**) and **Edit**.',
         },
       ],
     },
@@ -307,13 +343,13 @@ const gameSetup = {
           t: 'list',
           items: [
             { title: 'Planning a…', text: 'Press the kind of meeting (Retro, Brainstorm, Kick-off, Team check-in, Quiz, Feedback form, Offsite day) and it picks a format and says why. You can still pick any other.' },
-            { title: 'How it runs', text: 'Beside the form, the chosen format as a storyboard to scroll through: each stage a picture of the room screen and a phone with a plain description, from the first question to what you get at the end. The numbers at the top jump to a stage.' },
+            { title: 'How it runs', text: 'Beside the form, the chosen format as a storyboard to scroll through: each stage a picture of the room screen and a phone with a plain description, from the first question to what you get at the end. The numbers at the top jump to a stage. Before you choose, it shows one example stage, labelled as an example, and previews whichever card you point at or focus.' },
             { title: 'Compare formats', text: 'Opens the Format guide, wide: the storyboard on top and a short card for every format below. Pick a card to see how it runs, then press the Use button beside its name to go back to the form with it chosen. Your title and choices are kept.' },
           ],
         },
         {
           t: 'p',
-          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format. Once you have created a session, the last format you used is chosen for you.',
+          text: '**Hide**, on the storyboard, folds it to a slim strip at the side, and the form takes the room; press the strip to show it again. This browser remembers which you chose. On a phone the storyboard is a fold under Format, closed until you open it. Until you pick a format, the storyboard shows one example stage; nothing is chosen for you.',
         },
       ],
     },
@@ -418,7 +454,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Advanced** is folded at the foot of the form. Its one line says what is in force, any change first, so you can leave it closed. Open it to change:',
+          text: '**Advanced** is folded at the foot of the form, once a question set is picked. Closed, its line names the defaults worth checking, or what you changed, in amber; open, it starts with every default in force. In an event agenda item the closed line lists them all. Open it to change:',
         },
         {
           t: 'list',
@@ -447,7 +483,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Press **Edit** on the session\'s row in your sessions list. **Edit session** is the same form: change the title, the categories, Workie\'s briefing and the Advanced options, then **Save changes**. Nobody can join while you do.',
+          text: 'Press **Edit** on the session\'s Setup, where a new session lands, or under **⋯** on its row in your sessions list. **Edit session** is the same form: change the title, the categories, Workie\'s briefing and the Advanced options, then **Save changes**, which takes you back where you were. Nobody can join while you do.',
         },
         {
           t: 'p',
@@ -495,6 +531,48 @@ const gameSetup = {
       ],
     },
     /*
+      The set as a place (experience plan 5e): components/QuestionSetPage.jsx.
+      From the shelf, Edit questions / Copy and edit / Review replace the shelf
+      with the set's page and move the address to /sets/<id>; App.jsx routes a
+      reload or a pasted link there. Bar: "← Your question sets" (or "← Back"
+      opened directly), eyebrow "Question set · <format>", the set's name, ?.
+      Body: QuestionSetEditor with inPlace (Details, Questions, Images; no
+      Versions, Download or AI drafting for a host). Back, the browser's Back,
+      Escape and Close all go through the editor's requestClose, which asks
+      "You have unsaved questions" first. The AI builders open in one dusk
+      window (components/AIBuilderDialog.jsx), and a builder or a draft's
+      review also replaces the shelf rather than opening over it.
+    */
+    {
+      id: 'editing-a-set',
+      title: 'Editing a set',
+      icon: 'PencilSimple',
+      blocks: [
+        {
+          t: 'p',
+          text: '**Edit questions** (or **Copy and edit**, or **Review** on a draft) opens the set on a page of its own, in place of Your question sets. The set\'s name is at the top, and the page has its own address, so you can bookmark it or send the link to someone who can edit it.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'Details', text: 'The name, description, format, categories and the set\'s Workie. **Save Changes** saves these.' },
+            { title: 'Questions', text: 'Add, edit, delete and reorder questions, pull some from another set, or **Add questions** with Workie. **Save** saves the questions as a new version.' },
+            { title: 'Images', text: 'The pictures the set\'s questions use.' },
+          ],
+        },
+        {
+          t: 'p',
+          text: '**Your question sets** at the top (the arrow back), your browser\'s Back, Esc and **Close** at the foot all return you to the list, where your search is as you left it. If you have unsaved questions, you are asked first.',
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'One thing at a time',
+          text: 'The set\'s page, Workie\'s generators and a draft\'s review each take the place of the list while they are open, rather than opening on top of it. Closing one brings the list back.',
+        },
+      ],
+    },
+    /*
       HostQuestionSetsDialog.jsx: New question set / Hide new set (:847) ->
       QuestionSetUploadPanel ("How do you want to make it?": Generate with AI,
       Start from a template, Use your own chatbot, artwork template, Manual
@@ -520,17 +598,15 @@ const gameSetup = {
       ],
     },
     /*
-      QuickstartMenu.jsx: "Pick a set and go", "Creates the session and starts
-      it in one press." Sets: quickstart && active, sections for Call &
-      Answer, Trivia, Wavelength, Poll (no Survey, no Build Room); title
-      "Quick <kind>: <set>"; all categories, shuffled; QuickScreens "Where the
-      room watches" only when a Call & Answer set is listed; PlanLimitNotice.
-      Search (23 Oct 2026): "Search N quick start sets: name, description or
-      tag" over SET_SEARCH_FIELDS; "N of M" per format; no match → "Clear the
-      search"; Esc clears, then closes.
-      The chip: HostQuestionSetsDialog.jsx:673-693, title "Click to offer this
-      set on the quickstart menu"; inactive sets stay off the menu (:683).
-      Checked on dev 22 Oct 2026.
+      Quick start, the lane inside New engagement (experience plan 4c):
+      GameSetupDialog.jsx `gsd-quick`, config/quickStart.js (QUICK_WORDS,
+      quickFormat, quickSet, quickTitle): "In a hurry? <format> with “<set>”,
+      every default. You land on its Setup, ready to start." Format: chosen,
+      else the last one, else Call & Answer; never Build Room or Event. Set:
+      picked, else used lately, else marked quickstart, else Engage's, else
+      the first. Title "Quick <format>: <set>" unless typed. All topics,
+      shuffled (never a survey), names hidden. The Quickstart chip:
+      HostQuestionSetsDialog.jsx.
     */
     {
       id: 'quick-start',
@@ -539,22 +615,24 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Quick start** on the start screen opens **Pick a set and go**: the sets on the quick start menu, grouped by format (Call & Answer, Trivia, Wavelength and Poll; surveys and Build Rooms are not offered). Narrow them with the search box, whose sets (each counted), and tags (any of those pressed; press again to let one go). **Clear the search and filters** brings everything back. One press on a set creates the session and starts it, with all its categories and the questions shuffled, titled after the set. There is nothing else to fill in; change settings afterwards in the Session panel.',
+          text: '**Quick start** sits at the top of **New engagement**, one line that says what it will make, such as *Call & Answer with “Retro basics”, every default*. One press creates it and lands on its Setup, ready to start. It uses the format you chose (else your last one, else Call & Answer), the set you picked (else one you used lately, else a set marked for Quick start, else a ready-made one) and your title (else *Quick <format>: <set>*). Every topic is on and the questions are shuffled. Build Rooms and events are not offered.',
         },
         {
           t: 'p',
-          text: 'When a Call & Answer set is listed, **Where the room watches** sits at the top: choose **One screen** or **Two screens** before you press a set. On two screens the room\'s window opens as the session starts.',
+          text: 'Where the room watches is asked on the Setup it lands on, before you press **Start**; on two screens the room\'s window opens with Start.',
         },
         {
           t: 'p',
-          text: 'To put one of your sets on the menu, click its **Quickstart** tag in Your question sets; click again to take it off. The click is the change. A set that is switched off stays off the menu. Anyone who manages a set can also put it on the menu from the console\'s Question sets. While the menu is empty, Quick start says so, and **Open your question sets** takes you there.',
+          text: 'To make one of your sets the one Quick start reaches for, click its **Quickstart** tag in Your question sets; click again to take it off. A set that is switched off is never used.',
         },
       ],
     },
     /*
-      config/surfaces.js:26 TWO_SURFACE_TYPES (call-and-answer, build);
-      GameHostPage.jsx:7075 chooser in the lobby, C&A only, not events, until
-      this browser has chosen; config/roomScreen.js ROOM_WORDS (Where will the
+      config/surfaces.js TWO_SURFACE_TYPES (call-and-answer, build, trivia, poll), no tier
+      default (F6); Setup's step 1 (SessionSetup.jsx, GameHostPage.jsx
+      setupStepFor), C&A, Trivia and Poll since 2g (events too since 2d, once per event day:
+      config/eventAgenda.js eventScreensSet), until this browser has chosen or
+      Change reopens it; config/roomScreen.js ROOM_WORDS (Where will the
       room watch?, Two screens, One screen, Help me pick and its three
       questions, Keep this choice, "This browser remembers your choice.");
       SCREEN_WORDS (Screens, Where the room watches) in Settings.
@@ -566,7 +644,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A Call & Answer session can run on one screen or two. Every other format, and every session inside an event, runs on one screen.',
+          text: 'A Call & Answer, Trivia or Poll session can run on one screen or two, on its own or inside an event. Wavelength and surveys run on one screen; Wavelength\'s Setup, and Screens in the Session menu, say why.',
         },
         {
           t: 'list',
@@ -577,7 +655,7 @@ const gameSetup = {
         },
         {
           t: 'p',
-          text: 'The first time you start a Call & Answer session, the lobby asks **Where will the room watch?** Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice. Quick start asks the same question as **Where the room watches**. To change it later, use Screens at the top of the Session panel\'s Settings tab.',
+          text: 'The first time you start a Call & Answer, Trivia or Poll session, Setup asks **Where will the room watch?** as its first step, on every site. Pick one, or press **Help me pick** to answer three questions about your setup and get a recommendation. This browser remembers the choice, so next time Start skips that step. Quick start asks the same question as **Where the room watches**. To change it later, press **Change** beside it in Setup (**Setup** on the steps strip opens it during the session), or use the Session menu\'s Screens section.',
         },
         { t: 'p', text: 'Running on two screens, and placing the room\'s window, is in Two screens and your phone.' },
       ],
@@ -593,7 +671,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A set is tagged by category, and a session can play only some of them. Pick them in Create engagement, change them in Edit before the session starts, or turn them on and off during the session in the Questions tab of the Session panel, where each one shows how many of its questions are still unasked.',
+          text: 'A set is tagged by category, and a session can play only some of them. Pick them in Create engagement, change them in Edit before the session starts, or turn them on and off during the session in the Session menu\'s **Up next** (**Categories** · **Change**), where each one shows how many of its questions are still unasked.',
         },
         {
           t: 'note',
@@ -617,29 +695,30 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'Once the session has started and before the first round, open the Session panel\'s Settings tab and check:',
+          text: 'Once the session has started and before the first round, open the Session menu and check:',
         },
         {
           t: 'list',
           items: [
-            { title: 'Screens', text: 'One screen or two, and the room screen size: Room, TV, Call or Table. The right size is the difference between readable and squinting.' },
-            { title: 'Names', text: 'Under The rounds: **Show who wrote each response from the start**, and **Name who is still waiting** for whether the room sees who has not answered yet.' },
-            { title: 'Controls on your phone', text: '**Your phone as a remote**: scan its QR with your own phone and run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
+            { title: 'Screens', text: 'One screen or two, and the room screen size (under More options): Room, TV, Call or Table. The right size is the difference between readable and squinting.' },
+            { title: 'Names', text: 'Under **How it runs**: **Show who wrote each response from the start**, and, under its More options, **Name who is still waiting** for whether the room sees who has not answered yet.' },
+            { title: 'Controls on your phone', text: 'In **Screens**, **Your phone as a remote**: **Connect your phone** and scan its QR with your own phone to run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
             { title: 'Joining', text: 'The join link, to paste into a video call\'s chat.' },
           ],
         },
-        { t: 'p', text: 'The Session panel › The Settings tab explains each setting; Two screens and your phone covers the remote.' },
+        { t: 'p', text: 'The Session panel › Screens, joining, and how it runs explains each setting; Two screens and your phone covers the remote.' },
       ],
     },
     /*
-      SessionHistoryPanel.jsx: "Your sessions" / "Edit one to set it up, or
-      start it when the room is ready."; Search sessions ("Title, code, host
-      or set…"), Type; columns Session, Code, Type, State (Played / Not
-      started), Players, Rounds, Created, Last played; flags On stage /
-      Latest; rowActions (:109-140): not started Edit + Start; started Report
-      + Continue; closed survey Report + Results + Continue; Build Room
-      Continue + Report; event Edit agenda / Open; every row Link, Invite….
-      Checked on dev 22 Oct 2026.
+      One list, components/SessionList.jsx (experience plan 4a), in Home's
+      recent rows, the "Your sessions" dialog and Library & team › Sessions.
+      Columns Session (title; set · code), Format, Status (Not started /
+      Running / Ended / Closed / Played, with people · rounds), Date. Actions
+      from config/sessionRows.js sessionActions: not started Start · Edit,
+      Invite…, Copy join link, Delete…; running Continue · Report…; ended
+      Report · Continue…; closed survey Survey results · Report, Continue…;
+      Build Room Continue · Report; event Open · Edit the agenda. Search
+      sessions, Type, State, Sort. Delete asks inline ("Keep it" / "Delete").
     */
     {
       id: 'sessions-list',
@@ -648,21 +727,21 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: '**Sessions** on the start screen lists every session you have created or run, newest first, with its code, type, state (Not started or Played), players, rounds and dates. Search by title, code, host or set, or filter by **Type**.',
+          text: 'Your sessions are one list wherever you meet them: five rows under **Recent sessions** on Home, and every session in Sessions, in **Library & team** (**See all** on Home opens it). Each row shows the session\'s title, its set and code, its format, its status (Not started, Running, Ended) with how many people and rounds, and a date. In the full list, search by title, code, host or set, and filter by type and state.',
         },
         {
           t: 'table',
-          head: ['The session', 'Its buttons'],
+          head: ['The session', 'Its main button', 'Under ⋯'],
           rows: [
-            ['Not started', '**Edit** to change it, **Start** to open it to the room.'],
-            ['Played', '**Continue** to go back to it, **Report** to read its report.'],
-            ['A closed survey', '**Results** as well, for its answers.'],
-            ['Every row', '**Link** copies the join link; **Invite…** opens an invitation to send.'],
+            ['Not started', '**Start** (or **Start · two screens**) opens it to the room.', '**Edit** to change it first; **Invite…**; **Copy join link**; **Delete…**'],
+            ['Running', '**Continue** goes back to it.', '**Report**; **Invite…**; **Copy join link**; **Delete…**'],
+            ['Ended', '**Report** reads its report.', '**Continue**; **Invite…**; **Copy join link**; **Delete…**'],
+            ['A closed survey', '**Survey results**, for its answers.', '**Report**; **Continue**; **Invite…**; **Copy join link**; **Delete…**'],
           ],
         },
         {
           t: 'p',
-          text: 'A Build Room continues on its own page. An event has one row; open it to see its items. Saved reports are under **Reports** on the start screen: see The session report › Saving and sharing a report.',
+          text: 'A Build Room continues on its own page. An event has one row: **Open** goes to its stage and **Edit the agenda** is under **⋯**; press its name to see its items, each with **Continue** and, once played, **Report**, or **Session expired** when its session has gone. **Delete…** asks on the row itself and says what goes with it; **Delete** is only offered to the session\'s host or a team owner or admin. Saved reports are under **Reports** on Home: see The session report › Saving and sharing a report.',
         },
       ],
     },

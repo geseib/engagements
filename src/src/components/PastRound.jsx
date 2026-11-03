@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Modal from './Modal';
 import Icon from './Icon';
+import { DialogClose } from './ui/DialogParts';
 import RoundReport from './RoundReport';
 import { step, canStep, positionLabel } from '../utils/stepIndex';
 
@@ -165,9 +166,8 @@ export default function PastRound({
     >
       <div className="past-round__head">
         <span className="past-round__count">{positionLabel(index, total)}</span>
-        <button type="button" className="past-round__close" onClick={onClose} aria-label="Close">
-          <Icon name="X" size={22} />
-        </button>
+        {/* A viewer: the one shared close (ui/DialogParts). */}
+        <DialogClose className="past-round__close" onClose={onClose} size={22} />
       </div>
 
       {/*

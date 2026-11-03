@@ -114,10 +114,13 @@ export function buildApi(gameId) {
      * A direction; `as` is keep, later or ask (step 7c), else Do now. `from` names
      * what it was written from (`{ askIds, ideaIds }`, parity PLAN §2.8 H1), so
      * History can mark those as sent to Claude. `hideFromRoom`: Don't show the room.
+     * `engagePrompt`: the key of a prompt Engage wrote (QA walk on test, 31 Oct 2026),
+     * so the room reads its plain line, never its words.
      */
-    postDirection: (text, as, from = null, { hideFromRoom = false } = {}) => post('directions', {
+    postDirection: (text, as, from = null, { hideFromRoom = false, engagePrompt = null } = {}) => post('directions', {
       text,
       ...(hideFromRoom ? { hideFromRoom: true } : {}),
+      ...(engagePrompt ? { engagePrompt } : {}),
       ...(as && as !== 'do-now' ? { as } : {}),
       ...(from && from.askIds && from.askIds.length ? { fromAskIds: from.askIds } : {}),
       ...(from && from.ideaIds && from.ideaIds.length ? { fromIdeaIds: from.ideaIds } : {}),
@@ -259,6 +262,37 @@ export async function createBuildSession({ title, goal, visibility = 'public', a
   if (!gameId) throw new Error('The session was created without a code. Try again.');
   await call(`games/${seg(gameId)}/start`, { method: 'POST', body: {} });
   return String(gameId);
+}
+
+/**
+ * THE BUILD ROOM'S FOUR SETUP FIELDS, CHECKED IN ONE PLACE (experience plan
+ * 4c). They used to live only in BuildCreate's own form; New engagement now
+ * folds them into its Optional section when Build Room is chosen, so both
+ * forms check them with these words. Returns the first problem, or ''.
+ */
+export const BUILD_SETUP_DEFAULTS = Object.freeze({ goal: '', decides: 'room', visibility: 'public', accessCode: '', review: true });
+export function buildSetupProblem({ title = '', goal = '', decides = 'room', visibility = 'public', accessCode = '' } = {}) {
+  if (!String(title).trim()) return 'Give the room a title.';
+  if (decides === 'host' && !String(goal).trim()) return 'Write the goal, or let the room decide.';
+  if (visibility === 'private' && !String(accessCode).trim()) return 'A private room needs an access code.';
+  return '';
+}
+
+/**
+ * Create a Build Room from its four fields and resolve its gameId: the
+ * session, then the goal as the opening's answer when the host set it, then
+ * the review switch when it is off. The last two are best effort: the room
+ * can do either itself.
+ */
+export async function createBuildRoom({ title, goal = '', decides = 'room', visibility = 'public', accessCode = '', review = true }) {
+  const gameId = await createBuildSession({ title, goal, visibility, accessCode });
+  if (decides === 'host' && String(goal).trim()) {
+    try { await buildApi(gameId).openingAction('answer', { step: 'kind', text: String(goal).trim() }); } catch (e) { /* the host can answer it in the room */ }
+  }
+  if (!review) {
+    try { await buildApi(gameId).saveSettings({ reviewAgentAsks: false }); } catch (e) { /* the room can switch it */ }
+  }
+  return gameId;
 }
 
 // ── Where a Build Room lives ────────────────────────────────────────────────

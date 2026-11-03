@@ -52,30 +52,30 @@ const DUSK_CASES = H.CASES.filter(([, theme]) => theme === 'dark');
 describe.each(DUSK_CASES)('%s / %s: every pairing clears AA on the surface it is really drawn on', (skin, theme) => {
   const opts = { skin, theme };
   /** What `.rr-c` actually paints on: --surface under the sheet's own wash. */
-  const layers = () => [H.role('--surface', opts), H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-wash', opts)];
+  const layers = () => [H.role('--surface', opts), H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-wash', opts)];
 
   test('the comment text', () => {
-    const text = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-text', opts);
+    const text = H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-text', opts);
     expect(H.on(text, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
   test('the author byline and the anchor label', () => {
     // These are the ones the wash endangers: --muted is the closest token to
     // the bar, and lifting the background is what pushes a pairing under it.
-    const muted = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-muted', opts);
+    const muted = H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-muted', opts);
     expect(H.on(muted, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
   test('the Comment affordance and the Comments heading', () => {
     // --rr-c-accent reads the --accent role (0b-4): orange in Classic, blue in
     // Present, and the same value the old --primary read gave in Classic.
-    const accent = H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-accent', opts);
+    const accent = H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-accent', opts);
     expect(accent.toUpperCase()).toBe(H.role('--accent', opts).toUpperCase());
     expect(H.on(accent, layers())).toBeGreaterThanOrEqual(H.AA);
   });
 
   test('the call-out edge is the accent at .28, and Classic keeps today\'s amber', () => {
-    const rule = H.parseColor(H.scopeVar(RAW_SHEET, '.rr-c {', '--rr-c-rule', opts));
+    const rule = H.parseColor(H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-rule', opts));
     expect(rule.a).toBeCloseTo(0.28, 3);
     expect(rule.rgb).toEqual(H.channel('--accent-rgb', opts));
     if (skin === 'classic') expect(rule.rgb).toEqual([246, 169, 76]);
@@ -134,8 +134,13 @@ describe('the scope is the scope', () => {
       still scoped by its own class.
     */
     const selectors = [...SHEET.matchAll(/^([^@\s][^{]*)\{/gm)]
-      .map((m) => m[1].trim())
-      .filter((sel) => !sel.startsWith(':root'));
+      // A closing brace on its own line is swept into the next match; drop it,
+      // and skip an at-rule's prelude (`@media …`), which is not a selector.
+      // The rules INSIDE a media block are indented and checked below.
+      .map((m) => m[1].replace(/^[}\s]+/, '').trim())
+      .filter((sel) => !sel.startsWith(':root') && !sel.startsWith('@'));
+    const nested = [...SHEET.matchAll(/^\s+([.#][^{]*)\{/gm)].map((m) => m[1].trim());
+    selectors.push(...nested);
     for (const group of selectors) {
       for (const sel of group.split(',').map((x) => x.trim()).filter(Boolean)) {
         expect(sel.includes('.rr-c')).toBe(true);
@@ -194,5 +199,90 @@ describe('reachability', () => {
   test('pasted prose can break rather than widening the page', () => {
     // A participant pastes a URL; without this the phone scrolls sideways.
     expect(SHEET).toMatch(/\.rr-c__text\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  });
+});
+
+/*
+ * THE COMMENT BUTTONS CAN SEE THE LOCALS THEY USE.
+ *
+ * `.rr-c__add` sits in the section heads and in each response row — never
+ * inside a `.rr-c` box. With the locals declared on `.rr-c` alone, every
+ * `var(--rr-c-…)` on the button was undefined, which invalidates the whole
+ * declaration: no border, no accent colour, no 12px size, a plain-text button.
+ */
+describe('the Comment button inherits its locals', () => {
+  const block = (sel) => {
+    const at = SHEET.indexOf(`${sel} {`);
+    return at < 0 ? '' : SHEET.slice(at, SHEET.indexOf('}', at));
+  };
+  const LOCALS = ['--rr-c-text', '--rr-c-muted', '--rr-c-accent', '--rr-c-wash', '--rr-c-rule', '--rr-c-t-floor'];
+
+  test('every local is declared on the report root, which wraps the buttons', () => {
+    // rejects: the locals scoped to `.rr-c`, a box the buttons are never in.
+    for (const name of LOCALS) expect(block('.rr-c-root')).toMatch(new RegExp(`${name}\\s*:`));
+    for (const name of LOCALS) expect(block('.rr-c')).not.toMatch(new RegExp(`${name}\\s*:`));
+  });
+
+  test('every var the button reads is one the root declares', () => {
+    // rejects: a button rule reaching for a local nothing above it defines.
+    const used = [...block('.rr-c__add').matchAll(/var\((--rr-c-[a-z0-9-]+)\)/g)].map((m) => m[1]);
+    expect(used.length).toBeGreaterThan(0);
+    for (const name of used) expect(block('.rr-c-root')).toMatch(new RegExp(`${name}\\s*:`));
+  });
+
+  test('the button text resolves to the 12px floor, not an inherited size', () => {
+    // rejects: `font-size: var(--rr-c-t-floor)` with the floor undefined at the button.
+    expect(block('.rr-c__add')).toMatch(/font-size:\s*var\(--rr-c-t-floor\)/);
+    expect(block('.rr-c-root')).toMatch(/--rr-c-t-floor:\s*12px/);
+  });
+
+  test('the report root carries the class (RoundReport.jsx)', () => {
+    // rejects: a stylesheet scope no element wears.
+    const jsx = fs.readFileSync(path.join(__dirname, '..', 'components', 'RoundReport.jsx'), 'utf8');
+    expect(jsx).toMatch(/className="past-round__body rr-c-root"/);
+  });
+
+  describe.each(DUSK_CASES)('%s / %s: the pill is legible where it is really drawn', (skin, theme) => {
+    const opts = { skin, theme };
+    const accent = () => H.scopeVar(RAW_SHEET, '.rr-c-root {', '--rr-c-accent', opts);
+    // The rows' own tints (styles.css `.past-round__answers li` and `.is-lead`).
+    test.each([
+      ['a section head, on the surface', []],
+      ['a response row', ['rgba(0, 0, 0, 0.04)']],
+      ['the leading response row', ['rgba(74, 124, 247, 0.12)']],
+    ])('%s', (_where, tints) => {
+      // rejects: an accent that clears AA on the comment wash but not on the
+      // backgrounds the buttons actually sit on.
+      expect(H.on(accent(), [H.role('--surface', opts), ...tints])).toBeGreaterThanOrEqual(H.AA);
+    });
+  });
+});
+
+/*
+ * ONE RESPONSE, ONE ROW. `.past-round__answers li` had three grid tracks for
+ * four children (number, text, author, Comment), so the Comment button wrapped
+ * onto a row of its own, under the next response's number.
+ */
+describe('the response row keeps its Comment button', () => {
+  const STYLES = stripCss(fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
+  const rowRule = () => {
+    const at = STYLES.indexOf('.past-round__answers li {');
+    return STYLES.slice(at, STYLES.indexOf('}', at));
+  };
+
+  test('every child of a row is placed on the same row', () => {
+    // rejects: `grid-template-columns: 28px 1fr auto` with row flow, which
+    // sends a fourth child to a new grid row.
+    expect(rowRule()).toMatch(/grid-auto-flow:\s*column/);
+    expect(rowRule()).toMatch(/grid-template-columns:\s*28px minmax\(0,\s*1fr\)\s*;/);
+  });
+
+  test('on a phone, the author drops under the text and the button keeps the right column', () => {
+    // rejects: a 360px row splitting number, text, author and button four ways,
+    // which leaves the response a sliver or pushes the button off the row.
+    const phone = STYLES.slice(STYLES.indexOf('@media (max-width: 480px) {\n  .past-round__answers li {'));
+    expect(phone).toMatch(/grid-template-columns:\s*28px minmax\(0,\s*1fr\)\s*auto/);
+    expect(phone).toMatch(/\.past-round__who\s*\{[^}]*grid-row:\s*2/);
+    expect(SHEET).toMatch(/@media \(max-width: 480px\)\s*\{\s*\.past-round__answers \.rr-c__add\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*1 \/ span 2/);
   });
 });

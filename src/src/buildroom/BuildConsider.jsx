@@ -19,10 +19,12 @@
  */
 import React, { createContext, useContext, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { W } from './words';
 import { MARK_WORDS } from './sentMarks';
 import { SendExtras, useMirror } from './BuildSendOptions';
+import Button from '../components/ui/Button';
 
 export const ConsiderContext = createContext(null);
 
@@ -32,10 +34,11 @@ const askNo = (askId) => Number(askId) || askId;
 /** One mark. With `onOpen` and an entry a sent mark is a button that opens History there. */
 export function SentMark({ mark, onOpen = null }) {
   if (!mark) return null;
-  const words = MARK_WORDS[mark.mark];
+  // Queued for Claude while Claude Code has never called in (QA walk on test, 31 Oct 2026): no tick, nothing went.
+  const words = mark.claudeQueued ? W.queuedHeadline : MARK_WORDS[mark.mark];
   if (!words) return null;
-  const cls = `brm-mark brm-mark--${mark.mark}`;
-  const tick = mark.mark !== 'queued' ? <Icon name="Check" size={12} aria-hidden="true" /> : null;
+  const cls = `brm-mark brm-mark--${mark.claudeQueued ? 'queued' : mark.mark}`;
+  const tick = mark.mark !== 'queued' && !mark.claudeQueued ? <Icon name="Check" size={12} aria-hidden="true" /> : null;
   if (onOpen && mark.entryId && mark.mark !== 'queued') {
     return (
       <button type="button" className={`${cls} brm-mark--link`} title={W.markOpens} onClick={(e) => { e.stopPropagation(); onOpen(mark.entryId); }}>
@@ -65,9 +68,9 @@ export function ItemTools({ item, consider = true }) {
     <span className="brm-itools">
       <SentMark mark={mark} onOpen={c.openHistory} />
       {consider && !c.ended && (
-        <button type="button" className="brm-btn brm-btn--sm brm-consider" aria-label={`${W.consider}: ${item.words}`} onClick={(e) => { e.stopPropagation(); c.open(item); }}>
+        <Button type="button" size={36} className="brm-tight brm-consider" aria-label={`${W.consider}: ${item.words}`} onClick={(e) => { e.stopPropagation(); c.open(item); }}>
           {W.consider}
-        </button>
+        </Button>
       )}
     </span>
   );
@@ -114,13 +117,7 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--consider" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-consider-q">
-      <div className="brm-pa-head">
-        <div>
-          <div className="brm-pa-eb">{W.considerEyebrow(item.askId ? askNo(item.askId) : null)}</div>
-          <h2 className="brm-pa-q brm-consider-q" id="brm-consider-q">{`“${item.words}”`}</h2>
-        </div>
-        <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-pa-head" titleId="brm-consider-q" title={<>{`“${item.words}”`}</>} titleClassName="brm-pa-q brm-consider-q" eyebrow={<>{W.considerEyebrow(item.askId ? askNo(item.askId) : null)}</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
       <div className="brm-consider-doors" role="radiogroup" aria-label={W.consider}>
         <button type="button" role="radio" aria-checked={d.door === 'room'} className={`brm-cdoor${d.door === 'room' ? ' is-on' : ''}`} onClick={() => set({ door: 'room' })}>
           <b>{W.considerQueue}</b>
@@ -165,20 +162,19 @@ export function ConsiderPanel({ item, draft, setDraft, api, run, busy, canIdeas 
         </>
       )}
       {error && <p className="brm-alert" role="alert">{error}</p>}
-      <div className="brm-sd-foot">
+      <DialogFoot className="brm-sd-foot" cancel={<Button size={44} className="brm-ctl" onClick={onClose}>Close</Button>}>
+        <span className="brm-hint">{W.considerEsc}</span>
         {d.door === 'claude' ? (
           <>
-            <button type="button" className="brm-btn brm-btn--primary" disabled={busy || !d.text.trim()} onClick={() => send(false)}>
+            <Button size={44} className="brm-ctl" disabled={busy || !d.text.trim()} onClick={() => send(true)}>{W.later}</Button>
+            <Button variant="primary" size={44} className="brm-ctl" disabled={busy || !d.text.trim()} onClick={() => send(false)}>
               <Icon name="PaperPlaneTilt" size={16} /> {W.sendNow}
-            </button>
-            <button type="button" className="brm-btn" disabled={busy || !d.text.trim()} onClick={() => send(true)}>{W.later}</button>
+            </Button>
           </>
         ) : (
-          <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={queue}>{W.considerQueue}</button>
+          <Button variant="primary" size={44} className="brm-ctl" disabled={busy} onClick={queue}>{W.considerQueue}</Button>
         )}
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
-        <span className="brm-hint brm-push">{W.considerEsc}</span>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

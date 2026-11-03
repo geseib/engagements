@@ -137,7 +137,10 @@ describe('adding a presentation with its slides', () => {
     await within(slidesField()).findByText(/not saved yet/);
     // Both exits (the X and the footer's Close) go through one requestClose.
     for (const exit of screen.getAllByRole('button', { name: 'Close' })) fireEvent.click(exit);
-    expect(window.confirm).toHaveBeenCalledTimes(2);
+    // Each asks in the small confirm dialog (useConfirm, experience plan 5c),
+    // one at a time, never window.confirm; nothing closes until it is answered.
+    expect(screen.getAllByRole('dialog', { name: 'Close without saving?' })).toHaveLength(1);
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(p.onClose).not.toHaveBeenCalled();
   });
 

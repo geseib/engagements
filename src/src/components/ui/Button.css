@@ -17,6 +17,9 @@
      accent   --on-accent on --accent          7.42 Classic · 5.91 Present
      quiet    --text on --bg/--surface/-2      14.97/12.53/10.20 dusk · 13.64/14.56/12.46 paper
      danger   glow ink on --danger-deep        5.16, and darker (higher) on hover
+     tertiary --info on dusk --bg/--surface/-2, --accent-text on paper (>= 4.5 each)
+     disabled action: --muted on the slate wash (a disabled control is exempt
+              from 1.4.3; measured anyway so it still reads)
      focus    --accent-text ring vs ground     >= 3:1 (non-text, WCAG 1.4.11)
 
    THE DANGER INK is `rgb(var(--glow-rgb))` (#F4EDE4 in both skins), not
@@ -57,6 +60,14 @@
 .ui-btn--sm { min-height: 1.85em; padding: .25em .65em; }
 .ui-btn--lg { min-height: 2.6em; padding: .6em 1.2em; }
 
+/* ---- the fixed heights (experience plan §5.1, step 5a) ----
+   36px laptop rows and bars, 44px dialog feet and touch, 56px the phone dock.
+   One radius on the laptop (10px), one on the phone dock (14px). Height,
+   padding and radius only: the type is still the caller's (--ui-size). */
+.ui-btn--h36 { box-sizing: border-box; min-height: 36px; padding: 0 14px; border-radius: 10px; }
+.ui-btn--h44 { box-sizing: border-box; min-height: 44px; padding: 0 18px; border-radius: 10px; }
+.ui-btn--h56 { box-sizing: border-box; min-height: 56px; padding: 0 20px; border-radius: 14px; }
+
 /* ---- the one action ---- */
 .ui-btn--action { background: var(--action); border-color: var(--action); color: var(--on-action); }
 .ui-btn--action:hover:not(:disabled):not([aria-disabled="true"]) {
@@ -66,6 +77,33 @@
 [data-surface="wall"] .ui-btn--action:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--action);
   border-color: var(--action);
+}
+/* A DISABLED MAIN BUTTON SPENDS NO ORANGE (experience plan §2 principle 4;
+   dev QA 2 Nov): a grey wash with --muted ink, never a faded fill that still
+   reads as live. The native `disabled` stays, so it is announced as such. */
+.ui-btn--action:disabled,
+.ui-btn--action[aria-disabled="true"] {
+  background: rgb(var(--slate-rgb) / .18);
+  border-color: transparent;
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* ---- done: a send that landed ("Sent", owner 3 Nov 2026) ----
+   A state in the main button's place, not an action and not the disabled grey:
+   a --success wash and edge under --text ink, beside a check. The ink is
+   --text, not --success-text, because Classic paper's --success-text is the
+   dusk green (1.7:1 on paper); the green is the wash and the edge, the word
+   and the check say it. It is aria-disabled, so the generic fade above must
+   not reach it (opacity 1), and the cursor says nothing will happen. No
+   hover: there is nothing to press. */
+.ui-btn--done,
+.ui-btn--done[aria-disabled="true"] {
+  background: rgb(var(--success-rgb) / .16);
+  border-color: var(--success);
+  color: var(--text);
+  opacity: 1;
+  cursor: default;
 }
 
 /* ---- accent ---- */
@@ -80,6 +118,25 @@
 .ui-btn--quiet:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--row-hover);
   border-color: var(--muted);
+}
+
+/* ---- tertiary: text only (experience plan §5.1 "quiet", step 5a) ----
+   No outline and no fill; the link ink says it moves the eye, not the
+   session ("See in People"). The ink is keyed on the nearest data-theme the
+   way Chip.css keys its inks (a descendant selector cannot pick the NEAREST
+   themed ancestor; inheritance can): --info on dusk, --accent-text on paper,
+   where --info is 2.5:1 on white. Only --ui-btn-* names are declared there. */
+:root, [data-theme="dark"] { --ui-btn-link-ink: var(--info); }
+[data-theme="light"] { --ui-btn-link-ink: var(--accent-text); }
+.ui-btn--tertiary {
+  border-color: transparent;
+  color: var(--ui-btn-link-ink, var(--info));
+  padding-left: .25em;
+  padding-right: .25em;
+}
+.ui-btn--tertiary:hover:not(:disabled):not([aria-disabled="true"]) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ---- danger ---- */

@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Icon from './Icon';
+import { useConfirm } from './ConfirmDialog';
 import './UserManagement.css';
 
 /**
@@ -90,16 +91,16 @@ export function roleOf(user) {
 const ROLE_META = {
   admins: { label: 'Engage admin', chip: 'warn' },
   hosts: { label: 'Host', chip: 'on' },
-  disabled: { label: 'Disabled', chip: 'off' },
+  disabled: { label: 'Suspended', chip: 'off' },
   pending: { label: 'Pending', chip: 'warn' },
 };
 
 /** The three roles a member row can be moved between, in the order they rank. */
 const MEMBER_ROLES = ['admins', 'hosts', 'disabled'];
 
-/** "Make Engage admin" / "Make host" / "Disable" — the verb, named. */
+/** "Make Engage admin" / "Make host" / "Suspend…" — the verb, named. */
 const MOVE_VERB = {
-  admins: 'Make Engage admin', hosts: 'Make host', disabled: 'Disable',
+  admins: 'Make Engage admin', hosts: 'Make host', disabled: 'Suspend…',
 };
 
 /**
@@ -180,7 +181,39 @@ function displayName(user) {
   return null; // caller renders "No name provided" + the username beneath
 }
 
+/**
+ * The row as the backend just left it (manage-users.js). SUSPEND keeps a
+ * member's groups and switches the account off; REJECT (a pending applicant)
+ * leaves no group; REINSTATE answers with the groups it restored. Any other
+ * move lands exactly the one group, switched on. `enabled: true` on a
+ * suspension would flip the row back on the next roleOf() read.
+ */
+function withoutSuspension(user) {
+  const copy = { ...user };
+  delete copy.suspendedReason;
+  delete copy.suspendedAt;
+  return copy;
+}
+
+export function mirrorState(user, newState, result = {}) {
+  if (newState === 'disabled') {
+    const kept = (user.groups || []).filter((g) => g === 'hosts' || g === 'admins');
+    return {
+      ...user, groups: kept, state: 'disabled', status: 'disabled', enabled: false,
+      ...(result.reason ? { suspendedReason: result.reason } : {}),
+    };
+  }
+  if (newState === 'reinstate') {
+    const groups = Array.isArray(result.groups) && result.groups.length ? result.groups : (user.groups || []);
+    const state = result.state || roleOf({ groups, enabled: true });
+    return { ...withoutSuspension(user), groups, state, status: state, enabled: true };
+  }
+  return { ...withoutSuspension(user), groups: [newState], state: newState, status: newState, enabled: true };
+}
+
 const UserManagement = () => {
+  // Reject and Remove ask in the small confirm dialog (experience plan 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -189,6 +222,7 @@ const UserManagement = () => {
   // accounts in the default view are "mostly noise"; they keep their own tab.
   const [roleFilter, setRoleFilter] = useState('active');
   const [actionInProgress, setActionInProgress] = useState(new Set());
+  const [notice, setNotice] = useState(null);
 
   const { isAdmin } = useAuth();
   const canAdminister = isAdmin();
@@ -251,19 +285,14 @@ const UserManagement = () => {
       setUsers((prev) =>
         newState === 'delete'
           ? prev.filter((user) => user.username !== username)
-          : prev.map((user) =>
-              user.username === username
-                // Mirror what the backend just did: a reject disables the
-                // account and leaves it in no group; any other move re-enables
-                // it and lands it in exactly the one group. `enabled: true` on
-                // a disable would flip the row back on the next roleOf() read.
-                ? (newState === 'disabled'
-                    ? { ...user, groups: [], state: 'disabled', status: 'disabled', enabled: false }
-                    : { ...user, groups: [newState], state: newState, status: newState, enabled: true })
-                : user
-            )
+          : prev.map((user) => (user.username === username ? mirrorState(user, newState, result) : user))
       );
       setError(null);
+      // Reinstating an account that had no role brings it back as pending;
+      // the server says so and staff need to read it.
+      if (newState === 'reinstate' && result.message && /approv/i.test(result.message)) {
+        setNotice(result.message);
+      }
     } catch (err) {
       console.error('Error changing user state:', err);
       setError(err.message || 'Failed to change user state');
@@ -333,6 +362,14 @@ const UserManagement = () => {
 
   return (
     <div className="um">
+      {notice && (
+        <div className="um-alert" role="status">
+          <span className="um-alert-text">{notice}</span>
+          <button type="button" className="um-alert-close" onClick={() => setNotice(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       {error && (
         <div className="um-alert" role="alert">
           <Icon name="Warning" weight="fill" size={16} color="var(--danger-text)" />
@@ -437,13 +474,14 @@ const UserManagement = () => {
                       type="button"
                       className="um-btn um-btn--danger"
                       disabled={busy}
-                      onClick={() => {
+                      onClick={async () => {
                         const who = name || user.username;
-                        if (
-                          window.confirm(
-                            `Reject ${who}?\n\nThey move to Disabled and cannot sign in. The account is kept, so this can be undone from the members list. Nothing is deleted.`
-                          )
-                        ) {
+                        if (await askConfirm({
+                          title: `Reject ${who}?`,
+                          message: 'They move to Suspended and cannot sign in. The account is kept, so Reinstate on that row undoes this. Nothing is deleted.',
+                          confirmText: 'Reject',
+                          danger: true,
+                        })) {
                           changeUserState(user.username, 'disabled');
                         }
                       }}
@@ -478,7 +516,7 @@ const UserManagement = () => {
             ['active', 'Active'],
             ['admins', 'Admins'],
             ['hosts', 'Hosts'],
-            ['disabled', 'Disabled'],
+            ['disabled', 'Suspended'],
           ].map(([id, label]) => (
             <button
               key={id}
@@ -505,6 +543,20 @@ const UserManagement = () => {
         the whole point of the split, and staff who expect otherwise read the
         refusal as a broken product.
       */}
+      {/*
+        SUSPENDED ACCOUNTS ARE NEVER BEHIND A HIDDEN FILTER (#40). The default
+        Active view leaves them out — rejected applicants are mostly noise
+        there — so it says how many there are and opens them in one click.
+      */}
+      {roleFilter === 'active' && memberCounts.disabled > 0 && (
+        <p className="um-note" data-testid="um-suspended-note">
+          {memberCounts.disabled} suspended {memberCounts.disabled === 1 ? 'account is' : 'accounts are'} not shown here.{' '}
+          <button type="button" className="um-btn um-btn--sm" onClick={() => setRoleFilter('disabled')}>
+            Show suspended
+          </button>
+        </p>
+      )}
+
       <p className="um-note um-note--roles">
         <b>Engage admin</b> is Engage staff: every organisation on this tier, approving
         and suspending them, and this screen. It grants no access to any organisation’s
@@ -550,6 +602,9 @@ const UserManagement = () => {
                     {name || <span className="um-noname">No name provided</span>}
                   </span>
                   <span className="um-sub">{user.email || user.username}</span>
+                  {role === 'disabled' && user.suspendedReason && (
+                    <span className="um-sub" title={user.suspendedReason}>Why: {user.suspendedReason}</span>
+                  )}
                 </td>
                 <td>
                   <span className={`um-chip um-chip--${meta.chip}`}>{meta.label}</span>
@@ -563,13 +618,36 @@ const UserManagement = () => {
                       rendered all four with the current one disabled — four
                       controls to express three choices, none of them a verb.
                     */}
-                    {MEMBER_ROLES.filter((target) => target !== role).map((target) => (
+                    {/*
+                      A SUSPENDED ROW OFFERS REINSTATE, and only that (#40):
+                      the same word and the same place as on Organisations.
+                      It puts back the role the account had; the moves come
+                      back once it is active again.
+                    */}
+                    {role === 'disabled' ? (
+                      <button
+                        type="button"
+                        className="um-btn um-btn--sm"
+                        disabled={busy}
+                        onClick={() => changeUserState(user.username, 'reinstate')}
+                      >
+                        Reinstate
+                      </button>
+                    ) : MEMBER_ROLES.filter((target) => target !== role).map((target) => (
                       <button
                         key={target}
                         type="button"
                         className="um-btn um-btn--sm"
                         disabled={busy}
-                        onClick={() => changeUserState(user.username, target)}
+                        onClick={async () => {
+                          if (target === 'disabled' && !(await askConfirm({
+                            title: `Suspend ${who}?`,
+                            message: 'They stop being able to host, open the console or use any Engage admin screen at once, and cannot sign in again until reinstated. Nothing they made is deleted. Reinstate, on this row, gives them back exactly the role they have now.',
+                            confirmText: 'Suspend',
+                            danger: true,
+                          }))) return;
+                          changeUserState(user.username, target);
+                        }}
                       >
                         {MOVE_VERB[target]}
                       </button>
@@ -580,12 +658,13 @@ const UserManagement = () => {
                       aria-label={`Remove ${who}`}
                       title={`Remove ${who}`}
                       disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete ${who}'s account?\n\nThey lose access immediately and would have to register again from scratch. Sessions they hosted and any question sets they uploaded are not affected.`
-                          )
-                        ) {
+                      onClick={async () => {
+                        if (await askConfirm({
+                          title: `Delete ${who}'s account?`,
+                          message: 'They lose access immediately and would have to register again from scratch. Sessions they hosted and any question sets they uploaded are not affected.',
+                          confirmText: 'Delete the account',
+                          danger: true,
+                        })) {
                           changeUserState(user.username, 'delete');
                         }
                       }}
@@ -609,6 +688,7 @@ const UserManagement = () => {
         Cognito returns at most 60 accounts in one page and there is no second page.
         Search and role filters apply to what is loaded.
       </p>
+      {confirmDialog}
     </div>
   );
 };

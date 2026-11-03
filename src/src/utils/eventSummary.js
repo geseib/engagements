@@ -38,13 +38,38 @@ export const REPORT_STATUS = Object.freeze({
 
 const STATE_WORDS = Object.freeze({ planned: 'Planned', live: 'Live', paused: 'Paused', done: 'Done' });
 
+/** The signed-in person's display name: name, else given and family names, else the email before the @. */
+export function signedInName(user) {
+  const a = (user && user.attributes) || {};
+  const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+  const full = clean(a.name) || clean([a.given_name, a.family_name].filter(Boolean).join(' '));
+  if (full) return full;
+  const email = clean(a.email);
+  return email.includes('@') ? email.split('@')[0] : '';
+}
+
+/**
+ * "Hosted by": the name kept on the event when it was made (create-event.js,
+ * since 2026-10-31). An event from before has none; then, and only when the
+ * signed-in person made it, their own name. A colleague's older event names
+ * nobody rather than the wrong person.
+ */
+export function hostOf(event, user) {
+  const kept = String((event && event.hostName) || '').trim();
+  if (kept) return kept;
+  const sub = String((user && user.attributes && user.attributes.sub) || '').trim();
+  const creator = String((event && event.createdBy) || '').trim();
+  return sub && creator && sub === creator ? signedInName(user) : '';
+}
+
 /**
  * The summary's data, from the host view of the event and the GET /reports
  * body. Pure: the tests and the document read it the same way.
  * @param {{event: object, items: object[]}} view   GET /events/{code}
  * @param {object} reportsBody                      GET /reports
+ * @param {{user?: object}} [who]                   the signed-in person (AuthContext currentUser)
  */
-export function eventSummaryData(view, reportsBody) {
+export function eventSummaryData(view, reportsBody, { user = null } = {}) {
   const event = (view && view.event) || {};
   const rawItems = (view && view.items) || [];
   const timed = event.startsAt ? rules.agendaTimes(event.startsAt, rawItems) : { rows: rawItems, endsAt: '' };
@@ -89,6 +114,8 @@ export function eventSummaryData(view, reportsBody) {
     endsAt: timed.endsAt || '',
     timeZone: event.timeZone || '',
     place: event.place || '',
+    hostName: hostOf(event, user),
+    teamName: String(event.teamName || '').trim(),
     state: event.state || '',
     items,
     counts: {
@@ -110,14 +137,14 @@ export function eventRunning(data) {
 }
 
 /** Both reads, side by side. A failed reports list costs the report column, never the summary. */
-export async function loadEventSummary(code, { fetchFn = authFetch } = {}) {
+export async function loadEventSummary(code, { fetchFn = authFetch, user = null } = {}) {
   const [view, reportsBody] = await Promise.all([
     getEvent(code),
     fetchFn(adminApiUrl('reports'))
       .then((r) => (r.ok ? r.json() : {}))
       .catch(() => ({})),
   ]);
-  return eventSummaryData(view, reportsBody);
+  return eventSummaryData(view, reportsBody, { user });
 }
 
 /** "Platform-Summit-summary.pdf". */
@@ -128,9 +155,9 @@ export const summaryFileName = (title) => `${String(title || 'Event').replace(/[
  * drawReportPdf: the report's PDF mode, the stamped head and foot) and hand
  * the file to the browser. Modules load on the click, not with the page.
  */
-export async function downloadEventSummary(code) {
+export async function downloadEventSummary(code, { user = null } = {}) {
   const [data, React, { createRoot }, { flushSync }, { default: EventSummaryDocument }, { drawReportPdf }, { REPORT_PDF_PASSES }] = await Promise.all([
-    loadEventSummary(code),
+    loadEventSummary(code, { user }),
     import('react'),
     import('react-dom/client'),
     import('react-dom'),

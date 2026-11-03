@@ -8,7 +8,9 @@ import { adminApiUrl } from '../../utils/adminApi';
 import { navigateTo } from '../../auth/navigate';
 import useFullscreenKey from '../../hooks/useFullscreenKey';
 import { downloadEventSummary } from '../../utils/eventSummary';
+import { useOptionalAuth } from '../../auth/AuthContext';
 import './HostEventAgenda.css';
+import Button from '../ui/Button';
 
 /**
  * AN EVENT'S AGENDA, ON THE HOST'S SIDE — /host/event/<code>/agenda.
@@ -33,13 +35,17 @@ export default function HostEventAgenda({ code }) {
   const [title, setTitle] = useState('');
   // The event summary PDF (utils/eventSummary.js): drawing, or why it failed.
   const [summary, setSummary] = useState({ busy: false, error: '' });
+  // The signed-in host: their name stands in on an event made before the
+  // event kept its creator's (utils/eventSummary.js hostOf).
+  const auth = useOptionalAuth();
+  const user = auth && auth.currentUser;
   useFullscreenKey();
 
   const saveSummary = async () => {
     if (summary.busy) return;
     setSummary({ busy: true, error: '' });
     try {
-      await downloadEventSummary(code);
+      await downloadEventSummary(code, { user });
       setSummary({ busy: false, error: '' });
     } catch (err) {
       setSummary({ busy: false, error: `The event summary was not made${err && err.message ? ` (${err.message})` : ''}. Please try again.` });
@@ -64,9 +70,9 @@ export default function HostEventAgenda({ code }) {
   return (
     <div className="hea" data-theme="dark">
       <header className="hea-head">
-        <button type="button" className="hea-btn" onClick={() => navigateTo('/host')}>
+        <Button variant="secondary" size={36} onClick={() => navigateTo('/host')}>
           <Icon name="ArrowLeft" size={16} color="currentColor" /> Main screen
-        </button>
+        </Button>
         <div className="hea-titles">
           <p className="hea-kicker">{`Event ${code} · agenda`}</p>
           <h1 className="hea-title" title={title || undefined}>{title || 'Agenda'}</h1>
@@ -76,16 +82,15 @@ export default function HostEventAgenda({ code }) {
         <HelpButton {...helpFor('event-agenda')} variant="inline" size="small" tooltip="Help: the agenda" className="help-button-quiet" />
         {/* A short PDF: the overview and the agenda, and which item reports
             exist and where. Downloaded, not stored (utils/eventSummary.js). */}
-        <button type="button" className="hea-btn" onClick={saveSummary} disabled={summary.busy}>
+        <Button variant="secondary" size={36} onClick={saveSummary} disabled={summary.busy}>
           <Icon name="FilePdf" size={16} color="currentColor" /> {summary.busy ? 'Making the summary…' : 'Save event summary (PDF)'}
-        </button>
-        <button
-          type="button"
-          className="hea-btn hea-btn--primary"
+        </Button>
+        <Button
+          variant="secondary" size={36}
           onClick={() => navigateTo(`/host/event/${encodeURIComponent(code)}`)}
         >
           <Icon name="PlayCircle" size={16} color="currentColor" /> Open the stage
-        </button>
+        </Button>
       </header>
       {summary.error && <p className="hea-error" role="alert">{summary.error}</p>}
       <main className="hea-body">

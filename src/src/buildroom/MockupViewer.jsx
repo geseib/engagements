@@ -13,9 +13,11 @@
  */
 import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogClose, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import BuildImage, { useImageUrl } from './BuildImage';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 /** `(askId, label, from) => void`, or null where a surface has no viewer. */
 export const ViewerContext = createContext(null);
@@ -44,18 +46,19 @@ function PictureViewer({ image, backLabel, onBack }) {
   return (
     <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Picture viewer">
       <div className="brm-viewer-top">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={onBack}>
+        <Button type="button" size={36} className="brm-tight" onClick={onBack}>
           <Icon name="CaretLeft" size={14} /> {backLabel}
-        </button>
+        </Button>
         {image.caption ? <b className="brm-viewer-q">{image.caption}</b> : null}
+        <DialogClose className="brm-viewer-x brm-push" onClose={onBack} />
       </div>
       <div className="brm-viewer-main" data-testid="brm-viewer-main">
         <BuildImage imageId={image.imageId} alt={image.caption || 'Screenshot'} className="brm-viewer-pic" linked={false} />
       </div>
-      <div className="brm-viewer-foot">
+      <DialogFoot className="brm-viewer-foot">
         <span><kbd>Esc</kbd> to go back</span>
         <span className="brm-push"><FullSize imageId={image.imageId} /></span>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -94,9 +97,9 @@ function ChoiceViewer({ ask, startLabel, backLabel, onBack }) {
   return (
     <Modal overlayClassName="brm-viewer" contentClassName="brm-viewer-in" onClose={onBack} closeOnBackdrop={false} label="Mockup viewer">
       <div className="brm-viewer-top">
-        <button type="button" className="brm-btn brm-btn--sm" onClick={onBack}>
+        <Button type="button" size={36} className="brm-tight" onClick={onBack}>
           <Icon name="CaretLeft" size={14} /> {backLabel}
-        </button>
+        </Button>
         <b className="brm-viewer-q">{ask.prompt}</b>
         <div className="brm-viewer-tabs" role="tablist" aria-label="Choices">
           {pics.map((o) => (
@@ -106,6 +109,7 @@ function ChoiceViewer({ ask, startLabel, backLabel, onBack }) {
           ))}
         </div>
         <span className="brm-viewer-n">{at + 1} of {pics.length}</span>
+        <DialogClose className="brm-viewer-x" onClose={onBack} />
       </div>
       <div
         className="brm-viewer-main"
@@ -122,12 +126,12 @@ function ChoiceViewer({ ask, startLabel, backLabel, onBack }) {
         <BuildImage imageId={here.imageId} alt={`Choice ${here.label}: ${here.title}`} className="brm-viewer-pic" linked={false} />
         <button type="button" className="brm-viewer-arrow brm-viewer-arrow--r" onClick={() => go(1)} disabled={at === pics.length - 1} aria-label="Next choice"><Icon name="CaretRight" size={22} /></button>
       </div>
-      <div className="brm-viewer-foot">
+      <DialogFoot className="brm-viewer-foot">
         <span><kbd>←</kbd> <kbd>→</kbd> to flip</span>
         <span><kbd>Esc</kbd> to go back</span>
         <span className="brm-push"><FullSize imageId={here.imageId} /></span>
         <span>Mockup {here.label}{chosen.includes(here.label) ? ' · picked' : ''}</span>
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

@@ -8,7 +8,7 @@
 
    SCOPE `.brc`. Every crew root carries `brc` and is always mounted inside the
    Build Room root `.brm` (data-theme="dark"), so it reuses that sheet's
-   buttons, chips, fields and dialogs (`.brm .brm-btn` …) and its wall ladder
+   chips, fields and dialogs (`.brm .brm-field` …; buttons are ui/Button) and its wall ladder
    (--brm-st-*). Everything crew-only is declared here, rooted at `.brc`.
 
    TYPE. The laptop ladder 12 / 13 / 15 / 19 / 24 / 30px (--brc-t-*), nothing

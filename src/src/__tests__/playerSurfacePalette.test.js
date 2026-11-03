@@ -568,7 +568,8 @@ describe('the shell is what makes "scroll to read, never to act" structural', ()
     // A4 measures this on a device and cannot be measured here. What CAN be
     // pinned is that the declaration exists on each of them, including the two
     // places it is easiest to cheat: the rank buttons and the Show-all control.
-    expect(block(CSS, '.plr-btn')).toMatch(/min-height:\s*56px/);
+    // The dock's buttons are ui/Button at 56px since step 5a (components/ui/Button.css).
+    expect(block(stripped(read('components', 'ui', 'Button.css')), '.ui-btn--h56')).toMatch(/min-height:\s*56px/);
     for (const sel of ['.plr-rk', '.plr-slot', '.plr-mode', '.plr-more', '.plr-chip']) {
       expect(block(CSS, sel)).toMatch(/min-height:\s*var\(--plr-tap\)/);
     }
@@ -775,13 +776,13 @@ describe('wavelength: ten words in two columns wider than a phone', () => {
     expect(block(CSS, '.plr-words-form')).not.toMatch(/grid/);
   });
 
-  test('the labels, the ids and the sticky Submit survive the re-layout', () => {
+  test('the labels, the ids and the sticky Send survive the re-layout', () => {
     // The grid wraps; it does not re-order, rename or move anything. The
     // submit lives in the dock, outside the scrolling stage.
     expect(PLR_JSX).toMatch(/id=\{`plr-word-\$\{index\}`\}/);
     expect(PLR_JSX).toMatch(/htmlFor=\{`plr-word-\$\{index\}`\}/);
     expect(PLR_JSX).toMatch(/Word \{index \+ 1\}/);
-    expect(PLR_JSX).toMatch(/Submit Words \(\{wordCount\}\/10\)/);
+    expect(PLR_JSX).toMatch(/\{SEND\.words\(wordCount\)\}/);
     expect(PLR_JSX).toMatch(/wavelengthWords\.map/);
   });
 });

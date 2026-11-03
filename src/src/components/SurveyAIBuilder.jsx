@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import HelpButton from './HelpButton';
-import { helpFor } from '../config/help/screens';
+import AIBuilderDialog from './AIBuilderDialog';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -75,11 +76,10 @@ function listed(items) {
  * so each has its own field and travels as `source` and `goal`; the rules
  * Workie must obey are folded behind a <details>.
  *
- * DERIVED ON WHITE, like the rest of the builder. The mockups draw this on the
- * console's dusk field; the builder modal is `.modal-content { background:
- * white }` (BuilderPage.css), and GenerationJobPanel.css and
- * GeneratedItemsTable.css already re-derive their mockups on white for the same
- * reason. SurveyAIBuilder.css carries the measured palette.
+ * ON DUSK, as the mockups draw it (experience plan 5e). The builder opens in
+ * the four builders' one window, components/AIBuilderDialog (Modal, the shared
+ * dialog head and foot, `theme="dark"`); SurveyAIBuilder.css carries the
+ * palette in roles, measured in surveyAIBuilderPalette.test.js.
  *
  * NOT HERE, DELIBERATELY: the old one-question-at-a-time editor. It edited the
  * retired item shape (`question`, `type`, a `scale` object) and the contract's
@@ -96,6 +96,8 @@ function SurveyAIBuilder({
 }) {
   /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
   const run = useDraftRun({ endpoint: ENDPOINT, appendTo: null, libraries, onDraftReady });
+  // The small confirm dialog, not the browser's (experience plan 5b/5e).
+  const [askConfirm, confirmDialog] = useConfirm();
   const runRef = useRef(run);
   runRef.current = run;
   const [step, setStep] = useState(1);
@@ -275,14 +277,17 @@ function SurveyAIBuilder({
    * switch that would throw something away is asked about first, naming it.
    * Choice ↔ Ranking keeps the list and asks nothing.
    */
-  const changeKind = (index, toKind) => {
+  const changeKind = async (index, toKind) => {
     const current = items[index];
     if (!current || current.kind === toKind) return;
     const { row, loses } = convertKind(current, toKind);
     if (loses.length > 0) {
-      const ok = window.confirm(
-        `Make question ${index + 1} ${surveyKindMeta(toKind).label}? It would lose ${listed(loses)}.`
-      );
+      const ok = await askConfirm({
+        title: `Make question ${index + 1} ${surveyKindMeta(toKind).label}?`,
+        message: `It would lose ${listed(loses)}.`,
+        confirmText: 'Change it',
+        cancelText: 'Keep it as it is',
+      });
       if (!ok) return;
     }
     setItems((prev) => prev.map((item, i) => (i === index ? row : item)));
@@ -345,9 +350,15 @@ function SurveyAIBuilder({
     && Object.values(form).some((value) => String(value).trim() !== '');
   const reviewDirty = reviewing && !created
     && (excluded.size > 0 || draftedKinds.some((kind) => kind !== undefined));
-  const requestClose = () => {
+  const requestClose = async () => {
     if ((formDirty || reviewDirty)
-      && !window.confirm('Close the survey generator? What you have typed or changed here will be lost.')) {
+      && !(await askConfirm({
+        title: 'Close the survey generator?',
+        message: 'What you have typed or changed here will be lost.',
+        confirmText: 'Close and lose it',
+        cancelText: 'Keep working',
+        danger: true,
+      }))) {
       return;
     }
     onClose();
@@ -366,39 +377,40 @@ function SurveyAIBuilder({
   const canWrite = !isGenerating && count >= 1
     && (form.source.trim() !== '' || form.goal.trim() !== '');
 
-  return (
-    <div className="survey-ai-builder-modal">
-      <div className="modal-overlay" onClick={requestClose}></div>
-      <div
-        className={`modal-content survey-builder sab${step === 1 ? ' sab--form' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sab-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div className="sab-headtext">
-            <h2 id="sab-title">
-              {reviewing ? `Workie wrote ${items.length} question${items.length === 1 ? '' : 's'}` : 'Generate a survey'}
-            </h2>
-            {step === 1 && (
-              <p className="sab-sub">The job runs on the server, so you can close this once it starts.</p>
-            )}
-          </div>
-          {/* The AI builders' guide (Help Phase 3), beside the X. */}
-          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
-          <button
-            type="button"
-            className="close-button"
-            onClick={requestClose}
-            aria-label="Close the survey generator"
-            title="Close"
-          >
-            <Icon name="X" weight="bold" size={16} color="currentColor" />
-          </button>
-        </div>
+  /* The window's foot (AIBuilderDialog draws it): the way back on the left, the action on the right. */
+  const footCancel = step === 1 ? (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      ) : reviewing ? (
+        <Button size={44} onClick={backToConfiguration}>
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to the form
+        </Button>
+      ) : null;
+  const footActions = (
+    <>
+      {step === 1 && (
+        <Button variant="primary" size={44} onClick={handleConfigSubmit} disabled={!canWrite}>
+          <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" /> Write the survey
+        </Button>
+      )}
+      {reviewing && (
+        <Button size={44} onClick={requestClose}>Close</Button>
+      )}
+    </>
+  );
 
-        <div className="modal-body">
+  return (
+    <AIBuilderDialog
+      kind="survey"
+      className={`survey-builder sab${step === 1 ? ' sab--form' : ''}`}
+      titleId="sab-title"
+      title={reviewing ? `Workie wrote ${items.length} question${items.length === 1 ? '' : 's'}` : 'Generate a survey'}
+      sub={step === 1 ? 'The job runs on the server, so you can close this once it starts.' : null}
+      onClose={requestClose}
+      closeLabel="Close the survey generator"
+      cancel={footCancel}
+      actions={footActions}
+    >
+        {confirmDialog}
           {step === 1 && (
             <div className="sab-form">
               {/* Only ever set on step 1 by the resume path, when the stored
@@ -588,18 +600,16 @@ function SurveyAIBuilder({
                     }}
                     actions={(
                       <>
-                        <button type="button" className="btn-secondary" onClick={handleDownloadCsv}>
+                        <Button size={36} onClick={handleDownloadCsv}>
                           <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Download as CSV
-                        </button>
+                        </Button>
                         {created ? (
-                          <button type="button" className="btn-primary" onClick={handleOpenCreatedSet}>
+                          <Button variant="primary" size={36} onClick={handleOpenCreatedSet}>
                             <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
                             Open &ldquo;{created.setName}&rdquo;
-                          </button>
+                          </Button>
                         ) : (
-                          <button
-                            type="button"
-                            className="btn-primary"
+                          <Button variant="primary" size={36}
                             onClick={handleSaveDraft}
                             disabled={keptItems.length === 0 || keptFlagged > 0}
                             title={keptFlagged > 0
@@ -607,7 +617,7 @@ function SurveyAIBuilder({
                               : undefined}
                           >
                             Save {keptItems.length} as a draft survey
-                          </button>
+                          </Button>
                         )}
                       </>
                     )}
@@ -616,37 +626,7 @@ function SurveyAIBuilder({
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {step === 1 && (
-            <>
-              <button type="button" className="btn-secondary" onClick={requestClose}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleConfigSubmit}
-                disabled={!canWrite}
-              >
-                <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" /> Write the survey
-              </button>
-            </>
-          )}
-          {reviewing && (
-            <>
-              <button type="button" className="btn-secondary" onClick={backToConfiguration}>
-                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to the form
-              </button>
-              <button type="button" className="btn-secondary" onClick={requestClose}>
-                Close
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </AIBuilderDialog>
   );
 }
 

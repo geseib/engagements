@@ -26,6 +26,7 @@ import SessionHistoryPanel, {
   rowActions, matchesSearch, orderSessions,
 } from '../components/SessionHistoryPanel';
 import { countOrDash } from '../config/tableCells';
+import { rowAction, clickRowAction } from '../testUtils/sessionRows';
 
 const started = {
   gameId: '4821', title: 'Q3 Offsite', gameType: 'call-and-answer',
@@ -53,6 +54,9 @@ const mount = (props = {}) => {
 };
 
 const rowFor = (title) => screen.getByText(title).closest('tr');
+/* Since the experience plan's 4a a row has ONE primary button and a ⋯ menu
+   with the rest; `act` finds an action in either (testUtils/sessionRows.js). */
+const act = (title, name) => rowAction(rowFor(title), name);
 
 describe('§1 the pure rules', () => {
   test('a started session offers Continue and a report, never Start or Edit', () => {
@@ -158,11 +162,18 @@ describe('§1b a closed survey offers Results AND Report — I-2, 2026-09-26 fin
 });
 
 describe('§2 the table', () => {
-  test('every column the cards carried is a column here', () => {
+  test('one row shape: session, format, status, date and the actions', () => {
     mount();
-    ['Session', 'Code', 'Type', 'State', 'Created', 'Last played'].forEach((h) => {
+    ['Session', 'Format', 'Status', 'Date'].forEach((h) => {
       expect(screen.getByRole('columnheader', { name: h })).toBeInTheDocument();
     });
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+  });
+
+  test('the code and the set are on the row, under the title', () => {
+    mount();
+    expect(within(rowFor('Q3 Offsite')).getByText(/4821/)).toBeInTheDocument();
+    expect(within(rowFor('Q3 Offsite')).getByText(/Set: set-alpha/)).toBeInTheDocument();
   });
 
   test('the type is named, not guessed, for a row that has one', () => {
@@ -171,20 +182,11 @@ describe('§2 the table', () => {
   });
 
   test('a legacy row with no type prints an em dash rather than a default', () => {
-    /*
-      resolveGameType, not normalizeGameType: the latter always returns
-      something, which would label every untyped legacy row "Call & Answer".
-
-      Addressed by COLUMN, not by text. A row with no type usually also has no
-      last-played date, so both cells hold an em dash and a text query matches
-      two elements — a version of this test that settled for the first was
-      asserting about whichever came first in the document, not about the type.
-    */
+    // resolveGameType, not normalizeGameType: the latter always returns
+    // something, which would label every untyped legacy row "Call & Answer".
     mount({ sessions: [{ ...fresh, gameType: undefined }] });
     const cells = rowFor('Pricing Workshop').cells;
-    const typeColumn = screen.getAllByRole('columnheader').findIndex(
-      (th) => th.textContent === 'Type'
-    );
+    const typeColumn = screen.getAllByRole('columnheader').findIndex((th) => th.textContent === 'Format');
     expect(cells[typeColumn].textContent).toBe('—');
   });
 
@@ -192,6 +194,12 @@ describe('§2 the table', () => {
     mount();
     expect(within(rowFor('Q3 Offsite')).getByText('Played')).toBeInTheDocument();
     expect(within(rowFor('Pricing Workshop')).getByText('Not started')).toBeInTheDocument();
+  });
+
+  test('a session that was read as running or ended says which', () => {
+    mount({ sessions: [{ ...started, ended: false }, { ...fresh, gameId: '7001', title: 'Done one', started: true, ended: true }] });
+    expect(within(rowFor('Q3 Offsite')).getByText('Running')).toBeInTheDocument();
+    expect(within(rowFor('Done one')).getByText('Ended')).toBeInTheDocument();
   });
 
   test('the session on the stage is flagged', () => {
@@ -202,106 +210,119 @@ describe('§2 the table', () => {
 
 describe('§3 a session can be prepared without being started', () => {
   /*
-    HISTORY OF THIS SECTION, because its headline assertion INVERTED. It was
-    written to pin "Open exists and does not start" — the fix for "i cant edit
-    the session without starting it today". Open has since been retired (the
-    same owner: three buttons was "too many"), and the property it guarded
-    moved: the way to touch an unstarted session without starting it is now
-    EDIT, which opens a dialog and never loads or starts anything. The bug
-    being guarded against is unchanged — a control on an unstarted row that
-    quietly POSTs /start.
+    The bug guarded here is unchanged since the Open button was retired: a
+    control on an unstarted row that quietly POSTs /start. EDIT is the way to
+    touch an unstarted session without starting it; it is under ⋯ now, with
+    Start the row's one primary (experience plan 4a).
   */
   test('an unstarted session offers no Open — Edit is the way in', () => {
     mount();
-    expect(within(rowFor('Pricing Workshop')).queryByRole('button', { name: /Open/i })).toBeNull();
-    expect(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }))
-      .toBeInTheDocument();
+    expect(act('Pricing Workshop', /^Open/)).toBeNull();
+    expect(act('Pricing Workshop', /^Edit/)).not.toBeNull();
   });
 
   test('Edit raises the edit flow and starts nothing', () => {
     const { onEdit, onStart, onOpen } = mount();
-    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }));
+    clickRowAction(rowFor('Pricing Workshop'), /^Edit/);
     expect(onEdit).toHaveBeenCalledWith('9137', 'Pricing Workshop');
     expect(onStart).not.toHaveBeenCalled();
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  test('Start is a separate control, and it starts', () => {
+  test('Start is the row\'s primary, and it starts', () => {
     const { onOpen, onStart } = mount();
-    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Start/i }));
+    const start = act('Pricing Workshop', /^Start/);
+    expect(start).toHaveClass('slist-lead');
+    fireEvent.click(start);
     expect(onStart).toHaveBeenCalledWith('9137', 'Pricing Workshop');
     expect(onOpen).not.toHaveBeenCalled();
   });
 
   test('a started session has no Start button to press again', () => {
     mount();
-    expect(within(rowFor('Q3 Offsite')).queryByRole('button', { name: /^Start/i })).toBeNull();
+    expect(act('Q3 Offsite', /^Start/)).toBeNull();
   });
 
   test('Continue loads a started session', () => {
     const { onOpen } = mount();
-    fireEvent.click(within(rowFor('Q3 Offsite')).getByRole('button', { name: /Continue/i }));
+    clickRowAction(rowFor('Q3 Offsite'), /^Continue/);
     expect(onOpen).toHaveBeenCalledWith('4821', 'Q3 Offsite');
   });
 
   test('a report is offered only where there is something to report', () => {
     mount();
-    expect(within(rowFor('Q3 Offsite')).getByRole('button', { name: /Report/i }))
-      .toBeInTheDocument();
-    expect(within(rowFor('Pricing Workshop')).queryByRole('button', { name: /Report/i }))
-      .toBeNull();
+    expect(act('Q3 Offsite', /^Report/)).not.toBeNull();
+    expect(act('Pricing Workshop', /^Report/)).toBeNull();
+  });
+
+  test('an ended session leads with its report, and Continue is still there', () => {
+    const { onReport, onOpen } = mount({ sessions: [{ ...started, ended: true }] });
+    const report = act('Q3 Offsite', /^Report/);
+    expect(report).toHaveClass('slist-lead');
+    fireEvent.click(report);
+    expect(onReport).toHaveBeenCalledWith('4821', 'Q3 Offsite');
+    clickRowAction(rowFor('Q3 Offsite'), /^Continue/);
+    expect(onOpen).toHaveBeenCalledWith('4821', 'Q3 Offsite');
   });
 });
 
 describe('§3b a session can be edited before it starts', () => {
-  test('an unstarted session offers Edit beside Open and Start', () => {
-    mount();
-    expect(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }))
-      .toBeInTheDocument();
-  });
-
   /*
-    THE SAME TRAP AS OPEN-WIRED-TO-START, one row over: an Edit button wired to
-    onOpen (or onStart) satisfies the render test above and reproduces the bug
-    this feature exists to fix — the only ways into an unstarted session being
-    "load it" or "let the room in".
+    THE SAME TRAP AS OPEN-WIRED-TO-START, one row over: an Edit wired to
+    onOpen (or onStart) reproduces the bug this feature exists to fix.
   */
   test('Edit raises onEdit — not onOpen, and never onStart', () => {
     const { onEdit, onOpen, onStart } = mount();
-    fireEvent.click(within(rowFor('Pricing Workshop')).getByRole('button', { name: /Edit/i }));
+    clickRowAction(rowFor('Pricing Workshop'), /^Edit/);
     expect(onEdit).toHaveBeenCalledWith('9137', 'Pricing Workshop');
     expect(onOpen).not.toHaveBeenCalled();
     expect(onStart).not.toHaveBeenCalled();
   });
 
-  test('a started session has no Edit button — the backend would refuse it', () => {
-    // rejects: rendering Edit unconditionally, which offers a control whose
-    // only possible outcome on a started row is a 400 from PUT /games/{id}.
+  test('a started session has no Edit — the backend would refuse it', () => {
     mount();
-    expect(within(rowFor('Q3 Offsite')).queryByRole('button', { name: /Edit/i })).toBeNull();
+    expect(act('Q3 Offsite', /^Edit/)).toBeNull();
   });
 });
 
 describe('§4 the other row actions', () => {
   test('the link and invite controls name the session they act on', () => {
     mount();
-    const row = within(rowFor('Q3 Offsite'));
-    expect(row.getByRole('button', { name: /Link/i })).toHaveAttribute(
-      'title', expect.stringContaining('Q3 Offsite')
-    );
-    expect(row.getByRole('button', { name: /Invite/i })).toHaveAttribute(
-      'title', expect.stringContaining('Q3 Offsite')
-    );
+    expect(act('Q3 Offsite', /^Copy join link/)).toHaveAttribute('title', expect.stringContaining('Q3 Offsite'));
+    expect(act('Q3 Offsite', /^Invite/)).toHaveAttribute('title', expect.stringContaining('Q3 Offsite'));
   });
 
   test('the link control passes the code, the invite passes the whole session', () => {
     // The invite needs the title, type and set; the player URL needs only the id.
     const { onCopyPlayerUrl, onInvite } = mount();
-    const row = within(rowFor('Q3 Offsite'));
-    fireEvent.click(row.getByRole('button', { name: /Link/i }));
-    fireEvent.click(row.getByRole('button', { name: /Invite/i }));
+    clickRowAction(rowFor('Q3 Offsite'), /^Copy join link/);
+    clickRowAction(rowFor('Q3 Offsite'), /^Invite/);
     expect(onCopyPlayerUrl).toHaveBeenCalledWith('4821');
     expect(onInvite).toHaveBeenCalledWith(started);
+  });
+
+  test('the ⋯ menu is a real menu: named, keyboard-closable, and focus goes back', () => {
+    mount();
+    const more = within(rowFor('Q3 Offsite')).getByRole('button', { name: 'More for "Q3 Offsite"' });
+    expect(more).toHaveAttribute('aria-haspopup', 'menu');
+    fireEvent.click(more);
+    const menu = screen.getByRole('menu', { name: 'More for "Q3 Offsite"' });
+    expect(within(menu).getAllByRole('menuitem').length).toBeGreaterThan(0);
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(more);
+  });
+
+  test('Delete is offered only when the page can delete, and asks on the row first', async () => {
+    mount();
+    expect(act('Q3 Offsite', /^Delete/)).toBeNull();
+    const onDelete = jest.fn(() => Promise.resolve());
+    render(<SessionHistoryPanel sessions={[{ ...started, gameId: '6001', title: 'Deletable' }]} onDelete={onDelete} />);
+    clickRowAction(rowFor('Deletable'), /^Delete/);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByTestId('delete-confirm')).toHaveTextContent(/Every answer, vote and player record/);
+    fireEvent.click(within(screen.getByTestId('delete-confirm')).getByRole('button', { name: 'Delete' }));
+    expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ gameId: '6001' }), '');
   });
 
   test('close is reachable by its accessible name', () => {
@@ -311,7 +332,7 @@ describe('§4 the other row actions', () => {
   });
 });
 
-describe('§4b Results, rendered — Task 3 fix round 1', () => {
+describe('§4b Survey results, rendered — Task 3 fix round 1', () => {
   const closedSurvey = {
     gameId: '5001', title: 'Pulse check', gameType: 'survey',
     questionSetId: 'set-alpha', hostName: 'Ada',
@@ -320,37 +341,37 @@ describe('§4b Results, rendered — Task 3 fix round 1', () => {
   };
   const collectingSurvey = { ...closedSurvey, gameId: '5002', title: 'Still open', surveyClosed: false };
 
-  test('a closed survey row offers Results, and it names the session it opens', () => {
+  test('a closed survey row leads with Survey results, and it names the session it opens', () => {
     mount({ sessions: [closedSurvey] });
-    const btn = within(rowFor('Pulse check')).getByRole('button', { name: /Results/i });
+    const btn = act('Pulse check', /^Survey results/);
+    expect(btn).toHaveClass('slist-lead');
     expect(btn).toHaveAttribute('title', expect.stringContaining('Pulse check'));
   });
 
-  test('clicking Results calls onResults with the session\'s id and title', () => {
+  test('clicking it calls onResults with the session\'s id and title', () => {
     const { onResults } = mount({ sessions: [closedSurvey] });
-    fireEvent.click(within(rowFor('Pulse check')).getByRole('button', { name: /Results/i }));
+    clickRowAction(rowFor('Pulse check'), /^Survey results/);
     expect(onResults).toHaveBeenCalledWith('5001', 'Pulse check');
   });
 
-  test('a survey still collecting offers no Results button', () => {
+  test('a survey still collecting offers no Survey results', () => {
     mount({ sessions: [collectingSurvey] });
-    expect(within(rowFor('Still open')).queryByRole('button', { name: /Results/i })).toBeNull();
+    expect(act('Still open', /^Survey results/)).toBeNull();
   });
 
-  // I-2 (2026-09-26 final review): Results replacing Report entirely hid
-  // Task 4's saved document from a host who came back for it later — the
-  // row must offer both, wired to the same two independent handlers.
+  // I-2 (2026-09-26 final review): the row must offer both, wired to the
+  // same two independent handlers.
   test('a closed survey row ALSO offers Report, wired to the same report path other sessions use', () => {
     const { onReport } = mount({ sessions: [closedSurvey] });
-    const btn = within(rowFor('Pulse check')).getByRole('button', { name: /Report/i });
+    const btn = act('Pulse check', /^Report/);
     expect(btn).toHaveAttribute('title', expect.stringContaining('Pulse check'));
     fireEvent.click(btn);
     expect(onReport).toHaveBeenCalledWith('5001', 'Pulse check');
   });
 
-  test('an ordinary (non-survey) closed session offers no Results button', () => {
-    mount(); // started = call-and-answer, no surveyClosed field at all
-    expect(within(rowFor('Q3 Offsite')).queryByRole('button', { name: /Results/i })).toBeNull();
+  test('an ordinary (non-survey) closed session offers no Survey results', () => {
+    mount();
+    expect(act('Q3 Offsite', /^Survey results/)).toBeNull();
   });
 });
 
@@ -360,19 +381,14 @@ describe('§5 two empty states, saying different things', () => {
     expect(screen.getByText(/No sessions yet/i)).toBeInTheDocument();
   });
 
-  test('a search matching nothing says something different', () => {
-    /*
-      The card list had only the first message, so a host with forty sessions
-      who filtered to none would have been told they had none at all. "Nothing
-      exists" and "nothing matches" are different situations with different
-      ways out.
-    */
+  test('a search matching nothing says something different, with a way out', () => {
     mount();
     fireEvent.change(screen.getByRole('searchbox', { name: /Search sessions/i }), {
       target: { value: 'zzzz' },
     });
-    expect(screen.getByText(/No session matches that search/i)).toBeInTheDocument();
+    expect(screen.getByText(/No session matches this filter/i)).toBeInTheDocument();
     expect(screen.queryByText(/No sessions yet/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /Clear all filters/i })).toBeInTheDocument();
   });
 
   test('with no sessions there is no search box to filter with', () => {
@@ -391,10 +407,7 @@ describe('§5 two empty states, saying different things', () => {
 });
 
 /*
-  A REFUSED START IS SAID ON THE LIST. The page falls back to this list when a
-  create-and-open is refused (the survey exists, unopened), and the list's own
-  Start can be refused — both used to say so in a browser alert(). The reason
-  is the server's sentence, handed in as `notice`.
+  A REFUSED START IS SAID ON THE LIST, in the server's words (`notice`).
 */
 describe('§5a a notice from the page', () => {
   test('is shown as an alert, in the server\'s words', () => {
@@ -408,46 +421,34 @@ describe('§5a a notice from the page', () => {
   });
 });
 
-describe('§5b the two counts', () => {
-  const cellUnder = (rowTitle, header) => {
-    const i = screen.getAllByRole('columnheader').findIndex((th) => th.textContent === header);
-    return rowFor(rowTitle).cells[i].textContent;
+describe('§5b the two counts, under the status', () => {
+  const statusOfRow = (title) => {
+    const i = screen.getAllByRole('columnheader').findIndex((th) => th.textContent === 'Status');
+    return rowFor(title).cells[i].textContent;
   };
 
-  test('both counts are columns', () => {
+  test('a session that was played says how many people and rounds', () => {
     mount();
-    expect(screen.getByRole('columnheader', { name: 'Players' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Rounds' })).toBeInTheDocument();
-  });
-
-  test('a session that was played shows both', () => {
-    mount();
-    expect(cellUnder('Q3 Offsite', 'Players')).toBe('7');
-    expect(cellUnder('Q3 Offsite', 'Rounds')).toBe('4');
+    expect(statusOfRow('Q3 Offsite')).toMatch(/7 people · 4 rounds/);
   });
 
   /*
-    ZERO IS A REAL ANSWER AND MUST SURVIVE. A session nobody joined genuinely
-    had no players, so it prints 0. A `!value` guard — the obvious way to write
-    this — would turn every empty session into "unknown", which is the same
-    empty-state-that-lies mistake in miniature.
+    ZERO IS A REAL ANSWER AND MUST SURVIVE. A `!value` guard would turn every
+    empty session into "unknown".
   */
   test('zero prints as zero, not as unknown', () => {
     mount();
-    expect(cellUnder('Pricing Workshop', 'Players')).toBe('0');
-    expect(cellUnder('Pricing Workshop', 'Rounds')).toBe('0');
+    expect(statusOfRow('Pricing Workshop')).toMatch(/0 people · 0 rounds/);
   });
 
-  test('null prints an em dash — "we could not read it" is not "nobody"', () => {
+  test('null claims nothing — "we could not read it" is not "nobody"', () => {
     mount({ sessions: [{ ...started, playerCount: null, roundsPlayed: null }] });
-    expect(cellUnder('Q3 Offsite', 'Players')).toBe('—');
-    expect(cellUnder('Q3 Offsite', 'Rounds')).toBe('—');
+    expect(statusOfRow('Q3 Offsite')).not.toMatch(/\d/);
   });
 
   test('a row from an API that never sent the fields still renders', () => {
-    // Older deployments, and any tier not yet carrying the enriched handler.
     mount({ sessions: [{ ...started, playerCount: undefined, roundsPlayed: undefined }] });
-    expect(cellUnder('Q3 Offsite', 'Players')).toBe('—');
+    expect(statusOfRow('Q3 Offsite')).toBe('Played');
   });
 
   test.each([[0, '0'], [7, '7'], [null, '—'], [undefined, '—']])(
@@ -460,97 +461,76 @@ describe('§5b the two counts', () => {
 describe('§6 the stylesheet contracts jsdom cannot measure', () => {
   const fs = require('fs');
   const path = require('path');
-  const CSS = fs
-    .readFileSync(path.join(__dirname, '..', 'components', 'SessionHistoryPanel.css'), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
+  const CSS = strip(fs.readFileSync(path.join(__dirname, '..', 'components', 'SessionHistoryPanel.css'), 'utf8'));
+  const LIST = strip(fs.readFileSync(path.join(__dirname, '..', 'components', 'SessionList.css'), 'utf8'));
 
-  test('the action group is a fixed two-track grid, never a wrapping flex row', () => {
-    /*
-      SECOND ALIGNMENT REPORT. The first fix assumed two buttons per row and
-      kept a wrapping flex with margin-left:auto on the first child; every row
-      actually carries FOUR buttons, so the wrap point differed per row and
-      auto-margin shoved whichever button led the first line. A grid of two
-      equal tracks sized FROM the cell cannot wrap and cannot vary, and hard
-      rule 9 is satisfied by construction — nothing can overflow towards the
-      cell's hidden start.
-    */
-    const group = CSS.slice(CSS.indexOf('.shist__acts {'));
+  test('the action group starts with margin-left: auto and wraps, never flex-end (hard rule 9)', () => {
+    const group = LIST.slice(LIST.indexOf('.slist-acts {'));
     const body = group.slice(0, group.indexOf('}'));
-    expect(body).toMatch(/display:\s*grid/);
-    expect(body).toMatch(/grid-template-columns:\s*repeat\(2,/);
+    expect(body).toMatch(/flex-wrap:\s*wrap/);
     expect(body).not.toMatch(/justify-content:\s*flex-end/);
-    expect(CSS).not.toMatch(/\.shist__acts[^{]*\{[^}]*flex-wrap/);
-  });
-
-  test('the actions cell can grow to hold both grid rows', () => {
-    // Every other td is a fixed 36px with overflow:hidden — two rows of
-    // buttons inside that would clip the second row in half.
-    expect(CSS).toMatch(/\.shist__tbl td:last-child\s*\{[^}]*height:\s*auto/);
+    expect(LIST).toMatch(/\.slist-acts > :first-child\s*\{[^}]*margin-left:\s*auto/);
   });
 
   test('the actions are always visible, not revealed on hover', () => {
-    // The admin sheet hides them at opacity 0 until hover. On this screen the
-    // actions ARE the screen, and hover does not exist on a touch laptop.
-    expect(CSS).not.toMatch(/\.shist__acts\s*\{[^}]*opacity:\s*0/);
+    expect(LIST).not.toMatch(/\.slist-acts\s*\{[^}]*opacity:\s*0/);
+  });
+
+  test('the ⋯ menu is fixed-position, so no cell or scroll box clips it', () => {
+    expect(LIST).toMatch(/\.slist-menu\s*\{[^}]*position:\s*fixed/);
+    expect(LIST).toMatch(/td\.slist-c-acts\s*\{[^}]*overflow:\s*visible/);
   });
 
   test('the table is fixed layout', () => {
-    expect(CSS).toMatch(/\.shist__tbl\s*\{[^}]*table-layout:\s*fixed/);
+    expect(LIST).toMatch(/\.slist-tbl\s*\{[^}]*table-layout:\s*fixed/);
   });
 
-  test('the column widths sum to 100', () => {
-    const widths = ['name', 'id', 'type', 'state', 'acts'].map((k) => {
-      const m = CSS.match(new RegExp(`\\.shist__c-${k}\\s*\\{\\s*width:\\s*(\\d+)%`));
-      if (!m) throw new Error(`no width for .shist__c-${k}`);
+  test('the five column widths sum to 100', () => {
+    const widths = ['name', 'kind', 'state', 'when', 'acts'].map((k) => {
+      const m = LIST.match(new RegExp(`\\.slist-c-${k}\\s*\\{\\s*width:\\s*(\\d+)%`));
+      if (!m) throw new Error(`no width for .slist-c-${k}`);
       return Number(m[1]);
     });
-    const when = Number(CSS.match(/\.shist__c-when\s*\{\s*width:\s*(\d+)%/)[1]);
-    const num = Number(CSS.match(/\.shist__c-num\s*\{\s*width:\s*(\d+)%/)[1]);
-    // Two `when` columns and two `num` columns each share one rule.
-    expect(widths.reduce((a, b) => a + b, 0) + when * 2 + num * 2).toBe(100);
+    expect(widths.reduce((a, b) => a + b, 0)).toBe(100);
   });
 
-  test('the dialog is wide enough for nine columns', () => {
-    /*
-      The container was sized for the CARD list that used to live here, where
-      every field had its own line. At its old 800px the two date columns
-      resolve to about 72px — enough for "Aug 10," and not the year, which is
-      exactly what the owner reported.
-    */
-    const fs2 = require('fs');
-    const global2 = fs2
-      .readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+  test('the dialog is wide enough for the table', () => {
+    const global2 = strip(fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
     const rule = global2.slice(global2.indexOf('.reports-modal {'));
     const body = rule.slice(0, rule.indexOf('}'));
     const px = Number(body.match(/max-width:\s*min\((\d+)px/)[1]);
     expect(px).toBeGreaterThanOrEqual(1100);
-    // And it caps against the viewport, so a laptop at 1280 still fits it.
     expect(body).toMatch(/95vw/);
   });
 
-  test('only the table body scrolls, not the dialog as well', () => {
-    // Two nested scrollers is how a sticky table header scrolls away from the
-    // rows it labels.
-    const fs2 = require('fs');
-    const global2 = fs2
-      .readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+  test('only the list scrolls, not the dialog as well', () => {
+    const global2 = strip(fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'));
     const rule = global2.slice(global2.indexOf('.reports-modal {'));
     expect(rule.slice(0, rule.indexOf('}'))).toMatch(/overflow:\s*hidden/);
     expect(CSS).toMatch(/\.shist__scroll\s*\{[^}]*overflow-y:\s*auto/);
   });
 
-  test('nothing drops below the 12px floor', () => {
-    const sizes = [...CSS.matchAll(/font-size:\s*(\d+)px/g)].map((m) => Number(m[1]));
-    expect(sizes.length).toBeGreaterThan(0);
-    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
-  });
+  test.each([['SessionHistoryPanel.css', () => CSS], ['SessionList.css', () => LIST]])(
+    '%s: nothing drops below the 12px floor', (_n, get) => {
+      // Literal sizes and the ladder's own steps (`--x-t-floor: 12px`) both count.
+      const sizes = [...get().matchAll(/(?:font-size|-t-[a-z]+):\s*(\d+)px/g)].map((m) => Number(m[1]));
+      expect(sizes.length).toBeGreaterThan(0);
+      expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
+    },
+  );
 
-  test('every selector is rooted at the scope', () => {
-    const selectors = [...CSS.matchAll(/^([.@][^{]+)\{/gm)].map((m) => m[1].trim());
-    const leaked = selectors.filter((s) => !s.startsWith('@') && !s.includes('.shist'));
-    expect(leaked).toEqual([]);
+  test.each([['SessionHistoryPanel.css', () => CSS, '.shist'], ['SessionList.css', () => LIST, '.slist']])(
+    '%s: every selector is rooted at its scope', (_n, get, scope) => {
+      const selectors = [...get().matchAll(/^([.@][^{]+)\{/gm)].map((m) => m[1].trim());
+      const leaked = selectors.filter((sel) => !sel.startsWith('@') && !sel.includes(scope));
+      expect(leaked).toEqual([]);
+    },
+  );
+
+  test('SessionList.css paints with tokens only: no raw colour at all', () => {
+    expect(LIST).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(LIST).not.toMatch(/rgba?\((?!var\()/);
   });
 
   test('colour comes from tokens, not from raw hex outside the token block', () => {
@@ -560,6 +540,13 @@ describe('§6 the stylesheet contracts jsdom cannot measure', () => {
 
   test('the destructive-text rule is respected — no color: var(--danger)', () => {
     expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
+    expect(LIST).not.toMatch(/color:\s*var\(--danger\)/);
+  });
+
+  test('on a phone the rows are cards and every control is 44px', () => {
+    const phone = LIST.slice(LIST.lastIndexOf('@media (max-width: 600px)'));
+    expect(phone).toMatch(/\.slist \.slist-tbl tr \{[^}]*display:\s*flex/);
+    expect(phone).toMatch(/\.slist \.slist-act,\s*\.slist \.slist-lead \{[^}]*min-height:\s*44px/);
   });
 });
 

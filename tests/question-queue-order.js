@@ -36,7 +36,7 @@ const REPO = path.join(__dirname, '..');
 const API = [
   'QUEUE_OPS', 'QUEUE_MAX', 'normaliseQueue', 'queueEnqueue', 'queueRemove',
   'queueMove', 'queueFirst', 'queueDrop', 'applyQueueOp', 'queuePosition', 'queueRows',
-  'queueSummary',
+  'queueSummary', 'queueAfter', 'queueAddOwn', 'isOwnKey', 'OWN_KEY_PREFIX', 'OWN_PLACES',
 ];
 
 function loadFrontendCopy() {
@@ -258,7 +258,7 @@ const CASES = [
     identity: 'same',
   },
   {
-    name: 'R7 "clear" is not an op — the enum is the five in QUEUE_OPS',
+    name: 'R7 "clear" is not an op — the enum is the eight in QUEUE_OPS',
     fn: 'applyQueueOp', args: [THREE, { op: 'clear' }],
     expect: { queue: THREE, changed: false, refused: 'unknown-op' },
     identity: 'same',
@@ -354,6 +354,110 @@ const CASES = [
       { key: 'c001#003', position: 3, title: '', category: '', canMoveEarlier: true, canMoveLater: false, missing: true },
     ],
   },
+
+  /* -- OWN: the host's own questions (impromptu ask, README §5.2-3) ------- */
+  {
+    name: 'OWN an own: key survives canonical untouched',
+    fn: 'normaliseQueue', args: [['own:abc', 'QUESTION#q1', 'own:abc']],
+    expect: ['own:abc', 'q1'],
+  },
+  {
+    name: 'OWN add-own at Next goes to the head',
+    fn: 'applyQueueOp', args: [THREE, { op: 'add-own', questionKey: 'own:a1', place: 'next' }],
+    expect: { queue: ['own:a1', ...THREE], changed: true, refused: null },
+  },
+  {
+    name: 'OWN add-own at Now also goes to the head (select_own then serves it)',
+    fn: 'applyQueueOp', args: [THREE, { op: 'add-own', questionKey: 'own:a1', place: 'now' }],
+    expect: { queue: ['own:a1', ...THREE], changed: true, refused: null },
+  },
+  {
+    name: 'OWN add-own at the end goes to the tail',
+    fn: 'applyQueueOp', args: [THREE, { op: 'add-own', questionKey: 'own:a1', place: 'end' }],
+    expect: { queue: [...THREE, 'own:a1'], changed: true, refused: null },
+  },
+  {
+    name: 'OWN add-own Later after a queued anchor lands right after it',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'add-own', questionKey: 'own:a1', place: 'later', anchorKey: 'q2' }],
+    expect: { queue: ['q1', 'q2', 'own:a1', 'q3', 'q4', 'q5'], changed: true, refused: null },
+  },
+  {
+    name: 'OWN add-own Later after an AUTOMATIC anchor queues the walk through it first',
+    fn: 'applyQueueOp', args: [['q1'], { op: 'add-own', questionKey: 'own:a1', place: 'later', anchorKey: 'a2', through: ['a1', 'a2', 'a3'] }],
+    expect: { queue: ['q1', 'a1', 'a2', 'own:a1'], changed: true, refused: null },
+  },
+  {
+    name: 'OWN add-own Later with an anchor nowhere is refused, named',
+    fn: 'applyQueueOp', args: [THREE, { op: 'add-own', questionKey: 'own:a1', place: 'later', anchorKey: 'zz' }],
+    expect: { queue: THREE, changed: false, refused: 'anchor-not-queued' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN a duplicate own id is refused',
+    fn: 'applyQueueOp', args: [['own:a1', 'q1'], { op: 'add-own', questionKey: 'own:a1', place: 'end' }],
+    expect: { queue: ['own:a1', 'q1'], changed: false, refused: 'duplicate' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN add-own refuses a set key (it is not own:)',
+    fn: 'applyQueueOp', args: [THREE, { op: 'add-own', questionKey: 'q9', place: 'next' }],
+    expect: { queue: THREE, changed: false, refused: 'not-own' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN the 24 cap holds for own questions too (F7)',
+    fn: 'applyQueueOp', args: [FULL, { op: 'add-own', questionKey: 'own:a1', place: 'next' }],
+    expect: { queue: FULL, changed: false, refused: 'full' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN edit-own never moves anything; a queued key answers row-only',
+    fn: 'applyQueueOp', args: [['own:a1', 'q1'], { op: 'edit-own', questionKey: 'own:a1' }],
+    expect: { queue: ['own:a1', 'q1'], changed: false, refused: 'row-only' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN edit-own of an own key no longer queued answers not-queued',
+    fn: 'applyQueueOp', args: [['q1'], { op: 'edit-own', questionKey: 'own:a1' }],
+    expect: { queue: ['q1'], changed: false, refused: 'not-queued' },
+    identity: 'same',
+  },
+  {
+    name: 'OWN remove of an own key takes it out like any entry',
+    fn: 'applyQueueOp', args: [['q1', 'own:a1'], { op: 'remove', questionKey: 'own:a1' }],
+    expect: { queue: ['q1'], changed: true, refused: null },
+  },
+  {
+    name: 'AFTER moves a queued key to just after the anchor',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'after', questionKey: 'q1', anchorKey: 'q3' }],
+    expect: { queue: ['q2', 'q3', 'q1', 'q4', 'q5'], changed: true, refused: null },
+  },
+  {
+    name: 'AFTER where it already is is at-edge',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'after', questionKey: 'q4', anchorKey: 'q3' }],
+    expect: { queue: FIVE, changed: false, refused: 'at-edge' },
+    identity: 'same',
+  },
+  {
+    name: 'AFTER itself is refused',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'after', questionKey: 'q2', anchorKey: 'q2' }],
+    expect: { queue: FIVE, changed: false, refused: 'same' },
+    identity: 'same',
+  },
+  {
+    name: 'AFTER with no anchor is refused',
+    fn: 'applyQueueOp', args: [FIVE, { op: 'after', questionKey: 'q2' }],
+    expect: { queue: FIVE, changed: false, refused: 'no-anchor' },
+    identity: 'same',
+  },
+  {
+    name: 'AFTER refuses to grow past the cap through the walk',
+    fn: 'applyQueueOp', args: [FULL.slice(0, 23), { op: 'after', questionKey: 'own:x', anchorKey: 'b2', through: ['b1', 'b2'] }],
+    expect: { queue: FULL.slice(0, 23), changed: false, refused: 'full' },
+    identity: 'same',
+  },
+  { name: 'isOwnKey knows own: keys', fn: 'isOwnKey', args: ['own:a1'], expect: true },
+  { name: 'isOwnKey refuses a bare prefix', fn: 'isOwnKey', args: ['own:'], expect: false },
 ];
 
 /**
@@ -387,7 +491,7 @@ check('QUEUE_MAX is 24 in both — the same 24 as the host masks', () => {
   assert.strictEqual(back.QUEUE_MAX, 24);
 });
 check('QUEUE_OPS is the same closed enum in both', () => {
-  assert.deepStrictEqual(front.QUEUE_OPS, ['add', 'remove', 'earlier', 'later', 'first']);
+  assert.deepStrictEqual(front.QUEUE_OPS, ['add', 'remove', 'earlier', 'later', 'first', 'add-own', 'edit-own', 'after']);
   assert.deepStrictEqual(back.QUEUE_OPS, front.QUEUE_OPS);
 });
 

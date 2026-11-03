@@ -55,7 +55,15 @@ const renderPanel = (props = {}) => render(
   />,
 );
 
-const openQuestions = () => fireEvent.click(screen.getByRole('tab', { name: /questions/i }));
+/* Up next's Choose from the set step (docs/design/session-menu D4): the
+   browser, an inline step of Up next since the redesign. */
+const openUpNext = () => fireEvent.click(screen.getByRole('tab', { name: 'Up next' }));
+const openQuestions = () => { openUpNext(); fireEvent.click(screen.getByTestId('up-next-choose')); };
+/* Ask now sits in each row's ⋯ (fork F3). */
+const rowMenuItem = (row, id) => {
+  fireEvent.click(within(row).getByTestId('browser-row-menu'));
+  return within(row).getByTestId(`browser-row-menu-${id}`);
+};
 
 /** The browser row whose title contains `text`. */
 const browserRow = (text) => screen.getAllByTestId('browser-row')
@@ -66,27 +74,29 @@ describe('the queue on the questions tab', () => {
     // rejects: putting the queue below sixty question rows, where a host would
     // scroll past everything they might add to reach what they already chose.
     // Document order is assertable in jsdom; geometry is not.
+    // Since the redesign the browser is not drawn until asked for: Up next
+    // opens on the running order, and Choose from the set is a step of it.
     const { container } = renderPanel();
+    openUpNext();
+    expect(container.querySelector('.setup-q')).toBeTruthy();
+    expect(container.querySelector('.setup-qb__list')).toBeNull();
     openQuestions();
-
-    const queue = container.querySelector('.setup-q');
-    const list = container.querySelector('.setup-qb__list');
-    expect(queue).toBeTruthy();
-    expect(list).toBeTruthy();
-    // eslint-disable-next-line no-bitwise
-    expect(queue.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('.setup-qb__list')).toBeTruthy();
   });
 
   test('every browser row offers Queue, Ask next AND Ask now, least disruptive first', () => {
     // rejects: one button doing two jobs. The owner: "'ask next' in most
     // people's mind means put it at the top of the queue, not run it now" —
-    // so the interrupt is `Ask now`, and `Ask next` is a queue op.
+    // so the interrupt is `Ask now`, and `Ask next` is a queue op. Since the
+    // redesign (fork F3) Ask now is one step further away, in the row's ⋯.
     renderPanel();
     openQuestions();
 
     for (const row of screen.getAllByTestId('browser-row')) {
-      expect(within(row).getAllByRole('button').map((b) => b.textContent))
-        .toEqual(['Queue', 'Ask next', 'Ask now']);
+      expect(within(row).getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label')))
+        .toEqual(['Queue', 'Ask next', expect.stringMatching(/^More for /)]);
+      expect(rowMenuItem(row, 'ask-now')).toHaveTextContent(/^Ask now/);
+      fireEvent.keyDown(document, { key: 'Escape' });
     }
   });
 
@@ -110,7 +120,7 @@ describe('the queue on the questions tab', () => {
     renderPanel({ onQueueFirst, onQueueQuestion, onSelectQuestion });
     openQuestions();
 
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask now$/i }));
+    fireEvent.click(rowMenuItem(browserRow('pricing power'), 'ask-now'));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
     expect(onQueueFirst).not.toHaveBeenCalled();
     expect(onQueueQuestion).not.toHaveBeenCalled();
@@ -128,10 +138,13 @@ describe('the queue on the questions tab', () => {
     // would silently drop at the end of the round.
     renderPanel({ usedQuestionIds: ['q-1'] });
     openQuestions();
+    fireEvent.click(screen.getByTestId('hide-asked'));
     const row = browserRow('pricing power');
     expect(within(row).getByRole('button', { name: /^queue$/i })).toBeDisabled();
     expect(within(row).getByRole('button', { name: /^ask next$/i })).toBeDisabled();
-    expect(within(row).getByRole('button', { name: /^ask again now$/i })).toBeEnabled();
+    const again = rowMenuItem(row, 'ask-now');
+    expect(again).toHaveTextContent(/^Ask again now/);
+    expect(again).toBeEnabled();
   });
 
   test('the running order\'s rows ask next and ask now too, through the same two props', () => {
@@ -140,14 +153,16 @@ describe('the queue on the questions tab', () => {
     const onQueueFirst = jest.fn();
     const onSelectQuestion = jest.fn();
     renderPanel({ questionQueue: ['q-1', 'q-2'], onQueueFirst, onSelectQuestion });
-    openQuestions();
+    openUpNext();
     const rows = screen.getAllByTestId('queue-row');
 
-    fireEvent.click(within(rows[1]).getByRole('button', { name: /^ask next/i }));
+    fireEvent.click(within(rows[1]).getByTestId('queue-row-menu'));
+    fireEvent.click(within(rows[1]).getByTestId('queue-row-menu-ask-next'));
     expect(onQueueFirst).toHaveBeenCalledWith('q-2', expect.anything());
     expect(onSelectQuestion).not.toHaveBeenCalled();
 
-    fireEvent.click(within(rows[1]).getByRole('button', { name: /^ask now/i }));
+    fireEvent.click(within(rows[1]).getByTestId('queue-row-menu'));
+    fireEvent.click(within(rows[1]).getByTestId('queue-row-menu-ask-now'));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[1]);
   });
 
@@ -219,7 +234,7 @@ describe('the queue on the questions tab', () => {
     renderPanel({ questionQueue: ['q-1'], onSelectQuestion });
     openQuestions();
 
-    fireEvent.click(within(browserRow('pricing power')).getByRole('button', { name: /^ask now$/i }));
+    fireEvent.click(rowMenuItem(browserRow('pricing power'), 'ask-now'));
     expect(onSelectQuestion).toHaveBeenCalledWith(questions[0]);
   });
 
@@ -230,7 +245,7 @@ describe('the queue on the questions tab', () => {
     // coming home, and the row would move twice.
     const onQueueMove = jest.fn();
     renderPanel({ questionQueue: ['q-1', 'q-2'], onQueueMove });
-    openQuestions();
+    openUpNext();
 
     const before = screen.getAllByTestId('queue-row').map((r) => r.textContent);
     fireEvent.click(screen.getAllByTestId('queue-row')[1]

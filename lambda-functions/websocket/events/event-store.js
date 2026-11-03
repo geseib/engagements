@@ -72,6 +72,13 @@ function projectEvent(row) {
     out.breakCount = Number(r.BreakCount) || 0;
     out.attendeeReports = r.AttendeeReports || 'full';
     out.createdAt = r.CreatedAt || null;
+    // Who made it (create-event.js, since 2026-10-31), decrypted. '' on an
+    // event from before, and on a row whose words could not be opened.
+    out.hostName = typeof r.HostName === 'string' ? r.HostName : '';
+    out.teamName = typeof r.TeamName === 'string' ? r.TeamName : '';
+    // The creator's user id, so a host's page can tell its own events from a
+    // colleague's (the summary PDF's fallback for events made before HostName).
+    out.createdBy = typeof r.CreatedBy === 'string' ? r.CreatedBy : '';
     out.updatedAt = r.UpdatedAt || null;
   }
   return out;

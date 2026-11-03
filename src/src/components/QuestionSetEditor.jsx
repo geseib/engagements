@@ -4,6 +4,7 @@ import Icon from './Icon';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import PromptShapePreview from './PromptShapePreview';
 import RoundKindPicker from './RoundKindPicker';
@@ -190,6 +191,16 @@ export default function QuestionSetEditor({
   onAppeal,
   /** Where this set lives, in words, for "Add questions" (QuestionsPanel). */
   libraryLabel = '',
+  /*
+   * THE EDITOR AS A PLACE (experience plan 5e). The host's set editor is a
+   * page of its own now (components/QuestionSetPage.jsx), whose bar carries
+   * the set's name and the way back — so the dialog head here would say the
+   * same thing twice. `inPlace` drops it; the Details and footer exits stay.
+   * `closeRef` hands the page this editor's `requestClose`, so the page's Back
+   * asks about an unsaved working copy exactly as every other exit does.
+   */
+  inPlace = false,
+  closeRef = null,
   onCancel
 }) {
   const setId = questionSet?.id || '';
@@ -518,6 +529,7 @@ export default function QuestionSetEditor({
     }
     onCancel();
   }, [onCancel, questionsDirty]);
+  if (closeRef) closeRef.current = onCancel ? requestClose : null;
 
   /* ------------------------------------------------ AI drafting the details */
 
@@ -1087,24 +1099,16 @@ export default function QuestionSetEditor({
         `×` that is wired to nothing is worse than no `×` — it is the control
         people reach for first, so it must never be the one that does nothing.
       */}
-      <div className="qs-dialog-head">
-        <h2>
-          <Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />{' '}
-          Edit Question Set
-        </h2>
-        {onCancel && (
-          <button
-            type="button"
-            className="qs-dialog-close"
-            onClick={requestClose}
-            aria-label="Close the editor"
-            title="Close the editor"
-            data-testid="qs-editor-close"
-          >
-            ×
-          </button>
-        )}
-      </div>
+      {!inPlace && (
+        <DialogHead
+          className="qs-dialog-head"
+          title={<><Icon name="PencilSimple" weight="bold" size={16} color="currentColor" />{' '}Edit question set</>}
+          onClose={onCancel ? requestClose : undefined}
+          closeLabel="Close the editor"
+          closeClassName="qs-dialog-close"
+          closeProps={{ title: 'Close the editor', 'data-testid': 'qs-editor-close' }}
+        />
+      )}
       <p className="section-description">
         {currentSet.name || setId} · {gameTypeLabel(currentSet.engagementType)} ·{' '}
         {currentSet.totalQuestions || 0} questions in {currentSet.categoryCount || 0} categories
@@ -1598,7 +1602,7 @@ export default function QuestionSetEditor({
                 {/* The designed default, in the same words the empty state and
                     the warning below use — "Use default prompt for game type"
                     named the implementation in a row that no longer does. */}
-                <option value="">The standard way for this game type (recommended)</option>
+                <option value="">The standard way for this format (recommended)</option>
                 {summaryPromptChoices.map((prompt) => (
                   <option key={prompt.promptId} value={prompt.promptId}>
                     {prompt.name}
@@ -1608,12 +1612,12 @@ export default function QuestionSetEditor({
                 ))}
               </select>
               <small className="help-text" data-testid="workie-prompt-help">
-                The summary approach Workie follows for <strong>{gameTypeLabel(engagementType)}</strong>
+                How Workie reads each round of <strong>{gameTypeLabel(engagementType)}</strong>
                 {' '}sets. Most sets want the standard one.
                 {resolvedPrompt && ` Currently: ${resolvedPrompt.name}.`}
                 {hiddenPromptCount > 0 && ` ${hiddenPromptCount} prompt${
                   hiddenPromptCount === 1 ? '' : 's'
-                } for other game types are hidden.`}
+                } for other formats are hidden.`}
               </small>
               {promptsKnown && prompts.length === 0 && (
                 <small className="help-text" data-testid="workie-prompt-empty">
@@ -2038,22 +2042,20 @@ export default function QuestionSetEditor({
           labelledBy="qs-editor-confirm-close-title"
           onClose={() => setConfirmClose(false)}
         >
-          <h3 id="qs-editor-confirm-close-title">
-            <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
-            You have unsaved questions
-          </h3>
+          <DialogHead titleId="qs-editor-confirm-close-title" title={<><Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+            You have unsaved questions</>} as="h3" onClose={() => setConfirmClose(false)} />
           <p>
             The Questions panel has changes that have not been saved. Closing the editor
             throws them away — there is no draft kept anywhere.
           </p>
-          <div className="modal-actions">
+          <DialogFoot className="modal-actions">
             <button className="btn-secondary" onClick={() => setConfirmClose(false)}>
               Go back and save them
             </button>
             <button className="btn-danger" onClick={() => { setConfirmClose(false); if (onCancel) onCancel(); }}>
               Close and lose the changes
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -2066,10 +2068,8 @@ export default function QuestionSetEditor({
           labelledBy="qs-pinned-delete-title"
           onClose={() => setPendingDelete(null)}
         >
-            <h3 id="qs-pinned-delete-title">
-              <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
-              Version {pendingDelete.version} is in play
-            </h3>
+            <DialogHead titleId="qs-pinned-delete-title" title={<><Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+              Version {pendingDelete.version} is in play</>} as="h3" onClose={() => setPendingDelete(null)} />
             <p>{pendingDelete.message}</p>
             {pendingDelete.pinnedByGames.length > 0 && (
               <ul className="qs-pinned-games">
@@ -2082,17 +2082,16 @@ export default function QuestionSetEditor({
               Those engagements read their questions from version {pendingDelete.version} while
               they run. Deleting it now will break them mid-session.
             </p>
-            <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setPendingDelete(null)}>
+            <DialogFoot className="modal-actions" cancel={<button className="btn-secondary" onClick={() => setPendingDelete(null)}>
                 Keep version {pendingDelete.version}
-              </button>
+              </button>}>
               <button
                 className="btn-danger"
                 onClick={() => deleteVersion(pendingDelete.version, true)}
               >
                 Delete it anyway
               </button>
-            </div>
+            </DialogFoot>
         </Modal>
       )}
     </div>

@@ -3,7 +3,7 @@
  * Behaviour only; jsdom has no layout, so nothing here measures anything.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import NewSetDialog from '../components/NewSetDialog';
 
 const draw = (props = {}) => {
@@ -45,20 +45,28 @@ describe('NewSetDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('asks before discarding a typed title, and Escape is held', () => {
+  it('asks before discarding a typed title, and Escape is held', async () => {
     const { onClose } = draw();
     fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Offsite trivia' } });
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
 
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    // The small confirm dialog (useConfirm, experience plan 5c), never the
+    // browser's window.confirm.
+    const browser = jest.spyOn(window, 'confirm');
     fireEvent.click(screen.getByTestId('newset-close'));
-    expect(confirm).toHaveBeenCalled();
+    const ask = await screen.findByRole('dialog', { name: 'Close without importing?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep editing' }));
+    await act(async () => {});
     expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Close without importing?' })).toBeNull();
 
-    confirm.mockReturnValue(true);
     fireEvent.click(screen.getByTestId('newset-close'));
+    const again = await screen.findByRole('dialog', { name: 'Close without importing?' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Discard' }));
+    await act(async () => {});
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(browser).not.toHaveBeenCalled();
   });
 
   it('Generate with AI closes this dialog and opens the builder', () => {

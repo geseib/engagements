@@ -24,9 +24,10 @@ const playerSurveys = {
   sections: [
     /*
       PlayerPage join form, survey brief: "Used to get you back in if you lose
-      this page." + the Names phone promise. SurveyRunner not-started: "You're
-      in", "Joined as {name}.", "The survey opens when your host is ready.
-      This page will change on its own."; loading "Loading the survey…";
+      this page." + the Names phone promise. SurveyRunner not-started (the one
+      wait, config/playerWords.js WAIT): "You're in as {name}", "Waiting for
+      the host.", "The survey opens when your host is ready. This page changes
+      on its own."; loading "Loading the survey…";
       error "The survey did not load." + Try again. Checked on dev.
     */
     {
@@ -176,7 +177,8 @@ const playerSurveys = {
       Back, "Send my answers" (disabled: "Question N needs an answer before you
       can send." / "Answer at least one question to send."); sent: "Thanks,
       {name} — that's everything.", "Your answers are in. You can still change
-      them…", "Change my answers". Checked on dev.
+      them…", "Change my answers" (in the dock since experience plan 3d) beside
+      "Sent" with a check where Send was (owner, 3 Nov 2026). Checked on dev.
     */
     {
       id: 'checking-and-sending',
@@ -193,7 +195,7 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Your phone then says your answers are in. **Change my answers** takes you back to the list until the host closes the survey. Changes save as you make them.',
+          text: 'Your phone then says your answers are in, and the button at the bottom reads **Sent** with a tick. **Change my answers**, beside it, takes you back to the list until the host closes the survey. Changes save as you make them.',
         },
         {
           t: 'note',
@@ -210,9 +212,12 @@ const playerSurveys = {
       closed: "The survey is closed." + "Thanks, {name}. Everything you
       answered counts, whether or not you pressed Send." / "Your host has
       closed it, so there is nothing more to answer.", "Your host may put the
-      results on the main screen. Nobody's name is shown there."; ended:
-      "That's a wrap", "Thanks for taking part, {name}.", "The session is
-      over. You can close this page." Checked on dev.
+      results on the room’s screen. Nobody's name is shown there."; ended:
+      the one ended screen (components/PlayerEnded.jsx, experience plan
+      3a/3e): "That's a wrap", "Thanks for taking part, {name}.", "You can
+      close this page. …"; inside an event instead "This item is finished",
+      "Up next …", "Keep this page open: the next item starts here by itself."
+      and Open the agenda in the dock, never "close this page".
     */
     {
       id: 'when-it-closes',
@@ -225,20 +230,20 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Once it closes, your phone says "The survey is closed." and nothing more can be answered or changed. Everything you answered counts, whether or not you pressed Send. The host may show the results on the main screen, without names.',
+          text: 'Once it closes, your phone says "The survey is closed." and nothing more can be answered or changed. Everything you answered counts, whether or not you pressed Send. The host may show the results on the room’s screen, without names.',
         },
         {
           t: 'p',
-          text: 'When the host ends the session your phone thanks you and says the session is over. You can close the page.',
+          text: 'When the host ends the session your phone thanks you for taking part. On its own you can close the page. Inside an event it says what is up next instead: keep the page open, and **Open the agenda** shows the day so far.',
         },
       ],
     },
     /*
-      PlayerPage ~3379: a closed survey's feedback round, FeedbackRoundPanel
-      with namesShown=false. Dev: "Read it back, then say what you think. Tap
-      Comment on the summary, on the results, or on any single response.",
-      "Results by question", the AI read, "Commenting on", "Your name is not
-      shown with this comment.", Cancel / Post comment.
+      PlayerPage: a closed survey's feedback round, FeedbackRoundPanel with
+      namesShown=false (phone-comments 3b): "Comment on the survey", Workie's
+      read with "Comment on Workie's read", "Results by question" with
+      "Comment on this question" on each card, "Comment on the whole round";
+      "Your name is not shown with this comment.", Cancel / Post comment.
     */
     {
       id: 'comments-afterwards',
@@ -251,7 +256,7 @@ const playerSurveys = {
         },
         {
           t: 'p',
-          text: 'Tap **Comment** on the part you want to talk about, write, and press **Post comment**. In a survey your name is never shown with a comment, and the phone says so. The rest works as in Commenting on a round, in Comments and quick questions.',
+          text: 'Pick what you are talking about: **Comment on Workie’s read**, **Comment on this question** on one question\'s card, or **Comment on the whole round**. Write, and press **Post comment**. In a survey your name is never shown with a comment, and the phone says so. The rest works as in Commenting on a round, in Comments and quick questions.',
         },
       ],
     },

@@ -17,9 +17,11 @@
  */
 import React, { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { questionAnswer } from './buildScreens';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 const stepOf = (opening, key) => (opening.steps || []).find((x) => x.key === key) || null;
 const framed = (x) => ['done', 'skipped'].includes(x.status);
@@ -40,7 +42,7 @@ export function focusStep(opening, focus) {
 }
 
 /** A step's own lead move: orange, unless Connect holds the screen's one orange (`calm`). */
-const lead = (calm) => (calm ? 'brm-btn' : 'brm-btn brm-btn--primary');
+const lead = (calm) => (calm ? 'secondary' : 'primary');
 
 /** Step 1: the list the room picks from, editable per session (up to six, for the wheel). */
 function KindStep({ step, kinds: initial, busy, run, api, calm = false }) {
@@ -76,12 +78,12 @@ function KindStep({ step, kinds: initial, busy, run, api, calm = false }) {
             <div className="brm-row brm-gap" key={i}>
               <input className="brm-input brm-input--sm" aria-label={`Kind ${i + 1}`} value={k.title} maxLength={120} onChange={(e) => set(i, 'title', e.target.value)} />
               <input className="brm-input brm-input--sm" aria-label={`Kind ${i + 1}, in a few words`} value={k.detail || ''} maxLength={120} onChange={(e) => set(i, 'detail', e.target.value)} />
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={`Remove kind ${i + 1}`} disabled={kinds.length <= 2} onClick={() => setKinds((list) => list.filter((_, j) => j !== i))}>Remove</button>
+              <Button type="button" size={36} className="brm-tight" aria-label={`Remove kind ${i + 1}`} disabled={kinds.length <= 2} onClick={() => setKinds((list) => list.filter((_, j) => j !== i))}>Remove</Button>
             </div>
           ))}
           <div className="brm-row brm-gap">
-            {kinds.length < 6 && <button type="button" className="brm-btn brm-btn--sm" onClick={() => setKinds((list) => [...list, { title: '', detail: '' }])}>Add a kind</button>}
-            <button type="button" className="brm-btn brm-btn--sm brm-btn--primary brm-push" onClick={() => setEditing(false)}>Done</button>
+            {kinds.length < 6 && <Button type="button" size={36} className="brm-tight" onClick={() => setKinds((list) => [...list, { title: '', detail: '' }])}>Add a kind</Button>}
+            <Button type="button" variant="primary" size={36} className="brm-tight brm-push" onClick={() => setEditing(false)}>Done</Button>
           </div>
         </div>
       ) : (
@@ -102,14 +104,14 @@ function KindStep({ step, kinds: initial, busy, run, api, calm = false }) {
           {picking ? (
             <>
               <span className="brm-hint">Click the one the room settled on.</span>
-              <button type="button" className="brm-btn brm-btn--ghost brm-push" onClick={() => setPicking(false)}>Back</button>
+              <Button type="button" size={36} className="brm-ctl brm-push" onClick={() => setPicking(false)}>Back</Button>
             </>
           ) : (
             <>
-              <button type="button" className={lead(calm)} disabled={busy || !ready} onClick={ask}>Ask the room to pick</button>
-              <button type="button" className="brm-btn" disabled={busy || !ready} onClick={spin}>{W.spin}</button>
-              <button type="button" className="brm-btn brm-btn--ghost" disabled={busy || !ready} onClick={() => setPicking(true)}>Pick for the room</button>
-              <button type="button" className="brm-btn brm-btn--link brm-push" onClick={() => setEditing(true)}>Edit the list</button>
+              <Button variant={lead(calm)} size={36} className="brm-ctl" disabled={busy || !ready} onClick={ask}>Ask the room to pick</Button>
+              <Button type="button" size={36} className="brm-ctl" disabled={busy || !ready} onClick={spin}>{W.spin}</Button>
+              <Button type="button" size={36} className="brm-ctl" disabled={busy || !ready} onClick={() => setPicking(true)}>Pick for the room</Button>
+              <Button type="button" variant="tertiary" size={36} className="brm-ctl brm-push" onClick={() => setEditing(true)}>Edit the list</Button>
             </>
           )}
         </div>
@@ -139,15 +141,15 @@ function AskStep({ step, busy, run, api, calm = false }) {
           <span className="brm-lbl">Your answer</span>
           <textarea className="brm-input brm-ta brm-ta--sm" aria-label="Your answer" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} />
           <div className="brm-row brm-gap">
-            <button type="submit" className={lead(calm)} disabled={busy || !text.trim()}>Save the answer</button>
-            <button type="button" className="brm-btn" disabled={busy || !q.trim()} onClick={ask}>{step.host ? 'Ask the room instead' : 'Ask the room'}</button>
-            {!step.host && <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setAnswering(false)}>Back</button>}
+            <Button type="submit" variant={lead(calm)} size={36} className="brm-ctl" disabled={busy || !text.trim()}>Save the answer</Button>
+            <Button type="button" size={36} className="brm-ctl" disabled={busy || !q.trim()} onClick={ask}>{step.host ? 'Ask the room instead' : 'Ask the room'}</Button>
+            {!step.host && <Button type="button" size={36} className="brm-ctl" onClick={() => setAnswering(false)}>Back</Button>}
           </div>
         </form>
       ) : (
         <div className="brm-row brm-gap">
-          <button type="button" className={lead(calm)} disabled={busy || !q.trim()} onClick={ask}>Ask the room</button>
-          <button type="button" className="brm-btn" onClick={() => setAnswering(true)}>Answer it yourself</button>
+          <Button variant={lead(calm)} size={36} className="brm-ctl" disabled={busy || !q.trim()} onClick={ask}>Ask the room</Button>
+          <Button type="button" size={36} className="brm-ctl" onClick={() => setAnswering(true)}>Answer it yourself</Button>
         </div>
       )}
     </>
@@ -194,8 +196,8 @@ export function DraftCard({ room, busy, run, api }) {
         </fieldset>
       )}
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => run(() => api.settleDraft('dismiss'))}>Dismiss</button>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !headline.trim()} onClick={accept}>Use this draft</button>
+        <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => run(() => api.settleDraft('dismiss'))}>Dismiss</Button>
+        <Button type="button" variant="primary" size={36} className="brm-ctl brm-push" disabled={busy || !headline.trim()} onClick={accept}>Use this draft</Button>
       </div>
     </section>
   );
@@ -214,17 +216,13 @@ export function StartBuildingConfirm({ opening, busy, run, api, onClose }) {
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={onClose} closeOnBackdrop={() => !busy} closeOnEscape={() => !busy} labelledBy="brm-startbuild-title">
-      <div className="brm-dh">
-        <h2 className="brm-h" id="brm-startbuild-title">Start building?</h2>
-        <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-dh" titleId="brm-startbuild-title" title="Start building?" titleClassName="brm-h" onClose={onClose} closeClassName="brm-x" />
       <p>{W.startConfirmFramed(n, of, more)}</p>
       {/* Where it really is (host review, 25 Oct 2026): there is no More. */}
       <p className="brm-hint">Nothing is lost: Back to the opening, under SESSION, returns to these steps and tells Claude to pause.</p>
-      <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Keep framing</button>
-        <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={start}>Start building</button>
-      </div>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={onClose}>Keep framing</Button>}>
+        <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy} onClick={start}>Start building</Button>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -262,8 +260,8 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
               <p className="brm-op-value">{step.value}</p>
               {!ended && (
                 <div className="brm-row brm-gap">
-                  <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.openingAction('reopen', { step: step.key }))}>Ask it again</button>
-                  <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setFocus(null)}>Next step</button>
+                  <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.openingAction('reopen', { step: step.key }))}>Ask it again</Button>
+                  <Button type="button" size={36} className="brm-tight" onClick={() => setFocus(null)}>Next step</Button>
                 </div>
               )}
             </div>
@@ -274,7 +272,7 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
           )}
           {!ended && step.status !== 'done' && (
             <div className="brm-row brm-gap">
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} onClick={() => run(async () => { await api.openingAction('skip', { step: step.key }); setFocus(null); return true; })}>Skip this step</button>
+              <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} onClick={() => run(async () => { await api.openingAction('skip', { step: step.key }); setFocus(null); return true; })}>Skip this step</Button>
             </div>
           )}
         </>
@@ -285,13 +283,13 @@ export function OpeningPanel({ room, focus, setFocus, busy, ended, run, api, onS
         <div className="brm-op-start">
           <span>{W.openingFramed(count.n, count.of, count.more)}</span>
           {opening.readyForDraft && !room.briefDraft && (
-            <button type="button" className="brm-btn brm-btn--sm" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
-              onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true }))}>
+            <Button type="button" size={36} className="brm-tight" disabled={busy} title="Claude writes a headline and a short summary from what the room said"
+              onClick={() => run(() => api.postDirection('Draft the one-page build brief now with draft_brief: a headline and two or three sentences, in the room\'s words.', 'do-now', null, { hideFromRoom: true, engagePrompt: 'draft-brief' }))}>
               {opening.drafted ? 'Ask Claude to redraft the brief' : 'Ask Claude to draft the brief'}
-            </button>
+            </Button>
           )}
-          <button type="button" className="brm-btn brm-btn--sm" onClick={onShowWall}>Show the brief on the wall</button>
-          <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => setConfirming(true)}>Start building</button>
+          <Button type="button" size={36} className="brm-tight" onClick={onShowWall}>Show the brief on the wall</Button>
+          <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => setConfirming(true)}>Start building</Button>
         </div>
       )}
       {confirming && <StartBuildingConfirm opening={opening} busy={busy} run={run} api={api} onClose={() => setConfirming(false)} />}
@@ -323,7 +321,7 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
       </button>
       {!ended && st.status === 'done' && st.probes.length > 0 && (
         <div className="brm-bp-probes" role="group" aria-label={`Probe ${st.label}`}>
-          {st.probes.map((p) => <button key={p} type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => probe(st, p)}>{p}</button>)}
+          {st.probes.map((p) => <Button key={p} type="button" size={36} className="brm-tight" disabled={busy} onClick={() => probe(st, p)}>{p}</Button>)}
         </div>
       )}
     </li>
@@ -340,7 +338,7 @@ export function BriefPath({ room, focus, setFocus, busy, ended, run, api }) {
       <ol className="brm-bp">{coreSteps(opening).map(line)}</ol>
       {more.length > 0 && (
         <details className="brm-bp-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
-          <summary>{W.openingMore}<span className="brm-muted">{` · ${W.openingMoreHint(more.length)}`}</span></summary>
+          <summary>{W.openingMore}<span className="brm-muted">{` · ${W.openingMoreHint(more.filter((x) => !framed(x)).length, more.length)}`}</span></summary>
           <ol className="brm-bp">{more.map(line)}</ol>
         </details>
       )}

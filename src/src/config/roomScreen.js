@@ -23,7 +23,7 @@ export const ROOM_WORDS = Object.freeze({
   chosen: 'Chosen',
   keepChoice: 'Keep this choice',
   helpMePick: 'Help me pick',
-  remembers: 'This browser remembers your choice. Change it any time in Setup.',
+  remembers: 'This browser remembers your choice, so next time Start skips this step. Change it any time in Setup.',
   backToChoices: 'Back to the two choices',
   helpHeading: 'Help me pick',
   q1: 'Is this laptop connected to the projector or TV?',

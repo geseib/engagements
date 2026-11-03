@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import HelpButton from './HelpButton';
-import { helpFor } from '../config/help/screens';
+import AIBuilderDialog from './AIBuilderDialog';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 import FileUploadPrompt from './FileUploadPrompt';
 import { authFetch } from '../auth/authFetch';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
@@ -121,6 +122,8 @@ function AIScenarioBuilder({
 }) {
   /* WHERE, THE SLOT, AND THE HAND-OFF — hooks/useDraftRun.js. */
   const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  // The small confirm dialog, not the browser's (experience plan 5b/5e).
+  const [askConfirm, confirmDialog] = useConfirm();
   const runRef = useRef(run);
   runRef.current = run;
   const [step, setStep] = useState(1);
@@ -1087,13 +1090,25 @@ function AIScenarioBuilder({
       || (interpreted.outcome === 'partial' && reviewingPartial));
 
   /** See TriviaAIBuilder.requestClose — same contract, same reasons. */
-  const requestClose = () => {
+  const requestClose = async () => {
     if (isAppend(appendTo) && reviewing && keptScenarios.length > 0
-      && !window.confirm('Close without adding these scenarios? They have not been added and will be lost.')) {
+      && !(await askConfirm({
+        title: 'Close without adding these scenarios?',
+        message: 'They have not been added and will be lost.',
+        confirmText: 'Close and lose them',
+        cancelText: 'Keep reviewing',
+        danger: true,
+      }))) {
       return;
     }
     onClose();
   };
+
+  /** What this builder writes, in the words its title and buttons use. */
+  const itemsNoun = engagementType === 'trivia' ? 'trivia questions'
+    : engagementType === 'poll' ? 'poll questions'
+      : engagementType === 'wavelength' ? 'wavelength prompts'
+        : 'scenarios';
 
   /** A scenario with no prompt text is nothing a room can respond to. */
   const scenarioDefect = (scenario) => {
@@ -1155,18 +1170,44 @@ function AIScenarioBuilder({
     return 'Leadership, Management, Communication...';
   };
 
-  return (
-    <div className="ai-scenario-builder-modal">
-      <div className="modal-overlay" onClick={requestClose}></div>
-      <div className="modal-content scenario-builder" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> AI {engagementType === 'trivia' ? 'Trivia' : engagementType === 'poll' ? 'Poll' : engagementType === 'wavelength' ? 'Wavelength' : 'Scenario'} Builder{isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}</h2>
-          {/* The AI builders' guide (Help Phase 3), beside the X. */}
-          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
-          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
-        </div>
+  /* The window's foot (AIBuilderDialog draws it): the way back on the left, the action on the right. */
+  const footCancel = step === 1 ? (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      ) : step === 2 ? (
+        <Button size={44} onClick={() => setStep(1)}>
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back
+        </Button>
+      ) : step === 3 && reviewing ? (
+        <Button size={44} onClick={backToConfiguration}>
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to the form
+        </Button>
+      ) : null;
+  const footActions = (
+    <>
+      {step === 2 && (
+        <Button variant="primary" size={44} onClick={handleConfigSubmit}>
+          <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" /> Generate {itemsNoun}
+        </Button>
+      )}
+      {step === 3 && reviewing && (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      )}
+    </>
+  );
 
-        <div className="modal-body">
+  return (
+    <AIBuilderDialog
+      kind="scenario"
+      className="scenario-builder"
+      titleId="scenario-builder-title"
+      title={`Generate ${itemsNoun}${isAppend(appendTo) ? ` — adding to “${appendTo.setName}”` : ''}`}
+      icon={<Icon name="Sparkle" weight="duotone" size={20} color="var(--primary)" />}
+      onClose={requestClose}
+      closeLabel="Close the generator"
+      cancel={footCancel}
+      actions={footActions}
+    >
+        {confirmDialog}
           {step === 1 && (
             <div className="scenario-type-selection">
               <AppendModeSwitch appendTo={appendTo} />
@@ -1315,9 +1356,9 @@ function AIScenarioBuilder({
                           <div className="prompts-error">
                             <p><Icon name="Warning" weight="fill" size={16} color="var(--primary)" /> {promptsError}</p>
                             <p>Using default templates as fallback.</p>
-                            <button onClick={fetchAvailablePrompts} className="btn-secondary">
-                              Retry Loading
-                            </button>
+                            <Button size={36} onClick={fetchAvailablePrompts}>
+                              Try again
+                            </Button>
                           </div>
                         ) : availablePrompts.length === 0 ? (
                           <div className="no-prompts">
@@ -1366,15 +1407,13 @@ function AIScenarioBuilder({
                 if (!blank) return null;
                 return (
                   <div className="scenario-continue-row">
-                    <button
-                      type="button"
-                      className="btn-secondary"
+                    <Button size={36}
                       data-testid="scenario-continue-blank"
                       disabled={kindGaps.length > 0}
                       onClick={() => handleTypeSelection(blank.id)}
                     >
                       {'Or just continue — describe it yourself on the next step →'}
-                    </button>
+                    </Button>
                   </div>
                 );
               })()}
@@ -1383,7 +1422,7 @@ function AIScenarioBuilder({
 
           {step === 2 && (
             <div className="scenario-configuration">
-              <h3>Configure Your {engagementType === 'trivia' ? 'Trivia Questions' : engagementType === 'poll' ? 'Poll Questions' : engagementType === 'wavelength' ? 'Wavelength Prompts' : 'Scenarios'}</h3>
+              <h3 className="aib-step">Describe the {itemsNoun} you want</h3>
               {/* Only ever set on this step by the resume path, when the stored
                   job id has outlived the job record's three-day TTL. */}
               <StatusMessage message={generationStatus} tone="pending" />
@@ -1447,7 +1486,7 @@ function AIScenarioBuilder({
                     disabled: a title box here implies the run makes a set. */}
                 <div className="form-group" style={isAppend(appendTo) ? { display: 'none' } : undefined}>
                   <div className="label-row">
-                    <label>Question Set Title</label>
+                    <label>Set title</label>
                     {lockFor('customTitle')}
                   </div>
                   <input
@@ -1460,7 +1499,7 @@ function AIScenarioBuilder({
 
                 <div className="form-group">
                   <div className="label-row">
-                    <label>Context/Background</label>
+                    <label>Context or background</label>
                     {lockFor('context')}
                   </div>
                   <textarea
@@ -1473,7 +1512,7 @@ function AIScenarioBuilder({
 
                 <div className="form-group">
                   <div className="label-row">
-                    <label>Target Audience</label>
+                    <label>Audience</label>
                     {lockFor('audience')}
                   </div>
                   <input
@@ -1512,7 +1551,7 @@ function AIScenarioBuilder({
                   />
                   <div className="form-group" style={appendsToExisting(appendTo) ? { display: 'none' } : undefined}>
                     <div className="label-row">
-                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Categories it must include'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input
@@ -1527,7 +1566,7 @@ function AIScenarioBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <label>
-                      {engagementType === 'trivia' ? 'Difficulty Level' : 'Level of Detail'}
+                      {engagementType === 'trivia' ? 'Difficulty' : 'Level of detail'}
                     </label>
                     <select
                       value={scenarioConfig.difficulty}
@@ -1620,7 +1659,7 @@ function AIScenarioBuilder({
                   <b>
                     {interpreted.createdSet
                       ? `Done. The set is saved as “${interpreted.createdSet.setName}”: open it to check and edit each one.`
-                      : `Done. Check each ${singularNoun(engagementType)} below, then press ${isAppend(appendTo) ? `Add ${keptScenarios.length}` : `Load ${keptScenarios.length} into System`}.`}
+                      : `Done. Check each ${singularNoun(engagementType)} below, then press ${isAppend(appendTo) ? `Add ${keptScenarios.length}` : `Save ${keptScenarios.length} as a new set`}.`}
                   </b>
                   {!interpreted.createdSet && (
                     <small>Edit opens one; Leave out drops it. Nothing is saved until you {isAppend(appendTo) ? 'add' : 'load'} them.</small>
@@ -1678,18 +1717,18 @@ function AIScenarioBuilder({
                   ]}
                   actions={(
                     <>
-                      <button className="btn-secondary" onClick={handleExportCSV}>
+                      <Button size={36} onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
-                      </button>
+                      </Button>
                       {interpreted.createdSet ? (
-                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                        <Button variant="primary" size={36} onClick={handleOpenCreatedSet}>
                           <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
                           Open &ldquo;{interpreted.createdSet.setName}&rdquo;
-                        </button>
+                        </Button>
                       ) : (
-                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptScenarios.length} to “${appendTo.setName}”` : `Load ${keptScenarios.length} into System`}
-                        </button>
+                        <Button variant="primary" size={36} onClick={handleLoadIntoSystem} disabled={keptScenarios.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptScenarios.length} to “${appendTo.setName}”` : `Save ${keptScenarios.length} as a new set`}
+                        </Button>
                       )}
                     </>
                   )}
@@ -1697,26 +1736,28 @@ function AIScenarioBuilder({
               ) : (
                 <div className="scenario-review">
                   <div className="scenario-navigation">
-                    <button
-                      className="nav-button prev"
+                    <Button
+                      size={36}
+                      className="aib-nav-prev"
                       onClick={() => navigateScenario('prev')}
                       disabled={currentScenarioIndex === 0}
                     >
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
-                    </button>
+                    </Button>
                     
                     <div className="scenario-counter">
                       <span>Scenario {currentScenarioIndex + 1} of {generatedScenarios.length}</span>
                       <h3>{currentScenario?.title}</h3>
                     </div>
                     
-                    <button
-                      className="nav-button next"
+                    <Button
+                      size={36}
+                      className="aib-nav-next"
                       onClick={() => navigateScenario('next')}
                       disabled={currentScenarioIndex === generatedScenarios.length - 1}
                     >
                       Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="scenario-editor">
@@ -1739,7 +1780,7 @@ function AIScenarioBuilder({
                     </div>
 
                     <div className="form-group">
-                      <label>Scenario Details</label>
+                      <label>Scenario details</label>
                       <textarea
                         value={currentScenario?.detail || ''}
                         onChange={(e) => handleScenarioEdit(currentScenarioIndex, 'detail', e.target.value)}
@@ -1748,7 +1789,7 @@ function AIScenarioBuilder({
                     </div>
 
                     <div className="form-group">
-                      <label>Custom Instructions</label>
+                      <label>Custom instructions</label>
                       <textarea
                         value={currentScenario?.customInstructions || ''}
                         onChange={(e) => handleScenarioEdit(currentScenarioIndex, 'customInstructions', e.target.value)}
@@ -1789,53 +1830,20 @@ function AIScenarioBuilder({
                   </div>
 
                   <div className="scenario-actions">
-                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                    <Button size={36} onClick={() => { setTagDraft(null); setEditingItem(false); }}>
                       <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedScenarios.length} scenarios
-                    </button>
-                    <button
-                      className="btn-secondary"
+                    </Button>
+                    <Button size={36}
                       onClick={() => toggleExcluded(currentScenarioIndex)}
                     >
                       {excluded.has(currentScenarioIndex) ? 'Put this one back' : 'Leave this one out'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {step === 1 && (
-            <>
-              <button className="btn-secondary" onClick={onClose}>
-                Cancel
-              </button>
-            </>
-          )}
-          {step === 2 && (
-            <>
-              <button className="btn-secondary" onClick={() => setStep(1)}>
-                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back
-              </button>
-              <button className="btn-primary" onClick={handleConfigSubmit}>
-                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Scenarios
-              </button>
-            </>
-          )}
-          {step === 3 && reviewing && (
-            <>
-              <button className="btn-secondary" onClick={backToConfiguration}>
-                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-              </button>
-              <button className="btn-secondary" onClick={requestClose}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </AIBuilderDialog>
   );
 }
 

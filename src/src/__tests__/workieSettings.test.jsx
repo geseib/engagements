@@ -146,7 +146,7 @@ describe('the editor shows Workie as one setting with two plain rows', () => {
     renderEditor();
     expect(screen.getByTestId('workie-group-help').textContent).toMatch(/after each round/i);
     expect(screen.getByTestId('workie-voice-help').textContent).toMatch(/register/i);
-    expect(screen.getByTestId('workie-prompt-help').textContent).toMatch(/summary approach/i);
+    expect(screen.getByTestId('workie-prompt-help').textContent).toMatch(/how workie reads each round/i);
   });
 });
 
@@ -332,7 +332,7 @@ describe('the picker never offers a scope the writer would refuse', () => {
     mockEditorApi();
     renderEditor();
     const help = screen.getByTestId('workie-prompt-help').textContent;
-    expect(help).toMatch(/1 prompt for other game types are hidden/);
+    expect(help).toMatch(/1 prompt for other formats are hidden/);
     expect(help).not.toMatch(/2 prompts/);
   });
 
@@ -441,7 +441,7 @@ function renderDialog(overrides = {}) {
       isFirstEngagement
       // A novice opens with no format (new-engagement README §3.1); these
       // tests are about Call & Answer's plan line.
-      lastFormat="call-and-answer"
+      initialFormat="call-and-answer"
       eventTitle=""
       onEventTitleChange={jest.fn()}
       questionSets={SETS}
@@ -459,7 +459,9 @@ function renderDialog(overrides = {}) {
 
 // The Advanced line now states the plan (session-setup-redesign 01); the old
 // green plan sentence it replaced made the same promise these tests guard.
-const plan = () => screen.getByTestId('gsd-adv-summary');
+/* The full sentence: since New engagement round 4 the closed fold shows a
+   short line and the whole promise opens at the top of the fold's body. */
+const plan = () => screen.getByTestId('gsd-adv-full');
 
 describe('the setup dialog only promises what will happen', () => {
   // rejects: reading `promptId` as proof. The id is a reference into a library
@@ -510,13 +512,17 @@ describe('the setup dialog only promises what will happen', () => {
   });
 
   // rejects: a fetch in the render body, which would re-read the list on every
-  // keystroke in the event-title field.
-  test('the prompt list is read once, when the dialog opens', async () => {
+  // keystroke in the event-title field. Since round 4 the Advanced fold that
+  // reads it appears with the first set picked, so that is when it is read —
+  // once, and not again for the next set.
+  test('the prompt list is read once, when Advanced first appears', async () => {
     const { promptCalls } = mockPromptApi();
     renderDialog();
-    await waitFor(() => expect(promptCalls()).toHaveLength(1));
+    expect(promptCalls()).toHaveLength(0);
     pickSet('platform:lp');
+    await waitFor(() => expect(promptCalls()).toHaveLength(1));
     pickSet('platform:plain');
+    pickSet('platform:ghosted');
     expect(promptCalls()).toHaveLength(1);
   });
 });

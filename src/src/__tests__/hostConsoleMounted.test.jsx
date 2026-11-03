@@ -93,6 +93,24 @@ test('two screens: the console, not the stage, with the host notes beside the re
   expect(container.querySelector('.hc-now .host-action-bar')).toBeTruthy();
 });
 
+/* EXPERIENCE PLAN 2a / 2c ON THE REAL PAGE: the top bar's slots, the pulse,
+   and the Session menu opening as a sheet over the content area only. */
+test('the top bar, the pulse, and the Session menu as a sheet over the content area', async () => {
+  const { container } = render(<GameHostPage />);
+  await waitFor(() => expect(container.querySelector('.hc')).toBeTruthy(), { timeout: 5000 });
+  const slots = [...container.querySelectorAll('.hc-top [data-slot]')].map((n) => n.getAttribute('data-slot'));
+  expect(slots[0]).toBe('main-menu');
+  expect(slots[slots.length - 1]).toBe('session-menu');
+  expect(slots).toEqual(expect.arrayContaining(['name', 'join', 'needs-you', 'help']));
+  expect(container.querySelectorAll('.hc-pulse [data-tile]')).toHaveLength(3);
+  expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
+  await act(async () => { container.querySelector('[data-slot="session-menu"]').click(); });
+  const sheet = await screen.findByRole('dialog', { name: 'Session menu' });
+  expect(sheet.closest('.hc-sheet')).not.toBeNull();
+  expect(sheet.closest('.hc-sheet').contains(container.querySelector('.hc-now'))).toBe(false);
+  expect(container.querySelector('[data-slot="session-menu"]')).toHaveAttribute('aria-expanded', 'true');
+});
+
 test('presentChanged reads the host door again', async () => {
   const { container } = render(<GameHostPage />);
   await waitFor(() => expect(container.querySelector('.hc')).toBeTruthy(), { timeout: 5000 });

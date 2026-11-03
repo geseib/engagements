@@ -37,7 +37,7 @@ const { upgradeRequired, UPGRADE_REQUIRED_STATUS } = require('../pricing');
 const { planLimitResolve } = require('../plan-limit');
 const { recordEventCreated } = require('../platform-metrics');
 const rules = require('./agenda-rules');
-const { json, readBody, trace, callerSub, eventsEnabled } = require('./event-http');
+const { json, readBody, trace, callerSub, callerDisplayName, eventsEnabled } = require('./event-http');
 const { META_SK, indexSk, projectEvent } = require('./event-store');
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -80,6 +80,9 @@ exports.handler = async (request) => {
     }
 
     const now = new Date(nowSeconds * 1000).toISOString();
+    const hostName = callerDisplayName(request);
+    const teamName = allowance && allowance.org && allowance.org.type === 'team'
+      ? String(allowance.org.name || '').trim() : '';
     const shared = {
       orgId,
       Title: v.title,
@@ -100,6 +103,12 @@ exports.handler = async (request) => {
       BreakCount: 0,
       AttendeeReports: v.attendeeReports,
       CreatedBy: callerSub(request),
+      // WHO MADE IT, for the event summary PDF's "Hosted by" (2026-10-31):
+      // the creator's display name from the token, and the team's name when
+      // the event is a team's (a personal space's name is the person's own,
+      // so it says nothing more). Sealed like Title (tenant-crypto `event`).
+      ...(hostName ? { HostName: hostName } : {}),
+      ...(teamName ? { TeamName: teamName } : {}),
       CreatedAt: now,
       UpdatedAt: now,
     };

@@ -19,7 +19,11 @@ import PendingInvites, { NOT_APPROVAL_NOTE } from './components/PendingInvites';
 import WordCloudTest from './WordCloudTest';
 import RootPage from './components/RootPage';
 import SharedReportPage from './components/SharedReportPage';
+import QuestionSetPage, { setFromLocation } from './components/QuestionSetPage';
 import SkinProvider from './components/SkinProvider';
+import SuspendedScreen from './components/SuspendedScreen';
+import { useSuspension, clearSuspension } from './auth/suspension';
+import { setActiveOrgId } from './auth/authFetch';
 
 // Marketing is lazy so that a player on /play and a host on the stage never
 // download a brochure. One chunk per page; AuthLoading is the fallback.
@@ -116,6 +120,9 @@ function ProtectedRoute({ children, requireAdmin = false }) {
   // dispatcher and throws -- that Sign Out button was dead for as long as the
   // branch existed, and it is the only way off that screen.
   const { currentUser, loading, signOut } = useAuth();
+  // A suspended account, or a suspended organisation the console is acting
+  // for (auth/suspension.js, #40). Read here, with the other hooks.
+  const suspension = useSuspension();
 
   if (loading) {
     return <AuthLoading />;
@@ -124,6 +131,18 @@ function ProtectedRoute({ children, requireAdmin = false }) {
   // Check if user is authenticated
   if (!currentUser) {
     return <AuthPage onAuthSuccess={() => window.location.reload()} />;
+  }
+
+  // ONE CLEAR SCREEN instead of a page of refused requests. The server is
+  // what enforces it (auth/standing.js); this only says so.
+  if (suspension) {
+    return (
+      <SuspendedScreen
+        suspension={suspension}
+        onSignOut={() => { clearSuspension(); signOut(); window.location.reload(); }}
+        onGoTo={(orgId) => { setActiveOrgId(orgId); clearSuspension(); window.location.reload(); }}
+      />
+    );
   }
 
   // Check if user is pending approval
@@ -461,6 +480,19 @@ function AppRouter() {
     return (
       <ProtectedRoute>
         <EventStage code={eventStage[1]} />
+      </ProtectedRoute>
+    );
+  }
+
+  // A QUESTION SET'S PAGE (experience plan 5e): the set editor as a place with
+  // its own address. The host's shelf opens it in place and pushes this
+  // address; a reload or a pasted link lands here. Behind ProtectedRoute: the
+  // list it reads is the signed-in person's own (GET /admin/question-sets).
+  const setPage = setFromLocation(window.location);
+  if (setPage) {
+    return (
+      <ProtectedRoute>
+        <QuestionSetPage setId={setPage.id} scope={setPage.scope} />
       </ProtectedRoute>
     );
   }

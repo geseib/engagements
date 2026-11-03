@@ -131,16 +131,37 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     expect(ratio(token('--gsd-focus'), token('--gsd-side'))).toBeGreaterThanOrEqual(3);
   });
 
-  test('step 3 before a format is muted text, at AA — never dimmed', () => {
-    expect(CSS).toMatch(/\.gsd \.gsd-later\s*\{[^}]*color:\s*var\(--gsd-muted\)/);
+  /* (Round 4 retires "step 3 before a format is muted text": nothing waits on
+     screen now, so there is no .gsd-later — held absent below.) */
+
+  /* ROUND 4: the foot's "Still needed", the hand-off cell's 12px line and the
+     not-ready Create, each composited on the card they sit on. */
+  test('round 4: "Still needed" is body text on the card; the hand-off cell\'s line is muted on the card', () => {
+    expect(CSS).toMatch(/\.gsd \.gsd-foot-need\s*\{[^}]*color:\s*var\(--gsd-text\)/);
+    expect(ratio(text(), card())).toBeGreaterThanOrEqual(AA);
+    for (const sel of ['\\.gsd \\.gsd-fmt--row \\.gsd-fmt-desc', '\\.gsd \\.gsd-fmt-other-note', '\\.gsd \\.gsd-fmt-other-k']) {
+      const rule = CSS.match(new RegExp(`${sel}\\s*\\{([^}]*)\\}`))[1];
+      expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
+      expect(rule).toMatch(/font-size:\s*var\(--gsd-t-floor\)/);
+    }
+    // The cell has no fill of its own: the card is the ground.
+    expect(CSS.match(/\.gsd \.gsd-fmt-other\s*\{([^}]*)\}/)[1]).not.toMatch(/background/);
     expect(ratio(muted(), card())).toBeGreaterThanOrEqual(AA);
   });
 
-  test('a disabled Create is outlined with the muted label, not a dimmed amber block', () => {
-    const rule = CSS.match(/\.gsd \.btn-primary:disabled\s*\{([^}]*)\}/)[1];
-    expect(rule).toMatch(/background:\s*transparent/);
-    expect(rule).toMatch(/color:\s*var\(--gsd-muted\)/);
-    expect(rule).toMatch(/opacity:\s*1\b/); // answers styles.css's 0.6 (devtest M1)
+  /* Since experience plan 5c Create is ui/Button primary. Not yet (disabled, or
+     aria-disabled for the reason), it is the library's slate wash with the muted
+     label, never a dimmed amber block: and in this dialog --muted is re-pointed
+     at --gsd-muted on the button itself, so the label is measured on the card. */
+  const BUTTON_CSS = read('components', 'ui', 'Button.css');
+  test('a not-ready Create (disabled or aria-disabled) is the slate wash with the muted label, at full opacity', () => {
+    const rule = BUTTON_CSS.match(/\.ui-btn--action:disabled,\s*\.ui-btn--action\[aria-disabled="true"\]\s*\{([^}]*)\}/)[1];
+    expect(rule).toMatch(/background:\s*rgb\(var\(--slate-rgb\) \/ \.18\)/);
+    expect(rule).toMatch(/color:\s*var\(--muted\)/);
+    expect(rule).toMatch(/opacity:\s*1\b/); // answers the library's .45 (devtest M1)
+    expect(CSS).toMatch(/\.gsd \.ui-btn\s*\{[^}]*--muted:\s*var\(--gsd-muted\)/);
+    const slate = H.parseColor(`rgb(${H.role('--slate-rgb', { skin, theme: 'light' })})`).rgb;
+    expect(ratio(muted(), alphaOver(slate, card(), 0.18))).toBeGreaterThanOrEqual(AA);
   });
 
   test('the selected category chip: body text on the same tint', () => {
@@ -195,7 +216,9 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
     const deep = H.composite([H.role('--danger-deep', { skin, theme: 'light' })]);
     expect(ratio(text(), deep)).toBeGreaterThanOrEqual(AA);
     expect(CSS).toMatch(/\.gsd \.dialog-actions\.is-confirm\s*\{[^}]*background:\s*var\(--gsd-confirm\)/);
-    expect(CSS).toMatch(/\.gsd \.gsd-discard\s*\{[^}]*background:\s*var\(--danger-deep\)[^}]*color:\s*var\(--gsd-text\)/s);
+    // Discard is ui/Button danger (5c): the glow ink on --danger-deep.
+    expect(JSX).toMatch(/variant="danger"[\s\S]{0,80}className="gsd-foot-act gsd-discard"/);
+    expect(ratio(H.parseColor(`rgb(${H.role('--glow-rgb', { skin, theme: 'light' })})`).rgb, deep)).toBeGreaterThanOrEqual(AA);
     expect(CSS).not.toMatch(/color:\s*var\(--danger\)/);
   });
 
@@ -258,10 +281,12 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
   });
 
   test('the filled primary button carries DARK text, never white', () => {
-    // #F6A94C under white is 1.9:1 in either theme. The dark navy clears 7:1.
-    const m = CSS.match(/\.gsd \.btn-primary \{[^}]*color:\s*(#[0-9A-Fa-f]{6})/);
-    expect(m).not.toBeNull();
-    expect(ratio(parseHex(m[1]), token('--gsd-primary'))).toBeGreaterThanOrEqual(AA);
+    // #F6A94C under white is 1.9:1 in either theme. Create is ui/Button primary
+    // (5c): --on-action on --action, the dark navy, 8.86:1.
+    expect(JSX).toMatch(/variant=\{view === 'compare' \? 'secondary' : 'primary'\}/);
+    const ink = H.composite([H.role('--on-action', { skin: SKIN0, theme: 'light' })]);
+    expect(ratio(ink, H.composite([H.role('--action', { skin: SKIN0, theme: 'light' })]))).toBeGreaterThanOrEqual(AA);
+    expect(ratio(ink, token('--gsd-primary'))).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -275,7 +300,8 @@ describe.each(H.SKINS)('every pairing is measured, composited from the real pain
 describe('the head and foot stick', () => {
   test('the head sticks to the top on the card colour', () => {
     expect(CSS).toMatch(/\.gsd \.gsd-head\s*\{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*background:\s*var\(--gsd-card\)/s);
-    expect(JSX).toMatch(/<div className="gsd-head">[\s\S]*?className="gsd-close"/);
+    // The shared head since experience plan 5b, in the dialog's own classes.
+    expect(JSX).toMatch(/<DialogHead\s+className="gsd-head"[\s\S]*?closeClassName="gsd-close"/);
   });
 
   test('the foot sticks to the bottom on the card colour', () => {
@@ -307,14 +333,14 @@ describe('the scope is whole, and it is the only scope', () => {
   });
 
   test('no raw hex outside the token block', () => {
-    // One deliberate exception: the filled button's dark text, which is a
-    // colour ABOUT the amber fill, not about the theme — documented inline.
-    // Comments are stripped first: the header quotes the old #e1e1e1 inputs
-    // it is retiring, and prose is not paint.
+    // None at all since experience plan 5c: the one exception, the filled
+    // button's dark text (#1B2942), went with the scoped .btn-primary; Create
+    // is ui/Button and reads --on-action. Comments are stripped first: the
+    // header quotes the old #e1e1e1 inputs it is retiring, and prose is not paint.
     const body = CSS.slice(CSS.indexOf('}', CSS.indexOf('.gsd {')) + 1)
       .replace(/\/\*[\s\S]*?\*\//g, '');
     const hexes = body.match(/#[0-9A-Fa-f]{6}\b/g) || [];
-    expect(hexes).toEqual(['#1B2942']);
+    expect(hexes).toEqual([]);
   });
 
   test('every var() the sheet uses is declared on the scope', () => {
@@ -362,6 +388,43 @@ describe('the card never moves, and nothing animates for ever', () => {
     for (const [, name, inner] of frames) {
       expect([name, /(^|[\s}])(to|100%)\s*\{/.test(inner)]).toEqual([name, false]);
     }
+  });
+
+  /* ROUND 4, "Motion": the reveal's fade is declared ONLY for a viewer who has
+     not asked for reduced motion; the base rule is the end state; its keyframe
+     names only a start; nothing animates height. */
+  test('the reveal animates only under prefers-reduced-motion: no-preference, and ends at the base', () => {
+    const uses = [...body.matchAll(/([^{}]*\.gsd-reveal[^{}]*)\{([^{}]*)\}/g)];
+    expect(uses.length).toBeGreaterThan(0);
+    for (const [, , decls] of uses) expect(decls).toMatch(/animation:\s*gsd-reveal-in\b/);
+    // Every rule naming .gsd-reveal sits inside the no-preference block.
+    const blocks = [...body.matchAll(/@media \(prefers-reduced-motion: no-preference\)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)].map((m) => m[1]).join('\n');
+    const outside = body.replace(/@media \(prefers-reduced-motion: no-preference\)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g, '');
+    expect(blocks).toMatch(/\.gsd \.gsd-reveal\s*\{[^}]*animation:\s*gsd-reveal-in 180ms ease-out/);
+    expect(outside).not.toMatch(/\.gsd-reveal/);
+    // The keyframe: a start only (opacity and a 4px rise), never height.
+    const frame = body.match(/@keyframes gsd-reveal-in\s*\{([\s\S]*?\})\s*\}/)[1];
+    expect(frame).toMatch(/from\s*\{[^}]*opacity:\s*0;[^}]*transform:\s*translateY\(4px\)/);
+    expect(frame).not.toMatch(/(^|[\s}])(to|100%)\s*\{/);
+    expect(frame).not.toMatch(/height|margin|top:/);
+    // The slot's resting style moves nothing.
+    expect(body.match(/\.gsd \.gsd-slot\s*\{([^}]*)\}/)[1]).not.toMatch(/opacity|transform/);
+  });
+
+  test('round 4 retires the step numbers, the waiting step, the status line and the OPTIONAL header', () => {
+    for (const gone of ['.gsd-step-n', '.gsd-later', '.gsd-stat', '.gsd-optional-h', '.gsd-fmt-art']) {
+      expect([gone, body.includes(gone)]).toEqual([gone, false]);
+    }
+  });
+
+  test('round 4: the gallery is three text cards across, one column on a phone', () => {
+    const last = body.lastIndexOf('.gsd .gsd-fmt-group--gallery { grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(last).toBeGreaterThan(-1);
+    // Nothing after it re-points the desktop columns.
+    const after = body.slice(last + 10);
+    const phone = after.match(/@media \(max-width: 600px\)\s*\{\s*\.gsd \.gsd-fmt-group--gallery \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+    expect(phone).not.toBeNull();
+    expect(after.replace(phone[0], '')).not.toMatch(/gsd-fmt-group--gallery\s*\{[^}]*grid-template-columns/);
   });
 
   test('reduced motion removes the preview animations', () => {
@@ -416,5 +479,32 @@ describe('the ladder', () => {
     */
     const sizes = [...CSS.matchAll(/font-size:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
     expect(sizes.filter((px) => px < 12)).toEqual([]);
+  });
+
+  /* Revision, 31 Oct: at 1280×720, pane open, "Event" wrapped to a second
+     row. The form column there is 8px narrower than at 1440 (the card is
+     100vw − 48px) and, 720 tall, it scrolls: ~15px of scrollbar. A laptop
+     block gives that back by spacing alone — never by shrinking the words. */
+  test('seven chips fit one row at 1280 with the pane open: spacing steps in, text stays on the ladder', () => {
+    const at = CSS.indexOf('@media (min-width: 901px) and (max-width: 1440px)');
+    expect(at).toBeGreaterThan(-1);
+    const block = CSS.slice(at, CSS.indexOf('\n}', at));
+    const px = (re) => Number(block.match(re)[1]);
+    // Only with the pane open, and only spacing: no font-size in the block.
+    expect(block).not.toMatch(/font-size/);
+    expect(block).toMatch(/\.gsd-body\.has-side \.gsd-fmt--chips\s*\{/);
+    const chipPad = px(/\.has-side \.gsd-fmt--chips\s*\{\s*padding:\s*0 (\d+)px/);
+    const groupGap = px(/\.has-side \.gsd-fmt-group--chips\s*\{\s*gap:\s*(\d+)px/);
+    const iconGap = px(/\.has-side \.gsd-fmt--chips \.gsd-fmt-top\s*\{\s*gap:\s*(\d+)px/);
+    const sidePad = px(/\.has-side \.dialog-content\s*\{\s*padding-left:\s*(\d+)px/);
+    // What it gives back against the 1440 values (chips 10px, gaps 5px, side 28px).
+    const chips = 7;
+    const back = chips * 2 * (10 - chipPad) + chips * (5 - iconGap) + chips * (5 - groupGap) + 2 * (28 - sidePad);
+    const shortfall = (1240 - (1280 - 48)) + 15;
+    expect(back).toBeGreaterThanOrEqual(shortfall * 2); // with room to spare for font metrics
+    // The words: chips at the label size, the "last" tag at the 12px floor.
+    expect(CSS).toMatch(/\.gsd \.gsd-fmt-top\s*\{[^}]*font-size:\s*var\(--gsd-t-label\)/);
+    expect(CSS).toMatch(/\.gsd \.gsd-fmt-last\s*\{[^}]*font-size:\s*var\(--gsd-t-floor\)/);
+    expect(SCOPE).toMatch(/--gsd-t-label:\s*13px/);
   });
 });

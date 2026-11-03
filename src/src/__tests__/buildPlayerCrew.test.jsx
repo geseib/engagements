@@ -320,7 +320,7 @@ describe('the crew stays out of the way of an ask', () => {
     const crew = screen.getByRole('region', { name: 'The crew' });
     // eslint-disable-next-line no-bitwise
     expect(prompt.compareDocumentPosition(crew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.querySelector('.plr-btn').textContent).toBe('Suggest');
+    expect(container.querySelector('.ui-btn--h56').textContent).toBe('Suggest');
   });
 
   test('crew off: no crew section at all', async () => {

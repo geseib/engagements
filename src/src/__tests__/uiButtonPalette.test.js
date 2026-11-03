@@ -72,7 +72,14 @@ describe('Button.css reads roles only', () => {
   });
 
   test('every selector is rooted at .ui-btn (the wall hover names the wall, then .ui-btn)', () => {
+    const INK = [':root', '[data-theme="dark"]', '[data-theme="light"]'];
     for (const r of RULES) {
+      // The tertiary ink is keyed on the nearest theme (as Chip.css keys its inks):
+      // those blocks declare only --ui-btn-* names.
+      if (r.selectors.every((s) => INK.includes(s))) {
+        expect(Object.keys(r.decls).every((k) => k.startsWith('--ui-btn-'))).toBe(true);
+        continue;
+      }
       for (const s of r.selectors) expect(s).toMatch(/^(\[data-surface="wall"\] )?\.ui-btn\b/);
     }
   });
@@ -86,6 +93,12 @@ describe('Button.css reads roles only', () => {
     for (const s of ['.ui-btn--sm', '.ui-btn--lg']) {
       const r = RULES.find((x) => x.selectors.includes(s));
       expect(Object.keys(r.decls).sort()).toEqual(['min-height', 'padding']);
+    }
+    // The fixed heights (experience plan §5.1): height, padding and radius, no type.
+    for (const [s, h, radius] of [['.ui-btn--h36', '36px', '10px'], ['.ui-btn--h44', '44px', '10px'], ['.ui-btn--h56', '56px', '14px']]) {
+      const r = RULES.find((x) => x.selectors.includes(s));
+      expect(Object.keys(r.decls).sort()).toEqual(['border-radius', 'box-sizing', 'min-height', 'padding']);
+      expect([s, r.decls['min-height'], r.decls['border-radius']]).toEqual([s, h, radius]);
     }
     const sized = RULES.filter((r) => 'font-size' in r.decls || 'font' in r.decls);
     expect(sized.map((r) => r.selectors.join(','))).toEqual(['.ui-btn']);
@@ -109,6 +122,26 @@ describe('the variants read the roles SPEC §6 names', () => {
   test('danger: --danger-deep fill, never --danger', () => {
     expect(decl('.ui-btn--danger', 'background')).toBe('var(--danger-deep)');
     expect(BODY).not.toMatch(/var\(--danger\)/);
+  });
+  test('tertiary: no outline, no fill, the theme-keyed link ink', () => {
+    expect(decl('.ui-btn--tertiary', 'border-color')).toBe('transparent');
+    expect(decl('.ui-btn--tertiary', 'color')).toBe('var(--ui-btn-link-ink, var(--info))');
+    expect(() => decl('.ui-btn--tertiary', 'background')).toThrow();
+    expect(decl(':root', '--ui-btn-link-ink')).toBe('var(--info)');
+    expect(decl('[data-theme="light"]', '--ui-btn-link-ink')).toBe('var(--accent-text)');
+  });
+  test('a disabled main button is the slate wash with --muted ink, never a faded orange', () => {
+    expect(decl('.ui-btn--action:disabled', 'background')).toBe('rgb(var(--slate-rgb) / .18)');
+    expect(decl('.ui-btn--action:disabled', 'color')).toBe('var(--muted)');
+    expect(decl('.ui-btn--action:disabled', 'opacity')).toBe('1');
+  });
+  test('done ("Sent", 3 Nov): a --success wash and edge, --text ink, never orange, never the grey or the fade', () => {
+    expect(decl('.ui-btn--done', 'background')).toBe('rgb(var(--success-rgb) / .16)');
+    expect(decl('.ui-btn--done', 'border-color')).toBe('var(--success)');
+    expect(decl('.ui-btn--done', 'color')).toBe('var(--text)');
+    expect(decl('.ui-btn--done[aria-disabled="true"]', 'opacity')).toBe('1');
+    const done = RULES.filter((r) => r.selectors.some((x) => x.startsWith('.ui-btn--done')));
+    for (const r of done) expect(Object.values(r.decls).join(' ')).not.toMatch(/--action|--slate-rgb|--muted/);
   });
   test('radius from --radius-sm', () => {
     expect(decl('.ui-btn', 'border-radius')).toBe('var(--radius-sm)');
@@ -164,6 +197,16 @@ describe.each(H.CASES)('%s / %s: contrast, composited', (skin, theme) => {
     expect(H.on(ink, [fill])).toBeGreaterThanOrEqual(H.AA);
     const shade = paint(`.ui-btn--danger${HOVER}`, 'box-shadow', opts).match(/rgb\([^)]*\)/)[0];
     expect(H.on(ink, [fill, shade])).toBeGreaterThanOrEqual(H.on(ink, [fill]));
+  });
+
+  test.each(GROUNDS)('tertiary: the link ink on %s', (_, ground) => {
+    const ink = H.role(theme === 'light' ? '--accent-text' : '--info', opts);
+    expect(H.on(ink, ground)).toBeGreaterThanOrEqual(H.AA);
+  });
+
+  test.each(GROUNDS)('done: the ink on the success wash over %s', (_, ground) => {
+    const ink = paint('.ui-btn--done', 'color', opts);
+    expect(H.on(ink, [...ground, paint('.ui-btn--done', 'background', opts)])).toBeGreaterThanOrEqual(H.AA);
   });
 
   test.each(GROUNDS)('the focus ring clears 3:1 on %s', (_, ground) => {

@@ -141,6 +141,28 @@ describe('scrolling through it', () => {
     expect(css).toMatch(/\.gsd \.gsd-wt--guide \.gsd-sb \{[^}]*flex-direction:\s*row;[^}]*overflow-x:\s*auto/);
   });
 
+  /* Round 4, Fork 1 A: before a format is chosen the pane is quiet. */
+  test('exampleOnly: one sentence, the labelled first stage, no index and no storyboard', () => {
+    render(<FormatWalkthrough format="call-and-answer" label="Call & Answer" exampleOnly />);
+    expect(screen.getByRole('heading', { name: 'How it runs' })).toBeInTheDocument();
+    expect(screen.getByText(/Pick a format and this side shows what happens in the room, stage by stage\./)).toBeInTheDocument();
+    const card = screen.getByTestId('gsd-wt-example');
+    // review Dana 2: the example must say it is one, with its place in the run
+    expect(card).toHaveTextContent('Example · Call & Answer, stage 1 of 6');
+    expect(within(card).getByRole('heading', { name: /The ask/ })).toBeInTheDocument();
+    // rejects: the full storyboard and its index competing with the form on open
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(screen.queryByRole('list', { name: /stage by stage/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Everyone answers/ })).toBeNull();
+  });
+
+  test('the hover preview says how to choose, for a pointer and a keyboard alike', () => {
+    render(<FormatWalkthrough format="trivia" label="Trivia" preview="hover" />);
+    expect(screen.getByText('A preview of the card you are on. Click it, or press Enter, to choose it.')).toBeInTheDocument();
+    // A preview is the whole storyboard, with its index.
+    expect(screen.getByRole('navigation', { name: 'Stages of Trivia' })).toBeInTheDocument();
+  });
+
   test('no format yet: one plain line, no controls', () => {
     render(<FormatWalkthrough format="" />);
     expect(screen.getByText(/Choose a format to see how it runs/)).toBeInTheDocument();

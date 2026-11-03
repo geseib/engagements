@@ -79,7 +79,9 @@ check('and Authorization is in it (guards the scanner itself)', () =>
     'the scanner found no identity source at all, so every check below is vacuous'));
 
 console.log('\n2. caching state and identity source agree');
-const cachingOn = /AuthorizerResultTtlInSeconds:\s*[1-9]/.test(code);
+// SAM's spelling of the TTL is `Identity.ReauthorizeEvery`; it becomes
+// `authorizerResultTtlInSeconds` in the generated OpenAPI. Either above 0 is ON.
+const cachingOn = /(AuthorizerResultTtlInSeconds|ReauthorizeEvery):\s*[1-9]/.test(code);
 const headerIsIdentitySource = /-\s*X-Engage-Org\b/i.test(code);
 
 check(`caching is ${cachingOn ? 'ON' : 'off'} and the header is ${headerIsIdentitySource ? '' : 'not '}an identity source`, () => {

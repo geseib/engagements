@@ -17,7 +17,7 @@
  * generationJobResume.test.jsx / generatedSetHandoff.test.jsx / batchGuidance.test.jsx.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -38,6 +38,14 @@ const appendTo = (overrides = {}) => ({
   onModeChange: () => {},
   ...overrides,
 });
+
+
+/** The builders ask with the app's small confirm dialog now (experience plan 5e), not window.confirm. */
+const closeConfirm = () => screen.queryByRole('dialog', { name: /Close without/ });
+async function answerConfirm(yes) {
+  const dialog = await screen.findByRole('dialog', { name: /Close without/ });
+  fireEvent.click(within(dialog).getByRole('button', { name: yes ? /Close and lose/ : /Keep reviewing/ }));
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -75,72 +83,67 @@ describe('TriviaAIBuilder: closing the review screen while adding', () => {
     const onClose = jest.fn();
     const onTriviaGenerated = jest.fn();
     const utils = render(<TriviaAIBuilder appendTo={appendTo()} onClose={onClose} onTriviaGenerated={onTriviaGenerated} />);
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
     await screen.findByRole('button', { name: /Add 2 to/ });
     return { ...utils, onClose, onTriviaGenerated };
   }
 
   test('declining the confirm keeps the builder open', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).toHaveBeenCalled();
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(false);
     expect(onClose).not.toHaveBeenCalled();
+    expect(closeConfirm()).toBeNull();
   });
 
   test('accepting the confirm closes it', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   test('the scrim and the review Cancel button ask too — one shared close path', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
-
-    fireEvent.click(container.querySelector('.modal-overlay'));
-    expect(window.confirm).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const { onClose } = await toReview();
+    fireEvent.click(document.querySelector('.aib-scrim'));
+    await answerConfirm(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 
     onClose.mockClear();
-    window.confirm.mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(window.confirm).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await answerConfirm(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
-  test('with nothing generated yet, closing asks nothing', () => {
+  test('with nothing generated yet, closing asks nothing', async () => {
     mockApi([]);
     const onClose = jest.fn();
-    const { container } = render(<TriviaAIBuilder appendTo={appendTo()} onClose={onClose} onTriviaGenerated={() => {}} />);
-    jest.spyOn(window, 'confirm');
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    render(<TriviaAIBuilder appendTo={appendTo()} onClose={onClose} onTriviaGenerated={() => {}} />);
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(closeConfirm()).toBeNull();
   });
 
   test('with every generated question left out, closing asks nothing', async () => {
-    const { container } = await toReview();
+    const { onClose } = await toReview();
     const rows = screen.getAllByRole('row');
     fireEvent.click(rows[1].querySelector('.git-ghost'));
     fireEvent.click(rows[2].querySelector('.git-ghost'));
-    jest.spyOn(window, 'confirm');
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(closeConfirm()).toBeNull();
   });
 
   test('making a NEW set (no appendTo) never asks, even mid-review', async () => {
     mockApi(triviaItems(2));
     const onClose = jest.fn();
-    const { container } = render(<TriviaAIBuilder onClose={onClose} onTriviaGenerated={() => {}} />);
+    render(<TriviaAIBuilder onClose={onClose} onTriviaGenerated={() => {}} />);
     fireEvent.change(screen.getByPlaceholderText(/American History/i), { target: { value: 'Topic' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
-    await screen.findByRole('button', { name: /Load 2 into System/ });
-    jest.spyOn(window, 'confirm');
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
+    await screen.findByRole('button', { name: /Save 2 as a new set/ });
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(closeConfirm()).toBeNull();
   });
 });
 
@@ -171,34 +174,33 @@ describe('PollAIBuilder: closing the review screen while adding', () => {
     const onClose = jest.fn();
     const onPollGenerated = jest.fn();
     const utils = render(<PollAIBuilder appendTo={appendTo()} onClose={onClose} onPollGenerated={onPollGenerated} />);
-    fireEvent.click(screen.getByRole('button', { name: /Generate Poll Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate poll questions/ }));
     await screen.findByRole('button', { name: /Add 2 to/ });
     return { ...utils, onClose, onPollGenerated };
   }
 
   test('declining the confirm keeps the builder open', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).toHaveBeenCalled();
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(false);
     expect(onClose).not.toHaveBeenCalled();
+    expect(closeConfirm()).toBeNull();
   });
 
   test('accepting the confirm closes it', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
-  test('with nothing generated yet, closing asks nothing', () => {
+  test('with nothing generated yet, closing asks nothing', async () => {
     mockApi([]);
     const onClose = jest.fn();
-    const { container } = render(<PollAIBuilder appendTo={appendTo()} onClose={onClose} onPollGenerated={() => {}} />);
-    jest.spyOn(window, 'confirm');
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    render(<PollAIBuilder appendTo={appendTo()} onClose={onClose} onPollGenerated={() => {}} />);
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(closeConfirm()).toBeNull();
   });
 });
 
@@ -241,36 +243,35 @@ describe('AIScenarioBuilder: closing the review screen while adding', () => {
     const disclosure = screen.queryByTestId('template-disclosure');
     if (disclosure) fireEvent.click(disclosure);
     fireEvent.click(await screen.findByTestId('scenario-continue-blank'));
-    fireEvent.click(await screen.findByRole('button', { name: /Generate Scenarios/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Generate scenarios/ }));
     await screen.findByRole('button', { name: /Add 2 to/ });
     return { ...utils, onClose, onScenariosGenerated };
   }
 
   test('declining the confirm keeps the builder open', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(false);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).toHaveBeenCalled();
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(false);
     expect(onClose).not.toHaveBeenCalled();
+    expect(closeConfirm()).toBeNull();
   });
 
   test('accepting the confirm closes it', async () => {
-    const { container, onClose } = await toReview();
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const { onClose } = await toReview();
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await answerConfirm(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   test('with nothing generated yet, closing asks nothing', async () => {
     mockApi([]);
     const onClose = jest.fn();
-    const { container } = render(
+    render(
       <AIScenarioBuilder appendTo={appendTo()} engagementType="call-and-answer" onClose={onClose} onScenariosGenerated={() => {}} />
     );
     await waitFor(() => expect(authFetch).toHaveBeenCalled());
-    jest.spyOn(window, 'confirm');
-    fireEvent.click(container.querySelector('.close-button'));
-    expect(window.confirm).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('aib-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(closeConfirm()).toBeNull();
   });
 });

@@ -9,6 +9,171 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 3 Nov 2026 (one Engage: the experience plan, the impromptu ask, suspension enforced)
+
+**Test:** merge of dev `b22b96143`. This push also carries the three entries directly below (**1 Nov**, **Build Room: fixes from the test walk**, **the event summary names its host**), which never reached test on their own. Everything below those is already on test.
+
+The owner asked on 1 Nov to "step back and really organize the end to end experience". The plan is `docs/design/experience-plan/PLAN.md` (mockups in its `index.html`); every phase of it is in this push.
+
+### New
+
+- **Needs you: one place for anything waiting on the host.** A name request, a failed Workie read, late answers, the event moving on, Claude's asks: each shows on a line under the main button, on the person it concerns, and on the bell, which counts this session's items during a live session. On one screen (the room sees the laptop) it is a count only, never a name; the detail is on the phone remote or shown one item at a time after "the room will see this".
+- **Moving a name to a new device works end to end.** The new device asks and waits, gets in by itself when the host says **Let them** (it asks for a second press while the first device is still open), can **Ask again** after a minute, and the request lapses after ten. The old device is told "Sam is now on another device" and can no longer answer.
+- **One host frame for every format, on one screen or two.** The same top bar (Main menu, name, Join, the room's screen, Needs you, ?, Session menu), **Your part now** with the one orange button, and the Needs-you line. On one screen the controls fade after three seconds without the mouse and come back when it moves; a clicker or the phone remote does not bring them back.
+- **Setup is the lobby.** Start asks where the room watches, puts the room's screen up, then shows the QR with a live count. Returning two-screen hosts get "Start · two screens" in one click. Dev's two-screen default is gone.
+- **Stat tiles and a round timer.** Answered N of M (green when everyone's in), Time, and who joined. A time chip beside Start round / Start voting (No limit, 1, 2, 3, 5 min), +1 min (button, `+` key, phone); advisory unless "Close answering at zero" is ticked. The room and phones see words and a bar, never seconds.
+- **Trivia and Poll on two screens.** The trivia answer shows only on the laptop until you show results; the room's window never carries it early.
+- **Event items use the same console**, with ‹ Agenda and Bring everyone here; screens are set up once per event day.
+- **The impromptu ask.** "Write a question" (Session menu › Up next, the round queue, the phone remote, or **Q**) queues your own question as a full round: Next, Later or Now (between rounds). It is marked **Yours** for you and in the report, with an optional private note for Workie.
+- **A simpler Session menu.** Six tabs, the same everywhere: Up next · Rounds so far · People · Screens · Joining · How it runs, each short with **More options** below. Rounds so far is back (the report first, then every earlier round). End session and Main menu are at its foot. Events show one line, "item N of M · ‹ Agenda · Bring everyone here", instead of an Agenda tab.
+- **The left bar says something even when closed.** People reads "6 here · waiting on Marcus" (or "top: Priya, 40" at results); the round queue "2 of 21 · next: …"; Late "2 to review". Someone who needs you fades in once on the Needs-you line and their row; scores show for Call & Answer and Trivia, quiet until results.
+- **The join QR on the laptop.** Hover or click the code in the top bar on two screens: the QR pops up on your screen only. "Show on the room's screen" is now its own button. **S** and **V** (scoreboard) also work when the room's window has focus.
+- **The participant's phone, consistent.** One set of words and screens across formats ("Sent · Your answer is in.", "Waiting for the host."); one end screen (no "Final score 0" on a poll); every next action in the bottom bar; the send button turns into **✓ Sent**; votes are held while offline; no browser pop-ups. Comments come in three headed sections with "Reply to this response", and replies stay anchored to the right answer even on a tie.
+- **One home and one New button.** Home has New engagement, Rejoin, five recent sessions and events; the console is **Library & team**. One Sessions list everywhere. Quick start, Build Room and events all start from New engagement, and everything created lands on its own Setup with Start and Edit. Editing a question set is a page (`/sets/<id>`), and the AI builders open in one dark window.
+- **One look.** One button style and one dialog head with an X close everywhere; browser confirm pop-ups replaced by a small in-app dialog.
+- **Suspension is enforced.** A suspended account, or the members of a suspended organisation, are refused on their next request and see one clear screen; a suspended organisation's sessions stop taking joins and answers. Admins can always reinstate, and Reinstate restores everything.
+
+### Fixed
+
+- A slow laptop could drop a round's answers from the host screen for good (they arrived before the page drew and were thrown away).
+- The round queue on the left was incomplete after a refresh until "Rounds and questions" was opened; Call & Answer scores were missing from People.
+- The Running order numbered your question 1 and then jumped to 3; its buttons didn't line up.
+- On one screen the old Session panel showed private things (Workie's warnings, late answers with names) on the screen the room watches.
+- A Workie read for "round 1" could fetch the wrong round's read; phones and the host logged needless errors on background checks.
+- End session works before round 1; issue reports name their own tier, not prod.
+
+### What to look at
+
+1. Create a Call & Answer session and press **Start**: Setup asks where the room watches, opens the room's window, then shows the QR and a live count. Start round 1.
+2. On two screens, watch the top bar, the Needs-you line and the tiles through a round with three phones: "Answered N of M" turns green when everyone's in.
+3. From a second browser, join with a name that is taken and choose **That's me**: the request shows on the Needs-you line, on the person and on the bell. Press **Let them** (twice, if the first device is open). The new device gets in; the first is told its name moved.
+4. Give a round a one-minute timer; press **+1 min**; check the phones say words, not seconds.
+5. Press **Q**, write a question, choose **Next**: it shows as **Yours** in the round queue and runs as a normal round; the report marks it.
+6. Open the **Session menu**: six tabs, each short with More options; Rounds so far has the report and earlier rounds; End session is at the foot.
+7. Close **People** on the left during answering: it says who is still out. At results, scores brighten.
+8. Hover the join code in the top bar: the QR appears on your laptop only. Click into the room's window and press **S**.
+9. Switch to one screen: the controls fade after three seconds without the mouse; Needs you shows a count, never a name.
+10. Run a Trivia round on two screens: the answer is on the laptop only until you show results.
+11. On a phone, answer a question: the button reads **✓ Sent**.
+12. Go **Home**: New engagement, Rejoin, recent sessions; open **Library & team**. Create a session and land on its Setup.
+13. In Library & team › Accounts, suspend a test account and try it; reinstate it.
+
+### Known gaps
+
+- The laptop can't yet tell when your phone remote is open, so it offers "Connect your phone" rather than "Open on my phone".
+- "Joined from item N" in an event only knows the current item; two-screen events still need one click per item to open the room's window.
+- Trivia's main button says "Show results", not "Show the answer"; at 1280×720 the private answer sits just below the fold.
+- The account Suspend confirm doesn't ask for a reason; comments in a suspended organisation's sessions are still accepted. Deleting an organisation or account is designed (`docs/design/account-org-deletion/`) and waits on the owner's decisions.
+- Drift still to burn down: 9 browser pop-ups, 89 button families, 216 retired labels; the guards stop them rising.
+- The Verdict Board's corrected prompt reaches a tier only when an admin takes "Repo has a newer version" for it.
+
+---
+
+## 1 Nov 2026 (new engagement reveals as you go; Space on the button; review #48 fixes; the two lesson sets)
+
+**Test:** merge of dev `d93829e7`. Everything below this entry is already on test, except the two entries directly below (**Build Room: fixes from the test walk** and **the event summary names its host**): they were written for pushes that had not happened, and arrive on test with this one.
+
+**Data on test (done 1 Nov, before this push):** *Lessons from the Tech World* and *Lessons from Other Professions* were installed with `scripts/install-question-set.js` and set up as Apply rounds with `scripts/replace-question-set.js` (dry run first each time). Neither existed on test before. Prod needs the same when this goes there.
+
+### New
+
+- **A new engagement reveals itself as you go** (owner, 31 Oct: "less daunting if we revealed the sections as needed"). **Name it** and **Format** show from the start; **Question set** appears once a format is chosen; the names card, Background for Workie and Advanced appear once a set is picked. Nothing goes away again while the dialog is open. **Every** host now starts where a first-timer does, at the format cards, with no format chosen; the format you used last is marked ("You used it last.", or a **last** tag on its chip) and is where the keyboard lands, so Title, Enter, Enter still gets you there. **Create** says what is still needed, and pressing it early takes you to the first gap.
+- **The Space key is on the main button.** Every host stage's main dock button (the event board, a session's stage, the Build Room, the survey walkthrough) carries a small **Space** keycap at its right edge, in place of the loose "or press Space" beside it. Off when Space does nothing, it keeps its width so the button never moves; it shows on every display profile, never under 12px.
+- **EXIT on an event's stage leaves to your start screen**, where the event is listed with a button back to it (it went to the console's Events).
+- **Lessons from the Tech World, rewritten** (owner, 1 Nov: it did not follow the lessons pattern). Thirty things that really happened in tech, each with its source, from Knight Capital's 2012 deploy to CrowdStrike's 2024 update, in six categories. Each states the lesson and asks where it would land on your team, project or company. It is an **Apply** round with the Transfer Reader as its Workie.
+- **Lessons from Other Professions** (was *Lessons from the School of Hard Books*): the same 80 lessons from eight professions, now an Apply round with the same instruction shape and Workie. On test it is new.
+- `scripts/replace-question-set.js`: a new version of an Engage set from a CSV, and its details, through the app's own handlers (a dry run by default).
+
+### Fixed
+
+- **Start it now on Your sessions started nothing** ("That session did not start: Game not found") (review #48, finding 1). It now starts the session it names.
+- **Workie invented a disagreement** (review #48, finding 2): every round's opening demanded "the tension between two responses". It names a split only when two answers really pulled apart. A Judge round's reader no longer gives a verdict of its own, and a prompt that writes its own first line keeps it.
+- **The Verdict Board counted an outright no as "No verdict"** and described a split nobody stated (review #48). Its prompt counts "not shown", "fails" and "does not meet the bar" as not shown to clear, and the two-sides question applies only when answers split. The new prompt text reaches test when its repo version is taken (done after this deploy).
+- **Comments on a round** (phone and report): the phone ranks responses in the report's order (points, then first-place votes); a response is named "Name's response"; switching what you comment on keeps each draft; the Comment buttons render as pills; the report says "N comments on this round" and calls the summary **Workie's read**.
+
+### What to look at
+
+1. On engage.test, press **New engagement**. It opens at the format cards with nothing chosen, even if you have created engagements before; your last format says **You used it last.** Pick one: **Question set** appears. Pick a set: Background for Workie and Advanced appear. Press **Create** before naming it: it says what is missing and takes you there.
+2. Host any Call & Answer round: the main button at the bottom carries a small **Space** cap; nothing floats beside it. Press Space: it does what the button says.
+3. Open an event's stage and press **EXIT**, then **Leave — the event keeps going**: you land on your start screen with the event listed.
+4. In the console's Question sets, open **Lessons from the Tech World**: 30 questions in six categories, each a real event with its source, the round kind **Apply**, and the instruction "This happened somewhere else…". Run one round and read Workie's take.
+5. Open **Lessons from Other Professions**: 80 questions, Apply, the instruction "This lesson comes from another profession…".
+6. On **Your sessions**, create a session, press **Edit**, close it unchanged, then **Start it now**: the session starts.
+7. Run a Judge round (*Ready or Not*) where every answer says no: Workie counts them as not shown to clear and invents no split.
+8. In a Call & Answer round with comments on, comment from a phone on two responses in turn: each keeps its own draft; the report reads "N comments on this round".
+
+### Known gaps
+
+- On test the two lesson sets use the Transfer Reader prompt that is still marked **draft** in Admin › Prompts. Draft prompts run (only archived ones are skipped); switch it to active when convenient.
+- *Lessons from Other Professions* has the id `lessons` on dev and `lessonsfromotherprofessions` on test: the installer names a new set from its title.
+- The Space cap goes when the dock is crowded (below 1100px wide, or 1280px with AGENDA) before a button would wrap.
+
+---
+
+## 31 Oct 2026 (Build Room: fixes from the test walk)
+
+**Test:** merge of dev `ab020e52`. Everything below this entry is already on test; this push adds only what is here.
+
+Fixes for what the QA walk on engage.test found in the Build Room on 31 Oct, mostly in a room where Claude Code never connected. They close gaps in the four "Build Room, simpler" entries below.
+
+### New
+
+- Nothing new. One small addition to an existing form: in the wrap-up, each link has a **The build** tick, so you can say which link is the build.
+
+### Fixed
+
+- **The Start building prompt reached the room.** Pressing **Start building** before Claude Code connected put Engage's instructions for Claude ("The room has framed the build. Plan 3 to 6 steps, post the plan with post_update…" and the whole brief) on every phone, on the Stage and in your Claude now. Engage's own prompts (Start building, Back to the opening, Ask Claude to draft the brief, Preview the work, mockups for an ask, Ask Claude to wrap up) are now marked as Engage's when they are saved. The phones, the Stage, the room's window, Claude now and the timeline show a plain line such as "Start building: Claude got the brief", as the report already did. Claude still gets the full prompt.
+- **"Sent" while Claude was not connected.** The header and Claude now said **Queued for Claude**, but the green line after a send said "Sent to Claude as …", the composer folded to "Sent: …", and every decision in History had a **Sent to Claude** mark. Until Claude Code connects they all say **Queued for Claude**, and the line is no longer green. Once Claude connects they say Sent, as before.
+- **Write it myself left the summary blank** when Claude had not drafted a headline, under "Filled in from the session". The summary now comes from the opening's answers: Good looks like, else The problem, else Making, and the form says which one it used. If there is nothing to use, the field stays empty and nothing says it was filled in.
+- **Your part now on two screens** said "Connect Claude Code…" beside a "No main move now" box, with Connect as the orange button further down. When What's next leads with Connect, **Connect Claude Code** is now Your part now's main button, and What's next's own Connect is a plain button. A move focused in the main area no longer ends up half hidden under the card.
+- **A wrap-up link was taken for the build.** After the wrap-up, the header's **Open the build** and the room's window opened the first link ("Shift sheet") although Claude never showed a build, and the window made that link the orange button. Only a build Claude showed, or a link you tick as **The build**, counts as the build. Other links are plain links.
+- **After End session the header still said Live and Queued for Claude.** It now reads **Session ended**, and the Claude status chip and the "directions wait for it" notice are gone.
+- **Before the room starts never went away** if Claude never connected. It stayed through the wrap-up and the end, still saying "You can start the opening now". It now goes when the opening ends, as planned. If Claude has still not connected, **Claude now** says so and has a **Connect Claude Code** button, and What's next leads with Connect.
+- **More framing questions · 4** stayed at 4 after one was answered. It now counts what is left: "3 of 4 left, if the room has time".
+
+### What to look at
+
+1. On engage.test, create a Build Room and do not connect Claude Code. Join on a phone. Answer the opening's core steps yourself, then press **Start building** and confirm. On the phone's Now, the Stage (2) and the room's window: **Queued for Claude** with "Start building: Claude got the brief", and no post_update or brief text anywhere. Claude now on the right says the same line.
+2. In a second room without Claude, put an opening step to the room (**Ask the room**), and once the phone has answered, send the pick: the line after it reads "Queued for Claude as Keep in mind: …" in blue, not green. Open **Tell Claude…** and send something: it folds to "Queued for Claude: …". Decide an ask and press **Decided** in History: its mark reads **Queued for Claude** and still opens History at the entry.
+3. Before Start building, open **More framing questions**, answer **Never**: the fold's count reads "3 of 4 left, if the room has time".
+4. After Start building: **Before the room starts** is gone. Claude now reads "Waiting for Claude Code" (or Queued for Claude) with a **Connect Claude Code** button that opens Connect.
+5. Press **Use two screens** in Settings, Screens (or on a fresh room before starting). Between asks with Claude not connected, **Your part now** says "Connect Claude Code: nothing is built without it." with **Connect Claude Code** as its button. There is no "No main move now", and What's next's first row is fully in view.
+6. Decide one ask, then in What's next press **Write it myself**. With no headline from Claude, the Summary holds your Good looks like answer, and the hint under it says "From the opening's Good looks like". Add two links, for example Shift sheet and Volunteer handbook, leave **The build** unticked, and save. The header has no **Open the build**, and the room's window shows both links as plain buttons. Edit the wrap-up, tick **The build** on one link and save: **Open the build** appears and opens that link.
+7. Press **End session**. The header reads **Session ended**, with no Live and no Queued for Claude.
+8. Connect Claude Code in a new room, press Start building, and check Claude got the full prompt: it posts a plan as a milestone. The room's screens still show only the plain line.
+9. Open help (?): Before the room starts says the card goes when the opening ends; Your part now mentions Connect Claude Code; Writing the wrap-up describes the summary fallback and **The build**; History's marks mention Queued for Claude.
+
+### Known gaps
+
+- A wrap-up Claude writes does not mark a link as the build. If Claude showed a build, that build is still Open the build; if it never did, its links are plain links.
+- The two console errors seen on the walk are not Build Room bugs. "Error fetching question sets: Failed to fetch" comes from the main menu's question set list (`AdminPage` fetchQuestionSets). That request is cut off when you leave the main menu for the new Build Room page. The Build Room page never makes that call, and its address and sign-in are the same as every other admin list. The 403 could not be traced without the walk's network log.
+- Phones still name who is spinning the wheel (the owner accepted this: phones are personal).
+
+---
+
+## 31 Oct 2026 (later still: the event summary names its host)
+
+**Test:** merge of dev `86ff1123`. Everything below this entry is already on test; this push adds only what is here.
+
+### New
+
+- **The event summary says who hosted it**: "Hosted by <name>", with the team underneath for a team event. A new event keeps its creator's name (from their sign-in) and its team's name, sealed like the event's title.
+
+### Fixed
+
+- **The event summary had no host or team name**, because the event stored only the creator's account id.
+
+### What to look at
+
+1. On engage.test, create a small event and press **Save event summary (PDF)** on its agenda: the overview reads "Hosted by" with your name, and the team's name in a team space.
+2. Save the summary of an event made before today: it names you if you made it.
+
+### Known gaps
+
+- An event made before this release did not keep its host's name: its summary names the signed-in host when they made the event, and nobody otherwise.
+
+---
+
 ## 31 Oct 2026 (later: event summary PDF; trivia explains its answers)
 
 **Test:** merge of dev `cec0f677`. Everything below this entry is already on test; this push adds only what is here.

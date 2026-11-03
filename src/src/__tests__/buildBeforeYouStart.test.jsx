@@ -133,7 +133,7 @@ describe('Connect Claude Code, step 1: the plugin version', () => {
     />,
   );
   const step1 = () => document.querySelector('[data-step="install"]');
-  const primaries = () => document.querySelectorAll('.brm-modal .brm-btn--primary');
+  const primaries = () => document.querySelectorAll('.brm-modal .ui-btn--action');
 
   test('not yet known: the latest only, the command shown, Mint stays the one orange', () => {
     panel({ agent: {}, plugin: { running: '', latest: '1.16.0', outdated: false } });

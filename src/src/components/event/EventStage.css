@@ -1,4 +1,4 @@
-/* skin-allowance: colour=1 font=0 primary=13 */
+/* skin-allowance: colour=1 font=0 primary=11 */
 /* ===========================================================================
    EventStage.css — the event's stage (events M3, reworked 27 Sep 2026): the
    host's agenda BOARD, a talk's or a break's own screen, the join QR and the
@@ -218,30 +218,23 @@
   gap: .4em;
 }
 
+/* A ROW'S BUTTONS ARE ui/Button, secondary at 44px (experience plan §5.1,
+   step 5c), on the stage's ladder. Go live and Resume are edged and lettered
+   in the action colour, not filled: the dock's step is the screen's one
+   orange, and a board of planned items is not a column of orange blocks. */
 .ag-b {
-  font-family: inherit;
+  --ui-size: var(--t-meta);
   font-size: var(--t-meta);
-  font-weight: 700;
-  line-height: 1;
   min-height: 44px;
+}
+.ag-r-go .ag-b {
   padding: 0 .8em;
   border-radius: 9px;
   border: var(--hair) solid var(--rule);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
 }
-
-.ag-b--go {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--bg);
-}
-
-.ag-b:disabled {
-  opacity: .5;
-  cursor: not-allowed;
+.ag-r-go .ag-b--go {
+  border-color: var(--action);
+  color: var(--accent-text);
 }
 
 .ag-grid[data-dense] .ag-r {
@@ -851,56 +844,14 @@
   border-top: 1px solid var(--ag-rule);
 }
 
+/* THE DIALOGS' BUTTONS ARE ui/Button at 44px (experience plan §5.1, step
+   5c): the way back (.ag-close) the secondary, the go-ahead in an ask that is
+   not destructive (.ag-yes: Start the event, Bring everyone here, Leave) the
+   primary, --action / --on-action, and the ends (.ag-end) the filled danger.
+   A dialog is a laptop surface: the type is 15px, never the stage ladder. */
 .ag-close,
-.ag-end {
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.ag-close {
-  border: 1px solid var(--ag-rule);
-  background: none;
-  color: var(--text);
-}
-
-.ag-end {
-  border: 1px solid var(--danger-deep);
-  background: none;
-  color: var(--danger-text);
-}
-
-.ag-end:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-/* THE GO-AHEAD in an ask that is not destructive — Start the event, Bring
-   everyone here, Leave (owner, 31 Oct 2026: guard rails on starting and
-   ending). The skin's ACTION role and its own ink (styles/roles.css), as
-   every other filled go-ahead: on Classic that is the amber with the dusk
-   ground as text, 9.2:1. */
-.ag-yes {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--action);
-  border-radius: 10px;
-  background: var(--action);
-  color: var(--on-action);
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.ag-yes:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
+.ag-yes,
+.ag-end { --ui-size: 15px; }
 
 /* The exit's two ways out, each with what it does underneath. */
 .ag-exit-ways {

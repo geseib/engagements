@@ -37,7 +37,7 @@ jest.mock('../WebSocketClient', () => ({
   },
 }));
 
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 
 /* A REDACTED ballot, which is what an unattributed round actually sends: the
@@ -128,10 +128,10 @@ async function resync() {
 
 async function join() {
   render(<PlayerPage />);
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
 }
 
@@ -171,7 +171,7 @@ describe('the shell', () => {
     // Node.DOCUMENT_POSITION_FOLLOWING — a relationship jsdom does model,
     // unlike every offset on the page.
     expect(stage().compareDocumentPosition(dock()) & 4).toBeTruthy();
-    expect(within(dock()).getByRole('button', { name: /Join Game/i })).toBeInTheDocument();
+    expect(within(dock()).getByRole('button', { name: /^Join$/i })).toBeInTheDocument();
   });
 
   // rejects: the parallax hero coming back. Three cross-origin .webp layers,
@@ -194,7 +194,7 @@ describe('the join screen', () => {
   test('both fields have real labels tied to them', () => {
     installFetch(makeServer());
     render(<PlayerPage />);
-    expect(screen.getByLabelText(/Session code/i)).toBe(screen.getByPlaceholderText(/Game ID/i));
+    expect(screen.getByLabelText(/Session code/i)).toBe(screen.getByLabelText(/Session code/i));
     expect(screen.getByLabelText(/Your name/i)).toBe(screen.getByPlaceholderText(/Your Name/i));
   });
 
@@ -228,7 +228,7 @@ describe('the join screen', () => {
 
     await join();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/not found/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Nothing is running under 7123/i);
     expect(alertSpy).not.toHaveBeenCalled();
     // And the form is still usable, which is the whole point of not navigating.
     expect(screen.getByPlaceholderText(/Your Name/i)).toBeInTheDocument();
@@ -245,7 +245,7 @@ describe('the volume is set by the state machine, and the player never chooses',
     await join();
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'rest'));
     expect(dock()).toBeNull();
-    expect(screen.getByText(/Waiting for the game to start/i)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the host/i)).toBeInTheDocument();
   });
 
   // rejects: ASK losing its dock — the one state where the phone legitimately
@@ -264,7 +264,9 @@ describe('the volume is set by the state machine, and the player never chooses',
 
   // rejects: an action surviving the submission. Once the task is done the
   //          phone yields; a second submit affordance in a REST state is an
-  //          invitation to do something that cannot be done.
+  //          invitation to do something that cannot be done. Since 3 Nov the
+  //          dock keeps ONE thing in Send's place: the "Sent" state, which is
+  //          aria-disabled, swallows its click and is not the orange action.
   test('an answered round is REST and offers nothing to press', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
@@ -277,23 +279,33 @@ describe('the volume is set by the state machine, and the player never chooses',
       target: { value: 'A definition everyone renders from.' },
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send my answer/i }));
     });
 
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'rest'));
-    expect(dock()).toBeNull();
+    const only = within(dock()).getAllByRole('button');
+    expect(only).toHaveLength(1);
+    expect(only[0]).toHaveAccessibleName('Sent');
+    expect(only[0]).toHaveAttribute('aria-disabled', 'true');
+    expect(dock().querySelector('.ui-btn--action')).toBeNull();
   });
 
-  // rejects: RESULTS growing an action. The stage is the show in WATCH; the
-  //          phone carries only what is personal and cannot be on the stage.
-  test('results is WATCH and offers nothing to press', async () => {
+  // rejects: RESULTS growing an action beyond the one way into comments. The
+  //          stage is the show in WATCH; the phone's dock carries only
+  //          "Comment on this round" (phone-comments D9; experience plan
+  //          principle 8: the action lives in the dock), never the bare
+  //          "Feedback".
+  test('results is WATCH and its dock offers only "Comment on this round"', async () => {
     const server = makeServer({ state: 'CREATED', gameType: 'trivia' });
     installFetch(server);
     await join();
     server.state = 'RESULTS#001';
     await resync();
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'watch'));
-    expect(dock()).toBeNull();
+    const buttons = dock().querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent.trim()).toBe('Comment on this round');
+    expect(dock().textContent).toContain('Reply to a response, or comment on Workie’s read.');
   });
 });
 
@@ -370,7 +382,7 @@ describe('ASK', () => {
 
     fireEvent.change(composer, { target: { value: 'One definition, rendered everywhere.' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Answer/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send my answer/i }));
     });
 
     expect(await screen.findByText('One definition, rendered everywhere.')).toBeInTheDocument();
@@ -447,17 +459,17 @@ describe('the ballot', () => {
   // rejects: the submit drifting back into the scrolling list, where a 20-card
   //          ballot puts it below the fold, and a second copy of it appearing in
   //          the other mode.
-  test('there is exactly one Submit Votes, and it is in the dock', async () => {
+  test('there is exactly one Send my votes, and it is in the dock', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
     await reachBallot(server);
 
-    const submits = screen.getAllByRole('button', { name: /Submit Votes|more to submit/i });
+    const submits = screen.getAllByRole('button', { name: /Send my votes|more to send/i });
     expect(submits).toHaveLength(1);
     expect(dock().contains(submits[0])).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: /Detailed Vote/i }));
-    const afterSwitch = screen.getAllByRole('button', { name: /Submit Votes|more to submit/i });
+    const afterSwitch = screen.getAllByRole('button', { name: /Send my votes|more to send/i });
     expect(afterSwitch).toHaveLength(1);
     expect(dock().contains(afterSwitch[0])).toBe(true);
   });
@@ -470,7 +482,7 @@ describe('the ballot', () => {
     installFetch(server);
     await reachBallot(server);
 
-    expect(screen.getByRole('button', { name: /Pick 3 more to submit/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Pick 3 more to send/i })).toBeDisabled();
   });
 
   // rejects: your own row losing its mark, or gaining a block on ranking it.
@@ -643,7 +655,7 @@ describe('the join refusal', () => {
 
     const buttons = within(dock()).getAllByRole('button');
     for (const button of buttons) {
-      expect(button).toHaveClass('plr-btn');
+      expect(button).toHaveClass('ui-btn', 'ui-btn--h56');
       expect(button.className).not.toMatch(/btn-primary|btn-secondary|btn-large/);
     }
     expect(within(stage()).queryAllByRole('button')).toEqual([]);
@@ -652,73 +664,25 @@ describe('the join refusal', () => {
   /* rejects: a self-serve takeover reappearing on the one screen built to
      refuse one.
 
-     THIS TEST COUNTED ONE BUTTON UNTIL THE HANDOVER SHIPPED, and the count was
-     standing in for the real rule: nothing on this screen may take a name the
-     server has said is held. Two buttons now, and the rule is asserted
-     directly instead — the first offer is to ASK, and the takeover is not
-     reachable until the person has. A single button labelled "take it anyway"
-     would satisfy a count of two and is exactly what must never appear. */
+     Two buttons, and the rule is asserted directly: the first offer ASKS, and
+     nothing on this screen ever takes a name the server has said is held. A
+     single button labelled "take it anyway" would satisfy a count of two and
+     is exactly what must never appear. The wait that follows the ask, its
+     quiet retry and its timings are pinned in playerNameMove.test.jsx. */
   test('the first offer is to ask the host, never to take the name', async () => {
     await refuse('NAME_TAKEN');
 
     const labels = () => within(dock()).getAllByRole('button')
       .map((b) => b.textContent.trim());
-    expect(labels()).toEqual(['Ask the host to hand it over', 'Pick a different name']);
-
-    // Only after asking does a takeover appear at all — and even then the
-    // server refuses it without a host grant (tests/name-handover.js §1).
-    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
-    await waitFor(() => expect(labels()).toEqual(['Take over the name', 'Pick a different name']));
-    expect(screen.getByText(/when they say go ahead/i)).toBeInTheDocument();
-  });
-
-  /* rejects: a takeover the host has not authorised failing SILENTLY. The
-     server refuses it — a 409 with the same NAME_TAKEN code the screen is
-     already showing — so without this branch the button does nothing visible
-     and the person taps it forever. */
-  test('a takeover the host has not granted says "not yet", not nothing', async () => {
-    await refuse('NAME_TAKEN');
-
-    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
-    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
+    expect(labels()).toEqual(["That's me: use my name on this device", "I'm someone else: pick another name"]);
+    expect(screen.getByRole('heading', { name: `${ME} is already in this session.` })).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /take over the name/i }));
+      fireEvent.click(screen.getByRole('button', { name: /use my name on this device/i }));
     });
-
-    await waitFor(() => expect(screen.getByText(/has not unlocked/i)).toBeInTheDocument());
-    expect(screen.getByText(/ask them out loud/i)).toBeInTheDocument();
-    // The way out is still there, and the takeover can still be retried once
-    // the host does unlock it.
-    expect(within(dock()).getAllByRole('button').map((b) => b.textContent.trim()))
-      .toEqual(['Take over the name', 'Pick a different name']);
-  });
-
-  /* rejects: a takeover that does not actually CLAIM. Without `claimExisting`
-     the server treats it as an ordinary retry and refuses it however wide the
-     host's grant is open — the button would be permanently, silently inert,
-     and every other test here would stay green because they all model a
-     session that refuses. */
-  test('the takeover claims the name, and the grant lets it through', async () => {
-    await refuse('NAME_TAKEN', { granted: true });
-
-    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
-    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /take over the name/i }));
-    });
-
-    // In. The refusal is gone and the surface has left the join phase.
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-    expect(shell().getAttribute('data-phase')).not.toBe('join');
-
-    const claim = global.fetch.mock.calls
-      .map(([url, options]) => ({ url: String(url), options }))
-      .filter(({ url, options }) => (options?.method === 'POST')
-        && url.endsWith(`games/${GAME}/players`))
-      .pop();
-    expect(JSON.parse(claim.options.body).claimExisting).toBe(true);
+    // Asked, and checked: the screen waits only because the server said yes.
+    await waitFor(() => expect(screen.getByText(/Waiting for the host to let you in as/)).toBeInTheDocument());
+    expect(labels()).toEqual(['Pick another name']);
   });
 
   /* rejects: an ask that carries no identity. The host's console offers "let
@@ -730,7 +694,7 @@ describe('the join refusal', () => {
     await refuse('NAME_TAKEN');
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
+      fireEvent.click(screen.getByRole('button', { name: /use my name on this device/i }));
     });
 
     const ask = global.fetch.mock.calls
@@ -750,27 +714,28 @@ describe('the join refusal', () => {
     expect(ask.url).toContain(`${encodeURIComponent(ME)}/handover-request`);
   });
 
-  /* rejects: `asked` surviving into a refusal about a DIFFERENT name. The
-     two-step is the guard on this screen — reaching "Take over the name"
-     requires having asked — and a stage carried across a fresh join would hand
-     that button to somebody who has asked nobody anything. */
+  /* rejects: a wait surviving into a refusal about a DIFFERENT name. A screen
+     that said "Waiting for the host to let you in as Someone Else" would be
+     describing an ask nobody made. */
   test('picking a different name and colliding again starts the ask over', async () => {
     await refuse('NAME_TAKEN');
 
-    fireEvent.click(screen.getByRole('button', { name: /ask the host/i }));
-    await waitFor(() => screen.getByRole('button', { name: /take over the name/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /use my name on this device/i }));
+    });
+    await waitFor(() => screen.getByText(/Waiting for the host/));
 
     // Give up on that name and try another, which is also taken.
-    fireEvent.click(screen.getByRole('button', { name: /pick a different name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /pick another name/i }));
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Someone Else' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     });
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(within(dock()).getAllByRole('button').map((b) => b.textContent.trim()))
-      .toEqual(['Ask the host to hand it over', 'Pick a different name']);
-    expect(screen.queryByText(/when they say go ahead/i)).toBeNull();
+      .toEqual(["That's me: use my name on this device", "I'm someone else: pick another name"]);
+    expect(screen.queryByText(/Waiting for the host/)).toBeNull();
   });
 });
 
@@ -782,8 +747,8 @@ describe('results shows the personal half and points at the room for the rest', 
               runs that game type. */
   test.each([
     ['call-and-answer', /You didn’t send a response this round/i],
-    ['trivia', /You answered/i],
-    ['wavelength', /Your words/i],
+    ['trivia', /Your result/i],
+    ['wavelength', /Your result/i],
     ['poll', /You didn’t send a response this round/i],
   ])('%s results renders and carries the look-up cue', async (gameType, heading) => {
     const server = makeServer({ state: 'CREATED', gameType });
@@ -807,10 +772,10 @@ describe('results shows the personal half and points at the room for the rest', 
               writes no scores and a poll is not scored, so the line read as a
               wrong answer; the scored types keep it. */
   test.each([
-    ['wavelength', /Your words/i, false],
+    ['wavelength', /Your result/i, false],
     ['poll', /You didn’t send a response this round/i, false],
     ['call-and-answer', /You didn’t send a response this round/i, true],
-    ['trivia', /You answered/i, true],
+    ['trivia', /Your result/i, true],
   ])('%s results: the score lines only where the type scores', async (gameType, heading, scored) => {
     const server = makeServer({ state: 'CREATED', gameType });
     installFetch(server);
@@ -838,7 +803,7 @@ describe('the states that did not exist', () => {
     await resync();
 
     await waitFor(() => expect(screen.getByText(/Thanks for playing/i)).toBeInTheDocument());
-    expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Download Report/i })).toBeNull();
     expect(shell()).toHaveAttribute('data-volume', 'watch');
   });
@@ -872,8 +837,8 @@ describe('the states that did not exist', () => {
     await resync();
     await waitFor(() => expect(screen.getByText(/Something to add\?/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Is the demo ready for Tuesday?' })).toBeInTheDocument());
-    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    await waitFor(() => expect(document.querySelector('.fbr-q__title')?.textContent).toBe('Is the demo ready for Tuesday?'));
+    expect(document.body.textContent).toMatch(/Round 1 · Comments/i);
     expect(screen.queryByText(/could not be loaded/i)).toBeNull();
   });
 
@@ -891,10 +856,10 @@ describe('the states that did not exist', () => {
     fireEvent.click(screen.getByRole('button', { name: /Round 1/ }));
     await waitFor(() => expect(screen.queryByText(/Thanks for playing/i)).toBeNull());
     expect(screen.getByText(/Comments stay open for 24 hours/)).toBeInTheDocument();
-    expect(document.body.textContent).toMatch(/Round 1 · Feedback/i);
+    expect(document.body.textContent).toMatch(/Round 1 · Comments/i);
     // The room cannot "move on" from the end: the panel stays, and a comment can be started.
     await new Promise((r) => setTimeout(r, 50));
-    fireEvent.click(screen.getAllByRole('button', { name: /^Comment/ })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Comment on /i })[0]);
     await waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
   });
 

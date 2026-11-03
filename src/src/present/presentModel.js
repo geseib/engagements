@@ -8,7 +8,9 @@
  * snapshot, so a reload lands on the same moment.
  *
  * Moments: WAITING, NOT_FOUND, LOBBY, ANSWERING, VOTING, VOTE_RESPONSE,
- * RESULTS, RESPONSES, READ, READ_WAIT, FEEDBACK, QUESTION_FOCUS, ENDED, OTHER.
+ * RESULTS, RESPONSES, READ, READ_WAIT, FEEDBACK, QUESTION_FOCUS, ENDED, OTHER,
+ * and Trivia's and Poll's own (experience plan 2g): TRIVIA_QUESTION,
+ * TRIVIA_REVEAL, POLL_ASK, POLL_RESULTS.
  * The scoreboard is not a moment: it sits over whichever one is on.
  *
  * Names (R9 and the owner's ruling of 2026-10-12):
@@ -59,6 +61,7 @@ import { partText } from './presentFit';
 import { wallCreditFor } from '../config/comments';
 import { podiumEntries } from '../config/podium';
 import { isSurveyType } from '../config/hostControls';
+import { triviaOptions, isCorrectTriviaOption, optionShare } from '../config/questionCard';
 
 /** The results tally shows five; up to six fit whole (NOTES §5). */
 export const TALLY_TOP = 5;
@@ -277,6 +280,83 @@ function joinFacts(snapshot, reads, code) {
   };
 }
 
+/*
+  TRIVIA AND POLL ON THE ROOM'S WINDOW (experience plan 2g, §3.3's "The room
+  sees": Trivia "the options, nothing marked and no split, until Show the
+  answer"; Poll "the live board"). Their answering and results moments only;
+  the read, feedback, the lobby and the end are every type's.
+
+  THE TRIVIA ANSWER IS NEVER WORKED OUT HERE BEFORE THE REVEAL. TRIVIA_QUESTION
+  carries the letters and texts and nothing else, whatever the input holds; the
+  reveal reads `correctAnswer` off the public /state, which carries it only at
+  RESULTS (get-game-state.js; tests/trivia-answer-private.js), and the split
+  from the public get-results read, which answers only once the round is in
+  RESULTS. Names never reach either: the shares are counted from the answer
+  letters alone.
+*/
+const promptOf = (q) => {
+  const prompt = String(q.questionDetail || q.detail || '').trim();
+  return prompt === String(q.title || '').trim() ? '' : prompt;
+};
+
+function triviaModel(moment, snapshot, reads, common) {
+  const q = snapshot.currentQuestionData || {};
+  const base = {
+    ...common,
+    category: String(q.category || ''),
+    title: String(q.title || ''),
+    prompt: promptOf(q),
+  };
+  if (moment === 'ANSWERING') {
+    return {
+      moment: 'TRIVIA_QUESTION',
+      ...base,
+      options: triviaOptions(q).map(({ letter, text }) => ({ letter, text: String(text) })),
+      counts: countsOf(snapshot, 'answered'),
+      ...(snapshot.time ? { time: snapshot.time } : {}),
+    };
+  }
+  const results = reads.results && reads.results.gameType === 'trivia' ? reads.results : null;
+  const letters = results && Array.isArray(results.answers)
+    ? results.answers.map((a) => ({ answer: String((a && a.answer) || '') }))
+    : [];
+  const known = q.correctAnswer !== undefined && q.correctAnswer !== null && q.correctAnswer !== '';
+  const options = triviaOptions(q).map(({ key, letter, text }) => ({
+    letter,
+    text: String(text),
+    correct: known && isCorrectTriviaOption(q, key, letter),
+    share: results ? optionShare(letters, letter) : null,
+  }));
+  const right = options.filter((o) => o.correct).map((o) => o.letter);
+  return {
+    moment: 'TRIVIA_REVEAL',
+    ...base,
+    options,
+    loading: !known || !results,
+    answered: letters.length,
+    gotIt: letters.filter((a) => right.includes(a.answer)).length,
+  };
+}
+
+function pollModel(moment, snapshot, reads, common) {
+  const q = snapshot.currentQuestionData || {};
+  const round = (String(snapshot.state || '').match(/#(\d+)/) || [])[1];
+  const board = reads.poll && reads.poll.question && (!reads.poll.round || !round || reads.poll.round === round.padStart(3, '0'))
+    ? reads.poll : null;
+  return {
+    moment: moment === 'ANSWERING' ? 'POLL_ASK' : 'POLL_RESULTS',
+    ...common,
+    category: String(q.category || ''),
+    title: String(q.title || ''),
+    prompt: promptOf(q),
+    question: (board && board.question) || q.poll || null,
+    tally: board ? board.tally || null : null,
+    live: moment === 'ANSWERING',
+    counts: countsOf(snapshot, 'answered'),
+    ...(moment === 'ANSWERING' && snapshot.time ? { time: snapshot.time } : {}),
+  };
+}
+
 function momentModel(snapshot, reads = {}) {
   if (!snapshot || typeof snapshot !== 'object') return { moment: 'WAITING', profile: DEFAULT_PROFILE };
   if (snapshot.notFound) return { moment: 'NOT_FOUND', profile: DEFAULT_PROFILE };
@@ -345,6 +425,10 @@ function momentModel(snapshot, reads = {}) {
     state: snapshot.state, stageBeat: snapshot.stageBeat, focus, roomAsk: liveAsk ? { status: liveAsk.status } : null,
   });
 
+  const kind = String(snapshot.gameType || '');
+  if (kind === 'trivia' && (moment === 'ANSWERING' || moment === 'RESULTS')) return triviaModel(moment, snapshot, reads, common);
+  if (kind === 'poll' && (moment === 'ANSWERING' || moment === 'RESULTS')) return pollModel(moment, snapshot, reads, common);
+
   switch (moment) {
     case 'LOBBY':
       return {
@@ -362,6 +446,9 @@ function momentModel(snapshot, reads = {}) {
         task: taskOf(q, snapshot),
         story: storyOf(q),
         counts: countsOf(snapshot, 'answered'),
+        // The round timer as words and a bar (experience plan 2f), only when
+        // the host left "show the time" on; /state carries none otherwise.
+        ...(snapshot.time ? { time: snapshot.time } : {}),
       };
     case 'VOTING': {
       const answered = int(snapshot.roomCounts && snapshot.roomCounts.answered);
@@ -372,6 +459,7 @@ function momentModel(snapshot, reads = {}) {
         ...contextOf(q, snapshot),
         lead: RW.answersOnDevices(answered),
         counts: countsOf(snapshot, 'voted'),
+        ...(snapshot.time ? { time: snapshot.time } : {}),
       };
     }
     case 'RESULTS': {

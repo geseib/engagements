@@ -3,8 +3,14 @@ import './RemoteSessionPanel.css';
 import Icon from './Icon';
 import RemoteQuestionBrowser from './RemoteQuestionBrowser';
 import QueueList from './stage/QueueList';
+import OwnQuestionComposer from './OwnQuestionComposer';
+import YoursMark from './YoursMark';
+import Button from './ui/Button';
+import { ownQuestionWords as OQ } from '../config/consoleWords';
+import { laterAnchors } from '../config/ownQuestion';
 import WorkieContextHint from './WorkieContextHint';
-import { remotePanelTabs, rosterListing } from '../config/hostRemote';
+import { remotePanelTabs, remotePanelTab, rosterListing } from '../config/hostRemote';
+import { endSessionConfirm } from '../config/hostControls';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
 import { displayLabelFor } from '../config/anonymity';
 import { answerText } from '../config/stageAnswers';
@@ -60,7 +66,7 @@ const apiBase = () => window.API_BASE || '';
 export default function RemoteSessionPanel({
   gameId = '',
   setId = '',
-  initialTab = 'players',
+  initialTab = 'up-next',
   roster = null,
   state = '',
   // The session's game type, straight from the server, for the Questions tab's
@@ -81,8 +87,50 @@ export default function RemoteSessionPanel({
   onAskNext = () => {},
   onAskNow = () => {},
   onUnqueue = () => {},
+  /* THE IMPROMPTU ASK (README D2, frame 5): the Rounds tab's "Write a
+     question", the queue's Yours rows, and the composer's props from
+     HostRemote (null = closed) — drawn as a full-height sheet over the tabs. */
+  ownQuestions = [],
+  onWriteQuestion = null,
+  onEditOwn = null,
+  onRemoveOwn = null,
+  ownComposer = null,
+  /* The round on screen, { n, title }, from the state poll: the running
+     order numbers on from it, as the stage and the rail do. Null: the plan's
+     own round numbers say where the next round is. */
+  queueNowRound = null,
+  /* UP NEXT'S CATEGORIES LINE (docs/design/session-menu §3, phone rows):
+     "4 of 6 on · 23 questions left", with Change opening the switches
+     (`categoryPanel`, HostRemote's RemoteCategoryList). Empty: no line. */
+  categoryLine = '',
+  categoryPanel = null,
+  /* ROUNDS SO FAR'S REPORT (D10: the phone's Rounds so far gains the report).
+     `onOpenReport` opens it once the session has ended; before that the card
+     says the rounds below are the report so far. */
+  ended = false,
+  onOpenReport = null,
+  /* END SESSION ON THE PHONE (fork F8), confirmed in place with the laptop's
+     own words (config/hostControls.js endSessionConfirm). `onEndSession`
+     resolves { ended, error }; null draws no foot. */
+  onEndSession = null,
 }) {
-  const [tab, setTab] = useState(initialTab);
+  const [catsOpen, setCatsOpen] = useState(false);
+  const [endAsk, setEndAsk] = useState(false);
+  const [endBusy, setEndBusy] = useState(false);
+  const [endError, setEndError] = useState('');
+  const endWords = endSessionConfirm();
+  const endNow = async () => {
+    setEndBusy(true);
+    setEndError('');
+    try {
+      const r = await onEndSession();
+      if (r && r.ended === false) setEndError(r.error ? `The session did not end: ${r.error}` : 'The session did not end.');
+      else setEndAsk(false);
+    } finally {
+      setEndBusy(false);
+    }
+  };
+  const [tab, setTab] = useState(() => remotePanelTab(initialTab));
   const [rounds, setRounds] = useState([]);
   const [roundsLoading, setRoundsLoading] = useState(false);
   const [openRound, setOpenRound] = useState(null);
@@ -105,7 +153,7 @@ export default function RemoteSessionPanel({
    * Never on a timer of its own: a list nobody has open costs nothing.
    */
   useEffect(() => {
-    if (tab !== 'questions' || !gameId) return undefined;
+    if ((tab !== 'up-next' && !ownComposer) || !gameId) return undefined;
     let cancelled = false;
     (async () => {
       const result = await fetchUpNext({ apiBase: apiBase(), gameId });
@@ -116,7 +164,7 @@ export default function RemoteSessionPanel({
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, gameId, round, state, queueVersion]);
+  }, [tab, gameId, round, state, queueVersion, ownComposer]);
 
   /*
     TITLES FOR THE QUEUED ROWS. QueueList names a queued key from the questions
@@ -188,6 +236,21 @@ export default function RemoteSessionPanel({
 
   const tabs = remotePanelTabs();
 
+  if (ownComposer) {
+    const laterOptions = laterAnchors(plan.upNext.map((row, i) => ({
+      key: questionKey(String(row.questionId || '')),
+      n: Number(row.round) > 0 ? Number(row.round) : i + 1,
+      title: row.title || '',
+      source: row.source,
+    })));
+    const nextN = plan.upNext.length && Number(plan.upNext[0].round) > 0 ? Number(plan.upNext[0].round) : null;
+    return (
+      <div className="hrs hrs--own" data-testid="remote-own-sheet">
+        <OwnQuestionComposer laterOptions={laterOptions} nextRound={nextN} {...ownComposer} />
+      </div>
+    );
+  }
+
   return (
     <div className="hrs">
       <div className="hrs-tabs" role="tablist" aria-label="Session">
@@ -207,12 +270,12 @@ export default function RemoteSessionPanel({
         ))}
       </div>
 
-      {tab === 'players' && (
+      {tab === 'people' && (
         <section
           className="hrs-pane"
           role="tabpanel"
-          id="hrs-panel-players"
-          aria-labelledby="hrs-tab-players"
+          id="hrs-panel-people"
+          aria-labelledby="hrs-tab-people"
           /* WHICH SET THIS LIST IS, as a fact in the markup rather than
              something inferred from the heading — RoomMeter.jsx's idiom, and
              its reason: a joined list under a waiting caption is an accusation,
@@ -267,9 +330,26 @@ export default function RemoteSessionPanel({
             <p className="hr-hint">
               {roundsLoading
                 ? 'Reading the rounds…'
-                : 'No rounds yet. They appear here once a round has been played.'}
+                : 'The report and each round appear here once a round has been played.'}
             </p>
           ) : (
+            /* THE REPORT FIRST (D3, D10), as on the laptop's Rounds so far. */
+            <div className="hrs-report" data-testid="remote-report">
+              <Icon name="FileText" weight="duotone" size={22} color="var(--primary)" />
+              <span className="hrs-report-t">
+                <b>Session report</b>
+                <span className="hr-hint">
+                  {ended
+                    ? `All ${rounds.length === 1 ? 'the round' : `${rounds.length} rounds`}, with Workie's reads.`
+                    : `Rounds 1–${rounds.length} so far: the rounds below. The full report opens here once the session ends.`}
+                </span>
+              </span>
+              {ended && typeof onOpenReport === 'function' ? (
+                <Button variant="secondary" size={44} onClick={onOpenReport} data-testid="remote-open-report">Open the report</Button>
+              ) : null}
+            </div>
+          )}
+          {rounds.length === 0 ? null : (
             <ul className="hrs-list hrs-rounds">
               {rounds.map((entry, index) => {
                 const open = openRound === index;
@@ -284,6 +364,7 @@ export default function RemoteSessionPanel({
                       <span className="hrs-rank">{entry.ordinal}</span>
                       <span className="hrs-round-text">
                         <span className="hrs-round-title">{entry.title}</span>
+                        {entry.own ? <YoursMark /> : null}
                         <span className="hrs-round-sub">{roundSubtitle(entry)}</span>
                       </span>
                       {/* Answers the question a host scanning this list
@@ -340,12 +421,12 @@ export default function RemoteSessionPanel({
         </section>
       )}
 
-      {tab === 'questions' && (
+      {tab === 'up-next' && (
         <section
           className="hrs-pane"
           role="tabpanel"
-          id="hrs-panel-questions"
-          aria-labelledby="hrs-tab-questions"
+          id="hrs-panel-up-next"
+          aria-labelledby="hrs-tab-up-next"
         >
           {/* THE RUNNING ORDER FIRST, then the set that fills it — the stage
               panel's reading order, for the stage panel's reason: what is
@@ -369,12 +450,38 @@ export default function RemoteSessionPanel({
             askNowArmedKey={askNowArmedKey}
             onAskNext={(key, meta) => onAskNext(asRow(key, meta))}
             onAskNow={(key, meta) => onAskNow(asRow(key, meta))}
+            ownQuestions={ownQuestions}
+            onEditOwn={onEditOwn}
+            onRemoveOwn={onRemoveOwn}
+            base={queueNowRound && queueNowRound.n > 0 ? queueNowRound.n : null}
+            nowRound={queueNowRound}
           />
 
-          {/* THE BROWSER THAT ALREADY EXISTED, not a second question list. It
-              used to own the whole viewport — its own bar, its own dock — which
-              is why it is the tab whose chrome had to move rather than the tab
-              that had to be written. */}
+          {/* THE IMPROMPTU ASK'S PHONE DOOR (README D2), in Up next with the
+              laptop's (session-menu D4): the same composer, as a full-height
+              sheet. */}
+          {onWriteQuestion ? (
+            <Button variant="secondary" size={44} className="hrs-write" onClick={onWriteQuestion} data-testid="remote-write">
+              <Icon name="Plus" weight="bold" size={16} color="currentColor" />
+              {OQ.write}
+            </Button>
+          ) : null}
+
+          {/* THE CATEGORIES, IN ONE LINE, with Change opening the switches. */}
+          {categoryLine ? (
+            <div className="hrs-cats" data-testid="remote-categories">
+              <span><b>Categories</b>{` · ${categoryLine}`}</span>
+              {categoryPanel ? (
+                <Button variant="tertiary" size={44} aria-expanded={catsOpen} onClick={() => setCatsOpen((v) => !v)} data-testid="remote-categories-change">
+                  {catsOpen ? 'Done' : 'Change'}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {catsOpen && categoryPanel ? <div className="hr-card-panel">{categoryPanel}</div> : null}
+
+          {/* CHOOSE FROM THE SET: the browser that already existed, not a
+              second question list (it heads itself "Question set"). */}
           <RemoteQuestionBrowser
             setId={setId}
             /* The session reads its OWN set: which library the slug belongs to
@@ -391,6 +498,28 @@ export default function RemoteSessionPanel({
           />
         </section>
       )}
+
+      {/* THE FOOT (fork F8): End session, with the laptop's confirm, asked in
+          place — a phone has no room for a dialog over the dock. */}
+      {typeof onEndSession === 'function' ? (
+        <div className="hrs-foot" data-testid="remote-end-foot">
+          {endAsk ? (
+            <div className="hrs-end-ask" role="group" aria-label={endWords.title}>
+              <b>{endWords.title}</b>
+              <p className="hr-hint">{endWords.message}</p>
+              {endError ? <p className="hr-flash hr-flash--error" role="alert">{endError}</p> : null}
+              <div className="hr-grid">
+                <Button variant="secondary" size={44} onClick={() => { setEndAsk(false); setEndError(''); }} disabled={endBusy}>Keep it running</Button>
+                <Button variant="danger" size={44} onClick={endNow} disabled={endBusy} data-testid="remote-end-confirm">
+                  {endBusy ? 'Ending…' : endWords.confirmText}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="secondary" size={44} className="hrs-end" onClick={() => setEndAsk(true)} data-testid="remote-end">End session…</Button>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

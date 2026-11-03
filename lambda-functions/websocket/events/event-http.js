@@ -26,6 +26,26 @@ function callerSub(request) {
   return String(lambda.userId || claims.sub || '').trim();
 }
 
+/**
+ * The caller's display name, for the event they create (the summary PDF's
+ * "Hosted by"): the token's `name`, else given and family names, else the
+ * part of the email before the @. '' when the request carries none of them.
+ * The Lambda authorizer passes `name` and `email` (auth/authorizer.js); a JWT
+ * authorizer passes the claims themselves.
+ */
+function callerDisplayName(request) {
+  const auth = (request && request.requestContext && request.requestContext.authorizer) || {};
+  const lambda = auth.lambda || {};
+  const claims = (auth.jwt && auth.jwt.claims) || auth.claims || {};
+  const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+  const name = clean(lambda.name) || clean(claims.name);
+  if (name) return name.slice(0, 120);
+  const full = clean([claims.given_name, claims.family_name].filter(Boolean).join(' '));
+  if (full) return full.slice(0, 120);
+  const email = clean(lambda.email) || clean(claims.email);
+  return email.includes('@') ? email.split('@')[0].slice(0, 120) : '';
+}
+
 function methodOf(request) {
   const http = (request && request.requestContext && request.requestContext.http) || {};
   return String(http.method || '').toUpperCase();
@@ -71,4 +91,4 @@ function readBody(request) {
  */
 const eventsEnabled = () => String(process.env.EVENTS_ENABLED || '').trim().toLowerCase() === 'on';
 
-module.exports = { json, notFound, callerSub, methodOf, trace, readBody, eventsEnabled };
+module.exports = { json, notFound, callerSub, callerDisplayName, methodOf, trace, readBody, eventsEnabled };

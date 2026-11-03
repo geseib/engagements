@@ -56,13 +56,19 @@
  */
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const {
-  DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteCommand,
+  DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, TransactWriteCommand,
 } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 
+const nodeCrypto = require('crypto');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
-const { QUEUE_OPS, applyQueueOp, normaliseQueue } = require('./queue-order');
-const { callerMayDriveSession } = require('./tenant');
+const { QUEUE_OPS, OWN_PLACES, applyQueueOp, normaliseQueue } = require('./queue-order');
+const { callerMayDriveSession, callerUserId } = require('./tenant');
+const { encryptItem } = require('./tenant-crypto');
+const {
+  OWN_TASK, LIMITS: OWN_LIMITS, ownIdOfKey, isOwnQueueKey, ownQueueKey, ownRowKey,
+  readOwnQuestion, listOwnQuestions,
+} = require('./round-question');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -172,6 +178,54 @@ const broadcastToHosts = async (gameId, message) => {
   }
 };
 
+/*
+  ── THE HOST'S OWN QUESTIONS (docs/design/impromptu-ask README §5.3) ────────
+
+  Three ops ride this route and no other: `add-own` writes a new
+  `GAME#<id> / OWNQ#<ownId>` row AND inserts `own:<ownId>` into the running
+  order in ONE transaction (so a question can never exist without its place,
+  or a place without its question); `edit-own` rewrites the row's words until
+  the round runs; `after` places any queued key after a named anchor. `remove`
+  of an `own:` key also marks its row `removed`. No new Lambda and no new
+  route: the stack is near its resource limit.
+*/
+
+/** The three fields, trimmed and capped; `{ error }` when they do not hold. */
+const ownFieldsOf = (source) => {
+  const s = source && typeof source === 'object' ? source : {};
+  const text = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '');
+  const title = text(s.title);
+  const detail = text(s.detail);
+  const note = text(s.note);
+  if (!title) return { error: 'The question needs some words.' };
+  if (title.length > OWN_LIMITS.title) return { error: `The question is longer than ${OWN_LIMITS.title} characters.` };
+  if (detail.length > OWN_LIMITS.detail) return { error: `The line for the room is longer than ${OWN_LIMITS.detail} characters.` };
+  if (note.length > OWN_LIMITS.note) return { error: `The note for Workie is longer than ${OWN_LIMITS.note} characters.` };
+  return { title, detail, note };
+};
+
+/** Who wrote it, as the report names them ("Written by the host…"). Never sent to a participant. */
+const callerName = (event) => {
+  const authorizer = (event && event.requestContext && event.requestContext.authorizer) || {};
+  const claims = (authorizer.jwt && authorizer.jwt.claims) || authorizer.claims || {};
+  const raw = claims.name || [claims.given_name, claims.family_name].filter(Boolean).join(' ') || claims.email || '';
+  return String(raw).trim().slice(0, 120);
+};
+
+/** The OWNQ row as stored: sealed under the session's org with the `question` entity. */
+const sealOwnRow = async (orgId, item) => (orgId ? encryptItem(orgId, 'question', item) : item);
+
+/** The host's own questions beside the running order, for every host-facing response. */
+const withOwn = async (gameId, body) => {
+  let ownQuestions = [];
+  try {
+    ownQuestions = await listOwnQuestions(db, process.env.TABLE_NAME, gameId);
+  } catch (error) {
+    console.error('❌ QUEUE: could not list own questions (continuing):', error.message);
+  }
+  return { ...body, ownQuestions };
+};
+
 /** The set this game plays, so the queue records what it was built against. */
 const resolveGameSet = async (gameId) => {
   const metadata = await db.send(new GetCommand({
@@ -234,7 +288,7 @@ exports.handler = async (event) => {
       // A game that has never queued anything has no QUEUE row, and that is an
       // empty queue at version 0 — not a 404. The panel must be able to render
       // before the host has pressed anything.
-      return respond(200, { gameId, ...projectQueue(current.Item) });
+      return respond(200, await withOwn(gameId, { gameId, ...projectQueue(current.Item) }));
     }
 
     if (method !== 'POST') return respond(405, { error: `${method} is not supported` });
@@ -247,7 +301,8 @@ exports.handler = async (event) => {
     }
 
     const { op, expectedVersion } = body;
-    const key = body.questionKey ?? body.questionId ?? body.key;
+    let key = body.questionKey ?? body.questionId ?? body.key;
+    const sessionOrgId = typeof (ownerRead.Item || {}).orgId === 'string' ? ownerRead.Item.orgId.trim() : '';
 
     /*
       A CLOSED ENUM, REFUSED OUT LOUD — the same 400 stage-beat.js gives an
@@ -261,12 +316,78 @@ exports.handler = async (event) => {
     if (!QUEUE_OPS.includes(op)) {
       return respond(400, { error: `op must be one of: ${QUEUE_OPS.join(', ')}` });
     }
+
+    // ADD-OWN mints its key here, ONCE, outside the retry loop: a retry that
+    // minted a new id would write a second row for one press.
+    let ownFields = null;
+    let place = 'next';
+    if (op === 'add-own') {
+      ownFields = ownFieldsOf(body.question || body);
+      if (ownFields.error) return respond(400, { error: ownFields.error });
+      place = OWN_PLACES.includes(body.place) ? body.place : 'next';
+      key = ownQueueKey(nodeCrypto.randomBytes(6).toString('hex'));
+    }
     if (!String(key ?? '').trim()) {
       return respond(400, { error: 'questionKey is required' });
     }
 
+    // EDIT-OWN rewrites the row and never the order (README F3: no editing once
+    // it has started — the condition on Status is the server's half of that).
+    if (op === 'edit-own') {
+      if (!isOwnQueueKey(key)) return respond(400, { error: 'edit-own takes an own: key' });
+      const fields = ownFieldsOf(body.question || body);
+      if (fields.error) return respond(400, { error: fields.error });
+      const ownId = ownIdOfKey(key);
+      const existing = await readOwnQuestion(db, process.env.TABLE_NAME, gameId, ownId);
+      if (!existing || existing.Status === 'removed') {
+        return respond(200, await withOwn(gameId, { gameId, changed: false, refused: 'not-queued' }));
+      }
+      if (existing.Status !== 'queued') {
+        return respond(200, await withOwn(gameId, {
+          gameId, changed: false, refused: 'already-asked', askedRound: existing.AskedRound || null,
+        }));
+      }
+      const now = new Date().toISOString();
+      const sealed = await sealOwnRow(sessionOrgId, { Title: fields.title, Detail: fields.detail, Background: fields.note });
+      try {
+        await db.send(new UpdateCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: ownRowKey(gameId, ownId),
+          UpdateExpression: 'SET #t = :t, #d = :d, #b = :b, #u = :now',
+          // Its own UpdatedAt: an edit from a two-second-stale Remote cannot
+          // overwrite the laptop's newer words (README risk 6).
+          ConditionExpression: '#s = :queued AND #u = :was',
+          ExpressionAttributeNames: { '#t': 'Title', '#d': 'Detail', '#b': 'Background', '#u': 'UpdatedAt', '#s': 'Status' },
+          ExpressionAttributeValues: {
+            ':t': sealed.Title, ':d': sealed.Detail, ':b': sealed.Background,
+            ':now': now, ':queued': 'queued', ':was': existing.UpdatedAt,
+          },
+        }));
+      } catch (error) {
+        if (error.name !== 'ConditionalCheckFailedException') throw error;
+        const again = await readOwnQuestion(db, process.env.TABLE_NAME, gameId, ownId);
+        return respond(200, await withOwn(gameId, {
+          gameId, changed: false, refused: again && again.Status === 'asked' ? 'already-asked' : 'stale-edit',
+        }));
+      }
+      await broadcastToHosts(gameId, { type: 'questionQueueChanged', gameId, own: true, timestamp: now });
+      return respond(200, await withOwn(gameId, { gameId, key, changed: true, refused: null }));
+    }
+
     const gameSet = await resolveGameSet(gameId);
     if (!gameSet) return respond(404, { error: 'Game not found' });
+
+    // Where the host was when they placed it, for the report's source line
+    // ("put next after round 3"). One read, add-own only.
+    let placedAtRound = 0;
+    if (op === 'add-own') {
+      const stateRead = await db.send(new GetCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+        ProjectionExpression: 'LessonNumber',
+      }));
+      placedAtRound = Number((stateRead.Item || {}).LessonNumber) || 0;
+    }
 
     let staleView = false;
 
@@ -290,7 +411,9 @@ exports.handler = async (event) => {
       }
 
       // 2. APPLY, to the list JUST READ.
-      const result = applyQueueOp(queue, { op, questionKey: key });
+      const result = applyQueueOp(queue, {
+        op, questionKey: key, place, anchorKey: body.anchorKey, through: body.through,
+      });
 
       if (!result.changed) {
         // Nothing to write, so nothing is written and nothing is announced.
@@ -298,13 +421,13 @@ exports.handler = async (event) => {
         // answers 200 with the reason — `full`, `duplicate`, `at-edge`,
         // `not-queued` — because "why did that button do nothing" is the
         // question the host will ask.
-        return respond(200, {
+        return respond(200, await withOwn(gameId, {
           gameId,
           ...projectQueue(item),
           changed: false,
           refused: result.refused,
           staleView,
-        });
+        }));
       }
 
       const now = new Date().toISOString();
@@ -314,7 +437,7 @@ exports.handler = async (event) => {
         // 3. WRITE, conditional on the version being exactly the one just read.
         //    `attribute_not_exists` covers the very first write, where there is
         //    no row and therefore no version to match.
-        await db.send(new UpdateCommand({
+        const queueUpdate = {
           TableName: process.env.TABLE_NAME,
           Key: queueKey(gameId),
           UpdateExpression: 'SET #queue = :queue, #version = :next, #setId = :setId, '
@@ -341,7 +464,51 @@ exports.handler = async (event) => {
             ':now': now,
             ':ttl': Math.floor(Date.now() / 1000) + TTL_CREATION_PHASE,
           },
-        }));
+        };
+
+        if (op === 'add-own') {
+          // THE ROW AND ITS PLACE IN ONE TRANSACTION. The row rides the
+          // session's lifetime, as the QUEUE row does.
+          const anchorRound = Number(body.anchorRound);
+          const row = await sealOwnRow(sessionOrgId, {
+            ...ownRowKey(gameId, ownIdOfKey(key)),
+            Title: ownFields.title,
+            Detail: ownFields.detail,
+            Background: ownFields.note,
+            CustomInstructions: OWN_TASK,
+            OrgId: sessionOrgId,
+            Status: 'queued',
+            CreatedAt: now,
+            UpdatedAt: now,
+            CreatedBy: callerUserId(event) || '',
+            CreatedByName: callerName(event),
+            Placement: place,
+            PlacedAtRound: placedAtRound,
+            ...(place === 'later' && Number.isInteger(anchorRound) && anchorRound > 0 ? { PlacedAfterRound: anchorRound } : {}),
+            ttl: Math.floor(Date.now() / 1000) + TTL_CREATION_PHASE,
+          });
+          await db.send(new TransactWriteCommand({
+            TransactItems: [
+              { Put: { TableName: process.env.TABLE_NAME, Item: row, ConditionExpression: 'attribute_not_exists(PK)' } },
+              { Update: queueUpdate },
+            ],
+          }));
+        } else {
+          await db.send(new UpdateCommand(queueUpdate));
+        }
+
+        // A REMOVED OWN QUESTION is marked so, so no surface lists it again.
+        // After the queue write and best effort: the queue is what serves.
+        if (op === 'remove' && isOwnQueueKey(key)) {
+          await db.send(new UpdateCommand({
+            TableName: process.env.TABLE_NAME,
+            Key: ownRowKey(gameId, ownIdOfKey(key)),
+            UpdateExpression: 'SET #s = :removed, #u = :now',
+            ConditionExpression: '#s = :queued',
+            ExpressionAttributeNames: { '#s': 'Status', '#u': 'UpdatedAt' },
+            ExpressionAttributeValues: { ':removed': 'removed', ':queued': 'queued', ':now': now },
+          })).catch((e) => console.warn(`⚠️ QUEUE: could not mark ${key} removed: ${e.name}`));
+        }
 
         await broadcastToHosts(gameId, {
           type: 'questionQueueChanged',
@@ -351,7 +518,7 @@ exports.handler = async (event) => {
           timestamp: now,
         });
 
-        return respond(200, {
+        return respond(200, await withOwn(gameId, {
           gameId,
           queue: result.queue,
           version: nextVersion,
@@ -361,9 +528,14 @@ exports.handler = async (event) => {
           changed: true,
           refused: null,
           staleView,
-        });
+          // The key the server minted for a new own question, so the surface
+          // that pressed can offer Undo (a `remove` of it) at once.
+          ...(op === 'add-own' ? { key } : {}),
+        }));
       } catch (error) {
-        if (error.name !== 'ConditionalCheckFailedException') throw error;
+        // A transaction (add-own) that lost the version race is cancelled, not
+        // ConditionalCheckFailed; either way the answer is re-read and re-apply.
+        if (error.name !== 'ConditionalCheckFailedException' && error.name !== 'TransactionCanceledException') throw error;
 
         // 4. LOST THE RACE. Go round again: RE-READ and RE-APPLY THE OP. Not
         //    the array — re-sending the array is what discards the winner's

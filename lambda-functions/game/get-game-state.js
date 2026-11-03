@@ -1,15 +1,17 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition } = require('./set-version');
-const { ORG, callerMayDriveSession } = require('./tenant');
+const { readRoundQuestion, listOwnQuestions } = require('./round-question');
+const { callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
+const { correctSlots, drawnOptions } = require('./trivia-answer');
 const { normalizeNames } = require('./survey-names');
 
 const { roomCounts, presentPlayers, presentingCount, presentingDetail, queryAll } = require('./room-counts');
 const { BEATS, STAGE_PROFILES, FOCUS_PHASES } = require('./stage-beats');
 const { normaliseScoreboard } = require('./scoreboard-state');
 const { lateWindow } = require('./late-window');
+const { timerView } = require('./round-timer');
 
 /**
  * WHOSE SESSION IS THIS? — read off the row, never off the caller.
@@ -129,6 +131,8 @@ exports.handler = async (event) => {
     const lessonNumber = stateItem?.LessonNumber || 0;
     let currentQuestionData = null;
     let currentQuestionHostNotes = null;
+    // The trivia answer for the HOST'S DOOR only (experience plan 2g): see below.
+    let currentQuestionHostAnswer = null;
     
     // Use the actual state directly (ASK#001, VOTE#001, etc.)
     const frontendState = currentState;
@@ -297,54 +301,18 @@ exports.handler = async (event) => {
         }));
 
         if (questionRef.Item) {
-          const sourceQuestionId = questionRef.Item.SourceQuestionId;
-          const questionSetId = questionRef.Item.SetId;
-          
-          // Read the VERSION this round was served from. The REF row records it
-          // (next-question.js writes SetVersion); the resolver falls through to
-          // the set's activeVersion and then to the legacy `SET#<id>` partition,
-          // so rounds started before versioning are unaffected.
-          //
-          // AND THE SCOPE, FROM THE SAME ROW. Since tenancy a `setId` alone no
-          // longer names one partition — setId is a slug of the title
-          // (upload-questions.js:298), so two organisations can both produce
-          // `teamretro`. The REF row pins the PAIR, and this reads it from
-          // there rather than from the request for the reason get-question.js
-          // gives at the same call: THIS ROUTE IS PUBLIC and its callers are
-          // anonymous participants, so a request-derived scope would resolve to
-          // `platform` for every player in every organisation's session and
-          // serve them nothing.
-          //
-          // A REF written before tenancy carries no SetScope, which reads as
-          // platform — the same reading of an absent scope as everywhere else
-          // (set-version.js `setRef`).
-          const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME,
-            {
-              scope: questionRef.Item.SetScope,
-              orgId: questionRef.Item.SetOrgId,
-              setId: questionSetId,
-            },
-            questionRef.Item.SetVersion
-          );
-
-          // Get the actual question from the question set
-          const question = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: {
-              PK: resolvedSet.pk,
-              SK: sourceQuestionId
-            }
-          }));
-
-          // Decrypted from the SET's org, which is not necessarily the
-          // SESSION's: a host in org A can run a platform set, and the pinned
-          // pair on the REF row is the only authority on which. Platform and
-          // public content is never encrypted, so it passes through as-is.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          const questionItem = question.Item && setOrgId
-            ? await decryptItem(setOrgId, 'question', question.Item)
-            : question.Item;
+          // THE ONE RESOLVER (round-question.js): the REF names a set row — read
+          // through the version and the scope PAIR it pins, never the request's,
+          // because this route is PUBLIC and its callers are anonymous — or a
+          // question the host wrote during the session (OWNQ#, the session's own
+          // partition). Decrypted from the SET's org for a set row, from the
+          // session's for an own row; platform and public pass through.
+          const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+          const resolvedSet = read.resolved;
+          const questionSetId = read.setId;
+          const setOrgId = read.setOrgId;
+          const question = { Item: read.question };
+          const questionItem = read.question;
 
           // The set's own instruction, for the wall's task line (session 7924,
           // finding #4). Encrypted at rest on an org set, so it is unwrapped
@@ -355,6 +323,14 @@ exports.handler = async (event) => {
 
           if (question.Item) {
             currentQuestionHostNotes = questionItem.Background ? { background: String(questionItem.Background) } : null;
+            if ((gameMetadata.Item && gameMetadata.Item.GameType) === 'trivia') {
+              // The DRAWN letters (what the room sees and the phones submit),
+              // resolved by the scorer's own module, so "B is correct" on the
+              // console is the B the room is paid for.
+              const slots = correctSlots(questionItem);
+              const letters = drawnOptions(questionItem).filter((o) => slots.includes(o.slot)).map((o) => o.letter);
+              currentQuestionHostAnswer = letters.length ? { round: currentQuestionNumber, letters } : null;
+            }
             currentQuestionData = {
               id: currentQuestionNumber,
               questionNumber: currentQuestionNumber,
@@ -410,7 +386,7 @@ exports.handler = async (event) => {
             
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);
           } else {
-            console.warn(`❌ Question not found: ${sourceQuestionId} from set ${questionSetId}`);
+            console.warn(`❌ Question not found: ${read.sourceQuestionId} from set ${questionSetId}`);
           }
         } else {
           console.warn(`❌ Question reference not found: QUESTION#${currentQuestionNumber}#REF`);
@@ -442,6 +418,16 @@ exports.handler = async (event) => {
         A yes/no only, so it is safe on the public door.
       */
       commentsOpen: lateWindow({ meta: gameMetadata.Item, state: stateItem }).open,
+      /*
+        THE ROUND TIMER, as the room sees it (round-timer.js): words and a bar
+        on the wall and the phones, so only { phase, startedAt, limitMs,
+        extendedMs }, only while its phase is on, and only when the host left
+        "show the time" on. Whether it closes at zero is the host's
+        (`hostTime`, below). `serverNow` is this server's clock at the read:
+        every screen measures time left against it, never its own clock alone.
+      */
+      time: timerView(stateItem),
+      serverNow: Date.now(),
       authorsRevealed: authorsRevealed,
       stageBeat: stageBeat,
       stageFocus: stageFocus,
@@ -614,10 +600,29 @@ exports.handler = async (event) => {
         response.presentDetail = null;
       }
 
+      // The whole timer, for the console's Time tile and the Remote's time
+      // card: with or without the wall, whether it closes at zero, and still
+      // there once its phase has closed ("Took 2:14 · 2:00 given"). With it,
+      // when this phase opened, timed or not (round-timer.js PhaseStartedAt).
+      response.hostTime = timerView(stateItem, { host: true });
+      response.phaseStartedAt = (stateItem && stateItem.PhaseStartedAt) || null;
+
       // The host's own notes for the question (host console spec §3.4): the
       // set's Background, on the host door only. /state never carries it
       // (tests/present-public-reads.js §2).
       response.hostNotes = currentQuestionHostNotes || null;
+
+      /*
+        THE PRIVATE TRIVIA ANSWER (experience plan 2g, §3.2a: "B is correct.
+        Only you see this."). The console on two screens marks it for the host
+        while the room is still answering, and the phone Remote is the host's
+        private half on one screen. `{ round, letters }`: the drawn letters,
+        resolved by trivia-answer.js, the module that scores the room. ON
+        THIS DOOR ONLY: the public `/state`, `?view=room`, the player's read
+        and every frame carry no answer before RESULTS
+        (tests/trivia-answer-private.js).
+      */
+      response.hostAnswer = currentQuestionHostAnswer;
 
       /*
         THE QUEUED RUNNING ORDER — and the remote is the reason it is HERE.
@@ -654,7 +659,10 @@ exports.handler = async (event) => {
           version: Number(queueItem?.Version) || 0,
           setId: queueItem?.SetId || null,
           setVersion: queueItem?.SetVersion !== undefined ? queueItem.SetVersion : null,
-          updatedAt: queueItem?.UpdatedAt || null
+          updatedAt: queueItem?.UpdatedAt || null,
+          // The host's own questions (impromptu ask), as GET /queue lists
+          // them: this door only, never the public /state.
+          ownQuestions: await listOwnQuestions(db, process.env.TABLE_NAME, gameId).catch(() => []),
         };
       } catch (error) {
         console.error('Error fetching question queue:', error);

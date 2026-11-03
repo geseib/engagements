@@ -29,12 +29,15 @@
  */
 import React, { useMemo, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead as SharedDialogHead, DialogFoot } from '../components/ui/DialogParts';
+import { useConfirm } from '../components/ConfirmDialog';
 import Icon from '../components/Icon';
 import { copyText } from '../utils/copyText';
 import BuildImage from './BuildImage';
 import { safeHref } from './links';
 import { pluginSlash } from './pluginTier';
 import './BuildCrew.css';
+import Button from '../components/ui/Button';
 
 // ── Words ───────────────────────────────────────────────────────────────────
 
@@ -149,21 +152,18 @@ function Link({ href, children }) {
   return <a className="brm-lnk" href={url} target="_blank" rel="noopener noreferrer">{children || url}</a>;
 }
 
+// The shared dialog head (components/ui/DialogParts, experience plan 5b),
+// in the Build Room's own classes.
 function DialogHead({ id, title, onClose }) {
-  return (
-    <div className="brm-dh">
-      <h2 className="brm-h" id={id}>{title}</h2>
-      {onClose && <button type="button" className="brm-x" aria-label="Close" onClick={onClose}><Icon name="X" size={16} /></button>}
-    </div>
-  );
+  return <SharedDialogHead className="brm-dh" titleId={id} title={title} titleClassName="brm-h" onClose={onClose} closeClassName="brm-x" />;
 }
 
 function Copy({ text, label }) {
   const [said, setSaid] = useState('');
   return (
-    <button
+    <Button
       type="button"
-      className="brm-btn brm-btn--sm"
+      size={36} className="brm-tight"
       onClick={async () => {
         const ok = await copyText(text);
         setSaid(ok ? 'Copied' : 'Press and hold to copy');
@@ -171,7 +171,7 @@ function Copy({ text, label }) {
       }}
     >
       <Icon name="ClipboardText" size={14} /> {said || label}
-    </button>
+    </Button>
   );
 }
 
@@ -210,17 +210,16 @@ export function RunCrewCodeSwitch({ crew, busy, run, api }) {
           <DialogHead id="brc-run-title" title="Switch Run crew code on?" onClose={() => setConfirming(false)} />
           <p>Claude may install and run builders&apos; code on this laptop: their tests, and the project, to review or merge it.</p>
           <p className="brm-hint">Their code is untrusted. Claude says in every review which way the switch was set. Switch it off again at any time.</p>
-          <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirming(false)}>Keep it off</button>
-            <button
+          <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={() => setConfirming(false)}>Keep it off</Button>}>
+            <Button
               type="button"
-              className="brm-btn brm-btn--primary brm-push"
+              variant="primary" size={44} className="brm-ctl brm-push"
               disabled={busy}
               onClick={async () => { setConfirming(false); await run(() => api.crewSettings({ runCrewCode: true })); }}
             >
               Switch on
-            </button>
-          </div>
+            </Button>
+          </DialogFoot>
         </Modal>
       )}
     </>
@@ -240,8 +239,10 @@ export function CrewDialog({ crew, gameId, busy, run, api, shareCard, onClose })
   const [runCode, setRunCode] = useState(Boolean(c.runCrewCode));
   const [closing, setClosing] = useState(false);
   const dirty = enabled && runCode !== Boolean(c.runCrewCode);
-  const requestClose = () => {
-    if (dirty && !window.confirm('Discard your changes to the crew settings?')) return;
+  const [askConfirm, confirmDialog] = useConfirm();
+  // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
+  const requestClose = async () => {
+    if (dirty && !(await askConfirm({ title: 'Discard your changes to the crew settings?', message: 'Run crew code stays as it was.', confirmText: 'Discard', cancelText: 'Keep editing' }))) return;
     onClose();
   };
   const save = async () => {
@@ -293,22 +294,23 @@ export function CrewDialog({ crew, gameId, busy, run, api, shareCard, onClose })
       <div className="brm-notice"><b>Builders join on their phone:</b> join with code {gameId} as usual, tap <b>I have Claude Code</b>, then type the line the phone shows into Claude Code. Up to 8 builders. Everyone else just joins.</div>
 
       {closing ? (
-        <div className="brm-row brm-gap">
-          <span className="brm-hint">Builders can no longer share or take tasks. Their early looks, reviews and tasks stay.</span>
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setClosing(false)}>Keep the crew</button>
-          <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={stop}>Close the crew</button>
-        </div>
+        <>
+          <p className="brm-hint">Builders can no longer share or take tasks. Their early looks, reviews and tasks stay.</p>
+          <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={() => setClosing(false)}>Keep the crew</Button>}>
+            <Button variant="danger" size={44} className="brm-ctl" disabled={busy} onClick={stop}>Close the crew</Button>
+          </DialogFoot>
+        </>
       ) : (
-        <div className="brm-row brm-gap">
-          {enabled && <button type="button" className="brm-btn brm-btn--ghostdanger" onClick={() => setClosing(true)}>Close the crew</button>}
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>{enabled && !dirty ? 'Done' : 'Cancel'}</button>
+        <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={requestClose}>{enabled && !dirty ? 'Done' : 'Cancel'}</Button>}>
+          {enabled && <Button size={44} className="brm-ctl brm-danger" onClick={() => setClosing(true)}>Close the crew</Button>}
           {(!enabled || dirty) && (
-            <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy} onClick={save}>
+            <Button variant="primary" size={44} className="brm-ctl" disabled={busy} onClick={save}>
               <Icon name="UsersThree" size={16} /> {enabled ? 'Save' : 'Open to a crew'}
-            </button>
+            </Button>
           )}
-        </div>
+        </DialogFoot>
       )}
+      {confirmDialog}
     </Modal>
   );
 }
@@ -413,9 +415,9 @@ function Lane({ b, i, crew, host, now, onOpen }) {
         </div>
         {b.status === 'needs-rebase' && b.note && <div className="brc-note">{b.note}</div>}
         {host && share && (
-          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost brc-openlook" title={share.title} onClick={() => onOpen(share.shareId)}>
+          <Button type="button" size={36} className="brm-tight brc-openlook" title={share.title} onClick={() => onOpen(share.shareId)}>
             Open the early look{share.title ? `: ${share.title}` : ''}
-          </button>
+          </Button>
         )}
       </div>
       <div className="brc-lane-shot">
@@ -439,12 +441,12 @@ function HelpCard({ b, crew, busy, run, api, now }) {
       </div>
       {b.note && <blockquote className="brc-quote">{b.note}</blockquote>}
       <div className="brm-row brm-gap">
-        <button type="button" className="brm-btn brm-btn--sm brm-btn--primary" disabled={busy} onClick={() => run(() => api.crewHelpAction(b.name, 'send-claude'))}>
+        <Button type="button" variant="primary" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.crewHelpAction(b.name, 'send-claude'))}>
           <Icon name="MagnifyingGlass" size={14} /> Send my Claude
-        </button>
-        <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.crewHelpAction(b.name, 'resolve'))}>
+        </Button>
+        <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.crewHelpAction(b.name, 'resolve'))}>
           <Icon name="Check" size={14} /> Mark handled
-        </button>
+        </Button>
         <span className="brm-hint">Your Claude fetches the branch, reads it and posts suggestions. It runs nothing of theirs while Run crew code is Off.</span>
       </div>
     </section>
@@ -506,9 +508,9 @@ export function CrewIncoming({ crew, busy, run, api, onOpen }) {
             <div className="brc-in-t">{s.title}</div>
             {review && <div className="brm-hint">Claude: {RECOMMENDATION[review.recommendation] || review.recommendation}</div>}
             <div className="brc-in-acts">
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.crewShareAction(s.shareId, 'feature'))}>Put on the wall</button>
-              <button type="button" className="brm-btn brm-btn--sm" disabled={busy} onClick={() => run(() => api.crewReviewRequest(s.shareId))}>Ask Claude to review</button>
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => onOpen(s.shareId)}>Open</button>
+              <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.crewShareAction(s.shareId, 'feature'))}>Put on the wall</Button>
+              <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.crewReviewRequest(s.shareId))}>Ask Claude to review</Button>
+              <Button type="button" size={36} className="brm-tight" onClick={() => onOpen(s.shareId)}>Open</Button>
             </div>
           </div>
         );
@@ -688,29 +690,29 @@ export function EarlyLook({ share, crew, host, busy, run, api, onDirty, stage = 
                 />
               </label>
               <div className="brm-row brm-gap">
-                <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setComposing(false); if (onDirty) onDirty(false); }}>Cancel</button>
-                <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !feedback.trim()} onClick={sendFeedback}>
+                <Button type="button" size={36} className="brm-ctl" onClick={() => { setComposing(false); if (onDirty) onDirty(false); }}>Cancel</Button>
+                <Button type="button" variant="primary" size={36} className="brm-ctl brm-push" disabled={busy || !feedback.trim()} onClick={sendFeedback}>
                   <Icon name="PaperPlaneTilt" size={16} /> Send to {share.builder}&apos;s Claude
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
             <div className="brm-row brm-gap brc-look-acts">
               {share.featured
-                ? <button type="button" className="brm-btn" disabled={busy} onClick={() => act('unfeature')}><Icon name="EyeSlash" size={16} /> Take off the wall</button>
-                : <button type="button" className="brm-btn brm-btn--primary" disabled={busy} onClick={() => act('feature')}><Icon name="Monitor" size={16} /> Put on the wall</button>}
-              <button type="button" className="brm-btn" disabled={busy} onClick={() => run(() => api.crewReviewRequest(share.shareId))}><Icon name="MagnifyingGlass" size={16} /> Ask Claude to review</button>
-              <button type="button" className="brm-btn" disabled={busy} onClick={openComposer}><Icon name="NotePencil" size={16} /> Write feedback</button>
+                ? <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => act('unfeature')}><Icon name="EyeSlash" size={16} /> Take off the wall</Button>
+                : <Button type="button" variant="primary" size={36} className="brm-ctl" disabled={busy} onClick={() => act('feature')}><Icon name="Monitor" size={16} /> Put on the wall</Button>}
+              <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={() => run(() => api.crewReviewRequest(share.shareId))}><Icon name="MagnifyingGlass" size={16} /> Ask Claude to review</Button>
+              <Button type="button" size={36} className="brm-ctl" disabled={busy} onClick={openComposer}><Icon name="NotePencil" size={16} /> Write feedback</Button>
               {share.lane === 'not-now'
-                ? <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={() => act('reopen')}>Back in the lane</button>
-                : share.lane !== 'merged' && <button type="button" className="brm-btn brm-btn--ghost brm-push" disabled={busy} onClick={() => act('not-now')}>Not now</button>}
+                ? <Button type="button" size={36} className="brm-ctl brm-push" disabled={busy} onClick={() => act('reopen')}>Back in the lane</Button>
+                : share.lane !== 'merged' && <Button type="button" size={36} className="brm-ctl brm-push" disabled={busy} onClick={() => act('not-now')}>Not now</Button>}
             </div>
           )}
           {sent && <p className="brm-hint" role="status">{sent}</p>}
           {crew && <p className="brm-hint">Run crew code is {crew.runCrewCode ? 'On: a review may run their tests.' : 'Off: a review reads the code only.'}</p>}
           <form className="brc-reply" onSubmit={sendReply}>
             <input className="brm-input" aria-label="Reply on this early look" placeholder="Reply on this early look… type 2 to point at a suggestion" value={reply} maxLength={500} onChange={(e) => { setReply(e.target.value); if (onDirty) onDirty(Boolean(e.target.value.trim())); }} />
-            <button type="submit" className="brm-btn brm-btn--sm" disabled={busy || !reply.trim()}>Post</button>
+            <Button type="submit" size={36} className="brm-tight" disabled={busy || !reply.trim()}>Post</Button>
           </form>
         </>
       )}
@@ -720,18 +722,18 @@ export function EarlyLook({ share, crew, host, busy, run, api, onDirty, stage = 
 
 export function EarlyLookDialog({ share, crew, busy, run, api, onClose }) {
   const [dirty, setDirty] = useState(false);
-  const requestClose = () => {
-    if (dirty && !window.confirm('Discard what you wrote?')) return;
+  const [askConfirm, confirmDialog] = useConfirm();
+  // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
+  const requestClose = async () => {
+    if (dirty && !(await askConfirm({ title: 'Discard what you wrote?', message: 'Your review of this early look is not sent.', confirmText: 'Discard', cancelText: 'Keep writing' }))) return;
     onClose();
   };
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--wide brc brc-lookmodal" onClose={requestClose} closeOnBackdrop={false} closeOnEscape={() => !dirty} labelledBy="brc-look-title">
-      <div className="brm-dh">
-        <span className="brm-sr" id="brc-look-title">Early look: {share.title}</span>
-        <button type="button" className="brm-x" aria-label="Close" onClick={requestClose}><Icon name="X" size={16} /></button>
-      </div>
+      <SharedDialogHead className="brm-dh" as="span" titleId="brc-look-title" titleClassName="brm-sr" title={`Early look: ${share.title}`} onClose={requestClose} closeClassName="brm-x" />
       <EarlyLook share={share} crew={crew} host busy={busy} run={run} api={api} onDirty={setDirty} />
-      <div className="brm-row brm-gap"><button type="button" className="brm-btn brm-push" onClick={requestClose}>Close</button></div>
+      <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={requestClose}>Close</Button>} />
+      {confirmDialog}
     </Modal>
   );
 }
@@ -742,8 +744,10 @@ function TaskDialog({ task, busy, run, api, onClose }) {
   const [text, setText] = useState(task ? task.text : '');
   const [detail, setDetail] = useState(task ? task.detail : '');
   const dirty = text !== (task ? task.text : '') || detail !== (task ? task.detail : '');
-  const requestClose = () => {
-    if (dirty && !window.confirm('Discard this task?')) return;
+  const [askConfirm, confirmDialog] = useConfirm();
+  // Asked in the small confirm dialog (useConfirm, experience plan 5d), never window.confirm.
+  const requestClose = async () => {
+    if (dirty && !(await askConfirm({ title: 'Discard this task?', message: 'What you wrote here is not saved.', confirmText: 'Discard', cancelText: 'Keep editing' }))) return;
     onClose();
   };
   const save = async (e) => {
@@ -760,11 +764,11 @@ function TaskDialog({ task, busy, run, api, onClose }) {
         <DialogHead id="brc-task-title" title={task ? 'Edit the task' : 'Add a task'} onClose={requestClose} />
         <label className="brm-field"><span className="brm-lbl">Task (what to build)</span><input className="brm-input" value={text} maxLength={200} onChange={(e) => setText(e.target.value)} placeholder="Parking map" /></label>
         <label className="brm-field"><span className="brm-lbl">Detail (optional; the builder&apos;s Claude reads it when they take the task)</span><textarea className="brm-input brm-ta brm-ta--sm" value={detail} maxLength={1000} onChange={(e) => setDetail(e.target.value)} /></label>
-        <div className="brm-row brm-gap">
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={requestClose}>Cancel</button>
-          <button type="submit" className="brm-btn brm-btn--primary brm-push" disabled={busy || !text.trim()}>{task ? 'Save task' : 'Add task'}</button>
-        </div>
+        <DialogFoot className="brm-row brm-gap" cancel={<Button size={44} className="brm-ctl" onClick={requestClose}>Cancel</Button>}>
+          <Button type="submit" variant="primary" size={44} className="brm-ctl" disabled={busy || !text.trim()}>{task ? 'Save task' : 'Add task'}</Button>
+        </DialogFoot>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }
@@ -777,7 +781,7 @@ export function CrewTasks({ crew, host, busy, run, api }) {
     <section className="brm-panel brc brc-tasks" aria-labelledby="brc-tasks-h">
       <div className="brm-row">
         <h2 className="brm-h" id="brc-tasks-h">Tasks</h2>
-        {host && <button type="button" className="brm-btn brm-btn--sm brm-push" onClick={() => setEditing('new')}><Icon name="Plus" size={14} /> Add a task</button>}
+        {host && <Button type="button" size={36} className="brm-tight brm-push" onClick={() => setEditing('new')}><Icon name="Plus" size={14} /> Add a task</Button>}
       </div>
       <p className="brm-sub">Builders take a task from their phone or from Claude. Taking one sends it to their Claude. Two builders on one task is a race, and that is fine: the room compares.</p>
       {!tasks.length ? (
@@ -813,16 +817,16 @@ export function CrewTasks({ crew, host, busy, run, api }) {
                     <td>
                       {deleting === t.taskId ? (
                         <div className="brm-rowact">
-                          <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setDeleting(null)}>Keep</button>
-                          <button type="button" className="brm-btn brm-btn--sm brm-btn--dangersolid" disabled={busy} onClick={async () => { await run(() => api.crewTaskAction(t.taskId, { action: 'delete' })); setDeleting(null); }}>Delete</button>
+                          <Button type="button" size={36} className="brm-tight" onClick={() => setDeleting(null)}>Keep</Button>
+                          <Button type="button" variant="danger" size={36} className="brm-tight" disabled={busy} onClick={async () => { await run(() => api.crewTaskAction(t.taskId, { action: 'delete' })); setDeleting(null); }}>Delete</Button>
                         </div>
                       ) : (
                         <div className="brm-rowact">
-                          <button type="button" className="brm-btn brm-btn--sm brm-btn--link" aria-label={`Edit ${t.text}`} onClick={() => setEditing(t)}>Edit</button>
+                          <Button type="button" variant="tertiary" size={36} className="brm-tight" aria-label={`Edit ${t.text}`} onClick={() => setEditing(t)}>Edit</Button>
                           {t.state === 'done'
-                            ? <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} aria-label={`Reopen ${t.text}`} onClick={() => run(() => api.crewTaskAction(t.taskId, { action: 'reopen' }))}>Reopen</button>
-                            : <button type="button" className="brm-btn brm-btn--sm brm-btn--link" disabled={busy} aria-label={`Mark ${t.text} done`} onClick={() => run(() => api.crewTaskAction(t.taskId, { action: 'done' }))}>Done</button>}
-                          <button type="button" className="brm-btn brm-btn--sm brm-btn--link brm-danger" aria-label={`Delete ${t.text}`} onClick={() => setDeleting(t.taskId)}>Delete</button>
+                            ? <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} aria-label={`Reopen ${t.text}`} onClick={() => run(() => api.crewTaskAction(t.taskId, { action: 'reopen' }))}>Reopen</Button>
+                            : <Button type="button" variant="tertiary" size={36} className="brm-tight" disabled={busy} aria-label={`Mark ${t.text} done`} onClick={() => run(() => api.crewTaskAction(t.taskId, { action: 'done' }))}>Done</Button>}
+                          <Button type="button" variant="tertiary" size={36} className="brm-tight brm-danger" aria-label={`Delete ${t.text}`} onClick={() => setDeleting(t.taskId)}>Delete</Button>
                         </div>
                       )}
                     </td>

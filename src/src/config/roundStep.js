@@ -141,6 +141,10 @@ export function roundNumberOf(state) {
   return m ? Number(m[2]) : null;
 }
 
+/** Trivia and Poll: the formats whose answers are options and whose loop names its own steps (2g). */
+export const CHOICE_TYPES = Object.freeze(['trivia', 'poll']);
+const choiceType = (ctx) => CHOICE_TYPES.includes(ctx && ctx.gameType);
+
 function primaryFor(moment, ctx) {
   const noun = ctx.roundNoun;
   const runsVote = hostRunsVotePhase(ctx.gameType);
@@ -183,7 +187,10 @@ function primaryFor(moment, ctx) {
       return base;
     }
     case 'RESULTS':
-      return control('field-notes', RW.whatWeHeard, I.FIELD_NOTES, 'Sparkle');
+      // Trivia and Poll have no "What we heard" step (their strips are
+      // Question · Reveal · Scores and Ask · Results): the next beat is
+      // Workie's read, said as that (dev QA 2 Nov).
+      return control('field-notes', choiceType(ctx) ? RW.workiesRead : RW.whatWeHeard, I.FIELD_NOTES, 'Sparkle');
     case 'VOTE_RESPONSES':
       // VOTING SHOWS THE RESPONSES (owner, 2026-10-13: "when going to vote, we
       // should automatically get the response screens up ... the host can
@@ -286,6 +293,9 @@ function secondaryFor(moment, ctx, primary) {
       // behind Session, R7).
       return control('skip', RW.skipRound(noun), I.SKIP, 'SkipForward', { arm: { text: RW.armSkip(noun) } });
     case 'RESULTS':
+      // A trivia or poll answer is an option, not a response to put up one by
+      // one: "Show response 1 of 3" was Call & Answer's words (dev QA 2 Nov).
+      if (choiceType(ctx)) return null;
       return ctx.answerCount > 0
         ? control('show-response', RW.showResponse(1, ctx.answerCount), I.SHOW_RESPONSE, 'ArrowsOut', { index: 0, part: 0 })
         : null;
@@ -437,6 +447,7 @@ function nextFor(moment, ctx, primary) {
       if (primary.id === 'notes-page') return L.READ_PAGE;
       if (primary.id === 'ask-room') return L.READ_ASK;
       return L.READ_LAST;
+    case 'RESULTS': return choiceType(ctx) ? L.RESULTS_READ : L.RESULTS;
     case 'OTHER': return L.UNKNOWN;
     default: return L[moment] || L.UNKNOWN;
   }

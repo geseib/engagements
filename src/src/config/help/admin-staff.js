@@ -172,9 +172,13 @@ const organisations = {
       personal spaces refused ("A personal space cannot be suspended. Disable
       the account instead."); the audit entry is written first or nothing
       changes (503). create-org.js: a new team is written 'active' on Free and
-      files a new-organisation plan request. What a suspension does to the
-      team's members is not enforced anywhere in the code at 6a5aa8f7, so the
-      help says only what the screen shows.
+      files a new-organisation plan request. ENFORCED since 2026-11-03:
+      auth/standing.js refuses every signed-in request acting for a suspended
+      org (staff-only routes excepted, so Reinstate works) and drops it from
+      orgIds; GET /orgs answers ORG_SUSPENDED and the console shows
+      SuspendedScreen; org-standing.js stops its sessions admitting joins,
+      votes and answers (cached 30 s). Authorizer caching is off
+      (ReauthorizeEvery: 0), so a change applies on the next request.
     */
     {
       id: 'organisations',
@@ -189,8 +193,8 @@ const organisations = {
           t: 'list',
           items: [
             { title: '**Approve**', text: 'On a Pending organisation: makes it Active.' },
-            { title: '**Suspend…**', text: 'On an active team: asks first, then marks it Suspended. Write a **Reason** of a few words and press **Suspend**. The reason shows under the team\'s name and goes in its log, which its owners and admins can read. Nothing else changes yet: its members can still sign in and run sessions. A personal space cannot be suspended: to stop a person, disable their account in Accounts.' },
-            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again, on the click, and clears the reason from the row.' },
+            { title: '**Suspend…**', text: 'On an active team: stops it, after asking for a reason (next section).' },
+            { title: '**Reinstate**', text: 'On a Suspended organisation: makes it Active again (next section).' },
             { title: '**Billing…**', text: 'The organisation\'s billing ledger (next section).' },
             { title: '**Activity…** and **Staff activity…**', text: 'Activity… is one organisation\'s log of who changed what, the same list its owners and admins see in Data & privacy. Staff activity…, at the top, lists every change staff have made: to organisations, accounts, discount codes and Engage settings. Both keep entries for a year.' },
           ],
@@ -200,6 +204,31 @@ const organisations = {
           tone: 'info',
           title: 'New teams do not wait here',
           text: 'A new team starts at once, Active, on the free plan. Its request for the paid plan arrives in Plan requests. Each status change is written to the organisation\'s log first; if that cannot be done, nothing changes.',
+        },
+      ],
+    },
+    {
+      id: 'suspending',
+      title: 'Suspending and reinstating an organisation',
+      icon: 'Lock',
+      blocks: [
+        {
+          t: 'p',
+          text: '**Suspend…** asks first. Write a **Reason** of a few words and press **Suspend**. The reason shows under the team\'s name and goes in its log, which its owners and admins can read.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: 'What stops', text: 'From their next click its members cannot use it: no hosting, question sets, reports, events or settings. They see one screen saying the organisation is suspended, with a way to their own space. Its sessions stop taking new players, votes and answers within about 30 seconds, and its Build Room keys stop working.' },
+            { title: 'What carries on', text: 'Each member\'s own space and other teams. Nothing is deleted. Engage staff can still open the team\'s row, billing and log.' },
+            { title: '**Reinstate**', text: 'On the Suspended row: makes it Active again and clears the reason. Its members have everything back on their next click.' },
+          ],
+        },
+        {
+          t: 'note',
+          tone: 'info',
+          title: 'A person, not a team',
+          text: 'A personal space cannot be suspended. To stop one person, suspend their account in Accounts.',
         },
       ],
     },
@@ -318,7 +347,7 @@ const accounts = {
   id: 'admin-staff-accounts',
   title: 'Accounts',
   icon: 'UserCircle',
-  summary: 'Approving people who signed up, what each kind of account can do, and making someone staff, disabling or deleting an account.',
+  summary: 'Approving people who signed up, what each kind of account can do, and making someone staff, suspending and reinstating, or deleting an account.',
   sections: [
     /*
       UserManagement.jsx: "Waiting for approval" ("Registration puts people
@@ -344,7 +373,7 @@ const accounts = {
           items: [
             { title: '**Approve as host**', text: 'The usual answer. They can create and run sessions.' },
             { title: '**Admin**', text: 'Approves them as an Engage admin instead: Engage staff (see the next section).' },
-            { title: '**Reject**', text: 'Asks first, then moves them to Disabled: they cannot sign in. The account is kept, so it can be restored from the members list below.' },
+            { title: '**Reject**', text: 'Asks first, then moves them to Suspended: they cannot sign in. The account is kept, so **Reinstate** on its row in the members list below puts them back in this queue.' },
           ],
         },
         {
@@ -372,7 +401,7 @@ const accounts = {
             ['Host', 'Create and run sessions, and manage their own question sets. What an ordinary account needs.'],
             ['Pending', 'Sign in and nothing else. Waiting for approval.'],
             ['Engage admin', 'Engage staff: the Engage sections of this console. No access to any organisation\'s sets, sessions or reports.'],
-            ['Disabled', 'Nothing: they cannot sign in. The account is kept.'],
+            ['Suspended', 'Nothing: they cannot sign in, and a sign-in they already have stops working on their next click. The account, its role and everything it made are kept.'],
           ],
         },
         {
@@ -393,7 +422,13 @@ const accounts = {
       any question sets they uploaded are not affected."). um-cap: 60 accounts.
       manage-users.js: lockoutRefusal (last Engage admin; own disable/delete),
       the audit entry first or nothing changes (503), a move to hosts/admins
-      re-enables a disabled account (AdminEnableUser).
+      re-enables a disabled account (AdminEnableUser). Since 2026-11-03:
+      "Suspend…" (confirm) keeps a member's groups, writes PROFILE.suspended
+      (read by auth/standing.js on every request) and turns the Cognito
+      account off; a suspended row offers only "Reinstate" (newState
+      'reinstate': account on, flag off, groups as they were; a group-less
+      account returns to pending and the screen says so). The Active view
+      counts suspended accounts with "Show suspended"; the tab is Suspended.
     */
     {
       id: 'changing-access',
@@ -402,14 +437,15 @@ const accounts = {
       blocks: [
         {
           t: 'p',
-          text: 'Below the queue, Members lists every approved account. Search by name, email or username, and filter with **Active**, **Admins**, **Hosts** or **Disabled**. Point at a row to see its moves; each row offers only those that apply to that person:',
+          text: 'Below the queue, Members lists every approved account. Search by name, email or username, and filter with **Active**, **Admins**, **Hosts** or **Suspended** (Active counts the suspended ones and has **Show suspended**). Each row offers only the moves that apply to that person:',
         },
         {
           t: 'list',
           items: [
             { title: '**Make Engage admin**', text: 'Makes them Engage staff, with every Engage section.' },
-            { title: '**Make host**', text: 'Makes them a host. On a disabled account it also lets them sign in again.' },
-            { title: '**Disable**', text: 'They cannot sign in. Nothing is deleted.' },
+            { title: '**Make host**', text: 'Makes them a host.' },
+            { title: '**Suspend…**', text: 'Asks first. From their next click they cannot host, open the console or use any Engage screen, and they cannot sign in again; they see one screen saying the account is suspended. Their role and everything they made are kept.' },
+            { title: '**Reinstate**', text: 'The one move on a suspended row. They can sign in again and are the host or Engage admin they were, from their next click. An account that had no role (a rejected sign-up) goes back to Waiting for approval, and the screen tells you.' },
             { title: 'The bin', text: 'Deletes the account, after you confirm. They lose access at once and would have to register again. Sessions they hosted and sets they uploaded are not affected.' },
           ],
         },
@@ -417,7 +453,7 @@ const accounts = {
           t: 'note',
           tone: 'warn',
           title: 'What Engage refuses',
-          text: 'It will not remove the last Engage admin (make someone else one first), and you cannot disable or delete your own account. Every change is written to the person\'s own log first; if that cannot be done, nothing changes.',
+          text: 'It will not remove the last Engage admin (make someone else one first), and you cannot suspend or delete your own account. Every change is written to the person\'s own log first; if that cannot be done, nothing changes.',
         },
         {
           t: 'p',

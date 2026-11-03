@@ -83,17 +83,20 @@ describe('the paths', () => {
 });
 
 describe('SessionsPanel (the console list)', () => {
-  test('a build session is labelled Build Room and opens on /build', async () => {
+  test('a build session is labelled Build Room and continues on /build', async () => {
+    const { clickRowAction } = require('../testUtils/sessionRows');
     authFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ games: [BUILD, POLL] }) });
-    render(<SessionsPanel />);
+    const navigate = jest.fn();
+    render(<SessionsPanel navigate={navigate} />);
     const row = (await screen.findByText('Food bank sign-up')).closest('tr');
     expect(within(row).getByText('Build Room')).toBeInTheDocument();
-    expect(within(row).getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/build?gameId=4821');
-    expect(within(row).getByRole('link', { name: 'Report' })).toHaveAttribute('href', '/build?gameId=4821&view=report');
+    clickRowAction(row, /^Continue/);
+    expect(navigate).toHaveBeenLastCalledWith('/build?gameId=4821');
+    clickRowAction(row, /^Report/);
+    expect(navigate).toHaveBeenLastCalledWith('/build?gameId=4821&view=report');
 
     const other = screen.getByText('Team pulse').closest('tr');
     expect(within(other).queryByText('Build Room')).toBeNull();
-    expect(within(other).queryByRole('link', { name: 'Open' })).toBeNull();
   });
 });
 
@@ -111,9 +114,10 @@ describe('SessionHistoryPanel (the host list)', () => {
     );
     const row = screen.getByText('Food bank sign-up').closest('tr');
     expect(within(row).getByText(/Build Room/)).toBeInTheDocument();
-    fireEvent.click(within(row).getByRole('button', { name: /Continue/ }));
+    const { clickRowAction } = require('../testUtils/sessionRows');
+    clickRowAction(row, /^Continue/);
     expect(navigate).toHaveBeenCalledWith('/build?gameId=4821');
-    fireEvent.click(within(row).getByRole('button', { name: /Report/ }));
+    clickRowAction(row, /^Report/);
     expect(navigate).toHaveBeenCalledWith('/build?gameId=4821&view=report');
     expect(onOpen).not.toHaveBeenCalled();
     expect(onReport).not.toHaveBeenCalled();
@@ -135,14 +139,17 @@ describe('GameHostPage ?gameId= sends a build session to /build', () => {
   });
 });
 
-describe('the welcome screen has a door to /build', () => {
-  test('a Build Room link', () => {
+/* ONE NEW DOOR (experience plan 4c): the welcome screen's own Build Room
+   link went; Build Room is a format in New engagement, created there and
+   landed on its room page. /build itself still routes (above). */
+describe('the welcome screen reaches the Build Room through New engagement', () => {
+  test('no Build Room door of its own; New engagement names it', () => {
     const WelcomeScreen = require('../components/WelcomeScreen').default;
     authFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }));
     render(<WelcomeScreen currentUser={{ groups: ['hosts'], attributes: {} }} />);
-    const link = screen.getByRole('link', { name: /Build Room/ });
-    expect(link).toHaveAttribute('href', '/build');
+    expect(screen.queryByRole('link', { name: /Build Room/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /new engagement/i })).toHaveTextContent(/a Build Room/);
   });
 });
 

@@ -127,6 +127,9 @@ function seed({ orgId = ORG_A, state = 'ASK#001', metadata = true } = {}) {
   table.put({
     PK, SK: 'PLAYER#Ada', PlayerName: 'Ada', ClientId: 'ada-phone',
     HandoverRequestedBy: 'ada-laptop',
+    // Every real ask carries its stamp (request-handover.js writes both), and
+    // an ask nobody can date is treated as lapsed (handover.js requestState).
+    HandoverRequestedAt: new Date().toISOString(),
   });
   table.put({
     PK, SK: 'PLAYER#Grace', PlayerName: 'Grace', ClientId: 'grace-phone',

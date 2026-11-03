@@ -50,8 +50,9 @@ describe('the module the bundle actually loads', () => {
     expect(QUEUE_MAX).toBe(24);
   });
 
-  test('QUEUE_OPS is closed to the five the endpoint accepts', () => {
-    expect(QUEUE_OPS).toEqual(['add', 'remove', 'earlier', 'later', 'first']);
+  test('QUEUE_OPS is closed to the eight the endpoint accepts', () => {
+    // The impromptu ask added three (add-own, edit-own, after): still closed.
+    expect(QUEUE_OPS).toEqual(['add', 'remove', 'earlier', 'later', 'first', 'add-own', 'edit-own', 'after']);
   });
 });
 

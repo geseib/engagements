@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import QuestionSetUploadPanel from './QuestionSetUploadPanel';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * "NEW SET" IS A DIALOG, LIKE EVERY OTHER MAKE-ONE-THING ACTION HERE.
@@ -26,13 +29,20 @@ import QuestionSetUploadPanel from './QuestionSetUploadPanel';
  *
  * EVERY EXIT IS ONE FUNCTION. The X, the footer button, Escape and the backdrop
  * all go through `requestClose`, which asks first when a file or a title would
- * be lost.
+ * be lost: in the small confirm dialog (useConfirm, experience plan 5c), never
+ * the browser's own window.confirm.
  */
 export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...panelProps }) {
   const [dirty, setDirty] = useState(false);
+  const [ask, confirmDialog] = useConfirm();
 
-  const requestClose = () => {
-    if (dirty && !window.confirm('Close without importing? The file and the details you entered will be lost.')) return;
+  const requestClose = async () => {
+    if (dirty && !(await ask({
+      title: 'Close without importing?',
+      message: 'The file and the details you entered will be lost.',
+      confirmText: 'Discard',
+      cancelText: 'Keep editing',
+    }))) return;
     if (onClose) onClose();
   };
 
@@ -46,25 +56,10 @@ export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...pa
       closeOnBackdrop={() => !dirty}
       closeOnEscape={() => !dirty}
     >
-      <header>
-        <Icon name="NotePencil" weight="duotone" size={20} color="var(--primary)" />
-        <div className="qsets-grow">
-          <h2 id="qsets-new-title">New question set</h2>
-          <p className="qsets-dim">Pick the kind of round, then generate it, start from a template, or upload a file.</p>
-        </div>
+      <DialogHead titleId="qsets-new-title" title="New question set" titlesClassName="qsets-grow" sub="Pick the kind of round, then generate it, start from a template, or upload a file." subClassName="qsets-dim" icon={<Icon name="NotePencil" weight="duotone" size={20} color="var(--primary)" />} onClose={requestClose} closeLabel="Close new question set" closeClassName="qs-dialog-close" closeProps={{ 'data-testid': "newset-close" }}>
         {/* The question-sets guide's new-set section (Help Phase 3). */}
         <HelpButton {...helpFor('admin-new-set')} variant="inline" size="small" tooltip="Help: new question set" className="help-button-quiet" />
-        <button
-          type="button"
-          className="qs-dialog-close"
-          onClick={requestClose}
-          aria-label="Close new question set"
-          title="Close"
-          data-testid="newset-close"
-        >
-          ×
-        </button>
-      </header>
+      </DialogHead>
 
       <div className="qsets-modal-body">
         <QuestionSetUploadPanel
@@ -82,9 +77,10 @@ export default function NewSetDialog({ onClose, onOpenBuilder, onUploaded, ...pa
         />
       </div>
 
-      <footer>
-        <button type="button" className="qsets-btn" onClick={requestClose}>Close</button>
-      </footer>
+      <DialogFoot>
+        <Button variant="secondary" size={44} onClick={requestClose}>Close</Button>
+      </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }

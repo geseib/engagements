@@ -169,3 +169,34 @@ describe('one copy of the options, never two', () => {
     expect(src).toMatch(/<SessionBriefing\b/);
   });
 });
+
+/*
+  THE CLOSED LINE (New engagement round 4). The create dialog asks for the
+  short `brief` on the closed fold and the full sentence inside it; the event
+  item dialog, which does not ask, keeps the full sentence closed.
+*/
+describe('the Advanced summary line', () => {
+  test('briefSummary: the short line closed, the full sentence at the top of the open body', async () => {
+    mount({ briefSummary: true, namesStated: true });
+    await settle();
+    expect(screen.getByTestId('gsd-adv-summary').textContent).toBe('Defaults: questions shuffled, Workie’s standard summary');
+    const full = screen.getByTestId('gsd-adv-full');
+    expect(full.parentElement).toHaveClass('gsd-adv-body');
+    expect(full.textContent).toMatch(/^Using the defaults — answers anonymous until voting closes, questions shuffled;/);
+  });
+
+  test('briefSummary with a change: the amber lead alone, closed', async () => {
+    mount({ briefSummary: true, namesStated: true, value: { ...VALUE, randomizeQuestions: false } });
+    await settle();
+    const closed = screen.getByTestId('gsd-adv-summary');
+    expect(closed.textContent).toBe('Changed: questions asked in order.');
+    expect(closed.querySelector('b')).toHaveTextContent('Changed: questions asked in order.');
+  });
+
+  test('without it (the event item dialog) the closed line is the full sentence, as before', async () => {
+    mount();
+    await settle();
+    expect(screen.getByTestId('gsd-adv-summary').textContent).toMatch(/^Using the defaults — answers anonymous until voting closes/);
+    expect(screen.queryByTestId('gsd-adv-full')).toBeNull();
+  });
+});

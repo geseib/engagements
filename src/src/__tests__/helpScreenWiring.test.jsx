@@ -84,8 +84,9 @@ describe('§2 every screen id a component names is real', () => {
 });
 
 describe('§3 the per-state pickers pick real ids', () => {
-  test('the Session panel: one per tab', () => {
-    expect(Object.keys(TAB_HELP).sort()).toEqual(['history', 'players', 'questions', 'settings']);
+  // rejects: dev QA 2 Nov — the sections renamed, and a `?` that opened a section that no longer exists (renamed again by the 3 Nov redesign).
+  test('the Session panel: one per section', () => {
+    expect(Object.keys(TAB_HELP).sort()).toEqual(['close', 'history', 'joining', 'people', 'results', 'run', 'screens', 'up-next']);
     Object.values(TAB_HELP).forEach((id) => expect(HELP_FOR_SCREEN[id]).toBeDefined());
   });
 

@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session start and live stats</title>
+<style>
+/* SESSION START + LIVE STATS (owner feedback, 1 Nov 2026). Mockup only.
+   Dusk tokens from styles/skins/classic.css (--sk-dark-*), the laptop ladder
+   12 / 13 / 15 / 19 / 24 / 30px (engage-design §2), the console's own
+   classes copied by shape from components/console/HostConsole.css.
+   Sample content invented. Every frame is a fixed size so the PNGs are honest:
+   laptop 1366x768, 1280x720, phone 390x844. */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --accent:#F6A94C;--accent-text:#F6A94C;--on-accent:#1B2942;--info:#7CA7E6;
+  --success:#4FB286;--success-text:#6FD0A4;--warn:#F6A94C;
+  --rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--rule-3:rgba(244,237,228,.3);
+  --wall:linear-gradient(180deg,#0C1526 0%,#12203A 46%,#1B2C4A 78%,#2A3A57 100%);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.doc{max-width:1420px;margin:0 auto;padding:24px 16px 80px}
+.doc h1{font-size:24px;margin:0 0 6px}
+.doc > p, .cap p{color:var(--muted);font-size:13px;max-width:900px;margin:0 0 8px}
+.doc > p b, .cap b{color:var(--text)}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 24px;padding:0;list-style:none}
+.toc a{display:inline-block;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;border:1px solid var(--rule-2);border-radius:999px;padding:5px 12px;background:var(--surface)}
+.group-h{font-size:19px;margin:40px 0 4px;padding-top:12px;border-top:1px solid var(--rule)}
+.cap{margin:22px 0 8px}
+.cap h3{font-size:15px;margin:0 0 4px}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px}
+.tag.new{background:rgba(246,169,76,.16);color:var(--accent-text);border:1px solid rgba(246,169,76,.5)}
+.tag.reuse{background:rgba(124,167,230,.14);color:var(--info);border:1px solid rgba(124,167,230,.45)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-laptop{width:1366px;height:768px}
+.f-720{width:1280px;height:720px}
+.f-phone{width:390px;height:844px;border-radius:28px}
+.f-crop{width:980px;height:440px}
+.pair{display:flex;gap:16px;align-items:flex-start}
+
+/* ---------------- console shell (HostConsole.css by shape) --------------- */
+.hc{position:absolute;inset:0;display:grid;grid-template-columns:260px minmax(0,1fr);
+  grid-template-rows:auto auto auto auto minmax(0,1fr);
+  grid-template-areas:"top top" "loop loop" "rail now" "rail pulse" "rail main";font-size:15px}
+.hc.setup-mode{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr);grid-template-areas:"top" "loop" "now" "main"}
+.f-720 .hc{grid-template-columns:232px minmax(0,1fr)}
+.f-720 .now{margin-top:10px;padding:10px 16px}
+.f-720 .main{padding-top:10px;gap:10px}
+.f-720 .hc.setup-mode{grid-template-columns:minmax(0,1fr)}
+.top{grid-area:top;display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid var(--rule);min-width:0}
+.leave{font:inherit;font-size:13px;font-weight:700;color:var(--muted);background:none;border:0;padding:4px 6px}
+.brand{font-weight:800}
+.name{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sp{margin-left:auto}
+.code,.btn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:5px 12px;text-decoration:none;white-space:nowrap}
+.code b{color:var(--accent-text);letter-spacing:.06em;margin-left:4px}
+.winstat{font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 12px;border:1px solid var(--rule-2);white-space:nowrap}
+.winstat i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.winstat.ok{border-color:var(--success);background:rgba(79,178,134,.14)} .winstat.ok i{background:var(--success)}
+.winstat.warn{border-color:var(--warn);background:rgba(246,169,76,.14)} .winstat.warn i{background:var(--warn)}
+.winstat.off{color:var(--muted)}
+.qm{width:24px;height:24px;border-radius:50%;border:1px solid var(--rule-2);display:inline-grid;place-items:center;font-size:12px;font-weight:800;color:var(--muted)}
+.bell{width:18px;height:18px;color:var(--muted)}
+.loop{grid-area:loop;display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--rule);font-size:13px;color:var(--muted);white-space:nowrap}
+.loop ol{display:flex;gap:6px;margin:0;padding:3px 6px;list-style:none;border:1px solid var(--rule-2);border-radius:10px;align-items:center}
+.loop .round{font-weight:800;color:var(--text);padding:0 4px}
+.st{padding:2px 10px;border-radius:7px;border:1px solid var(--rule-2);color:var(--muted)}
+.st.done{color:var(--text)} .st.done::before{content:"✓ ";color:var(--success-text);font-weight:800}
+.st.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--info);font-weight:800}
+.st.opt{border-style:dashed}
+.rail{grid-area:rail;border-right:1px solid var(--rule);overflow:hidden;padding:8px 0}
+.sec{border-bottom:1px solid var(--rule)}
+.sec-h{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13px;font-weight:700}
+.sec-h::before{content:"▸";color:var(--muted)} .sec.open .sec-h::before{content:"▾"}
+.sec-h .ct{margin-left:auto;font-size:12px;color:var(--muted);font-weight:600}
+.sec-h .ct.alert{color:var(--accent-text)}
+.rl{list-style:none;margin:0;padding:0 14px 10px;display:grid;gap:6px;font-size:13px}
+.rl li{display:flex;gap:8px;align-items:baseline}
+.tick{color:var(--success-text);font-weight:800;width:12px} .wait{color:var(--muted);width:12px}
+.meta{color:var(--muted);font-size:12px}
+.lnk{font:inherit;font-size:12px;font-weight:700;color:var(--info);background:none;border:0;padding:0 14px 10px;text-align:left}
+.rl .lnk{padding:0;font-size:13px}
+
+/* Your part now (ConsoleFooter, owner 18 Oct) */
+.now{grid-area:now;display:flex;align-items:center;gap:20px;margin:14px 20px 0;padding:12px 18px;border-radius:12px;background:var(--surface);border-left:4px solid var(--accent)}
+.now-t{flex:1;min-width:0;display:grid;gap:3px}
+.k{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.part{margin:0;font-size:19px;line-height:1.3;max-width:62ch}
+.part b{color:var(--accent-text)}
+.status{margin:0;font-size:13px;color:var(--muted)}
+.acts{display:flex;align-items:center;gap:10px;flex:none}
+.go{font:inherit;font-size:15px;font-weight:800;background:var(--accent);color:var(--on-accent);border:0;border-radius:10px;padding:10px 18px;white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.go .kc{font-size:12px;font-weight:700;border:1px solid rgba(27,41,66,.45);border-radius:5px;padding:0 5px}
+.go[disabled]{opacity:.45}
+.alt{font:inherit;font-size:15px;font-weight:700;background:transparent;color:var(--text);border:1px solid var(--rule-2);border-radius:10px;padding:9px 14px;white-space:nowrap}
+.held{display:inline-flex;align-items:center;min-height:40px;padding:8px 16px;border:1px dashed var(--rule-3);border-radius:10px;font-size:15px;color:var(--muted);white-space:nowrap}
+/* NEW: the time chip that rides beside an opening move */
+.timechip{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--surface-2);border:1px solid var(--rule-3);border-radius:10px;padding:10px 12px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.timechip svg{width:15px;height:15px}
+.timechip .caret{color:var(--muted)}
+.armed{font-size:13px;color:var(--text);margin:0 0 6px;text-align:right}
+
+/* NEW: the pulse — the room at a glance, under Your part now */
+.pulse{grid-area:pulse;display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:12px;margin:10px 20px 0}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:10px 14px;display:grid;gap:4px;align-content:start;min-width:0}
+.tile .k{display:flex;align-items:center;gap:6px}
+.tile .k svg{width:14px;height:14px}
+.num{margin:0;font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.num small{font-size:19px;color:var(--muted);font-weight:700}
+.num.mid{font-size:24px}
+.sub{margin:0;font-size:13px;color:var(--muted)}
+.sub b{color:var(--text);font-weight:700}
+.sub .lnk{padding:0;font-size:13px}
+.bar{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden;display:flex;gap:2px}
+.bar i{display:block;height:100%;flex:1;background:rgba(244,237,228,.08)}
+.bar i.on{background:var(--info)}
+.tile.allin{border-color:var(--success);background:linear-gradient(0deg,rgba(79,178,134,.10),rgba(79,178,134,.10)),var(--surface)}
+.tile.allin .bar i.on{background:var(--success)}
+.allin-w{display:inline-flex;align-items:center;gap:6px;color:var(--success-text);font-weight:800;font-size:15px}
+.allin-w svg{width:18px;height:18px}
+.tile.over{border-color:var(--warn)}
+.over-w{color:var(--accent-text);font-weight:800}
+.trow{display:flex;align-items:center;gap:14px}
+.ring{width:48px;height:48px;flex:none}
+.ring circle{fill:none;stroke-width:6}
+.ring .bg{stroke:var(--surface-2)} .ring .fg{stroke:var(--info);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%}
+.tile.over .ring .bg{stroke:rgba(246,169,76,.4)}
+.tbtn .kc{font-size:12px;color:var(--muted);border:1px solid var(--rule-2);border-radius:5px;padding:0 5px;margin-left:6px}
+.tbtn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:transparent;border:1px solid var(--rule-2);border-radius:8px;padding:4px 10px;margin-left:auto;white-space:nowrap}
+.tile.quiet .num{color:var(--text)}
+
+/* main area */
+.main{grid-area:main;overflow:hidden;padding:14px 20px;display:grid;gap:12px;align-content:start;min-height:0}
+.kick{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.h{margin:0;font-size:24px;line-height:1.2}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.resps{display:grid;gap:8px}
+.resp{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px}
+.resp small{display:block;font-size:12px;color:var(--muted)}
+.resp.new{border-color:var(--success)}
+.resp.onwall{border-color:var(--info);box-shadow:0 0 0 1px var(--info)}
+.resp.pts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:baseline}
+.pts-n{font-size:13px;color:var(--muted);white-space:nowrap}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:10px 12px}
+.card h4{margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.card p{margin:0;font-size:13px;color:var(--muted)}
+.task{border-left:3px solid var(--accent);padding:6px 10px;background:var(--surface);border-radius:0 8px 8px 0}
+.task small{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* NEW: the setup panel = the session's start (StepView + ScreensGroup grown up) */
+.setup{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+.f-720 .setup{grid-template-columns:minmax(0,1fr) 340px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.stp{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:12px 16px}
+.stp-head{display:flex;align-items:center;gap:12px}
+.stp-n{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;font-size:13px;font-weight:800;background:var(--surface-2);color:var(--text);flex:none}
+.stp.done .stp-n{background:rgba(79,178,134,.22);color:var(--success-text)}
+.stp.open{border-color:var(--rule-3)}
+.stp.open .stp-n{background:var(--info);color:var(--bg)}
+.stp.later{background:transparent;border-style:dashed}
+.stp.later .stp-h,.stp.later .stp-n{color:var(--muted)}
+.stp-h{margin:0;font-size:15px;font-weight:800}
+.stp-sum{font-size:13px;color:var(--muted)}
+.stp-sum b{color:var(--text)}
+.stp-head .lnk{margin-left:auto;padding:0;font-size:13px}
+.stp-body{margin:10px 0 2px 38px;display:grid;gap:10px}
+.stp-body p{margin:0;font-size:13px;color:var(--muted)}
+.stp-body p b{color:var(--text)}
+/* the chooser's cards (RoomScreenChooser) */
+.rsc-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rsc-card{border:1px solid var(--rule-2);border-radius:12px;padding:12px 14px;display:grid;gap:6px;background:var(--bg)}
+.rsc-card svg{width:100%;height:70px}
+.rsc-card h5{margin:0;font-size:15px}
+.rsc-card p{margin:0;font-size:13px;color:var(--muted)}
+.rsc-acts{display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap}
+.qbtn{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:var(--surface-2);border:1px solid var(--rule-3);border-radius:8px;padding:6px 12px;white-space:nowrap}
+.qlink{font:inherit;font-size:13px;font-weight:700;color:var(--accent-text);background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:2px}
+.art-l{fill:var(--surface-2);stroke:var(--rule-3)} .art-w{fill:#12203A;stroke:var(--info)} .art-t{fill:var(--muted);font-size:12px;font-family:inherit}
+/* checklist inside the window step */
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:15px}
+.checks li{display:flex;align-items:center;gap:10px}
+.ck{width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:800;flex:none;border:2px solid var(--rule-3);color:transparent}
+.ck.yes{border-color:var(--success);background:var(--success);color:var(--bg)}
+.ck.warn{border-color:var(--warn);color:var(--warn)}
+.checks .meta{margin-left:4px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row .lab{font-size:13px;font-weight:700}
+.sel{font:inherit;font-size:13px;color:var(--text);background:var(--surface-2);border:1px solid var(--rule-3);border-radius:8px;padding:5px 10px}
+.seg{display:inline-flex;border:1px solid var(--rule-3);border-radius:8px;overflow:hidden}
+.seg span{font-size:13px;padding:5px 12px;border-right:1px solid var(--rule-2)}
+.seg span:last-child{border-right:0}
+.seg span.on{background:var(--accent);color:var(--on-accent);font-weight:700}
+/* joiners */
+.joinwrap{display:flex;align-items:flex-end;gap:18px}
+.bignum{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;border:1px solid var(--rule-2);border-radius:999px;padding:2px 10px;background:var(--bg)}
+.chip.fresh{border-color:var(--success);color:var(--text)}
+.firstup{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--muted)}
+.firstup b{color:var(--text);font-size:15px}
+/* preview column: what the room sees */
+.pv{display:grid;gap:8px}
+.pv-wall{aspect-ratio:16/9;border-radius:10px;border:1px solid var(--info);background:var(--wall);position:relative;overflow:hidden;padding:14px 16px;display:grid;grid-template-columns:1fr 112px;gap:12px;align-items:center}
+.pv-wall.dim{opacity:.38;border-style:dashed;border-color:var(--rule-3)}
+.pv-wall.mirror{grid-template-columns:1fr;border-color:var(--accent)}
+.pv-title{font-size:19px;font-weight:800;line-height:1.15}
+.pv-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.pv-qr{background:#F4EDE4;border-radius:8px;padding:8px;aspect-ratio:1}
+.pv-qr div{width:100%;height:100%;background:
+  conic-gradient(from 90deg at 30% 30%,#0F1A2E 25%,transparent 0) 0 0/18px 18px,
+  linear-gradient(90deg,#0F1A2E 50%,transparent 0) 0 0/9px 9px,
+  linear-gradient(#0F1A2E 50%,transparent 0) 0 0/13px 13px;opacity:.9}
+.pv-code{font-size:12px;color:var(--muted);text-align:center;margin-top:4px}
+.pv-k{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.pv-k b{color:var(--text)}
+.note{font-size:13px;color:var(--muted);margin:0}
+.note b{color:var(--text)}
+.banner{display:flex;gap:10px;align-items:center;font-size:13px;padding:8px 12px;border-radius:10px;border:1px solid rgba(246,169,76,.5);background:rgba(246,169,76,.08);color:var(--text)}
+.banner svg{width:18px;height:18px;color:var(--accent-text);flex:none}
+
+/* popover (time chooser) */
+.pop{position:absolute;background:var(--surface-2);border:1px solid var(--rule-3);border-radius:12px;padding:14px;box-shadow:0 18px 40px rgba(6,11,22,.6);display:grid;gap:10px;width:330px;z-index:5}
+.pop h5{margin:0;font-size:15px}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.opts span{font-size:13px;font-weight:700;border:1px solid var(--rule-3);border-radius:8px;padding:5px 10px}
+.opts span.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.cbx{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.cbx i{width:16px;height:16px;border-radius:4px;border:2px solid var(--info);background:var(--info);flex:none;margin-top:1px;position:relative}
+.cbx i::after{content:"";position:absolute;left:3px;top:0;width:5px;height:9px;border:solid var(--bg);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.cbx i.off{background:transparent}
+.cbx i.off::after{display:none}
+.cbx small{display:block;color:var(--muted);font-size:12px}
+
+/* ---------------- the room's window (present.css by shape) --------------- */
+.wall{position:absolute;inset:0;background:var(--wall);display:grid;grid-template-rows:auto 1fr auto;font-family:Archivo,Inter,system-ui,sans-serif}
+.w-top{display:flex;justify-content:space-between;padding:22px 40px 0;font-size:20px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+.w-main{padding:20px 40px;display:grid;align-content:center;gap:18px}
+.w-ey{font-size:20px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;font-weight:700}
+.frame .w-title{font-size:58px;font-weight:800;line-height:1.05;letter-spacing:-.01em;margin:0}
+.w-lesson{font-size:26px;line-height:1.35;color:var(--text);max-width:34ch;margin:0}
+.w-turn{border-left:6px solid var(--accent);background:rgba(27,41,66,.75);padding:12px 18px;font-size:26px;border-radius:0 12px 12px 0;max-width:46ch}
+.w-turn small{display:block;font-size:20px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.w-foot{display:flex;align-items:center;gap:20px;padding:0 40px 24px;font-size:24px}
+.pips{display:flex;gap:6px}
+.pips i{width:20px;height:20px;border-radius:50%;background:rgba(244,237,228,.15)}
+.pips i.on{background:var(--info)}
+.w-time{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--text)}
+.w-tbar{width:220px;height:12px;border-radius:6px;background:rgba(244,237,228,.15);overflow:hidden}
+.w-tbar i{display:block;height:100%;background:var(--info)}
+.lobby{display:grid;grid-template-columns:1fr 360px;gap:48px;align-items:center;padding:0 56px}
+.frame .lobby .w-title{font-size:64px}
+.lob-count{font-size:30px;color:var(--text);margin:18px 0 0}
+.lob-join{display:grid;justify-items:center;gap:10px}
+.lob-qr{width:300px;height:300px;background:#F4EDE4;border-radius:16px;padding:18px}
+.lob-qr div{width:100%;height:100%;background:
+  conic-gradient(from 90deg at 30% 30%,#0F1A2E 25%,transparent 0) 0 0/36px 36px,
+  linear-gradient(90deg,#0F1A2E 50%,transparent 0) 0 0/18px 18px,
+  linear-gradient(#0F1A2E 50%,transparent 0) 0 0/26px 26px}
+.lob-ey{font-size:20px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:center;font-weight:700}
+.lob-url{font-size:24px;margin:0}
+.lob-code{font-size:48px;font-weight:800;letter-spacing:.08em;color:var(--accent);margin:0}
+
+/* ---------------- one-screen stage (styles/stage.css by shape) ----------- */
+.stage{position:absolute;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--wall)}
+.stage .slim{display:flex;gap:8px;align-items:center;padding:8px 18px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--rule)}
+.stage-body{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:24px;padding:22px 32px;align-items:center}
+.stage-meter{border-left:1px solid var(--rule-2);padding-left:24px}
+.stage-meter .w-ey{font-size:16px}
+.stage-meter .bignum{font-size:72px}
+.dock{display:flex;align-items:center;gap:14px;padding:10px 18px;background:rgba(15,26,46,.92);border-top:1px solid var(--rule-2)}
+.dock .st-l{font-size:15px;font-weight:700}
+
+/* ---------------- phones ----------------------------------------------- */
+.ph{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);font-size:15px}
+.ph-top{display:flex;align-items:center;gap:8px;padding:44px 16px 10px;border-bottom:1px solid var(--rule)}
+.ph-top b{font-size:15px}
+.ph-top .code{margin-left:auto}
+.ph-body{flex:1;padding:14px 16px;display:grid;gap:12px;align-content:start;overflow:hidden}
+.ph-card{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:14px;display:grid;gap:8px}
+.ph-foot{padding:12px 16px 30px;border-top:1px solid var(--rule);display:grid;gap:8px}
+.ph-foot .go{justify-content:center;width:100%;padding:14px}
+.ph .checks{font-size:15px}
+.dots{display:flex;gap:6px;justify-content:center}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--surface-2)} .dots i.on{background:var(--info)}
+.field{border:1px solid var(--rule-3);border-radius:10px;padding:10px 12px;min-height:120px;background:var(--surface);color:var(--muted)}
+.ptime{display:flex;align-items:center;gap:10px;font-size:15px}
+.ptime .w-tbar{flex:1;width:auto;height:8px}
+
+/* narrow host page (390): the setup stacks; preview folds to one line */
+.narrow .setup{grid-template-columns:1fr}
+.ph .now{grid-area:auto}
+.narrow .rsc-cards{grid-template-columns:1fr}
+.narrow .stp-body{margin-left:0}
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>Session start and live stats</h1>
+  <p><b>Owner, 1 Nov 2026.</b> (1) Starting a Call &amp; Answer session should <i>be</i> the nice Setup flow: choose one or two screens, put the room's screen up, then offer the join code. (2) On two screens the console is bland; the host needs to see at a glance how many have answered and how long the room has. Every frame below is drawn at its real size. Tags: <span class="tag new">new</span> <span class="tag reuse">reused</span>. README.md has the reasoning; reviews.md the desk review.</p>
+  <ul class="toc">
+    <li><a href="#a1">A1 First start</a></li><li><a href="#a2">A2 Two screens: window</a></li><li><a href="#a3">A3 Two screens: joining</a></li><li><a href="#a4">A4 The room sees</a></li>
+    <li><a href="#a5">A5 One screen: check</a></li><li><a href="#a6">A6 One screen: lobby</a></li><li><a href="#a7">A7 Returning: Start</a></li><li><a href="#a8">A8 Returning: landed</a></li>
+    <li><a href="#b1">B1 Answering</a></li><li><a href="#b2">B2 Everyone's in</a></li><li><a href="#b3">B3 Time's up</a></li><li><a href="#b4">B4 Voting</a></li><li><a href="#b5">B5 Results</a></li><li><a href="#b6">B6 Choosing the time</a></li><li><a href="#b7">B7 Wall with time</a></li>
+    <li><a href="#c1">C1 Remote: start</a></li><li><a href="#c2">C2 Remote: answering</a></li><li><a href="#c3">C3 Phone: answering</a></li><li><a href="#c4">C4 Narrow host: first start</a></li><li><a href="#c5">C5 1280x720 joining</a></li><li><a href="#c6">C6 1280x720 answering</a></li>
+  </ul>
+
+  <!-- ======================================================== A START -->
+  <h2 class="group-h">A · One start, beginning with the screens</h2>
+
+  <div class="cap" id="a1"><h3>A1 · First start, nothing chosen yet <span class="tag new">new</span></h3>
+    <p>Start on the session list opens <b>Setup</b>, not the stage. Step 1 is the existing chooser (<i>Where will the room watch?</i>, its drawings, <i>Help me pick</i>). The join code is <b>not</b> drawn yet: nothing goes to the projector until the room's screen is decided. Your part now holds the slot for Start round 1 and names why it is empty. No rail: until the first round there is nothing in it the host needs.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a1-start-first-choose">
+    <div class="hc setup-mode">
+      <header class="top" data-top="none"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Choose where the room watches.</b> The join code goes up once the room's screen is ready.</p></div>
+        <div class="acts"><span class="held">Start round 1 · after setup</span></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp open"><div class="stp-head"><span class="stp-n">1</span><p class="stp-h">Where will the room watch?</p></div>
+              <div class="stp-body">
+                <div class="rsc-cards">
+                  <div class="rsc-card"><svg viewBox="0 0 200 70" aria-hidden="true"><rect x="8" y="26" width="64" height="38" rx="4" class="art-l"/><text x="40" y="49" text-anchor="middle" class="art-t">your laptop</text><rect x="100" y="4" width="92" height="56" rx="4" class="art-w"/><text x="146" y="36" text-anchor="middle" class="art-t">the room's window</text></svg>
+                    <h5>Two screens</h5><p>The projector shows a second window. This laptop stays yours: Workie's notes, the icons beside points and late items stay private.</p>
+                    <div class="rsc-acts"><button class="qbtn">Use two screens</button></div></div>
+                  <div class="rsc-card"><svg viewBox="0 0 200 70" aria-hidden="true"><rect x="40" y="4" width="104" height="56" rx="4" class="art-w"/><text x="92" y="30" text-anchor="middle" class="art-t">this laptop, on the wall</text><text x="92" y="44" text-anchor="middle" class="art-t">(mirrored)</text><rect x="156" y="30" width="20" height="32" rx="4" class="art-l"/></svg>
+                    <h5>One screen</h5><p>The projector shows this laptop. Quick to set up, but the room sees everything on it. Your phone's Remote can hold the private notes.</p>
+                    <div class="rsc-acts"><button class="qbtn">Use one screen</button></div></div>
+                </div>
+                <p>Not sure? <button class="qlink">Help me pick</button>: three questions about your setup. This browser remembers your choice; next time Start skips this step.</p>
+              </div></li>
+            <li class="stp later"><div class="stp-head"><span class="stp-n">2</span><p class="stp-h">Put the room's screen up</p><span class="stp-sum">after step 1</span></div></li>
+            <li class="stp later"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p><span class="stp-sum">the join code goes up here</span></div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room sees</div>
+            <div class="pv-wall dim"><div><div class="pv-title">Relay expansion: kick-off</div><div class="pv-sub">0 in the room</div></div><div><div class="pv-qr"><div></div></div><div class="pv-code">7924</div></div></div>
+            <p class="note">Nothing yet. The join screen appears on the room's screen at step 3.</p>
+            <div class="card"><h4>This session</h4><p><b style="color:var(--text)">Relay expansion: kick-off</b> · Call &amp; Answer · 6 rounds from “Change that sticks”. Code <b style="color:var(--accent-text)">7924</b>.</p></div>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a2"><h3>A2 · Two screens chosen: put the room's window up <span class="tag new">new</span> <span class="tag reuse">ScreensGroup rows</span></h3>
+    <p>Step 1 folds to one line with <i>Change</i>. Step 2 is the Screens group's window row and size row, laid out as a checklist the app can actually verify (connected, full screen: <code>presentStatus.js</code>; never “the projector is on”). The one orange button is Your part now's <b>Open the room's window ↗</b>, which places it on the other display where Chrome can. The top line already shows the window state, as today.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a2-start-two-window">
+    <div class="hc setup-mode">
+      <header class="top" data-top="off"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Open the room's window</b> and put it on the projector.</p><p class="status">It opens on your other display and fills it with one click.</p></div>
+        <div class="acts"><button class="go">Open the room's window ↗</button></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Where the room watches</p><span class="stp-sum"><b>Two screens</b></span><button class="lnk">Change</button></div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">2</span><p class="stp-h">Put the room's window up</p></div>
+              <div class="stp-body">
+                <ul class="checks">
+                  <li><span class="ck">✓</span>Open <span class="meta">not open yet</span></li>
+                  <li><span class="ck">✓</span>Full screen <span class="meta">one click on the window, or press F</span></li>
+                </ul>
+                <div class="row"><span class="lab">Room screen size</span><select class="sel"><option>Room — projector</option></select><span class="meta">How big the room's screen draws everything</span></div>
+                <p><b>Opened on this screen?</b> Drag it onto the projector, then click it once.</p>
+                <p>No second display? <button class="qlink">Open as a tab</button> and share that tab on the call, or press F on a mirrored projector.</p>
+              </div></li>
+            <li class="stp later"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p><span class="stp-sum">the join code goes up on the room's window</span></div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room will see <span class="winstat off" style="margin-left:auto"><i></i>Not open</span></div>
+            <div class="pv-wall dim"><div><div class="pv-title">Relay expansion: kick-off</div><div class="pv-sub">0 in the room</div></div><div><div class="pv-qr"><div></div></div><div class="pv-code">7924</div></div></div>
+            <p class="note">The room's window opens on the join screen, so the code is up the moment it is on the projector.</p>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a3"><h3>A3 · Two screens: the room is joining <span class="tag new">new</span></h3>
+    <p>Window on and full screen: step 2 folds to ✓. Step 3 is the lobby that used to be the console's bare code-and-names panel: <b>how many are in</b>, who just arrived, what round 1 is. Start round 1 carries the new <b>time chip</b> (B6). Before anyone joins, the button is disabled with today's hint (“Someone must join first”).</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a3-start-two-joining">
+    <div class="hc setup-mode">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Start round 1</b> when the room is in.</p><p class="status">The join code is on the room's window.</p></div>
+        <div class="acts"><button class="timechip" data-ico="timer">No time limit <span class="caret">▾</span></button><button class="go">Start round 1 <span class="kc">Space</span></button></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Where the room watches</p><span class="stp-sum"><b>Two screens</b></span><button class="lnk">Change</button></div></li>
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Room's window</p><span class="stp-sum"><b>On, full screen</b> · Room — projector</span><button class="lnk">Change</button></div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p></div>
+              <div class="stp-body">
+                <div class="joinwrap"><span class="bignum">9</span><span class="sub" style="padding-bottom:3px">in the room · <b>2 in the last minute: Priya, Tom</b></span></div>
+                <div class="chips"><span class="chip fresh">Priya</span><span class="chip fresh">Tom</span><span class="chip">Ana</span><span class="chip">Ben</span><span class="chip">Chen</span><span class="chip">Dara</span><span class="chip">Eli</span><span class="chip">Fatima</span><span class="chip">Gus</span></div>
+                <div class="firstup">First up <b>Round 1 · The Meiji Restoration</b> <button class="lnk" style="padding:0">Running order</button></div>
+              </div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room sees <span class="winstat ok" style="margin-left:auto"><i></i>On, full screen</span></div>
+            <div class="pv-wall"><div><div class="pv-title">Relay expansion: kick-off</div><div class="pv-sub">9 in the room</div></div><div><div class="pv-qr"><div></div></div><div class="pv-code">7924</div></div></div>
+            <p class="note">Late joiners can always come in: <b>Join 7924</b> on the top line puts the code back on the wall mid-round.</p>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a4"><h3>A4 · What the room sees during A3 (1280×720) <span class="tag reuse">PresentLobby, unchanged</span></h3>
+    <p>The room's window is already right (owner, 18 Oct). Nothing changes here; it is shown so the pair reads together.</p></div>
+  <div class="scroll"><div class="frame f-720" data-shot="1-a4-room-window-lobby-1280x720">
+    <div class="wall">
+      <div class="w-top"><span>Engagements</span><span>Joining</span></div>
+      <div class="lobby">
+        <div><h1 class="w-title">Relay expansion: kick-off</h1><p class="w-lesson" style="font-size:24px;color:var(--muted);margin-top:14px">Six short rounds on what it takes for a change to stick.</p><p class="lob-count">9 in the room</p></div>
+        <div class="lob-join"><div class="lob-qr"><div></div></div><div class="lob-ey">Scan to join<br>no app, no account</div><p class="lob-url">engage.seibtribe.us/play</p><p class="lob-code">7924</p></div>
+      </div>
+      <div class="w-foot" style="font-size:22px;color:var(--muted)">Round 1 starts when the host is ready</div>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a5"><h3>A5 · One screen chosen: check what the room sees <span class="tag new">new</span></h3>
+    <p>On one screen the laptop <i>is</i> the wall, so step 2 is a check rather than a window: the size, and a plain warning that the room now sees this page. The Remote is offered as an address, never a second QR on a projected page (players would scan it). <b>Show the join code</b> is the step from Setup to the stage.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a5-start-one-check">
+    <div class="hc setup-mode">
+      <header class="top" data-top="none"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Check the room can read this screen,</b> then put the join code up.</p><p class="status">Look at the projector: can you read this line from the back of the room?</p></div>
+        <div class="acts"><button class="go">Show the join code</button></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Where the room watches</p><span class="stp-sum"><b>One screen</b></span><button class="lnk">Change</button></div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">2</span><p class="stp-h">Check the projector</p></div>
+              <div class="stp-body">
+                <div class="banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>The room sees this screen from now on.</div>
+                <div class="row"><span class="lab">Room screen size</span><span class="seg"><span class="on">Room</span><span>TV</span><span>Call</span><span>Table</span></span><span class="meta">Room: a projector, read from the back</span></div>
+                <p><b>Keep Workie's notes private:</b> open <b>engage.seibtribe.us/remote</b> on your phone and sign in. It finds this session.</p>
+              </div></li>
+            <li class="stp later"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p><span class="stp-sum">the join code fills this screen</span></div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room sees</div>
+            <div class="pv-wall mirror"><div><div class="pv-title" style="font-size:15px">This whole screen</div><div class="pv-sub">Setup now; the join code at step 3; then every round.</div></div></div>
+            <p class="note">Prefer to keep this laptop private? <button class="qlink">Use two screens</button> and open the room's window on the projector.</p>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a6"><h3>A6 · One screen: the lobby on the stage <span class="tag reuse">stage lobby</span> <span class="tag new">time chip, Setup ✓</span></h3>
+    <p>Today's stage lobby, now reached <i>after</i> the screens are settled. The strip's <b>Setup ✓</b> takes the host back. The dock gains the time chip beside Start round 1.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a6-start-one-lobby">
+    <div class="stage">
+      <div class="slim"><span class="st done">Setup</span> › <span>Round 1 of 6</span> › <span>Finish</span><span class="sp"></span><span>Relay expansion: kick-off</span></div>
+      <div class="stage-body">
+        <div class="lobby" style="padding:0;grid-template-columns:1fr 320px;gap:36px">
+          <div><div class="w-ey">Scan to join · no app, no account</div><h1 class="w-title" style="font-size:52px;margin-top:10px">Relay expansion: kick-off</h1><p class="lob-url" style="margin-top:16px;color:var(--muted)">engage.seibtribe.us/play · <b style="color:var(--accent)">7924</b></p></div>
+          <div class="lob-join"><div class="lob-qr" style="width:280px;height:280px"><div></div></div></div>
+        </div>
+        <div class="stage-meter"><div class="w-ey">In the room</div><div class="bignum">9</div></div>
+      </div>
+      <div class="dock"><span class="st-l">Ready when you are</span><span class="sp"></span><button class="timechip">No time limit <span class="caret">▾</span></button><button class="go">Start round 1 <span class="kc">Space</span></button></div>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a7"><h3>A7 · Returning host: Start already knows <span class="tag new">new</span></h3>
+    <p>The session list's Start says what it will do: <b>Start · two screens</b>, with the line under the list and a way to pick the other this time. Because Start is a click, it can open the room's window in the same click (Quick start already does this with <code>openPendingRoomWindow</code>). One click replaces choose + open.</p></div>
+  <div class="scroll"><div class="frame f-crop" data-shot="1-a7-returning-start-row">
+    <div style="position:absolute;inset:0;padding:20px 24px;display:grid;gap:12px;align-content:start">
+      <p class="k">Your sessions</p>
+      <div class="card" style="padding:0">
+        <div style="display:grid;grid-template-columns:1fr 120px 110px 210px;align-items:center;gap:12px;height:36px;padding:0 14px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--rule)"><span>Session</span><span>Code</span><span>Status</span><span></span></div>
+        <div style="display:grid;grid-template-columns:1fr 120px 110px 210px;align-items:center;gap:12px;min-height:52px;padding:6px 14px;border-bottom:1px solid var(--rule)"><span><b>Relay expansion: kick-off</b><br><span class="meta">Call &amp; Answer · 6 rounds</span></span><span style="color:var(--accent-text);font-weight:700;letter-spacing:.06em">7924</span><span class="meta">Not started</span><span class="row" style="justify-content:flex-end"><button class="qbtn">Edit</button><button class="go" style="padding:8px 14px">Start · two screens</button></span></div>
+        <div style="display:grid;grid-template-columns:1fr 120px 110px 210px;align-items:center;gap:12px;min-height:52px;padding:6px 14px"><span><b>Ops review, October</b><br><span class="meta">Call &amp; Answer · ended 28 Oct</span></span><span class="meta">6610</span><span class="meta">Ended</span><span class="row" style="justify-content:flex-end"><button class="qbtn">Report</button></span></div>
+      </div>
+      <div class="row" style="font-size:13px;color:var(--muted)"><span class="ck yes">✓</span><span><b style="color:var(--text)">Two screens, like last time.</b> Start opens the room's window on your other display.</span><button class="qlink">One screen this time</button></div>
+      <div class="card"><h4>Why this is one click</h4><p>Pressing Start opens a blank room's window inside the click (browsers only allow a popup there), starts the session, then sends the window to the join screen and places it. Blocked? Setup opens at step 2 with the Open button, exactly as A2.</p></div>
+    </div>
+  </div></div>
+
+  <div class="cap" id="a8"><h3>A8 · Returning host: where Start lands <span class="tag new">new</span></h3>
+    <p>Steps 1 and 2 arrive done; the one thing left on the window (full screen needs a click <i>on</i> the window, a browser rule) is said as the status, amber, not as a blocker. People can already join.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-a8-returning-landed">
+    <div class="hc setup-mode">
+      <header class="top" data-top="warn"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Click the room's window once</b> to fill the projector. People can already join.</p></div>
+        <div class="acts"><button class="timechip">2 min <span class="caret">▾</span></button><button class="go">Start round 1 <span class="kc">Space</span></button></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Where the room watches</p><span class="stp-sum"><b>Two screens</b> · like last time</span><button class="lnk">Change</button></div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">2</span><p class="stp-h">Room's window</p><span class="stp-sum">opened on your other display</span></div>
+              <div class="stp-body">
+                <ul class="checks">
+                  <li><span class="ck yes">✓</span>Open <span class="meta">on DELL U2720Q</span></li>
+                  <li><span class="ck warn">!</span>Full screen <span class="meta">click the room's window once, or press F</span></li>
+                </ul>
+              </div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p></div>
+              <div class="stp-body">
+                <div class="joinwrap"><span class="bignum">3</span><span class="sub" style="padding-bottom:3px">in the room · <b>1 in the last minute: Ana</b></span></div>
+                <div class="chips"><span class="chip fresh">Ana</span><span class="chip">Ben</span><span class="chip">Chen</span></div>
+              </div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room sees <span class="winstat warn" style="margin-left:auto"><i></i>Open, not full screen</span></div>
+            <div class="pv-wall"><div><div class="pv-title">Relay expansion: kick-off</div><div class="pv-sub">3 in the room</div></div><div><div class="pv-qr"><div></div></div><div class="pv-code">7924</div></div></div>
+            <p class="note">The time chip remembers <b>2 min</b> from your last session.</p>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <!-- ======================================================== B CONSOLE -->
+  <h2 class="group-h">B · Two-screen console: the room at a glance</h2>
+
+  <div class="cap" id="b1"><h3>B1 · Answering, under way <span class="tag new">the pulse</span> <span class="tag reuse">rail, responses, Your part now</span></h3>
+    <p>A <b>pulse</b> row under Your part now: three tiles, one fact each. <b>Answered</b> owns the round's one display numeral (30px) and a bar; <b>Time</b> shows left and given, with +1 min; <b>Since round 2 opened</b> collects late arrivals and late items. The count moved here, so the People header and the card's status no longer repeat it (one fact, once).</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-b1-console-ask">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="answer"></nav>
+      <aside class="rail" data-rail="ask"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part">Let the room answer. <b>Start voting</b> when most are in.</p></div>
+        <div class="acts"><button class="go">Start voting <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile"><p class="k">Answered</p><div class="trow"><p class="num">9 <small>of 12</small></p><span class="sub" style="margin-left:auto">3 still writing</span></div><div class="bar" data-bar="9/12"></div></div>
+        <div class="tile"><p class="k">Time</p><div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="47/120"></svg><div><p class="num mid">0:47</p><p class="sub">left of <b>2:00</b></p></div><button class="tbtn" title="Give the room another minute (+)">+1 min<span class="kc">+</span></button></div></div>
+        <div class="tile"><p class="k">Since round 2 opened</p><p class="num mid">+2 <small>joined</small></p><p class="sub">Priya, Tom · <b>1 late answer</b> from round 1 · <button class="lnk">Review</button></p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · Answering</p><h2 class="h">The Meiji Restoration</h2></div>
+        <div class="cols">
+          <div class="resps">
+            <p class="kick">Responses as they land · names hidden</p>
+            <div class="resp new"><small>Response 9 · just now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+            <div class="resp"><small>Response 8</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval and lose the paper.</div>
+            <div class="resp"><small>Response 7</small>Weekly status meetings: replace with a written update and one decision slot.</div>
+          </div>
+          <div class="card"><h4>For you</h4><p>Japan bought out the samurai stipends rather than seizing them. Ask the room who the “samurai” are in their process.</p></div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b2"><h3>B2 · Answering: everyone's in <span class="tag new">new</span></h3>
+    <p>The Answered tile turns green with a check and the words <b>Everyone's in</b> (colour is never the only signal). Your part now says so and the button loses its arm. Time left stays visible but says it does not hold the host.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-b2-console-ask-everyone-in">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="answer"></nav>
+      <aside class="rail" data-rail="askall"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Everyone's in.</b> Start voting.</p></div>
+        <div class="acts"><button class="go">Start voting <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile allin"><p class="k">Answered</p><div class="trow"><p class="num">12 <small>of 12</small></p><span class="allin-w" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm-1.2 14.2l-4-4 1.4-1.4 2.6 2.6 5.6-5.6 1.4 1.4-7 7z"/></svg>Everyone's in</span></div><div class="bar" data-bar="12/12"></div></div>
+        <div class="tile"><p class="k">Time</p><div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="72/120"></svg><div><p class="num mid">1:12</p><p class="sub">left of <b>2:00</b> · no need to wait</p></div></div></div>
+        <div class="tile"><p class="k">Since round 2 opened</p><p class="num mid">+2 <small>joined</small></p><p class="sub">Priya, Tom · nothing late</p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · Answering</p><h2 class="h">The Meiji Restoration</h2></div>
+        <div class="cols">
+          <div class="resps">
+            <p class="kick">Responses as they land · names hidden</p>
+            <div class="resp new"><small>Response 12 · just now</small>Our shift handover log. Everyone fills it in and nobody reads it.</div>
+            <div class="resp"><small>Response 11</small>Monthly forecast deck: twenty slides, one number people actually use.</div>
+            <div class="resp"><small>Response 10</small>Approval emails for small spends. Give team leads a budget instead.</div>
+          </div>
+          <div class="card"><h4>For you</h4><p>Japan bought out the samurai stipends rather than seizing them. Ask the room who the “samurai” are in their process.</p></div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b3"><h3>B3 · Answering: time's up <span class="tag new">new</span></h3>
+    <p>The timer is <b>advisory</b>: at zero nothing closes by itself (unless Auto is on, which already acts on its own rules). The tile turns amber and counts over; <b>+1 min</b> is the one-press extension. Start voting keeps today's in-place arm (“2 still writing. Press again to start voting.”).</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-b3-console-ask-times-up">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="answer"></nav>
+      <aside class="rail" data-rail="ask10"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Time's up.</b> Start voting, or give them another minute.</p></div>
+        <div class="acts"><button class="go">Start voting <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile"><p class="k">Answered</p><div class="trow"><p class="num">10 <small>of 12</small></p><span class="sub" style="margin-left:auto">2 still writing</span></div><div class="bar" data-bar="10/12"></div></div>
+        <div class="tile over"><p class="k">Time</p><div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="0/120"></svg><div><p class="num mid over-w">Time's up</p><p class="sub"><b>0:18</b> over <b>2:00</b></p></div><button class="tbtn" title="Give the room another minute (+)">+1 min<span class="kc">+</span></button></div></div>
+        <div class="tile"><p class="k">Since round 2 opened</p><p class="num mid">+2 <small>joined</small></p><p class="sub">Priya, Tom · <b>1 late answer</b> · <button class="lnk">Review</button></p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · Answering</p><h2 class="h">The Meiji Restoration</h2></div>
+        <div class="cols">
+          <div class="resps">
+            <p class="kick">Responses as they land · names hidden</p>
+            <div class="resp"><small>Response 10</small>Approval emails for small spends. Give team leads a budget instead.</div>
+            <div class="resp"><small>Response 9</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+            <div class="resp"><small>Response 8</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval and lose the paper.</div>
+          </div>
+          <div class="card"><h4>For you</h4><p>Japan bought out the samurai stipends rather than seizing them. Ask the room who the “samurai” are in their process.</p></div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b4"><h3>B4 · Voting <span class="tag new">the pulse</span> <span class="tag reuse">ballot panel</span></h3>
+    <p>Same three tiles, same places: <b>Voted</b> (people who have voted, and how many are still voting), the voting time if one was set when voting opened, and arrivals. The tiles never move between phases, so the eye learns one place per fact.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-b4-console-vote">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="vote"></nav>
+      <aside class="rail" data-rail="vote"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part">The room is voting. <b>Show results</b> when most have voted.</p></div>
+        <div class="acts"><button class="go">Show results <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile"><p class="k">Voted</p><div class="trow"><p class="num">7 <small>of 12</small></p><span class="sub" style="margin-left:auto">5 still voting</span></div><div class="bar" data-bar="7/12"></div></div>
+        <div class="tile"><p class="k">Time</p><div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="65/90"></svg><div><p class="num mid">1:05</p><p class="sub">left of <b>1:30</b></p></div><button class="tbtn" title="Give the room another minute (+)">+1 min<span class="kc">+</span></button></div></div>
+        <div class="tile"><p class="k">Since round 2 opened</p><p class="num mid">+2 <small>joined</small></p><p class="sub">Priya, Tom · <b>1 late answer</b> arrived while voting · <button class="lnk">Review</button></p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · Voting</p><h2 class="h">The ballot, in the order the room sees it</h2></div>
+        <div class="resps">
+          <div class="resp"><small>1</small>Weekly status meetings: replace with a written update and one decision slot.</div>
+          <div class="resp onwall"><small>2 · On the wall</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+          <div class="resp"><small>3</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval and lose the paper.</div>
+          <div class="resp"><small>4</small>Our shift handover log. Everyone fills it in and nobody reads it.</div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b5"><h3>B5 · Results <span class="tag new">the pulse as a summary</span></h3>
+    <p>The live numbers settle into what happened: answered and voted, how long it took against the time given, and anything late with Review. The next opening move, <b>Start round 3</b>, carries its time chip.</p></div>
+  <div class="scroll"><div class="frame f-laptop" data-shot="1-b5-console-results">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="results"></nav>
+      <aside class="rail" data-rail="results"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part">Talk through the top answers, then <b>start round 3</b>.</p><p class="status">Workie's read is ready when you want it.</p></div>
+        <div class="acts"><button class="alt">What we heard</button><button class="timechip">2 min <span class="caret">▾</span></button><button class="go">Start round 3 <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile quiet"><p class="k">This round</p><p class="num mid">12 <small>answered</small> · 11 <small>voted</small></p><p class="sub">of 12 in the room</p></div>
+        <div class="tile quiet"><p class="k">Time</p><p class="num mid">2:14 <small>answering</small></p><p class="sub"><b>2:00</b> given · voting took <b>1:21</b></p></div>
+        <div class="tile"><p class="k">Late</p><p class="num mid">1 <small>answer</small></p><p class="sub">arrived while voting · <button class="lnk">Review</button></p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · The results</p><h2 class="h">The Meiji Restoration</h2></div>
+        <div class="resps">
+          <div class="resp pts onwall"><span><small>Top · On the wall</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</span><span class="pts-n">7 points</span></div>
+          <div class="resp pts"><span><small>2nd</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval and lose the paper.</span><span class="pts-n">5 points</span></div>
+          <div class="resp pts"><span><small>3rd</small>Weekly status meetings: replace with a written update and one decision slot.</span><span class="pts-n">4 points</span></div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b6"><h3>B6 · Choosing the time, as the round opens <span class="tag new">new</span></h3>
+    <p>The minimal timer: one chip beside each opening move (Start round N, Start voting). Presets, no free typing in the moment; <i>No time limit</i> is a first-class choice. The chip remembers per session and per step. One setting decides whether the wall shows it.</p></div>
+  <div class="scroll"><div class="frame f-crop" data-shot="1-b6-time-chip-open">
+    <div style="position:absolute;inset:0;padding:24px">
+      <section class="now" style="margin:0"><div class="now-t"><p class="k">Your part now</p><p class="part">Talk through the top answers, then <b>start round 3</b>.</p></div>
+        <div class="acts"><button class="alt">What we heard</button><button class="timechip" style="border-color:var(--info)">2 min <span class="caret">▴</span></button><button class="go">Start round 3 <span class="kc">Space</span></button></div></section>
+      <div class="pop" style="right:150px;top:110px" role="dialog" aria-label="Time for answering">
+        <h5>Time for answering, round 3</h5>
+        <div class="opts"><span>No limit</span><span>1 min</span><span class="on">2 min</span><span>3 min</span><span>5 min</span></div>
+        <label class="cbx"><i></i><span>Show the time on the room's window<small>As words: “About a minute left”. Phones see the same line.</small></span></label>
+        <label class="cbx"><i class="off"></i><span>Close answering when time is up<small>Off: you decide. The console says “Time's up”.</small></span></label>
+        <p class="note">Remembered for the rest of this session. Voting has its own chip.</p>
+      </div>
+      <p class="note" style="position:absolute;left:24px;bottom:24px;max-width:420px">Keyboard: the chip is a button before the main move; Enter opens the list, arrows choose, Escape closes. Space still presses Start round 3, so the clicker workflow is unchanged.</p>
+    </div>
+  </div></div>
+
+  <div class="cap" id="b7"><h3>B7 · The room's window with time shown (1280×720) <span class="tag new">time line</span> <span class="tag reuse">question, counts foot</span></h3>
+    <p>The wall's counts foot gains a quiet time line in words with a draining bar: “About a minute left”, “30 seconds left”, “Time's up: finish your sentence”. No ticking seconds on the wall: the room should think, not race.</p></div>
+  <div class="scroll"><div class="frame f-720" data-shot="1-b7-room-window-ask-time-1280x720">
+    <div class="wall">
+      <div class="w-top"><span>Round 2 of 6</span><span>Answering</span></div>
+      <div class="w-main">
+        <div class="w-ey">Leading change</div>
+        <h1 class="w-title">The Meiji Restoration</h1>
+        <p class="w-lesson">Japan dismantled the samurai class within a decade, buying out stipends rather than seizing them.</p>
+        <div class="w-turn"><small>Your turn</small>Which long-standing process should we dismantle, and how do we bring its owners with us?</div>
+      </div>
+      <div class="w-foot"><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div><span>9 of 12 answered</span>
+        <span class="w-time"><span>About a minute left</span><span class="w-tbar"><i style="width:39%"></i></span></span></div>
+    </div>
+  </div></div>
+
+  <!-- ======================================================== C SIZES -->
+  <h2 class="group-h">C · Phone width (390) and 1280×720</h2>
+
+  <div class="pair scroll">
+    <div>
+      <div class="cap" id="c1"><h3>C1 · Remote: setup <span class="tag new">new</span></h3><p style="max-width:380px">The host's phone mirrors Setup's state, read-only for the screens (they are a laptop fact), and can start round 1 with the time chip.</p></div>
+      <div class="frame f-phone" data-shot="1-c1-remote-setup-390">
+        <div class="ph">
+          <div class="ph-top"><b>Relay expansion</b><span class="code">Join <b>7924</b></span></div>
+          <div class="ph-body">
+            <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+            <p class="k">Setup</p>
+            <div class="ph-card">
+              <ul class="checks">
+                <li><span class="ck yes">✓</span>Two screens</li>
+                <li><span class="ck yes">✓</span>Room's window <span class="meta">on, full screen</span></li>
+              </ul>
+            </div>
+            <div class="ph-card">
+              <p class="k">The room joins</p>
+              <div class="joinwrap"><span class="bignum">9</span><span class="sub">in the room · <b>2 in the last minute: Priya, Tom</b></span></div>
+              <div class="chips"><span class="chip fresh">Priya</span><span class="chip fresh">Tom</span><span class="chip">Ana</span><span class="chip">Ben</span><span class="chip">+5</span></div>
+            </div>
+            <div class="firstup">First up <b>The Meiji Restoration</b></div>
+          </div>
+          <div class="ph-foot"><button class="timechip" style="justify-content:center">No time limit <span class="caret">▾</span></button><button class="go">Start round 1</button></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="cap" id="c2"><h3>C2 · Remote: answering <span class="tag reuse">meter, Everyone is in</span> <span class="tag new">time</span></h3><p style="max-width:380px">The Remote already has the meter and “Everyone is in” (<code>HostRemote.jsx:1595-1612</code>). It gains the time line and +1 min.</p></div>
+      <div class="frame f-phone" data-shot="1-c2-remote-ask-390">
+        <div class="ph">
+          <div class="ph-top"><b>Relay expansion</b><span class="code">Join <b>7924</b></span></div>
+          <div class="ph-body">
+            <div class="dots"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+            <p class="k">Round 2 · Answering</p>
+            <h2 class="h" style="font-size:19px">The Meiji Restoration</h2>
+            <div class="ph-card">
+              <p class="k">Answered</p>
+              <div class="trow"><p class="num">9 <small>of 12</small></p><span class="sub" style="margin-left:auto">3 still writing</span></div>
+              <div class="bar" data-bar="9/12"></div>
+            </div>
+            <div class="ph-card">
+              <p class="k">Time</p>
+              <div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="47/120"></svg><div><p class="num mid">0:47</p><p class="sub">left of <b>2:00</b></p></div><button class="tbtn" title="Give the room another minute (+)">+1 min<span class="kc">+</span></button></div>
+            </div>
+            <p class="sub">+2 joined since this round opened · <b>1 late answer</b></p>
+          </div>
+          <div class="ph-foot"><button class="go">Start voting</button></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="cap" id="c3"><h3>C3 · A player's phone, time shown <span class="tag new">time line</span></h3><p style="max-width:380px">Only when the host ticked “Show the time”. The same words as the wall, under the answer box, never a red countdown.</p></div>
+      <div class="frame f-phone" data-shot="1-c3-player-ask-time-390">
+        <div class="ph">
+          <div class="ph-top"><b>Round 2</b><span class="meta" style="margin-left:auto">Answering</span></div>
+          <div class="ph-body">
+            <p class="k">Your turn</p>
+            <h2 class="h" style="font-size:19px">Which long-standing process should we dismantle, and how do we bring its owners with us?</h2>
+            <div class="field">Type your answer…</div>
+            <div class="ptime"><span>About a minute left</span><span class="w-tbar"><i style="width:39%"></i></span></div>
+          </div>
+          <div class="ph-foot"><button class="go">Send</button></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="cap" id="c4"><h3>C4 · Host page at 390: first start <span class="tag new">new</span></h3><p style="max-width:380px">A narrow window stacks Setup: cards one above the other, the preview drops to the window's status line.</p></div>
+      <div class="frame f-phone narrow" data-shot="1-c4-host-setup-narrow-390">
+        <div class="ph">
+          <div class="ph-top"><b>Relay expansion</b><span class="code">Join <b>7924</b></span></div>
+          <div class="ph-body">
+            <section class="now" style="margin:0;padding:10px 12px"><div class="now-t"><p class="k">Your part now</p><p class="part" style="font-size:15px"><b>Choose where the room watches.</b></p></div></section>
+            <div class="stp open"><div class="stp-head"><span class="stp-n">1</span><p class="stp-h">Where will the room watch?</p></div>
+              <div class="stp-body">
+                <div class="rsc-cards">
+                  <div class="rsc-card"><h5>Two screens</h5><p>The projector shows a second window. This screen stays yours.</p><div class="rsc-acts"><button class="qbtn">Use two screens</button></div></div>
+                  <div class="rsc-card"><h5>One screen</h5><p>The projector shows this screen. The room sees everything on it.</p><div class="rsc-acts"><button class="qbtn">Use one screen</button></div></div>
+                </div>
+                <button class="qlink" style="justify-self:start">Help me pick</button>
+              </div></div>
+            <div class="stp later"><div class="stp-head"><span class="stp-n">2</span><p class="stp-h">Put the room's screen up</p></div></div>
+            <div class="stp later"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cap" id="c5"><h3>C5 · Two screens, joining, at 1280×720 <span class="tag new">new</span></h3><p>A3 at the smallest laptop the console supports: the preview column narrows, nothing scrolls.</p></div>
+  <div class="scroll"><div class="frame f-720" data-shot="1-c5-start-two-joining-1280x720">
+    <div class="hc setup-mode">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="setup"></nav>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part"><b>Start round 1</b> when the room is in.</p></div>
+        <div class="acts"><button class="timechip">No time limit <span class="caret">▾</span></button><button class="go">Start round 1 <span class="kc">Space</span></button></div></section>
+      <main class="main">
+        <div class="setup">
+          <ol class="steps">
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Where the room watches</p><span class="stp-sum"><b>Two screens</b></span><button class="lnk">Change</button></div></li>
+            <li class="stp done"><div class="stp-head"><span class="stp-n">✓</span><p class="stp-h">Room's window</p><span class="stp-sum"><b>On, full screen</b> · Room — projector</span><button class="lnk">Change</button></div></li>
+            <li class="stp open"><div class="stp-head"><span class="stp-n">3</span><p class="stp-h">The room joins</p></div>
+              <div class="stp-body">
+                <div class="joinwrap"><span class="bignum">9</span><span class="sub" style="padding-bottom:3px">in the room · <b>2 in the last minute: Priya, Tom</b></span></div>
+                <div class="chips"><span class="chip fresh">Priya</span><span class="chip fresh">Tom</span><span class="chip">Ana</span><span class="chip">Ben</span><span class="chip">Chen</span><span class="chip">Dara</span><span class="chip">Eli</span><span class="chip">Fatima</span><span class="chip">Gus</span></div>
+                <div class="firstup">First up <b>Round 1 · The Meiji Restoration</b></div>
+              </div></li>
+          </ol>
+          <aside class="pv">
+            <div class="pv-k">What the room sees <span class="winstat ok" style="margin-left:auto"><i></i>On, full screen</span></div>
+            <div class="pv-wall"><div><div class="pv-title" style="font-size:15px">Relay expansion: kick-off</div><div class="pv-sub">9 in the room</div></div><div><div class="pv-qr"><div></div></div><div class="pv-code">7924</div></div></div>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </div></div>
+
+  <div class="cap" id="c6"><h3>C6 · Answering at 1280×720 <span class="tag new">the pulse</span></h3><p>B1 at 1280×720. The tiles keep their order; the third tile's names give way first (it truncates with the full list in its title).</p></div>
+  <div class="scroll"><div class="frame f-720" data-shot="1-c6-console-ask-1280x720">
+    <div class="hc">
+      <header class="top" data-top="ok"></header>
+      <nav class="loop" data-loop="answer"></nav>
+      <aside class="rail" data-rail="ask"></aside>
+      <section class="now"><div class="now-t"><p class="k">Your part now</p><p class="part">Let the room answer. <b>Start voting</b> when most are in.</p></div>
+        <div class="acts"><button class="go">Start voting <span class="kc">Space</span></button></div></section>
+      <div class="pulse">
+        <div class="tile"><p class="k">Answered</p><div class="trow"><p class="num">9 <small>of 12</small></p><span class="sub" style="margin-left:auto">3 still writing</span></div><div class="bar" data-bar="9/12"></div></div>
+        <div class="tile"><p class="k">Time</p><div class="trow"><svg class="ring" viewBox="0 0 58 58" data-ring="47/120"></svg><div><p class="num mid">0:47</p><p class="sub">left of <b>2:00</b></p></div><button class="tbtn" title="Give the room another minute (+)">+1 min<span class="kc">+</span></button></div></div>
+        <div class="tile"><p class="k">Since round 2 opened</p><p class="num mid">+2 <small>joined</small></p><p class="sub" title="Priya, Tom" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Priya, Tom · 1 late answer</p></div>
+      </div>
+      <main class="main">
+        <div><p class="kick">Round 2 · Answering</p><h2 class="h">The Meiji Restoration</h2></div>
+        <div class="cols">
+          <div class="resps">
+            <p class="kick">Responses as they land · names hidden</p>
+            <div class="resp new"><small>Response 9 · just now</small>The Friday phone round-up. Nobody owns it, so it runs long and decides nothing.</div>
+            <div class="resp"><small>Response 8</small>The paper sign-off sheet. Supervisors lose a control they trust, so keep the approval and lose the paper.</div>
+            <div class="resp"><small>Response 7</small>Weekly status meetings: replace with a written update and one decision slot.</div>
+          </div>
+          <div class="card"><h4>For you</h4><p>Japan bought out the samurai stipends rather than seizing them.</p></div>
+        </div>
+      </main>
+    </div>
+  </div></div>
+</div>
+
+<script>
+/* Repeated chrome, filled in once so every frame matches. Mockup only. */
+const BELL = '<svg class="bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 004 0"/></svg>';
+const WIN = {
+  ok: '<a class="btn">Room\'s window ↗</a><span class="winstat ok"><i></i>On, full screen</span>',
+  warn: '<a class="btn">Room\'s window ↗</a><span class="winstat warn"><i></i>Open, not full screen</span>',
+  off: '<a class="btn">Room\'s window ↗</a><span class="winstat off"><i></i>Not open</span>',
+  none: '',
+};
+document.querySelectorAll('[data-top]').forEach((el) => {
+  el.innerHTML = '<button class="leave">← All sessions</button><span class="brand">Engagements</span><span class="name">Relay expansion: kick-off</span><span class="sp"></span><button class="code">Join <b>7924</b></button>'
+    + WIN[el.dataset.top] + '<span class="qm">?</span>' + BELL;
+});
+const LOOP = {
+  setup: ['live', '', '', '', '', 1],
+  answer: ['done', 'live', '', '', '', 2],
+  vote: ['done', 'done', 'live', '', '', 2],
+  results: ['done', 'done', 'done', 'live', '', 2],
+};
+document.querySelectorAll('[data-loop]').forEach((el) => {
+  const [s, a, v, h, k, r] = LOOP[el.dataset.loop];
+  el.innerHTML = `<span class="st ${s}">Setup</span><span>›</span><ol><li class="round">Round ${r} of 6</li><li class="st ${a}">Answer</li><li class="st ${v}">Vote</li><li class="st ${h}">What we heard</li><li class="st opt ${k}">Ask</li></ol><span>›</span><span class="st">Finish</span>`;
+});
+const NAMES = ['Ana', 'Ben', 'Chen', 'Dara', 'Eli', 'Fatima', 'Gus', 'Hana', 'Ivo', 'Jo', 'Priya', 'Tom'];
+function people(waiting, word, waitWord) {
+  return NAMES.map((n) => waiting.includes(n)
+    ? `<li><span class="wait">…</span><span>${n}<span class="meta"> · ${waitWord}</span></span></li>`
+    : `<li><span class="tick">✓</span><span>${n}<span class="meta"> · ${word}</span></span></li>`).join('');
+}
+const RAIL = {
+  ask: { people: people(['Hana', 'Jo', 'Tom'], 'answered', 'still writing'), late: 1 },
+  ask10: { people: people(['Jo', 'Tom'], 'answered', 'still writing'), late: 1 },
+  askall: { people: people([], 'answered', ''), late: 0 },
+  vote: { people: people(['Chen', 'Hana', 'Ivo', 'Jo', 'Tom'], 'voted', 'not yet'), late: 1 },
+  results: { people: NAMES.map((n) => `<li><span class="wait">·</span><span>${n}</span></li>`).join(''), late: 1, queue: true },
+};
+document.querySelectorAll('[data-rail]').forEach((el) => {
+  const r = RAIL[el.dataset.rail];
+  el.innerHTML = `<div class="sec"><div class="sec-h">Round queue <span class="ct">2 of 6</span></div></div>`
+    + `<div class="sec open"><div class="sec-h">People <span class="ct">12 here</span></div><ul class="rl">${r.people}</ul><button class="lnk">All players</button></div>`
+    + `<div class="sec"><div class="sec-h">Late &amp; not reviewed <span class="ct ${r.late ? 'alert' : ''}">${r.late}</span></div></div>`
+    + `<div class="sec"><div class="sec-h">Session tools <span class="ct">● Connected</span></div></div>`;
+});
+document.querySelectorAll('[data-bar]').forEach((el) => {
+  const [n, of] = el.dataset.bar.split('/').map(Number);
+  el.innerHTML = Array.from({ length: of }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', `${n} of ${of}`);
+});
+document.querySelectorAll('[data-ring]').forEach((el) => {
+  const [left, of] = el.dataset.ring.split('/').map(Number);
+  const c = 2 * Math.PI * 24;
+  const frac = Math.max(0, Math.min(1, left / of));
+  el.innerHTML = `<circle class="bg" cx="29" cy="29" r="24"/>` + (frac ? `<circle class="fg" cx="29" cy="29" r="24" stroke-dasharray="${c * frac} ${c}"/>` : '');
+  el.setAttribute('aria-hidden', 'true');
+});
+document.querySelectorAll('[data-ico="timer"]').forEach((el) => {
+  el.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>');
+});
+</script>
+</body>
+</html>

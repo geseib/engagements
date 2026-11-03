@@ -15,7 +15,9 @@
                                  Stage screen is buildroom/buildScreens.js:19
     the room's window            config/consoleWords.js:20 ("Room's window"), components/stage/RoomWindowStatus.jsx
     room screen size             config/roomScreen.js:111 ("Room screen size")
-    Session panel / the dock     components/stage/Dock.jsx:233 (aria-label "Session panel"), :239 (SESSION)
+    Session panel / the dock     config/hostWords.js sessionMenu (ConsoleTop's "Session menu"); the dock:
+                                 components/stage/Dock.jsx (Build Room stage, event wall, survey
+                                 walk-through); the host stage's Your part now is Dock.jsx `lead`
     Workie                       config/consoleSections.js:167 ("what Workie says afterwards")
     What we heard                components/stage/Rail.jsx:37, components/GameReport.jsx:698
     Ask the room                 config/followUpWords.js:95
@@ -31,7 +33,7 @@
 
   Added in Phase 2 (W11, 22 Oct 2026), for words wave 1's guides use across
   several guides:
-    the console                  components/WelcomeScreen.jsx:143 ("Question sets & team" / "Admin console")
+    the console                  config/sessionRows.js LIBRARY_NAME ("Library & team")
     your laptop console          components/console/HostConsole.jsx (two screens; host-two-screens#laptop-console)
     Your part now                config/roundWords.js:154 (yourPartLabel)
     session code                 components/stage/PresentMoments.jsx lobby, RootPage.jsx ("Session code");
@@ -62,7 +64,7 @@ const glossary = {
       title: 'Session (and "Create engagement")',
       icon: 'GameController',
       blocks: [
-        { t: 'p', text: 'A session is one run with a room: you start it, people join with its code, and it ends. The button that makes one on your start screen says Create engagement; everywhere else, including this help, it is a session.' },
+        { t: 'p', text: 'A session is one run with a room: you start it, people join with its code, and it ends. The button that makes one on your start screen says New engagement, and the dialog\'s own button Create engagement; everywhere else, including this help, it is a session.' },
       ],
     },
     {
@@ -102,7 +104,7 @@ const glossary = {
       title: 'The stage',
       icon: 'Monitor',
       blocks: [
-        { t: 'p', text: 'What your laptop shows the room when you run on one screen: the question, the answers and the results, large. You drive it from the dock along its bottom. (A Build Room also has a screen called Stage, one of the three the room can watch.)' },
+        { t: 'p', text: 'What your laptop shows the room when you run on one screen: the question, the answers and the results, large. You drive it from the top: the top bar, then Your part now with the main button. (A Build Room also has a screen called Stage, one of the three the room can watch.)' },
       ],
     },
     {
@@ -126,7 +128,7 @@ const glossary = {
       title: 'Your part now',
       icon: 'Play',
       blocks: [
-        { t: 'p', text: 'The box on your laptop console that says what to do next, in one sentence, with the main button. Space presses it.' },
+        { t: 'p', text: 'The bar directly under the top bar that says what to do next, with the main button: on your laptop console, and on the stage when you run on one screen, in the same place. Space presses it.' },
       ],
     },
     {
@@ -134,7 +136,7 @@ const glossary = {
       title: 'Room screen size',
       icon: 'CornersOut',
       blocks: [
-        { t: 'p', text: 'How large everything is drawn for the room: Room, TV, Call or Table. Set it in Settings, under Screens, before people arrive.' },
+        { t: 'p', text: 'How large everything is drawn for the room: Room, TV, Call or Table. Set it in the Session menu\'s Screens section, before people arrive.' },
       ],
     },
     {
@@ -142,7 +144,7 @@ const glossary = {
       title: 'Session panel',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: 'Your panel during a session, with the Players, Questions, Rounds and Settings tabs. Open it with SESSION on the dock, or press \\.' },
+        { t: 'p', text: 'Your panel during a session, with its Up next, Rounds so far, People, Screens, Joining and How it runs sections, and End session and Main menu at its foot. Open it with Session menu, top right on the top bar, or press \\.' },
       ],
     },
     {
@@ -150,7 +152,7 @@ const glossary = {
       title: 'The dock',
       icon: 'DotsSixVertical',
       blocks: [
-        { t: 'p', text: 'The row of buttons along the bottom of the stage: the main button that moves the room on, and SESSION for the Session panel.' },
+        { t: 'p', text: 'The row of buttons along the bottom of a Build Room\'s stage, an event\'s agenda wall and the survey walk-through: the main button that moves the room on, and its neighbours. On a session\'s own stage the main button is in Your part now, under the top bar.' },
       ],
     },
     {
@@ -174,7 +176,7 @@ const glossary = {
       title: 'Phone remote',
       icon: 'DeviceMobile',
       blocks: [
-        { t: 'p', text: 'Your own phone, signed in, running the session while you walk the room. Scan the QR under Your phone as a remote in the Session panel\'s Settings tab.' },
+        { t: 'p', text: 'Your own phone, signed in, running the session while you walk the room. Scan the QR in the Session menu\'s Phone remote section.' },
       ],
     },
     {
@@ -182,7 +184,7 @@ const glossary = {
       title: 'The console',
       icon: 'Gear',
       blocks: [
-        { t: 'p', text: 'Where your question sets, sessions, reports and team live. Open it from your start screen with Question sets & team (Admin console for Engage admins).' },
+        { t: 'p', text: 'Library & team: where your question sets, every session, reports and team live. Open it from your start screen (Home) with **Library & team**, or **See all** beside your recent sessions. Home is where you start a session; the console is your library.' },
       ],
     },
     {
@@ -198,7 +200,7 @@ const glossary = {
       title: 'What we heard',
       icon: 'Ear',
       blocks: [
-        { t: 'p', text: 'Workie\'s read of a round: what the room said, questions worth asking next, and next steps. You see it at results, in the Rounds tab and in the session report.' },
+        { t: 'p', text: 'Workie\'s read of a round: what the room said, questions worth asking next, and next steps. You see it at results, in the Session menu\'s Rounds so far and in the session report.' },
       ],
     },
     {
@@ -238,7 +240,7 @@ const glossary = {
       title: 'The bell',
       icon: 'Bell',
       blocks: [
-        { t: 'p', text: 'Your notifications: a draft that is ready, an invitation, someone waiting for approval. It is on your start screen, the console\'s top line, the two-screen console and your phone remote, never on a screen the room sees.' },
+        { t: 'p', text: 'Your notifications: a draft that is ready, an invitation, someone waiting for approval. It is on your start screen, the console\'s top line, the two-screen console and your phone remote, never on a screen the room sees. In a live session it counts what the session needs from you first; on one screen the stage has only Needs you, a count with no names.' },
       ],
     },
     {

@@ -11,7 +11,7 @@
  * WHERE IT SITS. `.bpl` is only ever rendered INSIDE PlayerShell's `.plr`
  * (BuildPlayer.jsx draws every screen through PlayerShell, and
  * __tests__/buildPlayer.test.jsx asserts the nesting). So it reuses the
- * player's controls as they are — `.plr-btn`, `.plr-inp`, `.plr-q`,
+ * player's controls as they are — ui/Button, `.plr-inp`, `.plr-q`,
  * `.plr-scale` — and the player's responsive type ladder (`--plr-t-*`,
  * declared on `.plr` by components/PlayerSurface.css, which PlayerShell
  * imports). It does not redeclare either: a second copy of the ladder is how
@@ -1047,7 +1047,7 @@
   border-radius: 12px;
   background: var(--bpl-good-tint);
 }
-.bpl .bpl-open .bpl-open-btn {
+.bpl .bpl-open .bpl-open-go {
   display: flex;
   align-items: center;
   justify-content: center;

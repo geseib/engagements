@@ -194,6 +194,7 @@ describe('the wall styles', () => {
     expect(block('.dock .status')).not.toMatch(/min-width:0/);
     expect(block('.dock .status')).toMatch(/min-width:min\(/);
     expect(CSS).toMatch(/@media \(max-width:1200px\)\{\.dock \.host-action-bar__keyhint\{display:none\}\}/);
-    expect(CSS).toMatch(/@media \(max-width:1100px\)\{\.dock \.kbd\{display:none\}\}/);
+    // The Space cap is on the main button now (.keycap, KeyCap.jsx).
+    expect(CSS).toMatch(/@media \(max-width:1100px\)\{\.dock \.keycap\{display:none\}\}/);
   });
 });

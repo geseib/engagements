@@ -26,7 +26,7 @@ import { stripFor } from '../config/workflowStrip';
 
 const renderSettings = (props = {}) => render(
   <SessionSetupPanel
-    initialTab="settings"
+    initialTab="screens"
     gameType="call-and-answer"
     gameState="CREATED"
     gameId="4473"
@@ -41,22 +41,34 @@ const team = { orgId: 'org_A', name: 'Relay Labs', type: 'team' };
 const personal = { orgId: 'org_P', name: 'George Seib', type: 'personal' };
 const user = { attributes: { name: 'George Seib', email: 'george@example.com' } };
 
-describe('the Settings tab, grouped', () => {
-  test('four groups, most used first, then Session and Keys folded away', () => {
+describe('the Session menu, in sections', () => {
+  // rejects: dev QA 2 Nov — one Settings tab of four groups plus a Session
+  // fold. Since the Session menu redesign (3 Nov 2026) the six sections are
+  // the same on every round type, the phone is a group of Screens, and End
+  // session is the foot.
+  test('Up next, Rounds so far, People, Screens, Joining, How it runs; the old groups live in them', () => {
     const { container } = renderSettings();
-    const groups = [...container.querySelectorAll('.setup-settings > .setup-group > h3.setup-h')]
-      .map((h) => h.childNodes[0].textContent);
-    expect(groups).toEqual(['Screens', 'Your phone as a remote', 'The rounds', 'Joining']);
-    const folds = [...container.querySelectorAll('.setup-settings > details.setup-fold > summary')]
-      .map((s) => s.textContent);
-    expect(folds).toEqual(['Session: back to menu, end it, sign out', 'Keyboard shortcuts']);
-    container.querySelectorAll('details.setup-fold').forEach((d) => expect(d.open).toBe(false));
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs).toEqual(['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs']);
+    const heads = (name) => {
+      fireEvent.click(screen.getByRole('tab', { name }));
+      return [...container.querySelectorAll('.setup-group h3.setup-h, .setup-group h4.setup-h')].map((h) => h.childNodes[0].textContent);
+    };
+    expect(heads('Screens')).toEqual(expect.arrayContaining(['Screens', 'Your phone as a remote']));
+    expect(heads('Joining')).toEqual(['Players join at']);
+    expect(heads('How it runs')).toEqual(['Names', 'Pace']);
+    expect(screen.getByTestId('session-menu-foot')).toHaveTextContent('End session…');
+    // No folds: each section has one More options instead.
+    expect(container.querySelectorAll('details.setup-fold')).toHaveLength(0);
   });
 
   test('"Display profile" is renamed "Room screen size" and sits with the screens', () => {
     const onProfileChange = jest.fn();
     const { container } = renderSettings({ onProfileChange });
-    const screens = container.querySelector('.setup-group--screens');
+    // Screens · More options since the redesign.
+    const more = screen.getByTestId('more-screens-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+    const screens = container.querySelector('.smenu-pane--screens');
     fireEvent.change(within(screens).getByLabelText('Room screen size'), { target: { value: 'tv' } });
     expect(onProfileChange).toHaveBeenCalledWith('tv');
     expect(container.textContent).not.toMatch(/Display profile/);
@@ -100,13 +112,15 @@ describe('the Screens group', () => {
   test('a game type two screens do not cover keeps only the room screen size', () => {
     renderSettings({ gameType: 'survey', roomScreen: 'two' });
     expect(screen.queryByRole('group', { name: 'Where the room watches' })).toBeNull();
+    const more = screen.getByTestId('more-screens-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
     expect(screen.getByLabelText('Room screen size')).toBeInTheDocument();
   });
 });
 
 describe('the remote says who may sign in on the phone', () => {
   test('a team session: any host or admin of the team, and who is on this laptop now', () => {
-    const { container } = renderSettings({ remoteWho: remoteSignIn({ org: team, user, privateScreen: true }) });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: remoteSignIn({ org: team, user, privateScreen: true }) });
     const who = container.querySelector('.setup-remote__who');
     expect(who.textContent).toContain('Sign in on the phone as any host or admin of Relay Labs.');
     expect(who.textContent).toContain('On this laptop now: George Seib · Relay Labs');
@@ -115,14 +129,14 @@ describe('the remote says who may sign in on the phone', () => {
 
   test('a personal account: only you, by email where the laptop is private', () => {
     const words = remoteSignIn({ org: personal, user, privateScreen: true });
-    const { container } = renderSettings({ remoteWho: words });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: words });
     const who = container.querySelector('.setup-remote__who');
     expect(who.textContent).toContain('Sign in on the phone as you (george@example.com). Only your account can drive this session.');
     expect(who.textContent).toContain('On this laptop now: George Seib · Personal');
   });
 
   test('on one screen the room may be watching, so the email never prints', () => {
-    const { container } = renderSettings({ remoteWho: remoteSignIn({ org: personal, user, privateScreen: false }) });
+    const { container } = renderSettings({ initialTab: 'remote', remoteWho: remoteSignIn({ org: personal, user, privateScreen: false }) });
     expect(container.textContent).not.toContain('@example.com');
     expect(container.querySelector('.setup-remote__who').textContent)
       .toContain('Sign in on the phone as you (George Seib). Only your account can drive this session.');
@@ -145,7 +159,7 @@ describe('the remote says who may sign in on the phone', () => {
     // rejects: the Screens group and the sign-in words in --text = dark ink
     // on the panel's navy, under a light page (walk of dev 92f8b24d).
     const panel = fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'SessionSetupPanel.jsx'), 'utf8');
-    expect(panel).toMatch(/className=\{`setup-panel\$\{[^}]*\}`\}\s*data-theme="dark"/);
+    expect(panel).toMatch(/className=\{`setup-panel( smenu)?\$\{[^}]*\}`\}\s*data-theme="dark"/);
     const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
     expect(css).toMatch(/\.setup-panel__tabs \{[^}]*flex-wrap: wrap;/);
   });
@@ -180,7 +194,7 @@ describe('Setup in the loop', () => {
     expect(first).toBeTruthy();
     fireEvent.click(within(first).getByRole('button', { name: 'One screen' }));
     expect(onChoose).toHaveBeenCalledWith('classic');
-    fireEvent.click(screen.getByRole('button', { name: 'All settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
     expect(onAll).toHaveBeenCalled();
   });
 

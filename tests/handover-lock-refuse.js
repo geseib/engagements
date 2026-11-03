@@ -206,7 +206,7 @@ const row = (name) => store.get(key(PK, `PLAYER#${name}`));
     assert.strictEqual((await act('Chris', { refuse: true }, {})).statusCode, 404);
     assert.ok(row('Chris').HandoverRequestedBy, 'an unauthenticated refusal cleared the ask');
     await act('Chris', { refuse: true });
-    assert.deepStrictEqual(Object.keys(publicHandoverState(row('Chris'))).sort(), ['expiresAt', 'open', 'requested', 'requestedAt']);
+    assert.deepStrictEqual(Object.keys(publicHandoverState(row('Chris'))).sort(), ['expiresAt', 'open', 'requestExpiresAt', 'requestLapsed', 'requested', 'requestedAt']);
     const list = bodyOf(await getPlayers.handler({ pathParameters: { gameId: GAME } }));
     assert.ok(!JSON.stringify(list).includes('"new"'), 'a clientId reached the roster');
   });

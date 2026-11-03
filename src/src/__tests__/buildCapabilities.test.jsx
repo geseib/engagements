@@ -112,19 +112,25 @@ async function walk(state) {
   const found = new Set();
   seenIn(found);
   ['2', '3', '4', '1'].forEach((key) => { fireEvent.keyDown(window, { key }); seenIn(found); });
-  fireEvent.click(screen.getAllByRole('button', { name: /^SESSION/ })[0]);
-  const panel = screen.getByRole('dialog', { name: 'Session' });
+  fireEvent.click(screen.getAllByRole('button', { name: /^Session menu/ })[0]);
+  const panel = screen.getByRole('dialog', { name: 'Session menu' });
   seenIn(found);
-  fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
-  seenIn(found);
+  // Every section of the redesigned menu, and its More options (docs/design/session-menu).
+  for (const t of within(panel).getAllByRole('tab')) {
+    fireEvent.click(t);
+    seenIn(found);
+    const more = panel.querySelector('[aria-controls^="smenu-more-"]');
+    if (more && more.getAttribute('aria-expanded') !== 'true') { fireEvent.click(more); seenIn(found); }
+  }
   cleanup();
   return found;
 }
 
 /**
- * TWO SCREENS (B8): the console, its rail's four slots opened in turn, each
- * fold, "Look here, privately" to Build and History (1 comes back), then the
- * Session panel from the Session slot. The laptop stays the console for 2-4.
+ * TWO SCREENS (B8): the console, its rail's slots opened in turn, each fold,
+ * then the Session menu from the top bar's button (experience plan 2e: the
+ * rail's old Session slot, with Look here, privately, moved into it). The
+ * laptop stays the console for 2-4.
  */
 async function walkConsole(state) {
   window.localStorage.setItem(SURFACES_KEY, 'two');
@@ -146,11 +152,16 @@ async function walkConsole(state) {
       fireEvent.keyDown(window, { key: '1' });
     }
   }
-  fireEvent.click(document.querySelector('.hc--build .bc-sess'));
-  const panel = screen.getByRole('dialog', { name: 'Session' });
+  fireEvent.click(document.querySelector('.hc--build [data-slot="session-menu"]'));
+  const panel = screen.getByRole('dialog', { name: 'Session menu' });
   seenIn(found);
-  fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
-  seenIn(found);
+  // Every section of the redesigned menu, and its More options (docs/design/session-menu).
+  for (const t of within(panel).getAllByRole('tab')) {
+    fireEvent.click(t);
+    seenIn(found);
+    const more = panel.querySelector('[aria-controls^="smenu-more-"]');
+    if (more && more.getAttribute('aria-expanded') !== 'true') { fireEvent.click(more); seenIn(found); }
+  }
   cleanup();
   window.localStorage.clear();
   return found;
@@ -189,8 +200,13 @@ test('two screens: every capability has an entry point on the console (the "Wher
   expect([...all].filter((id) => !CAPABILITY_IDS.includes(id))).toEqual([]);
 });
 
-test('two screens: the console itself, without the Session panel, carries every capability but the panel\'s own settings', async () => {
-  // The panel's groups (codes, list names, the release switch) live in the panel; everything else is a door on the console.
+// THE SESSION MENU'S OWN (experience plan 2e, PLAN §3.2b): set-once settings live in the Session
+// menu on every format, so the console's rail no longer carries a Session slot. These are the
+// capabilities whose only door on the console is the top bar's Session menu.
+const SESSION_MENU_ONLY = ['release-posts', 'opening', 'crew', 'claude-status', 'settings', 'build-screen', 'screens'];
+
+test('two screens: the console itself, without the Session menu, carries every capability but the Session menu\'s own', async () => {
+  // The Session menu's groups (Screens, Joining, Build settings, End session) live in it; everything else is a door on the console.
   const all = new Set();
   for (const [, mk] of MOMENTS) {
     window.localStorage.setItem(SURFACES_KEY, 'two');
@@ -203,7 +219,7 @@ test('two screens: the console itself, without the Session panel, carries every 
     seenIn(all);
     cleanup();
   }
-  const missing = CAPABILITY_IDS.filter((id) => !all.has(id) && id !== 'release-posts');
+  const missing = CAPABILITY_IDS.filter((id) => !all.has(id) && !SESSION_MENU_ONLY.includes(id));
   expect(missing).toEqual([]);
 });
 

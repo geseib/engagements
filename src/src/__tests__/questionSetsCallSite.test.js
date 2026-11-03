@@ -157,7 +157,9 @@ describe('New set is a dialog, not a panel below the table', () => {
     expect(dialog).toMatch(/overlayClassName="qsets qsets-scrim"/);
     expect(dialog).toMatch(/contentClassName="qsets-modal qsets-modal--create"/);
     // Both exits, and Modal's own onClose, are the same function.
-    expect((dialog.match(/onClick=\{requestClose\}/g) || []).length).toBe(2);
+    // The X is the shared head's (DialogHead onClose, step 5b); the bottom exit an onClick.
+    expect((dialog.match(/onClick=\{requestClose\}/g) || []).length).toBe(1);
+    expect(dialog).toMatch(/<DialogHead [^\n]*onClose=\{requestClose\}/);
     expect(dialog).toMatch(/onClose=\{requestClose\}/);
   });
 
@@ -219,8 +221,13 @@ describe('the host mounts the shared editor rather than a copy of it', () => {
     // rejects: a HostQuestionSetEditor.jsx appearing beside it, which is the
     // thing the owner asked not to happen and the thing that no test of either
     // screen's behaviour would ever notice.
+    // Since experience plan 5e the host's mount is the set's PAGE
+    // (QuestionSetPage.jsx), which the shelf opens in place of itself.
     expect(rendererNames('QuestionSetEditor')).toEqual([
-      'AdminPage.jsx', 'HostQuestionSetsDialog.jsx',
+      'AdminPage.jsx', 'QuestionSetPage.jsx',
+    ]);
+    expect(rendererNames('QuestionSetPlace')).toEqual([
+      'HostQuestionSetsDialog.jsx', 'QuestionSetPage.jsx',
     ]);
   });
 
@@ -235,9 +242,15 @@ describe('the host mounts the shared editor rather than a copy of it', () => {
     // Each is a route `auth/authorizer.js` refuses a host — the CSV download,
     // the version list/promote/delete, and AI generation. rejects: mounting the
     // editor with its defaults, which draws three controls that 403.
-    expect(hostDialog).toMatch(/showVersions=\{false\}/);
-    expect(hostDialog).toMatch(/showDownload=\{false\}/);
-    expect(hostDialog).toMatch(/showAIAssist=\{false\}/);
+    // The host's flags live with the host's page (QuestionSetPage.jsx), and
+    // every host mount goes through QuestionSetPlace, which spreads them.
+    const hostPage = stripComments(fs.readFileSync(path.join(SRC, 'components', 'QuestionSetPage.jsx'), 'utf8'));
+    expect(hostPage).toMatch(/showVersions:\s*false/);
+    expect(hostPage).toMatch(/showDownload:\s*false/);
+    expect(hostPage).toMatch(/showAIAssist:\s*false/);
+    expect(hostPage).toMatch(/<QuestionSetEditor[\s\S]*\{\.\.\.editorProps\}[\s\S]*\{\.\.\.HOST_EDITOR_FLAGS\}/);
+    expect(hostDialog).toMatch(/<QuestionSetPlace\b/);
+    expect(hostDialog).not.toMatch(/showVersions|showDownload|showAIAssist/);
   });
 
   test('the editor stays a DOM child of the host dialog, never an afterContent hoist', () => {

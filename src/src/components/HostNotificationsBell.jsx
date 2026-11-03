@@ -34,7 +34,13 @@ export function openNotificationAway(item, { newTab = false, win = window } = {}
   win.location.assign(url);
 }
 
-export default function HostNotificationsBell({ newTab = false }) {
+/*
+ * IN A LIVE SESSION (`session`, experience plan §4.3): the bell counts this
+ * session's Needs you and lists it first; nothing opens a new tab mid-session
+ * (a folded account entry opens in place, and the session keeps running).
+ * Without `session`, exactly as above.
+ */
+export default function HostNotificationsBell({ newTab = false, session = null, labelled = false }) {
   const [libraries, setLibraries] = useState([]);
   useEffect(() => {
     let live = true;
@@ -44,5 +50,12 @@ export default function HostNotificationsBell({ newTab = false }) {
       .catch(() => { /* labels are a nicety; the inbox still reads */ });
     return () => { live = false; };
   }, []);
-  return <NotificationsBell libraries={libraries} onOpen={(item) => openNotificationAway(item, { newTab })} />;
+  return (
+    <NotificationsBell
+      libraries={libraries}
+      session={session}
+      labelled={labelled}
+      onOpen={(item) => openNotificationAway(item, { newTab: newTab && !session })}
+    />
+  );
 }

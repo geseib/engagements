@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
+import { useConfirm } from './ConfirmDialog';
 import pricing from '../../../lambda-functions/game/pricing';
 import './DiscountCodes.css';
 
@@ -39,8 +41,14 @@ export default function DiscountCodesPanel() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const [askConfirm, confirmDialog] = useConfirm();
   const retire = async (code) => {
-    if (!window.confirm(`Retire ${code}? Nobody can redeem it after this; teams that already used it keep their discount.`)) return;
+    if (!(await askConfirm({
+      title: `Retire ${code}?`,
+      message: 'Nobody can redeem it after this; teams that already used it keep their discount.',
+      confirmText: 'Retire',
+      danger: true,
+    }))) return;
     setRetiring(code);
     try {
       const res = await authFetch(adminApiUrl(`platform/codes/${encodeURIComponent(code)}/retire`), { method: 'POST' });
@@ -91,6 +99,7 @@ export default function DiscountCodesPanel() {
         </table>
       )}
       {creating && <NewCodeDialog onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />}
+      {confirmDialog}
     </div>
   );
 }
@@ -105,9 +114,10 @@ export function NewCodeDialog({ onCancel, onCreated }) {
   const listCents = STANDARD_PLAN.base;
   const offCents = f.unit === 'percent' ? Math.round(listCents * Math.min(100, n) / 100) : Math.min(listCents, Math.round(n * 100));
 
-  const requestClose = () => {
+  const [askConfirm, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without creating the code?')) return;
+    if (dirty && !(await askConfirm({ title: 'Close without creating the code?', message: 'What you typed will be lost.', confirmText: 'Close', cancelText: 'Keep editing' }))) return;
     onCancel();
   };
   const submit = async () => {
@@ -125,10 +135,7 @@ export function NewCodeDialog({ onCancel, onCreated }) {
 
   return (
     <Modal overlayClassName="dcode dcode-scrim" contentClassName="dcode-modal" labelledBy="dcode-new-title" onClose={requestClose} closeOnBackdrop={() => !dirty && !busy} closeOnEscape={() => !dirty && !busy}>
-      <header className="dcode-mhead">
-        <div className="dcode-grow"><h2 id="dcode-new-title">New discount code</h2></div>
-        <button type="button" className="dcode-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-      </header>
+      <DialogHead className="dcode-mhead" titleId="dcode-new-title" title="New discount code" onClose={requestClose} closeDisabled={busy} closeClassName="dcode-x" />
       <div className="dcode-mbody">
         <div className="dcode-grid">
           <label className="dcode-field"><span className="dcode-lab">Code</span><input className="dcode-input dcode-input--code" value={f.code} onChange={set('code')} placeholder="AUTUMN25" maxLength={32} aria-label="Code" /><span className="dcode-help">Letters, digits and dashes. It is what the customer types.</span></label>
@@ -153,10 +160,10 @@ export function NewCodeDialog({ onCancel, onCreated }) {
         </div>
         {error && <p className="dcode-alert" role="alert">{error}</p>}
       </div>
-      <footer className="dcode-mfoot">
-        <button type="button" className="dcode-btn" onClick={requestClose} disabled={busy}>Cancel</button>
+      <DialogFoot className="dcode-mfoot" cancel={<button type="button" className="dcode-btn" onClick={requestClose} disabled={busy}>Cancel</button>}>
         <button type="button" className="dcode-btn dcode-btn--primary" onClick={submit} disabled={busy || !f.code} data-testid="dcode-create">{busy ? 'Creating…' : `Create ${f.code || 'code'}`}</button>
-      </footer>
+      </DialogFoot>
+      {confirmDialog}
     </Modal>
   );
 }

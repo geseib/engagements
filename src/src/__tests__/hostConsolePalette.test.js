@@ -20,18 +20,24 @@ test('the laptop ladder only: 12 / 13 / 15 / 19 / 24px', () => {
 // The next step is a card above the main area, outside its scroll (owner, 18 Oct 2026).
 test('the main area scrolls; the next-step card is above it, outside it (Review Focus 5)', () => {
   expect(css).toMatch(/\.hc-main\s*\{[^}]*overflow:\s*auto/);
-  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail now"\s*"rail main"/);
+  // The Needs-you line has its own row between the card and the main area
+  // (experience plan §4.3), then the pulse (2c): the card stays first under the strip.
+  expect(css).toMatch(/grid-template-areas:\s*"top top"\s*"loop loop"\s*"rail now"\s*"rail needs"\s*"rail pulse"\s*"rail main"/);
 });
 test('no colour literal', () => {
   expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/);
 });
 test('the reused action bar is pinned to the ladder inside the console', () => {
-  for (const cls of ['__hint', '__armed', '__primary', '__secondary', '__tertiary', '__kbd', '__keyhint']) {
+  for (const cls of ['__hint', '__armed', '__primary', '__secondary', '__tertiary', '__keyhint']) {
     expect(css).toMatch(new RegExp(`\\.hc-acts \\.host-action-bar${cls}[^{]*\\{[^}]*font-size:\\s*\\d+px`));
   }
+  // The Space cap on the main button (KeyCap.jsx; was the loose __kbd hint).
+  expect(css).toMatch(/\.hc-acts \.host-action-bar__primary \.keycap[^{]*\{[^}]*font-size:\s*12px/);
 });
 test('keyboard focus is visible on the console\'s own controls', () => {
-  for (const sel of ['.hc-sec summary', '.hc-link', '.hc-code', '.hc-btn', '.hc-winstat']) {
+  // Main menu, Join, the Session menu and the scoreboard are ui/Button since step 5a,
+  // which draws its own focus ring (uiButtonPalette.test.js).
+  for (const sel of ['.hc-sec summary', '.hc-link', '.hc-winstat']) {
     expect(css).toMatch(new RegExp(`${sel.replace(/\./g, '\\.')}:focus-visible`));
   }
 });

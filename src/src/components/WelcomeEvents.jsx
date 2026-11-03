@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { listEvents } from '../utils/eventsApi';
 import { readEventsAccess } from '../utils/eventsAccess';
 import { navigateTo } from '../auth/navigate';
-import EventDetailsDialog from './EventDetailsDialog';
+import Button from './ui/Button';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import pricing from '../../../lambda-functions/game/pricing';
 
@@ -18,13 +18,14 @@ import pricing from '../../../lambda-functions/game/pricing';
  * scrolling (the owner, same day: "They should not have to scroll"), and
  * four rows pushed the page past it.
  *
- * AND A HOST MAKES ONE HERE (the owner, 27 Sep 2026: "there is still no way
- * to create an agenda for the host. only the admin"). On a paid plan the block
- * carries "New event": the same new-event dialog the console uses, and then
- * the agenda — the console's own builder, on the host's side
- * (/host/event/<code>/agenda, components/event/HostEventAgenda.jsx). Any
- * member may, host or admin (create-event.js). On Free the block says which
- * plan brings events, once, with the way to it.
+ * A HOST MAKES ONE THROUGH NEW (the owner, 27 Sep 2026: "there is still no
+ * way to create an agenda for the host. only the admin"; experience plan 4c,
+ * one New door). This block used to carry its own "New event" button, the
+ * fourth "new" door on Home (audit E N1). Event is a format in New engagement
+ * now, with the day asked there, and lands on the agenda on the host's side
+ * (/host/event/<code>/agenda). So on a paid plan with no events yet the block
+ * says where to start one; on Free it says which plan brings events, once,
+ * with the way to it.
  *
  * DRAWS NOTHING while Events is switched off for the tier, or when GET /orgs
  * cannot be read — the welcome screen is then exactly as it was.
@@ -44,7 +45,6 @@ function stillOn(event, nowMs) {
 export default function WelcomeEvents({ nowMs }) {
   const [events, setEvents] = useState([]);
   const [access, setAccess] = useState(null);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,24 +86,20 @@ export default function WelcomeEvents({ nowMs }) {
       <p className="wel-kicker">Events</p>
       <div className="wel-evhead">
         <h2 id="wel-events-title">Run an event</h2>
-        {canCreate && (
-          <button type="button" className="wel-btn wel-btn-line" onClick={() => setCreating(true)}>
-            New event
-          </button>
-        )}
       </div>
       {!events.length && canCreate && (
         <p className="wel-meta wel-ev-more">
           {`A whole agenda behind one code — quizzes, polls, talks and breaks, in the order you run them. `}
-          {`${pricing.formatCents(pricing.PER_EVENT_CENTS)} an event, counted when it first goes live.`}
+          {`${pricing.formatCents(pricing.PER_EVENT_CENTS)} an event, counted when it first goes live. `}
+          {'To make one, press New engagement and choose Event.'}
         </p>
       )}
       {!canCreate && enabled && access.offerPlanName && (
         <p className="wel-meta wel-ev-more">
           {`Events come with the ${access.offerPlanName}: a whole agenda behind one code. `}
-          <button type="button" className="wel-btn wel-btn-quiet wel-ev-plan" onClick={() => navigateTo('/admin?section=events')}>
+          <Button variant="tertiary" size="sm" className="wel-ev-plan" onClick={() => navigateTo('/admin?section=events')}>
             See how
-          </button>
+          </Button>
         </p>
       )}
       {events.length > 0 && (
@@ -118,14 +114,15 @@ export default function WelcomeEvents({ nowMs }) {
                   {Number(event.attendeeCount) > 0 ? ` · ${event.attendeeCount} joined` : ''}
                 </span>
               </span>
-              <button
-                type="button"
-                className="wel-btn wel-btn-line"
+              <Button
+                variant="secondary"
+                size={36}
+                className="wel-line"
                 onClick={() => navigateTo(`/host/event/${encodeURIComponent(event.code)}`)}
                 aria-label={`Open ${event.title || 'the event'}: its agenda and stage`}
               >
                 Open
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -134,16 +131,6 @@ export default function WelcomeEvents({ nowMs }) {
         <p className="wel-meta wel-ev-more">
           {`${events.length - SHOWN} more in the console's Events list.`}
         </p>
-      )}
-      {creating && (
-        <EventDetailsDialog
-          onClose={() => setCreating(false)}
-          /* Made: straight to its agenda, on the host's side. */
-          onSaved={(event) => {
-            setCreating(false);
-            navigateTo(`/host/event/${encodeURIComponent(event.code)}/agenda`);
-          }}
-        />
       )}
     </section>
   );

@@ -446,8 +446,16 @@ const OPENING_MOVES = [
   'Open mid-thought, as if the mic caught you already reacting to the top-ranked response.',
   'Open with the single best phrase a participant wrote, quoted verbatim, then react to it.',
   'Open with a number that jumps out of this round, and why it matters.',
-  'Open with a short, punchy verdict on the round — a few words — then spend the section earning it.',
-  'Open by naming the tension: where two responses pulled in opposite directions.',
+  // Not "verdict" (until 2026-10-31): on a Judge round (the Verdict Board)
+  // that word asked Workie for a ruling of its own, which the prompt forbids.
+  'Open with a short, punchy take on the round — a few words — then spend the section earning it.',
+  // CONDITIONAL, never demanded — the same failure the session-advisor's
+  // conditionalAddition records (test game 6497): told to name a tension,
+  // the model invents one when the answers agree. Review #48 round 2: four
+  // answers all saying the diagram falls short were read back with "the
+  // disagreement is about whether the bar covers the offline path at all".
+  'Open by naming the tension where two responses pulled in opposite directions, only if two genuinely did; '
+    + 'if none did, open with the point every response shared instead, and never invent a split.',
   'Open with the thing that genuinely surprised you in these responses.',
   'Open by speaking to the room about what they just did, not about what was asked.',
   'Open with the one idea this round kept circling back to.',
@@ -458,9 +466,26 @@ const OPENING_MOVES = [
 /** One move for this round. Random per call, so a Redo gets a fresh way in. */
 const pickOpeningMove = () => OPENING_MOVES[Math.floor(Math.random() * OPENING_MOVES.length)];
 
-const buildOutputContract = (prompt, { openingMove } = {}) => {
+/*
+  A PROMPT THAT NAMES ITS OWN FIRST LINE KEEPS IT. The opening move rides
+  inside the FORMAT block, which "supersedes any formatting instruction that
+  appeared earlier", so a drawn move ("Open with a number that jumps out",
+  "Open by naming the tension") out-ranked a prompt's own required opener —
+  the Verdict Board's "Open with the bold count line", the line review #48
+  found miscounted. The moves exist to break the "We asked one question..."
+  groove of a prompt that says nothing about how to begin; a prompt whose
+  first declared section opens with "Open ..." has already chosen.
+*/
+const promptOwnsOpening = (prompt) => {
+  if (!hasCustomOutputShape(prompt)) return false;
+  const [first] = resolveOutputSections(prompt);
+  return /^\s*Open\b/i.test(String((first && first.guidance) || ''));
+};
+
+const buildOutputContract = (prompt, { openingMove: drawnMove } = {}) => {
   const sections = resolveOutputSections(prompt);
   const count = COUNT_WORD[sections.length] || String(sections.length);
+  const openingMove = promptOwnsOpening(prompt) ? null : drawnMove;
 
   const body = sections
     .map(({ heading, guidance }) => `## ${heading}${guidance ? `\n${guidance}` : ''}`)
@@ -929,6 +954,7 @@ module.exports = {
   buildOutputContract,
   OPENING_MOVES,
   pickOpeningMove,
+  promptOwnsOpening,
   buildHostDirective,
   buildVoiceDirective,
   buildBriefingLayer,

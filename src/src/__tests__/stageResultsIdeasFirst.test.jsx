@@ -68,7 +68,7 @@ function installFetch(overrides) {
     for (const [pattern, body] of Object.entries(overrides)) {
       const hit = pattern.endsWith('$') ? u.endsWith(pattern.slice(0, -1)) : u.includes(pattern);
       if (hit) {
-        if (pattern === 'games/get-results') await new Promise((r) => setTimeout(r, 50));
+        // Instant, on purpose: see resultsRankOrder.test.jsx installFetch.
         return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
       }
     }
@@ -107,7 +107,7 @@ const mount = async ({ anonymous, extra = 0 }) => {
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   await waitFor(() => {
     expect(document.querySelectorAll('.cards .card .ans').length).toBeGreaterThanOrEqual(3);
   }, { timeout: 5000 });

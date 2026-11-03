@@ -1,10 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { refSetRef, resolveSetPartition } = require('./set-version');
+const { readRoundQuestion } = require('./round-question');
 const { isHidden } = require('./anonymity');
-const { encryptItem, decryptItem } = require('./tenant-crypto');
-const { ORG } = require('./tenant');
+const { encryptItem } = require('./tenant-crypto');
 const { clearQuestionFocus } = require('./question-focus');
 const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
 const { isPollRound, pollQuestionOf, pollAnswerText } = require('./poll-question');
@@ -13,6 +12,8 @@ const { answerTiming, LATE_TTL_DAYS } = require('./late-answer');
 const {
   isAnswerCorrect, drawnOptions, slotForSubmitted, correctSlots,
 } = require('./trivia-answer');
+const { heldByAnotherDevice, nameMovedFrame, presentedClientId, NAME_MOVED } = require('./name-holder');
+const { orgIsSuspended, SESSION_UNAVAILABLE } = require('./org-standing');
 
 const dynamoClient = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(dynamoClient);
@@ -61,6 +62,16 @@ exports.handler = async (event) => {
     // player socket sending this changes nothing.
     if (messageType === 'PRESENT_STATUS') {
       await recordPresentStatus(gameId, connectionId, body);
+      return { statusCode: 200, body: 'ok' };
+    }
+
+    // "DO I STILL HOLD MY NAME?" (experience plan step 1d). A player page sends
+    // this after its socket reopens. If the host let the name move while this
+    // phone was asleep, it missed the push join-game.js sends (step 1f), and
+    // the answer it gets here is the same `nameMoved` frame. Nothing is
+    // forwarded anywhere; the reply goes only to the asking socket.
+    if (messageType === 'NAME_CHECK') {
+      await checkNameHolder(gameId, playerName, body.clientId, connectionId);
       return { statusCode: 200, body: 'ok' };
     }
 
@@ -497,47 +508,18 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         }));
         
         if (questionRef.Item) {
-          const sourceQuestionId = questionRef.Item.SourceQuestionId;
-          const questionSetId = questionRef.Item.SetId;
           const questionStartTime = questionRef.Item.StartedAt;
-          
-          // Read the VERSION this round was served from (the REF row records
-          // it). Scoring against a different version's correctAnswer than the
-          // one the player was shown is the worst possible drift.
-          //
-          // Resolved with the PAIR the REF row pins, never the bare id: a bare
-          // id reads as PLATFORM (set-version.js `setRef`), so for a session
-          // played from an organisation's own set or from a public copy this
-          // read missed, the block below was skipped without a sound, and the
-          // whole room was stored with no IsCorrect and no PointsEarned
-          // (tests/trivia-scoring-set-scope.js).
-          const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
-          );
 
-          // Get the actual question to check correct answer
-          const questionRow = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: {
-              PK: resolvedSet.pk,
-              SK: sourceQuestionId
-            }
-          }));
-
-          // An org's optionA..optionF are encrypted at rest, and an envelope is
-          // not a string: trivia-answer.js draws no option from one, so every
-          // answer in the room resolves to no slot and is marked WRONG —
-          // whichever way the set spells the right one. Decrypted from the
-          // SET's org (the pinned pair above), not the session's: a host in
-          // org A may be running a platform or public set, which was never
-          // encrypted and passes through. A failure to decrypt lands in the
-          // catch below and the answer is stored unscored, as it always was.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          const question = {
-            Item: questionRow.Item && setOrgId
-              ? await decryptItem(setOrgId, 'question', questionRow.Item)
-              : questionRow.Item
-          };
+          // THE ONE RESOLVER (round-question.js). Read through the VERSION the
+          // round was served from — scoring against another version's
+          // correctAnswer is the worst possible drift — and with the PAIR the
+          // REF pins, never the bare id (tests/trivia-scoring-set-scope.js).
+          // DECRYPTED from the SET's org: an org's optionA..F are envelopes at
+          // rest, and an envelope draws no option, so every answer would be
+          // marked wrong. A failure lands in the catch below and the answer is
+          // stored unscored, as it always was.
+          const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+          const question = { Item: read.question };
 
           if (question.Item) {
             const points = question.Item.points || 10;
@@ -609,17 +591,10 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         console.log(`⚠️ Poll answer refused: no REF row for round ${questionNumber}`);
         return;
       }
-      const resolvedSet = await resolveSetPartition(
-        db, process.env.TABLE_NAME, refSetRef(ref, ref.SetId), ref.SetVersion
-      );
-      const questionRow = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: resolvedSet.pk, SK: ref.SourceQuestionId }
-      }));
-      const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-      const row = questionRow.Item && setOrgId
-        ? await decryptItem(setOrgId, 'question', questionRow.Item)
-        : questionRow.Item;
+      // The one resolver (round-question.js); a host-written round is never a poll's.
+      const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, ref);
+      const resolvedSet = read.resolved;
+      const row = read.own ? null : read.question;
       if (!row || !isPollRound(resolvedSet.metadata, row)) {
         console.log(`⚠️ Poll answer refused: round ${questionNumber} is not a poll's`);
         return;
@@ -687,6 +662,13 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
       ProjectionExpression: COUNT_PROJECTION
     }));
     const answerOrgId = typeof sessionMeta.Item?.orgId === 'string' ? sessionMeta.Item.orgId.trim() : '';
+    // A SUSPENDED ORGANISATION'S ROOM TAKES NO NEW ANSWERS (org-standing.js).
+    // Refused like a round that is no longer on screen — nothing is stored,
+    // and the phone's `answerReceived` says not kept, with the plain sentence.
+    if (await orgIsSuspended(db, process.env.TABLE_NAME, answerOrgId)) {
+      console.log(`⚠️ Answer refused for game ${gameId}: its organisation is suspended`);
+      return { status: 'refused', round: questionNumber, code: SESSION_UNAVAILABLE.code, message: SESSION_UNAVAILABLE.message };
+    }
     const itemToStore = answerOrgId
       ? await encryptItem(answerOrgId, 'answer', answerRecord)
       : answerRecord;
@@ -812,14 +794,76 @@ async function keepLateAnswer(gameId, playerName, questionNumber, answer, answer
  */
 
 /**
+ * Does the sending device still hold this name? (experience plan step 1d)
+ *
+ * Read only when the frame presents a client id: a page loaded before this
+ * shipped sends none and keeps its old behaviour, with no extra read (see
+ * name-holder.js for every shape that is let through). Strongly consistent,
+ * because the moment that matters is the one straight after a handover, when
+ * a stale read would still name the old browser.
+ */
+async function nameMovedAway(gameId, playerName, clientId) {
+  if (!playerName || !presentedClientId(clientId)) return false;
+  const row = await db.send(new GetCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `PLAYER#${playerName}` },
+    ProjectionExpression: 'ClientId, AttendeeId',
+    ConsistentRead: true
+  }));
+  return heldByAnotherDevice(row.Item, clientId);
+}
+
+/**
+ * The NAME_CHECK frame: answer the asking socket, and if its name has moved,
+ * drop its connection row so the room's broadcasts stop reaching a page that
+ * has stopped. Silent when the name is still this device's.
+ */
+async function checkNameHolder(gameId, playerName, clientId, connectionId) {
+  if (!(await nameMovedAway(gameId, playerName, clientId))) return;
+  console.log(`📵 A socket in game ${clipForLog(gameId)} checked in for a name that has moved`);
+  await sendToConnection(connectionId, nameMovedFrame(gameId, playerName));
+  await db.send(new DeleteCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: { PK: `GAME#${gameId}`, SK: `CONNECTION#${connectionId}` }
+  })).catch(() => {});
+}
+
+/**
  * Handle player messages - process and send to host
  */
-async function handlePlayerMessage(gameId, playerName, messageType, messageData, connectionId = null) {
+async function handlePlayerMessage(gameId, playerName, messageType, rawMessageData, connectionId = null) {
   console.log(`👤 Player message ${messageType} from ${playerName} in game ${gameId}`);
-  
+
+  // THE CLIENT ID STOPS HERE. It rides in on ANSWER# frames so the server can
+  // tell which device sent them (step 1d), and it is a capability
+  // (get-answers.js returns a player's own answer text to whoever presents
+  // it), so it must never be spread into the `playerAnswered` frame the host
+  // is sent below.
+  const { clientId, ...messageData } = rawMessageData || {};
+
   try {
     // Handle ANSWER# messages by storing the answer in DynamoDB
     if (messageType.startsWith('ANSWER#')) {
+      // FROM A DEVICE THAT NO LONGER HOLDS THE NAME (step 1d): not stored, not
+      // kept late, not counted, and the host hears nothing. The sender is told
+      // twice over — `answerReceived` with `kept: false` and the reason, so a
+      // receipt it already showed is withdrawn, and `nameMoved`, which stops
+      // the page.
+      if (await nameMovedAway(gameId, playerName, clientId)) {
+        console.log(`📵 Answer refused in game ${clipForLog(gameId)}: the name has moved to another device`);
+        if (connectionId) {
+          await sendToConnection(connectionId, {
+            type: 'answerReceived',
+            gameId,
+            questionNumber: String(messageType.replace('ANSWER#', '')).padStart(3, '0'),
+            kept: false,
+            late: false,
+            code: NAME_MOVED,
+          });
+          await sendToConnection(connectionId, nameMovedFrame(gameId, playerName));
+        }
+        return;
+      }
       const outcome = await handlePlayerAnswer(gameId, playerName, messageType, messageData);
       // THE PHONE IS TOLD (session flow v3 §4.4): stored, kept late, or not
       // taken. A late answer is not an answer to the round in progress, so the
@@ -832,6 +876,7 @@ async function handlePlayerMessage(gameId, playerName, messageType, messageData,
           questionNumber: outcome.round,
           kept: outcome.status !== 'refused',
           late: outcome.status === 'late',
+          ...(outcome.code ? { code: outcome.code, message: outcome.message } : {}),
         });
       }
       if (outcome && outcome.status !== 'stored') {

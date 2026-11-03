@@ -1,0 +1,216 @@
+/* ============================================================================
+   NEEDS YOU — components/needs/* (docs/design/experience-plan/PLAN.md §4).
+
+   The Needs-you line under Your part now, the rows and buttons a Needs-you
+   item carries wherever it is drawn (the bell's This session, the phone
+   Remote's card, the one-screen sheet once revealed), the "Show on this
+   screen" gate, and the one-screen sheet itself. Dusk surfaces only: every
+   caller declares data-theme="dark" on an ancestor (HostConsole, the Session
+   panel, HostRemote) or on the sheet's overlay.
+
+   ROLES ONLY (styles/roles.css): --text, --muted, --surface, --surface-2,
+   --accent (amber, the "needs you" edge), --danger-text for a refusal,
+   --rule-strong for borders. No literal, no --primary.
+
+   Laptop ladder 12 / 13 / 15 / 19 px. The line is ONE FIXED HEIGHT (56px)
+   calm or amber, so nothing below it moves when an item arrives (owner O1).
+   Measured (needsYouPalette.test.js, composited on dusk --bg #0F1A2E):
+     --text on --surface          12.53:1
+     --muted on --surface          5.43:1
+     --text on the amber tint     >= 11:1  (8% --warn-rgb over --surface)
+     --danger-text on --surface    5.04:1
+   ========================================================================== */
+
+.ny {
+  --ny-t-floor: 12px;
+  --ny-t-label: 13px;
+  --ny-t-body: 15px;
+  --ny-t-head: 19px;
+  --ny-line-h: 56px;
+}
+
+/* ---- the line, under Your part now ---- */
+.ny.ny-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-sizing: border-box;
+  height: var(--ny-line-h);
+  min-width: 0;
+  padding: 0 18px;
+  border-radius: 12px;
+  border-left: 4px solid transparent;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--ny-t-body);
+  overflow: hidden;
+}
+.ny.ny-line.is-now {
+  border-left-color: var(--accent);
+  background: linear-gradient(rgb(var(--warn-rgb) / .08), rgb(var(--warn-rgb) / .08)), var(--surface);
+  color: var(--text);
+}
+/* THE ONE MOTION (docs/design/console-rail README D4; owner fork 3): a new
+   Now item fades the amber in ONCE, 240ms ease-out, in the same commit as
+   the People header's mark and the rail's lifted asker (useArrival). Paint
+   only: the edge from transparent, and a --surface veil fading off the
+   wash (an inset shadow sits under the words, so they are there at once).
+   One iteration; never alternate, never infinite (WCAG 2.3.1). Cleared, it
+   goes calm at once: the calm rule carries no animation. */
+.ny.ny-line.is-now[data-arrived] { animation: ny-arrive 240ms ease-out 1 both; }
+.ny.ny-asking[data-arrived] .ny-asker { animation: ny-arrive 240ms ease-out 1 both; }
+.ny.ny-asking[data-arrived] .ny-dot { animation: ny-arrive-dot 240ms ease-out 1 both; }
+@keyframes ny-arrive { from { border-left-color: transparent; box-shadow: inset 0 0 0 100vmax var(--surface); } }
+@keyframes ny-arrive-dot { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ny.ny-line.is-now[data-arrived], .ny.ny-asking[data-arrived] .ny-asker, .ny.ny-asking[data-arrived] .ny-dot { animation: none; }
+}
+.ny.ny-line.is-soon { color: var(--text); }
+/* THE PUBLIC LINE (PublicNeedsLine.jsx, PLAN §3.3, 2h): the room can read it.
+   Calm is the muted line; waiting is an amber EDGE and no wash (a wash reads
+   as an alarm from the back of the room), with the count by kind in --text.
+   Its one button is outlined (.ui-btn--quiet), never the orange. */
+.ny.ny-line.ny-line--public.is-waiting { border-left-color: var(--accent); color: var(--text); }
+.ny.ny-line.ny-line--public .ui-btn { --ui-size: var(--ny-t-label); flex: none; }
+.ny .ny-line-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ny .ny-line-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ny .ny-line-main b { font-weight: 700; color: var(--text); }
+.ny .ny-detail { color: var(--muted); font-size: var(--ny-t-label); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ny .ny-more { color: var(--muted); font-size: var(--ny-t-label); flex: none; }
+.ny .ny-error { color: var(--danger-text); font-size: var(--ny-t-label); flex: none; }
+
+/* ---- the buttons an item carries: outlined, never orange (PLAN §4.4) ---- */
+.ny .ny-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.ny .ny-acts .ui-btn { --ui-size: var(--ny-t-label); }
+/* The armed Let them's reason, on its own line under the buttons (dev QA
+   2 Nov). Empty, it takes no room but stays in the tree as a live region. */
+.ny-acts .ny-armed {
+  flex-basis: 100%;
+  font-size: var(--ny-t-label, 13px);
+  font-weight: 700;
+  color: var(--text);
+}
+.ny-acts .ny-armed:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+/* "See in People" is ui/Button's tertiary look (text, the link ink). */
+.ny .ny-acts .ny-link { --ui-size: var(--ny-t-label); }
+
+/* ---- a list of items (the bell's This session, the Remote, the sheet) ---- */
+.ny .ny-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ny .ny-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border-left: 4px solid transparent;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--ny-t-body);
+}
+.ny .ny-item.is-now { border-left-color: var(--accent); }
+.ny .ny-item-t { margin: 0; font-weight: 700; }
+.ny .ny-item-d { margin: 0; color: var(--muted); font-size: var(--ny-t-label); }
+.ny .ny-empty { margin: 0; color: var(--muted); font-size: var(--ny-t-label); }
+.ny .ny-k {
+  margin: 0;
+  font-size: var(--ny-t-floor);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- "Show on this screen", the one-screen gate ---- */
+.ny.ny-private {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--rule-strong);
+  color: var(--text);
+  font-size: var(--ny-t-label);
+}
+.ny .ny-private-s { margin: 0; color: var(--text); }
+.ny .ny-confirm { margin: 0; color: var(--text); font-weight: 700; }
+
+/* ---- the one-screen sheet: a scrim that scrolls, a card that does not centre ---- */
+.ny.ny-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px 16px;
+  background: rgb(var(--shade-rgb) / .55);
+}
+.ny .ny-sheet {
+  margin: auto;
+  width: min(480px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--ny-t-body);
+}
+.ny .ny-sheet-head { display: flex; align-items: center; gap: 10px; }
+.ny .ny-sheet-title { margin: 0; font-size: var(--ny-t-head); font-weight: 700; flex: 1; }
+.ny .ny-sheet-foot { display: flex; }
+.ny .ny-sheet-foot .ui-btn { margin-left: auto; }
+.ny .ny-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.ny .ny-x:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+
+/* ---- People rows in the console rail: the asker's row, lifted ---- */
+.ny.ny-asking { display: grid; gap: 6px; padding: 0 14px 10px; }
+.ny .ny-asker {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+  font-size: var(--ny-t-label);
+}
+.ny .ny-asker-name { display: flex; align-items: center; gap: 8px; font-size: var(--ny-t-body); font-weight: 700; color: var(--text); }
+.ny .ny-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.ny .ny-asker-flag { color: var(--text); }
+.ny .ny-asker-meta { color: var(--muted); font-size: var(--ny-t-floor); margin-left: auto; font-weight: 600; }

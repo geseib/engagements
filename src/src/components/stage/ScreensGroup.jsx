@@ -84,6 +84,25 @@ export const DISPLAY_PROFILES = [
   ['table', 'Table — laptop'],
 ];
 
+/** Room screen size: one row, also drawn on its own in Screens · More options. */
+export function ScreenSizeRow({ id, profile = 'room', onProfileChange = () => {} }) {
+  const ownId = useId();
+  const sizeId = id || ownId;
+  return (
+    <div className="scr-row">
+      <div className="scr-k">
+        <label className="scr-label" htmlFor={sizeId}>{W.size}</label>
+        <span className="scr-hint">{W.sizeHint}</span>
+      </div>
+      <select id={sizeId} className="scr-select" value={profile} onChange={(e) => onProfileChange(e.target.value)}>
+        {DISPLAY_PROFILES.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function ScreensGroup({
   choice = 'classic',
   offerChoice = false,
@@ -92,6 +111,12 @@ export default function ScreensGroup({
   presentDetail = null,
   profile = 'room',
   onProfileChange = () => {},
+  /* WHY THIS TYPE IS ONE SCREEN (config/surfaces.js oneScreenWhy; experience
+     plan §7 decision 10): where the choice would be, the row says One screen
+     and the reason, rather than the choice silently missing. */
+  why = '',
+  /* The Session menu draws the size in Screens · More options (README D2). */
+  showSize = true,
 }) {
   const two = choice === 'two';
   // Setup and the panel can both draw this group: one id each.
@@ -99,18 +124,17 @@ export default function ScreensGroup({
   return (
     <div className="scr">
       {offerChoice ? <ScreenChoiceRow choice={choice} onChoose={onChoose} help="host-room-screen-chooser" /> : null}
-      {offerChoice && two && presentHref ? <RoomWindowRow href={presentHref} detail={presentDetail} /> : null}
-      <div className="scr-row">
-        <div className="scr-k">
-          <label className="scr-label" htmlFor={sizeId}>{W.size}</label>
-          <span className="scr-hint">{W.sizeHint}</span>
+      {!offerChoice && why ? (
+        <div className="scr-row" data-row="where-fixed">
+          <div className="scr-k">
+            <span className="scr-label">{W.where}</span>
+            <span className="scr-hint">{why}</span>
+          </div>
+          <span className="scr-fixed">{W.one}</span>
         </div>
-        <select id={sizeId} className="scr-select" value={profile} onChange={(e) => onProfileChange(e.target.value)}>
-          {DISPLAY_PROFILES.map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
-      </div>
+      ) : null}
+      {offerChoice && two && presentHref ? <RoomWindowRow href={presentHref} detail={presentDetail} /> : null}
+      {showSize ? <ScreenSizeRow id={sizeId} profile={profile} onProfileChange={onProfileChange} /> : null}
     </div>
   );
 }

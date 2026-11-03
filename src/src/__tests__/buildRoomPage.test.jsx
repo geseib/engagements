@@ -50,7 +50,17 @@ const S = require('../../../lambda-functions/game/build-store');
 
 const API = 'https://api.example.test/dev/';
 const GAME = '4821';
-const NOW = new Date().toISOString();
+/*
+  ONE CLOCK FOR THE FIXTURE AND THE PAGE. The server's `now` (what hostView
+  judges connected / listening / stale / doing against) is read at the moment
+  a fixture is built, exactly as `ago()` is, and the page reads Date.now().
+  It used to be a NOW frozen at module load: under a loaded parallel run this
+  file reaches its later tests minutes after loading, so the server half saw
+  every `ago(n)` as minutes newer than the page did, and a judgment near a
+  window's edge (20s listening, 2 min connected, 90s building) came out
+  differently on the two halves — "Claude is building" read "Claude is ready".
+*/
+const nowIso = () => new Date().toISOString();
 const ago = (s) => new Date(Date.now() - s * 1000).toISOString();
 
 /** HostState, computed by build-store.js from rows — never hand-shaped. */
@@ -74,7 +84,7 @@ function hostState({ st = {}, asks = [], resps = [], answers = [], votes = [], l
     sessionState: 'STARTED',
     room: S.roomFromRows(rows),
     players: ['Ana', 'Dee', 'Priya', 'Sam'],
-    now: NOW,
+    now: nowIso(),
   });
 }
 
@@ -125,10 +135,14 @@ function serve(state) {
 const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
 const lastPost = () => posts()[posts().length - 1];
 const path = (c) => c.url.slice(API.length);
-/** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
-const openMore = () => {
-  fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
+/** The Session menu at a section, with its More options open (owner, 2026-10-09:
+    the three-dot menu's items live there; sections since docs/design/session-menu D10). */
+const openMore = (section = 'Claude') => {
+  if (!screen.queryByRole('dialog', { name: 'Session menu' })) fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+  const menu = screen.getByRole('dialog', { name: 'Session menu' });
+  fireEvent.click(within(menu).getByRole('tab', { name: new RegExp(`^${section}`) }));
+  const more = menu.querySelector('[aria-controls^="smenu-more-"]');
+  if (more && more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
 };
 /** The host's pick asks first (owner, 2026-10-06): confirm it. */
 const confirmPick = () => fireEvent.click(within(screen.getByRole('dialog', { name: /Choose the room's pick\?|Choose an alternate\?/ })).getByRole('button', { name: /^Choose / }));
@@ -533,8 +547,9 @@ describe('each ask status', () => {
   });
 
   // BEFORE THE ROOM STARTS (simplify PLAN item 10; owner, 26 Oct 2026) replaced How a Build Room works.
+  // A new room is in the opening (Phase unset); the card leaves when it ends (QA walk on test, 31 Oct 2026).
   test('an empty room shows Before the room starts: Connect, the code, the room\'s screen; no gate', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     const rows = within(card).getAllByRole('listitem');
     expect(rows.map((r) => r.querySelector('b').textContent)).toEqual(['Connect Claude Code', 'The room joins', 'The room watches this laptop']);
@@ -549,12 +564,12 @@ describe('each ask status', () => {
   });
 
   test('Connect stays until Claude has called in, not until a key or an ask (host review, 25 Oct 2026, F2)', async () => {
-    const keyed = { st: { AgentSeenAt: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] };
-    await openRoom(hostState({ ...keyed, asks: [{ ...CHOICE, Status: 'decided', Decision: { direction: 'x', chosen: ['B'] }, DecidedAt: ago(60) }] }));
+    const keyed = { st: { AgentSeenAt: undefined, Phase: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] };
+    await openRoom(hostState({ ...keyed, asks: [{ ...CHOICE, OpeningStep: 'kind', Status: 'decided', Decision: { direction: 'x', chosen: ['B'] }, DecidedAt: ago(60) }] }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
     const connect = within(card).getByRole('button', { name: /^Connect/ });
     // Past the first view the card's Connect is a plain button: the ask's move is the orange one.
-    expect(connect.className).not.toMatch(/brm-btn--primary/);
+    expect(connect.className).not.toMatch(/ui-btn--action/);
     expect(connect.closest('li')).not.toHaveClass('is-done');
     cleanup();
     // Claude has called in, building: the card is gone.
@@ -579,15 +594,15 @@ describe('each ask status', () => {
   });
 
   test('on the first view, Connect is the one orange button (F3)', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     const card = screen.getByRole('region', { name: 'Before the room starts' });
-    expect(within(card).getByRole('button', { name: /^Connect/ }).className).toMatch(/brm-btn--primary/);
+    expect(within(card).getByRole('button', { name: /^Connect/ }).className).toMatch(/ui-btn--action/);
     // Nothing else on the Host screen is orange.
-    expect([...document.querySelectorAll('.brm-host .brm-btn--primary')]).toHaveLength(1);
+    expect([...document.querySelectorAll('.brm-host .ui-btn--action')]).toHaveLength(1);
   });
 
   test('Show the code puts the join code on the Stage, as Join in the header does', async () => {
-    await openRoom(hostState({ st: { AgentSeenAt: undefined } }));
+    await openRoom(hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Before the room starts' })).getByRole('button', { name: 'Show the code' }));
     await waitFor(() => expect(posts().some((c) => path(c) === `games/${GAME}/build/wall` && c.body.codes === 'join')).toBe(true));
   });
@@ -669,7 +684,7 @@ describe('the host side panel', () => {
   test('End session posts games/{id}/end', async () => {
     await openRoom(hostState());
     openMore();
-    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    fireEvent.click(screen.getByRole('button', { name: /^End session/ }));
     const dialog = screen.getByRole('dialog', { name: 'End this session?' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'End session' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/end`));
@@ -677,7 +692,7 @@ describe('the host side panel', () => {
 
   test('Wrap up saves the outcome', async () => {
     await openRoom(hostState());
-    openMore();
+    openMore('Asks so far');
     fireEvent.click(screen.getByRole('button', { name: 'Wrap up' }));
     const dialog = screen.getByRole('dialog', { name: 'Wrap up' });
     fireEvent.change(within(dialog).getByLabelText('Summary'), { target: { value: 'A sign-up site.' } });
@@ -725,7 +740,7 @@ describe('the host side panel', () => {
     fireEvent.click(within(wn).getByRole('button', { name: 'Ask Claude to wrap up' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
     // Do now is the default kind, so it is not named; the room never sees the prompt.
-    expect(lastPost().body).toEqual({ text: expect.stringMatching(/^We are wrapping up\. Call room_status, then write the outcome with wrap_up/), hideFromRoom: true });
+    expect(lastPost().body).toEqual({ text: expect.stringMatching(/^We are wrapping up\. Call room_status, then write the outcome with wrap_up/), hideFromRoom: true, engagePrompt: 'wrap-up' });
   });
 });
 
@@ -791,7 +806,7 @@ describe('Connect Claude Code', () => {
   test('revoke, the review setting, and the prompt cards with their slash commands (all the steps)', async () => {
     await openRoom(hostState({ st: { AgentSeenAt: undefined }, keys: [{ KeyId: 'abc123def456', Label: 'Claude Code', CreatedAt: ago(300) }] }));
     openMore();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('button', { name: /Connect Claude Code/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: /Connect Claude Code/ }));
     const dialog = screen.getByRole('dialog', { name: 'Connect Claude Code' });
     ['/engage:kickoff', '/engage:ideas', '/engage:ab-mockups', '/engage:continue', '/engage:preview', '/engage:wrap-up', '/engage:share-repo'].forEach((slash) => {
       expect(within(dialog).getAllByText(slash, { exact: false }).length).toBeGreaterThan(0);
@@ -830,7 +845,7 @@ describe('Connect Claude Code', () => {
     expect(paste.querySelector('[data-testid="brm-connect"]').textContent).toBe(`/engage:kickoff eng_${GAME}_${'n'.repeat(43)}`);
     expect(mint).toHaveClass('is-done');
     expect(paste).toHaveClass('is-wait');
-    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('brm-btn--primary');
+    expect(screen.getByRole('button', { name: 'Done' })).not.toHaveClass('ui-btn--action');
 
     // An older key used long ago does not count.
     rerender(<ConnectPanel {...first} room={{ ...first.room, agent: { key: { keyId: 'k1', lastUsedAt: ago(900) } } }} />);
@@ -844,7 +859,7 @@ describe('Connect Claude Code', () => {
     expect(screen.getByTestId('brm-connected')).toHaveTextContent(/Claude Code connected at .*, in ~\/build-room\/volunteer-sign-up\. It has started work\./);
     expect(steps[0]).toHaveClass('is-done');
     expect(screen.queryByTestId('brm-connect-waiting')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('brm-btn--primary');
+    expect(screen.getByRole('button', { name: 'Done' })).toHaveClass('ui-btn--action');
   });
 
   test('a crew room adds a fourth step: share the repo', () => {
@@ -855,7 +870,7 @@ describe('Connect Claude Code', () => {
   });
 
   test('which window: first time, connected now, coming back, out of date, all the steps', () => {
-    const now = Date.parse(NOW);
+    const now = Date.now();
     expect(connectCase({ agent: {} }, now)).toBe('first');
     expect(connectCase({ agent: { lastSeenAt: ago(10) } }, now)).toBe('now');
     // The plugin's background report counts as checking in.
@@ -926,7 +941,7 @@ describe('after Claude wraps up, and what next', () => {
     links: [{ label: 'Demo', url: 'http://localhost:5173/' }, { label: 'Repository', url: 'https://github.com/x/y' }],
     nextSteps: ['Send a confirmation text'],
     by: 'agent',
-    updatedAt: NOW,
+    updatedAt: nowIso(),
   };
 
   test('the stage says what we built, with the demo one click away', async () => {
@@ -1059,7 +1074,7 @@ describe('the report view', () => {
 
   test('the Report button opens it', async () => {
     await openRoom(hostState());
-    openMore();
+    openMore('Asks so far');
     fireEvent.click(screen.getByRole('button', { name: 'Report' }));
     expect(await screen.findByRole('heading', { name: 'What we built' })).toBeInTheDocument();
   });
@@ -1162,13 +1177,15 @@ describe('create', () => {
 describe('the connection (owner, 2026-10-04: a long wait left only "refresh the page")', () => {
   const socketSays = (up) => act(() => { webSocketClient.onConnectionStatusChange.mock.calls.slice(-1)[0][0](up); });
 
-  test('Connecting, then Live, then Disconnected with one click to reconnect', async () => {
+  test('the top bar draws the connection only when it is broken (experience plan 2a, 2e): Disconnected, with one click to reconnect', async () => {
     await openRoom(hostState());
-    expect(screen.getByTestId('brm-conn').textContent).toBe('Connecting…');
+    // Connecting and Live are the calm states: no chip (PLAN §4.2 row 7, "connection only when broken").
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
     socketSays(true);
-    expect(screen.getByTestId('brm-conn').textContent).toBe('Live');
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
     socketSays(false);
     const chip = screen.getByRole('button', { name: 'Disconnected · Reconnect' });
+    expect(chip.closest('[data-slot="connection"]')).not.toBeNull();
     const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
     fireEvent.click(chip);
     await waitFor(() => expect(webSocketClient.ensureConnected).toHaveBeenCalled());
@@ -1370,13 +1387,17 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     await openRoom(busy());
     expect(screen.queryByRole('button', { name: 'End session' })).toBeNull();
     openMore();
-    const menu = screen.getByRole('dialog', { name: 'Session' });
-    ['Connect Claude Code', 'Open to a crew', 'Wrap up', 'Report', 'End session'].forEach((name) => {
+    const menu = screen.getByRole('dialog', { name: 'Session menu' });
+    ['Connect Claude Code', 'Open to a crew', 'End session'].forEach((name) => {
       expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
     expect(within(menu).getByRole('switch', { name: /Review Claude's questions/ })).toBeInTheDocument();
+    openMore('Asks so far');
+    ['Wrap up', 'Report'].forEach((name) => {
+      expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
+    });
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: 'Session' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
 
   test('the join code in the header puts the code on the Stage', async () => {
@@ -1808,7 +1829,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
   test('where it landed fills in the direction, which the host can still change', async () => {
     await openRoom(hostState({
       st: { CurrentAskId: '003' },
-      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     }));
     // Settle stays open with the wheel (H3): spin again, or go with where it landed.
@@ -1823,7 +1844,7 @@ describe('a room that begins with an ask, a tie, and the wheel (owner, 2026-10-0
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
     current = hostState({
       st: { CurrentAskId: '003' },
-      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }],
+      asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }],
       answers: TIE,
     });
     await act(async () => { handler({}); });
@@ -2803,8 +2824,11 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(link.querySelector('svg')).not.toBeNull();
     expect(header().querySelector('a, button')).toBe(link);
     openMore();
-    expect(within(screen.getByRole('dialog', { name: 'Session' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
-    expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(1);
+    // The Session menu's foot has Main menu too since the redesign (as on every format).
+    const inMenu = within(screen.getByRole('dialog', { name: 'Session menu' })).getAllByRole('link', { name: /Main menu/ });
+    expect(inMenu).toHaveLength(1);
+    expect(inMenu[0].closest('.brm-sp-foot')).not.toBeNull();
+    expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(2);
   });
 
   test('it is there on Build and History too (the Stage has no header; its way back is Host in the dock)', async () => {
@@ -2846,8 +2870,8 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
   test('375px: pressing the join code in the panel\'s top line opens the QR', async () => {
     asNarrow(true);
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    fireEvent.click(within(within(screen.getByRole('dialog', { name: 'Session menu' })).getByTestId('brm-sp-top')).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` }));
     expect(screen.getByTestId('stage-join-panel')).toBeInTheDocument();
   });
 
@@ -2866,8 +2890,8 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(within(h).getByRole('link', { name: /Main menu/ })).toBeInTheDocument();
     expect(within(h).queryByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeNull();
     expect(within(h).queryByText(/Open the build/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    const top = within(screen.getByRole('dialog', { name: 'Session' })).getByTestId('brm-sp-top');
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    const top = within(screen.getByRole('dialog', { name: 'Session menu' })).getByTestId('brm-sp-top');
     expect(within(top).getByRole('button', { name: `Join code ${GAME}. Show the join code on the Stage` })).toBeInTheDocument();
     expect(within(top).getByText(/Open the build/)).toBeInTheDocument();
     expect(top.querySelector('.brm-wifi')).not.toBeNull();
@@ -3027,7 +3051,7 @@ describe('the opening: frame the build with the room, then build (owner, 2026-10
     fireEvent.click(within(back).getByRole('button', { name: 'Back to the opening' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/opening/resume`));
     openMore();
-    expect(screen.getByRole('dialog', { name: 'Session' }).textContent).toMatch('Back to the opening');
+    expect(screen.getByRole('dialog', { name: 'Session menu' }).textContent).toMatch('Back to the opening');
   });
 });
 
@@ -3093,12 +3117,12 @@ describe("What's next and Decided (build-room-host-flow H1, H5; combine-and-stag
     await openRoom(hostState({ asks: [WHO, BUILT] }));
     const col = screen.getByRole('main', { name: 'Now' });
     const nudge = within(col).getByRole('region', { name: 'Share demo' });
-    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('brm-btn--primary');
+    expect(within(nudge).getByRole('button', { name: 'Share demo' })).toHaveClass('ui-btn--action');
     // What's next stays, as outline, and Space no longer presses it: sharing the laptop is a click.
     const card = screen.getByRole('region', { name: 'Now' });
     expect(within(card).getByRole('list', { name: "What's next" })).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Ask' })).not.toHaveAttribute('data-next-primary');
-    expect(col.querySelectorAll('.brm-btn--primary')).toHaveLength(1);
+    expect(col.querySelectorAll('.ui-btn--action')).toHaveLength(1);
   });
 
   test('between asks the Now column says what Claude is doing and leads What\'s next, focused', async () => {
@@ -3301,7 +3325,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     Slices: [{ id: 'A', label: 'A', text: 'Bold banner' }, { id: 'B', label: 'B', text: 'Calm photo + calendar' }],
     Spinner: 'Dee', Armed: true, Spins: [], ...over,
   });
-  const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
+  const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')]
     .filter((b) => !b.closest('[role="dialog"], .brm-modal'));
   const decides = () => posts().filter((c) => c.body && c.body.action === 'decide');
   const space = (target = window) => fireEvent.keyDown(target, { key: ' ' });
@@ -3336,7 +3360,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
   test('Space while the wheel turns does nothing; once it stops, Space sends', async () => {
     await openRoom(hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIED }));
     const handler = webSocketClient.onMessage.mock.calls.find(([type]) => type === 'buildChanged')[1];
-    current = hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED });
+    current = hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED });
     await act(async () => { handler({}); });
     expect(await screen.findByRole('button', { name: 'The wheel is turning…' })).toBeDisabled();
     space();
@@ -3376,12 +3400,14 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
     'results with a winner': () => resultsState(),
     'results with a tie': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: TIED }),
     'a wheel not yet spun': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL() }], answers: TIED }),
-    'a wheel that landed': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: NOW, By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED }),
+    'a wheel that landed': () => hostState({ st: { CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results', Wheel: WHEEL({ Armed: false, Spins: [{ SpinId: 's1', At: nowIso(), By: 'Dee', Result: 'B', Turns: 5 }] }) }], answers: TIED }),
     'results of a rating': () => hostState({ st: { CurrentAskId: '005' }, asks: [{ AskId: '005', Kind: 'rating', Prompt: 'How close?', Options: [], Status: 'results' }], answers: [{ AskId: '005', PlayerName: 'Ana', Rating: 4 }] }),
     'a proposed ask waiting': () => hostState({ asks: [{ ...CHOICE, Status: 'proposed' }], ideas: [{ PlayerName: 'Jordan', Text: 'A map link' }] }),
     'the opening': () => hostState({ st: { Phase: undefined } }),
     'the opening with a step done': () => hostState({ st: { Phase: undefined, Brief: { forWhom: 'Two friends', lines: { kind: 'A game' }, steps: { kind: 'done', forWhom: 'done' } } } }),
-    'a first run, nothing yet': () => hostState({ st: { AgentSeenAt: undefined } }),
+    'a first run, nothing yet': () => hostState({ st: { AgentSeenAt: undefined, Phase: undefined } }),
+    // QA walk on test, 31 Oct 2026: past the opening, Before the room starts is gone; What's next's Connect leads.
+    'building, Claude never connected': () => hostState({ st: { AgentSeenAt: undefined } }),
     'a live ask with a proposed one waiting': () => hostState({ st: { CurrentAskId: '004' }, asks: [{ ...IDEAS_ASK, Status: 'live' }, { ...CHOICE, Status: 'proposed' }], resps: IDEAS_RESPS }),
   };
   test.each(Object.keys(states))('exactly one orange button on the Host screen: %s', async (name) => {
@@ -3427,7 +3453,7 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
   test('the Composer\'s Send is outline while a step shows, and orange only when nothing else leads', async () => {
     await openRoom(resultsState());
     const send = () => within(composerPanel()).getAllByRole('button', { name: 'Send to Claude' })[0];
-    expect(send().className).not.toMatch('brm-btn--primary');
+    expect(send().className).not.toMatch('ui-btn--action');
     expect(within(composerPanel()).getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Queue it' })).toBeNull();
   });
@@ -3435,7 +3461,10 @@ describe('one main button, and Space at Settle sends once (batch 2-3, B1 and B2)
 
 describe('what Claude is doing, in one line (docs/design/build-room-doing)', () => {
   const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
-  const COMMANDS = [
+  // A function, built inside each test: `ago()` read at collection time is
+  // minutes old by the time a loaded run reaches the test, and 'Ran git push'
+  // (20s ago) falls out of the 90s building window ("Claude is ready").
+  const COMMANDS = () => [
     run(300, 'Ran git status'), run(200, 'Ran git remote'), run(150, 'Ran git remote'), run(120, 'Ran git remote'),
     run(60, 'Ran gh repo'), run(20, 'Ran git push'),
   ];
@@ -3448,7 +3477,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   beforeEach(() => { try { window.localStorage.clear(); } catch (e) { /* none */ } });
 
   test('D1: the header chip is the line and how long, and the panel leads with it', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is mocking up 3 graph options · 4 min');
     expect(screen.getByTestId('brm-agentchip')).toHaveAttribute('data-state', 'building');
     const p = panel();
@@ -3459,7 +3488,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D1: a to-do line says where it came from, and a helper sits under it', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: { ActiveAt: ago(10), DoingA: { text: 'Setting up the repository', source: 'todo', startedAt: ago(130), at: ago(10) }, Helper: { text: 'Researching contrast rules', at: ago(40) } },
     }));
     const p = panel();
@@ -3468,7 +3497,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   });
 
   test('D1: the commands are one folded row; opened, repeats are grouped, and the fold is remembered', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     const fold = within(panel()).getByRole('button', { name: /^Steps 6/ });
     expect(fold).toHaveTextContent('Steps 6 · last: Ran git push');
     expect(fold).toHaveAttribute('aria-expanded', 'false');
@@ -3482,7 +3511,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D1: an opened fold stays open on the next visit', async () => {
     window.localStorage.setItem('brm-steps-open', '1');
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
     expect(within(panel()).getByText('Ran git remote, 3 times')).toBeInTheDocument();
   });
 
@@ -3490,14 +3519,14 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
     const spy = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const set = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     try {
-      await openRoom(hostState({ activity: COMMANDS, doing: LINE() }));
+      await openRoom(hostState({ activity: COMMANDS(), doing: LINE() }));
       fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));
       expect(within(panel()).getByText('Ran git status')).toBeInTheDocument();
     } finally { spy.mockRestore(); set.mockRestore(); }
   });
 
   test('D1: with no line, the panel is as it was: the newest command leads', async () => {
-    await openRoom(hostState({ activity: COMMANDS }));
+    await openRoom(hostState({ activity: COMMANDS() }));
     expect(within(panel()).getByTestId('brm-activity-now')).toHaveTextContent('Ran git push');
     expect(within(panel()).queryByTestId('brm-doing')).toBeNull();
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
@@ -3507,7 +3536,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   // under the line ("Ran git push"); still never where the line came from.
   test('D2: the Stage says the line and how long, the helper beneath, and the tool lines only in their own list', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }),
     }));
     fireEvent.keyDown(window, { key: '2' });
@@ -3525,7 +3554,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   test('D5: a stale line is Claude was, the chip says when it was last seen, the Stage tells the room', async () => {
     await openRoom(hostState({
       st: { AgentSeenAt: ago(240) },
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: LINE({ ActiveAt: ago(240), DoingB: { text: 'Scaffolding the site', source: 'claude', startedAt: ago(700), at: ago(240) } }),
     }));
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude was scaffolding the site · last seen 4 min ago');
@@ -3538,7 +3567,7 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
   test('D4: History shows a finished step with its time and what it produced; commands never', async () => {
     await openRoom(hostState({
-      activity: COMMANDS,
+      activity: COMMANDS(),
       doing: { ActiveAt: ago(10), DoingA: { text: 'Building the bar chart', source: 'todo', startedAt: ago(125), at: ago(10) } },
       logs: [
         {
@@ -3559,8 +3588,8 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
   });
 
   test('D1-D5: one orange on the Host screen with a line, folded or open', async () => {
-    await openRoom(hostState({ activity: COMMANDS, doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
-    const oranges = () => [...document.querySelectorAll('.brm-host .brm-btn--primary, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
+    await openRoom(hostState({ activity: COMMANDS(), doing: LINE({ Helper: { text: 'Researching contrast rules', at: ago(40) } }) }));
+    const oranges = () => [...document.querySelectorAll('.brm-host .ui-btn--action, .brm-host .bwh-spin:not(.bwh-spin--sec)')];
     const before = oranges().length;
     expect(before).toBeLessThanOrEqual(1);
     fireEvent.click(within(panel()).getByRole('button', { name: /^Steps 6/ }));
@@ -3570,11 +3599,12 @@ describe('what Claude is doing, in one line (docs/design/build-room-doing)', () 
 
 describe('a helper alone, and what a step holds (docs/design/build-room-doing)', () => {
   const run = (sec, text) => ({ at: ago(sec), kind: 'run', text });
-  const ACTS = [run(60, 'Ran npm install'), run(20, 'Ran npm test')];
+  // Built per test, like COMMANDS above.
+  const ACTS = () => [run(60, 'Ran npm install'), run(20, 'Ran npm test')];
   const helperOnly = () => ({ text: '', past: '', source: '', startedAt: null, stale: false, helper: 'Researching contrast rules', lastActiveAt: ago(10) });
 
   test('the panel, chip and Stage keep today\'s words and show the helper', async () => {
-    await openRoom({ ...hostState({ activity: ACTS }), doing: helperOnly() });
+    await openRoom({ ...hostState({ activity: ACTS() }), doing: helperOnly() });
     expect(screen.getByTestId('brm-agentchip')).toHaveTextContent('Claude is building');
     const panel = screen.getByRole('region', { name: 'Claude now' });
     expect(within(panel).getByText('A helper is researching contrast rules')).toBeInTheDocument();
@@ -3631,9 +3661,9 @@ describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => 
 
   test('Show codes posts the codes up (and the Stage); hiding them posts none', async () => {
     await openRoom(hostState());
-    fireEvent.click(screen.getByRole('button', { name: /^SESSION/ }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('tab', { name: /^Settings/ }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session' })).getByRole('button', { name: 'Show on the Stage' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Joining/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: 'Show on the Stage' }));
     await waitFor(() => expect(wallPosts()).toEqual(expect.arrayContaining([{ screen: 'stage' }, { codes: 'join' }])));
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(wallPosts()).toContainEqual({ codes: 'none' }));
@@ -3656,5 +3686,98 @@ describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => 
     const before = calls.filter((c) => c.url.endsWith('/build/state')).length;
     await act(async () => { handler[1]({ type: 'presentChanged', gameId: GAME }); });
     await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/build/state')).length).toBeGreaterThan(before));
+  });
+});
+
+// ── The QA walk on test, 31 Oct 2026 (buildQaWalkFixes.test.jsx holds the rest) ──
+describe('the QA walk on test, 31 Oct 2026', () => {
+  const never = { AgentSeenAt: undefined };
+
+  test('2. before Claude Code ever connects, the composer folds to "Queued for Claude: …", not "Sent: …"', async () => {
+    await openRoom(hostState({ st: never }));
+    const panel = composerPanel();
+    fireEvent.change(within(panel).getByLabelText(/Tell Claude/), { target: { value: 'Use large tap targets' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send to Claude' }));
+    await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/build/directions`));
+    expect(await screen.findByText(`${W.queuedHeadline}: Use large tap targets`)).toBeInTheDocument();
+    expect(screen.queryByText('Sent: Use large tap targets')).toBeNull();
+  });
+
+  test('2. a decision sent before Claude connects: the Now card says "Queued for Claude as Do now: …"', async () => {
+    await openRoom(hostState({ st: { ...never, CurrentAskId: '003' }, asks: [{ ...CHOICE, Status: 'results' }], answers: CHOICE_ANSWERS }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send B to Claude' }));
+    const line = await screen.findByText(`${W.queuedHeadline} as Do now: Which header should volunteers see first: Calm photo + calendar`);
+    expect(line).toHaveAttribute('role', 'status');
+    expect(line).toHaveClass('is-queued');
+  });
+
+  // The opening's answers, no headline from Claude: the summary falls back to Good looks like.
+  const wrapRoom = (lines) => ({
+    ...hostState({
+      st: { ...never, Brief: { lines } },
+      asks: [{ ...CHOICE, Status: 'decided', DecidedAt: ago(300), Decision: { direction: 'Which header should volunteers see first? B', chosen: ['B'], note: '' } }],
+    }),
+  });
+  const openWrap = () => {
+    const wn = screen.getByRole('list', { name: "What's next" });
+    fireEvent.click(within(wn).getByRole('button', { name: 'Write it myself' }));
+    return screen.getByRole('dialog', { name: 'Wrap up' });
+  };
+
+  test('3. Write it myself without Claude: the summary comes from the opening (Good looks like), and says so', async () => {
+    await openRoom(wrapRoom({ kind: 'A website or page', problem: 'Volunteers miss shifts', good: 'Volunteers pick a shift in under a minute' }));
+    const dialog = openWrap();
+    expect(within(dialog).getByLabelText('Summary')).toHaveValue('Volunteers pick a shift in under a minute');
+    expect(dialog.textContent).toMatch(W.wrapFromLine('Good looks like'));
+    expect(dialog.textContent).toMatch('Filled in from the session');
+  });
+
+  test('3. no Good looks like: The problem; neither: Making', async () => {
+    await openRoom(wrapRoom({ kind: 'A website or page', problem: 'Volunteers miss shifts' }));
+    expect(within(openWrap()).getByLabelText('Summary')).toHaveValue('Volunteers miss shifts');
+    cleanup();
+    await openRoom(wrapRoom({ kind: 'A website or page' }));
+    expect(within(openWrap()).getByLabelText('Summary')).toHaveValue('A website or page');
+  });
+
+  test('5. a wrap-up link is not the build: no Open the build until Claude shows one or the host marks one', async () => {
+    const OUT = { summary: 'A shift picker.', built: [], links: [{ label: 'Shift sheet', url: 'https://example.com/sheet' }, { label: 'Volunteer handbook', url: 'https://example.com/hb' }], nextSteps: [], by: 'host', updatedAt: ago(10) };
+    await openRoom(hostState({ st: { ...never, Outcome: OUT } }));
+    expect(screen.queryByRole('link', { name: /^Open the build/ })).toBeNull();
+    cleanup();
+    const marked = { ...OUT, links: [OUT.links[0], { label: 'The demo', url: 'https://example.com/demo', demo: true }] };
+    await openRoom(hostState({ st: { ...never, Outcome: marked } }));
+    expect(screen.getByRole('link', { name: /^Open the build/ })).toHaveAttribute('href', 'https://example.com/demo');
+  });
+
+  test('6. after End session the header reads Session ended: no Live, no Queued for Claude', async () => {
+    await openRoom({ ...hostState({ st: never, logs: [{ Kind: 'direction', Text: 'Go calm', By: 'host', ForAgent: true, ForAgentAs: 'do-now' }] }), state: 'ENDED' });
+    expect(screen.queryByTestId('brm-conn')).toBeNull();
+    expect(screen.queryByTestId('brm-agentchip')).toBeNull();
+    expect(screen.getAllByText(W.wallEnded).length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(W.queuedHeadline);
+  });
+
+  test('7. Before the room starts leaves when the opening ends, with Claude never connected; Connect stays one press away', async () => {
+    await openRoom(hostState({ st: never }));
+    expect(screen.queryByText(W.setupHead)).toBeNull();
+    expect(screen.queryByText(/You can start the opening now/)).toBeNull();
+    // Claude now says so and offers Connect.
+    const now = document.querySelector('[data-claude-now]');
+    fireEvent.click(within(now).getByRole('button', { name: W.connectClaude }));
+    expect(screen.getByRole('dialog', { name: 'Connect Claude Code' })).toBeInTheDocument();
+  });
+
+  test('7. during the opening, the card is there as before', async () => {
+    await openRoom(hostState({ st: { ...never, Phase: undefined } }));
+    expect(screen.getByText(W.setupHead)).toBeInTheDocument();
+  });
+
+  test('More framing questions counts what is left, not all four', async () => {
+    await openRoom(hostState({ st: { ...never, Phase: undefined, Brief: { lines: { kind: 'A website or page' }, keep: [{ id: 'k', text: 'Never ask for a password', at: ago(9) }], steps: { never: 'done' } } } }));
+    const more = document.querySelector('.brm-bp-more summary');
+    expect(more.textContent).toBe(`${W.openingMore} · ${W.openingMoreHint(3, 4)}`);
+    expect(W.openingMoreHint(3, 4)).toBe('3 of 4 left, if the room has time');
+    expect(W.openingMoreHint(4, 4)).toBe('4, if the room has time');
   });
 });

@@ -603,8 +603,9 @@ describe('GameHostPage wires the reveal through the gate', () => {
     ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
     // 16 Oct regroup: Names is a sub-heading of "The rounds", and that group ends where Joining starts
     // (the display profile moved up into Screens), so the window is Names to the end of the rounds.
-    const names = panelSrc.slice(panelSrc.indexOf('<h4 className="setup-h setup-h--sub">Names'));
-    const namesSection = names.slice(0, names.indexOf('<section className="setup-group setup-group--joining"'));
+    // The redesign (docs/design/session-menu): Names is How it runs' first group, namesGroup.
+    const names = panelSrc.slice(panelSrc.indexOf('const namesGroup ='));
+    const namesSection = names.slice(0, names.indexOf('const phoneGroup ='));
     expect(namesSection.length).toBeGreaterThan(200);
     expect(namesSection).not.toMatch(/\bprofile\b/);
   });

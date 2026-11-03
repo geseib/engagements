@@ -302,12 +302,12 @@ describe('Next, Skip and Back', () => {
     const server = makeServer();
     const { container } = renderRunner(server);
     await heading(Q1);
-    expect(container.querySelector('.plr-ctx').textContent).toBe('1 of 4');
+    expect(container.querySelector('.plr-ctx').textContent).toBe('Question 1 of 4');
     expect(container.querySelector('.plr-strip').style.getPropertyValue('--plr-progress')).toBe('0%');
     await answerRating('4 of 5');
     fireEvent.click(primary());
     await heading(Q2);
-    expect(container.querySelector('.plr-ctx').textContent).toBe('2 of 4');
+    expect(container.querySelector('.plr-ctx').textContent).toBe('Question 2 of 4');
     expect(container.querySelector('.plr-strip').style.getPropertyValue('--plr-progress')).toBe('25%');
   });
 });
@@ -523,7 +523,7 @@ describe('coming back to it', () => {
     });
     const { container, storage } = renderRunner(server);
     await heading(Q3);
-    expect(container.querySelector('.plr-ctx').textContent).toBe('3 of 4');
+    expect(container.querySelector('.plr-ctx').textContent).toBe('Question 3 of 4');
     // POST, with the identity in the body — never in a URL or a log line.
     expect(server.mines).toEqual([{ respondentId: storage.data.get(RESP_KEY) }]);
     const mineCall = server.fetchFn.mock.calls.find(([u]) => String(u).endsWith('/survey/mine'));
@@ -574,7 +574,7 @@ describe('coming back to it', () => {
       mine: { answers: { [Q1.qid]: 4, [Q3.qid]: [1] }, answered: [Q1.qid, Q3.qid], complete: true, rev: 4 },
     });
     renderRunner(server);
-    expect(await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Your answers are in.' })).toBeInTheDocument();
   });
 
   test('before the host opens it, a waiting screen — and it loads when the survey opens', async () => {
@@ -634,18 +634,54 @@ describe('checking and sending', () => {
     expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('9 out of 10');
   });
 
-  test('Send marks it sent and lands on the rest-volume done screen with no dock', async () => {
+  // Experience plan 3d: the one thing left to do is in the dock, plain (no
+  // amber in REST volume), never inline in the stage.
+  test('Send marks it sent and lands on the rest-volume done screen, "Change my answers" in the dock', async () => {
     const server = threeOfFour();
     await reachReview(server);
     fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
-    expect(await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Your answers are in.' })).toBeInTheDocument();
     expect(server.submits).toEqual([{ respondentId: expect.stringMatching(RESPONDENT) }]);
-    expect(document.querySelector('.plr-dock')).toBeNull();
     expect(document.querySelector('.plr').getAttribute('data-volume')).toBe('rest');
     expect(screen.queryByRole('button', { name: /Send/ })).toBeNull();
-    // The way back in is on the page, not in a dock.
-    fireEvent.click(screen.getByRole('button', { name: 'Change my answers' }));
+    const dock = document.querySelector('.plr-dock');
+    const change = screen.getByRole('button', { name: 'Change my answers' });
+    expect(dock.contains(change)).toBe(true);
+    expect(change).toHaveClass('ui-btn--quiet');
+    expect(document.querySelector('.plr-stage').querySelectorAll('button')).toHaveLength(0);
+    fireEvent.click(change);
     expect(await screen.findByRole('heading', { name: 'Check your answers' })).toBeInTheDocument();
+  });
+
+  // Owner, 3 Nov 2026: "Sent" where Send was, not a greyed Send; an edit
+  // brings the live Send back.
+  test('after Send the dock reads "Sent" with a check, not actionable, and Change brings "Send my answers" back', async () => {
+    const server = threeOfFour();
+    await reachReview(server);
+    const live = document.querySelector('[data-sent-live]');
+    expect(live).toHaveTextContent('');
+    fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
+    await screen.findByRole('heading', { name: 'Your answers are in.' });
+    const sent = screen.getByRole('button', { name: 'Sent' });
+    expect(document.querySelector('.plr-dock').contains(sent)).toBe(true);
+    expect(sent).toHaveClass('ui-btn--done');
+    expect(sent).not.toHaveClass('ui-btn--action');
+    expect(sent).toHaveAttribute('aria-disabled', 'true');
+    expect(sent.querySelector('svg')).not.toBeNull();
+    // The same region, still mounted, now says it once.
+    expect(document.querySelector('[data-sent-live]')).toBe(live);
+    expect(live).toHaveTextContent(/^Sent$/);
+    const before = server.submits.length;
+    fireEvent.click(sent);
+    expect(server.submits.length).toBe(before);
+    expect(screen.getByRole('heading', { name: 'Your answers are in.' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change my answers' }));
+    await screen.findByRole('heading', { name: 'Check your answers' });
+    const send = screen.getByRole('button', { name: 'Send my answers' });
+    expect(send).toHaveClass('ui-btn--action');
+    expect(send).not.toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+    expect(live).toHaveTextContent('');
   });
 
   test('Send in Named carries the player and no respondent id', async () => {
@@ -660,7 +696,7 @@ describe('checking and sending', () => {
     fireEvent.click(primary());
     fireEvent.click(primary());
     fireEvent.click(await screen.findByRole('button', { name: 'Send my answers' }));
-    await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' });
+    await screen.findByRole('heading', { name: 'Your answers are in.' });
     expect(server.submits).toEqual([{ player: { name: 'Ada', clientId: storage.data.get(`playerClient_${GAME}`) } }]);
   });
 
@@ -674,7 +710,7 @@ describe('checking and sending', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'Changed my mind' } });
     fireEvent.click(primary());
     fireEvent.click(await screen.findByRole('button', { name: 'Send my answers' }));
-    await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' });
+    await screen.findByRole('heading', { name: 'Your answers are in.' });
     const order = server.fetchFn.mock.calls
       .map(([u, o]) => `${(o && o.method) || 'GET'} ${String(u).replace(API, '')}`)
       .filter((l) => /survey\/(answers|submit)/.test(l));
@@ -702,7 +738,7 @@ describe('checking and sending', () => {
       : [200, { complete: true }]);
     await reachReview(server);
     fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
-    expect(await screen.findByRole('heading', { name: 'Thanks, Ada — that’s everything.' }, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Your answers are in.' }, { timeout: 3000 })).toBeInTheDocument();
     expect(server.submits).toHaveLength(2);
     expect(screen.queryByRole('heading', { name: /The survey is closed/ })).toBeNull();
   });
@@ -864,9 +900,9 @@ describe('in the player page', () => {
   async function joinSurvey(server) {
     global.fetch = pageFetch(server);
     const utils = render(<PlayerPage />);
-    fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+    fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
     fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
     await heading(Q1);
     return utils;
   }
@@ -874,7 +910,7 @@ describe('in the player page', () => {
   test('a survey session draws the survey, not the lobby', async () => {
     const server = makeServer();
     await joinSurvey(server);
-    expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+    expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     expect(document.querySelector('.plr-anon')).not.toBeNull();
   });
 
@@ -944,9 +980,9 @@ describe('in the player page', () => {
     }
     async function join() {
       render(<PlayerPage />);
-      fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+      fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
       fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
       await screen.findByText(/Loading the session/i);
     }
 
@@ -954,13 +990,13 @@ describe('in the player page', () => {
       const server = makeServer();
       const state = heldState(server);
       await join();
-      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+      expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
       expect(screen.queryByText(/first round/i)).toBeNull();
       expect(screen.queryByText(/your score/i)).toBeNull();
       await state.answer({ state: 'SURVEY#OPEN', gameType: 'survey' });
       await heading(Q1);
       expect(screen.queryByText(/Loading the session/i)).toBeNull();
-      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+      expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     });
 
     // rejects: reading a failed /state's empty body as "call-and-answer" — the
@@ -971,7 +1007,7 @@ describe('in the player page', () => {
       await state.answer({ error: 'Internal Server Error' }, 500);
       await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
       expect(screen.getByText(/Loading the session/i)).toBeInTheDocument();
-      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+      expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     });
 
     // The brief the join screen reads (for its copy) is the server naming the
@@ -980,20 +1016,20 @@ describe('in the player page', () => {
     test('a survey the join screen already knew about opens without waiting for /state', async () => {
       heldState(makeServer(), { brief: { gameId: GAME, gameType: 'survey', names: 'anonymous' } });
       render(<PlayerPage />);
-      fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+      fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
       await waitFor(() => expect(document.getElementById('plr-name-help').textContent).toMatch(/^Used to get you back in/));
       fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: 'Ada' } });
-      fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
       await heading(Q1);
       expect(screen.queryByText(/Loading the session/i)).toBeNull();
-      expect(screen.queryByText(/Waiting for the game to start/i)).toBeNull();
+      expect(screen.queryByText(/Waiting for the host/i)).toBeNull();
     });
 
     test('a trivia session gets its lobby exactly as before, once /state says trivia', async () => {
       const state = heldState(makeServer());
       await join();
       await state.answer({ state: 'CREATED', gameType: 'trivia' });
-      expect(await screen.findByText('Waiting for the game to start. The host will begin the first round.')).toBeInTheDocument();
+      expect(await screen.findByText(/The host will start the first round\./)).toBeInTheDocument();
       expect(screen.queryByText(/Loading the session/i)).toBeNull();
     });
   });

@@ -181,7 +181,7 @@ describe('adding never asks for a set title', () => {
     // The owner: "you shouldnt get to set the question set title when adding
     // questions." Trivia and Poll have no such field; this was the only one.
     const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'AIScenarioBuilder.jsx'), 'utf8');
-    const at = src.indexOf('<label>Question Set Title</label>');
+    const at = src.indexOf('<label>Set title</label>');
     const opener = src.slice(src.lastIndexOf('<div className="form-group"', at), at);
     expect(opener).toContain("style={isAppend(appendTo) ? { display: 'none' } : undefined}");
     // rejects: the bare `hidden` attribute, which `.form-group { display: flex }` defeats.

@@ -16,13 +16,25 @@
  * steps, the format as one radio group, the topics under the set with a tick
  * on each, the names line, "Background for Workie". The diff of this
  * snapshot is that change; the shared SessionOptions fold is otherwise as it
- * was. `lastFormat` opens it on Call & Answer, as a returning host sees it.
+ * was. `initialFormat` opens it on Call & Answer (the test seam; no host
+ * opens with a format chosen since 31 Oct).
  * Re-recorded again the same day after the live dev tests (reviews/devtest-*):
  * bare topic counts ("Architecture 2"), the step's links after the chips in
  * the Tab order, and the set search as a combobox.
+ * RE-RECORDED ON PURPOSE, 31 Oct 2026, for ROUND 4 (README "Round 4 — show
+ * the next decision, not all of them"): no step numbers or ticks, the title's
+ * help in its heading row, the Question set and the names/options blocks in
+ * their reveal slots (`gsd-slot`, the options one still carrying the
+ * `gsd-reveal` entrance at the moment of recording), no "Optional — every one
+ * has a safe default" header, "Background for Workie · Optional", the
+ * Advanced fold's short closed line with the full sentence moved inside it,
+ * and "Make your own set" for a host who owns no set of the format.
  *
  * rejects: the extraction changing one attribute, id, class, word or order in
  * the create or edit form, for any format.
+ * RE-RECORDED ON PURPOSE, 2 Nov 2026, for EXPERIENCE PLAN 4c: the Quick start
+ * lane (`gsd-quick`, config/quickStart.js) above Name it. One section added
+ * at the top of each create shape; nothing else in the form moved.
  */
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -54,7 +66,7 @@ const CATEGORIES = [
 const dialog = (props = {}) => render(
   <GameSetupDialog
     isFirstEngagement
-    lastFormat="call-and-answer"
+    initialFormat="call-and-answer"
     eventTitle="Q3 Offsite"
     onEventTitleChange={jest.fn()}
     questionSets={SETS}

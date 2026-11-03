@@ -122,8 +122,8 @@ describe('RoomWindowStatus: the top-line part', () => {
     });
   });
   test('the host surface\'s own classes go on the link and the pill', () => {
-    const { container } = render(<RoomWindowStatus href={HREF} detail={UP} classes={{ link: 'hc-btn', stat: 'hc-winstat', dot: 'hc-dot' }} />);
-    expect(container.querySelector('a.hc-btn')).not.toBeNull();
+    const { container } = render(<RoomWindowStatus href={HREF} detail={UP} classes={{ link: 'ui-btn ui-btn--quiet ui-btn--h36', stat: 'hc-winstat', dot: 'hc-dot' }} />);
+    expect(container.querySelector('a.ui-btn.ui-btn--quiet')).not.toBeNull();
     expect(container.querySelector('.hc-winstat.is-success .hc-dot')).not.toBeNull();
   });
   test('no address: nothing at all', () => {
@@ -160,10 +160,13 @@ describe('two screens covers the Build Room (item 3)', () => {
     const m = new Map();
     return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
   };
-  test('build is in TWO_SURFACE_TYPES: on by default on dev only, as Call & Answer', () => {
-    expect(TWO_SURFACE_TYPES).toEqual(['call-and-answer', 'build']);
-    expect(twoSurfacesOn({ env: 'development', search: '', storage: memory(), gameType: 'build' })).toBe(true);
-    for (const env of ['test', 'production', undefined]) {
+  // No tier default for either type since experience plan 2b (F6): the Build
+  // Room asks its own "Where will the room watch?" until the browser chooses.
+  test('build is in TWO_SURFACE_TYPES: off until chosen on every tier, as Call & Answer', () => {
+    // Trivia and Poll joined in experience plan 2g.
+    expect(TWO_SURFACE_TYPES).toEqual(['call-and-answer', 'build', 'trivia', 'poll']);
+    expect(twoSurfacesOn({ env: 'test', search: '?surfaces=two', storage: memory(), gameType: 'build' })).toBe(true);
+    for (const env of ['development', 'test', 'production', undefined]) {
       expect(twoSurfacesOn({ env, search: '', storage: memory(), gameType: 'build' })).toBe(false);
     }
   });
@@ -171,13 +174,18 @@ describe('two screens covers the Build Room (item 3)', () => {
     const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     // The Remote's PRESENT has no wall key: it refuses a Build Room itself.
     expect(read('HostRemote.jsx')).toMatch(/gameType !== 'build' && twoSurfacesHere\(gameType\) \?/);
-    // Quick start lists no Build Room sets, so its "where the room watches" never asks for one.
-    const quick = read('components/QuickstartMenu.jsx');
-    expect(quick).not.toMatch(/'build': \[\]/);
+    // Quick start (New engagement's lane since 4c) never picks a Build Room
+    // or an event: both need their own setup.
+    const quick = read('config/quickStart.js');
+    expect(quick).toMatch(/if \(chosen && !isHandoff\(chosen\) && offered\.includes\(chosen\)\) return chosen;/);
     // The round types' panel and Setup are GameHostPage's; a Build Room session never reaches it.
     expect(read('App.jsx')).toMatch(/if \(\/\^\\\/build\\\/\?\$\/\.test\(path\)\)/);
-    // The lobby chooser stays Call & Answer's own.
-    expect(read('GameHostPage.jsx')).toMatch(/normalizeGameType\(currentGameType\) === 'call-and-answer'\n\s*&& \(roomScreenChoice === null \|\| roomScreenOpen\)/);
+    // The lobby chooser (Setup's step 1) is the console types' own (Call &
+    // Answer, Trivia and Poll since 2g), in an event too (2d); never a Build
+    // Room's. Setup opens for Wavelength too (dev QA 2 Nov), with the choice
+    // made for it: SETUP_TYPES is the console types plus Wavelength.
+    expect(read('GameHostPage.jsx')).toMatch(/const setupOn = hostPhase === 'LOBBY' && Boolean\(gameId\)\n\s*&& SETUP_TYPES\.includes\(normalizeGameType\(currentGameType\)\) && typeKnownFor === gameId;/);
+    expect(read('config/surfaces.js')).toMatch(/SETUP_TYPES = Object\.freeze\(\[\.\.\.CONSOLE_TYPES, 'wavelength'\]\)/);
   });
 });
 

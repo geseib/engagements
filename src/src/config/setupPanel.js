@@ -14,24 +14,149 @@
  */
 
 /**
- * Three tabs, named by the owner: Players · Questions · Settings.
- *
- * A function rather than a constant because the panel's siblings in this
- * codebase are all phase-aware and the next change to this file will be too —
- * but nothing yet varies by phase, and inventing a variation nothing asks for
- * would be a fourth tab nobody ruled on. It takes the argument and ignores it,
- * visibly.
+ * NAME REQUESTS LAPSE (experience plan §4.4 step 5; owner decision 5). The
+ * one reading of a roster row's handover flags, shared with the Needs-you list
+ * (config/needsYou.js re-exports these), so a row and the list never disagree.
  */
-export function setupPanelTabs() {
+export const REQUEST_LAPSE_MS = 10 * 60 * 1000;
+
+function isoMs(iso) {
+  if (!iso) return NaN;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : NaN;
+}
+
+/**
+ * IS THIS NAME ASKED FOR, NOW? A request, not yet answered by a grant, and not
+ * lapsed. A row from a backend with no `requestedAt` cannot lapse (it is
+ * shown, never silently dropped). The one reading both the list and every
+ * People row use, so they never disagree.
+ */
+export function askingNow(handover, now = Date.now()) {
+  const h = handover || {};
+  if (!h.requested || h.open || h.requestLapsed) return false;
+  // The server's own lapse time (get-players `requestExpiresAt`) when it
+  // sends one; the request time plus the lapse otherwise.
+  const until = isoMs(h.requestExpiresAt);
+  if (Number.isFinite(until)) return now < until;
+  const at = isoMs(h.requestedAt);
+  return !Number.isFinite(at) || now - at < REQUEST_LAPSE_MS;
+}
+
+/** Is the name open (granted, not yet taken, not lapsed)? */
+export function openNow(handover, now = Date.now()) {
+  const h = handover || {};
+  if (!h.open) return false;
+  const exp = Number(h.expiresAt);
+  return !Number.isFinite(exp) || exp * 1000 > now;
+}
+
+
+/**
+ * THE SESSION MENU'S SECTIONS (docs/design/session-menu, approved 3 Nov 2026:
+ * "yes, add People and go with the recommendations"). The same names on every
+ * round type, in this order:
+ *
+ *   Up next · Rounds so far · People · Screens · Joining · How it runs
+ *
+ * A type removes a section or swaps it for its own equivalent; it never
+ * renames a shared one. A survey: Close survey · Results · People · Screens ·
+ * Joining · How it runs. (The Build Room's own menu is Claude · Asks so far ·
+ * People · Screens · Joining, buildroom/BuildSessionPanel.jsx; the phone's is
+ * Up next · Rounds so far · People, config/hostRemote.js.)
+ *
+ * PEOPLE IS A SECTION IN EVERY VERSION (the owner's one change to the design).
+ * Where the frame has a People column (the console mid-session) the column
+ * stays the at-a-glance view and its "All N, and who left" opens this section.
+ *
+ * NO AGENDA AND NO END SESSION TAB. An event's item gets one line above the
+ * tabs (item N of M, ‹ Agenda, Bring everyone here); End session and Main menu
+ * are the sheet's foot, shown in every section. The phone remote folds into
+ * Screens.
+ *
+ * `event` and `peopleColumn` are accepted and no longer change the list: an
+ * event adds a line, not a tab, and People is always a tab.
+ */
+export function setupPanelTabs({ survey = false } = {}) {
+  if (survey) {
+    return [
+      { id: 'close', label: 'Close survey' },
+      { id: 'results', label: 'Survey results' },
+      { id: 'people', label: 'People' },
+      { id: 'screens', label: 'Screens' },
+      { id: 'joining', label: 'Joining' },
+      { id: 'run', label: 'How it runs' },
+    ];
+  }
   return [
-    { id: 'players', label: 'Players' },
-    { id: 'questions', label: 'Questions' },
-    // GOING BACK THROUGH WHAT ALREADY HAPPENED. Third rather than last because
-    // it is read mid-session — "what did they say in round two" — while
-    // Settings is set once and left alone.
-    { id: 'history', label: 'Rounds' },
-    { id: 'settings', label: 'Settings' },
+    { id: 'up-next', label: 'Up next' },
+    { id: 'history', label: 'Rounds so far' },
+    { id: 'people', label: 'People' },
+    { id: 'screens', label: 'Screens' },
+    { id: 'joining', label: 'Joining' },
+    { id: 'run', label: 'How it runs' },
   ];
+}
+
+/*
+  THE OLD NAMES, STILL ASKED FOR (a link, a key, ?panel=, the rail's "All
+  rounds" / "Review them" / "All N, and who left", the Needs-you line's See in
+  People): where each one lives now. A survey reads Up next as Close survey and
+  Rounds so far as Results, the same slots.
+*/
+export const LEGACY_SECTIONS = Object.freeze({
+  players: 'people',
+  questions: 'up-next',
+  'running-order': 'up-next',
+  rounds: 'up-next',
+  history: 'history',
+  settings: 'run',
+  agenda: 'up-next',
+  remote: 'screens',
+  phone: 'screens',
+  joining: 'joining',
+  screens: 'screens',
+  end: 'up-next',
+});
+
+const SURVEY_SLOTS = Object.freeze({ 'up-next': 'close', history: 'results' });
+
+/**
+ * Which section the menu opens at, for a place asked for. Nothing asked: Up
+ * next during play (fork F7) and Rounds so far once the session has ended (a
+ * survey: Results). Any other name that is not a section here opens that
+ * default.
+ */
+export function sessionMenuSection(asked, tabs = setupPanelTabs(), { ended = false } = {}) {
+  const survey = tabs.some((t) => t.id === 'close');
+  let id = LEGACY_SECTIONS[asked] || asked;
+  if (survey && SURVEY_SLOTS[id]) id = SURVEY_SLOTS[id];
+  if (id && tabs.some((t) => t.id === id)) return id;
+  if (ended) {
+    const late = survey ? 'results' : 'history';
+    if (tabs.some((t) => t.id === late)) return late;
+  }
+  return (tabs[0] && tabs[0].id) || 'up-next';
+}
+
+/**
+ * AN EVENT'S PLACE, IN ONE LINE (the event line above the tabs): "item 3 of 6",
+ * and "the room is on item 2" while the room is elsewhere. Empty when the
+ * agenda has not loaded.
+ */
+export function eventPlace({ n = null, total = null, roomOn = null } = {}) {
+  if (!(Number(n) > 0)) return '';
+  const parts = [Number(total) > 0 ? `item ${n} of ${total}` : `item ${n}`];
+  if (Number(roomOn) > 0 && Number(roomOn) !== Number(n)) parts.push(`the room is on item ${roomOn}`);
+  return parts.join(' · ');
+}
+
+/**
+ * MORE OPTIONS, NAMED (README D2): the closed expander's line is built from the
+ * labels of the groups inside it, so it can never lie about what it holds.
+ */
+export function moreOptionsSummary(groups = []) {
+  return groups.filter((g) => g && g.label).map((g) => g.label).join(' · ');
 }
 
 /**
@@ -92,6 +217,17 @@ export function categoryRows({
 /** How many questions the host can still reach — enabled categories only. */
 export function questionsRemaining(rows = []) {
   return rows.reduce((total, row) => (row.enabled ? total + (row.remaining || 0) : total), 0);
+}
+
+/**
+ * THE CATEGORIES, IN ONE LINE (Up next's default view): "4 of 6 on · 23
+ * questions left". The switches themselves are in Up next's More options.
+ */
+export function categoriesSummary(rows = []) {
+  if (!rows.length) return '';
+  const on = rows.filter((r) => r.enabled).length;
+  const left = questionsRemaining(rows);
+  return `${on} of ${rows.length} on · ${left} ${left === 1 ? 'question' : 'questions'} left`;
 }
 
 const OPTION_KEYS = [
@@ -308,8 +444,10 @@ export function rosterRows({
       score: player.score || 0,
       rank: currentRank,
       done,
-      handoverRequested: Boolean(handover.requested),
-      handoverOpen: Boolean(handover.open),
+      /* A request lapses after ten minutes (config/needsYou.js, the same
+         reading the Needs-you list uses, so the row and the list agree). */
+      handoverRequested: Boolean(handover.requested) && (openNow(handover) || askingNow(handover)),
+      handoverOpen: openNow(handover),
     };
   });
 }

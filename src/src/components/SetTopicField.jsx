@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Icon from './Icon';
 import {
   SET_TOPICS,
   SET_TOPIC_IDS,
@@ -283,7 +284,7 @@ export default function SetTopicField({
                 aria-label={`Remove ${tag}`}
                 onClick={() => removeTag(tag)}
               >
-                ×
+                <Icon name="X" weight="bold" size={14} color="currentColor" />
               </button>
             </li>
           ))}

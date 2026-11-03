@@ -1,4 +1,4 @@
-/* skin-allowance: colour=1 font=0 primary=0 */
+/* skin-allowance: colour=0 font=0 primary=0 */
 /* ============================================================================
    GUIDANCE FOR THESE QUESTIONS — components/BatchGuidanceField.jsx
 
@@ -29,7 +29,8 @@
    ========================================================================== */
 
 .bgf {
-  --bgf-muted: #5b6b7c;
+  /* A role since experience plan 5e: the builders' form tone is on dusk now. */
+  --bgf-muted: var(--muted);
   --bgf-t-label: 13px;
 }
 

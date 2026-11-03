@@ -86,7 +86,7 @@ describe('resuming a job this browser was already watching', () => {
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} />);
 
     expect(authFetch).not.toHaveBeenCalled();
-    expect(screen.getByText('Configure Your Trivia Questions')).toBeInTheDocument();
+    expect(screen.getByText('Describe the trivia you want')).toBeInTheDocument();
   });
 
   test('a stored id is picked back up with ONE GET and no POST', async () => {
@@ -104,7 +104,7 @@ describe('resuming a job this browser was already watching', () => {
 
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={() => {}} />);
 
-    await screen.findByRole('button', { name: /Load 3 into System/ });
+    await screen.findByRole('button', { name: /Save 3 as a new set/ });
     expect(calls('POST')).toHaveLength(0);
     expect(calls('GET')).toHaveLength(1);
     expect(calls('GET')[0][0]).toContain('admin/ai-generate-trivia/m4k2p9x7bq1a');
@@ -126,7 +126,7 @@ describe('resuming a job this browser was already watching', () => {
 
     await waitFor(() => expect(screen.getByText(/That job has expired/)).toBeInTheDocument());
     expect(screen.getByText(/readable for three days/)).toBeInTheDocument();
-    expect(screen.getByText('Configure Your Trivia Questions')).toBeInTheDocument();
+    expect(screen.getByText('Describe the trivia you want')).toBeInTheDocument();
     expect(recallGenerationJob(ENDPOINT)).toBeNull();
     expect(calls('GET')).toHaveLength(1);
   });
@@ -216,9 +216,9 @@ describe('starting a job, and finishing with it', () => {
     fireEvent.change(screen.getByPlaceholderText(/American History/i), {
       target: { value: 'Post-merger integration' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
 
-    const load = await screen.findByRole('button', { name: /Load 3 into System/ });
+    const load = await screen.findByRole('button', { name: /Save 3 as a new set/ });
     expect(recallGenerationJob(ENDPOINT)).toMatchObject({ jobId: 'brand-new-job' });
 
     fireEvent.click(load);
@@ -240,13 +240,13 @@ describe('starting a job, and finishing with it', () => {
 
     render(<TriviaAIBuilder onClose={() => {}} onTriviaGenerated={onTriviaGenerated} />);
     fireEvent.change(screen.getByPlaceholderText(/American History/i), { target: { value: 'Topic' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate Trivia Questions/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate trivia questions/ }));
 
     await screen.findByRole('table');
     const rows = screen.getAllByRole('row');
     fireEvent.click(rows[2].querySelector('.git-ghost')); // question 2
 
-    fireEvent.click(screen.getByRole('button', { name: /Load 2 into System/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Save 2 as a new set/ }));
 
     expect(onTriviaGenerated).toHaveBeenCalledTimes(1);
     const { questions: sent } = onTriviaGenerated.mock.calls[0][0];

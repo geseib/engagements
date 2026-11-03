@@ -33,8 +33,8 @@ const COMMENT = {
 
 describe('wallCreditFor — what the featured comment was about, as a phrase', () => {
   test.each([
-    [{ anchorKind: 'summary', anchorLabel: 'AI summary' }, 'on the summary'],
-    [{ anchorKind: 'results', anchorLabel: 'Results' }, 'on the results'],
+    [{ anchorKind: 'summary', anchorLabel: 'AI summary' }, 'on Workie’s read'],
+    [{ anchorKind: 'results', anchorLabel: 'Results' }, 'on the whole round'],
     [{ anchorKind: 'response', anchorLabel: 'Response 2 — Priya Shah' }, 'on Priya Shah’s response'],
     [{ anchorKind: 'response', anchorLabel: 'Response 2' }, 'on response 2'],
     [{ anchorKind: 'response', anchorLabel: 'Response 11 — James' }, 'on James’s response'],

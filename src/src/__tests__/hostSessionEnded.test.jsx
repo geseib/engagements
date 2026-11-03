@@ -109,8 +109,9 @@ afterEach(() => {
 
 /* RESULTS opens on the tally, whose primary is What We Heard; one press puts
    the read-back up, and its primary advances the round (Next Question for trivia, Next Round elsewhere) — the button the owner pressed. */
+// A trivia session: its RESULTS primary is Workie's read, not What we heard (dev QA 2 Nov).
 async function reachNextRound() {
-  const heard = await screen.findByRole('button', { name: /what we heard/i }, { timeout: 5000 });
+  const heard = await screen.findByRole('button', { name: /workie's read/i }, { timeout: 5000 });
   await act(async () => { fireEvent.click(heard); });
   return screen.findByRole('button', { name: /^(next|start) (round|question)/i }, { timeout: 5000 });
 }
@@ -153,7 +154,7 @@ describe('coming back from an expired sign-in', () => {
   test('to a LIVE session: the stage, not the report, and the marker is spent', async () => {
     sessionStorage.setItem(RESUME_KEY, `/host?gameId=${GAME}`);
     render(<GameHostPage />);
-    await screen.findByRole('button', { name: /what we heard/i }, { timeout: 5000 });
+    await screen.findByRole('button', { name: /workie's read/i }, { timeout: 5000 });
     await waitFor(() => expect(sessionStorage.getItem(RESUME_KEY)).toBeNull());
     expect(screen.queryByText(ENDED_AFTER_SIGN_IN)).toBeNull();
     expect(reportWasRequested()).toBe(false);

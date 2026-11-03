@@ -113,7 +113,8 @@ describe('HELP_FOR_SCREEN', () => {
     // the room's and carries no help; the dock's `?` (host-dock) is its help.
     [
       'host-start', 'host-create', 'host-quick-start', 'host-dock',
-      'host-session-players', 'host-session-questions', 'host-session-rounds', 'host-session-settings',
+      'host-session-up-next', 'host-session-history', 'host-session-screens', 'host-session-run',
+      'host-session-joining', 'host-session-close', 'host-session-results', 'host-session-players',
       'host-console', 'host-remote', 'event-builder', 'event-agenda', 'event-stage',
       'ai-builders', 'ai-draft-review',
       'build-host', 'build-stage', 'build-build', 'build-history', 'build-session-panel',

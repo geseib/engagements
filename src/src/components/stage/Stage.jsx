@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PROFILES, profileClass } from '../../config/displayProfile';
 import useStageFit from '../../hooks/useStageFit';
+import useChromeAutoHide from '../../hooks/useChromeAutoHide';
 import PhaseBar from './PhaseBar';
 
 /**
@@ -44,12 +45,52 @@ import PhaseBar from './PhaseBar';
  * growing or a reveal flipping would re-render the stage and never re-measure
  * it, because `profile` and `phase` are unchanged.
  */
+/*
+ * THE HOST'S FRAME ON THE STAGE (experience plan §3.2, §3.3, Phase 2 step 2h).
+ * `top`, `now` and `needs` are three more optional rows ABOVE the rail: the
+ * top bar (components/console/ConsoleTop.jsx), "Your part now" (a Dock given
+ * `lead`) and the Needs-you line, in that order, so on one screen the main
+ * button sits under the top bar exactly where the console has it. Each is
+ * host chrome in its own dusk wrapper (data-theme="dark": <html> is paper)
+ * and none is inside `.main`, so the fitter never scales them; it measures
+ * `.main`'s box, which is whatever these rows leave. With `now` given there is
+ * no bottom dock and no empty placeholder for one: the `dock` row is then 0px
+ * tall, and the height it held (13vh) goes back to the content.
+ *
+ * A caller passing none of the three (the Build Room's stage, an event's
+ * agenda wall, the survey walk-through) gets the stage exactly as it was: the
+ * empty rows collapse to nothing.
+ */
+/*
+ * THE CHROME STEPS ASIDE ON ONE SCREEN (owner, 3 Nov 2026; hooks/
+ * useChromeAutoHide.js). `autoHide` is the caller's "this laptop is the room's
+ * screen": after a few seconds without the mouse, the frame's rows and any
+ * `.fn-controls` fade (`data-chrome="hidden"`, styles/stage.css) and come back
+ * when the mouse moves. Never on two screens: that laptop is private and its
+ * chrome is the host's to read. `chromeHold` is a sheet or menu the page has
+ * open. THE ROWS KEEP THEIR HEIGHT: only opacity changes, so `.main`'s box and
+ * the fitter's scale are the same shown and hidden, and the room never sees
+ * the stage move (measured in Chromium, 1280x720 and 1920x1080, Room and TV:
+ * collapsing the rows would refit by up to 28% and lift the question by 67 to
+ * 178px on every show and hide; floating them over a full-height stage would
+ * cover the rail, code and all, every time the mouse moved).
+ *
+ * `urgent` is the count of Needs-you items at Now. While the chrome is hidden
+ * it draws a small cue in the corner where the bell sits: a dot and the count,
+ * never a name (the same count the public line shows), so the host knows to
+ * reach for the mouse. Decorative: the line under it keeps its own live
+ * region, which a screen reader still reads with the chrome faded.
+ */
 export default function Stage({
-  profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '', children,
+  profile, phase, rail = null, strip = null, view = null, meter = null, dock = null, overlay = null, fitKey = '',
+  top = null, now = null, needs = null, autoHide = false, chromeHold = false, urgent = 0, children,
 }) {
   const stageRef = useRef(null);
 
   useStageFit(stageRef, [profile, phase, fitKey]);
+
+  const hasChrome = Boolean(top || now || needs);
+  const chromeHidden = useChromeAutoHide({ enabled: Boolean(autoHide) && hasChrome, hold: chromeHold, rootRef: stageRef });
 
   useEffect(() => {
     const root = document.documentElement;
@@ -95,8 +136,15 @@ export default function Stage({
   }, []);
 
   return (
-    <main className="stage" ref={stageRef}>
+    <main
+      className="stage"
+      ref={stageRef}
+      data-chrome={autoHide && hasChrome ? (chromeHidden ? 'hidden' : 'shown') : undefined}
+    >
       <div className="field" aria-hidden="true" />
+      {top ? <div className="stage-top" data-theme="dark">{top}</div> : null}
+      {now ? <div className="stage-now" data-theme="dark">{now}</div> : null}
+      {needs ? <div className="stage-needs" data-theme="dark">{needs}</div> : null}
       {rail || <div className="rail" />}
       <PhaseBar phase={phase} />
       {/* The workflow strip (session flow v3 §4.6): host-only, in its own row
@@ -109,8 +157,14 @@ export default function Stage({
       {/* A step the host is looking at (session flow v3 §4.8): over `.main`,
           which stays mounted underneath and keeps its place. */}
       {view}
-      {dock || <div className="dock" />}
+      {dock || (now ? null : <div className="dock" />)}
       {overlay}
+      {autoHide && chromeHidden && urgent > 0 ? (
+        <div className="stage-cue" data-theme="dark" aria-hidden="true" data-testid="stage-chrome-cue">
+          <span className="stage-cue-dot" />
+          <span className="stage-cue-n">{urgent}</span>
+        </div>
+      ) : null}
     </main>
   );
 }

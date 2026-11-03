@@ -11,6 +11,7 @@ import {
 } from '../config/templateVariables';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import PromptVariableInspector, { DEFAULT_ROOM_SIZE } from './PromptVariableInspector';
 import PromptAssembledPreview from './PromptAssembledPreview';
@@ -228,7 +229,7 @@ function AIPromptEditor({
   /*
     THREE VIEWS OF ONE DIALOG — the form, the workbench (Improve) and an
     uploaded file's review — rather than a modal opened from a modal. They
-    share the × and requestClose, so there is one way out that asks about
+    share the X and requestClose, so there is one way out that asks about
     unsaved work, and switching views never touches the draft: only "Use this"
     and "Put it in the editor" change it, and only Save writes it. The
     workbench stays mounted (hidden) once opened, so going back to the form to
@@ -726,7 +727,7 @@ function AIPromptEditor({
       `closeOnBackdrop={false}` and `closeOnEscape={() => !isDirty}` are the
       same pair `QuestionSetEditor`'s container uses: a stray tap or a reflexive
       Escape must not bin a half-written prompt. They are not a substitute for
-      an exit — there are two, the × and the Cancel, and both go through
+      an exit — there are two, the X and the Cancel, and both go through
       `requestClose`.
     */
     <Modal
@@ -737,8 +738,7 @@ function AIPromptEditor({
       closeOnEscape={() => !isDirty}
       labelledBy="pmgr-editor-title"
     >
-        <div className="pmgr-modal-head">
-          <h2 id="pmgr-editor-title">{dialogTitle}</h2>
+        <DialogHead className="pmgr-modal-head" titleId="pmgr-editor-title" title={dialogTitle} onClose={requestClose} closeLabel="Close the prompt editor" closeClassName="pmgr-x">
           {/*
             THE WORKBENCH'S THREE DOORS, in the head where the mockup puts "Ask
             AI to improve it" (docs/design/admin-redesign/19-prompt-editor.html)
@@ -782,15 +782,7 @@ function AIPromptEditor({
               />
             </div>
           )}
-          <button
-            type="button"
-            className="pmgr-x"
-            onClick={requestClose}
-            aria-label="Close the prompt editor"
-          >
-            ×
-          </button>
-        </div>
+        </DialogHead>
 
         {showTabs && (
           <div className="pmgr-tabs" role="tablist" aria-label="Prompt editor views">
@@ -1188,7 +1180,7 @@ function AIPromptEditor({
               {formData.tags.map(tag => (
                 <span key={tag} className="tag">
                   {tag}
-                  <button type="button" onClick={() => handleRemoveTag(tag)}>×</button>
+                  <button type="button" aria-label={`Remove ${tag}`} onClick={() => handleRemoveTag(tag)}><Icon name="X" weight="bold" size={14} color="currentColor" /></button>
                 </span>
               ))}
             </div>
@@ -1238,7 +1230,7 @@ function AIPromptEditor({
             )}
           </div>
 
-          <div className="form-actions">
+          <DialogFoot className="form-actions">
             {saveBlocked && (
               <p className="save-blocked-note" data-testid="save-blocked-note">
                 Save is blocked by {report.blocking.length}{' '}
@@ -1250,7 +1242,7 @@ function AIPromptEditor({
                 <StatusMessage message={notice} tone="error" />
               </div>
             )}
-            {/* The bottom exit. Same handler as the ×, so there is no second
+            {/* The bottom exit. Same handler as the X, so there is no second
                 way out that skips the confirmation. */}
             <button
               type="button"
@@ -1263,7 +1255,7 @@ function AIPromptEditor({
             <button type="submit" className="btn-primary" disabled={isSaving || saveBlocked}>
               {isSaving ? 'Saving...' : (isNew ? 'Create Prompt' : 'Save Changes')}
             </button>
-          </div>
+          </DialogFoot>
         </form>
 
         {improveMounted && (
@@ -1308,16 +1300,14 @@ function AIPromptEditor({
             labelledBy="pmgr-discard-title"
             onClose={() => setConfirmDiscard(false)}
           >
-            <h3 id="pmgr-discard-title">
-              <Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
-              This prompt has never been saved
-            </h3>
+            <DialogHead titleId="pmgr-discard-title" title={<><Icon name="Warning" weight="fill" size={16} color="var(--primary)" />{' '}
+              This prompt has never been saved</>} as="h3" onClose={() => setConfirmDiscard(false)} />
             <p>
               Everything typed into this form &mdash; both halves, the tags, the default
               flag &mdash; exists in this browser tab and nowhere else. Closing throws it
               away; there is no draft kept anywhere and no undo.
             </p>
-            <div className="modal-actions">
+            <DialogFoot className="modal-actions">
               <button
                 type="button"
                 className="btn-secondary"
@@ -1334,7 +1324,7 @@ function AIPromptEditor({
               >
                 Close and lose what I typed
               </button>
-            </div>
+            </DialogFoot>
           </Modal>
         )}
     </Modal>
@@ -1931,7 +1921,7 @@ function AIPromptManager({ readOnly = false }) {
           labelledBy="pmgr-archive-title"
           onClose={() => setPendingArchive(null)}
         >
-          <h3 id="pmgr-archive-title">Retire “{archiveTarget.name}”?</h3>
+          <DialogHead titleId="pmgr-archive-title" title={<>Retire “{archiveTarget.name}”?</>} as="h3" onClose={() => setPendingArchive(null)} />
           <p>
             Retiring takes it out of the pickers and out of this list. It is not deleted
             &mdash; the record and its text stay, and it can be set back to Active from the
@@ -1983,7 +1973,7 @@ function AIPromptManager({ readOnly = false }) {
             If the aim is only to stop hosts choosing it, <strong>Draft</strong> does that and
             reads as a work in progress rather than a retirement.
           </p>
-          <div className="modal-actions">
+          <DialogFoot className="modal-actions">
             <button
               type="button"
               className="btn-secondary"
@@ -2004,7 +1994,7 @@ function AIPromptManager({ readOnly = false }) {
             >
               Retire it
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -2028,7 +2018,7 @@ function AIPromptManager({ readOnly = false }) {
           labelledBy="pmgr-draft-title"
           onClose={() => setPendingDraft(null)}
         >
-          <h3 id="pmgr-draft-title">Set “{pendingDraft.name}” to Draft?</h3>
+          <DialogHead titleId="pmgr-draft-title" title={<>Set “{pendingDraft.name}” to Draft?</>} as="h3" onClose={() => setPendingDraft(null)} />
           <p data-testid="pmgr-draft-still-runs">
             <strong>
               This is the default{' '}
@@ -2049,15 +2039,14 @@ function AIPromptManager({ readOnly = false }) {
             To actually retire it, open another prompt of this engagement type and make{' '}
             <strong>that</strong> one the default — the same save demotes this one.
           </p>
-          <div className="modal-actions">
-            <button
+          <DialogFoot className="modal-actions" cancel={<button
               type="button"
               className="btn-secondary"
               onClick={() => setPendingDraft(null)}
               data-testid="pmgr-draft-cancel"
             >
               Leave it Active
-            </button>
+            </button>}>
             <button
               type="button"
               className="btn-danger"
@@ -2070,7 +2059,7 @@ function AIPromptManager({ readOnly = false }) {
             >
               Set it to Draft anyway
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -2092,7 +2081,7 @@ function AIPromptManager({ readOnly = false }) {
           labelledBy="pmgr-populate-title"
           onClose={() => setConfirmPopulate(false)}
         >
-          <h3 id="pmgr-populate-title">Rewrite the built-in prompts?</h3>
+          <DialogHead titleId="pmgr-populate-title" title="Rewrite the built-in prompts?" as="h3" onClose={() => setConfirmPopulate(false)} />
           <p>
             This writes the built-in prompt for every category. It matches on <strong>name</strong>:
             any prompt here whose name matches a built-in gets <strong>the built-in text as a new
@@ -2109,7 +2098,7 @@ function AIPromptManager({ readOnly = false }) {
               ? 'There are no prompts here yet, so this run can only create.'
               : `${prompts.length} prompts exist here now. Which of them collide is decided by name inside the lambda and cannot be previewed from this screen.`}
           </p>
-          <div className="modal-actions">
+          <DialogFoot className="modal-actions">
             <button
               type="button"
               className="btn-secondary"
@@ -2126,7 +2115,7 @@ function AIPromptManager({ readOnly = false }) {
             >
               Write the built-in prompts
             </button>
-          </div>
+          </DialogFoot>
         </Modal>
       )}
     </div>

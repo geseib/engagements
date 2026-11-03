@@ -250,7 +250,7 @@ describe('the participant instruction follows the KIND and not the topic', () =>
     fireEvent.click(screen.getByText(topic));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
     await waitFor(() => expect(posted).toHaveLength(1));
-    fireEvent.click(await screen.findByRole('button', { name: /Load .* into System/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save .* as a new set/i }));
     await waitFor(() => expect(onScenariosGenerated).toHaveBeenCalled());
     const payload = onScenariosGenerated.mock.calls[0][0];
     unmount();
@@ -319,7 +319,7 @@ describe('the generic fallback is gone', () => {
     fireEvent.click(await screen.findByText('Onboarding Deep Dive'));
     fireEvent.click(await screen.findByRole('button', { name: /Generate/i }));
     await waitFor(() => expect(posted).toHaveLength(1));
-    fireEvent.click(await screen.findByRole('button', { name: /Load .* into System/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save .* as a new set/i }));
     await waitFor(() => expect(onScenariosGenerated).toHaveBeenCalled());
 
     const instruction = onScenariosGenerated.mock.calls[0][0].metadata.customInstructions;
@@ -460,7 +460,7 @@ describe('proceeding without selecting anything', () => {
     await open();
     fireEvent.click(screen.getByRole('radio', { name: /Apply/i }));
     fireEvent.click(screen.getByTestId('scenario-continue-blank'));
-    expect(await screen.findByText(/Configure Your Scenarios/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Describe the scenarios you want/i)).toBeInTheDocument();
   });
 
   test('an incomplete custom direction still blocks it, like every card', async () => {
@@ -474,7 +474,7 @@ describe('proceeding without selecting anything', () => {
   test('types without a direction picker get the door too', async () => {
     await open({ engagementType: 'trivia' });
     fireEvent.click(screen.getByTestId('scenario-continue-blank'));
-    expect(await screen.findByText(/Configure Your Trivia Questions/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Describe the trivia questions you want/i)).toBeInTheDocument();
   });
 });
 

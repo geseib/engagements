@@ -44,7 +44,7 @@ function sliceFrom(text, startMarker, endMarker) {
 }
 
 describe('the button on the ordinary results screen', () => {
-  test('every RESULTS# arm gets a Feedback button, appended once rather than duplicated per game type', () => {
+  test('every RESULTS# arm gets "Comment on this round", set once in the dock rather than duplicated per game type', () => {
     // The three game-type branches (trivia / wavelength / call-and-answer) all
     // build `body` inside one `if (gameType === 'trivia') {...} else if
     // (gameType === 'wavelength') {...} else {...}` chain; the button is
@@ -56,9 +56,13 @@ describe('the button on the ordinary results screen', () => {
       'const betweenRounds = lastRankRef.current > 0;',
     );
     expect(resultsArm).toMatch(/onClick=\{openMyFeedback\}/);
-    expect(resultsArm).toMatch(/plr-feedback-btn/);
-    // Appended to whatever body the game-type branch built, not a replacement.
-    expect(resultsArm).toMatch(/body = \(\s*<>\s*\{body\}/);
+    expect(resultsArm).toMatch(/plr-feedback\b/);
+    // In the dock (phone-comments D9, experience plan principle 8), named for
+    // what it does, never the bare "Feedback".
+    expect(resultsArm).toMatch(/dock = \(/);
+    expect(resultsArm).toMatch(/Comment on this round/);
+    expect(resultsArm).toMatch(/Reply to a response, or comment on Workie’s read\./);
+    expect(resultsArm).not.toMatch(/\{' '\}Feedback/);
   });
 
   test('the host-triggered whole-room panel (feedbackRound) is a separate branch, checked first, and untouched', () => {
@@ -306,10 +310,11 @@ describe('minors folded into fix round 1', () => {
     expect(closeCalls.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('the Feedback button on the ordinary results screen carries a class with an actual CSS rule', () => {
-    expect(player).toMatch(/plr-feedback-btn/);
+  test('the Comment on this round button carries a class with an actual CSS rule', () => {
+    // `plr-feedback` since step 5a moved the dock onto ui/Button (no scoped *-btn family).
+    expect(player).toMatch(/className="plr-feedback"/);
     const css = fs.readFileSync(src('components', 'PlayerSurface.css'), 'utf8');
-    expect(css).toMatch(/\.plr-feedback-btn\s*\{[^}]*margin-top/);
+    expect(css).toMatch(/\.plr-feedback\s*\{[^}]*margin-top/);
   });
 
   test('loadComments (the commentPosted handler) refreshes the player\'s own panel too, not only the host-triggered one', () => {

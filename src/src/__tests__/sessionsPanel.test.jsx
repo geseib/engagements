@@ -20,6 +20,7 @@ import path from 'path';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import SessionsPanel from '../components/SessionsPanel';
 import { authFetch } from '../auth/authFetch';
+import { rowAction, clickRowAction } from '../testUtils/sessionRows';
 
 jest.mock('../auth/authFetch', () => ({ authFetch: jest.fn() }));
 
@@ -128,7 +129,7 @@ describe('the list that has always been one GET away', () => {
     // never displayed. rejects: a list that shows titles only and leaves the id
     // as something you have to go and find on the host screen.
     await mount();
-    expect(within(rowFor('Nakamura Trivia Night')).getByText('NAKA07')).toBeInTheDocument();
+    expect(within(rowFor('Nakamura Trivia Night')).getByText(/NAKA07/)).toBeInTheDocument();
   });
 
   test('a session whose type was never recorded is not printed as Call & Answer', async () => {
@@ -142,13 +143,13 @@ describe('the list that has always been one GET away', () => {
     expect(within(rowFor('Nakamura Trivia Night')).getByText('Trivia')).toBeInTheDocument();
   });
 
-  test('state distinguishes played from never started, and claims nothing more', async () => {
-    // GET /games returns `started` and `lastPlayedAt` and no liveness at all.
-    // rejects: a "Live" state — the mockup draws one, and this endpoint cannot
-    // support it. Drawing it would be the same class of error as the Provider
-    // column that said cognito for everyone.
+  test('state distinguishes played from not started, and claims nothing more', async () => {
+    // Without an `ended` read, GET /games says only `started`. rejects: a
+    // "Live" (or "Running") state invented from that — it needs the ENDED
+    // read get-games-list now sends, and these rows predate it.
     await mount();
-    expect(within(rowFor('Untitled engagement')).getByText(/never started/i)).toBeInTheDocument();
+    expect(within(rowFor('Untitled engagement')).getByText(/not started/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^running$/i)).toBeNull();
     expect(within(rowFor('Q3 Leadership Offsite')).getByText(/played/i)).toBeInTheDocument();
     expect(screen.queryByText(/^live$/i)).toBeNull();
   });
@@ -161,9 +162,10 @@ describe('the list that has always been one GET away', () => {
     await mount();
     expect(within(rowFor('Untitled engagement')).getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.queryByText(/Invalid Date/)).toBeNull();
-    // ±1 day: the cell renders in the reader's timezone. Two cells, because
-    // Created and Last played are both real fields and both are rendered.
-    expect(within(rowFor('Nakamura Trivia Night')).getAllByText(/Aug [45], 2026/)).toHaveLength(2);
+    // ±1 day: the cell renders in the reader's timezone. One date column (the
+    // last played, else created); both are in its title.
+    const date = within(rowFor('Nakamura Trivia Night')).getByText(/Aug [45], 2026/);
+    expect(date.getAttribute('title')).toMatch(/Created .*2026 · last played .*2026/);
   });
 
   test('typing filters the loaded list without asking the server again', async () => {
@@ -222,58 +224,101 @@ describe('the two ways this screen can have nothing to show', () => {
 /* -------------------------------------------------------------- delete a row */
 
 describe('deleting one session, from the row that names it', () => {
-  test('it names the session and calls clear-game with the id from that row', async () => {
-    // rejects: the free-text "Enter Game ID" box. Also rejects a confirmation
-    // that says only "this action cannot be undone" — severity is not
-    // information (RATIONALE §8); which session it is, is.
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
-    await mount();
-    fireEvent.click(
-      within(rowFor('Nakamura Trivia Night')).getByRole('button', { name: /delete/i })
-    );
-    expect(confirm.mock.calls[0][0]).toMatch(/Nakamura Trivia Night/);
-    expect(confirm.mock.calls[0][0]).toMatch(/NAKA07/);
+  /*
+    THE CONFIRM IS ON THE ROW, NOT A BROWSER DIALOG (experience plan 4a): the
+    one SessionList confirm both frames share. It names the session and says
+    what goes and what stays — severity is not information (RATIONALE §8).
+  */
+  const askDelete = (title) => {
+    clickRowAction(rowFor(title), /^Delete/);
+    return screen.getByTestId('delete-confirm');
+  };
 
+  test('it names the session and calls clear-game with the id from that row', async () => {
+    await mount();
+    const ask = askDelete('Nakamura Trivia Night');
+    expect(ask).toHaveTextContent(/Nakamura Trivia Night/);
+    expect(ask).toHaveTextContent(/NAKA07/);
+    expect(ask).toHaveTextContent(/question set it used are kept/);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     await waitFor(() =>
       expect(
         authFetch.mock.calls.some(([u]) => u.endsWith('/admin/clear-game/NAKA07'))
       ).toBe(true)
     );
-    confirm.mockRestore();
   });
 
-  test('a declined confirmation deletes nothing', async () => {
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  test('Keep it deletes nothing', async () => {
     await mount();
-    fireEvent.click(
-      within(rowFor('Nakamura Trivia Night')).getByRole('button', { name: /delete/i })
-    );
+    const ask = askDelete('Nakamura Trivia Night');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
     expect(authFetch.mock.calls.some(([, o = {}]) => o.method === 'POST')).toBe(false);
-    confirm.mockRestore();
   });
 
   test('a deleted session leaves the list', async () => {
-    // rejects: firing the request and leaving the row on screen, which is what
-    // the old screen did — it printed a status string and never re-read
-    // anything, so the only feedback was a sentence.
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
     await mount();
-    fireEvent.click(
-      within(rowFor('Nakamura Trivia Night')).getByRole('button', { name: /delete/i })
-    );
+    fireEvent.click(within(askDelete('Nakamura Trivia Night')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(rows()).toHaveLength(2));
-    confirm.mockRestore();
   });
 
-  test('a refused delete is reported and the row stays', async () => {
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  test('a refused delete is reported on the row and the row stays', async () => {
     await mount({}, { deleteStatus: 500 });
-    fireEvent.click(
-      within(rowFor('Nakamura Trivia Night')).getByRole('button', { name: /delete/i })
-    );
+    fireEvent.click(within(askDelete('Nakamura Trivia Night')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/delete refused/i));
-    expect(rows()).toHaveLength(3);
-    confirm.mockRestore();
+    expect(rows().filter((r) => r.dataset.testid === 'session-row')).toHaveLength(3);
+  });
+});
+
+/* ------------------------------------------------- the rest of a row's actions */
+
+describe('the console list carries the host list\'s actions (experience plan 4a)', () => {
+  const unstarted = {
+    gameId: '3141', title: 'Planning day', gameType: 'call-and-answer', questionSetId: 'set-a',
+    createdAt: '2026-08-07T09:00:00.000Z', started: false, hostName: 'Ada',
+  };
+  const closed = {
+    gameId: '2718', title: 'Pulse', gameType: 'survey', questionSetId: 'set-s',
+    createdAt: '2026-08-04T09:00:00.000Z', started: true, surveyClosed: true,
+  };
+
+  test('Start, Edit, Report and Survey results hand the session to the host page', async () => {
+    const navigate = jest.fn();
+    await mount({ navigate }, { games: [unstarted, closed, GAMES[0]] });
+    clickRowAction(rowFor('Planning day'), /^Start/);
+    expect(navigate).toHaveBeenLastCalledWith('/host?session=3141&do=start');
+    clickRowAction(rowFor('Planning day'), /^Edit/);
+    expect(navigate).toHaveBeenLastCalledWith('/host?session=3141&do=edit');
+    clickRowAction(rowFor('Pulse'), /^Survey results/);
+    expect(navigate).toHaveBeenLastCalledWith('/host?session=2718&do=results');
+    clickRowAction(rowFor('Pulse'), /^Report/);
+    expect(navigate).toHaveBeenLastCalledWith('/host?session=2718&do=report');
+  });
+
+  test('Continue opens the session on the host page', async () => {
+    const navigate = jest.fn();
+    await mount({ navigate });
+    clickRowAction(rowFor('Q3 Leadership Offsite'), /^Continue/);
+    expect(navigate).toHaveBeenLastCalledWith('/host?gameId=ABCD12');
+  });
+
+  test('Invite opens the invitation here, with the set\'s name', async () => {
+    await mount({ questionSets: [{ id: 'lessons-learned', name: 'Lessons learned' }] });
+    clickRowAction(rowFor('Q3 Leadership Offsite'), /^Invite/);
+    expect(screen.getByRole('dialog')).toHaveTextContent(/Q3 Leadership Offsite/);
+  });
+
+  test('Copy join link copies the player link', async () => {
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    await mount();
+    clickRowAction(rowFor('Q3 Leadership Offsite'), /^Copy join link/);
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/player\?gameId=ABCD12$/));
+  });
+
+  test('a row nobody here may delete says who may, and does nothing', async () => {
+    await mount({}, { games: [{ ...GAMES[0], deleteAs: '' }] });
+    expect(rowAction(rowFor('Q3 Leadership Offsite'), /^Delete/)).toHaveAttribute('aria-disabled', 'true');
   });
 });
 
@@ -413,13 +458,13 @@ describe('nothing matches, which is a different state from "no sessions yet"', (
     // two exits, and an empty state must not lie about why it is empty).
     await filterToNothing();
     expect(screen.queryByRole('table')).toBeNull();
-    expect(screen.getByText(/No sessions match these 2 filters/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 sessions exist/i)).toBeInTheDocument();
+    expect(screen.getByText(/No session matches these 2 filters/i)).toBeInTheDocument();
+    expect(screen.getByText(/Removing any one of these/i)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Search “naka” — 1 session/ })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /State: Never started — 1 session/ })
+      screen.getByRole('button', { name: /State: Not started — 1 session/ })
     ).toBeInTheDocument();
   });
 
@@ -438,7 +483,7 @@ describe('nothing matches, which is a different state from "no sessions yet"', (
     // rejects: an exit wired to clearAll, which throws away the search the
     // operator meant to keep and is indistinguishable at a glance.
     await filterToNothing();
-    fireEvent.click(screen.getByRole('button', { name: /State: Never started — 1 session/ }));
+    fireEvent.click(screen.getByRole('button', { name: /State: Not started — 1 session/ }));
     expect(screen.getByRole('searchbox', { name: /search/i })).toHaveValue('naka');
     expect(screen.getByRole('combobox', { name: /state/i })).toHaveValue('all');
     expect(rows()).toHaveLength(1);
@@ -457,7 +502,7 @@ describe('nothing matches, which is a different state from "no sessions yet"', (
     fireEvent.change(screen.getByRole('combobox', { name: /state/i }), {
       target: { value: 'played' },
     });
-    const offered = [...document.querySelectorAll('.sp-drop')].map((b) => b.textContent);
+    const offered = [...document.querySelectorAll('.slist-drop')].map((b) => b.textContent);
     expect(offered).toHaveLength(1);
     expect(offered[0]).toMatch(/Search “zz-nope”/);
     expect(offered[0]).toMatch(/2 sessions/);

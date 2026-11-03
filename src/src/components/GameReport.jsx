@@ -48,14 +48,25 @@ import ReportSavedDialog from './ReportSavedDialog';
 import { BRAND_MARK_PATH } from './BrandMark';
 import { saveReportPdf } from '../utils/saveReport';
 import { resolveRoundNoun, pluralRoundNoun, resolveInstruction } from '../config/instructions';
-import { plainOf } from '../config/comments';
+import { anchorLabelShown, plainOf, SUMMARY_LABEL } from '../config/comments';
+import { ballotOfRow, placeComments } from '../config/commentPlacement';
 import { calculatePlayerRankings } from '../config/podium';
 import { namesMode } from '../config/surveyNames';
 import { gameTypeLabel } from '../config/gameTypes';
 import KindResult from './survey/results/KindResult';
 import TalkingPointsReport from './TalkingPointsReport';
 import { unexpectedSaveMessage } from '../config/reportPdf';
+import YoursMark from './YoursMark';
+import { ownQuestionWords as OQ } from '../config/consoleWords';
+import { ownSourceLine } from '../config/ownQuestion';
 import './GameReport.css';
+
+/** "10:42" — when a host wrote a question, for the report's source line. */
+const clockTime = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 const API_BASE = window.API_BASE;
 
@@ -209,6 +220,10 @@ function GameReport({
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
   const [saveAsPermanent, setSaveAsPermanent] = useState(false);
+  /* INCLUDE MY NOTES (impromptu ask, F5): the host's private notes to Workie
+     print in this report, labelled, unless the host switches them off before
+     printing or saving. Default on. */
+  const [includeNotes, setIncludeNotes] = useState(true);
   // The save response: the key, the passkey and how long they work. Shown in
   // ReportSavedDialog once, because the passkey is never retrievable again.
   const [savedReport, setSavedReport] = useState(null);
@@ -289,9 +304,18 @@ function GameReport({
         <div className="report-tool-group">
           {onBrowseAll && (
             <button type="button" className="report-tool" onClick={onBrowseAll}>
-              <Icon name="ClockCounterClockwise" weight="bold" size={16} /> All session reports
+              <Icon name="ClockCounterClockwise" weight="bold" size={16} /> Your sessions
             </button>
           )}
+          {/* The impromptu ask's notes switch (F5): shown only when a round the
+              host wrote carries a note. Screen only; it decides what the print
+              and the saved PDF carry. */}
+          {ready && ((reportData && (reportData.questions || reportData.detailedQuestions)) || []).some((q) => q && q.questionData && q.questionData.own && q.questionData.own.note) ? (
+            <label className="report-tool report-tool--check" data-testid="report-include-notes">
+              <input type="checkbox" checked={includeNotes} onChange={(e) => setIncludeNotes(e.target.checked)} />
+              {OQ.includeNotes}
+            </label>
+          ) : null}
           <button
             type="button"
             className="report-tool"
@@ -345,7 +369,7 @@ function GameReport({
             )}
             {onBrowseAll && (
               <button type="button" className="report-tool" onClick={onBrowseAll}>
-                All session reports
+                Your sessions
               </button>
             )}
             <button type="button" className="report-tool" onClick={onClose}>
@@ -355,7 +379,7 @@ function GameReport({
         </div>
       )}
 
-      {ready && <ReportDocument reportData={reportData} />}
+      {ready && <ReportDocument reportData={reportData} includeNotes={includeNotes} />}
     </div>
 
       {/* Save Report Modal */}
@@ -514,43 +538,98 @@ function ReportAISummary({ aiSummary }) {
  * 000, and arrive with no `playerName` at all — create-report.js never
  * attributes a survey comment — so each reads as "Comment N".
  */
-function ReportComments({ comments }) {
+function ReportComments({ comments, answers = [] }) {
   if (!Array.isArray(comments) || comments.length === 0) return null;
-  const note = `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} on this round’s results`;
-  const one = (comment, cIdx) => (
-    <div key={comment.commentId || cIdx} className="report-comment report-keep">
-      {comment.anchorLabel && (
-        <div className="comment-on">On {comment.anchorLabel}</div>
-      )}
-      {/* THE EXCERPT — quoted material the comment is about. Absent on a
-          comment stored before this field existed — `''`, never undefined,
-          so this renders nothing rather than an empty quote. */}
-      {comment.anchorExcerpt && (
-        <div className="comment-excerpt">{plainOf(comment.anchorExcerpt)}</div>
-      )}
-      <blockquote className="comment-text">{comment.text}</blockquote>
-      <div className="comment-meta">
-        {/* `playerName` is ABSENT, never null, on a round the server
-            redacted — so the fallback is a position, never a blank. */}
-        <span className="comment-author">
-          {comment.playerName || `Comment ${cIdx + 1}`}
-        </span>
-        {/* The host put it on the wall during the round. */}
-        {comment.featured === true && (
-          <span className="comment-featured">Shown to the room</span>
+  // "On this round", not "on this round's results": the list holds comments
+  // on Workie's read as well as on the results and single responses.
+  const note = `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} on this round`;
+  /*
+    THREE GROUPS, MATCHING THE PHONE (phone-comments §5): On Workie's read, On
+    the responses (each reply under its response, in ballot order), On the
+    whole round. Placed by config/commentPlacement.js against the rows this
+    report draws: a reply stored with a ballot number finds its response by
+    that number, an older one by its quote, and one whose response is gone
+    lands under the whole round with its quote.
+  */
+  const rows = Array.isArray(answers) ? answers : [];
+  const placed = placeComments(comments, rows);
+  const responseOrder = [...placed.byRow.keys()].sort((a, b) => {
+    const ba = ballotOfRow(rows[a]) ?? Number.MAX_SAFE_INTEGER;
+    const bb = ballotOfRow(rows[b]) ?? Number.MAX_SAFE_INTEGER;
+    return ba - bb || a - b;
+  });
+  const responseHead = (i) => {
+    const row = rows[i] || {};
+    const ballot = ballotOfRow(row);
+    const who = row.playerName;
+    if (ballot) return `Response ${ballot}${who ? ` — ${who}` : ''}`;
+    return who ? `${who}’s response` : `Response ${i + 1}`;
+  };
+  let n = 0;
+  const one = (comment, { on = '' } = {}) => {
+    n += 1;
+    const cIdx = n - 1;
+    return (
+      <div key={comment.commentId || `c${cIdx}`} className="report-comment report-keep">
+        {on && <div className="comment-on">{on}</div>}
+        {/* THE EXCERPT — quoted material the comment is about. Absent on a
+            comment stored before this field existed — `''`, never undefined,
+            so this renders nothing rather than an empty quote. */}
+        {comment.anchorExcerpt && (
+          <div className="comment-excerpt">{plainOf(comment.anchorExcerpt)}</div>
         )}
+        <blockquote className="comment-text">{comment.text}</blockquote>
+        <div className="comment-meta">
+          {/* `playerName` is ABSENT, never null, on a round the server
+              redacted — so the fallback is a position, never a blank. */}
+          <span className="comment-author">
+            {comment.playerName || `Comment ${cIdx + 1}`}
+          </span>
+          {comment.featured === true && (
+            <span className="comment-featured">Shown to the room</span>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+  const groups = [];
+  if (placed.summary.length) {
+    groups.push(
+      <div key="read" className="report-comment-group">
+        <div className="comment-group-head">On {SUMMARY_LABEL}</div>
+        {placed.summary.map((c) => one(c))}
+      </div>,
+    );
+  }
+  if (responseOrder.length) {
+    groups.push(
+      <div key="responses" className="report-comment-group">
+        <div className="comment-group-head">On the responses</div>
+        {responseOrder.map((i) => placed.byRow.get(i).map((c) => one(c, { on: responseHead(i) })))}
+      </div>,
+    );
+  }
+  if (placed.round.length) {
+    groups.push(
+      <div key="round" className="report-comment-group">
+        <div className="comment-group-head">On the whole round</div>
+        {/* A reply whose response is not in this report says what it was
+            about from its stored label, mapped at render. */}
+        {placed.round.map((c) => one(c, {
+          on: c.anchorKind === 'response' && anchorLabelShown(c) ? `On ${anchorLabelShown(c)}` : '',
+        }))}
+      </div>,
+    );
+  }
   return (
     <div className="report-comments">
-      {/* The heading travels with the first comment: a label stranded at the
+      {/* The heading travels with the first group: a label stranded at the
           foot of a page over a blank is a printing fault. */}
       <div className="rpt-keepnext report-keep">
         <SubHead title="Comments" note={note} />
-        {one(comments[0], 0)}
+        {groups[0]}
       </div>
-      {comments.slice(1).map((c, i) => one(c, i + 1))}
+      {groups.slice(1)}
     </div>
   );
 }
@@ -729,7 +808,7 @@ function ReportCover({ reportData, roundCount, roundsLabel, responseCount, topRe
  * start a new canvas when a long report would pass the 32,000 px ceiling
  * (utils/saveReport.js `partsFor`).
  */
-function ReportDocument({ reportData }) {
+function ReportDocument({ reportData, includeNotes = true }) {
   const { players = [], questions = [], questionSetData } = reportData;
 
   /*
@@ -956,16 +1035,35 @@ function ReportDocument({ reportData }) {
                   <header className="rpt-opener">
                     <span className="rpt-opener-num" aria-hidden="true">{pad2(qIdx + 1)}</span>
                     <div className="rpt-opener-head">
-                      <Kicker quiet={questionData.category || 'General'}>
+                      <Kicker quiet={questionData.own ? '' : (questionData.category || 'General')}>
                         {noun} {qIdx + 1} of {questions.length}
                       </Kicker>
                       <h2 className="rpt-opener-title">
                         {questionData.title || `${noun} ${questionNumber}`}
+                        {questionData.own ? <> {' '}<YoursMark className="rpt-yours" /></> : null}
                       </h2>
+                      {/* YOURS (impromptu ask, D9): who wrote it, when, and
+                          where it was placed — a reader months later must not
+                          take an improvised round for a planned one. */}
+                      {questionData.own ? (
+                        <p className="rpt-own-source" data-testid="report-own-source">
+                          {ownSourceLine(questionData.own, { timeOf: clockTime })}
+                        </p>
+                      ) : null}
                     </div>
                   </header>
 
-                  {questionData.detail && (
+                  {questionData.own ? (
+                    <div className="rpt-own" data-testid="report-own">
+                      {questionData.detail ? <p className="rpt-own-line"><b>{OQ.forTheRoom}</b> {questionData.detail}</p> : null}
+                      {/* The host's note, labelled as theirs (F5): in the host's
+                          report, and in the PDF only while Include my notes is on. */}
+                      {includeNotes && questionData.own.note ? (
+                        <p className="rpt-own-line" data-testid="report-own-note"><b>{OQ.hostNote}</b> {questionData.own.note}</p>
+                      ) : null}
+                      <p className="rpt-own-line rpt-own-quiet">{OQ.noSetMaterial}</p>
+                    </div>
+                  ) : questionData.detail && (
                     <p className="rpt-lead">{questionData.detail}</p>
                   )}
 
@@ -1059,7 +1157,7 @@ function ReportDocument({ reportData }) {
                   <ReportResponses answers={questionAnswers} scoring={scoring} />
                 )}
 
-                <ReportComments comments={question.comments} />
+                <ReportComments comments={question.comments} answers={questionAnswers} />
                 <ReportFollowUps followUps={question.followUps} late={question.late} />
                 <ReportLate late={question.late} roundNoun={noun} />
               </section>

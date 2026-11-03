@@ -1,4 +1,4 @@
-/* skin-allowance: colour=9 font=0 primary=0 */
+/* skin-allowance: colour=0 font=0 primary=0 */
 /* ============================================================================
    AI SCENARIO BUILDER — the parts docs/design/authoring-guidance/ (b1–b3) adds
    to components/AIScenarioBuilder.jsx: "What the AI is asked" (the card's base
@@ -25,15 +25,19 @@
    ========================================================================== */
 
 .asb {
-  --asb-text: #2c3e50;
-  --asb-muted: #56636f;
-  --asb-quiet: #f4f6f8;
-  --asb-rule: #e3e8ee;
-  --asb-tuned-fg: #7a4a00;
-  --asb-tuned-bg: #fbebd6;
-  --asb-link: #2f5e9e;
-  --asb-ok: #1c7350;
-  --asb-run: #2f5e9e;
+  /* ROLES since experience plan 5e: the builders open in one dusk window
+     (components/AIBuilderDialog.jsx), so the paper literals measured on the old
+     white `.modal-content` became the roles they stood in for. Measured on
+     dusk in __tests__/aiBuilderDialogPalette.test.js. */
+  --asb-text: var(--text);
+  --asb-muted: var(--muted);
+  --asb-quiet: var(--bg);
+  --asb-rule: var(--rule);
+  --asb-tuned-fg: var(--accent-text);
+  --asb-tuned-bg: rgb(var(--warn-rgb) / .12);
+  --asb-link: var(--info);
+  --asb-ok: var(--success);
+  --asb-run: var(--info);
 
   --asb-t-floor: 12px;
   --asb-t-label: 13px;

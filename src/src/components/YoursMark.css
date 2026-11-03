@@ -1,0 +1,40 @@
+/* skin-allowance: colour=6 font=0 primary=0 */
+/* THE "YOURS" MARK — a round the host wrote during the session (impromptu ask,
+   docs/design/impromptu-ask README D5, reviews A-1).
+
+   Violet, because amber already means "needs you" and blue "live step"; a
+   fourth meaning needed its own hue. Never colour alone: a pen icon and the
+   word "Yours" carry it (components/YoursMark.jsx).
+
+   Measured (README §7; __tests__/ownQuestionPalette.test.js recomputes it).
+   The wash is violet #A78BFA at 16%, as the mockup draws it:
+     dusk   #C9B6FF on its 16% violet wash
+              over --surface   #1B2942  6.19:1
+              over --surface-2 #25375A  5.13:1
+              over --bg        #0F1A2E  7.44:1
+     paper  #5B3FB0 on #EFEAFB           6.41:1
+   All clear 4.5:1. 12px floor (the laptop ladder's floor). */
+.yours-mark {
+  --yours-ink: #C9B6FF;
+  --yours-wash: rgb(167 139 250 / .16);
+  --yours-rule: rgb(167 139 250 / .55);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--yours-rule);
+  background: var(--yours-wash);
+  color: var(--yours-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
+}
+[data-theme="light"] .yours-mark {
+  --yours-ink: #5B3FB0;
+  --yours-wash: #EFEAFB;
+  --yours-rule: rgb(91 63 176 / .35);
+}
+.yours-mark svg { flex: none; }

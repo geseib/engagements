@@ -1,10 +1,13 @@
 /**
  * THE TWO-SURFACE SWITCH (docs/design/two-surface/PLAN.md D6).
  *
- * On by default only on dev (`window.ENV === 'development'`), and only for the
- * game types the Presentation covers (Call & Answer first; trivia and poll are
- * Phase 7). `?surfaces=two|classic` overrides it on any tier and is remembered
- * per browser, so the owner can try it on test without a deploy.
+ * The browser's own choice, and only for the types the room's window covers.
+ * NO TIER DEFAULT (session-start F6; experience plan 2b, owner 1 Nov 2026):
+ * until this browser has chosen, it is one screen here and Setup's step 1
+ * asks "Where will the room watch?" on every tier. It used to default to two
+ * screens on dev only, which is why dev and test felt like two products.
+ * `?surfaces=two|classic` still sets it on any tier and is remembered per
+ * browser, for testing.
  *
  * `/present` itself is live on every tier; this decides only whether the host's
  * screens offer it.
@@ -23,7 +26,55 @@ export const SURFACES_KEY = 'engage.surfaces';
   The Build Room reads the stored choice through config/roomScreen.js, and its
   room's window through presentHref(…, { type: 'build', k }).
 */
-export const TWO_SURFACE_TYPES = ['call-and-answer', 'build'];
+/*
+  'trivia' and 'poll' since 2 Nov 2026 (experience plan 2g, §7 decision 10:
+  the owner chose to build them): the room's window has their moments
+  (present/presentModel.js TRIVIA_QUESTION, TRIVIA_REVEAL, POLL_ASK,
+  POLL_RESULTS) and the laptop gets the console. Wavelength and Survey stay
+  one screen; ONE_SCREEN_WHY says so, with the reason, where the choice would
+  be (decision 10's fallback: say so instead of hiding the choice).
+*/
+export const TWO_SURFACE_TYPES = ['call-and-answer', 'build', 'trivia', 'poll'];
+
+/*
+  WHY A TYPE IS ONE SCREEN ONLY, said where the chooser would be (Setup in the
+  loop and the Session menu's Screens group, components/stage/ScreensGroup.jsx).
+  A type missing here simply has no chooser (the survey, which has no rounds
+  for the room to watch).
+*/
+export const ONE_SCREEN_WHY = Object.freeze({
+  wavelength: 'Wavelength runs on one screen for now: the room\'s window has no Write and Reveal moments yet, so the room watches this laptop.',
+});
+
+/** The reason a type is one screen only, or '' when it can use two (or has no chooser). */
+export function oneScreenWhy(gameType) {
+  return ONE_SCREEN_WHY[gameType] || '';
+}
+
+/*
+  WHICH TYPES GET THE HOST CONSOLE on two screens (experience plan 2d; audit A
+  §0). Call & Answer only, standalone or inside an event: an event's item gets
+  the same console as a standalone session (PLAN §3.2a "Event item"), never the
+  projector-style stage on a private laptop. Trivia and Poll join in 2g; the
+  Build Room has its own page (BuildConsole). The list used to sit in
+  GameHostPage beside `!eventCode`, naming trivia, poll and wavelength that
+  twoSurfacesFor had already ruled out. Trivia and Poll joined in 2g (the
+  question with its private answer; the live board).
+*/
+export const CONSOLE_TYPES = ['call-and-answer', 'trivia', 'poll'];
+
+/*
+  WHICH TYPES OPEN SETUP BEFORE ROUND 1 (session-start D1; experience plan
+  §7 decision 10). The console types, and Wavelength: dev QA 2 Nov found Start
+  went straight to its lobby. Wavelength's Setup has no chooser; step 1 says
+  it runs on one screen and why (ONE_SCREEN_WHY), then the one-screen path.
+*/
+export const SETUP_TYPES = Object.freeze([...CONSOLE_TYPES, 'wavelength']);
+
+/** True when the host page renders the console: two screens and a console type. */
+export function consoleFor(twoSurfaces, gameType) {
+  return Boolean(twoSurfaces) && CONSOLE_TYPES.includes(gameType || 'call-and-answer');
+}
 
 function overrideFrom(search) {
   try {
@@ -45,7 +96,8 @@ export function twoSurfacesOn({ env, search, storage, gameType } = {}) {
   try { stored = storage ? storage.getItem(SURFACES_KEY) : null; } catch (e) { stored = null; }
   if (stored === 'two') return true;
   if (stored === 'classic') return false;
-  return env === 'development';
+  // `env` is accepted and ignored: no tier picks for the host (F6).
+  return false;
 }
 
 /**
@@ -60,7 +112,8 @@ export function twoSurfacesFor(choice, { gameType, env } = {}) {
   if (!TWO_SURFACE_TYPES.includes(gameType || 'call-and-answer')) return false;
   if (choice === 'two') return true;
   if (choice === 'classic') return false;
-  return env === 'development';
+  // No choice yet: one screen while Setup asks (F6), whatever the tier.
+  return false;
 }
 
 /** The page's own reading, for components. */

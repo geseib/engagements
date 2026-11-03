@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your own question</title>
+<style>
+/* IMPROMPTU ASK ("your own question"), mockups, 2 Nov 2026. Mockup only; no application code.
+   Warm Summit dusk: tokens from styles.css :root and the theme-invariant set; the report is
+   paper ([data-theme="light"]) because GameReport.jsx:282 is. Laptop ladder 12/13/15/19/24/30,
+   phone ladder 34/24/19/16/13. One orange per screen: the orange is Your part now's (and the
+   phone Remote's dock); the composer's commit is a strong plain button on the laptop (review
+   revision R2). --danger never carries text. Pins are violet so they read as annotation.
+   Sample content invented. Every frame has a fixed size so the PNGs are honest. */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --primary:#F6A94C;--on-primary:#1B2942;--secondary:#7CA7E6;
+  --success:#4FB286;--success-text:#6FD0A4;--danger:#E5645E;--danger-text:#EF8C86;--danger-deep:#B03A34;
+  --rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--rule-3:rgba(244,237,228,.32);
+  --amber-wash:rgba(246,169,76,.12);--blue-wash:rgba(124,167,230,.14);--green-wash:rgba(79,178,134,.14);
+  --yours:#C9B6FF;--yours-wash:rgba(167,139,250,.16);--yours-rule:rgba(167,139,250,.55);
+  --pin:#8B6CF6;--r-ctl:10px;--r-card:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2,h3,h4{font-family:Archivo,Inter,system-ui,sans-serif}
+.doc{max-width:2300px;margin:0 auto;padding:24px 16px 80px}
+.doc>h1{font-size:30px;margin:0 0 6px}
+.doc>p{color:var(--muted);max-width:1000px;margin:0 0 8px}
+.doc>p b{color:var(--text)}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 26px;padding:0;list-style:none}
+.toc a{display:inline-block;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;border:1px solid var(--rule-2);border-radius:999px;padding:5px 12px;background:var(--surface)}
+.cap{margin:40px 0 10px;max-width:1200px}
+.cap h2{font-size:19px;margin:0 0 6px}
+.cap p,.cap ol{color:var(--muted);font-size:13px;margin:0 0 6px}
+.cap ol{padding-left:22px}
+.cap b{color:var(--text)}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.board{display:flex;gap:20px;align-items:flex-start;padding:16px;background:#0a1220;width:max-content}
+.blabel{font-size:13px;font-weight:700;color:var(--text);margin:0 0 8px}
+.blabel span{color:var(--muted);font-weight:500}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-laptop{width:1366px;height:768px}
+.f-720{width:1280px;height:720px}
+.f-phone{width:390px;height:844px;border-radius:28px}
+.pin{position:absolute;z-index:30;width:22px;height:22px;border-radius:50%;background:var(--pin);color:#fff;font:800 12px/22px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #0a1220}
+.pin.in{position:static;display:inline-block;vertical-align:middle;margin-right:6px}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.l{width:20px;height:20px}
+
+/* ---------- the one frame ---------- */
+.lf{position:absolute;inset:0;display:grid;grid-template-rows:auto auto auto minmax(0,1fr)}
+.tb{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border-bottom:1px solid var(--rule);min-width:0}
+.tb .sp{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);background:transparent;color:var(--text);font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+.tbtn.ghost{border-color:transparent}
+.tbtn.on{border-color:var(--secondary);background:var(--blue-wash)}
+.tbtn .code{color:var(--primary);letter-spacing:.08em;font-weight:800}
+.tname{font-size:15px;font-weight:700;white-space:nowrap}
+.sepv{width:1px;height:22px;background:var(--rule-2)}
+.stat{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--success);background:var(--green-wash)}
+.stat i{width:8px;height:8px;border-radius:50%;background:var(--success);display:block}
+.stat.pub{border-color:var(--secondary);background:var(--blue-wash)} .stat.pub i{background:var(--secondary)}
+.qbtn{width:36px;justify-content:center;padding:0}
+.ypn{display:flex;align-items:center;gap:18px;margin:12px 16px 0;padding:12px 16px 12px 18px;border-radius:var(--r-card);background:var(--surface);border-left:4px solid var(--primary)}
+.ypn .t{flex:1;min-width:0}
+.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ypn .s{margin:2px 0 0;font-size:19px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ypn .s b{color:var(--primary)}
+.ypn.slim{margin:8px 16px 0;padding:8px 14px}
+.ypn.slim .s{font-size:15px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--r-ctl);font:inherit;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--rule-3);background:transparent;color:var(--text)}
+.btn.main{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:800}
+.btn.strong{border:2px solid var(--text);font-weight:800}
+.btn.l{height:44px;padding:0 18px;font-size:15px}
+.btn.s{height:30px;padding:0 10px;font-size:13px}
+.btn.quiet{border-color:transparent;color:var(--secondary);padding:0 6px}
+.btn.dangertext{color:var(--danger-text)}
+.btn[disabled]{opacity:.55}
+.kc{font-size:12px;font-weight:700;border:1px solid rgba(27,41,66,.45);border-radius:5px;padding:0 5px;line-height:18px}
+.nys{display:flex;align-items:center;gap:12px;margin:10px 16px 0;min-height:48px;padding:8px 12px 8px 14px;border-radius:var(--r-card);background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--rule-3)}
+.nys p{margin:0;font-size:15px;color:var(--muted)}
+.nys p b{color:var(--text)}
+.body{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:0;margin-top:12px;border-top:1px solid var(--rule)}
+/* rail */
+.rail{border-right:1px solid var(--rule);overflow:hidden;min-height:0}
+.rsec{border-bottom:1px solid var(--rule)}
+.rsec>h3{display:flex;align-items:center;gap:8px;margin:0;padding:12px 14px 8px;font-size:15px}
+.rsec>h3 .ct{font-size:13px;color:var(--muted);font-weight:600;margin-left:auto}
+.rsec>h3 svg{color:var(--muted)}
+.rsec.closed>h3{padding-bottom:12px}
+.qrow{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 14px;font-size:15px}
+.qrow .n{width:20px;font-size:13px;font-weight:800;color:var(--muted);flex:none;text-align:right}
+.qrow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow .mt{font-size:12px;color:var(--muted);white-space:nowrap}
+.qrow.now{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.qrow.done .tt{color:var(--muted)}
+.yours{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:999px;font-size:12px;font-weight:800;color:var(--yours);background:var(--yours-wash);border:1px solid var(--yours-rule);white-space:nowrap;flex:none}
+.yours svg{width:12px;height:12px}
+.nextw{font-size:12px;font-weight:800;color:var(--primary);letter-spacing:.06em;text-transform:uppercase;flex:none}
+.rlinks{display:flex;flex-direction:column;gap:2px;padding:6px 14px 12px}
+.rlink{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--secondary);min-height:30px}
+/* content */
+.cc{min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px 16px 0;gap:10px;overflow:hidden}
+.loop{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.loop .stp{padding:3px 10px;border-radius:7px;border:1px solid var(--rule-2)}
+.loop .stp.done{color:var(--text)}
+.loop .stp.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--secondary);font-weight:800}
+.loop .rnd{font-weight:800;color:var(--text);margin:0 2px 0 6px}
+.content{position:relative;flex:1;min-height:0;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:14px 18px;overflow:hidden}
+.content h4{margin:2px 0 6px;font-size:24px;line-height:1.25}
+.content .lead{margin:0 0 10px;font-size:13px;color:var(--muted)}
+.content h5{margin:12px 0 4px;font-size:15px;color:var(--text)}
+.content p.r{margin:0 0 8px;font-size:15px;color:var(--text);max-width:880px}
+.pulse{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:10px 14px;display:grid;gap:4px;min-width:0}
+.num{margin:0;font-size:30px;font-weight:800;line-height:1.05}
+.num small{font-size:19px;color:var(--muted);font-weight:700}
+.num.m{font-size:24px}
+.sub{margin:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--secondary)}
+.resp{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--rule)}
+.resp .n{font-size:13px;font-weight:800;color:var(--muted);width:20px;flex:none;padding-top:1px}
+.resp .tx{flex:1;min-width:0;font-size:15px}
+.resp .by{font-size:12px;color:var(--muted);white-space:nowrap}
+/* the Session menu sheet: over the content area, never over Your part now */
+.smenu{position:absolute;right:16px;top:206px;bottom:16px;width:560px;z-index:10;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
+.smenu .hd{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--rule)}
+.smenu .hd h4{margin:0;font-size:19px;flex:1}
+.xbtn{width:36px;height:36px;border-radius:var(--r-ctl);border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text);flex:none}
+.tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--rule)}
+.tab{font-size:13px;font-weight:700;color:var(--muted);padding:6px 10px;border-radius:8px;white-space:nowrap}
+.tab.on{color:var(--text);background:var(--surface-2)}
+.smbody{flex:1;min-height:0;overflow:hidden;padding:12px 16px}
+.h-row{display:flex;align-items:center;gap:10px;margin:4px 0 6px}
+.h-row h5{margin:0;font-size:15px;flex:1}
+.note{margin:0 0 8px;font-size:13px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--rule-2);font-size:13px;white-space:nowrap}
+.chip.on{border-color:var(--primary);background:var(--amber-wash)}
+.chip small{font-size:12px;color:var(--muted)}
+.olist{border:1px solid var(--rule);border-radius:var(--r-card);overflow:hidden}
+.orow{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px 6px 12px;border-top:1px solid var(--rule);font-size:15px}
+.orow:first-child{border-top:0}
+.orow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orow .src{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.orow .acts{display:flex;gap:4px;flex:none}
+.orow.mine{background:var(--yours-wash);box-shadow:inset 3px 0 0 var(--yours-rule)}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text)}
+.statusline{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 12px;border-radius:10px;background:var(--green-wash);border:1px solid rgba(79,178,134,.5);font-size:13px}
+.statusline b{color:var(--success-text)}
+/* composer */
+.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--secondary)}
+.fld{margin:0 0 9px}
+.fld label{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:700;margin:0 0 4px}
+.fld label small{font-weight:500;color:var(--muted);font-size:12px}
+.fld label .cnt{margin-left:auto;font-weight:600;color:var(--muted);font-size:12px}
+.inp{display:block;width:100%;min-height:40px;padding:8px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--rule-3);color:var(--text);font-size:15px;line-height:1.4}
+.inp.big{min-height:46px;font-size:15px;border-color:var(--secondary);box-shadow:0 0 0 3px rgba(124,167,230,.25)}
+.inp.ph{color:var(--muted)}
+.priv{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:12px;color:var(--muted)}
+.how{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:10px;background:var(--surface-2);font-size:13px;color:var(--muted);margin:0 0 9px}
+.how b{color:var(--text)}
+.seg{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid var(--rule-3);border-radius:10px;overflow:hidden}
+.seg div{padding:7px 10px;font-size:13px;border-left:1px solid var(--rule-3);min-height:52px}
+.seg div:first-child{border-left:0}
+.seg div b{display:block;font-size:13px;color:var(--text)}
+.seg div span{display:block;font-size:12px;color:var(--muted)}
+.seg div.on{background:var(--blue-wash);box-shadow:inset 0 0 0 2px var(--secondary)}
+.sel{display:flex;align-items:center;gap:8px;margin:8px 0 0;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--rule-3);font-size:13px;color:var(--muted)}
+.sel b{color:var(--text);font-weight:600}
+.smfoot{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--rule)}
+.smfoot .sp{flex:1}
+.aside{font-size:13px;color:var(--muted);margin:2px 0 0}
+.aside a{color:var(--secondary);font-weight:700;text-decoration:none}
+.pv{border:1px dashed var(--rule-3);border-radius:10px;padding:8px 12px;margin:0 0 4px}
+.pv .eyebrow{font-size:12px}
+.pv p{margin:2px 0 0;font-size:13px}
+.pv p.q{font-size:15px;font-weight:700}
+
+/* scrim */
+.scrim{position:absolute;inset:0;background:rgba(10,18,32,.55);z-index:9}
+
+/* phones */
+.ph-in{position:absolute;inset:0;display:flex;flex-direction:column}
+.ph-top{display:flex;align-items:center;gap:8px;height:56px;padding:0 16px;border-bottom:1px solid var(--rule);font-size:13px}
+.ph-top b{font-size:15px}
+.ph-top .sp{flex:1}
+.live{font-size:12px;font-weight:700;color:var(--success-text);border:1px solid var(--success);border-radius:999px;padding:1px 8px}
+.ph-body{flex:1;min-height:0;overflow:hidden;padding:16px}
+.ph-dock{padding:12px 16px 20px;border-top:1px solid var(--rule)}
+.ph-dock .btn{width:100%;height:56px;border-radius:14px;font-size:19px}
+.ph-eye{margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary)}
+.ph-h{margin:0 0 8px;font-size:24px;line-height:1.25}
+.ph-p{margin:0 0 12px;font-size:16px;color:var(--muted)}
+.ph-task{margin:0 0 8px;font-size:16px;font-weight:700}
+.ph-ta{height:150px;border-radius:12px;background:var(--surface);border:1px solid var(--rule-3);padding:12px;font-size:16px;color:var(--muted)}
+.ph-sheet-h{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+.ph-sheet-h h4{margin:0;font-size:19px;flex:1}
+.ph-sheet .inp{font-size:16px}
+.ph-sheet .fld label{font-size:13px}
+.ph-sheet .seg{grid-template-columns:1fr 1fr 1fr}
+.ph-sheet .seg div{min-height:44px;padding:6px 8px}
+
+/* one-screen room view */
+.room{position:absolute;left:0;right:0;top:110px;bottom:0;padding:26px 56px}
+.room .eye{margin:0 0 6px;font-size:20px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary)}
+.room h3{margin:0 0 14px;font-size:40px;line-height:1.15;max-width:900px}
+.room p{font-size:22px;color:var(--text);max-width:900px;margin:0 0 10px}
+.psheet{position:absolute;left:340px;top:150px;width:600px;z-index:12;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden}
+.psheet .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.psheet .hd h4{margin:0;font-size:19px;flex:1}
+.psheet .warn{display:flex;align-items:center;gap:8px;margin:12px 14px;padding:8px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--rule-2);font-size:13px}
+.psheet .opt{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--rule)}
+.psheet .opt .w{flex:1;min-width:0;font-size:15px}
+.psheet .opt .w small{display:block;font-size:12px;color:var(--muted)}
+
+/* report (paper) */
+.paper{--p-bg:#FBF7F1;--p-surface:#FFFFFF;--p-surface-2:#F1EDE4;--p-text:#1B2942;--p-muted:#5E6167;--p-amber:#9A5B18;--p-rule:rgba(27,41,66,.14);--p-yours:#5B3FB0;--p-yours-wash:#EFEAFB;
+  background:var(--p-bg);color:var(--p-text)}
+.paper .doc-in{position:absolute;inset:0;padding:28px 40px;overflow:hidden}
+.paper h3{margin:0 0 2px;font-size:24px}
+.paper .rk{margin:0 0 4px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--p-muted)}
+.paper .meta{margin:0 0 14px;font-size:13px;color:var(--p-muted)}
+.paper .card{background:var(--p-surface);border:1px solid var(--p-rule);border-radius:12px;padding:16px 18px;margin:0 0 12px}
+.paper .card h4{margin:0 0 8px;font-size:19px}
+.paper .card p{margin:0 0 6px;font-size:15px}
+.paper .tagy{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:800;color:var(--p-yours);background:var(--p-yours-wash);border:1px solid rgba(91,63,176,.35);vertical-align:3px;margin-left:8px}
+.paper .tagy svg{width:12px;height:12px}
+.paper .src{font-size:13px;color:var(--p-muted);border-left:3px solid var(--p-rule);padding:2px 0 2px 10px;margin:8px 0 10px}
+.paper table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px}
+.paper th{text-align:left;font-size:13px;color:var(--p-muted);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--p-rule)}
+.paper td{padding:7px 8px;border-bottom:1px solid var(--p-rule);vertical-align:top}
+.paper td.v{width:70px;text-align:right;font-weight:700}
+.paper .toc2{display:grid;gap:0;border:1px solid var(--p-rule);border-radius:12px;background:var(--p-surface);overflow:hidden}
+.paper .toc2 div{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 14px;border-top:1px solid var(--p-rule);font-size:15px}
+.paper .toc2 div:first-child{border-top:0}
+.paper .toc2 .n{width:22px;font-weight:800;color:var(--p-muted);font-size:13px}
+.paper .toc2 .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paper .toc2 .c{font-size:13px;color:var(--p-muted);flex:none}
+.paper .toc2 .tagy{flex:none}
+.paper .fork{border:2px dashed #8B6CF6;border-radius:12px;padding:12px 14px;background:#F6F2FF}
+.paper .fork p{margin:0 0 6px;font-size:13px}
+.paper .pbtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:10px;border:1px solid rgba(27,41,66,.4);font-size:13px;font-weight:700;color:var(--p-text);background:var(--p-surface)}
+.paper .read h5{margin:10px 0 4px;font-size:15px}
+.paper .read p{font-size:15px}
+.colA{display:grid;grid-template-columns:330px 1fr;gap:22px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7M14 20h3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16zM14 6l3 3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6M16 4.5a3.5 3.5 0 0 1 0 7M22 20c0-3-2-5-5-5.8"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+
+<div class="doc">
+<h1>Your own question, queued</h1>
+<p>Owner, 2 Nov 2026: <b>"Host in call and answer can create a improptu ask and queue it up."</b>
+Read as: mid-session, the host writes a Call &amp; Answer question of their own and puts it in the
+running order, next or at a chosen place. It then runs as a normal round: answer, vote, results,
+Workie's read. The details are in <code>README.md</code>. This is a mockup only.</p>
+<p>The new words are <b>Write a question</b> (the way in), <b>Put it next / Put it later / Ask it now</b>
+(where it goes) and the <b>Yours</b> mark (on host surfaces only). There is no new surface. The composer is
+one step inside the Session menu's Rounds section, and the rail and the phone Remote are two more
+ways into that same step.</p>
+<ul class="toc">
+  <li><a href="#f-1">1 Start it</a></li><li><a href="#f-2">2 The composer</a></li>
+  <li><a href="#f-3">3 In the running order</a></li><li><a href="#f-4">4 It runs</a></li>
+  <li><a href="#f-5">5 One screen: write it on the phone</a></li><li><a href="#f-6">6 The report</a></li>
+</ul>
+
+<!-- =============================== 1 =============================== -->
+<div class="cap"><h2>1 · Start it: two doors into one place</h2>
+<p>Two screens, Round 3, Workie's read is up. The host thinks of a better question for the room.</p>
+<ol>
+  <li><b>Rail, Round queue:</b> a new quiet link <b>Write a question</b> sits under the rounds, beside the existing <b>Rounds and questions</b> link. It opens the Session menu at Rounds with the composer already open.</li>
+  <li><b>Session menu → Rounds → Running order:</b> <b>Write a question</b> sits at the right of the Running order heading, because that heading is where the question will land.</li>
+  <li>No new button in Your part now, the top bar or the dock. The orange button stays the room's next step.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-1">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 planning retro</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">Workie's read is up. Press <b>Next round</b> when the room is ready.</p></div><span class="btn main l">Next round <span class="kc">Space</span></span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 12</span></h3>
+          <div class="qrow done"><span class="n">1</span><span class="tt">Where does a handoff go quiet?</span><span class="mt">done</span></div>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Which meeting would you cancel?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What slows our handoffs down?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">Pricing power in a flat quarter</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">One habit worth keeping</span></div>
+          <div class="rlinks">
+            <span class="rlink" style="position:relative"><svg class="i"><use href="#i-plus"/></svg>Write a question</span>
+            <span class="rlink">Rounds and questions</span>
+          </div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span><svg class="i"><use href="#i-chev"/></svg></h3></div>
+        <div class="rsec closed"><h3>Late &amp; not reviewed <span class="ct">0</span><svg class="i"><use href="#i-chev"/></svg></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp done">Answer</span><span class="stp done">Vote</span><span class="stp done">Results</span><span class="stp live">What we heard</span></div>
+        <div class="content">
+          <p class="eyebrow">Workie's read · page 1 of 2</p>
+          <h4>What the room said</h4>
+          <p class="r">Most answers point at the same gap: the customer's context does not travel with the account, so each stage re-asks it.</p>
+          <h5>What the room voted</h5>
+          <p class="r">The one-page brief signed by sales and delivery took 14 of 31 vote points.</p>
+          <h5>Discussion topics</h5>
+          <p class="r">Who owns the gap between "signed" and "kicked off"?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="smenu">
+    <div class="hd"><h4>Session menu</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+    <div class="tabs"><span class="tab">Screens</span><span class="tab">Phone remote</span><span class="tab on">Rounds</span><span class="tab">Joining</span><span class="tab">End session</span></div>
+    <div class="smbody">
+      <div class="h-row"><h5>Categories</h5></div>
+      <p class="note">41 questions remaining</p>
+      <div class="chips"><span class="chip on">Strategy <small>7 left · on</small></span><span class="chip on">Handoffs <small>5 left · on</small></span><span class="chip">Pricing <small>9 left · off</small></span></div>
+      <div class="h-row"><h5>Running order</h5><span class="btn" style="position:relative"><svg class="i"><use href="#i-plus"/></svg>Write a question</span></div>
+      <p class="note">Your queued questions first, then the automatic order.</p>
+      <div class="olist">
+        <div class="orow"><span class="nextw">Next</span><span class="tt">Pricing power in a flat quarter</span><span class="src">automatic</span><span class="acts"><span class="ib"><svg class="i"><use href="#i-down"/></svg></span><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow"><span class="nextw" style="color:var(--muted)">5</span><span class="tt">One habit worth keeping</span><span class="src">automatic</span><span class="acts"><span class="ib"><svg class="i"><use href="#i-up"/></svg></span><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow"><span class="nextw" style="color:var(--muted)">6</span><span class="tt">The decision we keep deferring</span><span class="src">automatic</span><span class="acts"><span class="ib"><svg class="i"><use href="#i-up"/></svg></span><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></span></div>
+      </div>
+      <div class="h-row" style="margin-top:14px"><h5>Choose the next question</h5></div>
+      <p class="note">Every question in the set, with search and filters.</p>
+    </div>
+  </div>
+  <span class="pin" style="left:168px;top:432px">1</span>
+  <span class="pin" style="left:1326px;top:418px">2</span>
+  <span class="pin" style="left:772px;top:214px">3</span>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>The rail's link is a door to the Session menu, the way <b>Rounds and questions</b> already is (ConsoleRail.jsx:83). <span class="pin in">2</span>The home of the composer. <span class="pin in">3</span>The Session menu opens over the content area and never over Your part now (experience plan §3.2).</p></div>
+
+<!-- =============================== 2 =============================== -->
+<div class="cap"><h2>2 · The composer: a step inside Rounds, not a new dialog</h2>
+<ol>
+  <li><b>The question</b> (required, up to 200 characters): what the room sees and answers.</li>
+  <li><b>A line for the room</b> (optional, up to 400): shown under the question, like a set question's detail.</li>
+  <li><b>For Workie only</b> (optional, up to 400): what you hope to learn. Never shown to the room or on any phone. It is stored where a set question keeps its private Background.</li>
+  <li><b>How the room answers</b> is not a choice: it runs like every round. The composer says so in one line.</li>
+  <li><b>Where it goes:</b> <b>Next</b> (the default), <b>Later</b> (after a round you pick), or <b>Now</b> (only between rounds; while answering or voting is open it is greyed out and says why).</li>
+  <li>The foot has Cancel on the left and the commit on the right, and its label follows the choice: <b>Put it next</b>, <b>Put it after round 5</b> or <b>Ask it now</b>. The X, Cancel, ← Running order and Escape all go through one <code>requestClose()</code>, which asks first when something has been typed.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-2">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 planning retro</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">Workie's read is up. Press <b>Next round</b> when the room is ready.</p></div><span class="btn main l">Next round <span class="kc">Space</span></span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 12</span></h3>
+          <div class="qrow done"><span class="n">1</span><span class="tt">Where does a handoff go quiet?</span><span class="mt">done</span></div>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Which meeting would you cancel?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What slows our handoffs down?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">Pricing power in a flat quarter</span><span class="mt">next</span></div>
+        </div>
+      </div>
+      <div class="cc"><div class="loop"><span class="rnd">Round 3</span><span class="stp done">Answer</span><span class="stp done">Vote</span><span class="stp done">Results</span><span class="stp live">What we heard</span></div><div class="content"><p class="eyebrow">Workie's read · page 1 of 2</p><h4>What the room said</h4></div></div>
+    </div>
+  </div>
+  <div class="smenu">
+    <div class="hd"><span class="back"><svg class="i"><use href="#i-left"/></svg>Running order</span><h4 style="text-align:center">Write a question</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+    <div class="smbody">
+      <div class="fld"><label>The question <span class="cnt">63 / 200</span></label>
+        <div class="inp big">What would have to be true for us to ship the pilot by March?</div></div>
+      <div class="fld"><label>A line for the room <small>optional</small></label>
+        <div class="inp">Think about people, money and the calendar.</div></div>
+      <div class="fld"><label>For Workie only <small>optional</small></label>
+        <div class="inp">Is the blocker budget or sign-off? Note any owner named.</div>
+        <p class="priv"><svg class="i" style="width:12px;height:12px"><use href="#i-lock"/></svg>Never shown to the room or on any phone. Workie reads it with the answers.</p></div>
+      <div class="how"><svg class="i"><use href="#i-users"/></svg><span><b>It runs like every round:</b> write, vote, results, Workie's read. Scores count.</span></div>
+      <div class="fld" style="margin:0"><label>Where it goes</label>
+        <div class="seg">
+          <div class="on"><b>Next</b><span>When you press Next round</span></div>
+          <div><b>Later</b><span>After a round you pick</span></div>
+          <div><b>Now</b><span>Ends the read and starts it</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="smfoot"><span class="btn l">Cancel</span><span class="sp"></span><span class="btn l strong"><svg class="i"><use href="#i-check"/></svg>Put it next</span></div>
+  </div>
+  <span class="pin" style="left:762px;top:262px">1</span>
+  <span class="pin" style="left:762px;top:410px">2</span>
+  <span class="pin" style="left:762px;top:612px">3</span>
+  <span class="pin" style="left:1340px;top:720px">4</span>
+</div>
+<div>
+  <p class="blabel">Where it goes: Later <span>· crop of the same sheet</span></p>
+  <div class="frame" style="width:560px;height:250px;border-radius:14px;background:var(--surface)">
+    <div style="padding:14px 16px">
+      <div class="fld" style="margin:0"><label>Where it goes</label>
+        <div class="seg"><div><b>Next</b><span>When you press Next round</span></div><div class="on"><b>Later</b><span>After a round you pick</span></div><div><b>Now</b><span>Ends the read and starts it</span></div></div>
+        <div class="sel">After <b>round 5 · One habit worth keeping</b><span style="flex:1"></span><svg class="i"><use href="#i-chev"/></svg></div>
+      </div>
+    </div>
+    <div class="smfoot" style="position:absolute;left:0;right:0;bottom:0"><span class="btn l">Cancel</span><span class="sp"></span><span class="btn l strong"><svg class="i"><use href="#i-check"/></svg>Put it after round 5</span></div>
+  </div>
+  <p class="blabel" style="margin-top:18px">Mid-answer: Now waits <span>· crop</span></p>
+  <div class="frame" style="width:560px;height:150px;border-radius:14px;background:var(--surface)">
+    <div style="padding:14px 16px">
+      <div class="fld" style="margin:0"><label>Where it goes</label>
+        <div class="seg"><div class="on"><b>Next</b><span>When you press Next round</span></div><div><b>Later</b><span>After a round you pick</span></div><div style="opacity:.6"><b>Now</b><span>Answers are still coming in</span></div></div>
+      </div>
+      <p class="aside" style="margin-top:6px">Round 3 is open, so it can go next.</p>
+    </div>
+  </div>
+  <p class="blabel" style="margin-top:18px">What the phones will show <span>· folded preview under the fields</span></p>
+  <div class="frame" style="width:560px;height:118px;border-radius:14px;background:var(--surface)">
+    <div style="padding:12px 16px"><div class="pv"><p class="eyebrow">Round 4</p><p class="q">What would have to be true for us to ship the pilot by March?</p><p style="color:var(--muted)">Think about people, money and the calendar.</p></div></div>
+  </div>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>The question is the only required field. Commit stays disabled until it has words, and the reason is shown under the field. <span class="pin in">2</span>The private note uses the lock icon and the words "never shown", not colour alone. <span class="pin in">3</span>Three named choices with a line each, not a bare toggle. <span class="pin in">4</span>The commit names what will happen. It is strong and plain, not orange, because the orange belongs to Your part now (review revision R2).</p></div>
+
+<!-- =============================== 3 =============================== -->
+<div class="cap"><h2>3 · In the running order: marked Yours, editable until it runs</h2>
+<ol>
+  <li>A status line in the Rounds section confirms it: "Your question is next. It starts when you press Next round." The line has <b>Undo</b>.</li>
+  <li>Your part now names it, so the orange button's meaning is never a surprise: "Next round asks <b>your question</b>."</li>
+  <li>The row carries <b>Yours</b> (pen icon and the word) everywhere a running order is drawn: the Rounds section, the rail's Round queue, Setup's <b>First up</b> and the Remote's Rounds tab.</li>
+  <li>Row actions are <b>Edit</b> (reopens the composer with the words), earlier and later, and <b>Remove</b>. <b>Disable for this session</b> is not offered, because there is nothing in the set to disable.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-3">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 planning retro</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">Workie's read is up. <b>Next round</b> asks your question: "What would have to be true…"</p></div><span class="btn main l">Next round <span class="kc">Space</span></span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 13</span></h3>
+          <div class="qrow done"><span class="n">1</span><span class="tt">Where does a handoff go quiet?</span><span class="mt">done</span></div>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Which meeting would you cancel?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What slows our handoffs down?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><span class="tt">What would have to be true for us to ship the pilot by March?</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">Pricing power in a flat quarter</span></div>
+          <div class="rlinks"><span class="rlink"><svg class="i"><use href="#i-plus"/></svg>Write a question</span><span class="rlink">Rounds and questions</span></div>
+        </div>
+        <div class="rsec closed"><h3>People <span class="ct">12 here</span><svg class="i"><use href="#i-chev"/></svg></h3></div>
+        <div class="rsec closed"><h3>Late &amp; not reviewed <span class="ct">0</span><svg class="i"><use href="#i-chev"/></svg></h3></div>
+      </div>
+      <div class="cc"><div class="loop"><span class="rnd">Round 3</span><span class="stp done">Answer</span><span class="stp done">Vote</span><span class="stp done">Results</span><span class="stp live">What we heard</span></div><div class="content"><p class="eyebrow">Workie's read · page 1 of 2</p><h4>What the room said</h4><p class="r">Most answers point at the same gap: the customer's context does not travel with the account.</p></div></div>
+    </div>
+  </div>
+  <div class="smenu">
+    <div class="hd"><h4>Session menu</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+    <div class="tabs"><span class="tab">Screens</span><span class="tab">Phone remote</span><span class="tab on">Rounds</span><span class="tab">Joining</span><span class="tab">End session</span></div>
+    <div class="smbody">
+      <div class="h-row"><h5>Running order</h5><span class="btn"><svg class="i"><use href="#i-plus"/></svg>Write a question</span></div>
+      <p class="note">Your queued questions first, then the automatic order.</p>
+      <div class="olist">
+        <div class="orow mine"><span class="nextw">Next</span><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><span class="tt">What would have to be true for us to ship the pilot by March?</span><span class="acts"><span class="btn s">Edit</span><span class="ib"><svg class="i"><use href="#i-down"/></svg></span><span class="ib" style="color:var(--danger-text)"><svg class="i"><use href="#i-trash"/></svg></span></span></div>
+        <div class="orow"><span class="nextw" style="color:var(--muted)">5</span><span class="tt">Pricing power in a flat quarter</span><span class="src">automatic</span><span class="acts"><span class="ib"><svg class="i"><use href="#i-up"/></svg></span><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow"><span class="nextw" style="color:var(--muted)">6</span><span class="tt">One habit worth keeping</span><span class="src">automatic</span><span class="acts"><span class="ib"><svg class="i"><use href="#i-up"/></svg></span><span class="ib"><svg class="i"><use href="#i-dots"/></svg></span></span></div>
+      </div>
+      <div class="statusline" role="status"><svg class="i"><use href="#i-check"/></svg><span><b>Your question is next.</b> It starts when you press Next round.</span><span style="flex:1"></span><span class="btn quiet s">Undo</span></div>
+      <div class="h-row" style="margin-top:18px"><h5>Remove a question of yours</h5></div>
+      <div class="olist" style="border-color:var(--rule-2)">
+        <div class="orow" style="flex-wrap:wrap"><span class="tt" style="flex-basis:100%;white-space:normal">Remove "What would have to be true…"? It has not been asked, so nothing is lost but the words.</span><span style="flex:1"></span><span class="btn s">Keep it</span><span class="btn s dangertext">Remove</span></div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:1100px;top:112px">1</span>
+  <span class="pin" style="left:180px;top:466px">2</span>
+  <span class="pin" style="left:1330px;top:322px">3</span>
+  <span class="pin" style="left:1330px;top:500px">4</span>
+</div>
+<div>
+  <p class="blabel">Setup, before round 1 <span>· the First up line, crop</span></p>
+  <div class="frame" style="width:520px;height:120px;background:var(--surface)">
+    <div style="padding:16px 18px">
+      <p class="eyebrow">First up</p>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><b style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">Before we start: what do you need from today?</b></div>
+      <p class="aside"><a>Running order</a> · 2 of yours queued</p>
+    </div>
+  </div>
+  <p class="blabel" style="margin-top:18px">After it ran <span>· the Rounds so far row, crop</span></p>
+  <div class="frame" style="width:520px;height:96px;background:var(--surface)">
+    <div class="orow" style="border:0;padding:16px 18px"><span class="nextw" style="color:var(--muted)">4</span><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><span class="tt">What would have to be true for us to ship…</span><span class="src">AI · 11 answers</span></div>
+  </div>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>Your part now says what Next round will do. <span class="pin in">2</span>The rail's Round queue shows Yours in the queue (and the round total grows by one, "3 of 13"). <span class="pin in">3</span>Edit, move and Remove. <span class="pin in">4</span>Removing asks once in place (host standards §3) and never opens a modal from inside the sheet.</p></div>
+
+<!-- =============================== 4 =============================== -->
+<div class="cap"><h2>4 · It runs: the same steps, and nothing new for the room</h2>
+<ol>
+  <li>On the host's laptop, the steps strip gains a <b>Yours</b> mark after "Round 4". It is host-only and private on one screen.</li>
+  <li>The content area shows the question and "A line for the room", with the private note folded under <b>For Workie</b>. It is never drawn on the room's window.</li>
+  <li>The room's window and the phones show what every round shows: "Round 4", the question, the line, the answer box. No category is shown, because there is none. Nothing marks the round as improvised.</li>
+  <li>Answer, Vote, Results and What we heard all behave as in a set round. Workie reads it with the set's own Workie and voice. Where the set would supply lesson text, the prompt instead says the host wrote the question during the session (README §6).</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-4">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 planning retro</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">Answers are coming in. <b>Start voting</b> when the room is done.</p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">4 of 13</span></h3>
+          <div class="qrow done"><span class="n">3</span><span class="tt">What slows our handoffs down?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">4</span><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><span class="tt">What would have to be true for us to ship the pilot by March?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">5</span><span class="tt">Pricing power in a flat quarter</span><span class="mt">next</span></div>
+        </div>
+        <div class="rsec"><h3>People <span class="ct">12 here</span></h3>
+          <div class="qrow"><span class="n" style="color:var(--success-text)">✓</span><span class="tt">Priya Shah</span></div>
+          <div class="qrow"><span class="n" style="color:var(--success-text)">✓</span><span class="tt">Marcus Lee</span></div>
+          <div class="qrow"><span class="n">…</span><span class="tt">Dana Reyes</span><span class="mt">writing</span></div>
+          <div class="qrow"><span class="n" style="color:var(--success-text)">✓</span><span class="tt">Ana Gomez</span></div>
+          <div class="qrow"><span class="n">…</span><span class="tt">Tom Becker</span><span class="mt">writing</span></div>
+        </div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 4</span><span class="yours"><svg class="i"><use href="#i-pen"/></svg>Yours</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="pulse">
+          <div class="tile"><p class="eyebrow">Answered</p><p class="num">7 <small>of 12</small></p><div class="bar"><i style="width:58%"></i></div></div>
+          <div class="tile"><p class="eyebrow">Time</p><p class="num m">Open 0:52</p><p class="sub">No limit set</p></div>
+          <div class="tile"><p class="eyebrow">Since this round opened</p><p class="num m">+0 joined</p><p class="sub">Everyone is here</p></div>
+        </div>
+        <div class="content">
+          <p class="eyebrow">Round 4 · your question</p>
+          <h4>What would have to be true for us to ship the pilot by March?</h4>
+          <p class="lead">Think about people, money and the calendar. · <span style="color:var(--yours)"><svg class="i" style="width:12px;height:12px;vertical-align:-1px"><use href="#i-lock"/></svg> For Workie: Is the blocker budget or sign-off?…</span></p>
+          <div class="resp"><span class="n">7</span><span class="tx">Legal signs the data agreement by mid-January, not "when they can".</span><span class="by">Ana Gomez</span></div>
+          <div class="resp"><span class="n">6</span><span class="tx">One named owner for the pilot who can say no to scope.</span><span class="by">Marcus Lee</span></div>
+          <div class="resp"><span class="n">5</span><span class="tx">Budget released in Q4, so we can book the vendor before the holidays.</span><span class="by">Priya Shah</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:426px;top:212px">1</span>
+  <span class="pin" style="left:1000px;top:438px">2</span>
+</div>
+<div>
+  <p class="blabel">A participant's phone <span>· identical to any round</span></p>
+  <div class="frame f-phone">
+    <div class="ph-in">
+      <div class="ph-top"><b>7924</b><span>Q4 planning retro</span><span class="sp"></span><span>Priya</span></div>
+      <div class="ph-body">
+        <p class="ph-eye">Round 4 · Answer</p>
+        <h3 class="ph-h">What would have to be true for us to ship the pilot by March?</h3>
+        <p class="ph-p">Think about people, money and the calendar.</p>
+        <p class="ph-task">Answer in a sentence or two.</p>
+        <div class="ph-ta">Type your answer…</div>
+      </div>
+      <div class="ph-dock"><span class="btn main">Send</span></div>
+    </div>
+    <span class="pin" style="left:350px;top:70px">3</span>
+  </div>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>The host-only mark sits in the steps strip and the rail. <span class="pin in">2</span>The private note is drawn small, behind a lock, and only on the private laptop. On one screen it is on the phone. <span class="pin in">3</span>The phone has no badge and no "from the host" label, and the task line is the fixed "Answer in a sentence or two." rather than the set's lesson instruction (README D6).</p></div>
+
+<!-- =============================== 5 =============================== -->
+<div class="cap"><h2>5 · One screen: the composer never draws on the room's screen</h2>
+<ol>
+  <li>On one screen the laptop <i>is</i> the room's screen. <b>Write a question</b> in the Session menu (or on the slim rail link) opens a host-only choice. It never opens the composer straight away.</li>
+  <li><b>On your phone</b> is the first choice when the Remote is connected. The composer is already open there under Rounds. With no Remote connected, the choice reads <b>Connect your phone</b> (experience plan §3.3).</li>
+  <li><b>Write it here</b> is allowed, but it says plainly that the room will see the typing. It suits a host who wants to write it with the room.</li>
+  <li>The phone Remote's composer is the same fields in a full-height sheet. Its commit is the Remote's one orange button.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-5">
+<div>
+<p class="blabel">The laptop = the room's screen <span>· 1280×720</span></p>
+<div class="frame f-720">
+  <div class="lf" style="grid-template-rows:auto auto minmax(0,1fr)">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 planning retro</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn slim"><p class="eyebrow" style="flex:none">Your part now</p><div class="t"><p class="s">Workie's read is up. Press <b>Next round</b> when the room is ready.</p></div><span class="btn main">Next round <span class="kc">Space</span></span></div>
+  </div>
+  <div class="room">
+    <p class="eye">Round 3 · What we heard</p>
+    <h3>What the room said</h3>
+    <p>Most answers point at the same gap: the customer's context does not travel with the account, so each stage re-asks it.</p>
+  </div>
+  <div class="scrim" style="top:110px"></div>
+  <div class="psheet">
+    <div class="hd"><h4>Write a question</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+    <div class="warn"><svg class="i"><use href="#i-eye"/></svg><span><b>The room can see this screen.</b> What you type here is on it.</span></div>
+    <div class="opt"><svg class="i l"><use href="#i-phone"/></svg><div class="w">On your phone<small>Your Remote is open. The question is waiting under Rounds.</small></div><span class="btn strong">Open on my phone</span></div>
+    <div class="opt"><svg class="i l"><use href="#i-pen"/></svg><div class="w">Write it here<small>The room will see you type it, and see where it goes.</small></div><span class="btn">Write it here</span></div>
+  </div>
+  <span class="pin" style="left:928px;top:140px">1</span>
+  <span class="pin" style="left:928px;top:262px">2</span>
+</div>
+</div>
+<div>
+<p class="blabel">The host's phone Remote <span>· 390×844</span></p>
+<div class="frame f-phone">
+  <div class="ph-in">
+    <div class="ph-top"><b>7924</b><span>Q4 planning retro</span><span class="sp"></span><span class="live">Live</span></div>
+    <div class="ph-body ph-sheet">
+      <div class="ph-sheet-h"><span class="back"><svg class="i"><use href="#i-left"/></svg>Rounds</span><h4 style="text-align:center">Write a question</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+      <div class="fld"><label>The question <span class="cnt">63 / 200</span></label><div class="inp big" style="min-height:84px">What would have to be true for us to ship the pilot by March?</div></div>
+      <div class="fld"><label>A line for the room <small>optional</small></label><div class="inp ph">Shown under the question</div></div>
+      <div class="fld"><label>For Workie only <small>optional</small></label><div class="inp">Is the blocker budget or sign-off?</div><p class="priv"><svg class="i" style="width:12px;height:12px"><use href="#i-lock"/></svg>Never shown to the room.</p></div>
+      <div class="fld"><label>Where it goes</label><div class="seg"><div class="on"><b>Next</b></div><div><b>Later</b></div><div><b>Now</b></div></div></div>
+      <p class="aside">It runs like every round: write, vote, results, Workie's read.</p>
+    </div>
+    <div class="ph-dock" style="display:flex;gap:10px"><span class="btn" style="width:30%;height:56px;border-radius:14px;font-size:16px">Cancel</span><span class="btn main" style="flex:1">Put it next</span></div>
+  </div>
+  <span class="pin" style="left:330px;top:640px">3</span>
+</div>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>The warning comes first and uses words, not just a colour. <span class="pin in">2</span>The deliberate reveal, as for every private item on one screen (principle 3). <span class="pin in">3</span>On the Remote, Your part now is not on screen while the sheet is open, so the sheet's commit is the one orange button.</p></div>
+
+<!-- =============================== 6 =============================== -->
+<div class="cap"><h2>6 · The report: labelled as your question, with its own source line</h2>
+<ol>
+  <li>The session report's round list marks the round <b>Yours</b>, the same word as on the host's screens.</li>
+  <li>The round's own section says where the question came from: "Written by the host during the session, 10:42 · put next after round 3." It also says what Workie had to work with: no set material, only the question, the line for the room and the host's note.</li>
+  <li>The host's private note is printed in the report, labelled as the host's note. The report is the host's document. A shared PDF carries it only when the host leaves <b>Include my notes</b> on (README fork F5).</li>
+  <li><b>Keep this question</b> is phase 2 (fork F4). After the session it saves the question into a new version of the set, or into a new set of your own.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-6">
+<div class="frame paper" data-theme="light" style="width:1280px;height:760px">
+  <div class="doc-in">
+    <p class="rk">Session report · Q4 planning retro · 2 Nov 2026</p>
+    <div class="colA" style="margin-top:12px">
+      <div>
+        <h3 style="font-size:19px;margin-bottom:8px">Rounds</h3>
+        <div class="toc2">
+          <div><span class="n">1</span><span class="t">Where does a handoff go quiet?</span><span class="c">12</span></div>
+          <div><span class="n">2</span><span class="t">Which meeting would you cancel?</span><span class="c">12</span></div>
+          <div><span class="n">3</span><span class="t">What slows our handoffs down?</span><span class="c">11</span></div>
+          <div style="background:#F6F2FF"><span class="n">4</span><span class="t">What would have to be true…</span><span class="tagy" style="margin:0"><svg class="i"><use href="#i-pen"/></svg>Yours</span></div>
+          <div><span class="n">5</span><span class="t">Pricing power in a flat quarter</span><span class="c">12</span></div>
+        </div>
+        <div class="fork" style="margin-top:14px">
+          <p><b>Fork F4 · phase 2</b></p>
+          <p>Keep the questions you wrote during this session?</p>
+          <span class="pbtn"><svg class="i"><use href="#i-plus"/></svg>Keep this question…</span>
+          <p style="margin-top:8px">Adds it to a new version of "Q4 planning retro questions" (if you manage that set), or to a new set of your own. Never during a live session.</p>
+        </div>
+      </div>
+      <div>
+        <p class="rk">Round 4</p>
+        <h3>What would have to be true for us to ship the pilot by March? <span class="tagy"><svg class="i"><use href="#i-pen"/></svg>Yours</span></h3>
+        <p class="meta">Written by the host during the session, 10:42 · put next after round 3 · 11 answers, 31 vote points</p>
+        <div class="src"><b>For the room:</b> Think about people, money and the calendar.<br><b>Host's note to Workie:</b> Is the blocker budget or sign-off? Pull out anything that names an owner.<br>No set material: Workie read the question, the line for the room, the note and the answers.</div>
+        <div class="card">
+          <h4>Top answers</h4>
+          <table><thead><tr><th>Answer</th><th style="width:150px">By</th><th style="width:70px;text-align:right">Points</th></tr></thead><tbody>
+            <tr><td>One named owner for the pilot who can say no to scope.</td><td>Marcus Lee</td><td class="v">9</td></tr>
+            <tr><td>Legal signs the data agreement by mid-January, not "when they can".</td><td>Ana Gomez</td><td class="v">7</td></tr>
+            <tr><td>Budget released in Q4, so we can book the vendor before the holidays.</td><td>Priya Shah</td><td class="v">6</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card read">
+          <h4>Workie's read</h4>
+          <h5>What the room said</h5>
+          <p>The room splits the blocker in two: sign-off (an owner who can refuse scope, legal's date) and money (Q4 release). Sign-off came up in 7 of 11 answers.</p>
+          <h5>Suggested next steps</h5>
+          <p>Name the pilot owner this week; ask legal for a date, not a promise.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="pin" style="left:20px;top:268px">1</span>
+  <span class="pin" style="left:1240px;top:150px">2</span>
+  <span class="pin" style="left:1240px;top:214px">3</span>
+</div>
+</div></div>
+<div class="cap"><p><span class="pin in">1</span>The same word, Yours, appears in the report as on the host's screens. <span class="pin in">2</span>The source line, so a reader months later knows nobody planned this round. <span class="pin in">3</span>The private note appears in the host's report. The participant-facing round summary, if one is ever sent, leaves it out.</p></div>
+
+</div>
+</body>
+</html>

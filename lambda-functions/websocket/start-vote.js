@@ -6,13 +6,20 @@ const { inDisplayOrder } = require('./answer-order');
 const { callerMayDriveSession } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
 const { clearQuestionFocus } = require('./question-focus');
+const { timerForOpening, openingClauses, stateAfterOpening, timerView, isDue, endsAtMs } = require('./round-timer');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
   const gameId = event.pathParameters.gameId;
-  const { questionNumber } = JSON.parse(event.body || '{}');
+  const body = JSON.parse(event.body || '{}');
+  const { questionNumber } = body;
+  // `timeUp: true` is the opt-in close at zero (round-timer.js), sent by
+  // whichever host screen is open when answering runs out. Checked against
+  // the server's clock and STATE below, so a skewed laptop cannot close early
+  // and two screens firing at once open voting once.
+  const timeUp = body.timeUp === true;
 
   console.log(`🗳️ Starting vote for game ${gameId}, question ${questionNumber}`);
 
@@ -81,24 +88,18 @@ exports.handler = async (event) => {
     // Update game state to VOTE#questionNumber (using the main STATE record)
     const paddedQuestionNumber = String(questionNumber).padStart(3, '0');
     const newState = `VOTE#${paddedQuestionNumber}`;
+    const askState = `ASK#${paddedQuestionNumber}`;
     const now = new Date().toISOString();
-    
-    await db.send(new UpdateCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #updatedAt = :updatedAt',
-      ExpressionAttributeNames: {
-        '#state': 'State',
-        '#updatedAt': 'UpdatedAt'
-      },
-      ExpressionAttributeValues: {
-        ':state': newState,
-        ':updatedAt': now
-      }
-    }));
 
-    // Get answers for this question to return to the host
-    const answersResult = await db.send(new QueryCommand({
+    // The round's STATE as it stands: the session's last voting-time choice
+    // lives on it, and the close at zero is judged against it.
+    const stateRead = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'STATE' }
+    }));
+    const stateBefore = stateRead.Item || {};
+
+    const readAnswers = () => db.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
       ExpressionAttributeValues: {
@@ -106,6 +107,81 @@ exports.handler = async (event) => {
         ':sk': `QUESTION#${paddedQuestionNumber}#ANSWER#`
       }
     }));
+
+    /*
+      THE CLOSE AT ZERO (opt-in, round-timer.js). Not a scheduler: the stack is
+      near CloudFormation's resource limit and a per-round schedule needs a
+      role and a schedule group; it would also be a second copy of this
+      transition. Whichever host screen is open (the laptop's console or the
+      phone Remote) asks with `timeUp`, and the server decides:
+        - the room has already moved on (the other screen, or the host): 200,
+          nothing written, nothing sent;
+        - the host did not tick "Close answering at zero", or zero has not been
+          reached by THIS clock: 409, nothing written;
+        - nobody has answered: 409, a vote on nothing is not opened by a timer.
+      The write itself is conditioned on ASK#nnn, so two screens arriving
+      together open voting once.
+    */
+    let answersResult = null;
+    if (timeUp) {
+      const reply = (statusCode, payload) => ({
+        statusCode, body: JSON.stringify({ questionNumber, ...payload }), headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+      if (stateBefore.State !== askState) {
+        return reply(200, { status: 'OK', alreadyMoved: true, newState: stateBefore.State || null });
+      }
+      const nowMs = Date.now();
+      if (!isDue(stateBefore, nowMs)) {
+        const ends = endsAtMs(stateBefore);
+        return reply(409, {
+          error: stateBefore.TimeCloses === true ? 'Time is not up yet' : 'This round does not close on its own',
+          notDue: true,
+          remainingMs: ends === null ? null : Math.max(0, ends - nowMs),
+          serverNow: nowMs
+        });
+      }
+      answersResult = await readAnswers();
+      if (!(answersResult.Items || []).length) {
+        return reply(409, { error: 'Nobody has answered yet', nothingToVoteOn: true });
+      }
+    }
+
+    // The voting timer: the body's `time`, else this session's last voting
+    // choice, else No limit (Q3: voting defaults to No limit).
+    const voteTimer = openingClauses(newState, now, timerForOpening(body, stateBefore, 'vote'), 'vote');
+    try {
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
+        UpdateExpression: `SET #state = :state, #updatedAt = :updatedAt, ${voteTimer.set.join(', ')}`
+          + (voteTimer.remove.length ? ` REMOVE ${voteTimer.remove.join(', ')}` : ''),
+        ...(timeUp ? { ConditionExpression: '#state = :ask' } : {}),
+        ExpressionAttributeNames: {
+          '#state': 'State',
+          '#updatedAt': 'UpdatedAt',
+          ...voteTimer.names
+        },
+        ExpressionAttributeValues: {
+          ':state': newState,
+          ':updatedAt': now,
+          ...(timeUp ? { ':ask': askState } : {}),
+          ...voteTimer.values
+        }
+      }));
+    } catch (writeError) {
+      if (timeUp && writeError && writeError.name === 'ConditionalCheckFailedException') {
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ status: 'OK', alreadyMoved: true, questionNumber }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      throw writeError;
+    }
+    const timedState = stateAfterOpening(stateBefore, newState, now, voteTimer.timer);
+
+    // Get answers for this question to return to the host
+    if (!answersResult) answersResult = await readAnswers();
 
     const answers = answersResult.Items || [];
     console.log(`🗳️ Found ${answers.length} answers for question ${paddedQuestionNumber}`);
@@ -165,8 +241,20 @@ exports.handler = async (event) => {
       newState: newState,
       state: `GAME#${gameId} ${newState}`,
       questionNumber: paddedQuestionNumber,
-      timestamp: now
+      timestamp: now,
+      // The room's view of the voting timer, or null (round-timer.js).
+      time: timerView(timedState),
+      serverNow: Date.now(),
+      ...(timeUp ? { closedAtZero: true } : {})
     });
+    // The host's screens hear every timer change, including a voting time the
+    // room is not shown, and that the answering timer is over. A round with no
+    // timer either side sends nothing extra.
+    if (stateBefore.TimeLimitMs || timedState.TimeLimitMs) {
+      await broadcastToGame(gameId, {
+        type: 'roundTimeChanged', gameId, time: timerView(timedState, { host: true }), serverNow: Date.now()
+      }, 'HOST');
+    }
 
     console.log(`✅ Vote started successfully for game ${gameId}, question ${questionNumber}`);
     return {
@@ -175,7 +263,10 @@ exports.handler = async (event) => {
         status: 'OK',
         questionNumber: questionNumber,
         newState: newState,
-        answers: hidden ? redactAnswers(ballot) : ballot
+        answers: hidden ? redactAnswers(ballot) : ballot,
+        hostTime: timerView(timedState, { host: true }),
+        serverNow: Date.now(),
+        ...(timeUp ? { closedAtZero: true } : {})
       }),
       headers: { 'Access-Control-Allow-Origin': '*' }
     };

@@ -44,7 +44,7 @@ describe('the page actually mounts the panel', () => {
     // SetupPanel/` alone still matched after the element was renamed to
     // <SessionSetupPanelX> and the condition replaced with `false`.
     expect(host).toMatch(/import\s+SessionSetupPanel\s+from\s+'\.\/components\/stage\/SessionSetupPanel'/);
-    expect(host).toMatch(/\{setupPanelOpen && \(\s*<SessionSetupPanel\s/);
+    expect(host).toMatch(/\{setupPanelOpen && (?:sessionMenuWhere)?\(\s*<SessionSetupPanel\s/);
   });
 
   test('closing the panel goes through closeAllSidePanels', () => {
@@ -54,10 +54,14 @@ describe('the page actually mounts the panel', () => {
     expect(host).toMatch(/onClose=\{closeAllSidePanels\}/);
   });
 
-  test('the dock\'s SETUP button opens it, and nothing else does', () => {
-    // rejects: leaving `onSetup` pointed at the deleted qr-sidebar state — a
-    // repoint that is one identifier wide and silent if missed.
-    expect(host).toMatch(/onSetup=\{\(\) => setSetupPanelOpen/);
+  test('the top bar\'s Session menu opens it, on the stage and on the console', () => {
+    // rejects: leaving the opener pointed at the deleted qr-sidebar state — a
+    // repoint that is one identifier wide and silent if missed. Since
+    // experience plan 2h the stage has no bottom dock: its Session menu is the
+    // top bar's (ConsoleTop `onSessionMenu`), as the console's is.
+    const opens = host.match(/onSessionMenu[=:]\s*\{?\(\) => setSetupPanelOpen/g) || [];
+    expect(opens.length).toBe(2);
+    expect(host).not.toMatch(/onSetup=\{/);
     expect(host).not.toMatch(/setQrSidebarVisible/);
   });
 
@@ -213,8 +217,14 @@ describe('the dock control names the panel it opens', () => {
     expect(dock).not.toContain('⋯');
     expect(dock).not.toMatch(/Console/i);
 
-    const body = dock.slice(dock.indexOf('<footer'));
-    expect(body.indexOf('dock-more')).toBeGreaterThan(body.indexOf('{children}'));
+    // The element is `<Tag>` since experience plan 2h (a <section> when the
+    // dock is Your part now); the body starts there.
+    const body = dock.slice(dock.indexOf('<Tag'));
+    // SESSION (the button labelled SESSION) comes after the primary. Main menu
+    // is a dock-more too since 2 Nov 2026, and is deliberately FIRST — the
+    // other end of the dock from the panel SESSION opens.
+    expect(body.indexOf('>SESSION<')).toBeGreaterThan(body.indexOf('{children}'));
+    expect(body.indexOf('dock-main')).toBeLessThan(body.indexOf('{children}'));
   });
 });
 
@@ -262,7 +272,9 @@ describe('the panel can remove a player and hand over a name', () => {
     // already make this mistake impossible to repeat quietly.
     const removal = host.slice(host.indexOf('const setPlayerRemoved'));
     expect(removal.slice(0, 600)).toMatch(/authFetch\(/);
-    const handover = host.slice(host.indexOf('const grantNameHandover'));
+    // Grant, Not now and Lock again share one sender (experience plan 1a).
+    expect(host).toMatch(/const grantNameHandover = \(name, bindToRequester, requestedAt = null\) => sendHandover\(/);
+    const handover = host.slice(host.indexOf('const sendHandover'));
     expect(handover.slice(0, 600)).toMatch(/authFetch\(/);
     // ...and the name is escaped, because a player name is user input and it
     // is a path segment here.
@@ -276,8 +288,8 @@ describe('the panel can remove a player and hand over a name', () => {
     // to the tab that made the call.
     const removal = host.slice(host.indexOf('const setPlayerRemoved'));
     expect(removal.slice(0, 900)).toMatch(/fetchPlayers\(/);
-    const handover = host.slice(host.indexOf('const grantNameHandover'));
-    expect(handover.slice(0, 900)).toMatch(/fetchPlayers\(/);
+    const handover = host.slice(host.indexOf('const sendHandover'));
+    expect(handover.slice(0, 1600)).toMatch(/fetchPlayers\(reason\)/);
   });
 
   test('the ask arrives over the socket and is unsubscribed with the rest', () => {

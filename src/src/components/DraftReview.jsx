@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import PlanLimitNotice from './PlanLimitNotice';
+import { useConfirm } from './ConfirmDialog';
 import { authFetch } from '../auth/authFetch';
 import {
   DRAFT_STATUS, getDraft, updateDraftItems, cancelDraft, discardDraft, restoreDraft,
@@ -86,6 +87,8 @@ export default function DraftReview({
   const [activate, setActivate] = useState(true);
   const [result, setResult] = useState(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // "Accept anyway?" asks in the small confirm dialog (experience plan 5b).
+  const [askConfirm, confirmDialog] = useConfirm();
   const nameTouched = useRef(false);
   const topicTouched = useRef(false);
   const tagsTouched = useRef(false);
@@ -209,9 +212,12 @@ export default function DraftReview({
   const accept = async () => {
     if (!draft || !kept.length) return;
     if (blockAccept) { setMessage({ tone: 'error', text: blockAccept }); return; }
-    if (keptWithDefects.length && !window.confirm(
-      `${keptWithDefects.length} of the kept ${noun} ${keptWithDefects.length === 1 ? 'has a problem' : 'have problems'} (marked below). Accept anyway?`,
-    )) return;
+    if (keptWithDefects.length && !(await askConfirm({
+      title: 'Accept anyway?',
+      message: `${keptWithDefects.length} of the kept ${noun} ${keptWithDefects.length === 1 ? 'has a problem' : 'have problems'} (marked below).`,
+      confirmText: 'Accept anyway',
+      cancelText: 'Go back and fix',
+    }))) return;
     setBusy('accept');
     setMessage(null);
     setPlanLimit(null);
@@ -592,7 +598,7 @@ export default function DraftReview({
                 {tags.map((tag) => (
                   <span key={tag} className="drv-chip">
                     {tag}
-                    <button type="button" className="drv-chipx" aria-label={`Remove tag ${tag}`} onClick={() => removeTag(tag)}>×</button>
+                    <button type="button" className="drv-chipx" aria-label={`Remove tag ${tag}`} onClick={() => removeTag(tag)}><Icon name="X" weight="bold" size={14} color="currentColor" /></button>
                   </span>
                 ))}
                 <input className="drv-input drv-tagin" aria-label="Add a tag" value={tagDraft} placeholder="Add a tag"
@@ -650,6 +656,7 @@ export default function DraftReview({
       {!reviewable && !generating && (
         <div className="drv-actions"><button type="button" className="drv-btn" onClick={onClose}>Back</button></div>
       )}
+      {confirmDialog}
     </section>
   );
 }

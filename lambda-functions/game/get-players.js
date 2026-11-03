@@ -127,6 +127,31 @@ exports.handler = async (event) => {
     players = Array.from(playerMap.values());
     console.log(`✅ After deduplication: ${players.length} unique players`);
 
+    // WHO HAS A LIVE SOCKET (experience plan §4.4, `deviceConnected` below).
+    // Connection rows are deleted on disconnect (websocket/disconnect.js) and
+    // retired on reconnect (connect.js), so a PLAYER row under a name means a
+    // page is open under that name now. The room's window is a PLAYER row too,
+    // but name-less and marked `Viewer`; it never counts. A failed read means
+    // "nobody known to be connected", never a failed roster.
+    const connectedNames = new Set();
+    try {
+      const connections = await db.send(new QueryCommand({
+        TableName: process.env.TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+        FilterExpression: 'ConnectionType = :type',
+        ExpressionAttributeValues: {
+          ':pk': `GAME#${gameId}`,
+          ':sk': 'CONNECTION#',
+          ':type': 'PLAYER'
+        }
+      }));
+      (connections.Items || []).forEach((row) => {
+        if (row.ConnectionType === 'PLAYER' && row.PlayerName && !row.Viewer) connectedNames.add(row.PlayerName);
+      });
+    } catch (error) {
+      console.warn(`⚠️ Could not read connections for game ${gameId}: ${error.message}`);
+    }
+
     // Get player readiness for current question if there is one
     let playerReadiness = {};
     if (currentRound) {
@@ -231,6 +256,14 @@ exports.handler = async (event) => {
         previousScore: standing.previousScore,
         joinedAt: player.JoinedAt || player.joinedAt || new Date().toISOString(),
         isConnected: player.isConnected || false,
+        // TRUE WHILE A PAGE IS OPEN UNDER THIS NAME — the signal the host's
+        // Let them arms on (experience plan §4.4: "If Sam's first device is
+        // still answering, a second 'Sam' is more likely someone else"). The
+        // asking device has no socket (it is not in the session), so while a
+        // name request stands this can only be the FIRST device. A boolean,
+        // never a connection id. `isConnected` beside it is the join-time
+        // flag and is never cleared; do not read it for this.
+        deviceConnected: connectedNames.has(playerName),
         readiness: {
           isReady: isReady,
           type: readinessType,

@@ -1087,6 +1087,15 @@ Resources:
         # never throws, so nothing surfaces anywhere.
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # THE HOST'S OWN QUESTIONS (impromptu ask): add-own and edit-own seal
+        # the OWNQ# row under the session's org, and the listing opens it, so
+        # this function unwraps that org's data key — with an orgId context,
+        # which the key policy makes mandatory. No new resource: a statement.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         # The OTHER host surface has to hear about the change. Queue on the
         # phone, watch the stage follow; reorder on the stage, watch the phone
         # follow. Without this the broadcast is a silent AccessDenied and the
@@ -1185,6 +1194,14 @@ Resources:
             EnableSimpleResponses: true
             FunctionArn: !GetAtt AuthorizerFunction.Arn
             Identity:
+              # CACHING OFF, SAID OUT LOUD (2026-11-03, suspension enforcement).
+              # A suspension is enforced in the authorizer (auth/standing.js),
+              # so a cached "allow" would let a suspended host carry on for the
+              # whole TTL. 0 means every request is authorized afresh and a
+              # Suspend or Reinstate takes effect on the caller's next request.
+              # It was already off by omission; this pins it, and
+              # tests/suspension-authorizer.js fails if it is ever raised.
+              ReauthorizeEvery: 0
               Headers:
                 - Authorization
                 # X-Engage-Org IS DELIBERATELY NOT LISTED HERE. Read this before
@@ -5345,6 +5362,9 @@ Resources:
           GITHUB_TOKEN: !Ref GitHubToken
           GITHUB_REPO: !Ref GitHubRepo
           DOMAIN_NAME: !Ref DomainName
+          # The tier a report came from is this stack's own (#43):
+          # create-github-issue.js reportEnvironment.
+          ENVIRONMENT: !Ref Environment
       Events:
         AdminCreateGitHubIssueEvent:
           Type: HttpApi

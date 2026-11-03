@@ -5,9 +5,9 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 // Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
 // switch is on (claude-route.js).
 const claudeRoute = require('./claude-route');
-const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
+const { readRoundByNumber } = require('./round-question');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
-const { ORG, callerMayDriveSession } = require('./tenant');
+const { callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
@@ -437,25 +437,14 @@ const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
  */
 async function readRoundQuestion(gameId, paddedQuestionId) {
   try {
-    const questionRef = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
-    }));
-    if (!questionRef.Item) {
+    // THE ONE RESOLVER (round-question.js): a set row through the version and
+    // scope the REF pins, or a question the host wrote during the session.
+    const read = await readRoundByNumber(db, process.env.TABLE_NAME, gameId, paddedQuestionId);
+    if (!read.ref) {
       console.log(`❌ Question reference not found: QUESTION#${paddedQuestionId}#REF`);
       return null;
     }
-    const resolvedSet = await resolveSetPartition(
-      db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionRef.Item.SetId), questionRef.Item.SetVersion
-    );
-    const questionResponse = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: resolvedSet.pk, SK: questionRef.Item.SourceQuestionId }
-    }));
-    const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-    return questionResponse.Item && setOrgId
-      ? await decryptItem(setOrgId, 'question', questionResponse.Item)
-      : (questionResponse.Item || null);
+    return read.question || null;
   } catch (error) {
     console.error('❌ Error fetching question data:', error);
     return null;
@@ -968,12 +957,14 @@ const handle = async (event) => {
       tallied against the answers in SK order above, as they are stored. What
       leaves this handler is keyed by DISPLAY position instead — the numbers
       the stage and the phones voted under — so a tie on the results screen
-      falls in the room's order rather than alphabetically by author. Nothing
-      maps these keys back to a ballot; every reader takes Object.values.
+      falls in the room's order rather than alphabetically by author.
     */
     const shownOrder = displayOrder(answers, gameId, paddedQuestionId);
+    // Each entry also carries its BALLOT number (pos + 1, the number the room
+    // voted under), the stable anchor a reply to it stores (phone-comments B1).
+    // A copy, so the canonical tallies the score writes read stay as they were.
     const shownTallies = Object.fromEntries(
-      shownOrder.map((canonical, pos) => [String(pos), voteTallies[canonical]]));
+      shownOrder.map((canonical, pos) => [String(pos), { ...voteTallies[canonical], ballot: pos + 1 }]));
 
     // Find winners (highest score)
     const maxScore = Math.max(...Object.values(answerScores));
@@ -1256,6 +1247,12 @@ async function handleTriviaResults(event, gameId, questionId) {
     };
   }
 
+  // Each answer's BALLOT number — its 1-based display place (answer-order.js),
+  // the same on every screen — read BEFORE the sort below reorders `answers`
+  // in place. The stable anchor a reply to it stores (phone-comments B1).
+  const triviaBallot = new Map(displayOrder(answers, gameId, paddedQuestionId)
+    .map((canonical, pos) => [answers[canonical], pos + 1]));
+
   // Sort answers by points earned (highest first), then by response time (fastest first)
   const sortedAnswers = answers.sort((a, b) => {
     if (b.PointsEarned !== a.PointsEarned) {
@@ -1273,6 +1270,7 @@ async function handleTriviaResults(event, gameId, questionId) {
   // Create leaderboard for this question
   const leaderboard = sortedAnswers.map((answer, index) => ({
     rank: index + 1,
+    ballot: triviaBallot.get(answer),
     playerName: answer.PlayerName,
     answer: answer.Answer,
     isCorrect: answer.IsCorrect || false,
@@ -1413,6 +1411,7 @@ async function handleTriviaResults(event, gameId, questionId) {
       optionE: question ? (question.optionE || question.OptionE || '') : null,
       optionF: question ? (question.optionF || question.OptionF || '') : null,
       answers: sortedAnswers.map(answer => ({
+        ballot: triviaBallot.get(answer),
         playerName: answer.PlayerName,
         answer: answer.Answer,
         isCorrect: answer.IsCorrect || false,
@@ -1512,41 +1511,12 @@ async function handleWavelengthResults(event, gameId, questionId) {
     console.log(`🔍 Fetching question data for wavelength results`);
     let question = null;
     try {
-      // Get question reference record
-      const questionRef = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
-      }));
-
-      if (questionRef.Item) {
-        const sourceQuestionId = questionRef.Item.SourceQuestionId;
-        const questionSetId = questionRef.Item.SetId;
-        
-        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
-
-        // Same version resolution as the trivia branch above.
-        const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
-        );
-
-        // Get the actual question from the question set
-        const questionResponse = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: {
-            PK: resolvedSet.pk,
-            SK: sourceQuestionId
-          }
-        }));
-
-        if (questionResponse.Item) {
-          // Same rule as the trivia branch: the SET's org, from the pinned
-          // pair, not the session's and never the caller's.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          question = setOrgId
-            ? await decryptItem(setOrgId, 'question', questionResponse.Item)
-            : questionResponse.Item;
-          console.log(`✅ Question data loaded for wavelength results`);
-        }
+      // The one resolver, as the trivia branch above: the version and the
+      // SET's org from the pinned pair, never the caller's.
+      const read = await readRoundByNumber(db, process.env.TABLE_NAME, gameId, paddedQuestionId);
+      if (read.question) {
+        question = read.question;
+        console.log(`✅ Question data loaded for wavelength results`);
       }
     } catch (error) {
       console.error('Error fetching question data:', error);
@@ -1632,12 +1602,17 @@ async function handleWavelengthResults(event, gameId, questionId) {
         : (nothingToCluster ? 'skipped' : 'unavailable')
     };
 
+    const wavelengthBallot = new Map(displayOrder(allAnswers, gameId, paddedQuestionId)
+      .map((canonical, pos) => [canonical, pos + 1]));
     const resultsData = {
       gameId,
       questionId: paddedQuestionId,
       gameType: 'wavelength',
       question,
       answers: submissions.map((s, i) => ({
+        // The 1-based display place (answer-order.js): the stable anchor a
+        // reply to this submission stores (phone-comments B1).
+        ballot: wavelengthBallot.get(i),
         playerName: s.player,
         name: s.player, // For compatibility
         answer: allAnswers[i].Answer,

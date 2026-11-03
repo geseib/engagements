@@ -330,7 +330,7 @@ describe('the phone question browser', () => {
     serve();
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
     expect(screen.getByText(/Strategic Pricing Plays/)).toBeInTheDocument();
@@ -360,7 +360,7 @@ describe('the phone question browser', () => {
     serve({ stateDelayMs: 20 });
     await connect();
 
-    fireEvent.click(screen.getByRole('button', { name: /choose next question/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^up next$/i }));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
   });
@@ -383,7 +383,7 @@ describe('the phone question browser', () => {
   it('names the session it is driving when it reads the set', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     const urls = global.fetch.mock.calls.map(([url]) => String(url));
@@ -400,7 +400,7 @@ describe('the phone question browser', () => {
   it('shows the options AND which one is correct', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     expect(screen.getByText(TRIVIA.optionB)).toBeInTheDocument();
@@ -415,7 +415,7 @@ describe('the phone question browser', () => {
   it('Ask now arms mid-round, then posts the tapped question id with the skip', async () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
@@ -437,7 +437,7 @@ describe('the phone question browser', () => {
   it('Ask next puts the question at the top of the queue and does not advance', async () => {
     const posts = serve({ state: 'ASK#003' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask next/i }));
@@ -465,7 +465,7 @@ describe('the phone question browser', () => {
       ],
     });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
 
     const queued = await screen.findByTestId('queue-row');
     const auto = await screen.findByTestId('queue-auto-row');
@@ -491,7 +491,7 @@ describe('the phone question browser', () => {
         { source: 'auto', questionId: 'QUESTION#008', title: 'Churn tells', round: 5 }],
     });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     const autos = await screen.findAllByTestId('queue-auto-row');
 
     fireEvent.click(within(autos[1]).getByRole('button', { name: /^ask next/i }));
@@ -509,7 +509,7 @@ describe('the phone question browser', () => {
       upNext: [{ source: 'auto', questionId: 'QUESTION#007', title: 'Renewal signals', round: 4 }],
     });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     const auto = await screen.findByTestId('queue-auto-row');
 
     fireEvent.click(within(auto).getByRole('button', { name: /^ask now/i }));
@@ -528,7 +528,7 @@ describe('the phone question browser', () => {
   it('previews the question as the room would see it, from the live remote', async () => {
     serve();
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^preview/i }));
@@ -546,14 +546,14 @@ describe('the phone question browser', () => {
   it('returns to the round once the question is asked', async () => {
     serve({ state: 'ASK#003' });
     await connect();
-    fireEvent.click(await screen.findByRole('button', { name: /choose next question/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
     await screen.findByText(TRIVIA.title);
 
     fireEvent.click(screen.getByRole('button', { name: /^ask now/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^tap again to ask now/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /choose next question/i })).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: /^up next$/i })).toBeInTheDocument());
   });
 });
 
@@ -565,7 +565,8 @@ describe('categories on the phone', () => {
     const posts = serve({ live: true });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    fireEvent.click(await screen.findByTestId('remote-categories-change'));
     fireEvent.click(await screen.findByRole('button', { name: /Pricing Mechanics/ }));
 
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -583,7 +584,8 @@ describe('categories on the phone', () => {
     serve({ live: false, state: 'STARTED' });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /^categories$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    fireEvent.click(await screen.findByTestId('remote-categories-change'));
 
     const row = await screen.findByRole('button', { name: /Pricing Mechanics/ });
     expect(row).toBeDisabled();

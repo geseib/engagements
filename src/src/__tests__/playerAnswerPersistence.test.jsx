@@ -20,7 +20,7 @@ jest.mock('../WebSocketClient', () => ({
 }));
 
 const API = 'http://localhost:3000/api/';
-const GAME = 'TEST123';
+const GAME = '7123';
 const ME = 'TestPlayer';
 
 /**
@@ -155,10 +155,10 @@ async function switchAwayAndBack() {
 async function joinAndReachQuestion() {
   render(<PlayerPage />);
 
-  fireEvent.change(screen.getByPlaceholderText(/Game ID/i), { target: { value: GAME } });
+  fireEvent.change(screen.getByLabelText(/Session code/i), { target: { value: GAME } });
   fireEvent.change(screen.getByPlaceholderText(/Your Name/i), { target: { value: ME } });
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Join Game/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Join$/i }));
   });
 
   await waitFor(() => {
@@ -166,7 +166,7 @@ async function joinAndReachQuestion() {
   });
 }
 
-const submitButton = () => screen.getByRole('button', { name: /Submit Answer/i });
+const submitButton = () => screen.getByRole('button', { name: /Send my answer/i });
 
 describe('PlayerPage — answered state and in-flight selection survive a refresh', () => {
   let server;
@@ -191,7 +191,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
 
     // The server has recorded it, which is the whole point of asking the server.
@@ -199,8 +199,8 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
 
     await switchAwayAndBack();
 
-    expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Submit Answer/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my answer/i })).not.toBeInTheDocument();
   });
 
   // BUG B. Tapped but not submitted. A refresh landing in that window must not
@@ -236,7 +236,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
       fireEvent.click(submitButton());
     });
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
     server.answerers = [ME];
 
@@ -256,7 +256,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await waitFor(() => {
       expect(screen.getByText(/What is the capital of Spain/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText(/Answer Submitted!/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is in\./i)).not.toBeInTheDocument();
     // Draft cleared: nothing is selected, so Submit is unavailable.
     expect(submitButton()).toBeDisabled();
   });
@@ -304,9 +304,9 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
-    expect(screen.queryByRole('button', { name: /Submit Answer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my answer/i })).not.toBeInTheDocument();
   });
 
   // A refresh that came back without the participation block knows nothing
@@ -326,7 +326,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
       fireEvent.click(submitButton());
     });
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
     server.answerers = [ME];
 
@@ -340,7 +340,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
 
     await switchAwayAndBack();
 
-    expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
   });
 
   /**
@@ -364,7 +364,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
       fireEvent.click(submitButton());
     });
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
     server.answerers = [ME];
 
@@ -387,7 +387,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await switchAwayAndBack();
 
     expect(stateCalls).toBeGreaterThan(1);
-    expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
   });
 
   // The complement of the test above: not knowing must not carry the previous
@@ -400,7 +400,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
       fireEvent.click(submitButton());
     });
     await waitFor(() => {
-      expect(screen.getByText(/Answer Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your answer is in\./i)).toBeInTheDocument();
     });
 
     server.state = 'ASK#002';
@@ -423,7 +423,7 @@ describe('PlayerPage — answered state and in-flight selection survive a refres
     await waitFor(() => {
       expect(screen.getByText(/What is the capital of Spain/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText(/Answer Submitted!/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is in\./i)).not.toBeInTheDocument();
     expect(submitButton()).toBeDisabled();
   });
 });
@@ -466,7 +466,7 @@ describe('PlayerPage — a cast vote survives a tab switch', () => {
     server.voters = [ME];          // this player has already cast their ballot
     await switchAwayAndBack();
     await waitFor(() => {
-      expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Your votes are in\./i)).toBeInTheDocument();
     });
   }
 
@@ -479,8 +479,8 @@ describe('PlayerPage — a cast vote survives a tab switch', () => {
     await switchAwayAndBack();
     await switchAwayAndBack();
 
-    expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Submit Votes/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Your votes are in\./i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send my votes/i })).not.toBeInTheDocument();
   });
 
   // rejects: collapsing "I could not find out" into "you have not voted" on the
@@ -500,7 +500,7 @@ describe('PlayerPage — a cast vote survives a tab switch', () => {
 
     await switchAwayAndBack();
 
-    expect(screen.getByText(/Votes Submitted!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your votes are in\./i)).toBeInTheDocument();
   });
 
   // rejects: a fix that simply never clears the ballot, which would lock the
@@ -513,7 +513,7 @@ describe('PlayerPage — a cast vote survives a tab switch', () => {
     await switchAwayAndBack();
 
     await waitFor(() => {
-      expect(screen.queryByText(/Votes Submitted!/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Your votes are in\./i)).not.toBeInTheDocument();
     });
   });
 

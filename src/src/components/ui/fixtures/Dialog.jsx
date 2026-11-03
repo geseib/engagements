@@ -1,4 +1,5 @@
 import React from 'react';
+import Icon from '../../Icon';
 import '../Dialog.css';
 
 /**
@@ -22,7 +23,7 @@ function Shell({ theme, variant, title, sub, children, foot, height = 380 }) {
               <h2 id={id} className="ui-dialog-title">{title}</h2>
               {sub && <p className="ui-dialog-sub">{sub}</p>}
             </div>
-            <button type="button" className="ui-dialog-x" aria-label="Close">×</button>
+            <button type="button" className="ui-dialog-x" aria-label="Close"><Icon name="X" weight="bold" size={14} color="currentColor" /></button>
           </header>
           <div className="ui-dialog-body">{children}</div>
           <footer className="ui-dialog-foot">{foot}</footer>

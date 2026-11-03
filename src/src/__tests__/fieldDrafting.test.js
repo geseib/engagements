@@ -359,7 +359,7 @@ describe('5. the two copies of the field list still agree', () => {
     // rejects: `form.fields.find(...).label` with no guard. The status line is
     // built from these, and one unknown key would throw inside a catch that
     // reports it as a network failure.
-    expect(fieldLabel('scenario', 'context')).toBe('Context/Background');
+    expect(fieldLabel('scenario', 'context')).toBe('Context or background');
     expect(fieldLabel('scenario', 'nope')).toBe('nope');
     expect(fieldLabel('nope', 'context')).toBe('context');
   });

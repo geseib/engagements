@@ -11,8 +11,9 @@
  * measured contract has not been reverted", not "this looks right in a
  * browser" — only a browser can say that.
  *
- * TWO GROUNDS. The kinds picker is on the builder modal, which is white
- * (BuilderPage.css); the edit card is the set editor's dusk question form on
+ * TWO GROUNDS, BOTH DUSK since experience plan 5e. The kinds picker is on the
+ * builders' dusk dialog (components/AIBuilderDialog.jsx, a `ui-dialog` on
+ * --surface); the edit card is the set editor's dusk question form on
  * its own `--surface`, declared `data-theme="dark"` on its own root. The first
  * block holds both premises, so the day either changes this file says every
  * number below it is measured on the wrong ground.
@@ -48,26 +49,29 @@ function block(css, selector) {
 
 /* The .pab block now writes one role (`--pab-on-accent: var(--on-accent)`) beside its
    literals, so a token is RESOLVED through the skin harness rather than grepped as a hex.
-   The .pab block paints the white builder modal (paper), so it resolves in theme 'light';
-   the edit card declares data-theme="dark" on its own root, so its inks resolve in 'dark'. */
+   The builders' window is dusk (AIBuilderDialog, theme="dark"), so the .pab tokens resolve
+   in theme 'dark'; the edit card declares data-theme="dark" on its own root as well. */
 const SKIN_IDS = [...new Set(H.CASES.map(([skin]) => skin))];
 const hexOf = (c) => `#${H.parseColor(c).rgb.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 
-function token(css, selector, name, opts = { skin: 'classic', theme: 'light' }) {
+function token(css, selector, name, opts = { skin: 'classic', theme: 'dark' }) {
   return hexOf(H.scopeVar(css, `${selector} {`, name, opts));
 }
 
-const WHITE = '#FFFFFF';
+const DIALOG_JSX = read('components', 'AIBuilderDialog.jsx');
 function palette(skin) {
-  const paper = { skin, theme: 'light' };
   const dusk = { skin, theme: 'dark' };
+  const scoped = (name) => H.scopeVar(PAB_CSS, '.pab {', name, dusk);
+  const surface = hexOf(H.role('--surface', dusk));
   return {
-    text: token(PAB_CSS, '.pab', '--pab-text', paper),
-    muted: token(PAB_CSS, '.pab', '--pab-muted', paper),
-    edge: token(PAB_CSS, '.pab', '--pab-edge', paper),
-    quiet: token(PAB_CSS, '.pab', '--pab-quiet', paper),
-    field: token(PAB_CSS, '.pab', '--pab-field', paper),
-    onAccent: token(PAB_CSS, '.pab', '--pab-on-accent', paper),
+    surface,
+    text: token(PAB_CSS, '.pab', '--pab-text', dusk),
+    muted: token(PAB_CSS, '.pab', '--pab-muted', dusk),
+    edge: token(PAB_CSS, '.pab', '--pab-edge', dusk),
+    // The hover wash is translucent: laid over the dialog's card.
+    quiet: hexOf(H.composite([surface, scoped('--pab-quiet')])),
+    field: token(PAB_CSS, '.pab', '--pab-field', dusk),
+    onAccent: token(PAB_CSS, '.pab', '--pab-on-accent', dusk),
     primary: hexOf(H.role('--primary', dusk)),
     // The dusk card's inks and ground: `[data-theme="dark"]`, which the card
     // declares on its own root.
@@ -82,9 +86,11 @@ const AA = 4.5;
 const on = (fg, bg) => ratio(parseHex(fg), parseHex(bg));
 
 describe('the grounds this is measured on', () => {
-  test('the poll builder modal is white, as the kinds picker\'s numbers assume', () => {
-    expect(block(BUILDER_CSS, '.poll-ai-builder-modal .modal-content')).toMatch(/background:\s*white/);
-    expect(T.field.toUpperCase()).toBe(WHITE);
+  test('the poll builder opens in the dusk dialog, as the kinds picker\'s numbers assume', () => {
+    expect(DIALOG_JSX).toMatch(/theme="dark"/);
+    expect(DIALOG_JSX).toMatch(/ui-dialog ui-dialog--full/);
+    expect(BUILDER_CSS).not.toMatch(/\.poll-ai-builder-modal/);
+    expect(block(PAB_CSS, '.pab')).toMatch(/--pab-field:\s*var\(--surface-2\)/);
   });
 
   test('the edit card is dusk on its own root, on --surface, inside the editor\'s scope', () => {
@@ -103,8 +109,9 @@ describe.each(SKIN_IDS)('%s skin', (skin) => {
 
   describe('every pairing the builder paints clears AA', () => {
     const pairs = [
-      ['the kinds label and toggle words on the modal', () => on(P.text, WHITE)],
-      ['the kinds help line on the modal', () => on(P.muted, WHITE)],
+      ['the kinds label on the dialog', () => on(P.text, P.surface)],
+      ['the kinds help line on the dialog', () => on(P.muted, P.surface)],
+      ['a toggle word on its field', () => on(P.text, P.field)],
       ['a hovered toggle word', () => on(P.text, P.quiet)],
       ['a pressed toggle — its word on the amber fill', () => on(P.onAccent, P.primary)],
       ['a note on the dusk card', () => on(P.duskText, P.duskSurface)],
@@ -115,14 +122,13 @@ describe.each(SKIN_IDS)('%s skin', (skin) => {
     });
 
     test('amber never carries text, on either ground', () => {
-      expect(on(P.primary, WHITE)).toBeLessThan(AA);
       const offenders = stripComments(PAB_CSS).split('\n')
         .filter((l) => /(^|[^-])\bcolor\s*:\s*var\(--primary\)/.test(l));
       expect(offenders).toEqual([]);
     });
 
     test('a toggle is findable by its edge, not only its words (3:1 for a control boundary)', () => {
-      expect(on(P.edge, WHITE)).toBeGreaterThanOrEqual(3);
+      expect(on(P.edge, P.field)).toBeGreaterThanOrEqual(3);
       expect(block(PAB_CSS, '.pab-opt')).toMatch(/border:\s*1px solid var\(--pab-edge\)/);
     });
 

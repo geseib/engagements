@@ -229,15 +229,19 @@ describe('Engage', () => {
     expect(await screen.findByRole('heading', { name: /Decide: Harbour School/ })).toBeInTheDocument();
   });
 
-  test('Reject keeps its confirmation; declining it changes nothing', async () => {
+  test('Reject keeps its confirmation (the small confirm dialog); declining it changes nothing', async () => {
     serve(PLATFORM);
-    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const browser = jest.spyOn(window, 'confirm');
     render(<OverviewPanel scope="platform" now={NOW} />);
     fireEvent.click(within(await screen.findByTestId('ovw-box-accounts')).getByRole('button', { name: 'Review' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
-    expect(confirm).toHaveBeenCalled();
+    const ask = await screen.findByRole('dialog', { name: /^Reject / });
+    expect(ask).toHaveTextContent(/Nothing is deleted/);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Reject / })).toBeNull());
     expect(calls().some((c) => c.startsWith('PUT'))).toBe(false);
-    confirm.mockRestore();
+    expect(browser).not.toHaveBeenCalled();
+    browser.mockRestore();
   });
 
   test('Moderation is reviewed where its findings are', async () => {

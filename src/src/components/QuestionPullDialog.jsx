@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import { authFetch } from '../auth/authFetch';
 import { normalizeGameType, gameTypeLabel } from '../config/gameTypes';
@@ -148,10 +149,12 @@ export default function QuestionPullDialog({
       labelledBy="qs-pull-title"
       onClose={onCancel}
     >
-      <h3 id="qs-pull-title">
-        <Icon name="Books" weight="bold" size={16} color="var(--primary)" />{' '}
-        {sourceSet ? `Pull questions from "${sourceSet.name}"` : 'Pull questions from another set'}
-      </h3>
+      <DialogHead
+        as="h3"
+        titleId="qs-pull-title"
+        title={<><Icon name="Books" weight="bold" size={16} color="var(--primary)" />{' '}{sourceSet ? `Pull questions from "${sourceSet.name}"` : 'Pull questions from another set'}</>}
+        onClose={onCancel}
+      />
 
       {!sourceSet && (
         <>
@@ -269,13 +272,12 @@ export default function QuestionPullDialog({
 
       {sourceSet && copyBlocked && <p className="qs-panel-note">{copyBlocked}</p>}
 
-      <div className="modal-actions">
+      <DialogFoot className="modal-actions" cancel={<button className="btn-secondary" onClick={onCancel}>Cancel</button>}>
         {sourceSet && (
           <button className="btn-secondary" onClick={() => { setSourceSet(null); setRows([]); setChosen([]); }}>
             Pick a different set
           </button>
         )}
-        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
         {sourceSet && (
           <button
             className="btn-primary"
@@ -287,7 +289,7 @@ export default function QuestionPullDialog({
             Copy {chosen.length || ''} question{chosen.length === 1 ? '' : 's'} in
           </button>
         )}
-      </div>
+      </DialogFoot>
     </Modal>
   );
 }

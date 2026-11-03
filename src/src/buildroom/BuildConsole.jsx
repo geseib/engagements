@@ -6,13 +6,18 @@
  * Room's parts in its places, as docs/design/build-room-consider/ frame 1
  * draws it:
  *
- *   top line   ConsoleTop: the session, Join, Room's window ↗ and its status;
- *              then Share demo, The room sees: Stage 2 · Build 3 · History 4,
- *              See it here, and the connection
+ *   top line   ConsoleTop, the shared top bar (experience plan 2a, 2e):
+ *              Main menu, the session, Join, Room's window ↗ and its status;
+ *              then the Build Room's own Share demo and The room sees: Stage
+ *              2 · Build 3 · History 4, See it here; the connection only when
+ *              broken; the bell (Needs you); ?; Session menu
  *   strip      the ask path in the shared WorkflowStrip; dimmed between asks
  *              with a plain label on its left (answer (c))
- *   rail       four slots, as C&A's (answer (d)): Waiting for you, People,
- *              Later (Points inside), Session
+ *   rail       three slots (answer (d)): Waiting for you, People (the
+ *              shared person row, 340px), Later (Points inside). Session
+ *              moved into the Session menu (experience plan 2e)
+ *   needs      the Needs-you line under Your part now: Claude's asks, the
+ *              room's ideas, name requests (config/needsYou.js)
  *   centre     "Your part now" (ConsoleFooter, on buildControls with the
  *              decide panel inline: answer (a)), the main button in it, an
  *              empty held slot between asks (answer (b)); Claude's one status
@@ -27,28 +32,39 @@
 import React, { useEffect, useState } from 'react';
 import HostConsole from '../components/console/HostConsole';
 import { Section } from '../components/console/ConsoleRail';
-import Icon from '../components/Icon';
+import PersonRow from '../components/people/PersonRow';
 import { BCW, RAIL_SLOTS, railOpenFor } from './buildConsole';
-import { W } from './words';
 import './BuildConsole.css';
 
 
-/** People (answer (e)): who is here, and who has answered, by name. Never what they chose. */
-export function PeopleList({ people, onPlayers }) {
+/**
+ * People (answer (e); experience plan 2e, §3.2b): who is here, and who has
+ * answered, by name, never what they chose. Each person is the shared person
+ * row: dot, name, doing now, the ideas they gave, and ⋯ (Move to a new
+ * device, Lock name, Remove from session; the Build Room has no Rename). An
+ * asker's row turns amber with Let them / Not now, the Needs-you line's pair.
+ */
+export function PeopleList({ people, onPlayers, menuFor = null, asking = [], onNeedsAct = null, needsBusy = false }) {
   if (!people.rows.length) return <p className="hc-empty">{BCW.nobodyHere}</p>;
+  const askBy = new Map((asking || []).map((a) => [a.name, a]));
+  // Askers first (PLAN §4.4: "Sam's row moves to the top under Needs you").
+  const rows = [...people.rows].sort((a, b) => (askBy.has(b.name) ? 1 : 0) - (askBy.has(a.name) ? 1 : 0));
   return (
     <>
-      <ul className="hc-list bc-people" aria-label={BCW.people}>
-        {people.rows.map((p) => (
-          <li key={p.name} data-state={p.state}>
-            {p.state === 'answered' ? <span className="hc-tick" aria-hidden="true"><Icon name="Check" size={12} weight="bold" /></span> : null}
-            {p.state === 'not-yet' ? <span className="hc-wait" aria-hidden="true">…</span> : null}
-            <span>
-              {p.name}
-              {p.builder ? <span className="bc-tag">{BCW.builder}</span> : null}
-              {people.open ? <span className="hc-meta">{` · ${p.state === 'answered' ? people.verb : BCW.notYet}`}</span> : null}
-            </span>
-          </li>
+      <ul className="bc-people" aria-label={BCW.people}>
+        {rows.map((p) => (
+          <PersonRow
+            key={p.name}
+            name={p.name}
+            status={p.status || 'here'}
+            state={p.state}
+            doing={p.doing}
+            fact={p.fact}
+            menu={menuFor ? menuFor(p) : []}
+            needsItem={askBy.get(p.name) || null}
+            onNeedsAct={onNeedsAct}
+            needsBusy={needsBusy}
+          />
         ))}
       </ul>
       <p className="bc-links">
@@ -62,68 +78,7 @@ export function PeopleList({ people, onPlayers }) {
   );
 }
 
-/**
- * Session (the C&A "tools" slot): Claude's connection and plugin, the crew,
- * the room's screens looked at privately, the Session panel's tabs, and the
- * session's own ends. Every one is a door the Host screen or the Session
- * panel already had.
- */
-export function SessionSlot({ s }) {
-  return (
-    <div className="bc-session">
-      <ul className="hc-list">
-        <li data-capability="claude-status">
-          <button type="button" className="hc-link" onClick={s.onConnect}>{BCW.connectClaude}</button>
-          {s.keyLine ? <span className="hc-meta">{` · ${s.keyLine}`}</span> : null}
-        </li>
-        <li data-capability="claude-status">
-          <button type="button" className="hc-link" onClick={s.onPlugin}>{s.pluginOld ? BCW.pluginOld : BCW.pluginLatest}</button>
-          {s.pluginLine ? <span className="hc-meta">{` · ${s.pluginLine}`}</span> : null}
-        </li>
-        {s.continueSlot ? <li>{s.continueSlot}</li> : null}
-        <li data-capability="crew">
-          <button type="button" className="hc-link" onClick={s.onCrew}>{BCW.crew}</button>
-          {s.crewLine ? <span className="hc-meta">{` · ${s.crewLine}`}</span> : null}
-        </li>
-        <li>
-          <span className="hc-meta">{BCW.lookHere}</span>
-          <button type="button" className="hc-link" data-capability="build-screen" onClick={() => s.onLook('build')}>{BCW.build}</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="hc-link" data-capability="history" onClick={() => s.onLook('history')}>{BCW.history}</button>
-        </li>
-      </ul>
-      <p className="hc-card-h bc-subh">{BCW.sessionPanel}</p>
-      <ul className="hc-list">
-        <li>
-          <button type="button" className="hc-link" data-capability="screens" onClick={() => s.onPanel('settings', 'screens')}>{BCW.screens}</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="hc-link" data-capability="players" onClick={() => s.onPanel('players', '')}>{BCW.players}</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="hc-link bc-sess" data-capability="settings" aria-haspopup="dialog" onClick={() => s.onPanel('settings', '')}>{BCW.settings}</button>
-        </li>
-        <li data-capability="report">
-          {s.onBackToOpening ? (
-            <>
-              <button type="button" className="hc-link" data-capability="opening" disabled={s.busy} onClick={s.onBackToOpening}>{BCW.backToOpening}</button>
-              <span aria-hidden="true">·</span>
-            </>
-          ) : null}
-          <button type="button" className="hc-link" onClick={s.onWrap}>{BCW.wrapUp}</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="hc-link" onClick={s.onReport}>{BCW.report}</button>
-          {s.onEnd ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <button type="button" className="hc-link bc-end" onClick={s.onEnd}>{BCW.endSession}</button>
-            </>
-          ) : null}
-        </li>
-      </ul>
-    </div>
-  );
-}
-
-/** The rail: four slots (answer (d)). The one that matters opens by itself; the host's choice holds until the moment changes. */
+/** The rail: three slots (answer (d); Session moved into the Session menu, 2e). The one that matters opens by itself; the host's choice holds until the moment changes. */
 export function BuildConsoleRail({ moment, slots }) {
   const [open, setOpen] = useState(() => railOpenFor(moment));
   useEffect(() => { setOpen(railOpenFor(moment)); }, [moment]);
@@ -177,7 +132,7 @@ export function ConsolePoint({ point, ideas, sources = [] }) {
  * `children` is the main area, the moment's work.
  */
 export default function BuildConsole({
-  moment, top, topExtra, onLeave, strip, stripIdle, card, slots, side, children,
+  moment, top, topExtra, onLeave, strip, stripIdle, card, slots, side, children, needs = null, sheetRef = null,
 }) {
   return (
     <HostConsole
@@ -193,6 +148,11 @@ export default function BuildConsole({
       railSlot={<BuildConsoleRail moment={moment} slots={slots} />}
       side={side}
       mainLabel="Now"
+      /* The Needs-you line under Your part now, and the Session menu's sheet
+         host over the content area (experience plan 2e): the same frame as
+         Call & Answer's. */
+      needs={needs}
+      sheetRef={sheetRef}
     >
       {children}
     </HostConsole>

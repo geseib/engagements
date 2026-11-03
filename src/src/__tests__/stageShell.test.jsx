@@ -90,6 +90,7 @@ import Rail from '../components/stage/Rail';
 import PhaseBar from '../components/stage/PhaseBar';
 import RoomMeter from '../components/stage/RoomMeter';
 import Dock from '../components/stage/Dock';
+import KeyCap from '../components/stage/KeyCap';
 
 describe('the stage grid', () => {
   test('the profile class lands on the document root, not on a wrapper', () => {
@@ -569,17 +570,18 @@ describe('the dock', () => {
     expect(container.querySelector('.hint').textContent).toBe('Space also advances');
   });
 
-  test('the SPACE affordance is the dock\'s own, not HostActionBar\'s', () => {
-    // HostActionBar renders a `.host-action-bar__kbd` and then hides it under
-    // `.big-screen-mode` — the mode the dock ALWAYS passes — so the hint was
-    // invisible in all four profiles. That is the state the `.dock .kbd` note
-    // in styles/stage.css exists to prevent, undone by composition. Every
-    // mockup dock carries this span.
-    const { container, rerender } = render(<Dock onSetup={() => {}}><button type="button">Go</button></Dock>);
-    expect(container.querySelector('.kbd')).toBeNull();
-    rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go</button></Dock>);
-    const kbd = container.querySelector('.kbd');
-    expect(kbd.textContent).toBe('or press Space');
+  test('the dock decides the SPACE cap, and the main button draws it', () => {
+    // The dock says whether Space presses its main button (`kbd`); the cap
+    // the button draws reads that (KeyCap via DockKeyContext). It used to be
+    // the dock's own span beside the button — and before that HostActionBar's,
+    // hidden under `.big-screen-mode` in all four profiles. Now it is on the
+    // button (owner, 31 Oct 2026), and shown in every profile.
+    const { container, rerender } = render(<Dock onSetup={() => {}}><button type="button">Go<KeyCap /></button></Dock>);
+    expect(container.querySelector('.keycap')).toBeNull();
+    rerender(<Dock kbd="SPACE" onSetup={() => {}}><button type="button">Go<KeyCap /></button></Dock>);
+    const kbd = container.querySelector('.keycap');
+    expect(kbd.textContent).toBe('Space');
+    expect(kbd.closest('button')).not.toBeNull();
     // A visual affordance for the operator, not a control the room's assistive
     // tech should announce between the button and its status.
     expect(kbd.getAttribute('aria-hidden')).toBe('true');
@@ -716,16 +718,21 @@ describe('what the host page must now render', () => {
     // the room" box (compose=) and pushed <Dock to 2,626.
     // 3200 -> 6000 on 2026-10-14, when the workflow strip (strip=) and the
     // viewed step / room-screen chooser (view=) slots landed ahead of <Rail.
+    // 6000 -> 12000 on 2026-11-02 (experience plan 2h), when the host's frame
+    // (top=, now=, needs=) moved onto the stage ahead of <Rail; the bottom
+    // `dock=` went, and Your part now (`now=`) is the <Dock it held.
+    // 12000 -> 14000 on 2026-11-03, when the one-screen auto-hide props
+    // (autoHide=, chromeHold=, urgent=) and their comment landed first.
     const windows = [];
     for (let i = source.indexOf('<Stage'); i !== -1; i = source.indexOf('<Stage', i + 1)) {
-      windows.push(source.slice(i, i + 6000));
+      windows.push(source.slice(i, i + 14000));
     }
     expect(windows.length).toBeGreaterThan(0);
 
-    // ONE <Stage> has to carry all three, which is what "composed" means. A
+    // ONE <Stage> has to carry all of them, which is what "composed" means. A
     // window per occurrence because the identifier also appears in prose above
     // the element; requiring the conjunction is what keeps that from counting.
-    const slots = [['rail', '<Rail'], ['meter', '<RoomMeter'], ['dock', '<Dock']];
+    const slots = [['top', '<ConsoleTop'], ['now', '<Dock'], ['rail', '<Rail'], ['meter', '<RoomMeter']];
     const composed = windows.some((w) => slots.every(
       ([slot, component]) => new RegExp(`\\b${slot}=\\{`).test(w) && w.includes(component)
     ));

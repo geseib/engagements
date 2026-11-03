@@ -47,8 +47,8 @@ describe('host page (two surfaces)', () => {
 });
 
 describe('Remote', () => {
-  test('the panel button reads Display on screen and toggles the join focus', () => {
-    expect(REMOTE).toMatch(/joinOnWall \? 'Take it off the screen' : 'Display on screen'/);
+  test('the panel button reads Show join code and toggles the join focus', () => {
+    expect(REMOTE).toMatch(/joinOnWall \? 'Take it off the screen' : 'Show join code'/);
     // Since 18 Oct the QR is its own fact beside the focus: { join: true|false }.
     expect(REMOTE).toMatch(/setStageFocus\(\{ join: !joinOnWall \}\)/);
   });

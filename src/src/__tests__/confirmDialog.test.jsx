@@ -67,7 +67,7 @@ describe('ConfirmDialog keys', () => {
     const { container } = render(
       <ConfirmDialog title="t" message="m" confirmText="Skip Question" onConfirm={() => {}} onCancel={() => {}} />
     );
-    const [cancel, confirm] = container.querySelectorAll('.dialog-actions button');
+    const [cancel, confirm] = container.querySelectorAll('.ui-dialog-foot button');
     expect(cancel.textContent).toContain('←');
     expect(cancel.textContent).toContain('Cancel');
     expect(confirm.textContent).toContain('Skip Question');
@@ -113,7 +113,7 @@ describe('ConfirmDialog keys', () => {
     );
     fireEvent.click(container.querySelector('.confirmation-modal'));
     expect(onCancel).not.toHaveBeenCalled();
-    fireEvent.click(container.querySelector('.expanded-qr-overlay'));
+    fireEvent.click(container.querySelector('.ui-scrim'));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });
@@ -175,7 +175,7 @@ describe('ConfirmDialog with arrowConfirms={false} — for acts that cannot be u
 
   test('the confirm button wears no → hint; Cancel keeps its ←', () => {
     const { container } = draw();
-    const [cancel, confirm] = container.querySelectorAll('.dialog-actions button');
+    const [cancel, confirm] = container.querySelectorAll('.ui-dialog-foot button');
     expect(cancel.textContent).toContain('←');
     expect(confirm.textContent).toContain('Close the survey');
     expect(confirm.textContent).not.toContain('→');
@@ -206,7 +206,7 @@ describe('ConfirmDialog with arrowConfirms={false} — for acts that cannot be u
     const { container } = render(<ConfirmDialog title="t" message="m" confirmText="Skip" onConfirm={onConfirm} onCancel={() => {}} />);
     press('ArrowRight');
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(container.querySelectorAll('.dialog-actions button')[1].textContent).toContain('→');
+    expect(container.querySelectorAll('.ui-dialog-foot button')[1].textContent).toContain('→');
   });
 });
 

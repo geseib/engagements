@@ -137,7 +137,9 @@ describe('remoteStep — every game type x every phase, through roundStep', () =
   it('offers the read first on RESULTS, for every round type', () => {
     for (const type of ALL_TYPES) {
       if (type === 'survey') continue;
-      expect(stepOf('RESULTS#001', type).primary).toMatchObject({ id: 'field-notes', label: 'What we heard' });
+      // Trivia and Poll have no "What we heard" step: the read is named as that (dev QA 2 Nov).
+      const label = ['trivia', 'poll'].includes(type) ? "Workie's read" : 'What we heard';
+      expect(stepOf('RESULTS#001', type).primary).toMatchObject({ id: 'field-notes', label });
     }
   });
 
@@ -602,11 +604,11 @@ describe('phaseSummary', () => {
 
 describe('remotePanelTabs', () => {
   // Rejects: renaming the rounds tab's id on this surface. The desktop panel
-  // calls it `history` (config/setupPanel.js:32) and labels it `Rounds`; two
+  // calls it `history` (config/setupPanel.js) and labels it `Rounds so far` (the Session menu redesign); two
   // surfaces showing one list under two internal names is how they drift.
   it('uses the desktop panel\'s ids', () => {
-    expect(remotePanelTabs().map((t) => t.id)).toEqual(['players', 'history', 'questions']);
-    expect(remotePanelTabs().map((t) => t.label)).toEqual(['Players', 'Rounds', 'Questions']);
+    expect(remotePanelTabs().map((t) => t.id)).toEqual(['up-next', 'history', 'people']);
+    expect(remotePanelTabs().map((t) => t.label)).toEqual(['Up next', 'Rounds so far', 'People']);
   });
 
   // Rejects: adding Settings "for parity". Everything in the desktop's fourth

@@ -53,19 +53,19 @@ export const CAPABILITIES = Object.freeze([
   },
   {
     id: 'opening', name: 'The opening: the brief, its steps, Start building', oneScreen: 'Host screen; Session, Back to the opening',
-    twoScreens: 'Main-area panel while the room frames the build, and The brief in the side column; Session slot: Back to the opening',
+    twoScreens: 'Main-area panel while the room frames the build, and The brief in the side column; Session menu, Settings, End session: Back to the opening',
   },
   {
     id: 'crew', name: 'The crew: builders, early looks, run crew code', oneScreen: 'Host screen and Session',
-    twoScreens: 'Session slot: Crew; the crew board in the main area; builders marked in People',
+    twoScreens: 'Session menu, Settings, Build settings: Crew; the crew board in the main area; builders marked in People',
   },
   {
     id: 'share-demo', name: 'Share demo on this Wi-Fi, the codes card, the enlarged QR', oneScreen: 'Header join code, Share demo chip, Session',
-    twoScreens: 'Top line: Join (the codes on the wall) and Share demo; Session',
+    twoScreens: 'Top line: Join (the codes on the wall) and Share demo; Session menu, Settings, Joining',
   },
   {
     id: 'claude-status', name: "Claude's status, the doing line, the plugin's update dot, Continue, Connect Claude", oneScreen: 'Header chip, Session',
-    twoScreens: "Claude now at the top of the side column; Connect Claude, the plugin and Continue in the Session slot",
+    twoScreens: "Claude now at the top of the side column; Connect Claude, the plugin and Continue in the Session menu, Settings, Build settings",
   },
   {
     id: 'host-alert', name: 'The Host alert (what waits, Mark all seen)', oneScreen: 'Header tab on Build and History; HOST on the Stage, one press home',
@@ -73,28 +73,28 @@ export const CAPABILITIES = Object.freeze([
   },
   {
     id: 'players', name: 'Players: handover requests, remove, Away, Builders; team invitations', oneScreen: 'Session, Players',
-    twoScreens: 'Rail: People (who has answered, by name); the request strip in the main area; Session slot: Players',
+    twoScreens: 'Rail: People (the person row; an asker amber with Let them and Not now); the Needs-you line; Session menu: Players',
   },
   {
     id: 'settings', name: 'Settings: codes, list names, Claude, Crew, opening, wrap up, report, end', oneScreen: 'Session',
-    twoScreens: 'Session slot: Settings opens the Session panel; the \\ key too',
+    twoScreens: 'The top bar\'s Session menu, top right, a sheet over the content area; the \\ key too',
   },
   {
     id: 'history', name: 'History: filters, the ask window, the mockup viewer', oneScreen: 'History screen',
-    twoScreens: 'Session slot: Look here, privately: History; on the wall from The room sees',
+    twoScreens: 'The side column; Session menu, Settings, Screens: Look here, privately: History; on the wall from The room sees',
   },
   {
     id: 'build-screen', name: 'The Build screen: latest shot, open the build', oneScreen: 'Build screen',
-    twoScreens: 'Session slot: Look here, privately: Build; on the wall from The room sees',
+    twoScreens: 'Session menu, Settings, Screens: Look here, privately: Build; on the wall from The room sees',
   },
   {
     id: 'report', name: 'The report, wrap-up, end', oneScreen: 'Session, This session',
-    twoScreens: 'Session slot: Wrap up, Report, End session',
+    twoScreens: 'Session menu, Settings, End session: Wrap up, Report, End session',
   },
   // The room's window (parity PLAN §2.7, B7 and B9 in part): the Screens group, and the link that opens the wall.
   {
     id: 'screens', name: "Screens: the room's window, its status, the room screen size, a new link", oneScreen: 'Session, Settings, Screens',
-    twoScreens: 'Session slot: Screens',
+    twoScreens: 'Session menu, Settings, Screens',
   },
   {
     id: 'room-window', name: "The room's window (/present?type=build), following Stage, Build and History", oneScreen: "The header's Room's window ↗ (Host, Build, History), the Stage dock's ROOM'S WINDOW; Session, Settings, Screens: Room's window",
@@ -103,7 +103,7 @@ export const CAPABILITIES = Object.freeze([
   // The release gate (owner, 17 Oct 2026; parity PLAN §2c).
   {
     id: 'release-posts', name: "Releasing Claude's posts and screenshots to the room: release, keep to myself, release all, the check-posts switch", oneScreen: 'Host screen, Waiting for you; Session, Settings, Claude',
-    twoScreens: 'Rail: Waiting for you; Session, Settings, Claude',
+    twoScreens: 'Rail: Waiting for you; Session menu, Settings, Build settings',
   },
 ].map((c) => Object.freeze(c)));
 

@@ -448,6 +448,20 @@ const marcus = { playerName: 'Marcus', clientId: 'c-marcus' };
     const p = await playCall('GET', 'state', priya);
     assert.strictEqual(p.body.outcome.summary, 'A sign-up site, edited');
   });
+  // QA walk on test, 31 Oct 2026: the first wrap-up link ("Shift sheet") was taken for the build.
+  await check('a wrap-up link is the build only when marked; one at most; the room\'s read keeps the mark', async () => {
+    const r = await hostCall('POST', 'outcome', { summary: 'A shift picker', links: [
+      { label: 'Shift sheet', url: 'https://example.com/sheet' },
+      { label: 'The demo', url: 'https://example.com/demo', demo: true },
+      { label: 'Also demo', url: 'https://example.com/two', demo: true },
+      { label: 'Not a flag', url: 'https://example.com/three', demo: 'yes' },
+    ] });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.outcome.links.map((l) => l.demo === true), [false, true, false, false]);
+    assert.ok(!('demo' in r.body.outcome.links[0]), 'an unmarked link carries no flag');
+    const p = await playCall('GET', 'state', priya);
+    assert.deepStrictEqual(p.body.outcome.links.map((l) => l.demo === true), [false, true, false, false]);
+  });
 
   await check('local links reach the host (who can open them) but never a phone (which cannot)', async () => {
     const ask = (await agentCall('POST', 'asks', { kind: 'choice', prompt: 'Which footer?', options: [{ title: 'Plain', url: 'http://localhost:5173/a' }, { title: 'Map', url: 'https://preview.example.com/b' }] })).body.ask;

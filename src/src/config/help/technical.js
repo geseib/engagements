@@ -26,9 +26,11 @@ const troubleshooting = {
   sections: [
     {
       /*
-        lambda-functions/game/session-gate.js (404 "Game not found"; 403 "This
-        game has not been started yet. Please wait for the host to start the
-        session."; never refuses an ended session). components/RootPage.jsx and
+        lambda-functions/game/session-gate.js (404; 403 not started; never
+        refuses an ended session). The phone shows neither server sentence
+        (experience plan 3a/3e): joinResult.js says JOIN.wrongCode for the 404,
+        and not started is PlayerPage's lobby "Waiting for the host.", which
+        retries the join by itself every 4 seconds. components/RootPage.jsx and
         JoinCodeEntry.jsx (/join: "Nothing is running under {code}", Try
         again). PlayerPage "Use a different code". components/joinResult.js
         getClientId: the per-browser id lives in browser storage; with none,
@@ -43,8 +45,8 @@ const troubleshooting = {
           t: 'table',
           head: ['What they see', 'What to do'],
           rows: [
-            ['"This game has not been started yet"', 'The session exists but has not started. Start it, then they press **Join Game** again: the page does not retry by itself.'],
-            ['"Nothing is running under …", or "Game not found"', 'The four digits are wrong, or come from an old link. Read the code off the main screen (a 0 and an 8 look alike from the back). On a link, **Use a different code** lets them type it.'],
+            ['"Waiting for the host." (Holding your place)', 'The session exists but has not started. Start it: their page joins by itself within a few seconds, nothing for them to tap.'],
+            ['"Nothing is running under …"', 'The four digits are wrong, or come from an old link. Read the code off the room’s screen (a 0 and an 8 look alike from the back). On a link, **Use a different code** lets them type it.'],
             ['"This session is private."', 'It needs the access code as well. See Joining a session › A private session.'],
             ['"That name is taken."', 'Someone else, or their own other device, holds that name. See Joining a session › When your name is taken.'],
             ['The QR code does nothing', 'Some camera apps need a tap on the link they find. Or go to the join page and type the four digits.'],
@@ -55,7 +57,7 @@ const troubleshooting = {
           t: 'note',
           tone: 'info',
           title: 'Players never sign in',
-          text: 'A player asked to sign in has a host link. Give them the join address, under **Players join at** in the Session panel\'s Settings, or the QR.',
+          text: 'A player asked to sign in has a host link. Give them the join address, under **Players join at** in the Session menu\'s Joining section, or the QR.',
         },
         {
           t: 'p',

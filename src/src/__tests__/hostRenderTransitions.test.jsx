@@ -157,28 +157,23 @@ describe('GameHostPage survives every screen change', () => {
   });
 
   /**
-   * THE REPORTED JOURNEY, ALL THE WAY THROUGH.
+   * THE REPORTED JOURNEY, ALL THE WAY THROUGH ("I tried launching a QuickStart
+   * game and it goes to a blank screen").
    *
-   * The first version of this test stopped at the Quick Start MENU and passed
-   * against the broken code — because welcome and the menu are BOTH
-   * early-return branches, and both render the same reduced set of hooks.
-   * Nothing is wrong until the render gets past every guard into the live page,
-   * which is the hop the owner described: *"once starting the quick start"*.
-   *
-   * So this drives the whole journey — welcome → menu → pick a set → live game —
-   * and it is the hop at the end that does the work.
+   * Since experience plan 4c Quick start is the fast lane inside New
+   * engagement, and what it creates lands on the session's own Setup (not
+   * started, with Start and Edit there) like any create. So the journey is
+   * Home → New engagement → Quick start → Setup → Start → the live page, and
+   * it is still the last hop, past every early return, that does the work.
    */
-  test('welcome → Quick Start → a started game does not change the hook count', async () => {
+  test('Home → New → Quick start → Setup → Start → a started session does not change the hook count', async () => {
     installFetch({
-      'admin/question-sets': {
-        // `questionSets`, not `sets` — QuickstartMenu:44 reads that key, and a
-        // fixture with the wrong one renders an empty menu that passes for the
-        // wrong reason.
-        questionSets: [{
+      'question-sets': {
+        sets: [{
           id: 'lessons-learned',
           name: 'Lessons learned',
           engagementType: 'call-and-answer',
-          questionCount: 8,
+          totalQuestions: 8,
           active: true,
           quickstart: true,
         }],
@@ -186,21 +181,72 @@ describe('GameHostPage survives every screen change', () => {
     });
     render(<GameHostPage />);
 
-    const quickStart = await screen.findByRole('button', { name: /quick start/i });
-    await act(async () => { fireEvent.click(quickStart); });
+    const newButton = await screen.findByRole('button', { name: /new engagement/i });
+    await act(async () => { fireEvent.click(newButton); });
     expect(errors.hookOrderFailures()).toEqual([]);
 
-    // The set button carries the set's name. Clicking it creates the game and
-    // hands `onGameCreated` back to the page, which clears every guard at once.
-    const set = await screen.findByText(/lessons learned/i);
+    // The lane says what it will make before the press.
+    const lane = await screen.findByTestId('gsd-quick');
+    expect(lane).toHaveTextContent('Call & Answer with “Lessons learned”, every default. You land on its Setup, ready to start.');
     await act(async () => {
-      fireEvent.click(set.closest('button') || set);
+      fireEvent.click(screen.getByRole('button', { name: /^quick start$/i }));
       await Promise.resolve();
     });
 
+    // It lands on Setup, not started — not the Sessions list, not live.
+    const setup = await screen.findByTestId('setup-before-start');
+    expect(setup).toHaveTextContent('Quick Call & Answer: Lessons learned');
+    expect(setup).toHaveTextContent('Created. Nobody can join until you start it.');
+    expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
+    const posted = global.fetch.mock.calls.filter(([u, o]) => (o?.method || 'GET') === 'POST' && /\/games$/.test(String(u)));
+    expect(posted).toHaveLength(1);
+    expect(JSON.parse(posted[0][1].body)).toMatchObject({
+      eventTitle: 'Quick Call & Answer: Lessons learned', gameType: 'call-and-answer', questionSetId: 'lessons-learned', selectedCategories: [],
+    });
+    expect(global.fetch.mock.calls.some(([u]) => /\/start$/.test(String(u)))).toBe(false);
+    expect(errors.hookOrderFailures()).toEqual([]);
+
+    // Start, from Setup: POST /start, and the page carries past every guard.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^start/i }));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(global.fetch.mock.calls.some(([u]) => String(u).endsWith(`games/${GAME}/start`))).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId('setup-before-start')).toBeNull());
     await waitFor(() => expect(errors.hookOrderFailures()).toEqual([]));
     // ...and the page is actually showing something, not a blank body.
     expect(document.body.textContent.trim()).not.toBe('');
+  });
+
+  /* EDIT BEFORE IT STARTS, FROM SETUP (experience plan 4c: "Setup keeps an
+     Edit"). The owner's "edit before it starts" used to be ⋯ › Edit on a list
+     row; now it is on the Setup a create lands on, and closing the edit
+     dialog goes back to that Setup. */
+  test('Setup keeps an Edit: it opens the edit dialog, and closing it goes back to Setup', async () => {
+    installFetch({
+      'question-sets/lessons-learned/categories': { categories: [] },
+      'question-sets': {
+        sets: [{ id: 'lessons-learned', name: 'Lessons learned', engagementType: 'call-and-answer', totalQuestions: 8, active: true }],
+      },
+      'host-details': {
+        title: 'Quick Call & Answer: Lessons learned', gameType: 'call-and-answer', questionSetId: 'lessons-learned', started: false,
+      },
+    });
+    render(<GameHostPage />);
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /new engagement/i })); });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: /^quick start$/i }));
+      await Promise.resolve();
+    });
+    await screen.findByTestId('setup-before-start');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^edit$/i })); });
+    expect(await screen.findByRole('heading', { name: 'Edit session' })).toBeInTheDocument();
+    expect(global.fetch.mock.calls.some(([u]) => String(u).endsWith(`games/${GAME}/host-details`))).toBe(true);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^cancel$/i })); });
+    expect(await screen.findByTestId('setup-before-start')).toBeInTheDocument();
+    expect(errors.hookOrderFailures()).toEqual([]);
   });
 
   // rejects: the crossing that actually reached a host — leaving the welcome
@@ -575,8 +621,11 @@ describe('the stage takes a set instruction from the question, not only the cata
     // THE REGRESSION: fix round 1 left this reading "Start First Round" —
     // the generic default — forever, because the lookup that would have
     // supplied "Lesson" was never called on this path.
+    // Setup is the lobby (experience plan 2b): before the host has chosen
+    // where the room watches, Your part now holds round 1's slot and names it
+    // with the same label ("Start lesson 1 · after setup").
     await waitFor(
-      () => expect(screen.getByText('Start lesson 1')).toBeInTheDocument(),
+      () => expect(screen.getByText(/^Start lesson 1\b/)).toBeInTheDocument(),
       { timeout: 2000 }
     );
   });

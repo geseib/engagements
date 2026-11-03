@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone comments</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   PAGE CHROME (the design doc around the phones). Not part of the proposal.
+   ========================================================================== */
+:root {
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A;
+  --text: #F4EDE4; --muted: #9BA8BE; --amber: #F6A94C; --rule: rgba(244,237,228,.16);
+  --doc-bg: #0B1424;
+}
+:root[data-theme="light"] { --doc-bg: #0B1424; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --doc-bg: #0B1424; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--doc-bg); color: var(--text); font: 15px/1.55 "Inter", system-ui, sans-serif; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 40px 16px 80px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--amber); margin: 0 0 8px; }
+h1.doc { font-family: "Archivo", sans-serif; font-stretch: 125%; font-weight: 800; font-size: 30px; line-height: 1.1; margin: 0 0 12px; }
+h2.doc { font-family: "Archivo", sans-serif; font-stretch: 125%; font-weight: 700; font-size: 19px; margin: 56px 0 6px; padding-top: 20px; border-top: 1px solid var(--rule); }
+p.lede { max-width: 820px; margin: 0 0 10px; }
+p.note { color: var(--muted); font-size: 13px; max-width: 820px; margin: 0 0 18px; }
+.row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.fig { display: flex; gap: 20px; align-items: flex-start; padding: 20px; background: #0D1729; border: 1px solid var(--rule); border-radius: 16px; }
+.notes { width: 300px; font-size: 13px; color: #C9D2E0; }
+.notes h3 { font-size: 15px; margin: 0 0 8px; color: var(--text); }
+.notes ol { margin: 0; padding-left: 20px; }
+.notes li { margin: 0 0 8px; }
+.notes .k { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #E5645E; color: #fff; font-weight: 800; font-size: 12px; margin-right: 4px; }
+.notes code { font-size: 12px; color: #F4EDE4; }
+.pin { position: absolute; z-index: 20; width: 22px; height: 22px; border-radius: 50%; background: #E5645E; color: #fff; font: 800 12px/22px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #0F1A2E; }
+.fold { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed rgba(229,100,94,.85); z-index: 30; pointer-events: none; }
+.fold span { position: absolute; right: 6px; top: -20px; font: 700 12px Inter, sans-serif; color: #EF8C86; background: #0F1A2E; padding: 0 4px; }
+
+/* ============================================================================
+   THE PHONE FRAME
+   ========================================================================== */
+.phone { position: relative; flex: none; border-radius: 28px; overflow: hidden; border: 8px solid #050A14; box-shadow: 0 20px 60px rgba(0,0,0,.45); background: #0F1A2E; }
+.w390 { width: 406px; } /* 390 viewport + 2x8 bezel */
+.w360 { width: 376px; }
+.h844 { height: 860px; }
+.h740 { height: 756px; }
+
+/* ============================================================================
+   TODAY — the shipped CSS, copied VERBATIM under .today, so the shipped bugs
+   reproduce by themselves rather than being drawn:
+     styles.css:11823-11998 (past-round), RoundReport.css:50-188 (rr-c),
+     FeedbackRoundPanel.css:45-85 (fbr), PlayerSurface.css (plr shell bits).
+   Note in particular: --rr-c-* are declared ONLY on .rr-c (RoundReport.css:50-62);
+   .rr-c__add sits outside any .rr-c, so its colour / border / font-size are
+   invalid at computed-value time and fall back to inherited plain text.
+   ========================================================================== */
+.today {
+  --accent: #F6A94C; --accent-rgb: 246 169 76; --shade-rgb: 15 26 46; --primary: #F6A94C;
+  --text: #F4EDE4; --muted: #9BA8BE; --bg: #0F1A2E; --surface: #1B2942;
+  --plr-muted: #B6C2D4; --plr-rule: rgba(182,194,212,.20); --plr-rule-strong: rgba(182,194,212,.34);
+  --plr-t-meta: .8125rem; --plr-t-body: 1rem; --plr-t-secondary: 1.1875rem; --plr-tap: 44px; --plr-gut: 18px;
+  background: var(--bg); color: var(--text);
+  font-family: "Inter", system-ui, sans-serif; font-size: 1rem; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.today .plr-bar { border-bottom: 1px solid var(--plr-rule); }
+.today .plr-strip { height: 4px; background: var(--plr-rule); }
+.today .plr-line { display: flex; align-items: center; gap: 12px; padding: 10px 18px; font-size: var(--plr-t-meta); font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--plr-muted); }
+.today .plr-spacer { flex: 1; }
+.today .plr-dot { width: 8px; height: 8px; border-radius: 50%; background: #4FB286; display: inline-block; margin-right: 6px; }
+.today .plr-stage { padding: 20px 18px 28px; }
+.today .plr-feedback-top-close { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 0 12px auto; border: 1px solid var(--plr-rule-strong); border-radius: 50%; background: transparent; color: var(--text); }
+.today .plr-btn { display: block; width: 100%; min-height: 56px; padding: 15px 16px; border-radius: 14px; font-family: inherit; font-size: var(--plr-t-secondary); line-height: 1.2; text-align: center; }
+.today .plr-btn--ghost { background: transparent; border: 1px solid var(--plr-rule-strong); color: var(--text); font-weight: 700; }
+
+/* FeedbackRoundPanel.css:45-72 */
+.today .fbr { --fbr-text: var(--text); display: flex; flex-direction: column; gap: 12px; }
+.today .fbr__lead { margin: 0; font-size: 15px; line-height: 1.5; color: var(--fbr-text); }
+.today .fbr .markdown-content, .today .fbr .markdown-content * { color: var(--text); }
+.today .fbr .markdown-content h3, .today .fbr .markdown-content strong { color: var(--accent); }
+.today .markdown-content { line-height: 1.6; }
+
+/* styles.css:11823-11998 */
+.today .past-round__body { display: flex; flex-direction: column; gap: 20px; }
+.today .past-round__question h3 { margin: 0 0 6px; font-size: 1.3rem; }
+.today .past-round__detail { margin: 0 0 10px; opacity: .85; white-space: pre-wrap; }
+.today .past-round__results h4, .today .past-round__summary h4 { margin: 0 0 8px; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; opacity: .6; }
+.today .past-round__answers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.today .past-round__answers li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,.04); }
+.today .past-round__answers li.is-lead { background: rgba(74,124,247,.12); }
+.today .past-round__rank { opacity: .7; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid rgba(0,0,0,.18); border-radius: 50%; background: transparent; color: inherit; font: inherit; font-weight: 700; line-height: 1; }
+.today .past-round__rank.is-podium { opacity: 1; border-color: transparent; background: var(--primary); color: #fff; }
+.today .past-round__answer { overflow-wrap: anywhere; }
+.today .past-round__who { font-size: .85rem; opacity: .75; white-space: nowrap; }
+.today .past-round__empty { margin: 0; opacity: .7; font-style: italic; }
+.today .past-round__md > :first-child { margin-top: 0; }
+
+/* RoundReport.css:50-188, verbatim */
+.today .rr-c { --rr-c-text: var(--text); --rr-c-muted: var(--muted); --rr-c-accent: var(--accent); --rr-c-wash: rgba(255,255,255,.06); --rr-c-rule: rgb(var(--accent-rgb) / .28); --rr-c-t-floor: 12px; --rr-c-t-label: 13px; --rr-c-t-body: 15px; margin-top: 16px; padding: 12px 14px; background: var(--rr-c-wash); border-left: 3px solid var(--rr-c-rule); border-radius: 6px; }
+.today .rr-c__head { margin: 0 0 8px; font-size: var(--rr-c-t-label); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--rr-c-accent); }
+.today .rr-c__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.today .rr-c__item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.today .rr-c__anchor { font-size: var(--rr-c-t-floor); font-weight: 600; letter-spacing: .04em; color: var(--rr-c-muted); }
+.today .rr-c__excerpt { font-size: var(--rr-c-t-floor); line-height: 1.45; color: var(--rr-c-muted); }
+.today .rr-c__text { font-size: var(--rr-c-t-body); line-height: 1.5; color: var(--rr-c-text); }
+.today .rr-c__who { font-size: var(--rr-c-t-floor); color: var(--rr-c-muted); }
+.today .rr-c__section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.today .rr-c__section-head > :first-child { min-width: 0; }
+.today .rr-c__add { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: var(--rr-c-t-floor); font-weight: 600; letter-spacing: .03em; color: var(--rr-c-accent); background: transparent; border: 1px solid var(--rr-c-rule); border-radius: 999px; min-height: 28px; }
+.today .past-round__answers .rr-c__add { margin-left: 8px; flex: 0 0 auto; }
+.today svg { flex: none; }
+
+/* ============================================================================
+   PROPOSED — scoped .pc ("phone comments"). Player phone ladder
+   (PlayerSurface.css:111-115): 34 / 24 / 19 / 16 / 13. Nothing below 13px,
+   which is above the 12px floor. Every colour a token in this block.
+   ========================================================================== */
+.pc {
+  --bg: #0F1A2E; --surface: #1B2942; --surface-2: #25375A; --text: #F4EDE4;
+  --pc-muted: #B6C2D4;               /* = --plr-muted */
+  --pc-amber: #F6A94C;               /* = --primary: the ONE action colour (Post) */
+  --pc-workie: #7CA7E6;              /* = --secondary: Workie's identity, never an action */
+  --pc-good: #6FD0A4;                /* = --plr-success-text */
+  --pc-rule: rgba(182,194,212,.20);
+  --pc-rule-strong: rgba(182,194,212,.34);
+  --pc-edge: rgba(182,194,212,.55);  /* control outlines: 3.49:1 on --surface, 3.79:1 on --bg (WCAG 1.4.11) */
+  --pc-wash: rgba(255,255,255,.05);
+  --pc-workie-wash: rgba(124,167,230,.10);
+  --pc-amber-wash: rgba(246,169,76,.10);
+  --pc-good-wash: rgba(111,208,164,.10);
+  --pc-t-h1: 1.5rem;      /* 24 */
+  --pc-t-h2: 1.1875rem;   /* 19 */
+  --pc-t-body: 1rem;      /* 16 */
+  --pc-t-meta: .8125rem;  /* 13 — the phone floor; above the 12px house floor */
+  --pc-tap: 44px;
+  --pc-gut: 18px;
+  display: flex; flex-direction: column; height: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: "Inter", system-ui, sans-serif; font-size: var(--pc-t-body); line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.pc.auto { height: auto; }
+.pc * { box-sizing: border-box; }
+.pc button { font-family: inherit; }
+.pc .bar { flex: none; border-bottom: 1px solid var(--pc-rule); }
+.pc .strip { height: 4px; background: var(--pc-rule); }
+.pc .line { display: flex; align-items: center; gap: 12px; padding: 10px var(--pc-gut); font-size: var(--pc-t-meta); font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--pc-muted); }
+.pc .spacer { flex: 1; }
+.pc .dot { width: 8px; height: 8px; border-radius: 50%; background: #4FB286; display: inline-block; margin-right: 6px; }
+.pc .stage { flex: 1; min-height: 0; overflow: hidden; padding: 16px var(--pc-gut) 28px; }
+.pc.auto .stage { overflow: visible; }
+
+/* page head */
+.pc .head { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 6px; }
+.pc .h1 { margin: 0; flex: 1; min-width: 0; font-size: var(--pc-t-h1); line-height: 1.15; font-weight: 800; letter-spacing: -.01em; }
+.pc .x { flex: none; width: var(--pc-tap); height: var(--pc-tap); display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--pc-edge); border-radius: 50%; background: transparent; color: var(--text); }
+.pc .lede { margin: 0 0 14px; color: var(--pc-muted); font-size: var(--pc-t-body); }
+.pc .jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
+.pc .jump a { display: inline-flex; align-items: center; min-height: var(--pc-tap); padding: 0 14px; border: 1px solid var(--pc-edge); border-radius: 999px; color: var(--text); text-decoration: none; font-size: var(--pc-t-meta); font-weight: 700; }
+.pc .mine { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: var(--pc-amber-wash); border: 1px solid rgba(246,169,76,.35); font-size: var(--pc-t-meta); }
+.pc .mine b { display: block; font-size: var(--pc-t-body); margin-bottom: 4px; }
+.pc .mine a { color: var(--text); font-weight: 700; text-underline-offset: 3px; }
+
+/* the question — context, not a comment target */
+.pc .q { margin: 0 0 22px; padding: 0 0 18px; border-bottom: 1px solid var(--pc-rule); }
+.pc .lab { margin: 0 0 4px; font-size: var(--pc-t-meta); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--pc-muted); }
+.pc .q p.qt { margin: 0; font-size: var(--pc-t-h2); font-weight: 700; line-height: 1.3; }
+.pc .q p.qd { margin: 4px 0 0; color: var(--pc-muted); }
+
+/* a SECTION: real heading, own icon, own action inside it */
+.pc .sec { margin: 0 0 26px; }
+.pc .sec-h { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }
+.pc .sec-ic { flex: none; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.pc .sec-h h2 { margin: 0; font-size: var(--pc-t-h2); line-height: 1.25; font-weight: 800; }
+.pc .sec-h .n { font-weight: 600; color: var(--pc-muted); }
+.pc .sec-sub { margin: 0 0 12px 42px; font-size: var(--pc-t-meta); color: var(--pc-muted); }
+
+/* Workie's read: one card, periwinkle identity */
+.pc .card { background: var(--surface); border: 1px solid var(--pc-rule); border-radius: 14px; }
+.pc .workie { border-left: 4px solid var(--pc-workie); }
+.pc .workie .sec-ic { background: var(--pc-workie-wash); color: var(--pc-workie); }
+.pc .workie-body { padding: 14px 16px 4px; }
+.pc .md h3 { margin: 0 0 6px; font-size: var(--pc-t-body); font-weight: 800; color: var(--text); }
+.pc .md p { margin: 0 0 10px; }
+.pc .md ul { margin: 0 0 10px; padding-left: 18px; }
+.pc .md li { margin: 0 0 4px; }
+.pc .md strong { color: var(--text); font-weight: 700; }
+.pc .clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.pc .more { display: inline-flex; align-items: center; gap: 6px; min-height: var(--pc-tap); padding: 0; border: 0; background: none; color: var(--text); font-size: var(--pc-t-meta); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* the action at the foot of its own section */
+.pc .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--pc-rule); }
+.pc .act { display: inline-flex; align-items: center; gap: 8px; min-height: var(--pc-tap); padding: 0 14px; border: 1px solid var(--pc-edge); border-radius: 10px; background: transparent; color: var(--text); font-size: var(--pc-t-body); font-weight: 700; }
+.pc .act.wide { width: 100%; justify-content: center; }
+/* The thread toggle gets its OWN row under the action, so the action never shares a row and nothing wraps unevenly. */
+.pc .count { display: flex; width: 100%; align-items: center; gap: 6px; min-height: var(--pc-tap); padding: 0 4px; border: 0; background: none; color: var(--text); font-size: var(--pc-t-meta); font-weight: 700; text-align: left; }
+.pc .count.yours { color: var(--text); }
+
+/* the thread: under the thing it belongs to */
+.pc .thread { margin: 0; padding: 4px 16px 12px; list-style: none; }
+.pc .thread-h { margin: 0; padding: 12px 16px 2px; font-size: var(--pc-t-meta); font-weight: 700; color: var(--pc-muted); }
+.pc .c { padding: 8px 0 8px 12px; border-left: 2px solid var(--pc-rule-strong); margin: 6px 0; }
+.pc .c .who { display: flex; gap: 8px; align-items: center; font-size: var(--pc-t-meta); font-weight: 700; color: var(--pc-muted); }
+.pc .c .t { margin: 2px 0 0; overflow-wrap: anywhere; }
+.pc .c.you { border-left-color: var(--pc-amber); }
+.pc .c.new { background: var(--pc-amber-wash); border-radius: 0 8px 8px 0; padding-right: 8px; }
+.pc .tag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--pc-rule-strong); color: var(--text); font-size: var(--pc-t-meta); font-weight: 700; letter-spacing: 0; }
+.pc .tag.room { border-style: dashed; }
+
+/* the responses: one card each, one reply action each */
+.pc .resp .sec-ic { background: var(--pc-wash); color: var(--text); }
+.pc .ans-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.pc .ans { overflow: hidden; }
+.pc .ans.target { outline: 2px solid var(--pc-amber); outline-offset: 2px; }
+.pc .ans-top { padding: 12px 14px 0; }
+.pc .ans-meta { display: block; margin-top: 1px; font-size: var(--pc-t-meta); font-weight: 600; color: var(--pc-muted); }
+.pc .num { flex: none; min-width: 32px; height: 32px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: var(--pc-t-meta); border: 1px solid var(--pc-rule-strong); color: var(--text); }
+.pc .num.top { background: var(--surface-2); border-color: var(--pc-rule-strong); }
+.pc .ans-who { display: block; font-weight: 700; overflow-wrap: anywhere; }
+.pc .ans-votes { flex: none; font-size: var(--pc-t-meta); color: var(--pc-muted); font-weight: 600; }
+.pc .ans-text { margin: 8px 14px 12px; overflow-wrap: anywhere; }
+.pc .ans-text.c2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pc .ans .foot { padding: 4px 10px 6px; }
+.pc .ans .thread { padding-top: 0; }
+.pc .status { display: flex; gap: 8px; align-items: flex-start; margin: 10px 14px 0; padding: 10px 12px; border-radius: 10px; background: var(--pc-good-wash); border: 1px solid rgba(111,208,164,.45); font-size: var(--pc-t-meta); color: var(--text); }
+.pc .status svg { color: var(--pc-good); margin-top: 1px; }
+
+/* the whole round: last, smaller, worded as "something else" */
+.pc .round .sec-ic { background: var(--pc-wash); color: var(--text); }
+.pc .round-body { padding: 12px 16px 2px; color: var(--pc-muted); font-size: var(--pc-t-meta); }
+.pc .close-btn { display: block; width: 100%; min-height: 56px; border-radius: 14px; border: 1px solid var(--pc-edge); background: transparent; color: var(--text); font-size: var(--pc-t-h2); font-weight: 700; }
+
+/* sticky section head while scrolling a long list */
+.pc .sticky { position: relative; margin: -16px calc(-1 * var(--pc-gut)) 12px; padding: 10px var(--pc-gut); background: var(--bg); border-bottom: 1px solid var(--pc-rule); box-shadow: 0 6px 14px rgba(15,26,46,.6); }
+.pc .sticky .sec-h { margin: 0; }
+.pc .sticky .sec-sub { margin: 2px 0 0 42px; }
+
+/* THE COMPOSE SHEET — docked in the shell's flex column (like .plr-dock), not
+   position:fixed and not a Modal: the page above stays readable and scrollable. */
+.pc .sheet { flex: none; position: relative; z-index: 5; background: var(--surface); border-top: 2px solid var(--pc-amber); border-radius: 18px 18px 0 0; box-shadow: 0 -12px 30px rgba(5,10,20,.7); padding: 12px var(--pc-gut) 14px; }
+.pc .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--pc-rule-strong); margin: 0 auto 10px; }
+.pc .sheet-h { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.pc .sheet-h h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--pc-t-h2); line-height: 1.25; font-weight: 800; }
+.pc .sheet .x { width: 40px; height: 40px; }
+.pc .quote { margin: 0 0 10px; padding: 8px 12px; border-left: 4px solid var(--pc-rule-strong); background: var(--pc-wash); border-radius: 0 10px 10px 0; }
+.pc .quote.w { border-left-color: var(--pc-workie); background: var(--pc-workie-wash); }
+.pc .quote .qm { display: block; font-size: var(--pc-t-meta); font-weight: 700; color: var(--pc-muted); margin-bottom: 2px; }
+.pc .quote p { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pc .box { width: 100%; min-height: 84px; resize: none; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--pc-rule-strong); background: rgba(255,255,255,.08); color: var(--text); font: 400 1.1875rem/1.4 "Inter", sans-serif; }
+.pc .box:focus { outline: 2px solid var(--pc-amber); outline-offset: 1px; }
+.pc .box::placeholder { color: var(--pc-muted); }
+.pc .rule { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 10px; font-size: var(--pc-t-meta); color: var(--pc-muted); line-height: 1.45; }
+.pc .rule svg { margin-top: 1px; }
+.pc .sheet-act { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pc .cancel { min-height: var(--pc-tap); padding: 0 16px; border-radius: 10px; border: 1px solid var(--pc-edge); background: transparent; color: var(--text); font-size: var(--pc-t-body); font-weight: 700; }
+.pc .chars { font-size: var(--pc-t-meta); color: var(--pc-muted); }
+.pc .post { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-height: var(--pc-tap); padding: 0 18px; border-radius: 10px; border: 0; background: var(--pc-amber); color: var(--bg); font-size: var(--pc-t-body); font-weight: 800; }
+.pc .post[disabled] { background: transparent; color: var(--pc-muted); border: 1px solid var(--pc-rule-strong); }
+.pc .kbd { flex: none; height: 291px; background: #2A2D33; display: flex; flex-direction: column; gap: 10px; padding: 12px 6px; }
+.pc .kbd div { flex: 1; display: flex; gap: 6px; }
+.pc .kbd i { flex: 1; background: #474B52; border-radius: 6px; }
+.pc .kbd-cap { text-align: center; font: 600 12px Inter, sans-serif; color: #9AA0A8; }
+.pc .dim { opacity: .45; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.focus-ring { outline: 2px solid var(--text) !important; outline-offset: 2px; }
+
+/* results screen (the way in) — mirrors PlayerSurface.css */
+.pc .plab { margin: 0 0 7px; font-size: var(--pc-t-meta); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--pc-muted); }
+.pc .ph1 { margin: 0 0 12px; font-size: 2.125rem; line-height: 1.06; font-weight: 800; letter-spacing: -.02em; }
+.pc .pcard { margin: 0 0 14px; padding: 15px; border: 1px solid var(--pc-rule-strong); border-radius: 14px; background: var(--surface); }
+.pc .pcard p { margin: 0; font-size: 1.1875rem; line-height: 1.4; }
+.pc .stat { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--pc-rule); }
+.pc .stat .k { color: var(--pc-muted); font-size: var(--pc-t-meta); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.pc .stat .v { font-weight: 800; font-size: 1.1875rem; }
+.pc .cue { margin: 22px 0 0; padding-top: 14px; border-top: 1px solid var(--pc-rule); color: var(--pc-muted); }
+.pc .entry { margin-top: 26px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 56px; border-radius: 14px; border: 1px solid var(--pc-rule-strong); background: transparent; color: var(--text); font-size: 1.1875rem; font-weight: 700; }
+.pc .entry-sub { margin: 8px 0 0; text-align: center; font-size: var(--pc-t-meta); color: var(--pc-muted); }
+</style>
+</head>
+<body>
+
+<!-- Inline icon sprite (Phosphor-style, bold weight) -->
+<svg aria-hidden="true" width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 256 256"><path fill="currentColor" d="M128 28a100 100 0 0 0-87.7 148.1l-11.6 34.8a12 12 0 0 0 15.2 15.2l34.8-11.6A100 100 0 1 0 128 28Zm0 176a76 76 0 0 1-38.1-10.2a12 12 0 0 0-6-1.6a12.4 12.4 0 0 0-3.8.6l-21.4 7.1l7.1-21.4a12 12 0 0 0-1-9.8A76 76 0 1 1 128 204Z"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 256 256"><path fill="currentColor" d="M236 200a12 12 0 0 1-24 0a84.1 84.1 0 0 0-84-84H61l35.5 35.5a12 12 0 0 1-17 17l-56-56a12 12 0 0 1 0-17l56-56a12 12 0 0 1 17 17L61 92h67a108.1 108.1 0 0 1 108 108Z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 256 256"><path fill="currentColor" d="M208.5 191.5a12 12 0 0 1-17 17L128 145l-63.5 63.5a12 12 0 0 1-17-17L111 128L47.5 64.5a12 12 0 0 1 17-17L128 111l63.5-63.5a12 12 0 0 1 17 17L145 128Z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 256 256"><path fill="currentColor" d="M199 125.3l-52-19.1l-19.1-52a12 12 0 0 0-22.5 0l-19.1 52l-52 19.1a12 12 0 0 0 0 22.5l52 19.1l19.1 52a12 12 0 0 0 22.5 0l19.1-52l52-19.1a12 12 0 0 0 0-22.5Zm-65.7 22.4a12 12 0 0 0-7.1 7.1L117.3 179l-8.9-24.2a12 12 0 0 0-7.1-7.1L77 138.7l24.2-8.9a12 12 0 0 0 7.1-7.1l8.9-24.2l8.9 24.2a12 12 0 0 0 7.1 7.1l24.2 8.9Z"/></symbol>
+  <symbol id="i-people" viewBox="0 0 256 256"><path fill="currentColor" d="M117.3 159.6a64 64 0 1 0-74.6 0a100.3 100.3 0 0 0-39.6 31.5a12 12 0 1 0 19.2 14.4a76 76 0 0 1 121.6 0a12 12 0 0 0 19.2-14.4a100.3 100.3 0 0 0-45.8-31.5ZM40 108a40 40 0 1 1 40 40a40 40 0 0 1-40-40Zm210.1 97.2a12 12 0 0 1-16.8-2.4A76.1 76.1 0 0 0 172 172a12 12 0 0 1 0-24a40 40 0 1 0-14.8-77.2a12 12 0 1 1-8.9-22.3a64 64 0 0 1 58.4 111a100.3 100.3 0 0 1 45.8 31.5a12 12 0 0 1-2.4 16.8Z"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 256 256"><path fill="currentColor" d="M144 128a16 16 0 1 1-16-16a16 16 0 0 1 16 16Zm-84-16a16 16 0 1 0 16 16a16 16 0 0 0-16-16Zm136 0a16 16 0 1 0 16 16a16 16 0 0 0-16-16Z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 256 256"><path fill="currentColor" d="M251 123.1c-.4-.8-8.8-19.4-27.5-38.1C198.6 60.1 166.2 46 128 46S57.4 60.1 32.5 85c-18.7 18.7-27.1 37.3-27.5 38.1a12 12 0 0 0 0 9.8c.4.8 8.8 19.4 27.5 38.1C57.4 195.9 89.8 210 128 210s70.6-14.1 95.5-39c18.7-18.7 27.1-37.3 27.5-38.1a12 12 0 0 0 0-9.8ZM128 186c-30.2 0-56.6-11-78.4-32.6A129.3 129.3 0 0 1 29.7 128a129.3 129.3 0 0 1 19.9-25.4C71.4 81 97.8 70 128 70s56.6 11 78.4 32.6a129.3 129.3 0 0 1 19.9 25.4c-7.1 12.2-36.3 58-98.3 58Zm0-100a42 42 0 1 0 42 42a42 42 0 0 0-42-42Zm0 60a18 18 0 1 1 18-18a18 18 0 0 1-18 18Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 256 256"><path fill="currentColor" d="M128 20a108 108 0 1 0 108 108A108.1 108.1 0 0 0 128 20Zm0 192a84 84 0 1 1 84-84a84.1 84.1 0 0 1-84 84Zm48.5-119.5a12 12 0 0 1 0 17l-56 56a12 12 0 0 1-17 0l-24-24a12 12 0 0 1 17-17L112 140l47.5-47.5a12 12 0 0 1 17 0Z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 256 256"><path fill="currentColor" d="M216.5 104.5l-80 80a12 12 0 0 1-17 0l-80-80a12 12 0 0 1 17-17L128 159l71.5-71.5a12 12 0 0 1 17 17Z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 256 256"><path fill="currentColor" d="M216.5 168.5a12 12 0 0 1-17 0L128 97l-71.5 71.5a12 12 0 0 1-17-17l80-80a12 12 0 0 1 17 0l80 80a12 12 0 0 1 0 17Z"/></symbol>
+</svg>
+
+<div class="wrap">
+  <p class="eyebrow">Design · 1 Nov 2026 · participant phone</p>
+  <h1 class="doc">Comments on the phone: make it obvious what each one is about</h1>
+  <p class="lede">The owner: <i>“when the participants are asked to comment it is not super apparent the comment buttons go with AI read vs responses. the headers for the sections are the smallest text and both comment ‘buttons’ appear to go with the responses … when they pick response, are they commenting on all responses or each separately. how do we know which response they are commenting on.”</i></p>
+  <p class="note">The <b>Today</b> frames use the shipped CSS copied word for word, so the shipped faults show up by themselves rather than being drawn in. The <b>Proposed</b> frames use the player phone’s type ladder (24 / 19 / 16 / 13 px) and its colour tokens. The decisions, the backend changes they need and the reviews are in README.md and reviews.md, next to this file. The sample round is invented.</p>
+
+  <!-- =====================================================================
+       1-01 TODAY, WITH RESPONSES
+       ===================================================================== -->
+  <h2 class="doc">1 · What ships today</h2>
+  <p class="note">This is the player’s own panel, opened from <b>Feedback</b> on the results screen (PlayerPage.jsx:4661-4671 → 3604-3652 → FeedbackRoundPanel → RoundReport). The room opens the same panel when the host starts a feedback round (PlayerPage.jsx:4414).</p>
+  <div class="row">
+  <figure class="fig" id="f-today">
+    <div class="phone w390 today" style="position:relative">
+      <div class="plr-bar"><div class="plr-strip"></div><div class="plr-line"><span>Round 3 · Feedback</span><span class="plr-spacer"></span><span><i class="plr-dot"></i>Sam</span></div></div>
+      <div class="plr-stage">
+        <button class="plr-feedback-top-close" aria-label="Close"><svg aria-hidden="true" width="20" height="20"><use href="#i-x"/></svg></button>
+        <div class="fbr">
+          <p class="fbr__lead">Read it back, then say what you think. Tap <b>Comment</b> on the summary, on the results, or on any single response.</p>
+          <div class="past-round__body">
+            <section class="past-round__question">
+              <h3>What is one thing slowing down customer onboarding?</h3>
+              <p class="past-round__detail">Think about the first 30 days after a contract is signed.</p>
+            </section>
+            <section class="past-round__results">
+              <div class="rr-c__section-head">
+                <h4>Responses</h4>
+                <button class="rr-c__add" aria-label="Comment on the results"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button>
+              </div>
+              <ol class="past-round__answers">
+                <li class="is-lead"><button class="past-round__rank is-podium">1</button><span class="past-round__answer">The handoff from sales to implementation. Customers repeat everything they told…</span><span class="past-round__who">Priya Shah</span><button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button></li>
+                <li><button class="past-round__rank is-podium">2</button><span class="past-round__answer">Nobody owns the first 30 days. Sales has moved on and support hasn’t…</span><span class="past-round__who">Marcus Lee</span><button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button></li>
+                <li><button class="past-round__rank is-podium">3</button><span class="past-round__answer">Our security questionnaire. It takes legal two weeks…</span><span class="past-round__who">Dana Whitfield</span><button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button></li>
+                <li><button class="past-round__rank">4</button><span class="past-round__answer">Kickoff calls get scheduled for week three because…</span><span class="past-round__who">Sam Okafor</span><button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button></li>
+              </ol>
+              <div class="rr-c">
+                <h5 class="rr-c__head">Comments</h5>
+                <ol class="rr-c__list">
+                  <li class="rr-c__item"><span class="rr-c__anchor">Response 1 — Priya Shah</span><span class="rr-c__excerpt">The handoff from sales to implementation. Customers repeat everything they told sales…</span><span class="rr-c__text">Could sales record the discovery call? Then nobody has to repeat it.</span><span class="rr-c__who">Dana Whitfield</span></li>
+                  <li class="rr-c__item"><span class="rr-c__anchor">Results</span><span class="rr-c__excerpt">What is one thing slowing down customer onboarding?</span><span class="rr-c__text">Two people mentioned the onboarding survey nobody fills in.</span><span class="rr-c__who">Said in the room</span></li>
+                </ol>
+              </div>
+            </section>
+            <section class="past-round__summary">
+              <div class="rr-c__section-head">
+                <h4>AI summary</h4>
+                <button class="rr-c__add" aria-label="Comment on the AI summary"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button>
+              </div>
+              <div class="markdown-content past-round__md">
+                <h3>What the room said</h3>
+                <p>Four of six answers point at the same gap: <strong>the weeks between signature and kickoff</strong>, when no one team owns the customer.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <button class="plr-btn plr-btn--ghost">Close</button>
+      </div>
+      <span class="pin" style="top:354px;left:112px">1</span>
+      <span class="pin" style="top:474px;left:152px">2</span>
+      <span class="pin" style="top:608px;left:152px">3</span>
+      <span class="pin" style="top:349px;left:362px">4</span>
+      <span class="pin" style="top:1211px;left:362px">5</span>
+      <span class="pin" style="top:912px;left:132px">6</span>
+    </div>
+    <div class="notes">
+      <h3>Why the owner could not tell</h3>
+      <ol>
+        <li style="list-style:none;margin-left:-20px"><span class="k">1</span>The section headings are the <b>smallest, faintest text on the screen</b>: 12.8px, all capitals, 60% opacity (<code>styles.css:11901-11908</code>). A Workie heading inside the summary is drawn at about 19px in amber, so it is bigger than the section’s own heading.</li>
+        <li style="list-style:none;margin-left:-20px"><span class="k">2</span>Every “Comment” is <b>plain 16px text</b> rather than a pill. The <code>--rr-c-*</code> variables are declared only on the comment box (<code>RoundReport.css:50-62</code>), so the button’s colour, border and size fall back to inherited text. Each one is larger than the heading it belongs to.</li>
+        <li style="list-style:none;margin-left:-20px"><span class="k">3</span>A row has four children in a three-column grid (<code>styles.css:11919-11927</code>), so each response’s Comment wraps onto a line of its own under the row. The row’s background, <code>rgba(0,0,0,.04)</code>, is invisible on dusk, so the button floats halfway between its own response and the next one. Ties add a numbering fault: the phone orders ties differently from the report (<code>PlayerPage.jsx:231-235</code> vs <code>create-report.js:800-809</code>).</li>
+        <li style="list-style:none;margin-left:-20px"><span class="k">4</span>“Comment” beside “Responses” comments on the <b>whole round</b> (anchor <code>results</code>, <code>RoundReport.jsx:286-293</code>), but every label just says “Comment”. Nothing says “all” or “one”.</li>
+        <li style="list-style:none;margin-left:-20px"><span class="k">5</span>The AI summary’s Comment sits directly below the responses’ comment box. Its faint heading is the only thing separating it from the responses, so it <b>reads as the responses’ second button</b>. The phone also calls it “AI summary” while the rest of the product says “Workie’s read”.</li>
+        <li style="list-style:none;margin-left:-20px"><span class="k">6</span>Comments on every response and on the whole round <b>share one list</b> under Responses (<code>RoundReport.jsx:234, 370</code>). What a comment belongs to has to be read from a 12px label.</li>
+      </ol>
+    </div>
+  </figure>
+
+  <!-- 1-02 TODAY, NO VOTES -->
+  <figure class="fig" id="f-today-novotes">
+    <div class="phone w390 today" style="position:relative">
+      <div class="plr-bar"><div class="plr-strip"></div><div class="plr-line"><span>Round 3 · Feedback</span><span class="plr-spacer"></span><span><i class="plr-dot"></i>Sam</span></div></div>
+      <div class="plr-stage">
+        <button class="plr-feedback-top-close" aria-label="Close"><svg aria-hidden="true" width="20" height="20"><use href="#i-x"/></svg></button>
+        <div class="fbr">
+          <p class="fbr__lead">Read it back, then say what you think. Tap <b>Comment</b> on the summary, on the results, or on any single response.</p>
+          <div class="past-round__body">
+            <section class="past-round__question">
+              <h3>What is one thing slowing down customer onboarding?</h3>
+              <p class="past-round__detail">Think about the first 30 days after a contract is signed.</p>
+            </section>
+            <section class="past-round__results">
+              <div class="rr-c__section-head">
+                <h4>Responses</h4>
+                <button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button>
+              </div>
+              <p class="past-round__empty">Nobody voted on this round.</p>
+            </section>
+            <section class="past-round__summary">
+              <div class="rr-c__section-head">
+                <h4>AI summary</h4>
+                <button class="rr-c__add"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg><span>Comment</span></button>
+              </div>
+              <div class="markdown-content past-round__md">
+                <h3>What the room said</h3>
+                <p>Four of six answers point at the same gap: <strong>the weeks between signature and kickoff</strong>, when no one team owns the customer.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <button class="plr-btn plr-btn--ghost">Close</button>
+      </div>
+      <span class="pin" style="top:350px;left:244px">7</span>
+      <span class="pin" style="top:429px;left:244px">7</span>
+    </div>
+    <div class="notes">
+      <h3>The same panel with no responses to show</h3>
+      <ol>
+        <li style="list-style:none;margin-left:-20px"><span class="k">7</span>When the list is empty, because nobody answered or because the responses are still loading, exactly two “Comment”s are left, one under the other, with only a faint heading and one italic line between them. This matches the owner’s description word for word: <i>“both comment ‘buttons’ appear to go with the responses.”</i> The text is wrong too. “Nobody voted on this round.” (<code>PlayerPage.jsx:261-268, 3584-3590</code>) dates from before 14 Oct 2026. Since then <code>get-results</code> tallies every response at 0 when nobody votes (<code>get-results.js:912-936</code>), so this state now means <b>nobody answered</b>.</li>
+      </ol>
+      <p style="margin-top:12px">In the proposal, an empty list says “No responses came in for this round.” inside <b>The responses</b> section, which has no action of its own. Workie’s read and “Anything else” keep their own sections, so their buttons cannot be mistaken for the responses’.</p>
+    </div>
+  </figure>
+  </div>
+
+  <!-- =====================================================================
+       2 PROPOSED PANEL
+       ===================================================================== -->
+  <h2 class="doc">2 · Proposed: three sections, each with its own action inside it</h2>
+  <p class="note">There are three real headings at 19px, the second rung of the ladder: <b>Workie’s read</b>, <b>The responses</b> and, last, <b>Anything else about this round?</b> Each action sits inside its own section and says in words what it is about. Each response has its own <b>Reply to this response</b>, and there is no global button over the list. Comments show under the thing they are about. The question at the top is context and takes no comments, as before.</p>
+  <div class="row">
+  <figure class="fig" id="f-proposed">
+    <div class="phone w390" style="position:relative">
+      <div class="pc auto">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <div class="head"><h1 class="h1">Comment on round 3</h1><button class="x" aria-label="Close comments"><svg aria-hidden="true" width="20" height="20"><use href="#i-x"/></svg></button></div>
+          <p class="lede">Every comment is attached to one thing: Workie’s read, one response, or the round as a whole.</p>
+          <nav aria-label="Sections"><ul class="jump"><li><a href="#">Workie’s read</a></li><li><a href="#">The responses · 6</a></li><li><a href="#">Anything else</a></li></ul></nav>
+
+          <div class="q"><p class="lab">The question</p><p class="qt">What is one thing slowing down customer onboarding?</p><p class="qd">Think about the first 30 days after a contract is signed.</p></div>
+
+          <!-- WORKIE'S READ -->
+          <section class="sec" aria-labelledby="p-w">
+            <div class="card workie">
+              <div style="padding:14px 16px 0">
+                <div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-spark"/></svg></span><h2 id="p-w">Workie’s read</h2></div>
+                <p class="sec-sub" style="margin-bottom:0">The AI’s summary of everyone’s responses</p>
+              </div>
+              <div class="workie-body md">
+                <div class="clamp">
+                  <h3>What the room said</h3>
+                  <p>Four of six answers point at the same gap: <strong>the weeks between signature and kickoff</strong>, when no one team owns the customer. Context from sales is lost, kickoff lands in week three, and the security questionnaire stalls legal.</p>
+                </div>
+                <button class="more" aria-expanded="false">Read all of Workie’s read <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button>
+              </div>
+              <div class="foot"><button class="act" aria-label="Comment on Workie’s read"><svg aria-hidden="true" width="18" height="18"><use href="#i-chat"/></svg>Comment on Workie’s read</button><button class="count" aria-expanded="false" aria-controls="p-w-thread">Show 2 comments <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div>
+              <ol class="thread" id="p-w-thread" aria-label="Comments on Workie’s read" hidden></ol>
+            </div>
+          </section>
+
+          <!-- THE RESPONSES -->
+          <section class="sec resp" aria-labelledby="p-r">
+            <div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-people"/></svg></span><h2 id="p-r">The responses <span class="n">· 6</span></h2></div>
+            <p class="sec-sub">Most votes first. To reply to one, use the button on its card.</p>
+            <ol class="ans-list">
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Priya Shah</span><span class="ans-meta">Response 2 · 6 votes, the most</span></div>
+                <p class="ans-text">The handoff from sales to implementation. Customers repeat everything they told sales, and we lose a week rebuilding context nobody wrote down.</p>
+                <div class="foot"><button class="act" aria-label="Reply to this response: The handoff from sales to implementation… (Priya Shah, response 2)"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count" aria-expanded="false">Show 2 replies <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Marcus Lee</span><span class="ans-meta">Response 5 · 5 votes</span></div>
+                <p class="ans-text">Nobody owns the first 30 days. Sales has moved on and support hasn’t started, so the customer emails three people and gets three answers.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Dana Whitfield</span><span class="ans-meta">Response 1 · 3 votes</span></div>
+                <p class="ans-text">Our security questionnaire. It takes legal two weeks and every customer asks the same 80 questions.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count" aria-expanded="false">Show 1 reply <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Sam Okafor <span class="tag">Yours</span></span><span class="ans-meta">Response 4 · 2 votes</span></div>
+                <p class="ans-text">Kickoff calls get scheduled for week three because calendars are full. Book them at signature.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Ana Ruiz</span><span class="ans-meta">Response 6 · 1 vote</span></div>
+                <p class="ans-text">Too many tools in the welcome email: six links, three logins.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Theo Grant</span><span class="ans-meta">Response 3 · no votes</span></div>
+                <p class="ans-text">Training is one long video. Break it into five-minute pieces people can find later.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div>
+              </li>
+            </ol>
+          </section>
+
+          <!-- ANYTHING ELSE -->
+          <section class="sec round" aria-labelledby="p-o">
+            <div class="card">
+              <div style="padding:14px 16px 0"><div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-dots"/></svg></span><h2 id="p-o">Anything else about this round?</h2></div></div>
+              <p class="round-body">For a comment that is not about Workie’s read or any one response, for example something nobody said.</p>
+              <p class="thread-h">1 comment on the whole round</p>
+              <ol class="thread"><li class="c"><span class="who"><span class="tag room">Said in the room</span></span><p class="t">Two people mentioned the onboarding survey nobody fills in.</p></li></ol>
+              <div class="foot"><button class="act wide" aria-label="Comment on the whole round"><svg aria-hidden="true" width="18" height="18"><use href="#i-chat"/></svg>Comment on the whole round</button></div>
+            </div>
+          </section>
+          <button class="close-btn">Close</button>
+        </div>
+      </div>
+      <div class="fold" style="top:844px"><span>fold · 844</span></div>
+    </div>
+    <div class="notes">
+      <h3>What changed, top to bottom</h3>
+      <ol>
+        <li><b>Page title (24px)</b> and one line of lede that says the rule: <i>every comment is attached to one thing</i>.</li>
+        <li><b>Jump links</b> to the three sections, because the page is long.</li>
+        <li><b>Workie’s read</b> is one card with a periwinkle edge and the Workie spark. Its heading is 19px. Directly under the read, inside the card, is <b>Comment on Workie’s read</b>, and below it “Show 2 comments”, which opens the comments in the card. That is the same row a response card has. The read is cut to five lines, and “Read all” opens it in place.</li>
+        <li><b>The responses</b> get a heading of their own, with a count and one instruction. Each response is its own card: author, then “Response 2 · 6 votes, the most”, then the text. At its foot is <b>Reply to this response</b>, and below that “Show 2 replies” when it has any.</li>
+        <li>“Response 2” is the <b>ballot number</b>, the same one the vote used and the one the results screen means by “You wrote response 4”. It is printed as words, not in a circle, so it cannot be read as a rank. The order says the rank, and a tie can no longer put two “1”s on screen.</li>
+        <li><b>Anything else about this round?</b> comes last and in words. The whole-round comment stays, and the host’s “Said in the room” notes already land there.</li>
+        <li>Amber is kept for <b>Post</b> in the sheet, the one primary action. Section actions are quiet outlined buttons in the text colour.</li>
+      </ol>
+    </div>
+  </figure>
+  </div>
+
+  <!-- =====================================================================
+       3 COMPOSE ON WORKIE'S READ
+       ===================================================================== -->
+  <h2 class="doc">3 · Writing a comment: the sheet says what it is about</h2>
+  <p class="note">The sheet docks to the bottom of the phone shell, as the answer dock does (PlayerSurface.css’s <code>.plr-dock</code>, a flex row and not <code>position: fixed</code>). It is not a Modal, so the page above can still be scrolled and read. Its heading names the target, a quote shows it, and one line gives the name rule. Focus goes to the box. Its accessible name is the heading and its description is the name rule. The X and Cancel do the same thing.</p>
+  <div class="row">
+  <figure class="fig" id="f-compose-workie">
+    <div class="phone w390 h844">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <section class="sec" style="margin-top:-4px">
+            <div class="card workie" style="outline:2px solid #F6A94C;outline-offset:2px">
+              <div style="padding:14px 16px 0">
+                <div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-spark"/></svg></span><h2>Workie’s read</h2></div>
+                <p class="sec-sub" style="margin-bottom:0">The AI’s summary of everyone’s responses</p>
+              </div>
+              <div class="workie-body md">
+                <h3>What the room said</h3>
+                <p>Four of six answers point at the same gap: <strong>the weeks between signature and kickoff</strong>, when no one team owns the customer.</p>
+                <ul><li><strong>Handoff</strong>: context from sales is lost (Priya, Marcus).</li><li><strong>Scheduling</strong>: kickoff lands in week three (Sam).</li></ul>
+              </div>
+            </div>
+          </section>
+        </div>
+        <section class="sheet" role="region" aria-labelledby="s1-h">
+          <div class="grab"></div>
+          <div class="sheet-h"><h2 id="s1-h">Comment on Workie’s read</h2><button class="x" aria-label="Cancel comment"><svg aria-hidden="true" width="18" height="18"><use href="#i-x"/></svg></button></div>
+          <div class="quote w"><span class="qm">Workie’s read</span><p>Four of six answers point at the same gap: the weeks between signature and kickoff, when no one team owns the customer. Context from sales is lost…</p></div>
+          <textarea class="box" aria-labelledby="s1-h" aria-describedby="s1-r">The questionnaire point is right but it’s a sales problem, not</textarea>
+          <p class="rule" id="s1-r"><svg aria-hidden="true" width="18" height="18"><use href="#i-eye"/></svg><span>Your name is shown with this comment. Everyone in the session can read it, and the host may put it on the main screen.</span></p>
+          <div class="sheet-act"><button class="cancel">Cancel</button><span class="chars">62 / 1000</span><button class="post"><svg aria-hidden="true" width="16" height="16"><use href="#i-chat"/></svg>Post comment</button></div>
+        </section>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Comment on Workie’s read</h3>
+      <ol>
+        <li>The heading says it in words: <b>Comment on Workie’s read</b>. There is no small “Commenting on” label for the reader to decode.</li>
+        <li>The quote has a <b>periwinkle edge</b> and is labelled “Workie’s read”, the same identity as the section. The first three lines are shown, and the full read is still on the page above.</li>
+        <li>The Workie card above is <b>outlined in amber</b> while the sheet is open, so the page shows the same target the sheet names.</li>
+        <li><b>One line gives the name rule</b>, before anyone types. For a closed survey it reads “Your name is not shown with this comment.” (<code>namesShown=false</code>, as shipped).</li>
+        <li>The box is 19px, the phone’s input size (PlayerSurface.css: an input is never under 16px, or iOS zooms).</li>
+        <li>This frame has the keyboard down (the person dismissed it to reread). With the keyboard up, see the next frame (1-05).</li>
+      </ol>
+    </div>
+  </figure>
+
+  <!-- =====================================================================
+       4 COMPOSE ON ONE RESPONSE (keyboard up)
+       ===================================================================== -->
+  <figure class="fig" id="f-compose-answer">
+    <div class="phone w390 h844">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage" style="padding-top:10px">
+          <div class="card ans target">
+            <div class="ans-top"><span class="ans-who">Priya Shah</span><span class="ans-meta">Response 2 · 6 votes, the most</span></div>
+            <p class="ans-text">The handoff from sales to implementation. Customers repeat everything they told sales…</p>
+          </div>
+        </div>
+        <section class="sheet" role="region" aria-labelledby="s2-h">
+          <div class="sheet-h"><h2 id="s2-h">Reply to Priya Shah’s response</h2><button class="x" aria-label="Cancel reply"><svg aria-hidden="true" width="18" height="18"><use href="#i-x"/></svg></button></div>
+          <div class="quote"><span class="qm">Response 2 · Priya Shah</span><p>The handoff from sales to implementation. Customers repeat everything they told sales, and we lose a week rebuilding context nobody wrote down.</p></div>
+          <textarea class="box" style="min-height:60px" aria-labelledby="s2-h" aria-describedby="s2-r">Could sales record the discovery call?</textarea>
+          <p class="rule" id="s2-r" style="margin:6px 0 8px"><svg aria-hidden="true" width="18" height="18"><use href="#i-eye"/></svg><span>Your name is shown with this reply. Everyone in the session can read it, and the host may put it on the main screen.</span></p>
+          <div class="sheet-act"><button class="cancel">Cancel</button><span class="chars">38 / 1000</span><button class="post"><svg aria-hidden="true" width="16" height="16"><use href="#i-reply"/></svg>Post reply</button></div>
+        </section>
+        <div class="kbd" aria-hidden="true"><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i style="flex:5"></i><i></i></div><p class="kbd-cap">keyboard</p></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Reply to one response</h3>
+      <ol>
+        <li>Opened from <b>that response’s own card</b>. The reply is tied to that one response, and its anchor comes from the tap, never from a global button.</li>
+        <li>The heading names the <b>person</b>: “Reply to Priya Shah’s response”. On an anonymous round the server leaves the name out, and the heading reads “Reply to response 2”.</li>
+        <li>The quote carries the <b>ballot number and the author</b>, plus three lines of the response itself. The ballot number is the stable one, so it matches the vote and the results screen.</li>
+        <li>With the keyboard up, the sheet and one line of the card above still fit. The card is <b>outlined in amber</b>, so there are two statements of the target on screen at once.</li>
+        <li>Tapping <b>Reply</b> on another card while words are in the box asks first: “Move your reply to Marcus Lee’s response? Your words come with it.” with <b>Move it</b> / <b>Keep it here</b>. Today switching targets silently drops the text (<code>FeedbackRoundPanel.jsx:135-139</code>).</li>
+        <li>Cancel or the X with words in the box asks: “Discard your reply?” with <b>Keep writing</b> / <b>Discard</b>. The draft kept per round (issue #47) now remembers which response it was for.</li>
+      </ol>
+    </div>
+  </figure>
+  </div>
+
+  <!-- =====================================================================
+       5 SENT
+       ===================================================================== -->
+  <h2 class="doc">4 · After sending: say what it is attached to, and show it there</h2>
+  <div class="row">
+  <figure class="fig" id="f-sent">
+    <div class="phone w390 h844">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <section class="sec resp">
+            <div class="sticky"><div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-people"/></svg></span><h2>The responses <span class="n">· 6</span></h2></div></div>
+            <ol class="ans-list">
+              <li class="card ans">
+                <div class="status" role="status"><svg aria-hidden="true" width="18" height="18"><use href="#i-check"/></svg><span><b>Reply posted</b> under Priya Shah’s response (response 2).</span></div>
+                <div class="ans-top"><span class="ans-who">Priya Shah</span><span class="ans-meta">Response 2 · 6 votes, the most</span></div>
+                <p class="ans-text">The handoff from sales to implementation. Customers repeat everything they told sales, and we lose a week rebuilding context nobody wrote down.</p>
+                <div class="foot"><button class="act focus-ring"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count yours" aria-expanded="true">Hide 3 replies <svg aria-hidden="true" width="14" height="14"><use href="#i-up"/></svg></button></div>
+                <ol class="thread">
+                  <li class="c"><span class="who">Dana Whitfield</span><p class="t">+1. We tried a handoff doc last year and nobody read it.</p></li>
+                  <li class="c"><span class="who">Theo Grant</span><p class="t">Could implementation join the last sales call instead?</p></li>
+                  <li class="c you new"><span class="who">You · just now</span><p class="t">Could sales record the discovery call? Then nobody has to repeat it.</p></li>
+                </ol>
+              </li>
+              <li class="card ans">
+                <div class="ans-top"><span class="ans-who">Marcus Lee</span><span class="ans-meta">Response 5 · 5 votes</span></div>
+                <p class="ans-text">Nobody owns the first 30 days. Sales has moved on and support hasn’t started, so the customer emails three people and gets three answers.</p>
+                <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div>
+              </li>
+            </ol>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Sent</h3>
+      <ol>
+        <li>The sheet closes and the card it was for scrolls into view. The <b>confirmation sits inside that card</b> and names it: “Reply posted under Priya Shah’s response (response 2).” It is a <code>role="status"</code> live region, so a screen reader hears the same sentence.</li>
+        <li>The card’s replies open (“Hide 3 replies”), and <b>yours is last</b>, marked “You · just now” with an amber edge. It goes on screen straight away, as today (<code>PlayerPage.jsx:1898</code>).</li>
+        <li>Focus goes back to the button that opened the sheet (white focus ring), so the next reply is one tap away.</li>
+        <li>At the top of the page, scrolled out of view here, a banner appears once you have posted: “You have posted 2 comments on this round. On <u>Workie’s read</u> · on <u>Priya Shah’s response</u>”. Each item is a link to its place. The confirmation in the card fades after 6 seconds, and the banner stays.</li>
+        <li>Posted after the room moved on: “Reply posted under Priya Shah’s response. It is marked as added later.” The shipped late-comment wording is otherwise kept.</li>
+        <li>A failed post keeps the words in the box and says why, in <code>--danger-text</code>, as shipped.</li>
+      </ol>
+    </div>
+  </figure>
+
+  <!-- =====================================================================
+       6 MANY RESPONSES
+       ===================================================================== -->
+  <figure class="fig" id="f-many">
+    <div class="phone w390 h844">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <div class="sticky"><div class="sec-h"><span class="sec-ic" style="background:rgba(255,255,255,.05)"><svg aria-hidden="true" width="18" height="18"><use href="#i-people"/></svg></span><h2 style="font-size:1.1875rem;margin:0;font-weight:800;flex:1">The responses</h2><button class="count" style="width:auto;margin-left:auto" aria-pressed="false">Open all replies</button></div><p class="sec-sub" style="margin:0 0 0 42px">Showing 6–10 of 14</p></div>
+          <ol class="ans-list">
+            <li class="card ans"><div class="ans-top"><span class="ans-who">Ana Ruiz</span><span class="ans-meta">Response 9 · 2 votes</span></div><p class="ans-text c2">Too many tools in the welcome email: six links, three logins, and no order to do them in.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count yours">Show 1 reply (yours) <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div></li>
+            <li class="card ans"><div class="ans-top"><span class="ans-who">Theo Grant</span><span class="ans-meta">Response 3 · 2 votes</span></div><p class="ans-text c2">Training is one long video. Break it into five-minute pieces people can find later, by task.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div></li>
+            <li class="card ans"><div class="ans-top"><span class="ans-who">Jo Martín</span><span class="ans-meta">Response 12 · 1 vote</span></div><p class="ans-text c2">Our contract has twelve optional modules and implementation finds out which ones were sold on day one.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count">Show 4 replies <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div></li>
+            <li class="card ans"><div class="ans-top"><span class="ans-who">Lee Park</span><span class="ans-meta">Response 7 · 1 vote</span></div><p class="ans-text c2">Single sign-on setup needs the customer’s IT team, who never came to any meeting.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count yours">Show 2 replies (1 yours) <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div></li>
+            <li class="card ans"><div class="ans-top"><span class="ans-who">Rae Chen</span><span class="ans-meta">Response 14 · no votes</span></div><p class="ans-text c2">Data migration. Nobody scopes it until it fails.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Fourteen responses, a talkative participant</h3>
+      <ol>
+        <li>The section heading <b>stays pinned</b> while the list scrolls and says where you are (“Showing 6–10 of 14”). <b>Open all replies</b> is for someone who wants to read every thread. You always know you are in the responses, not in Workie’s read.</li>
+        <li>Past six responses, each card <b>cuts its text to two lines</b>. Tapping the text opens it in full in place: nothing is lost, and the card says it was cut.</li>
+        <li>Each card still has <b>its own Reply</b>. The list never gets a shared button.</li>
+        <li>A card you replied to says so: <b>“Show 1 reply (yours)”</b>. The banner at the top of the page (see frame 5’s notes) links to every one of them.</li>
+        <li>Threads stay closed until opened (“Show 4 replies”), so other people’s replies never push the next response off screen. Your own replies open after you post them.</li>
+      </ol>
+    </div>
+  </figure>
+  </div>
+
+  <!-- =====================================================================
+       7 SMALL PHONE 360
+       ===================================================================== -->
+  <h2 class="doc">5 · Small phone, 360 wide</h2>
+  <p class="note">This is the narrowest common Android width. The headings wrap instead of truncating, the action rows wrap instead of clipping (<code>margin-left: auto</code> plus <code>flex-wrap</code>, never <code>justify-content: flex-end</code>), and every target stays 44px.</p>
+  <div class="row">
+  <figure class="fig" id="f-small">
+    <div class="phone w360 h740">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <div class="head"><h1 class="h1">Comment on round 3</h1><button class="x" aria-label="Close comments"><svg aria-hidden="true" width="20" height="20"><use href="#i-x"/></svg></button></div>
+          <p class="lede">Every comment is attached to one thing: Workie’s read, one response, or the round as a whole.</p>
+          <section class="sec">
+            <div class="card workie">
+              <div style="padding:14px 16px 0"><div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-spark"/></svg></span><h2>Workie’s read</h2></div><p class="sec-sub" style="margin-bottom:0">The AI’s summary of everyone’s responses</p></div>
+              <div class="workie-body md"><div class="clamp" style="-webkit-line-clamp:3"><p>Four of six answers point at the same gap: <strong>the weeks between signature and kickoff</strong>, when no one team owns the customer.</p></div><button class="more">Read all of Workie’s read <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div>
+              <div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-chat"/></svg>Comment on Workie’s read</button><button class="count">Show 2 comments <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div>
+            </div>
+          </section>
+          <section class="sec resp">
+            <div class="sec-h"><span class="sec-ic"><svg aria-hidden="true" width="18" height="18"><use href="#i-people"/></svg></span><h2>The responses <span class="n">· 6</span></h2></div>
+            <p class="sec-sub">Most votes first. To reply to one, use the button on its card.</p>
+            <ol class="ans-list">
+              <li class="card ans"><div class="ans-top"><span class="ans-who">Priya Shah</span><span class="ans-meta">Response 2 · 6 votes, the most</span></div><p class="ans-text">The handoff from sales to implementation. Customers repeat everything they told sales.</p><div class="foot"><button class="act"><svg aria-hidden="true" width="18" height="18"><use href="#i-reply"/></svg>Reply to this response</button><button class="count">Show 2 replies <svg aria-hidden="true" width="14" height="14"><use href="#i-down"/></svg></button></div></li>
+            </ol>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>360 × 740, the panel</h3>
+      <ol>
+        <li>“Reply to this response” has its row to itself, and “Show 2 replies” sits on the row below it, so neither has to wrap or shrink at 360.</li>
+        <li>Workie’s read is cut to three lines here so the first response’s card starts above the fold.</li>
+        <li>The jump links are left out under 380px. The three headings are close enough together not to need them.</li>
+      </ol>
+    </div>
+  </figure>
+
+  <figure class="fig" id="f-small-compose">
+    <div class="phone w360 h740">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Comments</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage" style="padding-top:10px"><div class="card ans target"><div class="ans-top"><span class="ans-who">Dana Whitfield</span><span class="ans-meta">Response 1 · 3 votes</span></div><p class="ans-text">Our security questionnaire. It takes legal two weeks…</p></div></div>
+        <section class="sheet" role="region" aria-labelledby="s3-h">
+          <div class="sheet-h"><h2 id="s3-h">Reply to Dana Whitfield’s response</h2><button class="x" aria-label="Cancel reply"><svg aria-hidden="true" width="18" height="18"><use href="#i-x"/></svg></button></div>
+          <div class="quote"><span class="qm">Response 1 · Dana Whitfield</span><p style="-webkit-line-clamp:2">Our security questionnaire. It takes legal two weeks and every customer asks the same 80 questions.</p></div>
+          <textarea class="box" style="min-height:52px" aria-labelledby="s3-h" aria-describedby="s3-r">Publish the answers as a trust page</textarea>
+          <p class="rule" id="s3-r" style="margin:6px 0 8px"><svg aria-hidden="true" width="18" height="18"><use href="#i-eye"/></svg><span>Your name is shown with this reply. Everyone in the session can read it, and the host may put it on the main screen.</span></p>
+          <div class="sheet-act"><button class="cancel">Cancel</button><span class="chars">35 / 1000</span><button class="post"><svg aria-hidden="true" width="16" height="16"><use href="#i-reply"/></svg>Post reply</button></div>
+        </section>
+        <div class="kbd" style="height:260px" aria-hidden="true"><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i style="flex:5"></i><i></i></div><p class="kbd-cap">keyboard</p></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>360 × 740, keyboard up: the hardest case</h3>
+      <ol>
+        <li>About 480px is left above the keyboard and the sheet takes about 390px. Only the top of the outlined card still shows, and it is gone at 200% text. That is why the <b>quote in the sheet</b> carries the target on its own: heading, ballot number, author, and two lines of the response.</li>
+        <li>The quote steps down from three lines to two first. The name rule is never cut.</li>
+        <li>Cancel, the count and Post stay on one row at 360. At 320 Post wraps to its own line, full width.</li>
+      </ol>
+    </div>
+  </figure>
+  </div>
+
+  <!-- =====================================================================
+       8 THE WAY IN
+       ===================================================================== -->
+  <h2 class="doc">6 · The way in, from the results screen</h2>
+  <div class="row">
+  <figure class="fig" id="f-entry">
+    <div style="display:flex;gap:20px">
+    <div class="phone w360 h740">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Today</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <p class="plab">Results</p><h1 class="ph1">You wrote response 4</h1>
+          <div class="pcard"><p>Kickoff calls get scheduled for week three because calendars are full.</p></div>
+          <div class="stat"><span class="k">This round</span><span class="v">+2</span></div>
+          <p class="cue">Names are on the main screen now. The top responses and the discussion prompts are up there too.</p>
+          <button class="entry"><svg aria-hidden="true" width="18" height="18"><use href="#i-chat"/></svg>Feedback</button>
+        </div>
+      </div>
+    </div>
+    <div class="phone w360 h740">
+      <div class="pc">
+        <div class="bar"><div class="strip"></div><div class="line"><span>Round 3 · Proposed</span><span class="spacer"></span><span><i class="dot"></i>Sam</span></div></div>
+        <div class="stage">
+          <p class="plab">Results</p><h1 class="ph1">You wrote response 4</h1>
+          <div class="pcard"><p>Kickoff calls get scheduled for week three because calendars are full.</p></div>
+          <div class="stat"><span class="k">This round</span><span class="v">+2</span></div>
+          <p class="cue">Names are on the main screen now. The top responses and the discussion prompts are up there too.</p>
+          <button class="entry"><svg aria-hidden="true" width="18" height="18"><use href="#i-chat"/></svg>Comment on this round</button>
+          <p class="entry-sub">Reply to a response, or comment on Workie’s read.</p>
+        </div>
+      </div>
+    </div>
+    </div>
+    <div class="notes">
+      <h3>“Feedback” becomes “Comment on this round”</h3>
+      <ol>
+        <li>The button says what it does, and one line under it says what can be commented on, before the panel opens.</li>
+        <li>The panel’s bar and title read “Comments”, no longer “Feedback”. The host keeps the word “feedback” for the whole-room switch they control.</li>
+        <li>“Response 4” here and “4” on the card in the panel are now the same number (the ballot number). Today the panel numbers by rank, so the two disagree.</li>
+      </ol>
+    </div>
+  </figure>
+  </div>
+</div>
+</body>
+</html>

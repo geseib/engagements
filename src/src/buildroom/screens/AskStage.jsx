@@ -15,6 +15,7 @@ import { itemKeys } from '../sentMarks';
 import Pager from '../../components/stage/Pager';
 import { shows, dropRank } from '../../config/roomContent';
 import { pageSlice } from '../../config/stagePaging';
+import Button from '../../components/ui/Button';
 
 /**
  * THE CURRENT ASK'S BOARD: the options and their counts, the ideas, the
@@ -111,7 +112,7 @@ export function AskStage({
  */
 function PickButton({ id, current, onPick, idea = false, open = false }) {
   if (!open && current && id === current) return <span className="brm-pick is-on">Going to Claude</span>;
-  return <button type="button" className="brm-btn brm-btn--sm brm-pick" onClick={() => onPick(id)}>{W.chooseThis}</button>;
+  return <Button type="button" size={36} className="brm-tight brm-pick" onClick={() => onPick(id)}>{W.chooseThis}</Button>;
 }
 
 /** A click on an option card picks it, unless the click was on a link or button inside it. */
@@ -261,9 +262,9 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
             {/* CONSIDER (frame 2): every idea as it arrives, with its mark once it reached Claude. */}
             {host && !r.hidden && <ItemTools item={{ key: itemKeys.resp(ask.askId, r.respId), words: r.text, askId: ask.askId, type: 'resp' }} />}
             {host && !ended && (
-              <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
+              <Button type="button" size={36} className="brm-tight" disabled={busy} onClick={() => run(() => api.responseAction(ask.askId, r.respId, { action: r.hidden ? 'show' : 'hide' }))}>
                 {r.hidden ? 'Show' : 'Hide'}
-              </button>
+              </Button>
             )}
           </li>
         ))}
@@ -272,7 +273,7 @@ function SuggestBoard({ ask, host, busy, ended, run, api, pickId = null, onPick 
         <form className="brm-verbal" onSubmit={add}>
           <Icon name="Microphone" size={16} color="var(--success)" />
           <input className="brm-input" aria-label="Add what the room said" placeholder={W.addSaid} value={said} maxLength={280} onChange={(e) => setSaid(e.target.value)} />
-          <button type="submit" className="brm-btn brm-btn--sm" disabled={busy || !said.trim()}>Add</button>
+          <Button type="submit" size={36} className="brm-tight" disabled={busy || !said.trim()}>Add</Button>
         </form>
       )}
     </div>

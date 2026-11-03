@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import { authFetch } from '../auth/authFetch';
 import { adminApiUrl } from '../utils/adminApi';
 import './TeamPanel.css';
@@ -217,25 +218,8 @@ function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
       closeOnBackdrop={() => !busy}
       closeOnEscape={() => !busy}
     >
-      <header>
-        <div className="team-grow">
-          <h2 id="team-invite-title">{finished ? 'Invitation handled' : 'Invite someone'}</h2>
-          <p className="team-note">
-            {orgName ? `They join ${orgName}. ` : ''}
-            An invitation expires after 14 days. Nothing is created until it is accepted.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="team-x"
-          onClick={requestClose}
-          disabled={busy}
-          aria-label="Close"
-          title={busy ? 'Wait for the invitation to finish' : 'Close'}
-        >
-          <Icon name="X" weight="bold" size={14} color="currentColor" />
-        </button>
-      </header>
+      <DialogHead titleId="team-invite-title" title={<>{finished ? 'Invitation handled' : 'Invite someone'}</>} titlesClassName="team-grow" sub={<>{orgName ? `They join ${orgName}. ` : ''}
+            An invitation expires after 14 days. Nothing is created until it is accepted.</>} subClassName="team-note" onClose={requestClose} closeDisabled={busy} closeClassName="team-x" />
 
       <div className="team-modal-body">
         {!finished && (
@@ -347,7 +331,7 @@ function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
         )}
       </div>
 
-      <footer>
+      <DialogFoot>
         <span className="team-grow" />
         {finished ? (
           <button type="button" className="team-btn team-btn--primary" onClick={onInvited}>
@@ -377,7 +361,7 @@ function InviteDialog({ orgName, onCancel, onInvited, sendInvite }) {
             </button>
           </>
         )}
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }
@@ -438,28 +422,25 @@ function ConfirmDialog({
       closeOnBackdrop={dismissable}
       closeOnEscape={dismissable}
     >
-      <header>
-        <Icon
-          name={finished ? 'CheckCircle' : 'Warning'}
-          weight="fill"
-          size={20}
-          color={finished ? 'var(--success)' : 'var(--danger-text)'}
-        />
-        <div className="team-grow">
-          <h2 id={titleId}>{finished ? doneTitle : title}</h2>
-          {subtitle && <p className="team-note">{subtitle}</p>}
-        </div>
-        <button
-          type="button"
-          className="team-x"
-          onClick={onCancel}
-          disabled={!dismissable()}
-          aria-label="Close"
-          title={busy ? 'Wait for this to finish' : 'Close'}
-        >
-          <Icon name="X" weight="bold" size={14} color="currentColor" />
-        </button>
-      </header>
+      <DialogHead
+        icon={(
+          <Icon
+            name={finished ? 'CheckCircle' : 'Warning'}
+            weight="fill"
+            size={20}
+            color={finished ? 'var(--success)' : 'var(--danger-text)'}
+          />
+        )}
+        titleId={titleId}
+        title={finished ? doneTitle : title}
+        titlesClassName="team-grow"
+        sub={subtitle || null}
+        subClassName="team-note"
+        onClose={onCancel}
+        closeDisabled={!dismissable()}
+        closeClassName="team-x"
+        closeProps={{ title: busy ? 'Wait for this to finish' : 'Close' }}
+      />
 
       <div className="team-modal-body">
         {!finished && consequences.map((line) => <p key={line}>{line}</p>)}
@@ -494,7 +475,7 @@ function ConfirmDialog({
         )}
       </div>
 
-      <footer>
+      <DialogFoot>
         <span className="team-grow" />
         {finished ? (
           <button type="button" className="team-btn team-btn--primary" onClick={onDone}>
@@ -515,7 +496,7 @@ function ConfirmDialog({
             </button>
           </>
         )}
-      </footer>
+      </DialogFoot>
     </Modal>
   );
 }

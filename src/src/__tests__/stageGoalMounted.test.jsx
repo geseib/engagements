@@ -88,7 +88,7 @@ async function renderLiveGame(hostState, { restoredText } = {}) {
   });
   window.history.pushState({}, '', `/host?gameId=${GAME}`);
   render(<GameHostPage />);
-  await screen.findByRole('button', { name: /session panel/i }, { timeout: 5000 });
+  await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   // Something only the restored session can put on screen means host-state
   // has been read and restored — the loading gate `\` obeys is down and the
   // goal is known. Each case names its own (RESULTS restates a question
@@ -98,10 +98,13 @@ async function renderLiveGame(hostState, { restoredText } = {}) {
   }
 }
 
-/** The Questions tab's own progress line, opened the way a host would: `\`. */
+/** Up next's own progress line, opened the way a host would: `\`. */
 async function openGoalProgress() {
   await act(async () => { fireEvent.keyDown(document.body, { key: '\\' }); });
-  fireEvent.click(await screen.findByRole('tab', { name: 'Questions' }, { timeout: 5000 }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Up next' }, { timeout: 5000 }));
+  // Up next · More options since the Session menu redesign.
+  const more = await screen.findByTestId('more-up-next-toggle', {}, { timeout: 5000 });
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
   return screen.findByTestId('goal-progress', {}, { timeout: 5000 });
 }
 

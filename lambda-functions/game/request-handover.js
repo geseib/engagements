@@ -20,6 +20,13 @@
  * the choice though because they may have just mistakenly picked the same
  * name."*
  *
+ * AN ASK LAPSES. Ten minutes after `HandoverRequestedAt`
+ * (`handover.js` HANDOVER_REQUEST_SECONDS) the roster stops reporting it and
+ * `grant-handover.js` will not bind a grant to it. Asking again overwrites the
+ * stamp, which is also what moves it back to the top of the host's list. The
+ * phone learns the answer by retrying the join quietly (PlayerPage
+ * `useHandoverFlow`); there is no route that reports it.
+ *
  * ── WHAT AN UNAUTHENTICATED WRITE HERE CAN AND CANNOT DO ───────────────────
  *
  * It can put a spurious "someone is asking for this name" in front of the host,
@@ -53,6 +60,7 @@ const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewayman
 
 const { openSessionOr } = require('./session-gate');
 const { notifyHost } = require('./host-notify');
+const { HANDOVER_REQUEST_SECONDS, ASK_AGAIN_AFTER_SECONDS } = require('./handover');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -99,7 +107,9 @@ exports.handler = async (event) => {
     const gate = await openSessionOr(db, process.env.TABLE_NAME, gameId, accessCode);
     if (!gate.ok) return gate.response;
 
-    const requestedAt = new Date().toISOString();
+    const askedAtMs = Date.now();
+    const requestedAt = new Date(askedAtMs).toISOString();
+    const requestExpiresAt = new Date(askedAtMs + HANDOVER_REQUEST_SECONDS * 1000).toISOString();
     let recorded = false;
 
     try {
@@ -128,6 +138,9 @@ exports.handler = async (event) => {
         gameId,
         playerName,
         requestedAt,
+        // When the ask lapses: the host's item can clear itself at this
+        // moment without another fetch, the same moment the phone gives up.
+        requestExpiresAt,
         timestamp: requestedAt
       });
     }
@@ -137,8 +150,16 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         playerName,
+        // THE PHONE'S CLOCK, FROM THE SERVER (experience plan §4.4). Durations
+        // rather than instants, so a phone whose clock is wrong still waits
+        // the right length of time: it shows Ask again after
+        // `askAgainAfterSeconds` and stops waiting after `lapseSeconds`. The
+        // same for a name that is not in the room — anything else would be
+        // a name oracle (see the header).
+        askAgainAfterSeconds: ASK_AGAIN_AFTER_SECONDS,
+        lapseSeconds: HANDOVER_REQUEST_SECONDS,
         // Says what happens next, not what the roster contains.
-        message: `Asked the host to hand "${playerName}" over. When they say go ahead, tap “Take over the name”.`
+        message: `Asked the host to let you in as "${playerName}". This page will move on by itself when they do.`
       }),
       headers: cors
     };

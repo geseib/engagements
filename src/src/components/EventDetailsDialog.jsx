@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import Icon from './Icon';
 import rules from '../../../lambda-functions/websocket/events/agenda-rules';
 import { createEvent, updateEvent } from '../utils/eventsApi';
 import './EventsPanel.css';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * NEW EVENT, AND "EDIT DETAILS" — docs/design/agenda-redesign/05-new-event.html.
@@ -87,9 +90,17 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
   const dirty = title !== baseline.title || date !== baseline.date || time !== baseline.time
     || timeZone !== baseline.timeZone || place !== baseline.place || reports !== baseline.reports;
 
-  const requestClose = () => {
+  /* Asked in the small confirm dialog (useConfirm, experience plan 5c), never
+     the browser's own window.confirm. */
+  const [ask, confirmDialog] = useConfirm();
+  const requestClose = async () => {
     if (busy) return;
-    if (dirty && !window.confirm('Close without saving? What you typed will be lost.')) return;
+    if (dirty && !(await ask({
+      title: 'Close without saving?',
+      message: 'What you typed will be lost.',
+      confirmText: 'Discard',
+      cancelText: 'Keep editing',
+    }))) return;
     onClose();
   };
 
@@ -142,17 +153,9 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
       theme="dark"
     >
       <form onSubmit={submit} noValidate>
-        <header className="evts-modal-head">
-          <div className="evts-grow">
-            <h2 id="evts-details-title">{editing ? 'Event details' : 'New event'}</h2>
-            <p>
-              {editing
+        <DialogHead className="evts-modal-head" titleId="evts-details-title" title={<>{editing ? 'Event details' : 'New event'}</>} titlesClassName="evts-grow" sub={<>{editing
                 ? 'The name, the day and the place, as the agenda shows them.'
-                : 'Name it, say when and where, and choose who can join. You build the agenda next, from empty.'}
-            </p>
-          </div>
-          <button type="button" className="evts-x" onClick={requestClose} aria-label="Close" title="Close" disabled={busy}>×</button>
-        </header>
+                : 'Name it, say when and where, and choose who can join. You build the agenda next, from empty.'}</>} onClose={requestClose} closeDisabled={busy} closeClassName="evts-x" />
 
         <div className="evts-modal-body">
           <div className="evts-field evts-step">
@@ -234,15 +237,15 @@ export default function EventDetailsDialog({ initial = null, onClose, onSaved, o
           {error && <p className="evts-error" role="alert">{error}</p>}
         </div>
 
-        <footer className="evts-modal-foot">
-          <button type="button" className="evts-btn" onClick={requestClose} disabled={busy}>Close</button>
+        <DialogFoot className="evts-modal-foot" cancel={<Button variant="secondary" size={44} onClick={requestClose} disabled={busy}>Close</Button>}>
           <span className="evts-grow" />
           {!editing && <span className="evts-foot-note">The join code is chosen when you create it.</span>}
-          <button type="submit" className="evts-btn evts-btn--primary" disabled={busy}>
+          <Button type="submit" variant="primary" size={44} disabled={busy}>
             {busy ? 'Saving…' : (editing ? 'Save' : 'Create event')}
-          </button>
-        </footer>
+          </Button>
+        </DialogFoot>
       </form>
+      {confirmDialog}
     </Modal>
   );
 }

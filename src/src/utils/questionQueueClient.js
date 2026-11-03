@@ -37,6 +37,11 @@ import { normaliseQueue } from '../config/questionQueue';
  */
 export const REFUSALS_WORTH_SAYING = {
   full: 'The queue is full — 24 questions is the limit. Remove one first.',
+  // A question the host wrote (impromptu ask): each refusal is invisible on
+  // the surface that pressed, so each is said.
+  'already-asked': 'Already asked, so it can no longer be changed.',
+  'stale-edit': 'That question changed on another screen. Its newest words are shown.',
+  'anchor-not-queued': 'That round is no longer in the running order. Choose another.',
 };
 
 /** A refusal string, as something to show, or null when it is self-evident. */
@@ -62,6 +67,11 @@ function project(payload, fallback) {
     changed: body.changed ?? null,
     refused: body.refused ?? null,
     staleView: Boolean(body.staleView),
+    // The host's own questions (impromptu ask), listed beside the order on
+    // every host-facing queue response; [] from a server that predates them.
+    ownQuestions: Array.isArray(body.ownQuestions) ? body.ownQuestions : [],
+    // The key the server minted for a new own question (add-own only).
+    key: typeof body.key === 'string' ? body.key : null,
     ...fallback,
   };
 }
@@ -155,13 +165,18 @@ export async function fetchUpNext({
  */
 export async function postQueueOp({
   fetchFn = authFetch, apiBase, gameId, op, questionKey, expectedVersion,
+  // The impromptu ask's extras: where a new own question goes (`place`,
+  // `anchorKey`, `anchorRound`, `through`) and its words (`question`).
+  place, anchorKey, anchorRound, through, question,
 }) {
   let response;
+  const extras = Object.fromEntries(Object.entries({ place, anchorKey, anchorRound, through, question })
+    .filter(([, v]) => v !== undefined && v !== null));
   try {
     response = await fetchFn(`${apiBase}games/${encodeURIComponent(gameId)}/queue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op, questionKey, expectedVersion }),
+      body: JSON.stringify({ op, questionKey, expectedVersion, ...extras }),
     });
   } catch (e) {
     return { ok: false, queue: null, version: null, error: e?.message || 'The request did not reach the server.' };

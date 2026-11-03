@@ -52,3 +52,6 @@
 .scr-acts .scr-open { margin-left: 0; }
 .scr-open--quiet { background: transparent; border-color: transparent; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; padding-left: 0; padding-right: 0; }
 .scr-note { color: var(--text); }
+/* A type the room's window does not cover yet (config/surfaces.js
+   oneScreenWhy): "One screen" as a fact, not a control, the reason beside it. */
+.scr-fixed { flex: none; margin-left: auto; font-size: .93em; font-weight: 600; color: var(--text); }

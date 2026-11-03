@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import './HostRemote.css';
 import Icon from './components/Icon';
+import Button from './components/ui/Button';
 import HostNotificationsBell from './components/HostNotificationsBell';
 import HelpButton from './components/HelpButton';
 import { helpFor } from './config/help/screens';
@@ -12,13 +13,17 @@ import RemoteFocusPanel from './components/RemoteFocusPanel';
 import ActiveOrgSwitcher from './components/ActiveOrgSwitcher';
 import WorkieContextHint from './components/WorkieContextHint';
 import ReadCheckNote from './components/ReadCheckNote';
-import { fetchReadCheck } from './utils/readCheckClient';
+import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
+import { needsYou, NEEDS_ACTIONS, NEEDS_WORDS } from './config/needsYou';
+import SessionNeedsList from './components/needs/SessionNeedsList';
 import { authFetch } from './auth/authFetch';
 import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
 import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
-import { categoryRows, questionKey } from './config/setupPanel';
+import { categoryRows, categoriesSummary, questionKey } from './config/setupPanel';
+import { requestEndSession } from './utils/endSession';
+import { canEndSession } from './config/hostControls';
 import { focusRequest, sameFocus, NO_FOCUS, joinShown, joinRequest } from './config/stageFocus';
 import { fetchComments, postRoomNote } from './utils/commentsClient';
 import RoomNote from './components/RoomNote';
@@ -29,6 +34,9 @@ import FW from './config/followUpWords';
 import { placeAsks } from './config/askAnchors';
 import { sendAsk, closeAsk, cancelAsk } from './utils/followUpsClient';
 import { postQueueOp } from './utils/questionQueueClient';
+import { ownQuestionWords as OQ } from './config/consoleWords';
+import { ownNowAllowed, ownNowIsFirst } from './config/ownQuestion';
+import { normalizeGameType } from './config/gameTypes';
 import {
   remoteStep,
   snapshotFromHostState,
@@ -45,11 +53,15 @@ import {
   scoreboardControl,
   accessDeniedMessage,
   remoteGoal,
+  parseGamePhase,
 } from './config/hostRemote';
 import { workflowStrip } from './config/workflowStrip';
 import RemoteStepDots from './components/RemoteStepDots';
 import { scoreboardRequest } from './config/scoreboard';
 import RemoteScoreboardPanel from './components/RemoteScoreboardPanel';
+import RemoteTimeCard from './components/RemoteTimeCard';
+import { timerOnPhase, timeLeft } from './config/roundTimer';
+import { noteServerNow, serverNowMs } from './utils/serverClock';
 
 /**
  * The host's phone.
@@ -245,7 +257,6 @@ function HostRemote() {
    * went, and why.
    */
   const [panelTab, setPanelTab] = useState(null);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   /* Why the category list is empty, when it is empty for a reason. `null` means
      nothing went wrong — see the load below. */
@@ -336,7 +347,6 @@ function HostRemote() {
     setFeedbackCommentCount(null);
     setCategories([]);
     setCategoriesFailure(null);
-    setCategoriesOpen(false);
     setPanelTab(null);
   }, [access.status]);
 
@@ -408,6 +418,7 @@ function HostRemote() {
       // answer/vote progress, and it computes that progress with the same
       // player deduplication the roster uses, so the remote and the host
       // screen cannot disagree about whether the room is finished.
+      const sentAt = Date.now();
       const res = await authFetch(`${apiBase()}games/${id}/host-state`);
       if (activeGameRef.current !== id) return;
       if (!res.ok) {
@@ -431,7 +442,10 @@ function HostRemote() {
         if (res.status === 401 || res.status === 403 || res.status === 404) checkAccess(id);
         return;
       }
-      setSnapshot(await res.json());
+      const body = await res.json();
+      // The server's clock, for the time card (experience plan 2f).
+      noteServerNow(body && body.serverNow, sentAt);
+      setSnapshot(body);
       setConnected(true);
     } catch {
       if (activeGameRef.current === id) setConnected(false);
@@ -513,6 +527,71 @@ function HostRemote() {
   // Its own fact since 18 Oct (stageFocus.join): a panel beside what is up, not a takeover.
   const joinOnWall = joinShown(stageFocus);
   const round = snapshot?.currentQuestion || null;
+
+  /*
+    THE ROUND TIMER ON THE PHONE (experience plan 2f; session-start D5 C2):
+    the time card beside the meter, +1 min, and the opt-in close at zero. The
+    phone holds no socket, so the timer comes off the two-second /host-state
+    poll (hostTime), measured on the server's clock. The close at zero fires
+    from here too, so it works with the laptop shut: the server opens voting
+    once however many screens ask, and only when ITS clock says zero.
+  */
+  const remoteTimer = timerOnPhase(snapshot && snapshot.hostTime, snapshot && snapshot.state);
+  const remoteTimerKey = remoteTimer
+    ? [remoteTimer.phase, remoteTimer.startedAt, remoteTimer.limitMs, remoteTimer.extendedMs, remoteTimer.closes].join('|')
+    : '';
+  const remoteTimerRef = useRef(remoteTimer);
+  remoteTimerRef.current = remoteTimer;
+  const [timeBusy, setTimeBusy] = useState(false);
+  const postTimer = useCallback(async (which) => {
+    const t = remoteTimerRef.current;
+    const timed = requestFor(which, { gameId, round, phase: t && t.phase });
+    if (!timed) return null;
+    const sentAt = Date.now();
+    try {
+      const res = await authFetch(`${apiBase()}${timed.path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timed.body),
+      });
+      const payload = await res.json().catch(() => ({}));
+      noteServerNow(payload.serverNow, sentAt);
+      if (res.ok) pollState(gameId);
+      return { ok: res.ok, status: res.status, payload };
+    } catch {
+      return null;
+    }
+  }, [gameId, round, pollState]);
+  const addMinuteHere = useCallback(async () => {
+    setTimeBusy(true);
+    const reply = await postTimer('add-time');
+    setTimeBusy(false);
+    if (!reply) setError('No connection. Check signal and try again.');
+    else if (!reply.ok && reply.status !== 409) setError('Another minute was not added. Try again.');
+  }, [postTimer]);
+  const answeredSoFar = Number(snapshot && snapshot.answerProgress && snapshot.answerProgress.answersReceived) || 0;
+  const closedAtZeroRef = useRef('');
+  const [closeTick, setCloseTick] = useState(0);
+  useEffect(() => {
+    const t = remoteTimerRef.current;
+    if (!t || !t.closes || !String(t.phase).startsWith('ASK#') || answeredSoFar === 0) return undefined;
+    if (closedAtZeroRef.current === remoteTimerKey) return undefined;
+    const tl = timeLeft(t, serverNowMs());
+    if (!tl) return undefined;
+    let retry = null;
+    const fireClose = () => {
+      closedAtZeroRef.current = remoteTimerKey;
+      postTimer('close-at-zero').then((reply) => {
+        const p = reply && reply.payload;
+        if (p && p.notDue && Number(p.remainingMs) >= 0) {
+          retry = setTimeout(() => { closedAtZeroRef.current = ''; setCloseTick((n) => n + 1); }, Number(p.remainingMs) + 250);
+        }
+      });
+    };
+    const wait = tl.up ? null : setTimeout(fireClose, tl.leftMs + 50);
+    if (tl.up) fireClose();
+    return () => { if (wait) clearTimeout(wait); if (retry) clearTimeout(retry); };
+  }, [remoteTimerKey, answeredSoFar, postTimer, closeTick]);
   const title = snapshot?.gameMetadata?.title || '';
   const setId = snapshot?.gameMetadata?.questionSetId || '';
 
@@ -1000,6 +1079,48 @@ function HostRemote() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [gameId, access.status]);
   const lateStatus = useMemo(() => lateStatusOf(lateRounds), [lateRounds]);
+  /*
+    NEEDS YOU, ON THE PHONE (experience plan §3.3, 1b): the same list the
+    laptop works out (config/needsYou.js), from what this phone already polls:
+    the roster's handover flags every ROSTER_POLL_MS, the late count, the
+    read's check. Named, because the phone is private, with Let them / Not now
+    / Lock again on the same host-only route the laptop uses. Whoever answers
+    first wins; the other device shows the server's answer and re-reads.
+  */
+  const [needsBusy, setNeedsBusy] = useState(false);
+  const [needsError, setNeedsError] = useState('');
+  const needs = needsYou({
+    players: roster && Array.isArray(roster.players) ? roster.players : [],
+    late: lateStatus,
+    readCheck: onFieldNotes ? readCheckNote(readCheck) : '',
+    readRound: round,
+    now: Date.now(),
+  });
+  const actOnNeed = async (item, action) => {
+    const body = action === NEEDS_ACTIONS.LET ? { bindToRequester: true, ...(item.at ? { requestedAt: item.at } : {}) }
+      : action === NEEDS_ACTIONS.NOT_NOW ? { refuse: true }
+        : action === NEEDS_ACTIONS.LOCK ? { lock: true } : null;
+    if (!body || !item.name || !gameId) return;
+    setNeedsBusy(true);
+    setNeedsError('');
+    try {
+      const res = await authFetch(`${apiBase()}games/${gameId}/players/${encodeURIComponent(item.name)}/handover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let said = '';
+        try { const j = await res.json(); said = (j && (j.message || j.error)) || ''; } catch { /* no body */ }
+        setNeedsError(said || `That did not work (${res.status}). Look again.`);
+      }
+    } catch {
+      setNeedsError('That did not reach the server. Try again.');
+    } finally {
+      setNeedsBusy(false);
+      pollRoster(gameId);
+    }
+  };
   const stepExtras = useMemo(() => ({
     playerCount: rosterCount,
     answerCount: onResults || onVoting ? focusAnswers.length : undefined,
@@ -1323,6 +1444,65 @@ function HostRemote() {
   /** Take one back out of the running order — the undo for a stray Ask next. */
   const unqueue = useCallback((key) => queueOp('remove', key), [queueOp]);
 
+  /*
+    THE HOST'S OWN QUESTION, FROM THE PHONE (impromptu ask, README D2, frame 5).
+    The Rounds tab's "Write a question" opens the same composer as the laptop,
+    as a full-height sheet whose commit is the one orange on the screen. The
+    ops are the queue route's (add-own, edit-own); Now is add-own at the head
+    and then next-question's select_own, so a refused Now leaves it next.
+  */
+  const [ownComposer, setOwnComposer] = useState(null);
+  const [ownBusy, setOwnBusy] = useState(false);
+  const [ownError, setOwnError] = useState('');
+  const submitOwn = useCallback(async (fields) => {
+    if (!gameId || !ownComposer) return;
+    const editing = ownComposer.mode === 'edit';
+    setOwnBusy(true);
+    setOwnError('');
+    try {
+      const result = await postQueueOp({
+        apiBase: apiBase(),
+        gameId,
+        op: editing ? 'edit-own' : 'add-own',
+        questionKey: editing ? ownComposer.key : undefined,
+        expectedVersion: snapshot?.questionQueue?.version,
+        place: editing ? undefined : fields.place,
+        anchorKey: fields.anchorKey || undefined,
+        anchorRound: fields.anchorRound || undefined,
+        through: fields.through && fields.through.length ? fields.through : undefined,
+        question: { title: fields.title, detail: fields.detail, note: fields.note },
+      });
+      if (!result.ok) { setOwnError(`Could not save your question: ${result.error}`); return; }
+      if (result.changed === false) { setOwnError(result.message || 'Nothing changed. Look at the running order again.'); return; }
+      setOwnComposer(null);
+      if (!editing && fields.place === 'now' && result.key) {
+        const res = await authFetch(`${apiBase()}games/${encodeURIComponent(gameId)}/next-question`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select_own', ownId: result.key.slice('own:'.length) }),
+        });
+        if (res.ok) {
+          setPanelTab(null);
+          setNotice(OQ.askedNow);
+        } else {
+          const payload = await res.json().catch(() => ({}));
+          setNotice(`${OQ.isNext} ${payload.message || payload.error || ''}`.trim());
+        }
+      } else {
+        setNotice(editing ? OQ.saved : (fields.place === 'later' && fields.anchorRound ? OQ.placedAfter(fields.anchorRound) : `${OQ.isNext} ${OQ.isNextRest}`));
+      }
+      await pollState(gameId);
+    } catch {
+      setOwnError('No connection. Check signal and try again.');
+    } finally {
+      setOwnBusy(false);
+    }
+  }, [gameId, ownComposer, snapshot, pollState]);
+  const removeOwn = useCallback(async (key) => {
+    const done = await queueOp('remove', key);
+    if (done) setNotice(OQ.removed);
+  }, [queueOp]);
+
   /**
    * Turn a category on or off mid-session — the same endpoint and the same
    * argument order `GameHostPage.toggleCategoryDuringGame` uses. `position` is
@@ -1408,9 +1588,9 @@ function HostRemote() {
               value={gameIdDraft}
               onChange={(e) => setGameIdDraft(e.target.value.toUpperCase())}
             />
-            <button className="hr-btn hr-btn--primary" type="submit" disabled={!gameIdDraft.trim()}>
+            <Button variant="primary" size={44} type="submit" disabled={!gameIdDraft.trim()}>
               Connect
-            </button>
+            </Button>
           </form>
         </div>
       </div>
@@ -1505,15 +1685,14 @@ function HostRemote() {
                 <Icon name="Warning" weight="fill" size={18} color="currentColor" />
                 {accessDeniedMessage({ reason: access.reason, email })}
               </p>
-              <button
-                className="hr-btn hr-btn--primary"
-                type="button"
+              <Button
+                variant="primary" size={44}
                 onClick={access.reason === 'error' ? () => checkAccess(gameId) : handleSignInAgain}
               >
                 {access.reason === 'error' ? 'Try again'
                   : access.reason === 'expired' ? 'Sign in again'
                     : 'Sign in as someone else'}
-              </button>
+              </Button>
               {/* Only for the 'account' reason — the account this device is
                   signed in as may run a DIFFERENT one of its own teams, which
                   is a team change, not a sign-in change. Reconciles and heals a
@@ -1532,10 +1711,10 @@ function HostRemote() {
                   does — the door cannot tell the two apart, on purpose — so
                   this offers the same exit the normal Session card's "Back to
                   Menu" does, for every denial reason, not only 'account'. */}
-              <button className="hr-btn hr-btn--ghost" type="button" onClick={backToMenu}>
+              <Button variant="secondary" size={44} onClick={backToMenu}>
                 <Icon name="House" weight="bold" size={18} color="currentColor" />
                 Enter a different code
-              </button>
+              </Button>
             </section>
           )
         ) : panelTab ? (
@@ -1563,12 +1742,41 @@ function HostRemote() {
               gameId={gameId}
               setId={setId}
               initialTab={panelTab}
+              /* Up next's categories line (session-menu D10): the card's
+                 Categories button moved here, its list behind Change. */
+              categoryLine={setId ? (categoriesSummary(catRows) || (categoriesFailure ? 'could not be read' : 'none in this set yet')) : ''}
+              categoryPanel={setId ? (categoriesFailure ? (
+                <p className="hr-flash hr-flash--error" role="alert">
+                  <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                  {categoriesFailure.message}
+                </p>
+              ) : (
+                <RemoteCategoryList rows={catRows} live={categoriesLive} busy={togglingCategory} onToggle={toggleCategory} />
+              )) : null}
+              ended={snapshot?.state === 'ENDED'}
+              onOpenReport={() => navigateTo(`/host?gameId=${encodeURIComponent(gameId)}&open=report`)}
+              /* END SESSION ON THE PHONE (fork F8): the laptop's route and
+                 its confirm words, asked in place. Not a survey, not once
+                 ended (canEndSession, the laptop's own rule). */
+              onEndSession={canEndSession(gameType, snapshot?.state || '') && snapshot ? async () => {
+                const r = await requestEndSession({ fetchFn: authFetch, apiBase: apiBase(), gameId });
+                if (r.ended) { setPanelTab(null); await pollState(gameId); }
+                return r;
+              } : null}
               roster={roster}
               state={snapshot?.state}
               gameType={gameType}
               round={round}
               unaskedCount={unaskedCount}
               questionQueue={snapshot?.questionQueue || null}
+              /* ONE NUMBERING WITH THE STAGE (config/roundNumbers.js): the
+                 round on screen is the running order's first, quiet row. */
+              queueNowRound={(() => {
+                const live = parseGamePhase(snapshot?.state);
+                const data = snapshot?.currentQuestionData;
+                if (!live.round || !data) return null;
+                return { n: live.round, title: data.title || data.question || '' };
+              })()}
               busy={!!busyAction || cooling}
               askNowArmedKey={typeof armedAction === 'string' && armedAction.startsWith('ask-now:')
                 ? armedAction.slice('ask-now:'.length)
@@ -1576,10 +1784,45 @@ function HostRemote() {
               onAskNext={askNext}
               onAskNow={askNow}
               onUnqueue={unqueue}
+              // The impromptu ask (README D2): the Rounds tab's door, the
+              // queue's Yours rows, and the composer as a full-height sheet.
+              ownQuestions={(snapshot?.questionQueue && snapshot.questionQueue.ownQuestions) || []}
+              onWriteQuestion={normalizeGameType(gameType) === 'call-and-answer' && snapshot?.state !== 'ENDED'
+                ? () => { setOwnError(''); setOwnComposer({ mode: 'add' }); }
+                : null}
+              onEditOwn={(key, row) => {
+                const own = row || ((snapshot?.questionQueue?.ownQuestions) || []).find((o) => o.key === key);
+                if (own) { setOwnError(''); setOwnComposer({ mode: 'edit', key, initial: { title: own.title || '', detail: own.detail || '', note: own.note || '' } }); }
+              }}
+              onRemoveOwn={removeOwn}
+              ownComposer={ownComposer ? {
+                variant: 'touch',
+                mode: ownComposer.mode,
+                initial: ownComposer.initial,
+                canNow: ownNowAllowed(snapshot?.state),
+                lobby: ownNowIsFirst(snapshot?.state),
+                backLabel: OQ.backRounds,
+                busy: ownBusy,
+                error: ownError,
+                onSubmit: submitOwn,
+                onClose: () => setOwnComposer(null),
+              } : null}
             />
           </>
         ) : (
           <>
+            {/* NEEDS YOU, above the status card (experience plan §3.3, 1b). */}
+            {needs.items.length > 0 ? (
+              <section className="ny hr-needs" aria-label={NEEDS_WORDS.title} data-testid="remote-needs">
+                <p className="ny-k" aria-live="polite">{`${NEEDS_WORDS.title} · ${needs.items.length}`}</p>
+                <SessionNeedsList
+                  needs={{ ...needs, items: needs.items.map((i) => ({ ...i, actions: i.actions.filter((a) => [NEEDS_ACTIONS.LET, NEEDS_ACTIONS.NOT_NOW, NEEDS_ACTIONS.LOCK].includes(a)) })) }}
+                  onAct={actOnNeed}
+                  busy={needsBusy}
+                  error={needsError}
+                />
+              </section>
+            ) : null}
             <section className="hr-status" aria-live="polite">
               <p className="hr-status-kicker">{summary.detail}</p>
               <h1 className="hr-status-phase">{summary.headline}</h1>
@@ -1610,7 +1853,11 @@ function HostRemote() {
                     </p>
                   )}
                 </div>
-              ) : (
+              ) : null}
+              {remoteTimer ? (
+                <RemoteTimeCard timer={remoteTimer} onAddMinute={addMinuteHere} busy={timeBusy} />
+              ) : null}
+              {progress.applicable ? null : (
                 <p className="hr-roster">
                   <Icon name="UsersThree" weight="bold" size={18} color="var(--muted)" />
                   {rosterCount === null ? 'Counting the room…'
@@ -1675,15 +1922,14 @@ function HostRemote() {
                       ))}
                     </span>
                     {notesPage > 0 && (
-                      <button
-                        className="hr-btn hr-btn--ghost hr-btn--small"
-                        type="button"
+                      <Button
+                        variant="secondary" size={44}
                         disabled={blocked}
                         onClick={() => fire('notes-back')}
                       >
                         <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" />
                         {RW.backPage}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -1821,16 +2067,9 @@ function HostRemote() {
             <section className="hr-card" aria-label="This round">
               <h2 className="hr-card-heading">This round</h2>
               <div className="hr-grid">
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
-                  disabled={!setId}
-                  onClick={() => setPanelTab('questions')}
-                >
-                  <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
-                  Choose next question
-                </button>
-
+                {/* "Choose next question" was here: it is the Session card's
+                    Up next door now (docs/design/session-menu D10: one door,
+                    not two). */}
                 {/* THE ROOM'S SCREEN, FROM THE HOST'S HAND.
 
                     Disabled outside a round rather than hidden: unlike Skip —
@@ -1840,16 +2079,15 @@ function HostRemote() {
                     disappears between rounds is one they have to re-find every
                     time. `round` is null in LOBBY and after the session ends,
                     which is exactly when there is nothing to enlarge. */}
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   aria-expanded={focusOpen}
                   disabled={!round}
                   onClick={() => setFocusOpen((open) => !open)}
                 >
                   <Icon name="ArrowsOut" weight="bold" size={18} color="currentColor" />
                   Show on the big screen
-                </button>
+                </Button>
 
               </div>
 
@@ -1950,39 +2188,40 @@ function HostRemote() {
                   have that asked again just as much as one fixing a refusal. */}
               <ActiveOrgSwitcher onSwitch={recheckAccess} />
               <div className="hr-grid">
-                {/* THE WAY IN TO THE THREE LISTS.
+                {/* THE SESSION MENU'S THREE DOORS (docs/design/session-menu
+                    D10): the laptop's own names, Up next · Rounds so far ·
+                    People, each opening the panel at that section. First in
+                    the card, because they answer what a host asks DURING a
+                    round. The categories are Up next's line now. */}
+                <Button
+                  variant="secondary" size={44}
+                  onClick={() => setPanelTab('up-next')}
+                  data-testid="remote-door-up-next"
+                >
+                  <Icon name="ListBullets" weight="bold" size={18} color="currentColor" />
+                  Up next
+                </Button>
 
-                    First in the card, because it is the only control here that
-                    answers a question the host has DURING a round — who is in
-                    the room, what have we already asked — rather than one that
-                    changes a setting. `Choose next question` above opens the
-                    same panel on its third tab; two doors into one place, each
-                    named for what the host came for, is the shape the desktop
-                    already has (its dock button and its per-category
-                    magnifier). */}
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
-                  onClick={() => setPanelTab('players')}
+                <Button
+                  variant="secondary" size={44}
+                  onClick={() => setPanelTab('history')}
+                  data-testid="remote-door-history"
+                >
+                  <Icon name="ListNumbers" weight="bold" size={18} color="currentColor" />
+                  Rounds so far
+                </Button>
+
+                <Button
+                  variant="secondary" size={44}
+                  onClick={() => setPanelTab('people')}
+                  data-testid="remote-door-people"
                 >
                   <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
-                  Players &amp; rounds
-                </button>
+                  People
+                </Button>
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
-                  aria-expanded={categoriesOpen}
-                  disabled={!setId}
-                  onClick={() => setCategoriesOpen((open) => !open)}
-                >
-                  <Icon name="Folder" weight="bold" size={18} color="currentColor" />
-                  Categories
-                </button>
-
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   aria-expanded={joinOpen}
                   onClick={() => setJoinOpen((open) => !open)}
                 >
@@ -1997,7 +2236,7 @@ function HostRemote() {
                       much as a code. */}
                   <Icon name="LinkSimple" weight="bold" size={18} color="currentColor" />
                   Join code
-                </button>
+                </Button>
 
                 {/* PRESENT replaces Big screen under the two-surface switch
                     (PLAN 2.14): the room's screen is /present, which follows
@@ -2005,70 +2244,49 @@ function HostRemote() {
                     reload on either end loses nothing. */}
                 {/* A Build Room's window needs its wall key, which this page never reads. */}
                 {gameType !== 'build' && twoSurfacesHere(gameType) ? (
-                  <a
-                    className="hr-btn hr-btn--ghost"
+                  <Button
+                    as="a"
+                    variant="secondary"
+                    size={44}
                     href={presentHref(gameId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open it on the computer wired to the projector and press F"
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                    {Number(snapshot && snapshot.presenting) > 0 ? 'Presenting' : 'Present'}
-                  </a>
+                    {/* "Room's screen" (experience plan §3.6), the laptop's word. */}
+                    {Number(snapshot && snapshot.presenting) > 0 ? 'Room\'s screen · on' : 'Room\'s screen'}
+                  </Button>
                 ) : (
-                  <button
-                    className="hr-btn hr-btn--ghost"
-                    type="button"
+                  <Button
+                    variant="secondary" size={44}
                     aria-expanded={screenOpen}
                     onClick={() => setScreenOpen((open) => !open)}
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                    Big screen
-                  </button>
+                    Room&apos;s screen
+                  </Button>
                 )}
 
-                <button
-                  className="hr-btn hr-btn--ghost"
-                  type="button"
+                <Button
+                  variant="secondary" size={44}
                   onClick={backToMenu}
                 >
                   {/* House, not ArrowsClockwise: this goes back to the code
                       entry screen, which is the remote's menu. A cycle glyph
                       reads as "reload this session". */}
                   <Icon name="House" weight="bold" size={18} color="currentColor" />
-                  Back to Menu
-                </button>
+                  {/* Main menu (§3.6): one word for leaving, as on the laptop. */}
+                  Main menu
+                </Button>
               </div>
-
-              {categoriesOpen && (
-                <div className="hr-card-panel">
-                  {/* THE REFUSAL COMES BEFORE THE LIST, and replaces it. A list
-                      that is empty because the server would not answer is not an
-                      empty list, and drawing "No categories in this set" under a
-                      404 is the empty state that lies. */}
-                  {categoriesFailure ? (
-                    <p className="hr-flash hr-flash--error" role="alert">
-                      <Icon name="Warning" weight="fill" size={18} color="currentColor" />
-                      {categoriesFailure.message}
-                    </p>
-                  ) : (
-                    <RemoteCategoryList
-                      rows={catRows}
-                      live={categoriesLive}
-                      busy={togglingCategory}
-                      onToggle={toggleCategory}
-                    />
-                  )}
-                </div>
-              )}
 
               {joinOpen && (
                 <div className="hr-join">
                   <div className="hr-qr"><QRCode value={playerJoinUrl} size={168} level="M" includeMargin /></div>
                   <code className="hr-join-url">{playerJoinUrl}</code>
-                  <button
-                    className="hr-btn hr-btn--ghost"
-                    type="button"
+                  <Button
+                    variant="secondary" size={44}
                     onClick={() => {
                       navigator.clipboard?.writeText(playerJoinUrl)
                         .then(() => setNotice('Join link copied.'))
@@ -2076,22 +2294,21 @@ function HostRemote() {
                     }}
                   >
                     <Icon name="ClipboardText" weight="bold" size={18} color="currentColor" />Copy link
-                  </button>
+                  </Button>
                   {/* THE JOIN CODE ON THE ROOM'S SCREEN (owner, 2026-10-13): a
                       `join` focus, so the Presentation and the host page show
                       it too. Only while a round is on; the lobby already does. */}
                   {round ? (
-                    <button
-                      className="hr-btn hr-btn--ghost"
-                      type="button"
+                    <Button
+                      variant="secondary" size={44}
                       data-join-toggle=""
                       aria-pressed={joinOnWall}
                       disabled={focusBusy}
                       onClick={() => setStageFocus({ join: !joinOnWall })}
                     >
                       <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                      {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
-                    </button>
+                      {joinOnWall ? 'Take it off the screen' : 'Show join code'}
+                    </Button>
                   ) : null}
                 </div>
               )}
@@ -2100,25 +2317,25 @@ function HostRemote() {
                 <div className="hr-card-panel">
                   {displayLinked ? (
                     <div className="hr-grid">
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_TOP')}>
                         <Icon name="ArrowUp" weight="bold" size={18} color="currentColor" />Top
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_RESULTS')}>
                         <Icon name="ChartBar" weight="bold" size={18} color="currentColor" />Results
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('SCROLL_TO_BOTTOM')}>
                         <Icon name="ArrowDown" weight="bold" size={18} color="currentColor" />Bottom
-                      </button>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
+                      </Button>
+                      <Button variant="secondary" size={44} onClick={() => sendToHostPage('TOGGLE_BIG_SCREEN')}>
                         <Icon name="Monitor" weight="bold" size={18} color="currentColor" />Full screen
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <>
-                      <button className="hr-btn hr-btn--ghost" type="button" onClick={openHostPage}>
+                      <Button variant="secondary" size={44} onClick={openHostPage}>
                         <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
                         Open the big screen
-                      </button>
+                      </Button>
                       {/* Honest about the limit rather than showing dead buttons:
                           scrolling and full-screen are display-only, they have no
                           server representation, and a window handle cannot be
@@ -2148,16 +2365,17 @@ function HostRemote() {
                   amber. The same control the host page's dock shows beside
                   its primary: roundStep gives both the same one. */}
               {secondary && (
-                <button
-                  className={`hr-btn hr-btn--ghost hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size={44}
+                  className={`hr-sec ${secondaryArmed ? 'is-armed' : ''}`}
                   disabled={blocked || secondary.disabled}
                   onClick={onSecondary}
                   onBlur={() => { if (secondaryArmed) disarm(); }}
                 >
                   <Icon name={secondaryArmed ? 'Warning' : secondary.icon} weight="bold" size={18} color="currentColor" />
                   {secondaryArmed ? 'Tap again to confirm' : secondary.label}
-                </button>
+                </Button>
               )}
               {(primaryArmed || secondaryArmed) && (
                 <p className="hr-dock-warn" role="status">
@@ -2169,9 +2387,12 @@ function HostRemote() {
               {action.disabled && action.hint && (
                 <p className="hr-dock-hint" role="status">{action.hint}</p>
               )}
-              <button
+              {/* THE ONE ORANGE BUTTON ON THE PHONE: ui/Button's primary at the
+                  phone dock's 56px (experience plan §5.1, step 5a). */}
+              <Button
+                variant="primary"
+                size={56}
                 className={`hr-primary ${primaryArmed ? 'is-armed' : ''}`}
-                type="button"
                 disabled={blocked || action.disabled}
                 onClick={onPrimary}
                 onBlur={() => { if (primaryArmed) disarm(); }}
@@ -2185,7 +2406,7 @@ function HostRemote() {
                 <span className="hr-primary-label">
                   {busyAction ? 'Working…' : primaryArmed ? 'Tap again to confirm' : action.label}
                 </span>
-              </button>
+              </Button>
             </>
           ) : (
             <p className="hr-dock-idle">{step.status.text}</p>

@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
+import Button from './ui/Button';
 import StatusMessage from './StatusMessage';
+import KeyCap from './stage/KeyCap';
+import { TIMER_WORDS } from '../config/roundTimer';
 
 /**
  * The host's one and only "move the room forward" control.
@@ -98,6 +101,26 @@ export default function HostActionBar({
     page does not track (a dialog of a child component) can still be seen.
   */
   ignoreKey = null,
+  /*
+    THE TIME CHIP (experience plan 2f; session-start D4): a node drawn BEFORE
+    the primary on an opening move (Start round N, Start voting), so the time
+    is chosen where the phase is opened. The page decides when; the bar only
+    places it. Space still presses the primary, even with the chip focused.
+  */
+  timeChip = null,
+  /*
+    +1 MIN ON THE KEYBOARD (`+` or `=`), with the same guard set as the advance
+    keys: never while typing, never under an overlay, never on a held key.
+    null while no timer runs, so the keys stay the browser's.
+  */
+  onAddTime = null,
+  /*
+    +1 MIN AS A BUTTON, BESIDE THE MAIN ONE (dev QA 2 Nov: on one screen a
+    timed round showed no way to add time, only the room's words). The
+    console's pulse tile carries its own, so only a bar with no pulse asks for
+    it. Quiet, never orange: the main button keeps the one orange.
+  */
+  showAddTime = false,
 }) {
   const primary = controls?.primary || null;
   const secondary = controls?.secondary || null;
@@ -220,6 +243,25 @@ export default function HostActionBar({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [shortcutsEnabled, onBackKey, ignoreKey]);
 
+  // + / = — one more minute on the round's timer.
+  useEffect(() => {
+    if (!shortcutsEnabled || typeof onAddTime !== 'function') return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key !== '+' && event.key !== '=') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.repeat) return;
+      if (isTypingTarget(event.target)) return;
+      if (typeof ignoreKey === 'function' && ignoreKey(event)) return;
+      if (event.target?.closest?.('.setup-panel')) return;
+      event.preventDefault();
+      onAddTime();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shortcutsEnabled, onAddTime, ignoreKey]);
+
   if (!primary) return null;
 
   return (
@@ -244,31 +286,55 @@ export default function HostActionBar({
           {armedControl && (
             <span className="host-action-bar__armed" role="alert">{armedControl.arm.text}</span>
           )}
+          {/* ui/Button (experience plan §5.1, step 5a): the main move is the
+              one primary, every other button secondary, 36px. The
+              host-action-bar__* classes stay as hooks for the stage dock's
+              sizing (styles/stage.css) and the tests. */}
           {secondary && (
-            <button
-              type="button"
-              className={`btn-secondary host-action-bar__secondary${armClass(secondary)}`}
+            <Button
+              variant="secondary"
+              size={36}
+              className={`host-action-bar__secondary${armClass(secondary)}`}
               onClick={() => press(secondary)}
               disabled={Boolean(secondary.disabled)}
+              title={labelOf(secondary)}
             >
               <Icon name={secondary.icon} weight="bold" size={18} />
               <span>{labelOf(secondary)}</span>
-            </button>
+            </Button>
           )}
           {tertiary && (
-            <button
-              type="button"
-              className={`btn-secondary host-action-bar__tertiary${armClass(tertiary)}`}
+            <Button
+              variant="secondary"
+              size={36}
+              className={`host-action-bar__tertiary${armClass(tertiary)}`}
               onClick={() => press(tertiary)}
               disabled={Boolean(tertiary.disabled)}
+              title={labelOf(tertiary)}
             >
               <Icon name={tertiary.icon} weight="bold" size={18} />
               <span>{labelOf(tertiary)}</span>
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            className={`btn-primary host-action-bar__primary${armClass(primary)}`}
+          {timeChip}
+          {showAddTime && typeof onAddTime === 'function' ? (
+            <Button
+              variant="secondary"
+              size={36}
+              className="host-action-bar__addtime"
+              onClick={() => onAddTime()}
+              title={`${TIMER_WORDS.plusOneLabel} (${TIMER_WORDS.plusOneKeys})`}
+              aria-keyshortcuts="+ ="
+              data-testid="bar-add-minute"
+            >
+              <Icon name="Plus" weight="bold" size={16} />
+              <span>{TIMER_WORDS.plusOne}</span>
+            </Button>
+          ) : null}
+          <Button
+            variant="primary"
+            size={36}
+            className={`host-action-bar__primary${armClass(primary)}`}
             onClick={() => press(primary)}
             disabled={primary.disabled}
             title={primary.disabled ? primary.hint : 'Space or → also advances'}
@@ -276,10 +342,10 @@ export default function HostActionBar({
           >
             <Icon name={primary.icon} weight="bold" size={20} />
             <span>{labelOf(primary)}</span>
-          </button>
-          {!primary.disabled && shortcutsEnabled && (
-            <span className="host-action-bar__kbd" aria-hidden="true">or press Space</span>
-          )}
+            {/* The key, on the button (./stage/KeyCap.jsx). Inside a Dock the
+                dock says whether it works; on the console, this bar does. */}
+            <KeyCap on={!primary.disabled && shortcutsEnabled} />
+          </Button>
         </div>
         {/*
           WHAT THE KEYS DO RIGHT NOW — "should there be a visual queue on what

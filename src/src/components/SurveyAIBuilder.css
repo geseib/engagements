@@ -1,4 +1,4 @@
-/* skin-allowance: colour=8 font=0 primary=2 */
+/* skin-allowance: colour=0 font=0 primary=2 */
 /* ============================================================================
    GENERATE A SURVEY — components/SurveyAIBuilder.jsx
 
@@ -27,15 +27,19 @@
    ========================================================================== */
 
 .sab {
-  --sab-text: #2c3e50;
-  --sab-muted: #5b6b7c;
-  --sab-edge: #7a8898;
-  --sab-rule: #e3e8ee;
-  --sab-quiet: #f8f9fa;
-  --sab-field: #ffffff;
+  /* ROLES since experience plan 5e: the builders open in one dusk window
+     (components/AIBuilderDialog.jsx), so the paper literals measured on the old
+     white `.modal-content` became the roles they stood in for. Measured on
+     dusk in __tests__/aiBuilderDialogPalette.test.js. */
+  --sab-text: var(--text);
+  --sab-muted: var(--muted);
+  --sab-edge: var(--muted);
+  --sab-rule: var(--rule);
+  --sab-quiet: var(--row-hover);
+  --sab-field: var(--surface-2);
   --sab-on-accent: var(--on-accent);
-  --sab-chip-bg: #eef2f7;
-  --sab-chip-fg: #35506b;
+  --sab-chip-bg: var(--bg);
+  --sab-chip-fg: var(--text);
 
   --sab-t-floor: 12px;
   --sab-t-label: 13px;
@@ -48,7 +52,7 @@
 
 /* The form is a one-column thing (mockup 02: 740px); the review is a table
    and keeps the builder's full width (mockup 03: 1060px). */
-.sab.sab--form.modal-content { max-width: 760px; }
+.sab.sab--form.ui-dialog { width: min(760px, 100%); }
 
 .sab-headtext { flex: 1 1 auto; min-width: 0; }
 .sab-headtext h2 { margin: 0; }

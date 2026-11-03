@@ -16,6 +16,8 @@
  * question the server could not previously ask.
  */
 
+import { JOIN, EARLY } from '../config/playerWords';
+
 /** Deliberately per-game: an id shared across sessions would be a tracking handle. */
 export const clientIdStorageKey = (gameId) => `playerClient_${gameId}`;
 
@@ -62,7 +64,7 @@ export function getClientId(gameId, storage) {
  * (409 covers both collision shapes, and they need different screens — one
  * offers a way back in, the other must not).
  */
-export function classifyJoinFailure(status, data) {
+export function classifyJoinFailure(status, data, code = '') {
   const payload = data || {};
 
   if (payload.code === 'NAME_TAKEN' || payload.code === 'NAME_UNVERIFIED') {
@@ -72,7 +74,11 @@ export function classifyJoinFailure(status, data) {
       message: payload.message || 'That name is already in use in this session.',
       // The host answered this device's ask with Not now (join-game.js sends
       // it only to the device that asked).
-      ...(payload.handoverRefused ? { handoverRefused: true } : {})
+      ...(payload.handoverRefused ? { handoverRefused: true } : {}),
+      // THIS browser held the name until the host let it move to another
+      // device (join-game.js sends it only to that browser). The page says
+      // "<name> is now on another device" rather than offering to ask for it.
+      ...(payload.nameMoved ? { nameMoved: true } : {})
     };
   }
 
@@ -81,16 +87,19 @@ export function classifyJoinFailure(status, data) {
     return { kind: 'access-code', message: payload.message || '' };
   }
 
+  /* THE FRIENDLY LINE WINS (experience plan 3a, audit C §2.5). The server's
+     404 body is `{ error: 'Game not found' }` (session-gate.js), and preferring
+     it over the default is how a participant came to read "Game not found".
+     The server cannot tell a typo from an ended session, so neither can this. */
   if (status === 404) {
-    return {
-      kind: 'not-found',
-      message: payload.message || payload.error
-        || 'No session with that code. Check the main screen and try again.'
-    };
+    return { kind: 'not-found', message: JOIN.wrongCode(String(code || '').trim()) };
   }
 
+  /* Not started yet is a lobby that joins by itself (PlayerPage), never an
+     error the participant has to act on; the server's own sentence names the
+     wrong noun. */
   if (status === 403 && payload.error === 'Game not started') {
-    return { kind: 'not-started', message: payload.message || payload.error };
+    return { kind: 'not-started', message: EARLY.lede };
   }
 
   return {

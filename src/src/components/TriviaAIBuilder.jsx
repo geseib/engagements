@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import HelpButton from './HelpButton';
-import { helpFor } from '../config/help/screens';
+import AIBuilderDialog from './AIBuilderDialog';
+import Button from './ui/Button';
+import { useConfirm } from './ConfirmDialog';
 import FileUploadPrompt from './FileUploadPrompt';
 import { startGenerationJob, pollGenerationJob } from '../utils/aiBatchClient';
 import Icon from './Icon';
@@ -39,6 +40,8 @@ function TriviaAIBuilder({
      (hooks/useDraftRun.js). A ref, so the memoised job watcher reads the
      current one. */
   const run = useDraftRun({ endpoint: ENDPOINT, appendTo, libraries, onDraftReady });
+  // The small confirm dialog, not the browser's (experience plan 5b/5e).
+  const [askConfirm, confirmDialog] = useConfirm();
   const runRef = useRef(run);
   runRef.current = run;
   const [step, setStep] = useState(1);
@@ -424,9 +427,15 @@ function TriviaAIBuilder({
    * makes no set, so they live nowhere else, and reopening would auto-start a
    * fresh job that overwrites the one just abandoned.
    */
-  const requestClose = () => {
+  const requestClose = async () => {
     if (isAppend(appendTo) && reviewing && keptTrivia.length > 0
-      && !window.confirm('Close without adding these questions? They have not been added and will be lost.')) {
+      && !(await askConfirm({
+        title: 'Close without adding these questions?',
+        message: 'They have not been added and will be lost.',
+        confirmText: 'Close and lose them',
+        cancelText: 'Keep reviewing',
+        danger: true,
+      }))) {
       return;
     }
     onClose();
@@ -463,21 +472,43 @@ function TriviaAIBuilder({
       .join('; ');
   };
 
-  return (
-    <div className="trivia-ai-builder-modal">
-      <div className="modal-overlay" onClick={requestClose}></div>
-      <div className="modal-content trivia-builder" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2><Icon name="Brain" weight="duotone" size={16} color="var(--primary)" /> {isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'AI Trivia Builder'}</h2>
-          {/* The AI builders' guide (Help Phase 3), beside the X. */}
-          <HelpButton {...helpFor('ai-builders')} variant="inline" size="small" tooltip="Help: AI builders" className="help-button-quiet help-button-push" />
-          <button className="close-button" onClick={requestClose}><Icon name="X" weight="bold" size={16} color="currentColor" /></button>
-        </div>
+  /* The window's foot (AIBuilderDialog draws it): the way back on the left, the action on the right. */
+  const footCancel = step === 1 ? (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      ) : step === 2 && reviewing ? (
+        <Button size={44} onClick={backToConfiguration}>
+          <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to the form
+        </Button>
+      ) : null;
+  const footActions = (
+    <>
+      {step === 1 && (
+        <Button variant="primary" size={44} onClick={handleConfigSubmit} disabled={!triviaConfig.topic.trim()}>
+          <Icon name="Sparkle" weight="duotone" size={16} color="currentColor" /> Generate trivia questions
+        </Button>
+      )}
+      {step === 2 && reviewing && (
+        <Button size={44} onClick={requestClose}>Cancel</Button>
+      )}
+    </>
+  );
 
-        <div className="modal-body">
+  return (
+    <AIBuilderDialog
+      kind="trivia"
+      className="trivia-builder"
+      titleId="trivia-builder-title"
+      title={isAppend(appendTo) ? `Add trivia to “${appendTo.setName}”` : 'Generate trivia questions'}
+      icon={<Icon name="Brain" weight="duotone" size={20} color="var(--primary)" />}
+      onClose={requestClose}
+      closeLabel="Close the trivia generator"
+      cancel={footCancel}
+      actions={footActions}
+    >
+        {confirmDialog}
           {step === 1 && (
             <div className="trivia-configuration">
-              <h3>Configure Your Trivia Questions</h3>
+              <h3 className="aib-step">Describe the trivia you want</h3>
               <AppendModeSwitch appendTo={appendTo} />
               <DestinationField
                 libraries={run.libraries}
@@ -511,7 +542,7 @@ function TriviaAIBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Topic/Subject *</label>
+                      <label>Topic or subject *</label>
                       {lockFor('topic')}
                     </div>
                     <input
@@ -526,7 +557,7 @@ function TriviaAIBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>Target Audience</label>
+                      <label>Audience</label>
                       {lockFor('audience')}
                     </div>
                     <input
@@ -537,7 +568,7 @@ function TriviaAIBuilder({
                     />
                   </div>
                   <div className="form-group">
-                    <label>Difficulty Level</label>
+                    <label>Difficulty</label>
                     <select
                       value={triviaConfig.difficulty}
                       onChange={(e) => setTriviaConfig(prev => ({ ...prev, difficulty: e.target.value }))}
@@ -572,7 +603,7 @@ function TriviaAIBuilder({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Number of Answer Choices</label>
+                    <label>Answer choices</label>
                     <select
                       value={triviaConfig.numChoices}
                       onChange={(e) => setTriviaConfig(prev => ({ ...prev, numChoices: parseInt(e.target.value) }))}
@@ -583,7 +614,7 @@ function TriviaAIBuilder({
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Number of Correct Answers</label>
+                    <label>Correct answers</label>
                     <select
                       value={triviaConfig.numCorrect}
                       onChange={(e) => setTriviaConfig(prev => ({ ...prev, numCorrect: parseInt(e.target.value) }))}
@@ -599,7 +630,7 @@ function TriviaAIBuilder({
                 <div className="form-row">
                   <div className="form-group">
                     <div className="label-row">
-                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Must Have Categories'}</label>
+                      <label>{isAppend(appendTo) ? 'Name the new categories (optional)' : 'Categories it must include'}</label>
                       {lockFor('mustHaveCategories')}
                     </div>
                     <input
@@ -614,7 +645,7 @@ function TriviaAIBuilder({
 
                 <div className="form-group">
                   <div className="label-row">
-                    <label>Additional Requirements (Optional)</label>
+                    <label>Anything else it should know (optional)</label>
                     {lockFor('customPrompt')}
                   </div>
                   <textarea
@@ -690,18 +721,18 @@ function TriviaAIBuilder({
                   ]}
                   actions={(
                     <>
-                      <button className="btn-secondary" onClick={handleExportCSV}>
+                      <Button size={36} onClick={handleExportCSV}>
                         <Icon name="FileText" weight="bold" size={16} color="currentColor" /> Export CSV
-                      </button>
+                      </Button>
                       {interpreted.createdSet ? (
-                        <button className="btn-primary" onClick={handleOpenCreatedSet}>
+                        <Button variant="primary" size={36} onClick={handleOpenCreatedSet}>
                           <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />{' '}
                           Open &ldquo;{interpreted.createdSet.setName}&rdquo;
-                        </button>
+                        </Button>
                       ) : (
-                        <button className="btn-primary" onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
-                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptTrivia.length} to “${appendTo.setName}”` : `Load ${keptTrivia.length} into System`}
-                        </button>
+                        <Button variant="primary" size={36} onClick={handleLoadIntoSystem} disabled={keptTrivia.length === 0}>
+                          <Icon name="DownloadSimple" weight="bold" size={16} color="currentColor" /> {isAppend(appendTo) ? `Add ${keptTrivia.length} to “${appendTo.setName}”` : `Save ${keptTrivia.length} as a new set`}
+                        </Button>
                       )}
                     </>
                   )}
@@ -709,32 +740,34 @@ function TriviaAIBuilder({
               ) : (
                 <div className="trivia-review">
                   <div className="trivia-navigation">
-                    <button
-                      className="nav-button prev"
+                    <Button
+                      size={36}
+                      className="aib-nav-prev"
                       onClick={() => navigateTrivia('prev')}
                       disabled={currentTriviaIndex === 0}
                     >
                       <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Previous
-                    </button>
+                    </Button>
 
                     <div className="trivia-counter">
                       <span>Question {currentTriviaIndex + 1} of {generatedTrivia.length}</span>
                       <h3>{currentTrivia?.title}</h3>
                     </div>
 
-                    <button
-                      className="nav-button next"
+                    <Button
+                      size={36}
+                      className="aib-nav-next"
                       onClick={() => navigateTrivia('next')}
                       disabled={currentTriviaIndex === generatedTrivia.length - 1}
                     >
                       Next <Icon name="ArrowRight" weight="bold" size={16} color="currentColor" />
-                    </button>
+                    </Button>
                   </div>
 
                   {currentTrivia && (
                     <div className="trivia-editor">
                       <div className="form-group">
-                        <label>Question Title</label>
+                        <label>Question title</label>
                         <input
                           type="text"
                           value={currentTrivia.title || ''}
@@ -744,7 +777,7 @@ function TriviaAIBuilder({
                       </div>
 
                       <div className="form-group">
-                        <label>Question Text</label>
+                        <label>Question text</label>
                         <textarea
                           value={currentTrivia.questionDetail || ''}
                           onChange={(e) => handleTriviaEdit(currentTriviaIndex, 'questionDetail', e.target.value)}
@@ -754,7 +787,7 @@ function TriviaAIBuilder({
                       </div>
 
                       <div className="form-group">
-                        <label>Answer Explanation</label>
+                        <label>Answer explanation</label>
                         <textarea
                           value={currentTrivia.answerDetails || ''}
                           onChange={(e) => handleTriviaEdit(currentTriviaIndex, 'answerDetails', e.target.value)}
@@ -815,7 +848,7 @@ function TriviaAIBuilder({
                       </div>
 
                       <div className="trivia-options-editor">
-                        <h4>Answer Options</h4>
+                        <h4>Answer options</h4>
                         {availableOptions.map((optionKey, index) => {
                           const optionLetter = String.fromCharCode(65 + index);
                           const optionId = `Option${optionLetter}`;
@@ -834,9 +867,10 @@ function TriviaAIBuilder({
                                 />
                                 {isCorrect && <span className="correct-indicator"><Icon name="Check" weight="bold" size={16} color="var(--success)" /> Correct</span>}
                               </label>
-                              <button
-                                type="button"
-                                className={`set-correct-btn ${isCorrect ? 'active' : ''}`}
+                              <Button
+                                size={36}
+                                variant={isCorrect ? 'tertiary' : 'secondary'}
+                                aria-pressed={isCorrect}
                                 onClick={() => {
                                   if (isCorrect) {
                                     // Remove from correct answers
@@ -849,15 +883,15 @@ function TriviaAIBuilder({
                                   }
                                 }}
                               >
-                                {isCorrect ? 'Remove' : 'Set as Correct'}
-                              </button>
+                                {isCorrect ? 'Not correct' : 'Set as correct'}
+                              </Button>
                             </div>
                           );
                         })}
                       </div>
 
                       <div className="trivia-preview">
-                        <h4>Preview:</h4>
+                        <h4>Preview</h4>
                         <div className="trivia-preview-display">
                           <div className="question-header">
                             <h3>{currentTrivia.title}</h3>
@@ -889,50 +923,20 @@ function TriviaAIBuilder({
                   )}
 
                   <div className="trivia-actions">
-                    <button className="btn-secondary" onClick={() => { setTagDraft(null); setEditingItem(false); }}>
+                    <Button size={36} onClick={() => { setTagDraft(null); setEditingItem(false); }}>
                       <Icon name="ListChecks" weight="bold" size={16} color="currentColor" /> Back to all {generatedTrivia.length} questions
-                    </button>
-                    <button
-                      className="btn-secondary"
+                    </Button>
+                    <Button size={36}
                       onClick={() => toggleExcluded(currentTriviaIndex)}
                     >
                       {excluded.has(currentTriviaIndex) ? 'Put this one back' : 'Leave this one out'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {step === 1 && (
-            <>
-              <button className="btn-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleConfigSubmit}
-                disabled={!triviaConfig.topic.trim()}
-              >
-                <Icon name="Sparkle" weight="duotone" size={16} color="var(--primary)" /> Generate Trivia Questions
-              </button>
-            </>
-          )}
-          {step === 2 && reviewing && (
-            <>
-              <button className="btn-secondary" onClick={backToConfiguration}>
-                <Icon name="ArrowLeft" weight="bold" size={16} color="currentColor" /> Back to Configuration
-              </button>
-              <button className="btn-secondary" onClick={requestClose}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </AIBuilderDialog>
   );
 }
 

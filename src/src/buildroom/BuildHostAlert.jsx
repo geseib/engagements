@@ -18,6 +18,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useKeepOnScreen } from './keepOnScreen';
 import { W } from './words';
+import Button from '../components/ui/Button';
 
 export default function HostAlert({ alert, onHost, onGo, onMarkAll }) {
   const [open, setOpen] = useState(false);
@@ -87,8 +88,8 @@ export default function HostAlert({ alert, onHost, onGo, onMarkAll }) {
             ))}
           </ul>
           <div className="brm-halist-ft">
-            <button type="button" className="brm-halist-btn" onClick={() => { setOpen(false); onMarkAll(); if (trigger.current) trigger.current.focus(); }}>{W.markAllSeen}</button>
-            <button type="button" className="brm-halist-btn brm-halist-push" onClick={host}>{W.hostScreen} · 1</button>
+            <Button type="button" variant="tertiary" size={36} className="brm-ctl brm-halist-go" onClick={() => { setOpen(false); onMarkAll(); if (trigger.current) trigger.current.focus(); }}>{W.markAllSeen}</Button>
+            <Button type="button" variant="tertiary" size={36} className="brm-ctl brm-halist-go brm-halist-push" onClick={host}>{W.hostScreen} · 1</Button>
           </div>
         </div>
       )}

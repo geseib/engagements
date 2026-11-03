@@ -13,6 +13,7 @@
  */
 import React, { useContext, useState } from 'react';
 import Modal from '../components/Modal';
+import { DialogHead, DialogFoot } from '../components/ui/DialogParts';
 import Icon from '../components/Icon';
 import { ViewerContext } from './MockupViewer';
 import { W } from './words';
@@ -20,6 +21,7 @@ import { SendExtras, useMirror } from './BuildSendOptions';
 import {
   HOST_KINDS, defaultKind, decideBody, settleWords, decisionChoices, directionFor, pickVerdict, roomChoice,
 } from './buildScreens';
+import Button from '../components/ui/Button';
 
 const askNo = (askId) => Number(askId) || askId;
 const MAX_OPTIONS = 6;
@@ -110,13 +112,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
   if (mode === 'reask') {
     return (
       <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sd" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-sd-title">
-        <div className="brm-pa-head">
-          <div>
-            <div className="brm-pa-eb">Ask {askNo(ask.askId)} · ask again</div>
-            <h2 className="brm-pa-q" id="brm-sd-title">Ask the room again</h2>
-          </div>
-          <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-        </div>
+        <DialogHead className="brm-pa-head" titleId="brm-sd-title" title="Ask the room again" titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · ask again</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
         <div className="brm-sd-body">
           <label className="brm-field"><span className="brm-lbl">Question</span>
             <input className="brm-input" value={form.prompt} maxLength={300} onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))} />
@@ -134,39 +130,37 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
                     <input className="brm-input" aria-label={`Option ${letterOf(i)}`} value={o.title} maxLength={120} onChange={(e) => setOpt(i, { title: e.target.value })} />
                   </div>
                   {form.options.length > 2
-                    ? <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" aria-label={`Remove option ${letterOf(i)}`} onClick={() => setForm((f) => ({ ...f, options: f.options.filter((_, j) => j !== i) }))}><Icon name="X" size={14} /></button>
+                    ? <Button type="button" size={36} className="brm-tight" aria-label={`Remove option ${letterOf(i)}`} onClick={() => setForm((f) => ({ ...f, options: f.options.filter((_, j) => j !== i) }))}><Icon name="X" size={14} /></Button>
                     : <span />}
                 </div>
               ))}
               {form.options.length < MAX_OPTIONS && (
-                <button type="button" className="brm-btn brm-btn--sm brm-btn--ghost" onClick={() => setForm((f) => ({ ...f, options: [...f.options, { title: '', detail: '', url: '' }] }))}>
+                <Button type="button" size={36} className="brm-tight" onClick={() => setForm((f) => ({ ...f, options: [...f.options, { title: '', detail: '', url: '' }] }))}>
                   <Icon name="Plus" size={14} /> Add an option
-                </button>
+                </Button>
               )}
               <span className="brm-hint">Pictures stay with their option.</span>
             </div>
           )}
           {error && <p className="brm-alert" role="alert">{error}</p>}
         </div>
-        <div className="brm-sd-foot">
-          <button type="button" className="brm-btn brm-btn--ghost" onClick={() => { setError(''); setMode('send'); }}>
-            <Icon name="ArrowLeft" size={14} /> {`Back to ${W.change}`}
-          </button>
-          <button type="button" className="brm-btn brm-btn--primary brm-push" disabled={busy || !reaskReady} onClick={askAgain}>Ask again</button>
-        </div>
+        <DialogFoot
+          className="brm-sd-foot"
+          cancel={(
+            <Button size={44} className="brm-ctl" onClick={() => { setError(''); setMode('send'); }}>
+              <Icon name="ArrowLeft" size={14} /> {`Back to ${W.change}`}
+            </Button>
+          )}
+        >
+          <Button type="button" variant="primary" size={44} className="brm-ctl brm-push" disabled={busy || !reaskReady} onClick={askAgain}>Ask again</Button>
+        </DialogFoot>
       </Modal>
     );
   }
 
   return (
     <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sd" onClose={onClose} closeOnBackdrop={false} labelledBy="brm-sd-title">
-      <div className="brm-pa-head">
-        <div>
-          <div className="brm-pa-eb">Ask {askNo(ask.askId)} · results</div>
-          <h2 className="brm-pa-q" id="brm-sd-title">{W.change}</h2>
-        </div>
-        <button type="button" className="brm-x" onClick={onClose} aria-label="Close this window"><Icon name="X" size={16} /></button>
-      </div>
+      <DialogHead className="brm-pa-head" titleId="brm-sd-title" title={<>{W.change}</>} titleClassName="brm-pa-q" eyebrow={<>Ask {askNo(ask.askId)} · results</>} eyebrowClassName="brm-pa-eb" onClose={onClose} closeLabel="Close this window" closeClassName="brm-x" />
       <div className="brm-sd-body">
         <p className="brm-sd-q">{ask.prompt}</p>
         {choices.length > 0 && (
@@ -180,7 +174,7 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
                     <span className="brm-sd-t">{c.text}{c.id === room ? " · the room's choice" : ''}</span>
                   </button>
                   {pic && openViewer && (
-                    <button type="button" className="brm-btn brm-btn--link" aria-label={`View mockup ${c.label}`} onClick={() => openViewer(ask.askId, c.label, 'stage-edit')}>view mockup</button>
+                    <Button type="button" variant="tertiary" size={36} className="brm-ctl" aria-label={`View mockup ${c.label}`} onClick={() => openViewer(ask.askId, c.label, 'stage-edit')}>view mockup</Button>
                   )}
                   <b className="brm-sd-n">{c.count}</b>
                 </li>
@@ -214,23 +208,18 @@ export default function BuildStageDecide({ ask, busy, run, api, onClose, initial
         <SendExtras hide={hide} setHide={setHide} disabled={busy} />
         {error && <p className="brm-alert" role="alert">{error}</p>}
       </div>
-      <div className="brm-sd-foot">
-        <button type="button" className="brm-btn brm-btn--ghost" onClick={onClose}>Close</button>
-        <button type="button" className="brm-btn brm-btn--ghostdanger" disabled={busy} onClick={() => setConfirmDiscard(true)}>Discard</button>
-        <button type="button" className="brm-btn brm-btn--ghost" disabled={busy} onClick={() => setMode('reask')}>{W.askAgainEllipsis}</button>
-        <button type="button" className="brm-btn brm-push" disabled={cannot} onClick={() => decide('later')}>{W.saveLater}</button>
-        <button type="button" className="brm-btn brm-btn--primary" disabled={cannot} onClick={() => decide(as)}><Icon name="PaperPlaneTilt" size={16} /> {sendWords}</button>
-      </div>
+      <DialogFoot className="brm-sd-foot" cancel={<Button size={44} className="brm-ctl" onClick={onClose}>Close</Button>}>
+        <Button size={44} className="brm-ctl brm-danger" disabled={busy} onClick={() => setConfirmDiscard(true)}>Discard</Button>
+        <Button size={44} className="brm-ctl" disabled={busy} onClick={() => setMode('reask')}>{W.askAgainEllipsis}</Button>
+        <Button size={44} className="brm-ctl" disabled={cannot} onClick={() => decide('later')}>{W.saveLater}</Button>
+        <Button variant="primary" size={44} className="brm-ctl" disabled={cannot} onClick={() => decide(as)}><Icon name="PaperPlaneTilt" size={16} /> {sendWords}</Button>
+      </DialogFoot>
       {confirmDiscard && (
         <Modal overlayClassName="brm-scrim" contentClassName="brm-modal brm-modal--sm" onClose={() => setConfirmDiscard(false)} closeOnBackdrop={false} labelledBy="brm-sd-discard">
-          <div className="brm-dh">
-            <h2 className="brm-h" id="brm-sd-discard">{`Discard Ask ${askNo(ask.askId)}? The votes stay in History.`}</h2>
-            <button type="button" className="brm-x" aria-label="Close" onClick={() => setConfirmDiscard(false)}><Icon name="X" size={16} /></button>
-          </div>
-          <div className="brm-row brm-gap">
-            <button type="button" className="brm-btn brm-btn--ghost" onClick={() => setConfirmDiscard(false)}>Keep it</button>
-            <button type="button" className="brm-btn brm-btn--dangersolid brm-push" disabled={busy} onClick={discard}>Discard</button>
-          </div>
+          <DialogHead className="brm-dh" titleId="brm-sd-discard" title={<>{`Discard Ask ${askNo(ask.askId)}? The votes stay in History.`}</>} titleClassName="brm-h" onClose={() => setConfirmDiscard(false)} closeClassName="brm-x" />
+          <DialogFoot className="brm-row brm-gap" cancel={<Button type="button" size={44} className="brm-ctl" onClick={() => setConfirmDiscard(false)}>Keep it</Button>}>
+            <Button type="button" variant="danger" size={44} className="brm-ctl brm-push" disabled={busy} onClick={discard}>Discard</Button>
+          </DialogFoot>
         </Modal>
       )}
     </Modal>

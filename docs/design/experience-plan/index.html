@@ -1,0 +1,1789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experience plan mockups</title>
+<style>
+/* EXPERIENCE PLAN, key mockups (1 Nov 2026). Mockup only; no application code.
+   Warm Summit dusk: tokens from styles.css :root (dusk) and the theme-invariant set.
+   Laptop ladder 12/13/15/19/24/30 (engage-design §2); phone ladder 34/24/19/16/13
+   (PlayerSurface.css:103-108). One orange per screen. --danger never carries text.
+   Annotation pins are violet so they cannot be mistaken for product UI.
+   Sample content invented. Every frame has a fixed size so the PNGs are honest. */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --primary:#F6A94C;--on-primary:#1B2942;--secondary:#7CA7E6;
+  --success:#4FB286;--success-text:#6FD0A4;--danger:#E5645E;--danger-text:#EF8C86;--danger-deep:#B03A34;
+  --rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--rule-3:rgba(244,237,228,.32);
+  --amber-wash:rgba(246,169,76,.12);--blue-wash:rgba(124,167,230,.14);--green-wash:rgba(79,178,134,.14);
+  --pin:#8B6CF6;
+  --r-ctl:10px;--r-card:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2,h3,h4{font-family:Archivo,Inter,system-ui,sans-serif}
+.doc{max-width:1760px;margin:0 auto;padding:24px 16px 80px}
+.doc>h1{font-size:30px;margin:0 0 6px}
+.doc>p{color:var(--muted);font-size:15px;max-width:980px;margin:0 0 8px}
+.doc>p b{color:var(--text)}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 26px;padding:0;list-style:none}
+.toc a{display:inline-block;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;border:1px solid var(--rule-2);border-radius:999px;padding:5px 12px;background:var(--surface)}
+.cap{margin:40px 0 10px;max-width:1100px}
+.cap h2{font-size:19px;margin:0 0 6px}
+.cap p{color:var(--muted);font-size:13px;margin:0 0 6px}
+.cap p b{color:var(--text)}
+.cap ol{color:var(--muted);font-size:13px;margin:6px 0 0;padding-left:22px}
+.cap ol b{color:var(--text)}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-laptop{width:1366px;height:768px}
+.f-720{width:1280px;height:720px}
+.f-phone{width:390px;height:844px;border-radius:28px}
+.f-phone.sm{width:375px;height:760px}
+.board{position:relative;background:#0a1220;flex:none;padding:16px}
+.pin{position:absolute;z-index:20;width:22px;height:22px;border-radius:50%;background:var(--pin);color:#fff;font:800 12px/22px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #0a1220}
+.pin.in{position:static;display:inline-block;vertical-align:middle;margin-right:6px}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ======================= THE ONE FRAME (laptop) ======================= */
+.lf{position:absolute;inset:0;display:grid;grid-template-rows:auto auto auto minmax(0,1fr);font-size:15px}
+.tb{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border-bottom:1px solid var(--rule);min-width:0}
+.tb .sp{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);background:transparent;color:var(--text);font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+.tbtn.ghost{border-color:transparent;color:var(--text)}
+.tbtn .code{color:var(--primary);letter-spacing:.08em;font-weight:800}
+.tname{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:300px}
+.sep{width:1px;height:22px;background:var(--rule-2)}
+.stat{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--rule-2)}
+.stat i{width:8px;height:8px;border-radius:50%;background:currentColor;display:block}
+.stat.ok{border-color:var(--success);background:var(--green-wash)} .stat.ok i{background:var(--success)}
+.stat.pub{border-color:var(--secondary);background:var(--blue-wash)} .stat.pub i{background:var(--secondary)}
+.bell{position:relative}
+.bell .badge{min-width:20px;height:20px;border-radius:10px;background:var(--primary);color:var(--on-primary);font-size:12px;font-weight:800;display:inline-grid;place-items:center;padding:0 5px}
+.bell.has{border-color:var(--primary);background:var(--amber-wash)}
+.qbtn{width:36px;justify-content:center;padding:0}
+
+/* Your part now: under the top bar, both modes */
+.ypn{display:flex;align-items:center;gap:18px;margin:12px 16px 0;padding:12px 16px 12px 18px;border-radius:var(--r-card);background:var(--surface);border-left:4px solid var(--primary)}
+.ypn .t{flex:1;min-width:0}
+.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ypn .s{margin:2px 0 0;font-size:19px;line-height:1.3}
+.ypn .s b{color:var(--primary)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--r-ctl);font:inherit;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--rule-3);background:transparent;color:var(--text)}
+.btn.main{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:800}
+.btn.l{height:44px;padding:0 18px;font-size:15px}
+.btn.quiet{border-color:transparent;color:var(--secondary);padding:0 6px}
+.btn.danger{background:var(--danger-deep);border-color:var(--danger-deep);color:#fff}
+.btn.dangertext{color:var(--danger-text)}
+.kc{font-size:12px;font-weight:700;border:1px solid rgba(27,41,66,.45);border-radius:5px;padding:0 5px;line-height:18px}
+
+/* Needs-you strip: only for Now items, private laptop */
+.nys{display:flex;align-items:center;gap:12px;margin:10px 16px 0;padding:10px 12px 10px 14px;border-radius:var(--r-card);background:linear-gradient(0deg,var(--amber-wash),var(--amber-wash)),var(--surface);border:1px solid rgba(246,169,76,.45);border-left:4px solid var(--primary)}
+.nys{min-height:62px}
+.nys.calm{background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--rule-3)}
+.nys.calm .ic{background:var(--surface-2);color:var(--muted)}
+.nys.calm .l1{color:var(--muted)} .nys.calm .l1 b{color:var(--text)}
+.bdot{width:9px;height:9px;border-radius:50%;background:var(--primary);display:inline-block}
+.nys .ic{width:30px;height:30px;border-radius:50%;background:rgba(246,169,76,.2);color:var(--primary);display:grid;place-items:center;flex:none}
+.nys .w{flex:1;min-width:0}
+.nys .l1{margin:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nys .l2{margin:0;font-size:13px;color:var(--muted)}
+.nys .acts{display:flex;gap:8px;flex:none}
+
+.body{display:grid;grid-template-columns:268px minmax(0,1fr);gap:0;min-height:0;margin-top:12px;border-top:1px solid var(--rule)}
+/* People */
+.ppl{border-right:1px solid var(--rule);padding:12px 0;overflow:hidden;min-height:0}
+.ppl h3{display:flex;align-items:baseline;gap:8px;margin:0 14px 8px;font-size:15px}
+.ppl h3 .ct{font-size:13px;color:var(--muted);font-weight:600}
+.ppl h3 .al{margin-left:auto;font-size:12px;color:var(--primary);font-weight:700}
+.grp{margin:8px 14px 4px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 14px;font-size:15px}
+.row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .mt{font-size:12px;color:var(--muted);white-space:nowrap}
+.row .pts{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.st{width:14px;text-align:center;font-weight:800;font-size:13px;flex:none}
+.st.ok{color:var(--success-text)} .st.wr{color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.dot.am{background:var(--primary);box-shadow:0 0 0 3px rgba(246,169,76,.22)}
+.dot.away{background:transparent;border:2px solid var(--muted)}
+.row.ask{flex-wrap:wrap;background:var(--amber-wash);border-left:3px solid var(--primary);padding:8px 14px 10px 11px;margin:0 0 6px}
+.row.ask .flag{flex-basis:100%;font-size:13px;color:var(--text);margin:-2px 0 6px 17px}
+.row.ask .ra{display:flex;gap:6px;margin-left:17px}
+.btn.s{height:30px;padding:0 10px;font-size:13px}
+.more{display:block;margin:6px 14px 0;font-size:13px;font-weight:700;color:var(--secondary)}
+/* Content column */
+.cc{min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px 16px 0;gap:10px;overflow:hidden}
+.loop{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.loop .stp{padding:3px 10px;border-radius:7px;border:1px solid var(--rule-2)}
+.loop .stp.done{color:var(--text)}
+.loop .stp.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--secondary);font-weight:800}
+.loop .rnd{font-weight:800;color:var(--text);margin:0 2px 0 6px}
+.loop .dotm{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--primary);margin-left:5px;vertical-align:1px}
+.pulse{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:10px 14px;display:grid;gap:4px;min-width:0}
+.num{margin:0;font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.num small{font-size:19px;color:var(--muted);font-weight:700}
+.num.m{font-size:24px}
+.sub{margin:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub b{color:var(--text)}
+.bar{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--secondary)}
+.ring{display:flex;align-items:center;gap:10px}
+.content{position:relative;flex:1;min-height:0;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:14px 16px;overflow:hidden}
+.content h4{margin:2px 0 4px;font-size:19px}
+.content .lead{margin:0 0 10px;font-size:13px;color:var(--muted)}
+.resp{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--rule)}
+.resp .n{font-size:13px;font-weight:800;color:var(--muted);width:20px;flex:none;padding-top:1px}
+.resp .tx{flex:1;min-width:0;font-size:15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.resp .by{font-size:12px;color:var(--muted);white-space:nowrap}
+.resp .btn{flex:none}
+/* trivia content */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.opt{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);background:var(--bg)}
+.opt .k{width:30px;height:30px;border-radius:8px;background:var(--surface-2);display:grid;place-items:center;font-weight:800}
+.opt .c{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.opt .mini{grid-column:2/4;height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.opt .mini i{display:block;height:100%;background:var(--secondary)}
+.opt.right{border-color:var(--success);background:linear-gradient(0deg,var(--green-wash),var(--green-wash)),var(--bg)}
+.opt.right .k{background:var(--success);color:#0F1A2E}
+.private{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;border-radius:var(--r-ctl);background:var(--blue-wash);border:1px solid rgba(124,167,230,.4);font-size:13px}
+/* annotation overlays for frame 2 */
+.anno-fmt{position:absolute;border:2px dashed var(--pin);border-radius:14px;pointer-events:none;z-index:15}
+.anno-tag{position:absolute;z-index:21;background:var(--pin);color:#fff;font:700 12px/1 Inter,system-ui,sans-serif;padding:5px 8px;border-radius:6px;white-space:nowrap}
+.anno-tag.same{background:#2f3f63;border:1px solid var(--pin)}
+
+/* ======================= ONE SCREEN (stage) ======================= */
+.os .tb{height:46px}
+.os .ypn{margin:8px 16px 0;padding:8px 14px 8px 16px}
+.os .ypn .s{font-size:15px;margin:0}
+.stage{position:absolute;left:0;right:0;top:118px;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0}
+.stage .room{padding:28px 44px;min-width:0}
+.stage .room .eb{font-size:20px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary);margin:0}
+.stage .room h2{font-size:46px;line-height:1.12;margin:8px 0 18px;max-width:20ch}
+.stage .room .yt{display:flex;gap:14px;align-items:center;background:var(--surface);border-radius:16px;padding:16px 20px;font-size:26px;max-width:760px}
+.stage .room .yt b{color:var(--secondary);font-size:20px;letter-spacing:.06em;text-transform:uppercase}
+.stage .meter{border-left:1px solid var(--rule);padding:28px 24px;display:grid;align-content:start;gap:10px}
+.stage .meter .eb{font-size:20px;font-weight:700;color:var(--muted);margin:0}
+.stage .meter .big{font-size:64px;font-weight:800;line-height:1;margin:0;font-variant-numeric:tabular-nums}
+.stage .meter .big small{font-size:32px;color:var(--muted)}
+.stage .meter .bar{height:12px}
+.stage .meter .sub{font-size:20px}
+.board-os{display:grid;grid-template-columns:1280px 390px;grid-template-rows:auto auto auto;column-gap:24px;row-gap:10px;width:1726px}
+.lbl{font-size:13px;font-weight:700;color:var(--muted);margin:0;display:flex;align-items:center;gap:6px}
+.lbl b{color:var(--text)}
+.insets{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.inset{position:relative;height:300px}
+/* the sheet on one screen */
+.sheet{position:absolute;right:16px;top:16px;width:520px;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+.sheet .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.sheet .hd h4{margin:0;font-size:19px;flex:1}
+.xbtn{width:32px;height:32px;border-radius:8px;border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text)}
+.warn{display:flex;gap:8px;align-items:center;margin:12px 14px 4px;padding:8px 10px;border-radius:var(--r-ctl);background:var(--blue-wash);border:1px solid rgba(124,167,230,.45);font-size:13px}
+.sheet .it{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--rule)}
+.sheet .it .w{flex:1;min-width:0;font-size:15px}
+.sheet .it .w small{display:block;font-size:12px;color:var(--muted)}
+.sheet .ft{padding:10px 14px;font-size:13px;color:var(--muted);border-top:1px solid var(--rule)}
+.dim{position:absolute;inset:0;background:rgba(15,26,46,.55)}
+.revealed{display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(124,167,230,.22);font-size:13px;font-weight:700;border-bottom:1px solid rgba(124,167,230,.45)}
+
+/* ======================= PHONE (Remote + participant) ======================= */
+.ph{position:absolute;inset:0;display:flex;flex-direction:column}
+.ph .strip{height:4px;background:var(--surface-2);flex:none}
+.ph .strip.ask{background:var(--primary)} .ph .strip.wait{background:var(--secondary)} .ph .strip.done{background:var(--success)} .ph .strip.stop{background:var(--muted)}
+.ph .pbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--rule);font-size:13px;flex:none;min-width:0}
+.ph .pbar .mk{width:26px;height:26px;border-radius:8px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-weight:900;font-size:13px;flex:none}
+.ph .pbar .ctx{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-weight:700}
+.ph .pbar .who{display:inline-flex;align-items:center;gap:5px;font-weight:700;white-space:nowrap}
+.ph .pbar .who i{width:7px;height:7px;border-radius:50%;background:var(--success)}
+.ph .pbar .who i.off{background:var(--muted)}
+.ph .pbar .q{width:28px;height:28px;border-radius:50%;border:1px solid var(--rule-2);display:grid;place-items:center;font-weight:800;color:var(--muted);flex:none}
+.ph .stg{flex:1;min-height:0;overflow:hidden;padding:22px 20px}
+.ph .stg .peb{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary);margin:0 0 8px}
+.ph .stg h3{font-size:24px;line-height:1.22;margin:0 0 12px}
+.ph .stg p{font-size:16px;margin:0 0 14px;color:var(--text)}
+.ph .stg p.m{color:#B6C2D4}
+.pcard{background:var(--surface);border:1px solid var(--rule);border-radius:16px;padding:14px 16px;margin:0 0 12px}
+.pcard .r{display:flex;align-items:center;gap:10px;font-size:16px}
+.pcard .r + .r{margin-top:10px}
+.pcard small{display:block;font-size:13px;color:#B6C2D4}
+.pulsedots{display:inline-flex;gap:5px}
+.pulsedots i{width:8px;height:8px;border-radius:50%;background:var(--secondary);opacity:.5}
+.pulsedots i:first-child{opacity:1}
+.pcard.ok{border-color:rgba(79,178,134,.5);background:linear-gradient(0deg,var(--green-wash),var(--green-wash)),var(--surface)}
+.pdock{flex:none;padding:12px 16px 20px;border-top:1px solid var(--rule);display:grid;gap:10px;background:var(--bg)}
+.pbtn{height:56px;border-radius:14px;border:0;background:var(--primary);color:var(--on-primary);font:inherit;font-size:19px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;padding:0 14px}
+.pbtn.ghost{background:transparent;border:1px solid var(--rule-3);color:var(--text);font-size:16px;height:48px;font-weight:700}
+.pbtn.dis{opacity:.5}
+.pnote{font-size:13px;color:#B6C2D4;text-align:center;margin:0}
+/* Remote specifics */
+.hr .pbar .code{font-weight:800;letter-spacing:.06em;color:var(--text)}
+.hr .live{font-size:12px;font-weight:800;color:var(--success-text);border:1px solid rgba(79,178,134,.5);border-radius:999px;padding:2px 8px}
+.hr .rb{position:relative;width:32px;height:32px;border-radius:8px;border:1px solid var(--primary);background:var(--amber-wash);display:grid;place-items:center;color:var(--primary)}
+.hr .rb .badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:var(--primary);color:var(--on-primary);font-size:12px;font-weight:800;display:grid;place-items:center}
+.hr .stg{padding:14px 14px}
+.rny{background:linear-gradient(0deg,var(--amber-wash),var(--amber-wash)),var(--surface);border:1px solid rgba(246,169,76,.45);border-left:4px solid var(--primary);border-radius:14px;padding:12px 14px;margin:0 0 12px}
+.rny .l1{margin:0 0 2px;font-size:16px}
+.rny .l2{margin:0 0 10px;font-size:13px;color:#B6C2D4}
+.rny .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rny .acts .btn{height:44px;font-size:15px}
+.rstat{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:12px 14px;margin:0 0 12px}
+.ph .stg .rstat .num{font-size:34px;margin:4px 0 6px}
+.ph .stg .rstat .num small{font-size:19px}
+.rlist{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:4px 14px;margin:0 0 12px}
+.rlist .ln{display:flex;align-items:center;gap:8px;min-height:44px;font-size:16px;border-top:1px solid var(--rule)}
+.rlist .ln:first-child{border-top:0}
+.rlist .ln span{flex:1}
+.rlist .ln small{font-size:13px;color:#B6C2D4}
+
+/* ======================= PRIMITIVES ======================= */
+.prim{width:1460px;height:840px;padding:22px 26px;display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.prim .col{background:var(--bg);border:1px solid var(--rule-2);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden}
+.prim h3{margin:0 0 2px;font-size:24px}
+.prim .ksub{margin:0 0 14px;font-size:13px;color:var(--muted)}
+.prim h5{margin:16px 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.prow{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.spec{font-size:12px;color:var(--muted);display:block;text-align:center;margin-top:4px}
+.sample{display:inline-flex;flex-direction:column;align-items:center}
+/* today's buttons, each from its own stylesheet (audit E §4.1) */
+.t-wel{background:var(--primary);color:var(--on-primary);border-radius:16px;padding:16px 18px;font-weight:800;font-size:16px}
+.t-gsd{background:var(--primary);color:var(--on-primary);border-radius:8px;min-height:44px;padding:10px 18px;font-weight:700;font-size:15px;display:inline-flex;align-items:center}
+.t-shist{background:var(--primary);color:var(--on-primary);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700}
+.t-qsets{background:var(--primary);color:var(--on-primary);border-radius:6px;height:30px;padding:0 12px;font-size:13px;font-weight:700;display:inline-flex;align-items:center}
+.t-hea{background:var(--primary);color:var(--on-primary);border-radius:10px;min-height:40px;padding:8px 14px;font-size:14px;font-weight:700;display:inline-flex;align-items:center}
+.t-brm{background:var(--primary);color:var(--on-primary);border-radius:8px;height:36px;padding:8px 14px;font-size:14px;font-weight:700;display:inline-flex;align-items:center}
+.t-hc{background:var(--primary);color:var(--on-primary);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:700}
+.t-plr{background:var(--primary);color:var(--on-primary);border-radius:14px;height:56px;padding:0 22px;font-size:19px;font-weight:800;display:inline-flex;align-items:center}
+.t-bpl{background:rgba(124,167,230,.18);color:var(--secondary);border-radius:12px;padding:10px 14px;font-size:16px;font-weight:700}
+.t-gl{background:var(--primary);color:var(--on-primary);border-radius:8px;padding:12px 24px;font-size:16px;font-weight:700}
+.heads{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+.heads span{font-family:Archivo,Inter,sans-serif;font-weight:800}
+.closes{display:flex;gap:16px;align-items:center}
+.closes span{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--rule-2);border-radius:8px;font-size:20px}
+.dlg{background:var(--surface);border:1px solid var(--rule-2);border-radius:12px;overflow:hidden;width:100%}
+.dlg .h{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--rule)}
+.dlg .h b{flex:1;font-family:Archivo,Inter,sans-serif;font-size:19px}
+.dlg .f{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--rule)}
+.dlg .bd{padding:10px 14px;font-size:13px;color:var(--muted)}
+.miniDlgs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.md{border:1px solid var(--rule-2);border-radius:8px;overflow:hidden;font-size:12px}
+.md .h{padding:6px 8px;display:flex;justify-content:space-between;align-items:center}
+.md .b{height:28px}
+.md.paper{background:#fff;color:#1B2942}
+.md.paper .h{background:#F1EDE4;font-weight:700;text-transform:none}
+.md.brm .h{background:var(--surface-2);font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.md.gsd{background:var(--surface)} .md.gsd .h{border-bottom:1px solid var(--rule);font-size:13px;font-weight:700}
+.pan{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pn{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:10px 12px;font-size:13px;min-width:0}
+.pn b{display:block;font-size:15px;margin-bottom:2px}
+.pn.ny{border-left:4px solid var(--primary);background:linear-gradient(0deg,var(--amber-wash),var(--amber-wash)),var(--surface)}
+.pn.fail{border-left:4px solid var(--danger)}
+.pn.fail b{color:var(--danger-text)}
+.flagrow{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;font-size:15px}
+.flagrow .mt{font-size:13px;color:var(--muted)}
+.cnt{font-size:12px;color:var(--muted);margin-top:8px}
+.cnt b{color:var(--danger-text)}
+.cnt.good b{color:var(--success-text)}
+
+/* ======================= P6: ONE FRAME, EVERY TYPE (compact) =======================
+   The same frame as p-1/p-2 at a compact size (13px rows, 760×516) so seven fit side by
+   side. Text stays >= 12px; nothing is scaled with transform. Dashed violet = the format
+   fills this slot. Everything not outlined is identical in all seven. */
+.wide{padding:0 16px 80px}
+.wide .cap{max-width:1300px}
+.board-types{display:grid;grid-template-columns:repeat(3,760px);gap:22px 18px;padding:16px;width:2348px;background:#0a1220}
+.mcell{display:grid;gap:6px;align-content:start;min-width:0}
+.mlbl{margin:0;font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap}
+.mlbl b{color:var(--text);font-size:15px;margin-right:4px}
+.mcap{margin:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcap b{color:var(--text);margin-right:6px}
+.mcap .add{color:#C4B5FD;font-weight:700}
+.mcap .minus{color:var(--muted);text-decoration:line-through}
+.mf{width:760px;height:516px}
+.mf .tb{height:44px;gap:4px;padding:0 10px}
+.mf .tbtn{height:30px;padding:0 7px;font-size:12px;gap:5px}
+.mf .tbtn svg.i{width:14px;height:14px}
+.mf .tname{font-size:13px;max-width:none;flex:0 1 auto}
+.mf .stat{height:26px;padding:0 9px;font-size:12px;gap:6px}
+.mf .stat i{width:7px;height:7px}
+.mf .bell .badge{min-width:18px;height:18px}
+.mf .qbtn{width:30px;padding:0}
+.mf .ypn{margin:8px 10px 0;padding:7px 10px 7px 12px;gap:10px}
+.mf .ypn .s{font-size:15px;margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mf .btn{height:32px;font-size:13px;padding:0 12px}
+.mf .nys{margin:6px 10px 0;min-height:0;height:44px;padding:0 8px 0 10px;gap:8px}
+.mf .nys .ic{width:24px;height:24px}
+.mf .nys .ic svg.i{width:14px;height:14px}
+.mf .nys .l1{font-size:13px}
+.mf .nys .btn{height:28px;padding:0 9px}
+.mf .nys .btn.quiet{padding:0 4px}
+.mf .body{grid-template-columns:256px minmax(0,1fr);margin-top:8px}
+.mf .ppl{padding:8px 0;position:relative}
+.mf .ppl h3{margin:0 10px 4px;font-size:13px}
+.mf .ppl h3 .ct{font-size:12px}
+.mf .row{display:grid;grid-template-columns:8px minmax(0,1fr) 68px 44px 14px;gap:5px;align-items:center;min-height:28px;padding:0 10px;font-size:13px}
+.mf .row .mt{overflow:hidden;text-overflow:ellipsis}
+.mf .row .pts{font-size:12px;text-align:right;white-space:nowrap}
+.mf .row .pts.ok{color:var(--success-text)}
+.mf .row .mo{font-size:12px;color:var(--muted);text-align:center;line-height:1}
+.mf .dot{width:8px;height:8px}
+.dot.here{background:var(--success)}
+.dot.left{background:var(--rule-3)}
+.mf .more{margin:4px 10px 0;font-size:12px}
+.mf .cc{padding:8px 10px 6px;gap:6px}
+.mf .loop{font-size:12px;gap:5px}
+.mf .loop .stp{padding:2px 7px;border-radius:6px}
+.mf .loop .crumb{color:var(--secondary);font-weight:700}
+.mf .pulse{gap:6px}
+.mf .tile{padding:6px 9px;gap:2px}
+.mf .eyebrow{font-size:12px}
+.mf .num{font-size:19px}
+.mf .num small{font-size:12px}
+.mf .num.m{font-size:15px;line-height:1.35}
+.mf .sub{font-size:12px}
+.mf .bar{height:5px}
+.mf .content{padding:8px 10px}
+.mf .content h4{font-size:15px;margin:1px 0 6px}
+.mf .content .lead{font-size:12px;margin:0 0 4px}
+.mf .resp{padding:6px 0;gap:8px;align-items:center}
+.mf .resp .n{font-size:12px;width:14px;padding:0}
+.mf .resp .tx{font-size:13px;-webkit-line-clamp:1}
+.mf .resp .btn{height:26px;padding:0 8px;font-size:12px}
+.mf .opts{gap:6px;margin-top:4px}
+.mf .opt{grid-template-columns:24px 1fr auto;gap:8px;padding:5px 8px;font-size:13px}
+.mf .opt .k{width:22px;height:22px;border-radius:6px;font-size:12px}
+.mf .opt .c{font-size:12px}
+.mf .opt .mini{height:4px}
+.mf .private{margin-top:6px;padding:5px 9px;font-size:12px}
+.mf .private svg.i{width:14px;height:14px}
+.mf .hbar{display:grid;grid-template-columns:96px minmax(0,1fr) 22px;align-items:center;gap:8px;font-size:13px;padding:4px 0}
+.mf .hbar .tr{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.mf .hbar .tr i{display:block;height:100%;background:var(--secondary)}
+.mf .hbar .c{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.mf .hbar.win{font-weight:800}
+.mf .hbar.win .tr i{background:var(--success)}
+.mf .words{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.mf .words span{font-size:13px;padding:3px 9px;border-radius:999px;border:1px solid var(--rule-2);background:var(--bg)}
+.mf .words span b{color:var(--muted);font-weight:700;margin-left:4px;font-size:12px}
+.mf .words span.big{font-size:15px;border-color:var(--secondary)}
+.mf .qprog{display:grid;grid-template-columns:minmax(0,1fr) 120px 40px;align-items:center;gap:10px;font-size:13px;padding:4px 0;border-top:1px solid var(--rule)}
+.mf .qprog:first-of-type{border-top:0}
+.mf .qprog span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mf .qprog .tr{height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.mf .qprog .tr i{display:block;height:100%;background:var(--secondary)}
+.mf .qprog .c{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.mf .dirbox{margin-top:8px;padding:7px 10px;border-radius:var(--r-ctl);border:1px solid var(--rule-3);background:var(--bg);font-size:13px}
+.mf .dirbox small{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}
+/* the subtle "format fills this" mark */
+.fx{outline:1.5px dashed rgba(139,108,246,.85);outline-offset:2px;border-radius:6px}
+.content.fx,.pulse.fx{outline-offset:1px}
+.fxcol{position:absolute;top:30px;bottom:26px;right:25px;width:50px;border:1.5px dashed rgba(139,108,246,.85);border-radius:6px;pointer-events:none}
+/* legend cell */
+.mlegend{grid-column:2 / span 2;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px 28px;align-content:start;min-width:0}
+.mlegend h3{grid-column:1 / -1;margin:0;font-size:19px}
+.mlegend h5{margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mlegend p,.mlegend li{font-size:13px;color:var(--muted);margin:0 0 6px}
+.mlegend ul{margin:0;padding-left:18px}
+.mlegend b{color:var(--text)}
+.mlegend .sw{display:inline-block;width:34px;height:16px;vertical-align:-3px;margin-right:6px;border-radius:4px}
+.mlegend .sw.fxs{border:1.5px dashed rgba(139,108,246,.85)}
+.mlegend .sw.same{border:1px solid var(--rule-2);background:var(--surface)}
+.mlegend .calmdemo{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border-radius:var(--r-card);background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--rule-3);font-size:13px;color:var(--muted);margin:4px 0 8px}
+.mlegend .calmdemo b{color:var(--text)}
+
+/* ======================= P7: ONE PERSON ROW ======================= */
+.prf{width:1500px;height:960px;padding:20px 24px;display:grid;grid-template-columns:930px 1fr;gap:28px}
+.prf h3{margin:0 0 2px;font-size:24px}
+.prf .ksub{margin:0 0 14px;font-size:13px;color:var(--muted)}
+.plist{position:relative;display:grid;grid-template-columns:250px 340px 300px;column-gap:20px;row-gap:10px;align-items:center}
+.plist .ctx{font-size:13px;color:var(--muted);line-height:1.3}
+.plist .ctx b{display:block;color:var(--text);font-size:15px}
+.plist .why{font-size:13px;color:var(--muted);line-height:1.35}
+.plist .why b{color:#C4B5FD}
+.plist .hd{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.slot{position:relative;border-radius:10px;padding:0 10px;background:var(--bg);border:1px solid var(--rule)}
+.slot.phr{background:var(--surface);border-radius:14px}
+.slot.lob{background:var(--surface)}
+.pr{display:grid;grid-template-columns:10px minmax(0,1fr) 96px 56px 24px;gap:6px;align-items:center;min-height:36px;font-size:15px}
+.pr.tall{min-height:44px}
+.pr .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pr .dg{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .dg.ask{color:var(--primary);font-weight:700}
+.pr .f{font-size:13px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr .f .ok{color:var(--success-text);font-weight:800}
+.pr .f.none{color:var(--muted)}
+.pr .mo{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--muted);font-weight:800;font-size:15px;line-height:1}
+.pr .mo.open{background:var(--surface-2);color:var(--text);border:1px solid var(--rule-3)}
+.pr.hd2{min-height:20px}
+.pr.hd2 span{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.pr.hd2 .f{color:#C4B5FD}
+.slot.ask{background:linear-gradient(0deg,var(--amber-wash),var(--amber-wash)),var(--bg);border-color:rgba(246,169,76,.45);border-left:3px solid var(--primary);padding-bottom:10px}
+.slot.ask .flag{margin:0 0 6px 16px;font-size:13px}
+.slot.ask .ra{display:flex;gap:6px;margin-left:16px}
+.factband{position:absolute;top:0;bottom:0;width:62px;border-left:1.5px dashed rgba(139,108,246,.7);border-right:1.5px dashed rgba(139,108,246,.7);background:rgba(139,108,246,.07);pointer-events:none}
+.pmenu{position:absolute;z-index:5;width:240px;background:var(--surface);border:1px solid var(--rule-2);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:6px 0}
+.pmenu div{display:flex;align-items:center;gap:10px;height:36px;padding:0 14px;font-size:15px}
+.pmenu div svg.i{color:var(--muted)}
+.pmenu .sepl{height:1px;padding:0;margin:6px 0;background:var(--rule)}
+.pmenu .rm{color:var(--danger-text)}
+.pmenu .rm svg.i{color:var(--danger-text)}
+.pnotes{display:grid;gap:12px;align-content:start}
+.pnotes .pn{font-size:13px;color:var(--muted)}
+.pnotes .pn b{color:var(--text)}
+.pnotes ol{margin:4px 0 0;padding-left:18px}
+.pnotes li{margin:0 0 3px}
+.pnotes li b{display:inline;font-size:13px;margin:0}
+
+/* ======================= P8: EVERY TYPE, ONE SCREEN =======================
+   Frame 6's compact frame (.mf, 760×516) in one-screen mode: the laptop is the room's
+   screen. Same top bar, the slim Your part now (frame 3's inline eyebrow), the Needs-you
+   line public-safe, no People column, and the room's view in the content area at a room
+   ladder (19 / 24 / 36 / 56) so it reads across a room while the host chrome stays at 12-15.
+   The phone column reuses frame 3's Remote and frame 7's person row (.pr). */
+.board-one{display:grid;grid-template-columns:repeat(3,850px) 390px;gap:22px 18px;padding:16px;width:3026px;background:#0a1220}
+/* 850 wide, not frame 6's 760: every type size is frame 6's, but "Show join code" and "The
+   room sees this screen" are ~80px longer than "Join 7924" and "Room's window", and at 760
+   every session name was cut. At a real 1280 laptop they fit at full size (frame 3). */
+.mf.mos{width:850px}
+.mos .tb .tbtn,.mos .tb .stat{flex:none}
+.mos .ypn{padding:6px 8px 6px 12px}
+.mos .ypn .s .eyebrow{display:inline;margin-right:8px}
+.nys.pub{background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--primary)}
+.nys.pub .l1 b{color:var(--text)}
+.mos .rv{display:grid;grid-template-columns:minmax(0,1fr) 196px;min-height:0;margin-top:8px;border-top:1px solid var(--rule)}
+.mos .rv.fx{outline-offset:-3px}
+.mos .rv .room{padding:16px 22px 10px;min-width:0;overflow:hidden}
+.mos .rv .eb{margin:0;font-size:19px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mos .rv h2{margin:6px 0 14px;font-size:36px;line-height:1.15}
+.mos .rv .yt{display:flex;gap:10px;align-items:baseline;background:var(--surface);border-radius:12px;padding:12px 16px;font-size:24px;line-height:1.3}
+.mos .rv .yt b{color:var(--secondary);font-size:19px;letter-spacing:.06em;text-transform:uppercase;flex:none}
+.mos .rv .meter{border-left:1px solid var(--rule);padding:16px 16px;display:grid;align-content:start;gap:8px;min-width:0}
+.mos .rv .meter .eb{color:var(--muted);letter-spacing:0;text-transform:none}
+.mos .rv .big{margin:0;font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mos .rv .big small{font-size:30px;color:var(--muted)}
+.mos .rv .big.m{font-size:30px}
+.mos .rv .bar{height:8px}
+.mos .rv .msub{margin:0;font-size:19px;color:var(--muted)}
+.mos .rv .ropts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mos .rv .ropt{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);background:var(--surface);font-size:24px;min-width:0;white-space:nowrap}
+.mos .rv .ropt .k{width:36px;height:36px;border-radius:8px;background:var(--surface-2);display:grid;place-items:center;font-weight:800;flex:none}
+.mos .rv .rbar{display:grid;grid-template-columns:190px minmax(0,1fr) 40px;align-items:center;gap:12px;font-size:24px;padding:4px 0}
+.mos .rv .rbar .tr{height:14px;border-radius:7px;background:var(--surface-2);overflow:hidden}
+.mos .rv .rbar .tr i{display:block;height:100%;background:var(--secondary)}
+.mos .rv .rbar .c{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.mos .rv .rbar.win{font-weight:800}
+.mos .rv .rbar.win .tr i{background:var(--success)}
+.mos .rv .claude{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:6px 12px;border-radius:999px;border:1px solid var(--secondary);background:var(--blue-wash);font-size:19px;font-weight:700}
+.mcap .ph8{color:#C4B5FD;font-weight:700}
+/* the phone column */
+.mphone{grid-column:4;grid-row:1 / span 3;display:grid;gap:10px;align-content:start;min-width:0}
+.mphone .rny .eyebrow{color:var(--primary);margin-bottom:4px}
+.mphone .rny .l2{margin-bottom:10px}
+.ans{font-size:24px;font-weight:800;margin:4px 0 4px}
+.ans .k{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--success);color:#0F1A2E;font-size:16px;margin-right:8px;vertical-align:2px}
+.rppl{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:2px 12px;margin:0 0 12px}
+.rppl .rh{display:flex;align-items:baseline;gap:8px;padding:10px 0 6px;font-size:16px;font-weight:700}
+.rppl .rh small{font-size:13px;color:#B6C2D4;font-weight:600}
+.rppl .pr{border-top:1px solid var(--rule)}
+.mphone .pnotes .pn{font-size:13px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="13" rx="2"/><rect x="13" y="7" width="8" height="13" rx="2"/><path d="M9 21l2-2-2-2"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7h-6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M6 18l3-3M15 9l3-3"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 4 6"/></symbol>
+  </defs>
+</svg>
+
+<div class="doc">
+<h1>The experience plan: key mockups</h1>
+<p>Eight frames for <b>PLAN.md</b>. They show the one live-session frame, what stays put across
+formats, how one-screen mode keeps private things off the room's screen, the participant's
+side of moving a name to a new device, the visual primitives, the same frame in every format,
+the one person row, and every format again in one-screen mode. Violet pins and dashed violet outlines are annotations, not product UI.</p>
+<ul class="toc">
+  <li><a href="#p1">1 · The frame, two screens, Call &amp; Answer</a></li>
+  <li><a href="#p2">2 · The same frame, Trivia</a></li>
+  <li><a href="#p3">3 · One screen and the phone</a></li>
+  <li><a href="#p4">4 · Moving a name: the participant</a></li>
+  <li><a href="#p5">5 · Primitives, before and after</a></li>
+  <li><a href="#p6">6 · One frame, every type</a></li>
+  <li><a href="#p7">7 · One person row, everywhere</a></li>
+  <li><a href="#p8">8 · Every type, one screen</a></li>
+</ul>
+
+<!-- =============================== P1 =============================== -->
+<div class="cap" id="p1">
+  <h2>1 · The one host frame: two screens, Call &amp; Answer, answering, with a name request</h2>
+  <p>1366×768, the host's private laptop. The room's window is on the projector. Sam has joined
+  from a new device and asked for their name.</p>
+  <ol>
+    <li><b>The bell is the Needs-you door.</b> In a live session its number counts only urgent items in this session; things to review later add a dot, not a number.</li>
+    <li><b>Your part now</b> sits under the top bar in every mode and type. One orange button.</li>
+    <li><b>The Needs-you line</b> is always here at one height, so nothing below it moves. It turns amber with buttons for an urgent item (frame 2 shows it calm). Its buttons are outlined, so the room's next step keeps the only orange.</li>
+    <li><b>The same request, on the person.</b> Sam is lifted to the top of People with the same two buttons. People never collapses itself while anyone is asking.</li>
+    <li><b>The pulse</b> (session-start D3): the room's count said once, as a number with a bar.</li>
+    <li><b>Session menu</b>, one labelled button, top right. <b>Main menu</b> is always top left.</li>
+  </ol>
+</div>
+<div class="scroll">
+<div class="frame f-laptop" id="f-p1">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="sep"></span>
+      <span class="tname">Q4 planning retro</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat ok"><i></i>Room's window · on, full screen</span>
+      <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn">
+      <div class="t">
+        <p class="eyebrow">Your part now</p>
+        <p class="s">Responses are coming in. <b>Start voting</b> when the room is done.</p>
+      </div>
+      <span class="btn main l">Start voting <span class="kc">Space</span></span>
+    </div>
+    <div class="nys" role="region" aria-label="Needs you">
+      <span class="ic"><svg class="i"><use href="#i-swap"/></svg></span>
+      <div class="w">
+        <p class="l1"><b>Sam Okafor</b> wants their name on a new device</p>
+        <p class="l2">Asked 0:20 ago · Sam's first device is away · their answers and score go with the name</p>
+      </div>
+      <div class="acts">
+        <span class="btn">Let them</span>
+        <span class="btn">Not now</span>
+        <span class="btn quiet">See in People</span>
+      </div>
+    </div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">12 here</span><span class="al">1 needs you</span></h3>
+        <div class="grp">Needs you</div>
+        <div class="row ask">
+          <span class="dot am"></span><span class="nm"><b>Sam Okafor</b></span><span class="mt">0:20</span>
+          <span class="flag">Wants their name on a new device</span>
+          <span class="ra"><span class="btn s">Let them</span><span class="btn s">Not now</span></span>
+        </div>
+        <div class="grp">In the room</div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Priya Shah</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Marcus Lee</span></div>
+        <div class="row"><span class="st wr">…</span><span class="nm">Dana Reyes</span><span class="mt">writing</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Ana Gomez</span><span class="mt">joined 2 min ago</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Lee Park</span><span class="mt">joined 1 min ago</span></div>
+        <div class="row"><span class="st wr">…</span><span class="nm">Tom Becker</span><span class="mt">writing</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">away</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Ola Ade</span></div>
+        <span class="more">All 12, and who left</span>
+      </aside>
+      <section class="cc">
+        <div class="loop"><span class="stp done">Setup ✓</span>›<span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span>›<span class="stp">Finish</span></div>
+        <div class="pulse">
+          <div class="tile">
+            <p class="eyebrow">Answered</p>
+            <p class="num">9 <small>of 12</small></p>
+            <div class="bar"><i style="width:75%"></i></div>
+            <p class="sub"><b>3</b> still writing</p>
+          </div>
+          <div class="tile">
+            <p class="eyebrow">Time</p>
+            <p class="num m">Open 1:24</p>
+            <p class="sub">No limit set</p>
+          </div>
+          <div class="tile">
+            <p class="eyebrow">Since this round opened</p>
+            <p class="num m">+2 joined</p>
+            <p class="sub">Ana Gomez, Lee Park</p>
+          </div>
+        </div>
+        <div class="content">
+          <p class="eyebrow">Round 3 · Strategy</p>
+          <h4>What is one thing slowing down our handoffs?</h4>
+          <p class="lead">Responses, newest first. Press one to put it on the room's screen.</p>
+          <div class="resp"><span class="n">9</span><span class="tx">We re-explain the customer's context at every stage because nothing written travels with the account.</span><span class="by">Ola Ade</span><span class="btn s">Show</span></div>
+          <div class="resp"><span class="n">8</span><span class="tx">Sales closes on promises implementation never saw. A one-page brief signed by both would fix half of it.</span><span class="by">Lee Park</span><span class="btn s">Show</span></div>
+          <div class="resp"><span class="n">7</span><span class="tx">Too many tools. The ticket lives in one place and the decision in another.</span><span class="by">Ana Gomez</span><span class="btn s">Show</span></div>
+          <div class="resp"><span class="n">6</span><span class="tx">Nobody owns the gap between "signed" and "kicked off", so it waits.</span><span class="by">Marcus Lee</span><span class="btn s">Show</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <span class="pin" style="left:1100px;top:36px">1</span>
+  <span class="pin" style="left:1318px;top:62px">2</span>
+  <span class="pin" style="left:1340px;top:134px">3</span>
+  <span class="pin" style="left:150px;top:288px">4</span>
+  <span class="pin" style="left:668px;top:276px">5</span>
+  <span class="pin" style="left:1338px;top:2px">6</span>
+</div>
+</div>
+
+<!-- =============================== P2 =============================== -->
+<div class="cap" id="p2">
+  <h2>2 · The same frame for Trivia: what stays put, what is the format's</h2>
+  <p>Same laptop, same mode, a Trivia question. Nothing urgent is waiting, so the Needs-you line is calm
+  and the bell shows a dot, not a number, for one <i>Soon</i> item (a late answer). Grey tags mark what is identical in
+  every type. The dashed outline is the only part Trivia supplies, plus the words in Your part now
+  and the pulse's facts.</p>
+  <ol>
+    <li><b>Same:</b> top bar, Your part now's place and look, People's place, the pulse's place, the loop.</li>
+    <li><b>Trivia's own:</b> the options with the live split, and the correct answer, private to the host (the one thing the room must never see).</li>
+    <li><b>Trivia's words:</b> "Show the answer" comes from Trivia's own main-button function; People shows points because Trivia scores.</li>
+  </ol>
+</div>
+<div class="scroll">
+<div class="frame f-laptop" id="f-p2">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="sep"></span>
+      <span class="tname">Friday product quiz</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">3150</span></span>
+      <span class="stat ok"><i></i>Room's window · on, full screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="bdot" title="1 to review when you can"></span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn">
+      <div class="t">
+        <p class="eyebrow">Your part now</p>
+        <p class="s">The room is answering. <b>Show the answer</b> when they're done.</p>
+      </div>
+      <span class="btn main l">Show the answer <span class="kc">Space</span></span>
+    </div>
+    <div class="nys calm" role="region" aria-label="Needs you">
+      <span class="ic"><svg class="i"><use href="#i-check"/></svg></span>
+      <div class="w">
+        <p class="l1"><b>Nothing needs you now.</b> 1 to review when you can: a late answer to question 2.</p>
+      </div>
+      <div class="acts"><span class="btn quiet">Review</span></div>
+    </div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">12 here</span></h3>
+        <div class="grp">In the room · points</div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Priya Shah</span><span class="pts">340</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Sam Okafor</span><span class="pts">320</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Marcus Lee</span><span class="pts">300</span></div>
+        <div class="row"><span class="st wr">…</span><span class="nm">Dana Reyes</span><span class="pts">280</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Ana Gomez</span><span class="pts">260</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Lee Park</span><span class="pts">240</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Tom Becker</span><span class="pts">220</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Chris Wu</span><span class="pts">200</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Ola Ade</span><span class="pts">180</span></div>
+        <div class="row"><span class="st ok">✓</span><span class="nm">Kim Tran</span><span class="pts">160</span></div>
+        <span class="more">All 12, and who left</span>
+      </aside>
+      <section class="cc">
+        <div class="loop"><span class="stp done">Setup ✓</span>›<span class="rnd">Question 4 of 10</span><span class="stp live">Answer</span><span class="stp">Reveal</span>›<span class="stp">Finish</span><span style="margin-left:10px">Question 2 <span class="dotm"></span> 1 late answer</span></div>
+        <div class="pulse">
+          <div class="tile">
+            <p class="eyebrow">Answered</p>
+            <p class="num">11 <small>of 12</small></p>
+            <div class="bar"><i style="width:92%"></i></div>
+            <p class="sub"><b>1</b> still answering</p>
+          </div>
+          <div class="tile">
+            <p class="eyebrow">Time</p>
+            <p class="num m">0:18 left</p>
+            <div class="bar"><i style="width:60%"></i></div>
+            <p class="sub">of 0:30 · advisory</p>
+          </div>
+          <div class="tile">
+            <p class="eyebrow">Since this question opened</p>
+            <p class="num m">No change</p>
+            <p class="sub">Nobody joined or left</p>
+          </div>
+        </div>
+        <div class="content">
+          <p class="eyebrow">Question 4 · Our customers</p>
+          <h4>Which region grew fastest last quarter?</h4>
+          <div class="opts">
+            <div class="opt"><span class="k">A</span><span>North America</span><span class="c">2</span><span class="mini"><i style="width:18%"></i></span></div>
+            <div class="opt right"><span class="k">B</span><span>Southeast Asia</span><span class="c">6</span><span class="mini"><i style="width:55%"></i></span></div>
+            <div class="opt"><span class="k">C</span><span>Western Europe</span><span class="c">2</span><span class="mini"><i style="width:18%"></i></span></div>
+            <div class="opt"><span class="k">D</span><span>Latin America</span><span class="c">1</span><span class="mini"><i style="width:9%"></i></span></div>
+          </div>
+          <div class="private"><svg class="i"><use href="#i-lock"/></svg><span><b>B is correct.</b> Only you see this. The room's window shows the options with nothing marked until you press Show the answer.</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <!-- annotations -->
+  <span class="anno-tag same" style="left:560px;top:58px">Same in every type</span>
+  <span class="anno-tag same" style="left:560px;top:132px">Needs-you line: always here, one height</span>
+  <span class="anno-tag same" style="left:20px;top:735px">People: same place in every type</span>
+  <span class="anno-tag same" style="left:900px;top:252px">Same place · format's facts</span>
+  <div class="anno-fmt" style="left:280px;top:382px;width:1078px;height:382px"></div>
+  <span class="anno-tag" style="left:1220px;top:394px">Format: Trivia</span>
+</div>
+</div>
+
+<!-- =============================== P3 =============================== -->
+<div class="cap" id="p3">
+  <h2>3 · One screen: what the room sees, and where the private things go</h2>
+  <p>Call &amp; Answer on one screen: the laptop is the room's screen. The same top bar and Your part
+  now, slim and public-safe. Sam's request is the same event as in frame 1.</p>
+  <ol>
+    <li><b>Count only.</b> The bell says 1. No name, no text, on the screen the room reads.</li>
+    <li><b>"The room sees this screen"</b> replaces the room's-window status, so the host always knows which mode they are in.</li>
+    <li><b>Pressing the bell</b> opens a sheet that leads with the warning and lists items by kind. Each one offers <i>Show on this screen</i> or <i>On your phone</i>.</li>
+    <li><b>After Show on this screen</b>, one item, with a blue band saying the room can see it.</li>
+    <li><b>The phone Remote</b> is the private half: the same request, named, with the same buttons.</li>
+  </ol>
+</div>
+<div class="scroll">
+<div class="board board-os" id="f-p3">
+  <p class="lbl" style="grid-column:1;grid-row:1"><b>The laptop = the room's screen</b> · 1280×720</p>
+  <p class="lbl" style="grid-column:2;grid-row:1"><b>The host's phone Remote</b> · 390×844</p>
+  <div class="frame f-720 os" style="grid-column:1;grid-row:2">
+    <div class="lf" style="grid-template-rows:auto auto;align-content:start">
+      <div class="tb">
+        <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+        <span class="sep"></span>
+        <span class="tname">Q4 planning retro</span>
+        <span class="sp"></span>
+        <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+        <span class="stat pub"><i></i>The room sees this screen</span>
+        <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+        <span class="tbtn qbtn">?</span>
+        <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+      </div>
+      <div class="ypn">
+        <div class="t"><p class="s"><span class="eyebrow" style="margin-right:10px">Your part now</span>Responses are coming in. <b>Start voting</b> when the room is done.</p></div>
+        <span class="btn main">Start voting <span class="kc">Space</span></span>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="room">
+        <p class="eb">Round 3 · Strategy</p>
+        <h2>What is one thing slowing down our handoffs?</h2>
+        <div class="yt"><b>Your turn</b> Answer on your phone, laptop or tablet.</div>
+      </div>
+      <div class="meter">
+        <p class="eb">Answered</p>
+        <p class="big">9 <small>of 12</small></p>
+        <div class="bar"><i style="width:75%"></i></div>
+        <p class="sub">3 still writing</p>
+      </div>
+    </div>
+    <span class="pin" style="left:1046px;top:34px">1</span>
+    <span class="pin" style="left:900px;top:34px">2</span>
+  </div>
+  <div class="frame f-phone hr" style="grid-column:2;grid-row:2 / span 3">
+    <div class="ph">
+      <div class="strip ask"></div>
+      <div class="pbar">
+        <span class="code">7924</span><span class="ctx">Q4 planning retro</span>
+        <span class="live">Live</span>
+        <span class="q">?</span>
+        <span class="rb"><svg class="i"><use href="#i-bell"/></svg><span class="badge">1</span></span>
+      </div>
+      <div class="stg">
+        <div class="rny">
+          <p class="eyebrow" style="color:var(--primary);margin-bottom:4px">Needs you</p>
+          <p class="l1"><b>Sam Okafor</b> wants their name on a new device</p>
+          <p class="l2">Asked 0:20 ago · first device away</p>
+          <div class="acts"><span class="btn">Let them</span><span class="btn">Not now</span></div>
+        </div>
+        <div class="rstat">
+          <p class="eyebrow">Round 3 · Answering</p>
+          <p class="num">9 <small>of 12</small></p>
+          <div class="bar"><i style="width:75%"></i></div>
+          <p class="sub" style="margin-top:6px">Still writing: Dana Reyes, Tom Becker, Kim Tran</p>
+        </div>
+        <div class="rlist">
+          <div class="ln"><svg class="i"><use href="#i-users"/></svg><span>People</span><small>12 · 1 needs you</small></div>
+          <div class="ln"><svg class="i"><use href="#i-clock"/></svg><span>Late, to review</span><small>2</small></div>
+          <div class="ln"><svg class="i"><use href="#i-eye"/></svg><span>The question</span><small>Show</small></div>
+          <div class="ln"><svg class="i"><use href="#i-menu"/></svg><span>Session menu</span><small></small></div>
+        </div>
+      </div>
+      <div class="pdock">
+        <span class="pbtn">Start voting</span>
+      </div>
+    </div>
+    <span class="pin" style="left:350px;top:70px">5</span>
+  </div>
+  <p class="lbl" style="grid-column:1;grid-row:3"><b>Pressing the bell</b> (left) · <b>after Show on this screen</b> (right) · crops of the same laptop</p>
+  <div class="insets" style="grid-column:1;grid-row:4">
+    <div class="frame inset">
+      <div class="stage" style="top:0"><div class="room" style="padding:22px 28px"><p class="eb" style="font-size:16px">Round 3 · Strategy</p><h2 style="font-size:34px">What is one thing slowing down our handoffs?</h2></div><div class="meter"></div></div>
+      <div class="dim"></div>
+      <div class="sheet" style="width:560px;left:34px;right:auto">
+        <div class="hd"><svg class="i"><use href="#i-bell"/></svg><h4>Needs you</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+        <div class="warn"><svg class="i"><use href="#i-eye"/></svg><span><b>The room can see this screen.</b> Details stay hidden until you choose.</span></div>
+        <div class="it"><span class="w">A name request<small>Someone wants their name on a new device</small></span><span class="btn s">Show on this screen</span><span class="btn s"><svg class="i"><use href="#i-phone"/></svg>On your phone</span></div>
+        <div class="it"><span class="w">2 late answers<small>From round 2</small></span><span class="btn s">Show on this screen</span><span class="btn s"><svg class="i"><use href="#i-phone"/></svg>On your phone</span></div>
+      </div>
+      <span class="pin" style="left:600px;top:20px">3</span>
+    </div>
+    <div class="frame inset">
+      <div class="stage" style="top:0"><div class="room" style="padding:22px 28px"><p class="eb" style="font-size:16px">Round 3 · Strategy</p><h2 style="font-size:34px">What is one thing slowing down our handoffs?</h2></div><div class="meter"></div></div>
+      <div class="dim"></div>
+      <div class="sheet" style="width:560px;left:34px;right:auto">
+        <div class="revealed"><svg class="i"><use href="#i-eye"/></svg>Showing on this screen: the room can see it</div>
+        <div class="hd"><h4>A name request</h4><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+        <div class="it"><span class="w"><b>Sam Okafor</b> wants their name on a new device<small>Asked 0:40 ago · first device away</small></span></div>
+        <div class="it" style="justify-content:flex-end"><span class="btn quiet">Hide it</span><span class="btn">Not now</span><span class="btn">Let them</span></div>
+      </div>
+      <span class="pin" style="left:600px;top:20px">4</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- =============================== P4 =============================== -->
+<div class="cap" id="p4">
+  <h2>4 · Moving a name to a new device: the participant's side</h2>
+  <p>Sam's laptop battery died; they pick up their phone. Four screens, left to right. The waiting
+  screen updates itself: the phone quietly retries the join every few seconds, so it never relies on
+  the host saying "go ahead" out loud. "Not now" and the ten-minute lapse are described in PLAN §4.4.</p>
+  <ol>
+    <li><b>Refused, with the real choice.</b> "That's me" is the main button, because a name clash in a live room is usually the same person.</li>
+    <li><b>Waiting</b> says what for, and that the host can see it. Ask again appears after a minute.</li>
+    <li><b>Granted:</b> in, with answers and score.</li>
+    <li><b>The old device is told</b> and stops, so two devices can't answer as Sam.</li>
+  </ol>
+</div>
+<div class="scroll">
+<div class="board" id="f-p4" style="display:flex;gap:20px;width:1592px">
+  <div class="frame f-phone sm">
+    <div class="ph">
+      <div class="strip"></div>
+      <div class="pbar"><span class="mk">E</span><span class="ctx">Join a session</span><span class="q">?</span></div>
+      <div class="stg">
+        <p class="peb">That name is in use</p>
+        <h3>Sam Okafor is already in this session.</h3>
+        <p class="m">On another device? You can move your name here. The host lets you in, and your answers and score come with you.</p>
+        <div class="pcard">
+          <div class="r"><svg class="i"><use href="#i-swap"/></svg><span>Moved from a laptop or another phone</span></div>
+          <div class="r"><svg class="i"><use href="#i-users"/></svg><span>Or a different Sam? Add your last initial.</span></div>
+        </div>
+      </div>
+      <div class="pdock">
+        <span class="pbtn">That's me: use my name here</span>
+        <span class="pbtn ghost">I'm someone else: pick another name</span>
+      </div>
+    </div>
+    <span class="pin" style="left:338px;top:60px">1</span>
+  </div>
+  <div class="frame f-phone sm">
+    <div class="ph">
+      <div class="strip wait"></div>
+      <div class="pbar"><span class="mk">E</span><span class="ctx">Waiting for the host</span><span class="who"><i class="off"></i>Sam Okafor</span><span class="q">?</span></div>
+      <div class="stg">
+        <p class="peb">Asked the host</p>
+        <h3>Waiting for the host to let you in as Sam Okafor.</h3>
+        <div class="pcard">
+          <div class="r"><span class="pulsedots"><i></i><i></i><i></i></span><span>Asked 0:40 ago</span></div>
+          <small style="margin-top:8px">The host can see your request on their screen. This page moves on by itself when they answer.</small>
+        </div>
+        <p class="m">Your first device will stop when this one takes over.</p>
+      </div>
+      <div class="pdock">
+        <span class="pbtn ghost dis">Ask again in 0:20</span>
+        <p class="pnote">Or <u>pick another name</u></p>
+      </div>
+    </div>
+    <span class="pin" style="left:338px;top:60px">2</span>
+  </div>
+  <div class="frame f-phone sm">
+    <div class="ph">
+      <div class="strip done"></div>
+      <div class="pbar"><span class="mk">E</span><span class="ctx">In the session</span><span class="who"><i></i>Sam Okafor</span><span class="q">?</span></div>
+      <div class="stg">
+        <p class="peb" style="color:var(--success-text)">You're in</p>
+        <h3>You're in as Sam Okafor.</h3>
+        <div class="pcard ok">
+          <div class="r"><svg class="i" style="color:var(--success-text)"><use href="#i-check"/></svg><span>Your answers and score came with you</span></div>
+          <small style="margin-top:8px">2 rounds answered · 320 points</small>
+        </div>
+        <p class="m">Round 3 is open now.</p>
+      </div>
+      <div class="pdock">
+        <span class="pbtn">Answer round 3</span>
+      </div>
+    </div>
+    <span class="pin" style="left:338px;top:60px">3</span>
+  </div>
+  <div class="frame f-phone sm">
+    <div class="ph">
+      <div class="strip stop"></div>
+      <div class="pbar"><span class="mk">E</span><span class="ctx">This page has stopped</span><span class="q">?</span></div>
+      <div class="stg">
+        <p class="peb" style="color:var(--muted)">Your first device</p>
+        <h3>Sam Okafor is now on another device.</h3>
+        <div class="pcard">
+          <div class="r"><svg class="i"><use href="#i-stop"/></svg><span>This page has stopped, so two devices can't both answer as Sam.</span></div>
+        </div>
+        <p class="m">If that wasn't you, tell the host.</p>
+      </div>
+      <div class="pdock">
+        <span class="pbtn ghost">Join again with a different name</span>
+      </div>
+    </div>
+    <span class="pin" style="left:338px;top:60px">4</span>
+  </div>
+</div>
+</div>
+
+<!-- =============================== P5 =============================== -->
+<div class="cap" id="p5">
+  <h2>5 · The primitives: today's variety, and the system</h2>
+  <p>Left: real samples, each drawn from its own stylesheet's numbers (audit E §4.1, §4.3, §4.6). Right:
+  the small set from <code>components/ui</code> that every surface would use. The ratchet counts under
+  each row are what the guards hold down.</p>
+</div>
+<div class="scroll">
+<div class="frame prim" id="f-p5" style="border-radius:14px">
+  <div class="col">
+    <h3>Today</h3>
+    <p class="ksub">What a host meets in their first minute after sign-in.</p>
+    <h5>Primary buttons, one per surface</h5>
+    <div class="prow">
+      <span class="sample"><span class="t-wel">Create engagement</span><span class="spec">start · r16</span></span>
+      <span class="sample"><span class="t-gsd">Create</span><span class="spec">new · r8 h44</span></span>
+      <span class="sample"><span class="t-shist">Start</span><span class="spec">sessions · r8</span></span>
+      <span class="sample"><span class="t-qsets">New set</span><span class="spec">sets · r6 h30</span></span>
+      <span class="sample"><span class="t-hea">Open the stage</span><span class="spec">agenda · r10 h40</span></span>
+    </div>
+    <div class="prow" style="margin-top:10px">
+      <span class="sample"><span class="t-brm">Send to Claude</span><span class="spec">build · r8 h36</span></span>
+      <span class="sample"><span class="t-hc">Show scoreboard</span><span class="spec">console · 13px</span></span>
+      <span class="sample"><span class="t-gl">Save</span><span class="spec">global · 16px</span></span>
+      <span class="sample"><span class="t-bpl">Send an idea</span><span class="spec">phone · blue</span></span>
+      <span class="sample"><span class="t-plr">Join Game</span><span class="spec">phone · r14 h56</span></span>
+    </div>
+    <p class="cnt"><b>34</b> scoped primary classes · <b>~125</b> button families · <b>6</b> radii · <b>6</b> heights</p>
+    <h5>Headings for the same job (a panel title)</h5>
+    <div class="heads">
+      <span style="font-size:13px;opacity:.6;text-transform:uppercase;letter-spacing:.06em">Responses</span>
+      <span style="font-size:17px">Your sessions</span>
+      <span style="font-size:20px;font-family:Inter;font-weight:700">AI Trivia Builder</span>
+      <span style="font-size:22px">Session setup</span>
+      <span style="font-size:26px;font-weight:700">Configure Your Questions</span>
+    </div>
+    <p class="cnt"><b>99</b> heading sizes · Title Case and sentence case mixed</p>
+    <h5>Close</h5>
+    <div class="closes"><span>×</span><span>✕</span><span><svg class="i"><use href="#i-x"/></svg></span><span style="font-size:13px;width:auto;padding:0 8px">Close</span></div>
+    <p class="cnt"><b>34</b> "×" · <b>4</b> "✕" · 48 icon · one that reloads the page</p>
+    <h5>Dialog heads</h5>
+    <div class="miniDlgs">
+      <div class="md paper"><div class="h">AI Trivia Builder <span>×</span></div><div class="b"></div></div>
+      <div class="md brm"><div class="h">Decide <span>✕</span></div><div class="b"></div></div>
+      <div class="md gsd"><div class="h">New engagement <svg class="i"><use href="#i-x"/></svg></div><div class="b"></div></div>
+    </div>
+    <p class="cnt"><b>40</b> dialog shells · <b>25</b> alert() · <b>32</b> window.confirm()</p>
+  </div>
+  <div class="col">
+    <h3>The system</h3>
+    <p class="ksub">From <code>components/ui</code>, one set for every surface.</p>
+    <h5>Button: three looks, three sizes, one radius</h5>
+    <div class="prow">
+      <span class="sample"><span class="btn main">Start voting</span><span class="spec">main · 36</span></span>
+      <span class="sample"><span class="btn">Let them</span><span class="spec">plain · 36</span></span>
+      <span class="sample"><span class="btn quiet">See in People</span><span class="spec">quiet</span></span>
+      <span class="sample"><span class="btn danger">End session</span><span class="spec">danger</span></span>
+      <span class="sample"><span class="btn main l">Create</span><span class="spec">main · 44</span></span>
+    </div>
+    <div class="prow" style="margin-top:10px">
+      <span class="sample"><span class="pbtn" style="width:300px">Join the session</span><span class="spec">phone dock · 56 · r14</span></span>
+      <span class="sample"><span class="pbtn ghost" style="width:220px">Pick another name</span><span class="spec">phone plain · 48</span></span>
+    </div>
+    <p class="cnt good">Specimen sheet (a real screen has one orange) · radius <b>10</b> · phone dock <b>14</b> · heights <b>36 / 44 / 56</b></p>
+    <h5>Heading: eyebrow over one rung</h5>
+    <div>
+      <p class="eyebrow">Round 3 · Strategy</p>
+      <div class="heads"><span style="font-size:24px">Page title 24</span><span style="font-size:19px">Panel 19</span><span style="font-size:15px">Section 15</span></div>
+    </div>
+    <h5>Panels and the row flag</h5>
+    <div class="pan">
+      <div class="pn"><b>Panel</b>Surface, 12px radius</div>
+      <div class="pn ny"><b>Needs you</b>Amber edge, outlined buttons</div>
+      <div class="pn fail"><b>Didn't arrive</b>Danger edge, Retry</div>
+    </div>
+    <div class="flagrow" style="margin-top:10px"><span class="dot am"></span><b>Sam Okafor</b><span class="mt">wants their name on a new device</span><span style="margin-left:auto" class="btn s">Let them</span></div>
+    <h5>Dialog: one head, one foot, one close</h5>
+    <div class="dlg">
+      <div class="h"><b>End this session?</b><span class="xbtn"><svg class="i"><use href="#i-x"/></svg></span></div>
+      <div class="bd">Everyone's phone moves to the end screen. The report keeps every round. You can't reopen it.</div>
+      <div class="f"><span class="btn">Keep it running</span><span class="btn danger">End session</span></div>
+    </div>
+    <p class="cnt good">Close is always the icon · Cancel left, the action right · one <code>requestClose()</code></p>
+  </div>
+</div>
+</div>
+
+</div>
+<!-- =============================== P6 =============================== -->
+<div class="wide">
+<div class="cap" id="p6">
+  <h2>6 · One frame, every type: seven formats, the same rail</h2>
+  <p>The two-screen host frame from frames 1 and 2, drawn compact (13px rows, every word at 12px or larger) so all
+  seven formats sit at one scale. Read across a row: the top bar, Your part now, the Needs-you line, the pulse tiles,
+  People and the Session menu land in the same place every time. Only what is outlined changes. PLAN §3.2a.</p>
+</div>
+<div class="scroll">
+<div class="board board-types" id="f-p6">
+<div class="mcell">
+  <p class="mlbl"><b>Call &amp; Answer</b>Round 3, answering</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Q4 planning retro">Q4 planning retro</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">Responses are coming in. <b>Start voting</b> when the room is done.</p></div><span class="btn main fx">Start voting</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">12 here</span></h3>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">answered</span><span class="pts ">120</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">answered</span><span class="pts ">110</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">writing</span><span class="pts ">100</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">answered</span><span class="pts ">90</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">answered</span><span class="pts ">80</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Tom Becker</span><span class="mt">writing</span><span class="pts ">70</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">away</span><span class="pts ">60</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ola Ade</span><span class="mt">answered</span><span class="pts ">50</span><span class="mo">⋯</span></div>
+        <span class="more">All 12, and who left</span>
+        <span class="fxcol" title="The format's one added fact"></span>
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Answered</p><p class="num">9 <small>of 12</small></p><div class="bar"><i style="width:75%"></i></div><p class="sub"><b>3</b> still writing</p></div><div class="tile"><p class="eyebrow">Time</p><p class="num m">Open 1:24</p><p class="sub">No limit set</p></div><div class="tile"><p class="eyebrow">Since opened</p><p class="num m">+2 joined</p><p class="sub">Ana Gomez, Lee Park</p></div></div>
+        <div class="content fx"><p class="eyebrow">Round 3 · Strategy</p><h4>What is one thing slowing down our handoffs?</h4>
+      <div class="resp"><span class="n">9</span><span class="tx">We re-explain the customer's context at every stage.</span><span class="btn s">Show</span></div>
+      <div class="resp"><span class="n">8</span><span class="tx">Sales closes on promises implementation never saw.</span><span class="btn s">Show</span></div>
+      <div class="resp"><span class="n">7</span><span class="tx">The ticket lives in one tool and the decision in another.</span><span class="btn s">Show</span></div>
+      <div class="resp"><span class="n">6</span><span class="tx">Nobody owns the gap between "signed" and "kicked off".</span><span class="btn s">Show</span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session</p>
+  <p class="mcap"><b>Needs you can carry</b>name requests · late answers · a read that failed</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Trivia</b>Question 4 of 10, answering</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Friday quiz">Friday quiz</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">3150</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="bdot" title="1 to review when you can"></span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">The room is answering. <b>Show the answer</b> when they're done.</p></div><span class="btn main fx">Show the answer</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b> 1 to review when you can: a late answer.</p></div><div class="acts"><span class="btn quiet">Review</span></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">12 here</span></h3>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">answered</span><span class="pts ">340</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Sam Okafor</span><span class="mt">answered</span><span class="pts ">320</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">answered</span><span class="pts ">300</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">answering</span><span class="pts ">280</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">answered</span><span class="pts ">260</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">answered</span><span class="pts ">240</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Tom Becker</span><span class="mt">answered</span><span class="pts ">220</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Chris Wu</span><span class="mt">answered</span><span class="pts ">200</span><span class="mo">⋯</span></div>
+        <span class="more">All 12, and who left</span>
+        <span class="fxcol" title="The format's one added fact"></span>
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="rnd">Question 4 of 10</span><span class="stp live">Question</span><span class="stp">Reveal</span><span class="stp">Scores</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Answered</p><p class="num">11 <small>of 12</small></p><div class="bar"><i style="width:92%"></i></div><p class="sub"><b>1</b> still answering</p></div><div class="tile"><p class="eyebrow">Time</p><p class="num m">0:18 left</p><div class="bar"><i style="width:60%"></i></div><p class="sub">of 0:30 · advisory</p></div><div class="tile"><p class="eyebrow">Correct so far</p><p class="num m">6 <small>of 11</small></p><p class="sub">only you see this</p></div></div>
+        <div class="content fx"><p class="eyebrow">Question 4 · Our customers</p><h4>Which region grew fastest last quarter?</h4>
+      <div class="opts">
+        <div class="opt"><span class="k">A</span><span>North America</span><span class="c">2</span><span class="mini"><i style="width:18%"></i></span></div>
+        <div class="opt right"><span class="k">B</span><span>Southeast Asia</span><span class="c">6</span><span class="mini"><i style="width:55%"></i></span></div>
+        <div class="opt"><span class="k">C</span><span>Western Europe</span><span class="c">2</span><span class="mini"><i style="width:18%"></i></span></div>
+        <div class="opt"><span class="k">D</span><span>Latin America</span><span class="c">1</span><span class="mini"><i style="width:9%"></i></span></div>
+      </div>
+      <div class="private"><svg class="i"><use href="#i-lock"/></svg><span><b>B is correct.</b> Only you see this.</span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session</p>
+  <p class="mcap"><b>Needs you can carry</b>name requests · late answers</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Poll</b>Poll 2 of 5, asking</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="All-hands pulse">All-hands pulse</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">5512</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">Answers are filling the board. <b>Show results</b> when you're ready.</p></div><span class="btn main fx">Show results</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">24 here</span></h3>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">answered</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">answered</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">answering</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">answered</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">answered</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Kim Tran</span><span class="mt">answering</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">away</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ola Ade</span><span class="mt">answered</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <span class="more">All 24, and who left</span>
+        
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="rnd">Poll 2 of 5</span><span class="stp live">Ask</span><span class="stp">Results</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Answered</p><p class="num">18 <small>of 24</small></p><div class="bar"><i style="width:75%"></i></div><p class="sub"><b>6</b> still answering</p></div><div class="tile"><p class="eyebrow">Time</p><p class="num m">Open 0:52</p><p class="sub">No limit set</p></div><div class="tile"><p class="eyebrow">Since opened</p><p class="num m">+1 joined</p><p class="sub">Kim Tran</p></div></div>
+        <div class="content fx"><p class="eyebrow">Poll 2 · Choice</p><h4>Best day to meet in person?</h4>
+      <p class="lead">The board fills in live on the room's window.</p>
+      <div class="hbar"><span>Monday</span><span class="tr"><i style="width:22%"></i></span><span class="c">4</span></div>
+      <div class="hbar"><span>Wednesday</span><span class="tr"><i style="width:50%"></i></span><span class="c">9</span></div>
+      <div class="hbar"><span>Thursday</span><span class="tr"><i style="width:0%"></i></span><span class="c">0</span></div>
+      <div class="hbar"><span>Friday</span><span class="tr"><i style="width:28%"></i></span><span class="c">5</span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session</p>
+  <p class="mcap"><b>Needs you can carry</b>name requests</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Wavelength</b>Subject 2 of 4, writing</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Brand warm-up">Brand warm-up</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">6038</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">Everyone is listing words. <b>Reveal the overlap</b> when they're done.</p></div><span class="btn main fx">Reveal the overlap</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">14 here</span></h3>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">done</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">writing</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">done</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">writing</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">done</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Tom Becker</span><span class="mt">done</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ola Ade</span><span class="mt">writing</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot left"></span><span class="nm">Chris Wu</span><span class="mt">left</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <span class="more">All 14, and who left</span>
+        
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="rnd">Subject 2 of 4</span><span class="stp live">Write</span><span class="stp">Reveal</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Wrote</p><p class="num">10 <small>of 14</small></p><div class="bar"><i style="width:71%"></i></div><p class="sub"><b>4</b> still writing</p></div><div class="tile"><p class="eyebrow">Time</p><p class="num m">1:05 left</p><div class="bar"><i style="width:45%"></i></div><p class="sub">of 2:00 · advisory</p></div><div class="tile"><p class="eyebrow">Since opened</p><p class="num m">1 left</p><p class="sub">Chris Wu</p></div></div>
+        <div class="content fx"><p class="eyebrow">Subject 2</p><h4>Our first product launch</h4>
+      <p class="lead">Most-shared words so far. The room sees nothing until you reveal.</p>
+      <div class="words"><span class="big">deadline<b>7</b></span><span class="big">chaos<b>6</b></span><span>pride<b>5</b></span><span>late nights<b>4</b></span><span>coffee<b>4</b></span><span>bugs<b>3</b></span><span>launch party<b>3</b></span><span>relief<b>2</b></span><span>press<b>2</b></span><span>whiteboard<b>2</b></span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session</p>
+  <p class="mcap"><b>Needs you can carry</b>name requests</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Survey</b>open, 2 days left</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="New-hire survey">New-hire survey</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">2271</span></span>
+      <span class="stat"><i></i>Room's window · off</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">14 of 20 have finished. <b>Remind</b> the other 6, or close it.</p></div><span class="btn main fx">Send a reminder</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b> It closes Friday at 5 pm.</p></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">20 joined</span></h3>
+        <div class="row"><span class="dot away"></span><span class="nm">Priya Shah</span><span class="mt">done</span><span class="pts ">9 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">answering</span><span class="pts ">6 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Dana Reyes</span><span class="mt">done</span><span class="pts ">9 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Ana Gomez</span><span class="mt">paused</span><span class="pts ">4 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Lee Park</span><span class="mt">done</span><span class="pts ">9 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Tom Becker</span><span class="mt">not started</span><span class="pts ">0 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">done</span><span class="pts ">9 of 9</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Ola Ade</span><span class="mt">paused</span><span class="pts ">2 of 9</span><span class="mo">⋯</span></div>
+        <span class="more">All 20, and who left</span>
+        <span class="fxcol" title="The format's one added fact"></span>
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="rnd">No live steps</span><span class="stp done">Opened Mon</span>›<span class="stp live">Open</span>›<span class="stp">Closes Fri 5 pm</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Completed</p><p class="num">14 <small>of 20</small></p><div class="bar"><i style="width:70%"></i></div><p class="sub"><b>4</b> part way</p></div><div class="tile"><p class="eyebrow">Days left</p><p class="num m">2</p><p class="sub">closes Fri 5 pm</p></div><div class="tile"><p class="eyebrow">Since opened</p><p class="num m">+3 today</p><p class="sub">finished since 9 am</p></div></div>
+        <div class="content fx"><p class="eyebrow">Progress per question</p>
+      <div class="qprog"><span>1 · How clear was your first week?</span><span class="tr"><i style="width:100%"></i></span><span class="c">20</span></div>
+      <div class="qprog"><span>2 · Rate your laptop setup</span><span class="tr"><i style="width:95%"></i></span><span class="c">19</span></div>
+      <div class="qprog"><span>3 · Did you meet your buddy?</span><span class="tr"><i style="width:85%"></i></span><span class="c">17</span></div>
+      <div class="qprog"><span>4 · What nearly made you quit?</span><span class="tr"><i style="width:75%"></i></span><span class="c">15</span></div>
+      <div class="qprog"><span>5 · Who helped you most?</span><span class="tr"><i style="width:70%"></i></span><span class="c">14</span></div>
+      <div class="qprog"><span>6 · One thing to change</span><span class="tr"><i style="width:70%"></i></span><span class="c">14</span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Joining · <span class="add">Close survey</span> · End session · <span class="minus">Phone remote</span> <span class="minus">Rounds</span></p>
+  <p class="mcap"><b>Needs you can carry</b>name requests · closing soon</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Build Room</b>Ask 3, shaping</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Pricing rebuild">Pricing rebuild</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">4410</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">B won, 7 to 2. Shape the direction, then <b>send it to Claude</b>.</p></div><span class="btn main fx">Send to Claude</span></div>
+    <div class="nys" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><div class="w"><p class="l1"><b>Claude asked a new question:</b> show annual or monthly prices first?</p></div><div class="acts"><span class="btn">Open it</span><span class="btn">Later</span></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">9 here</span></h3>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">voted</span><span class="pts ">3 ideas</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">voted</span><span class="pts ">1 idea</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">voted</span><span class="pts ">2 ideas</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">voted</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">voted</span><span class="pts ">4 ideas</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Tom Becker</span><span class="mt">voted</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ola Ade</span><span class="mt">voted</span><span class="pts ">1 idea</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">away</span><span class="pts "></span><span class="mo">⋯</span></div>
+        <span class="more">All 9, and who left</span>
+        <span class="fxcol" title="The format's one added fact"></span>
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="stp done">Opening</span>›<span class="stp done">Building</span>›<span class="rnd">Ask 3 · Choose</span><span class="stp done">Vote</span><span class="stp live">Shape</span><span class="stp">Sent</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">On this ask</p><p class="num">9 <small>of 9</small></p><div class="bar"><i style="width:100%"></i></div><p class="sub">everyone voted</p></div><div class="tile"><p class="eyebrow">Claude</p><p class="num m">Waiting on you</p><p class="sub">since 2:10 · ask 3</p></div><div class="tile"><p class="eyebrow">Since opened</p><p class="num m">+2 ideas</p><p class="sub">from the room</p></div></div>
+        <div class="content fx"><p class="eyebrow">Ask 3 · Choose</p><h4>Which header for the pricing page?</h4>
+      <div class="hbar"><span>A · Split hero</span><span class="tr"><i style="width:22%"></i></span><span class="c">2</span></div>
+      <div class="hbar win"><span>B · Full photo</span><span class="tr"><i style="width:78%"></i></span><span class="c">7</span></div>
+      <div class="dirbox"><small>Direction to Claude · you can edit this</small>B, but keep A's logo. The room said "bigger call to action".</div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session · <span class="add">Build settings</span></p>
+  <p class="mcap"><b>Needs you can carry</b>Claude's asks · room ideas · name requests</p>
+</div>
+<div class="mcell">
+  <p class="mlbl"><b>Event item</b>Trivia, item 3 of 6 on the agenda</p>
+  <div class="frame mf">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Leadership offsite">Leadership offsite</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">8806</span></span>
+      <span class="stat ok" title="Room's window · on"><i></i>Room's window</span>
+      <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s fx">The room is answering. <b>Show the answer</b> when they're done.</p></div><span class="btn main fx">Show the answer</span></div>
+    <div class="nys" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-swap"/></svg></span><div class="w"><p class="l1"><b>Jo Park</b> wants their name on a new device · 0:20 ago</p></div><div class="acts"><span class="btn">Let them</span><span class="btn">Not now</span></div></div>
+    <div class="body">
+      <aside class="ppl">
+        <h3>People <span class="ct">26 here</span></h3>
+        <div class="row"><span class="dot am"></span><span class="nm"><b>Jo Park</b></span><span class="mt">asking</span><span class="pts ">180</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="mt">answered</span><span class="pts ">340</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Sam Okafor</span><span class="mt">answered</span><span class="pts ">320</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="mt">answering</span><span class="pts ">300</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Dana Reyes</span><span class="mt">answered</span><span class="pts ">280</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="mt">from item 3</span><span class="pts ">40</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot here"></span><span class="nm">Lee Park</span><span class="mt">answered</span><span class="pts ">240</span><span class="mo">⋯</span></div>
+        <div class="row"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="mt">away</span><span class="pts ">200</span><span class="mo">⋯</span></div>
+        <span class="more">All 26, and who left</span>
+        <span class="fxcol" title="The format's one added fact"></span>
+      </aside>
+      <section class="cc">
+        <div class="loop fx"><span class="crumb">‹ Agenda</span>›<span class="rnd">3 · Team trivia · Q2 of 8</span><span class="stp live">Question</span><span class="stp">Reveal</span><span class="stp">Scores</span></div>
+        <div class="pulse fx"><div class="tile"><p class="eyebrow">Answered</p><p class="num">21 <small>of 26</small></p><div class="bar"><i style="width:81%"></i></div><p class="sub"><b>5</b> still answering</p></div><div class="tile"><p class="eyebrow">Time</p><p class="num m">0:12 left</p><div class="bar"><i style="width:40%"></i></div><p class="sub">of 0:30 · advisory</p></div><div class="tile"><p class="eyebrow">Correct so far</p><p class="num m">12 <small>of 21</small></p><p class="sub">only you see this</p></div></div>
+        <div class="content fx"><p class="eyebrow">Question 2 · Our market</p><h4>How many customers renewed last year?</h4>
+      <div class="opts">
+        <div class="opt"><span class="k">A</span><span>About 60%</span><span class="c">4</span><span class="mini"><i style="width:19%"></i></span></div>
+        <div class="opt right"><span class="k">B</span><span>About 80%</span><span class="c">12</span><span class="mini"><i style="width:57%"></i></span></div>
+        <div class="opt"><span class="k">C</span><span>About 90%</span><span class="c">4</span><span class="mini"><i style="width:19%"></i></span></div>
+        <div class="opt"><span class="k">D</span><span>Nearly all</span><span class="c">1</span><span class="mini"><i style="width:5%"></i></span></div>
+      </div>
+      <div class="private"><svg class="i"><use href="#i-lock"/></svg><span><b>B is correct.</b> Only you see this.</span></div></div>
+      </section>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>Session menu</b>Screens · Phone remote · Rounds · Joining · End session · <span class="add">Agenda</span></p>
+  <p class="mcap"><b>Needs you can carry</b>its type's items · plus "the event moved on"</p>
+</div>
+<div class="mlegend">
+  <h3>How to read this sheet</h3>
+  <div>
+    <h5>Never moves</h5>
+    <p><span class="sw same"></span><b>Everything without a dashed outline</b> is identical in all seven: the top bar (Main menu, name, Join, the room's window with its green dot, saying "off" only when it is off, Needs you, ?, Session menu), Your part now's place and its one orange button, the Needs-you line at one height, People on the left, three pulse tiles, the content area's box.</p>
+    <h5 style="margin-top:12px">The format fills</h5>
+    <p><span class="sw fxs"></span><b>Dashed violet</b>: the steps strip, the words and label in Your part now, the pulse's three facts, the content area, and People's one added fact (the column outline). Poll and Wavelength have no outline there: nobody scores, so the slot stays empty.</p>
+  </div>
+  <div>
+    <h5>Calm when empty</h5>
+    <div class="calmdemo"><span>✓</span><span><b>Nothing needs you now.</b></span></div>
+    <p>One muted line, no buttons, same height as the amber state, so nothing below it jumps when a request arrives. Five of the seven are calm here. Build Room and the event item show it amber: Claude's new question, and a name request that carried across the agenda.</p>
+    <h5 style="margin-top:12px">Added or taken away, never moved</h5>
+    <ul>
+      <li><b>Survey</b> has no live steps, so its strip shows the schedule, and its Session menu loses Phone remote and Rounds and gains Close survey.</li>
+      <li><b>Build Room</b> adds Build settings; <b>Event item</b> adds Agenda, as the strip's first crumb and in the menu.</li>
+    </ul>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="cap" id="p7">
+  <h2>7 · One person row, everywhere</h2>
+  <p>The same person, Priya Shah, in every format, on the phone remote and in the lobby. The row is one component:
+  status dot, name, what they are doing now, the format's one added fact (dashed band), and ⋯. Two variations
+  are shown in place: a name request opening inside the row, and the ⋯ menu. PLAN §3.2b.</p>
+</div>
+<div class="scroll">
+<div class="frame prf" id="f-p7" style="border-radius:14px">
+  <div>
+    <h3>One row, twelve places</h3>
+    <p class="ksub">Same widths, same order, same type. Only the outlined column changes, and only by one fact.</p>
+    <div class="plist">
+      <span class="hd">Where</span>
+      <div class="slot" style="border-color:transparent;background:none"><div class="pr hd2"><span></span><span>Name</span><span>Doing now</span><span class="f">+1 fact</span><span>⋯</span></div></div>
+      <span class="hd">The format's one fact</span>
+      <div class="ctx"><b>Call &amp; Answer</b>People column</div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f">120</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>score</b></div>
+      <div class="ctx"><b>Trivia</b>before Reveal</div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f">340</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>score</b></div>
+      <div class="ctx"><b>Trivia</b>after Reveal</div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f"><span class="ok">✓</span> 360</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>score, with ✓ or ✗</b> for this question</div>
+      <div class="ctx"><b>Poll</b></div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f"></span><span class="mo">⋯</span></div></div>
+      <div class="why">nothing added: a poll does not score</div>
+      <div class="ctx"><b>Wavelength</b></div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">done</span><span class="f"></span><span class="mo">⋯</span></div></div>
+      <div class="why">nothing added: nobody scores</div>
+      <div class="ctx"><b>Survey</b>answered on her own time</div>
+      <div class="slot"><div class="pr"><span class="dot away"></span><span class="nm">Priya Shah</span><span class="dg">answering</span><span class="f">6 of 9</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>progress</b> through the survey</div>
+      <div class="ctx"><b>Build Room</b></div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">voted</span><span class="f">3 ideas</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>ideas given</b> to the room</div>
+      <div class="ctx"><b>Event item</b>Trivia, item 3 of the agenda</div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f">340</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>the item's fact</b> (here, Trivia's score)</div>
+      <div class="ctx"><b>Event item</b>a latecomer</div>
+      <div class="slot"><div class="pr"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="dg">from item 3</span><span class="f">40</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>the item's fact</b>; "from item 3" sits in doing-now, like "joined 2 min ago"</div>
+      <div class="ctx"><b>Call &amp; Answer</b>a name request, in the row</div>
+      <div class="slot ask"><div class="pr"><span class="dot am"></span><span class="nm"><b>Sam Okafor</b></span><span class="dg ask">asking</span><span class="f">110</span><span class="mo">⋯</span></div><p class="flag">Wants their name on a new device · 0:20 ago</p><div class="ra"><span class="btn s">Let them</span><span class="btn s">Not now</span></div></div>
+      <div class="why"><b>score</b>; the flag and its two buttons open inside the row, the same pair as on the Needs-you line</div>
+      <div class="ctx"><b>Phone remote</b>Call &amp; Answer, People</div>
+      <div class="slot phr"><div class="pr tall"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f">120</span><span class="mo">⋯</span></div></div>
+      <div class="why"><b>score</b>; 44px tall to tap, nothing else changes</div>
+      <div class="ctx"><b>Lobby</b>Setup, before round 1</div>
+      <div class="slot lob"><div class="pr"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">joined 2 min ago</span><span class="f"></span><span class="mo open">⋯</span></div><div class="pmenu" style="right:-4px;top:40px">
+        <div><svg class="i"><use href="#i-pencil"/></svg>Rename</div>
+        <div><svg class="i"><use href="#i-swap"/></svg>Move to a new device</div>
+        <div><svg class="i"><use href="#i-lock"/></svg>Lock name</div>
+        <div class="sepl"></div>
+        <div class="rm"><svg class="i"><use href="#i-x"/></svg>Remove from session</div>
+      </div></div>
+      <div class="why">nothing yet: the format's fact appears once play starts</div>
+      <span class="factband" style="left:510px"></span>
+    </div>
+  </div>
+  <div class="pnotes">
+    <div class="pn"><b>The row, left to right</b>
+      <ol>
+        <li><b>Status dot</b>: here (green), away (hollow), left (grey), asking (amber).</li>
+        <li><b>Name</b>, the only flexible slot; cut with an ellipsis, full name on hover.</li>
+        <li><b>Doing now</b>: answering, answered, voted, done, joined 2 min ago, from item 3.</li>
+        <li><b>The format's one fact</b>: score, ✓/✗, progress, ideas. Empty when the format has none; the slot stays so columns still line up.</li>
+        <li><b>⋯</b>: rename, move to a new device, lock name, remove. The rare things, one press away, never a row of icons.</li>
+      </ol>
+    </div>
+    <div class="pn"><b>A name request stays on the person.</b> The row turns amber and opens one line with the
+      same two buttons the Needs-you line carries. Either one clears both, on the laptop and the phone.</div>
+    <div class="pn"><b>Never in a row:</b> a second badge, a per-format colour, a status word in capitals, a button
+      that is not about this person. If a format wants a second fact, it goes in the content area, not here.</div>
+    <div class="pn"><b>Width.</b> The five slots fit at 15px in a 340px People column (frames 1 and 2 drew it at 268px; the compact frame 6 uses 256px at 13px).
+      On a phone the row runs full width at 44px tall.</div>
+    <div class="pn"><b>Lobby, ⋯ open.</b> Rename and Lock name are most used before round 1, so the menu is shown there.
+      Remove from session is last, in danger text, and asks once.</div>
+  </div>
+</div>
+</div>
+</div>
+<!-- =============================== /P7 =============================== -->
+
+<!-- =============================== P8 =============================== -->
+<div class="wide">
+<div class="cap" id="p8">
+  <h2>8 · Every type, one screen: the laptop is the room's screen</h2>
+  <p>Frame 6 again, the same seven formats at the same type sizes (each cell 90px wider, for the two longer top-bar labels), now with no room's window: the room reads the laptop.
+  The top bar, the slim Your part now with its one orange button and the Needs-you line land where they do in frame 6.
+  People is gone, and the content area becomes the room's view, at a size the back row can read. Everything private
+  goes to the host's phone (right). PLAN §3.3.</p>
+  <ol>
+    <li><b>The top bar is frame 6's</b>, with two words changed: <i>Show join code</i> in Join's place, and <i>The room sees this screen</i> (blue) in the room's-window place. Needs you shows a count or a dot, never a name.</li>
+    <li><b>The Needs-you line stays, public-safe.</b> Calm when nothing waits; when something does, it gives a count by kind and says where to deal with it ("1 name request · on your phone"), with an amber edge but no amber wash and no Let them / Not now. <i>Open</i> opens the bell's sheet from frame 3.</li>
+    <li><b>The room's view replaces People, the steps strip and the pulse tiles.</b> Its eyebrow says where we are; its meter is the count. Nothing private: no names, no late text, no trivia answer, no Workie warning.</li>
+  </ol>
+</div>
+<div class="scroll">
+<div class="board board-one" id="f-p8">
+
+<div class="mcell">
+  <p class="mlbl"><b>Call &amp; Answer</b>Round 3, answering</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Q4 planning retro">Q4 planning retro</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>Responses are coming in. <b>Start voting</b> when done.</p></div><span class="btn main fx">Start voting</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Round 3 · Strategy</p>
+        <h2>What is one thing slowing down our handoffs?</h2>
+        <div class="yt"><b>Your turn</b><span>Answer on your phone, laptop or tablet.</span></div>
+      </div>
+      <div class="meter"><p class="eb">Answered</p><p class="big">9 <small>of 12</small></p><div class="bar"><i style="width:75%"></i></div><p class="msub">3 still writing</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>the question and the count; responses appear when you open voting</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">late answers · Workie's read and its Retry · who wrote what</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Trivia</b>Question 4 of 10, answering</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Friday quiz">Friday quiz</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="bdot" title="1 to review when you can"></span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>The room is answering. <b>Show the answer</b> when done.</p></div><span class="btn main fx">Show the answer</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b> 1 late answer to review, on your phone.</p></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Question 4 · Our customers</p>
+        <h2>Which region grew fastest last quarter?</h2>
+        <div class="ropts">
+          <div class="ropt"><span class="k">A</span><span>North America</span></div>
+          <div class="ropt"><span class="k">B</span><span>Southeast Asia</span></div>
+          <div class="ropt"><span class="k">C</span><span>Western Europe</span></div>
+          <div class="ropt"><span class="k">D</span><span>Latin America</span></div>
+        </div>
+      </div>
+      <div class="meter"><p class="eb">Answered</p><p class="big">11 <small>of 12</small></p><div class="bar"><i style="width:92%"></i></div><p class="msub">0:18 left</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>the options, nothing marked and no split, until Show the answer</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">the answer · correct so far · the split per option · the late answer</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Poll</b>Poll 2 of 5, asking</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="All-hands pulse">All-hands pulse</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>The board is filling. <b>Show results</b> when ready.</p></div><span class="btn main fx">Show results</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Poll 2 · Choice</p>
+        <h2>Best day to meet in person?</h2>
+        <div class="rbar"><span>Monday</span><span class="tr"><i style="width:22%"></i></span><span class="c">4</span></div>
+        <div class="rbar"><span>Wednesday</span><span class="tr"><i style="width:50%"></i></span><span class="c">9</span></div>
+        <div class="rbar"><span>Thursday</span><span class="tr"><i style="width:0%"></i></span><span class="c">0</span></div>
+        <div class="rbar"><span>Friday</span><span class="tr"><i style="width:28%"></i></span><span class="c">5</span></div>
+      </div>
+      <div class="meter"><p class="eb">Answered</p><p class="big">18 <small>of 24</small></p><div class="bar"><i style="width:75%"></i></div><p class="msub">open 0:52</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>the live board, as on the room's window: a poll has nothing to hide</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">nothing extra: People, and the main button</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Wavelength</b>Subject 2 of 4, writing</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Brand warm-up">Brand warm-up</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>Everyone is listing words. <b>Reveal the overlap</b>.</p></div><span class="btn main fx">Reveal the overlap</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b></p></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Subject 2 of 4</p>
+        <h2>Our first product launch</h2>
+        <div class="yt"><b>Your turn</b><span>List the words it brings to mind. We reveal the overlap together.</span></div>
+      </div>
+      <div class="meter"><p class="eb">Wrote</p><p class="big">10 <small>of 14</small></p><div class="bar"><i style="width:71%"></i></div><p class="msub">1:05 left</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>the subject and the count; no words until Reveal</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">the words as they come in, most shared first</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Survey</b>open, 2 days left</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="New-hire survey">New-hire survey</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>14 of 20 have finished. <b>Remind</b> the rest.</p></div><span class="btn main fx">Send a reminder</span></div>
+    <div class="nys calm" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-check"/></svg></span><div class="w"><p class="l1"><b>Nothing needs you now.</b> It closes Friday at 5 pm.</p></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">New-hire survey · open until Fri 5 pm</p>
+        <h2>Thank you. Six of you still to go.</h2>
+        <div class="yt"><b>Your turn</b><span>Finish on your phone. It saves as you go, so you can stop and come back.</span></div>
+      </div>
+      <div class="meter"><p class="eb">Finished</p><p class="big">14 <small>of 20</small></p><div class="bar"><i style="width:70%"></i></div><p class="msub">2 days left</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>progress only: how many finished, and when it closes</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">progress per question · who has not finished</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Build Room</b>Ask 3, shaping</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Pricing rebuild">Pricing rebuild</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>B won, 7 to 2. <b>Send it to Claude</b>.</p></div><span class="btn main fx">Send to Claude</span></div>
+    <div class="nys pub" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-spark"/></svg></span><div class="w"><p class="l1"><b>1 new ask from Claude</b> · on your phone</p></div><div class="acts"><span class="btn">Open</span></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Ask 3 · Choose</p>
+        <h2>Which header for the pricing page?</h2>
+        <div class="rbar"><span>A · Split hero</span><span class="tr"><i style="width:22%"></i></span><span class="c">2</span></div>
+        <div class="rbar win"><span>B · Full photo</span><span class="tr"><i style="width:78%"></i></span><span class="c">7</span></div>
+        <span class="claude"><svg class="i"><use href="#i-spark"/></svg>Claude is waiting for the room's direction</span>
+      </div>
+      <div class="meter"><p class="eb">Voted</p><p class="big">9 <small>of 9</small></p><div class="bar"><i style="width:100%"></i></div><p class="msub">everyone voted</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>the ask, the room's vote, and Claude's status in one line</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">Claude's asks in full · the direction you're shaping · ideas to let in</span></p>
+</div>
+
+<div class="mcell">
+  <p class="mlbl"><b>Event item</b>Trivia, item 3 of 6 on the agenda</p>
+  <div class="frame mf mos">
+   <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      <span class="tname" title="Leadership offsite">Leadership offsite</span>
+      <span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn bell has"><svg class="i"><use href="#i-bell"/></svg>Needs you <span class="badge">1</span></span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="s fx"><span class="eyebrow">Your part now</span>The room is answering. <b>Show the answer</b> when done.</p></div><span class="btn main fx">Show the answer</span></div>
+    <div class="nys pub" role="region" aria-label="Needs you"><span class="ic"><svg class="i"><use href="#i-swap"/></svg></span><div class="w"><p class="l1"><b>1 name request</b> · on your phone</p></div><div class="acts"><span class="btn">Open</span></div></div>
+    <div class="rv fx">
+      <div class="room">
+        <p class="eb">Item 3 · Team trivia · Question 2 of 8</p>
+        <h2>How many customers renewed last year?</h2>
+        <div class="ropts">
+          <div class="ropt"><span class="k">A</span><span>About 60%</span></div>
+          <div class="ropt"><span class="k">B</span><span>About 80%</span></div>
+          <div class="ropt"><span class="k">C</span><span>About 90%</span></div>
+          <div class="ropt"><span class="k">D</span><span>Nearly all</span></div>
+        </div>
+      </div>
+      <div class="meter"><p class="eb">Answered</p><p class="big">21 <small>of 26</small></p><div class="bar"><i style="width:81%"></i></div><p class="msub">0:12 left</p></div>
+    </div>
+   </div>
+  </div>
+  <p class="mcap"><b>The room sees</b>its type's view; Agenda is in the Session menu, not on the screen</p>
+  <p class="mcap"><b>On your phone</b><span class="ph8">Jo's name request, named · the answer · correct so far · ‹ Agenda</span></p>
+</div>
+
+<div class="mlegend">
+  <h3>What changes from frame 6, and what does not</h3>
+  <div>
+    <h5>Same place, same look</h5>
+    <p><b>Main menu, the name, Needs you, ? and Session menu</b> sit where frame 6 puts them. Join becomes <b>Show join code</b> (it puts the code on this screen) and the room's-window chip becomes <b>The room sees this screen</b>, so the host always knows which mode they are in. <b>Your part now</b> is slim but in the same place, with the same one orange button, Space and the clicker.</p>
+    <h5 style="margin-top:12px">The Needs-you line, public-safe</h5>
+    <p>Same height as frame 6. Calm: one muted line, as there. Something waiting: an amber edge, a <b>count by kind</b> and where to handle it, one outlined <b>Open</b>. Never a name, never Let them / Not now on the room's screen. <i>Soon</i> items ride the calm line as a count ("1 late answer to review").</p>
+  </div>
+  <div>
+    <h5>Taken away on one screen</h5>
+    <ul>
+      <li><b>People</b>: the room sees a count in the meter. The list, with the same row as frame 7, is on the phone.</li>
+      <li><b>The steps strip and the pulse tiles</b>: the room's eyebrow says where we are and its meter is the count. Private tiles ("Correct so far") go to the phone.</li>
+      <li><b>Private detail</b>: the trivia answer, late text, Workie's read and warnings, who wrote what, host notes. Phone, or one item at a time with <i>Show on this screen</i> (frame 3).</li>
+    </ul>
+    <h5 style="margin-top:12px">Decided where the room's view was not obvious</h5>
+    <ul>
+      <li><b>Survey</b>: progress only, overall. Per-question counts can point at a person in a small group.</li>
+      <li><b>Build Room</b>: the ask, the room's own vote and a one-line Claude status. Claude's question text and the direction being typed stay on the phone until sent.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="mphone">
+  <p class="mlbl"><b>The host's phone</b>Event item, the private half · 390×844</p>
+  <div class="frame f-phone hr">
+    <div class="ph">
+      <div class="strip ask"></div>
+      <div class="pbar">
+        <span class="code">8806</span><span class="ctx">Leadership offsite</span>
+        <span class="live">Live</span>
+        <span class="q">?</span>
+        <span class="rb"><svg class="i"><use href="#i-bell"/></svg><span class="badge">1</span></span>
+      </div>
+      <div class="stg">
+        <div class="rny">
+          <p class="eyebrow">Needs you · 1</p>
+          <p class="l1"><b>Jo Park</b> wants their name on a new device</p>
+          <p class="l2">Asked 0:20 ago · first device away</p>
+          <div class="acts"><span class="btn">Let them</span><span class="btn">Not now</span></div>
+        </div>
+        <div class="rstat">
+          <p class="eyebrow">Question 2 · only you see this</p>
+          <p class="ans"><span class="k">B</span>About 80%</p>
+          <p class="sub">Correct so far <b>12</b> of 21 · A 4 · C 4 · D 1</p>
+        </div>
+        <div class="rppl">
+          <div class="rh">People <small>26 here · 1 needs you</small></div>
+          <div class="pr tall"><span class="dot am"></span><span class="nm"><b>Jo Park</b></span><span class="dg ask">asking</span><span class="f">180</span><span class="mo">⋯</span></div>
+          <div class="pr tall"><span class="dot here"></span><span class="nm">Priya Shah</span><span class="dg">answered</span><span class="f">340</span><span class="mo">⋯</span></div>
+          <div class="pr tall"><span class="dot here"></span><span class="nm">Sam Okafor</span><span class="dg">answered</span><span class="f">320</span><span class="mo">⋯</span></div>
+          <div class="pr tall"><span class="dot here"></span><span class="nm">Marcus Lee</span><span class="dg">answering</span><span class="f">300</span><span class="mo">⋯</span></div>
+          <div class="pr tall"><span class="dot here"></span><span class="nm">Ana Gomez</span><span class="dg">from item 3</span><span class="f">40</span><span class="mo">⋯</span></div>
+          <div class="pr tall"><span class="dot away"></span><span class="nm">Chris Wu</span><span class="dg">away</span><span class="f">200</span><span class="mo">⋯</span></div>
+        </div>
+      </div>
+      <div class="pdock">
+        <span class="pbtn">Show the answer</span>
+      </div>
+    </div>
+  </div>
+  <div class="pnotes">
+    <div class="pn"><b>The same list as the laptop.</b> The Needs-you card is the item the laptop's line counts, named here, with the same Let them / Not now. Either answer clears the bell on both.</div>
+    <div class="pn"><b>The same row as frame 7.</b> Status dot, name, doing now, the format's one fact, ⋯; 44px tall to tap. Jo's row shows <i>asking</i>; the buttons are on the card above.</div>
+    <div class="pn"><b>Per format.</b> The phone holds what each cell's violet line lists, plus People and Session menu in every format. The main button is the laptop's, mirrored.</div>
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+<!-- =============================== /P8 =============================== -->
+</body>
+</html>

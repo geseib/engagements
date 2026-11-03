@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authFetch } from '../auth/authFetch';
 import Icon from './Icon';
 import Modal from './Modal';
+import { DialogHead, DialogFoot } from './ui/DialogParts';
 import StatusMessage from './StatusMessage';
 import ListControls from './ListControls';
 import useListControls from '../hooks/useListControls';
@@ -517,13 +518,7 @@ const ArchivePanel = ({ environment }) => {
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <header>
-            <Icon name="DownloadSimple" weight="fill" size={20} color="var(--primary)" />
-            <div className="arch-grow">
-              <h2 id="arch-import-title">Restore {plural(selected.size, 'backup')} into {tierName}?</h2>
-            </div>
-            <button type="button" className="arch-x" onClick={closeDialog} disabled={Boolean(busy)} aria-label="Close" title="Close">×</button>
-          </header>
+          <DialogHead titleId="arch-import-title" title={<>Restore {plural(selected.size, 'backup')} into {tierName}?</>} titlesClassName="arch-grow" icon={<Icon name="DownloadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
           <div className="arch-modal-body">
             <p>
               A set that already exists gets a new version and switches to it; the version it replaces
@@ -532,12 +527,11 @@ const ArchivePanel = ({ environment }) => {
             <p>An active Engage set is live for every organisation the moment it is restored.</p>
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
           </div>
-          <footer>
-            <button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Cancel</button>
+          <DialogFoot cancel={<button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Cancel</button>}>
             <button type="button" className="arch-btn arch-btn--primary" onClick={confirmImport} disabled={Boolean(busy)}>
               {busy === 'import' ? 'Restoring…' : `Restore ${selected.size}`}
             </button>
-          </footer>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -550,14 +544,7 @@ const ArchivePanel = ({ environment }) => {
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <header>
-            <Icon name="Warning" weight="fill" size={20} color="var(--danger-text)" />
-            <div className="arch-grow">
-              <h2 id="arch-del-title">Delete the backup “{dialog.item.Title}”?</h2>
-              <p className="arch-dim">{formatWhen(dialog.item.CreatedAt)} · from {archiveTier(dialog.item) || 'an unknown environment'}</p>
-            </div>
-            <button type="button" className="arch-x" onClick={closeDialog} disabled={Boolean(busy)} aria-label="Close" title="Close">×</button>
-          </header>
+          <DialogHead titleId="arch-del-title" title={<>Delete the backup “{dialog.item.Title}”?</>} titlesClassName="arch-grow" sub={<>{formatWhen(dialog.item.CreatedAt)} · from {archiveTier(dialog.item) || 'an unknown environment'}</>} subClassName="arch-dim" icon={<Icon name="Warning" weight="fill" size={20} color="var(--danger-text)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
           <div className="arch-modal-body">
             <p>
               Every environment shares this archive: deleting it here removes it for dev, test and
@@ -565,12 +552,11 @@ const ArchivePanel = ({ environment }) => {
             </p>
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
           </div>
-          <footer>
-            <button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Cancel</button>
+          <DialogFoot cancel={<button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Cancel</button>}>
             <button type="button" className="arch-btn arch-btn--dangersolid" onClick={confirmDelete} disabled={Boolean(busy)}>
               {busy === 'delete' ? 'Deleting…' : 'Delete the backup'}
             </button>
-          </footer>
+          </DialogFoot>
         </Modal>
       )}
 
@@ -583,17 +569,7 @@ const ArchivePanel = ({ environment }) => {
           closeOnBackdrop={() => !busy}
           closeOnEscape={() => !busy}
         >
-          <header>
-            <Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />
-            <div className="arch-grow">
-              <h2 id="arch-export-title">Back up from {tierName}</h2>
-              <p className="arch-dim">
-                Engage and public content only. Organisation content is encrypted per organisation and is
-                never archived.
-              </p>
-            </div>
-            <button type="button" className="arch-x" onClick={closeDialog} disabled={Boolean(busy)} aria-label="Close" title="Close">×</button>
-          </header>
+          <DialogHead titleId="arch-export-title" title={<>Back up from {tierName}</>} titlesClassName="arch-grow" sub="Engage and public content only. Organisation content is encrypted per organisation and is never archived." subClassName="arch-dim" icon={<Icon name="UploadSimple" weight="fill" size={20} color="var(--primary)" />} onClose={closeDialog} closeDisabled={Boolean(busy)} closeClassName="arch-x" />
           <div className="arch-modal-body">
             <StatusMessage message={error} tone="error" className="arch-alert arch-alert--error" />
             {localPending > 0 ? (
@@ -659,9 +635,9 @@ const ArchivePanel = ({ environment }) => {
               </>
             )}
           </div>
-          <footer>
+          <DialogFoot>
             <button type="button" className="arch-btn" onClick={closeDialog} disabled={Boolean(busy)}>Close</button>
-          </footer>
+          </DialogFoot>
         </Modal>
       )}
     </section>

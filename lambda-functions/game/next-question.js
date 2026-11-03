@@ -3,8 +3,12 @@ const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutComm
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
 const { normaliseQueue, queueDrop } = require('./queue-order');
+const {
+  OWN_SOURCE, isOwnQueueKey, ownIdOfKey, ownQueueKey, ownSk, ownRowKey, readOwnQuestion,
+} = require('./round-question');
 const { callerMayDriveSession } = require('./tenant');
 const { startSession } = require('./session-start');
+const { timerForOpening, openingClauses, stateAfterOpening, timerView } = require('./round-timer');
 const { endSession } = require('./session-end');
 const { recordRoundServed, recordRoundClosed } = require('./platform-metrics');
 const { normaliseScoreboard, scoreboardWrite, revAfter, scoreboardFrame } = require('./scoreboard-state');
@@ -235,7 +239,15 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
     */
     const builtFor = item.SetVersion === undefined ? null : item.SetVersion;
     const playing = resolvedSet.version === undefined ? null : resolvedSet.version;
-    if (builtFor !== playing) {
+    /*
+      …EXCEPT THE HOST'S OWN QUESTIONS (impromptu ask, README §5.4). An
+      `own:` key names a row on the SESSION, not a key in any version of the
+      set, so a replaced set cannot change what it means. On a stale queue the
+      set keys are parked (skipped and left, so restoring the set recovers
+      them) and the host's own entries are still served.
+    */
+    const staleSet = builtFor !== playing;
+    if (staleSet && !queue.some(isOwnQueueKey)) {
       console.log(`⚠️ QUEUE: built for set version ${builtFor}, game is playing ${playing} — serving nothing from it`);
       return { staleSet: true };
     }
@@ -246,6 +258,23 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
     let candidate = null;
 
     for (const key of queue) {
+      if (isOwnQueueKey(key)) {
+        // A QUESTION THE HOST WROTE: read from the session's own partition.
+        // No category, no locateCategory, no set version.
+        const ownId = ownIdOfKey(key);
+        const own = await readOwnQuestion(db, process.env.TABLE_NAME, gameId, ownId);
+        if (!own || own.Status !== 'queued' || asked.has(ownSk(ownId))) {
+          console.log(`🧹 QUEUE: ${key} was asked or removed — dropping it`);
+          spent.push(key);
+          continue;
+        }
+        candidate = { questionKey: key, questionId: ownSk(ownId), own: true, ownId };
+        break;
+      }
+      if (staleSet) {
+        console.log(`⚠️ QUEUE: ${key} belongs to set version ${builtFor}, game is playing ${playing} — leaving it queued`);
+        continue;
+      }
       const sourceQuestionId = `QUESTION#${key}`;
 
       if (asked.has(sourceQuestionId)) {
@@ -289,7 +318,7 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
     const removals = candidate ? [...spent, candidate.questionKey] : spent;
     // Nothing to serve AND nothing to tidy: leave the row untouched so its
     // version does not move under a host who is mid-edit on the other surface.
-    if (removals.length === 0) return { served: null };
+    if (removals.length === 0) return staleSet ? { staleSet: true } : { served: null };
 
     const version = Number(item.Version) || 0;
     const next = queueDrop(queue, removals);
@@ -318,7 +347,7 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
       continue;
     }
 
-    return { served: candidate, queue: next.queue, version: version + 1 };
+    return { served: candidate, queue: next.queue, version: version + 1, ...(staleSet ? { staleSet: true } : {}) };
   }
 
   // Lost the race three times. Fall through to automatic selection rather than
@@ -326,6 +355,42 @@ const drainQueuedQuestion = async ({ gameId, setPk, resolvedSet, categoryState }
   // the button asked for.
   console.log('⚠️ QUEUE: could not drain after repeated contention — selecting automatically');
   return { served: null };
+};
+
+/**
+ * Take one key out of the running order, conditional on the version just read
+ * (the drain's own write). Used by "Ask it now" for a host-written question.
+ * Returns the drain's shape when it wrote, null when the key was not queued or
+ * the list kept moving (the round still goes ahead; the next drain drops an
+ * asked own entry anyway).
+ */
+const dropFromQueue = async (gameId, key) => {
+  for (let attempt = 1; attempt <= QUEUE_DRAIN_ATTEMPTS; attempt++) {
+    const read = await db.send(new GetCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: { PK: `GAME#${gameId}`, SK: 'QUEUE' }
+    }));
+    const item = read.Item;
+    const next = queueDrop(normaliseQueue(item && item.Queue), [key]);
+    if (!item || !next.changed) return null;
+    const version = Number(item.Version) || 0;
+    try {
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: { PK: `GAME#${gameId}`, SK: 'QUEUE' },
+        UpdateExpression: 'SET #queue = :queue, #version = :next, #updatedAt = :now',
+        ConditionExpression: '#version = :expected',
+        ExpressionAttributeNames: { '#queue': 'Queue', '#version': 'Version', '#updatedAt': 'UpdatedAt' },
+        ExpressionAttributeValues: {
+          ':queue': next.queue, ':next': version + 1, ':expected': version, ':now': new Date().toISOString()
+        }
+      }));
+      return { served: null, queue: next.queue, version: version + 1 };
+    } catch (error) {
+      if (error.name !== 'ConditionalCheckFailedException') throw error;
+    }
+  }
+  return null;
 };
 
 // Helper function to select next question from enhanced counts (array-based)
@@ -811,6 +876,26 @@ exports.handler = async (event) => {
       };
     }
 
+    /*
+      "ASK IT NOW", FOR A QUESTION THE HOST WROTE (impromptu ask, README D4 and
+      F2): only BETWEEN rounds — before round 1 or once a round has reached its
+      results (the read and the feedback live there too). While answers or
+      votes are still coming in, Now would cut the room's round with one press,
+      so it is refused with the reason, and the composer offers Next instead.
+    */
+    if (action === 'select_own') {
+      const s = String(gameState.Item.State || '');
+      const between = s === 'CREATED' || s === 'STARTED' || s.startsWith('RESULTS#');
+      if (!between) {
+        const reason = 'Answers are still coming in. Put it next instead, or wait for the results.';
+        return {
+          statusCode: 409,
+          body: JSON.stringify({ error: reason, message: reason, state: s, gameId }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+    }
+
     // DUPLICATE PREVENTION: Check current state and validate progression
     const currentState = gameState.Item.State;
     const currentLessonNumber = gameState.Item.LessonNumber || 0;
@@ -927,8 +1012,27 @@ exports.handler = async (event) => {
     let nextQuestion;
     let queueOutcome = null;
 
-    // Check if specific question was requested
-    if (questionId && (action === 'select_specific' || action === 'skip_to_specific')) {
+    if (action === 'select_own') {
+      // THE HOST'S OWN QUESTION, NOW. Read from the session's own partition;
+      // a question already asked or removed cannot be asked again.
+      const ownId = String(body.ownId || ownIdOfKey(body.questionKey) || '').trim();
+      const own = ownId ? await readOwnQuestion(db, process.env.TABLE_NAME, gameId, ownId) : null;
+      if (!own || own.Status !== 'queued') {
+        const reason = own && own.Status === 'asked'
+          ? `That question has already been asked (round ${own.AskedRound || '?'}).`
+          : 'That question is not waiting to be asked any more.';
+        return {
+          statusCode: 409,
+          body: JSON.stringify({ error: reason, message: reason, gameId }),
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+      }
+      // Out of the running order first (the reversible half, as the drain
+      // does): a "Now" that has just been added at the head must not be served
+      // a second time when the host next presses Next round.
+      queueOutcome = await dropFromQueue(gameId, ownQueueKey(ownId));
+      nextQuestion = { questionId: ownSk(ownId), own: true, ownId, isSpecific: true, categoryId: null };
+    } else if (questionId && (action === 'select_specific' || action === 'skip_to_specific')) {
       console.log(`🎯 Specific question requested: ${questionId}`);
       
       // Validate that the requested question exists
@@ -1033,7 +1137,12 @@ exports.handler = async (event) => {
         gameId, setPk, resolvedSet, categoryState: categoryState.Item
       });
 
-      if (queueOutcome && queueOutcome.served) {
+      if (queueOutcome && queueOutcome.served && queueOutcome.served.own) {
+        // A question the host wrote: specific, with no category and no cursor.
+        const served = queueOutcome.served;
+        console.log(`📋 QUEUE: serving the host's own question ${served.questionId}`);
+        nextQuestion = { questionId: served.questionId, own: true, ownId: served.ownId, isSpecific: true, categoryId: null };
+      } else if (queueOutcome && queueOutcome.served) {
         const served = queueOutcome.served;
         console.log(`📋 QUEUE: serving ${served.questionId} from the host's queue`);
         nextQuestion = {
@@ -1196,7 +1305,33 @@ exports.handler = async (event) => {
     console.log(`📝 Creating question reference QUESTION#${questionNumber}#REF for ${nextQuestion.questionId}`);
 
     // Step 1: Create question reference record (CRITICAL: per game flow spec)
-    await db.send(new PutCommand({
+    //
+    // A QUESTION THE HOST WROTE gets a REF of its own shape (impromptu ask,
+    // README §5.5): `Source: 'host'`, `SourceQuestionId: 'OWNQ#<id>'`, and no
+    // set, scope or version — it is in none. Every reader resolves it through
+    // round-question.js, which knows to read the session's own row.
+    if (nextQuestion.own) {
+      await db.send(new PutCommand({
+        TableName: process.env.TABLE_NAME,
+        Item: {
+          PK: `GAME#${gameId}`,
+          SK: `QUESTION#${questionNumber}#REF`,
+          SourceQuestionId: nextQuestion.questionId,
+          Source: OWN_SOURCE,
+          QuestionNumber: questionNumber,
+          StartedAt: now,
+          ...(sessionTtl !== undefined ? { ttl: sessionTtl } : {})
+        }
+      }));
+      // The row is now asked: no more editing (F3), and the drain drops it.
+      await db.send(new UpdateCommand({
+        TableName: process.env.TABLE_NAME,
+        Key: ownRowKey(gameId, nextQuestion.ownId),
+        UpdateExpression: 'SET #s = :asked, #r = :round, #at = :now, #u = :now',
+        ExpressionAttributeNames: { '#s': 'Status', '#r': 'AskedRound', '#at': 'AskedAt', '#u': 'UpdatedAt' },
+        ExpressionAttributeValues: { ':asked': 'asked', ':round': newLessonNumber, ':now': now }
+      })).catch((e) => console.warn(`⚠️ Could not mark own question ${nextQuestion.ownId} asked: ${e.name}`));
+    } else await db.send(new PutCommand({
       TableName: process.env.TABLE_NAME,
       Item: {
         PK: `GAME#${gameId}`,
@@ -1231,30 +1366,40 @@ exports.handler = async (event) => {
       }
     }));
 
-    // Step 2: Update game state
+    // Step 2: Update game state, with the round's timer (round-timer.js):
+    // PhaseStartedAt always, the time given when the host chose one (the
+    // body's `time`, else this session's last choice), and a previous
+    // round's timer removed when this one has No limit.
+    const roundTimer = openingClauses(newState, now, timerForOpening(body, gameState.Item, 'ask'), 'ask');
     await db.send(new UpdateCommand({
       TableName: process.env.TABLE_NAME,
       Key: { PK: `GAME#${gameId}`, SK: 'STATE' },
-      UpdateExpression: 'SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #updatedAt = :updatedAt',
+      UpdateExpression: `SET #state = :state, #currentQuestionId = :questionId, #lessonNumber = :lessonNumber, #updatedAt = :updatedAt, ${roundTimer.set.join(', ')}`
+        + (roundTimer.remove.length ? ` REMOVE ${roundTimer.remove.join(', ')}` : ''),
       ExpressionAttributeNames: {
         '#state': 'State',
         '#currentQuestionId': 'CurrentQuestionId',
         '#lessonNumber': 'LessonNumber',
-        '#updatedAt': 'UpdatedAt'
+        '#updatedAt': 'UpdatedAt',
+        ...roundTimer.names
       },
       ExpressionAttributeValues: {
         ':state': newState,
         ':questionId': nextQuestion.questionId,
         ':lessonNumber': newLessonNumber,
-        ':updatedAt': now
+        ':updatedAt': now,
+        ...roundTimer.values
       }
     }));
+    const timedState = stateAfterOpening(gameState.Item, newState, now, roundTimer.timer);
 
     // Served: one question put to the room, counted once per round (platform-metrics.js; never throws).
     // The usage stats ride the same guard: by type for the platform, the team and
     // the creator, and on the set's own row at the version served (usage-stats SPEC §5 E4).
+    // A host-written round counts as a round (D10) but bumps no set's row:
+    // `set: null`, and its OWNQ# id puts it in the "own questions" bucket.
     await recordRoundServed({
-      gameId, round: newLessonNumber, set: resolvedSet, questionId: nextQuestion.questionId, metadata: gameMetadata.Item,
+      gameId, round: newLessonNumber, set: nextQuestion.own ? null : resolvedSet, questionId: nextQuestion.questionId, metadata: gameMetadata.Item,
     }, { db });
 
     /*
@@ -1316,8 +1461,12 @@ exports.handler = async (event) => {
     }
 
     // Decrement category count when question is asked (not when results are calculated)
-    console.log(`🔢 Calling decrementCategoryCount for asked question ${questionNumber} in game ${gameId}`);
-    await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId, setPk);
+    // NOT for a question the host wrote: it is in no category, and taking one
+    // off a category's count would make "7 left" lie (README §5.4).
+    if (!nextQuestion.own) {
+      console.log(`🔢 Calling decrementCategoryCount for asked question ${questionNumber} in game ${gameId}`);
+      await decrementCategoryCount(gameId, questionNumber, nextQuestion.categoryId, setPk);
+    }
 
     /*
       THE SCOREBOARD STEPS ASIDE FOR THE QUESTION. Owner, 2026-09-25: "yes,
@@ -1349,8 +1498,20 @@ exports.handler = async (event) => {
       state: `GAME#${gameId} ASK#${questionNumber}`,
       questionNumber: questionNumber,
       lessonNumber: newLessonNumber,
-      timestamp: now
+      timestamp: now,
+      // The room's view of the timer (words and a bar), or null; the server's
+      // clock so every screen measures time left against the same reference.
+      time: timerView(timedState),
+      serverNow: Date.now()
     });
+    // The host's screens get the whole timer (whether it closes at zero, and
+    // the time when the room is not shown it), so a round opened from the
+    // phone Remote is timed on the laptop too.
+    if (timedState.TimeLimitMs) {
+      await broadcastToGame(gameId, {
+        type: 'roundTimeChanged', gameId, time: timerView(timedState, { host: true }), serverNow: Date.now()
+      }, { hostsOnly: true });
+    }
 
     // The list is one shorter than it was. Told separately, and never folded
     // into questionStarted: the stage's queue panel must follow it now, not at
@@ -1384,10 +1545,15 @@ exports.handler = async (event) => {
         lessonNumber: newLessonNumber,
         categoryId: nextQuestion.categoryId,
         message: 'Next question selected successfully',
+        hostTime: timerView(timedState, { host: true }),
+        serverNow: Date.now(),
         // Whether this round came off the host's running order, and what is
         // left of it. The surface that pressed the button re-renders from this
         // rather than guessing which entry was consumed.
         fromQueue: Boolean(queueOutcome && queueOutcome.served),
+        // To the host's own request only (never the room's frame, F6): this
+        // round is a question the host wrote.
+        ...(nextQuestion.own ? { ownQuestion: true } : {}),
         ...(queueOutcome && queueOutcome.queue
           ? { queue: queueOutcome.queue, queueVersion: queueOutcome.version }
           : {}),

@@ -1,4 +1,4 @@
-/* skin-allowance: colour=3 font=0 primary=4 */
+/* skin-allowance: colour=3 font=0 primary=3 */
 /* components/ReportsPanel.jsx — the saved-reports list.
    ==========================================================================
    SessionsPanel.css, verbatim, under its own scope. The namespace tests hold
@@ -122,33 +122,13 @@
 .rp-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
 .rp-count { font-size: var(--rp-t-label); color: var(--muted); white-space: nowrap; margin-left: auto; }
 
-.rp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--rp-rule-strong);
-  background: transparent;
-  color: var(--text);
-  font: 600 var(--rp-t-label)/1 var(--font-ui);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.rp-btn:hover:not(:disabled) { background: var(--rp-row-hover); border-color: var(--muted); }
-.rp-btn:disabled { opacity: .42; cursor: not-allowed; }
-.rp-btn--sm { height: 26px; padding: 0 9px; font-size: var(--rp-t-floor); }
-.rp-btn--link {
-  height: auto;
-  min-height: 0;
-  border: 0;
-  background: none;
-  color: var(--primary);
-  padding: 0;
-  text-decoration: underline;
-  font: 600 var(--rp-t-label)/1.4 var(--font-ui);
-}
+/* EVERY BUTTON HERE IS ui/Button (experience plan §5.1, step 5c): the row's
+   Make the PDF / Share / PDF / Summary PDF the outlined secondary at the row's
+   26px, Clear all filters the tertiary link, Copy (CopyField) the secondary.
+   A list of saved reports has no main action of its own, so no orange. */
+.rp .ui-btn { --rule-strong: var(--rp-rule-strong); --row-hover: var(--rp-row-hover); --ui-btn-link-ink: var(--accent-text); --ui-size: var(--rp-t-label); }
+.rp .rp-act { min-height: 26px; padding: 0 9px; border-radius: 6px; --ui-size: var(--rp-t-floor); }
+.rp .rp-clear { padding: 0; min-height: 0; text-decoration: underline; }
 
 /* "Nothing matches" is a DIFFERENT empty state from "no sessions yet", with
    different exits, and it is left-aligned because it is a list of actions
@@ -310,7 +290,6 @@
   border-radius: 6px;
 }
 .rp-share-input--key { font-family: var(--rp-font-mono); letter-spacing: .1em; }
-.rp-share-row .rp-btn { height: 34px; }
 .rp-share-copynote { margin: 4px 0 0; font-size: var(--rp-t-label); color: var(--muted); }
 .rp-share-copynote:empty { display: none; }
 .rp-share-note { margin: 0; font-size: var(--rp-t-label); color: var(--muted); }

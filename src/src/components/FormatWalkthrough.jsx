@@ -294,6 +294,12 @@ export default function FormatWalkthrough({
      plain line says how to see your own. Nothing here is a live region, so
      a pointer crossing the gallery says nothing to a screen reader. */
   preview = '',
+  /* NOTHING CHOSEN, NOTHING POINTED AT (New engagement round 4, Fork 1 A):
+     the pane stays quiet. One sentence, one plain line saying the card below
+     is only an example, and that example's first stage under its own label,
+     "Example · Call & Answer, stage 1 of 6". No index, no storyboard (review
+     Dana 2: the example read as a recommendation). */
+  exampleOnly = false,
 }) {
   const walk = walkthroughFor(format);
 
@@ -314,6 +320,37 @@ export default function FormatWalkthrough({
     { key: 'get', n: '', title: 'What you get', text: walk.get.text, art: walk.get.art, get: true },
   ];
   const cardId = (c) => `${idPrefix}-${format}-${c.key}`;
+
+  if (exampleOnly) {
+    const first = cards[0];
+    const total = walk.stages.length;
+    return (
+      <section className={`gsd-wt gsd-wt--${layout} is-example`} aria-labelledby={`${idPrefix}-h`} data-format={format}>
+        <div className="gsd-wt-sticky">
+          {layout !== 'phone' ? (
+            <div className="gsd-wt-head">
+              <h3 className="gsd-wt-h" id={`${idPrefix}-h`}>How it runs</h3>
+              {headActs}
+            </div>
+          ) : <h3 className="gsd-sr" id={`${idPrefix}-h`}>How it runs</h3>}
+        </div>
+        <p className="gsd-wt-welcome">Pick a format and this side shows what happens in the room, stage by stage.</p>
+        <p className="gsd-wt-note gsd-wt-ex">
+          <Icon name="Info" size={14} />
+          <span>An example while you choose: the first stage of <b>{label}</b>. Point at or focus a format to see its own.</span>
+        </p>
+        <div className="gsd-sb-card gsd-sb-card--example" data-testid="gsd-wt-example">
+          <span className="gsd-wt-exlbl">Example · {label}, stage 1 of {total}</span>
+          <WalkthroughPicture art={first.art} />
+          <h4 className="gsd-wt-t">
+            <span className="gsd-wt-n" aria-hidden="true">1</span>
+            {first.title}
+          </h4>
+          <p className="gsd-sb-text">{first.text}</p>
+        </div>
+      </section>
+    );
+  }
 
   /* The index scrolls the stage into view and gives it focus; no animation
      under reduced motion (README round 3, owner's storyboard). */
@@ -385,7 +422,8 @@ export default function FormatWalkthrough({
             {headActs}
           </div>
         )}
-        {preview && <p className="gsd-wt-note">Pick a format to see its own.</p>}
+        {preview === 'hover' && <p className="gsd-wt-note">A preview of the card you are on. Click it, or press Enter, to choose it.</p>}
+        {preview === 'example' && <p className="gsd-wt-note">Pick a format to see its own.</p>}
         {layout === 'phone' && <h3 className="gsd-sr" id={`${idPrefix}-h`}>How {label} runs{preview === 'example' ? ' — an example' : ''}</h3>}
         {layout === 'phone' && summary && <p className="gsd-wt-sum">{summary}</p>}
         {layout !== 'phone' && index}

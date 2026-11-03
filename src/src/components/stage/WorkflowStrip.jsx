@@ -1,5 +1,6 @@
 import React from 'react';
 import RW from '../../config/roundWords';
+import { EVENT_WORDS } from '../../config/eventAgenda';
 import './WorkflowStrip.css';
 
 /**
@@ -68,8 +69,36 @@ export default function WorkflowStrip({
   /* The host console carries "Your part now" in its footer, beside the
      buttons, so its strip leaves the line out (host console spec §3.2). */
   hidePart = false,
+  /* AN EVENT'S ITEM (experience plan §3.2a, §3.6; 2d): "‹ Agenda" is the
+     strip's first crumb, up one level to the event's agenda, never a top-bar
+     button. `{ onClick }`. It only navigates: the phones stay where they are.
+     Drawn even while the item has no live steps (a preview, a paused item),
+     so the way up is always in the same place. */
+  agenda = null,
 }) {
-  if (!strip) return null;
+  const crumb = agenda && typeof agenda.onClick === 'function' ? (
+    <li className="wfs-crumb-wrap">
+      <button
+        type="button"
+        className="wfs-crumb"
+        onClick={agenda.onClick}
+        disabled={Boolean(agenda.disabled)}
+        aria-label={EVENT_WORDS.agenda}
+        title={EVENT_WORDS.agendaHint}
+        data-testid="agenda-crumb"
+      >
+        {EVENT_WORDS.agendaCrumb}
+      </button>
+    </li>
+  ) : null;
+  if (!strip) {
+    if (!crumb) return null;
+    return (
+      <nav className="wfs" aria-label="Where the session is">
+        <ol className="wfs-steps">{crumb}</ol>
+      </nav>
+    );
+  }
   const slim = mode === 'slim';
   const press = slim ? null : onView;
   const outer = strip.steps.filter((s) => !s.loop);
@@ -90,6 +119,8 @@ export default function WorkflowStrip({
         </ul>
       ) : null}
       <ol className="wfs-steps">
+        {crumb}
+        {crumb ? sep : null}
         {setup ? <Step step={setup} viewing={viewing === 'setup'} onView={press} /> : null}
         {sep}
         <li className="wfs-loop-wrap">

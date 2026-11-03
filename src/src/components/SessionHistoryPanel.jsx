@@ -1,17 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import './SessionHistoryPanel.css';
 import Icon from './Icon';
+import { DialogHead } from './ui/DialogParts';
 import HelpButton from './HelpButton';
 import { helpFor } from '../config/help/screens';
-import SetImageBadge from './SetImageBadge';
-import { formatWhen, countOrDash } from '../config/tableCells';
-import {
-  isBuildSession, buildRoomPath, buildReportPath,
-} from '../buildroom/buildHostApi';
-import {
-  kindOf, kindLabel, kindIcon, isEventRow, typeOptions, itemTitles, itemKindLabel, itemStateLabel,
-  eventStateLabel, itemCountText, eventStagePath, eventAgendaPath, itemSessionPath, EVENT_KIND,
-} from '../config/engagementKinds';
+import SessionList from './SessionList';
+import { START_WORDS, startModeFor } from '../config/sessionStart';
+import { kindOf, isEventRow, itemTitles } from '../config/engagementKinds';
+import { sessionActions, allActions } from '../config/sessionRows';
+import { hostListHandlers, startLabelFor, startRow } from '../config/hostSessionActions';
+import Button from './ui/Button';
 
 /**
  * THE HOST'S OWN SESSION LIST, AS A TABLE.
@@ -22,13 +20,12 @@ import {
  * of chrome — the wall RATIONALE §4 rejects, and the same argument the console
  * already settled for question sets.
  *
- * IT IS BUILT ON `.sp`, THE ADMIN SESSIONS TABLE, NOT ON `.qsets` DIRECTLY.
- * Both are the owner's standard — `.sp` is itself cut from the question-set
- * screen — but the admin already renders exactly this object, with exactly
- * these columns, and a host who is also an admin was seeing sessions drawn two
- * completely different ways. One object, one table. `formatWhen` and
- * `countOrDash` come from config/tableCells.js, which is where those two rules
- * were consolidated when this screen became their third caller.
+ * ONE OBJECT, ONE TABLE (experience plan 4a). The rows are SessionList — the
+ * same component Library & team's Sessions place and Home use — so a host who
+ * is also an admin no longer sees sessions drawn two different ways, and a row
+ * offers the same actions wherever it is met. This file is the dialog's frame:
+ * its heading, the page's notice, the "just created" line and the
+ * like-last-time line under the list.
  *
  * PRESENTATIONAL BY RULE. No fetch, no `useAuth`, no API_BASE — every action is
  * a prop, exactly as `SessionSetupPanel` is. That is what makes it mountable in
@@ -92,53 +89,33 @@ import {
  * deliverable from the Sessions list entirely: the only way back to it was
  * Continue → Settings → Rounds tab.
  *
- * So both are true for a closed survey now, alongside `continue` — three
- * verb buttons where every other row has two. `.shist__acts`'s grid is only
- * ever `grid-template-columns: repeat(2, ...)` (`.shist__acts` in the
- * stylesheet); it is not capped at two ROWS, so a third verb button simply
- * wraps the row to a third line instead of overflowing. That is the least
- * disruptive placement available: dropping `continue` would remove this
- * row's only path back to the live stage (Results and Report each open a
- * narrower view — a modal and a document — neither replaces it), and
- * dropping either `results` or `report` would hide one of the two
- * independent things Task 3 and Task 4 each built. `session.surveyClosed`
- * (get-games-list.js, read off the same STATE batch as roundsPlayed: true
- * for SURVEY#CLOSED and ENDED, false otherwise, including "never opened" and
- * "still collecting") is the ONLY thing this reads. A survey still
+ * So both are true for a closed survey now, alongside `continue`: Survey
+ * results is the row's primary and Report and Continue are in its ⋯ menu.
+ * Dropping `continue` would remove the row's only path back to the live
+ * stage; dropping either of the other two would hide one of the two things
+ * Task 3 and Task 4 each built. `session.surveyClosed` (get-games-list.js,
+ * true for SURVEY#CLOSED and ENDED) is the ONLY thing this reads. A survey still
  * collecting, or one that never opened, falls through to the ordinary rule
  * unchanged, the same as any other session of its `started` state.
  */
 export function rowActions(session) {
   /*
-    AN EVENT (2026-10-04) — one row, like any session. OPEN is its stage (the
-    agenda board, /host/event/<code>), EDIT its agenda builder (the host's
-    side of the console's builder), LINK the attendees' join link. Its items'
-    sessions are under it, each with its own Continue and Report.
+    SINCE THE EXPERIENCE PLAN'S 4a this is a view of config/sessionRows.js
+    `sessionActions`, the one rule both sessions lists follow. The booleans
+    are the shape this export has always had; the rules above still hold
+    (Edit exactly while Start; a closed survey keeps Report beside Results;
+    an event opens its stage and edits its agenda; a Build Room continues on
+    its own page). Invite, the join link and Delete are in every row's menu.
   */
-  if (isEventRow(session)) {
-    return {
-      start: false, continue: false, report: false, edit: true, results: false, open: true,
-    };
-  }
-  // A Build Room opens on its own page (/build), which starts nothing and
-  // edits nothing here: Continue and Report, always.
-  if (isBuildSession(session)) {
-    return {
-      start: false, continue: true, report: true, edit: false, results: false,
-    };
-  }
-  if (session.gameType === 'survey' && session.surveyClosed) {
-    return {
-      start: false, continue: true, report: true, edit: false, results: true,
-    };
-  }
-  return session.started
-    ? {
-      start: false, continue: true, report: true, edit: false, results: false,
-    }
-    : {
-      start: true, continue: false, report: false, edit: true, results: false,
-    };
+  const ids = allActions(session);
+  return {
+    start: ids.includes('start'),
+    continue: ids.includes('continue'),
+    report: ids.includes('report'),
+    edit: ids.includes('edit') || ids.includes('agenda'),
+    results: ids.includes('results'),
+    ...(isEventRow(session) ? { open: ids.includes('open') } : {}),
+  };
 }
 
 /** Case-insensitive match over the fields a host would actually search by. */
@@ -170,15 +147,27 @@ export default function SessionHistoryPanel({
   currentGameId = null,
   /** 'select' offers Edit/Start/Continue; 'reports' is the same list, read for reports. */
   mode = 'select',
-  /** Only for the has-images badge. Optional — an absent list simply omits it. */
+  /** For each row's set name and has-images badge. Optional. */
   questionSets = [],
   onCopyPlayerUrl = () => {},
   onInvite = () => {},
   onReport = () => {},
-  /** A closed survey's "Results" button (Task 3 fix round 1) — (gameId, title). */
+  /** A closed survey's "Survey results" — (gameId, title). */
   onResults = () => {},
   onOpen = () => {},
   onStart = () => {},
+  /** Delete a row — (row, reason) => Promise. Absent: the list offers no Delete. */
+  onDelete = null,
+  /*
+    A RETURNING HOST'S START (session-start D2, F5; experience plan 2b): the
+    browser's stored choice of where the room watches ('two' | 'classic' |
+    null). With 'two', a Call & Answer row's Start says "Start · two screens"
+    and opens the room's window inside its own click (openPendingRoomWindow),
+    handing it to onStart as its third argument: (gameId, title,
+    { pending, blocked }). `onRoomScreen` is "One screen this time".
+  */
+  roomScreen = null,
+  onRoomScreen = null,
   /** Where a Build Room row goes: /build is a page of its own. Injectable for tests. */
   navigate = (url) => window.location.assign(url),
   onEdit = () => {},
@@ -197,28 +186,27 @@ export default function SessionHistoryPanel({
    */
   done = null,
 }) {
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState('all');
-  /** The event rows whose agenda items are showing. */
-  const [openEvents, setOpenEvents] = useState(() => new Set());
-  const toggleEvent = (code) => setOpenEvents((prev) => {
-    const next = new Set(prev);
-    if (next.has(code)) next.delete(code); else next.add(code);
-    return next;
-  });
-  const { sorted, latestId } = useMemo(() => orderSessions(sessions), [sessions]);
-  const shown = useMemo(
-    () => sorted.filter((s) => matchesSearch(s, search) && matchesType(s, type)),
-    [sorted, search, type]
-  );
-
+  const { sorted } = useMemo(() => orderSessions(sessions), [sessions]);
   const titleOf = (s) => s.title || s.eventTitle || 'Untitled session';
+
+  /* THE ROWS ARE SessionList (experience plan 4a): the same list, row shape
+     and actions as Library & team's Sessions and Home's recent rows. */
+  const on = hostListHandlers({
+    onStart, onEdit, onOpen, onReport, onResults, onInvite, onCopyPlayerUrl, onDelete, roomScreen, navigate,
+  });
+  const offersMode = roomScreen && sorted.some((s) => !isEventRow(s) && sessionActions(s).primary === 'start' && startModeFor(s, roomScreen));
 
   return (
     <div className="shist" data-theme="dark">
-      <div className="shist__head">
-        <div>
-          <h2 className="shist__title" id="shist-title" tabIndex={-1}>
+      {/* The shared dialog head (ui/DialogParts, experience plan 5b): this
+          panel is the content of the sessions dialog. */}
+      <DialogHead
+        className="shist__head"
+        titleId="shist-title"
+        titleClassName="shist__title"
+        titleProps={{ tabIndex: -1 }}
+        title={(
+          <>
             <Icon
               name={mode === 'select' ? 'GameController' : 'ChartBar'}
               weight="duotone"
@@ -226,28 +214,22 @@ export default function SessionHistoryPanel({
               color="var(--primary)"
             />
             {/* "Your sessions", not "Session history": half this list's job
-                is sessions that have not happened yet — Edit and Start act on
-                the future, and "history" told hosts the opposite. */}
-            {mode === 'select' ? ' Your sessions' : ' Session reports'}
-          </h2>
-          <p className="shist__sub">
-            {mode === 'select'
-              ? 'Edit one to set it up, or start it when the room is ready.'
-              : 'Read a report from a session that has been played.'}
-          </p>
-        </div>
-        {/* The setup guide's sessions-list section (Help Phase 3); in
-            reports mode the same list, so the same section. */}
+                is sessions that have not happened yet. In reports mode it is
+                the same list, read for a played session's report. */}
+            {' Your sessions'}
+          </>
+        )}
+        sub={mode === 'select'
+          ? 'Start one when the room is ready, or edit it first. More is under ⋯ on each row.'
+          : 'Read a report from a session that has been played. Saved PDFs are under Reports.'}
+        subClassName="shist__sub"
+        onClose={onClose}
+        closeLabel="Close your sessions"
+        closeClassName="shist__close"
+      >
+        {/* The setup guide's sessions-list section (Help Phase 3). */}
         <HelpButton {...helpFor('host-sessions')} variant="inline" size="small" tooltip="Help: your sessions" className="help-button-quiet shist__help" />
-        <button
-          type="button"
-          className="shist__close"
-          onClick={onClose}
-          aria-label="Close your sessions"
-        >
-          ✕
-        </button>
-      </div>
+      </DialogHead>
 
       {notice && (
         <div className="shist__notice" role="alert">{notice}</div>
@@ -262,400 +244,46 @@ export default function SessionHistoryPanel({
               <b>{done.verb === 'saved' ? 'Saved' : 'Created'} “{done.title || (row && titleOf(row)) || 'your session'}”.</b>
               {' '}Its code is <b className="shist__mono">{done.gameId}</b>.
               {' '}It waits here, and nobody can join until you press <b>Start</b> when the room is ready
-              {' '}— today or on the day. You can still <b>Edit</b> it first.
+              {' '}— today or on the day. You can still <b>Edit</b> it first, from ⋯ on its row.
             </p>
             {row && !row.started && (
-              <button type="button" className="shist__done-start" onClick={() => onStart(row)}>
-                <Icon name="Play" weight="fill" size={13} color="currentColor" /> Start it now
-              </button>
+              /* onStart's contract is (gameId, title), as the row's own Start
+                 calls it. This passed the whole row once, and the page built
+                 POST /games/[object Object]/start from it (issue #48 finding 1). */
+              <Button variant="primary" size={36} className="shist__done-start" onClick={() => startRow(row, done.title || titleOf(row), { onStart, roomScreen })}>
+                <Icon name="Play" weight="fill" size={13} color="currentColor" /> {START_WORDS.now(startModeFor(row, roomScreen))}
+              </Button>
             )}
           </div>
         );
       })()}
 
-      {/* The search is what makes the second empty state below meaningful. With
-          no way to filter, "nothing matches" can never happen and the only
-          honest empty state is "nothing exists". */}
-      {sorted.length > 0 && (
-        <div className="shist__filters">
-          <label className="shist__srch">
-            <span className="shist__srch-lab">Search sessions</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Title, code, host or set…"
-            />
-          </label>
-          {/* TYPE, like the console's Sessions list (2026-10-04): every format,
-              Build Room, and Event while events are in the list. */}
-          <label className="shist__srch shist__srch--type">
-            <span className="shist__srch-lab">Type</span>
-            <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by type">
-              {typeOptions(sorted).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </label>
-          <span className="shist__count">
-            {shown.length === sorted.length
-              ? `${sorted.length} ${sorted.length === 1 ? 'session' : 'sessions'}`
-              : `${shown.length} of ${sorted.length}`}
-          </span>
-        </div>
-      )}
-
-      {/* `table-layout: fixed` lives in the stylesheet — under auto layout a
-          declared width is a hint and one nowrap chip grows the whole table. */}
       <div className="shist__scroll">
-        <table className="shist__tbl">
-          <thead>
-            <tr>
-              <th className="shist__c-name">Session</th>
-              <th className="shist__c-id">Code</th>
-              <th className="shist__c-type">Type</th>
-              <th className="shist__c-state">State</th>
-              <th className="shist__c-num">Players</th>
-              <th className="shist__c-num">Rounds</th>
-              <th className="shist__c-when">Created</th>
-              <th className="shist__c-when">Last played</th>
-              <th className="shist__c-acts"><span className="shist__sr">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {/*
-              TWO EMPTY STATES, AND THEY SAY DIFFERENT THINGS. "You have not run
-              a session yet" and "your search matched none of your sessions" are
-              different situations with different ways out; the card list had
-              only the first, so filtering to nothing would have told a host
-              with forty sessions that they had none.
-            */}
-            {sorted.length === 0 && (
-              <tr className="shist__dim">
-                <td colSpan={9}>
-                  No sessions yet. Create one and it will appear here.
-                </td>
-              </tr>
-            )}
-            {sorted.length > 0 && shown.length === 0 && (
-              <tr className="shist__dim">
-                <td colSpan={9}>No session matches that search and type.</td>
-              </tr>
-            )}
-
-            {shown.map((session) => (isEventRow(session) ? renderEvent(session) : renderSession(session)))}
-          </tbody>
-        </table>
+        <SessionList
+          rows={sorted}
+          questionSets={questionSets}
+          on={on}
+          startLabel={startLabelFor(roomScreen)}
+          currentGameId={currentGameId}
+          highlightId={done && done.gameId ? done.gameId : null}
+          highlightWord={done && done.verb === 'saved' ? 'Just saved' : 'Just created'}
+          flagLatest
+          controls
+          label="Your sessions"
+          idPrefix="shist"
+          emptyText="No sessions yet. Create one and it will appear here."
+        />
       </div>
+      {/* LIKE LAST TIME (A7): what Start will do, and the one-off way round it. */}
+      {offersMode ? (
+        <p className="shist__mode" data-testid="shist-mode">
+          <Icon name="CheckCircle" weight="fill" size={16} color="currentColor" />
+          <span><b>{START_WORDS.likeLast(roomScreen)}</b> {START_WORDS.likeLastLine(roomScreen)}</span>
+          {roomScreen === 'two' && typeof onRoomScreen === 'function' ? (
+            <Button variant="tertiary" size="sm" className="shist__mode-switch" onClick={() => onRoomScreen('classic')}>{START_WORDS.oneThisTime}</Button>
+          ) : null}
+        </p>
+      ) : null}
     </div>
   );
-
-  function renderSession(session) {
-              /*
-                `resolveGameType`, not `normalizeGameType`. The latter always
-                returns something — its documented job — which would print
-                "Call & Answer" on every legacy row whose type was never
-                written. "We do not know" has to survive as "we do not know".
-              */
-              const kind = kindOf(session);
-              const acts = rowActions(session);
-              const isCurrent = session.gameId === currentGameId;
-              const isLatest = session.gameId === latestId;
-              const title = titleOf(session);
-              const set = questionSets.find((s) => s.id === session.questionSetId);
-
-              return (
-                <tr
-                  key={session.gameId}
-                  className={[
-                    isCurrent ? 'shist__row--now' : '',
-                    done && String(done.gameId) === String(session.gameId) ? 'shist__row--done' : '',
-                  ].filter(Boolean).join(' ') || undefined}
-                >
-                  <td>
-                    {/* The full strings in title=, and the name wraps to two
-                        lines rather than hiding "Latest" (live dev test 6 N3). */}
-                    <span className="shist__nm" title={title}>
-                      {title}
-                      {isCurrent && <span className="shist__flag shist__flag--now">On stage</span>}
-                      {isLatest && !isCurrent && <span className="shist__flag">Latest</span>}
-                    </span>
-                    <span className="shist__sub2" title={session.questionSetId ? `Set: ${(set && set.name) || session.questionSetId}` : undefined}>
-                      {/* The set's NAME where the list knows it, not its raw id
-                          ("Set: workplacescenariosfordisc…", live dev test B6). */}
-                      {session.questionSetId ? `Set: ${(set && set.name) || session.questionSetId}` : 'Set: —'}
-                      {/* "Host" is the create payload's placeholder, not a person. */}
-                      {session.hostName && session.hostName !== 'Host' ? ` · host ${session.hostName}` : ''}
-                      <SetImageBadge hasImages={set?.hasImages} />
-                    </span>
-                  </td>
-                  <td className="shist__mono">{session.gameId}</td>
-                  <td>
-                    {/* Build Room is not a config/gameTypes.js type on purpose
-                        (Build Room PLAN §4); config/engagementKinds.js names it. */}
-                    {kind ? (
-                      <span className="shist__chip shist__chip--type">
-                        <Icon name={kindIcon(kind)} weight="bold" size={13} color="currentColor" />
-                        {` ${kindLabel(kind)}`}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td>
-                    {/* The state is a WORD, not a colour. This list is read on
-                        laptops of every calibration and by hosts who cannot
-                        rely on hue — the same rule the roster flags follow. */}
-                    <span
-                      className={`shist__chip ${session.started ? 'shist__chip--on' : 'shist__chip--off'}`}
-                    >
-                      {session.started ? 'Played' : 'Not started'}
-                    </span>
-                  </td>
-                  {/*
-                      NULL IS NOT ZERO. "Nobody joined" and "we could not read
-                      it" are different facts, and rendering the second as `0`
-                      is the empty-state-that-lies rule in miniature. The API
-                      sends null when its per-session read failed or the row
-                      predates the counters.
-                  */}
-                  <td className="shist__num">{countOrDash(session.playerCount)}</td>
-                  <td className="shist__num">{countOrDash(session.roundsPlayed)}</td>
-                  <td className="shist__when" title={formatWhen(session.createdAt)}>{formatWhen(session.createdAt)}</td>
-                  <td className="shist__when" title={formatWhen(session.lastPlayedAt)}>{formatWhen(session.lastPlayedAt)}</td>
-                  <td>
-                    {/*
-                      A FIXED TWO-COLUMN GRID, deliberately: four buttons in a
-                      wrapping flex row broke at a different point per row and
-                      read as misaligned twice over. The verbs (Report/Edit,
-                      Start/Continue) take the top row because they are why
-                      the screen exists; Link and Invite sit beneath them in
-                      every OTHER row. A closed survey's row is the one
-                      exception (I-2, 2026-09-26 final review): it carries
-                      three verbs — Report, Results and Continue — so the
-                      grid simply wraps to a third line before Link and
-                      Invite; see rowActions' own comment for why that is the
-                      least disruptive place to put the third button. See
-                      .shist__acts in the stylesheet.
-                    */}
-                    <div className="shist__acts">
-                      {acts.report && (
-                        <button
-                          type="button"
-                          className="shist__btn shist__btn--sm"
-                          onClick={() => (isBuildSession(session) ? navigate(buildReportPath(session.gameId)) : onReport(session.gameId, title))}
-                          title={`Read the report for "${title}"`}
-                        >
-                          <Icon name="ChartBar" weight="bold" size={14} /> Report
-                        </button>
-                      )}
-                      {/* REPORT's slot, for a closed survey — never both on one
-                          row (rowActions). Reuses SurveyResultsPanel exactly;
-                          this button only names which session to fetch it for. */}
-                      {acts.results && (
-                        <button
-                          type="button"
-                          className="shist__btn shist__btn--sm"
-                          onClick={() => onResults(session.gameId, title)}
-                          title={`See the results for "${title}"`}
-                        >
-                          <Icon name="ChartBar" weight="bold" size={14} /> Results
-                        </button>
-                      )}
-                      {acts.edit && (
-                        /*
-                          PRIMARY, because it is the reflex act: everything it
-                          does is reversible and nothing reaches a player. It
-                          changes what the session IS — title, details, voice,
-                          anonymity, categories — via PUT /games/{id}, which
-                          only a session that has not started accepts.
-                        */
-                        <button
-                          type="button"
-                          className="shist__btn shist__btn--sm shist__btn--primary"
-                          onClick={() => onEdit(session.gameId, title)}
-                          title={`Edit "${title}" — title, settings and categories. Players cannot join yet.`}
-                        >
-                          <Icon name="PencilSimple" weight="bold" size={14} /> Edit
-                        </button>
-                      )}
-                      {acts.start && (
-                        /*
-                          NOT primary, deliberately: this is the one that lets
-                          players in, and it should take a decision rather than
-                          a reflex. (Open used to sit between these two; see
-                          rowActions for why it is gone.)
-                        */
-                        <button
-                          type="button"
-                          className="shist__btn shist__btn--sm"
-                          onClick={() => onStart(session.gameId, title)}
-                          title={`Start "${title}" — puts it on the stage and players can join`}
-                        >
-                          <Icon name="PlayCircle" weight="fill" size={14} /> Start
-                        </button>
-                      )}
-                      {acts.continue && (
-                        <button
-                          type="button"
-                          className="shist__btn shist__btn--sm shist__btn--primary"
-                          onClick={() => (isBuildSession(session) ? navigate(buildRoomPath(session.gameId)) : onOpen(session.gameId, title))}
-                          title={`Continue "${title}"`}
-                        >
-                          <Icon name="Play" weight="fill" size={14} /> Continue
-                        </button>
-                      )}
-                      {/* The utilities take the second grid row, under the
-                          verbs — every row has exactly these two, so the
-                          bottom row never varies and the grid never staggers. */}
-                      <button
-                        type="button"
-                        className="shist__btn shist__btn--sm"
-                        onClick={() => onCopyPlayerUrl(session.gameId)}
-                        title={`Copy the player link for "${title}"`}
-                      >
-                        <Icon name="LinkSimple" weight="bold" size={14} /> Link
-                      </button>
-                      <button
-                        type="button"
-                        className="shist__btn shist__btn--sm"
-                        onClick={() => onInvite(session)}
-                        title={`Invite people to "${title}"`}
-                      >
-                        <Icon name="ClipboardText" weight="bold" size={14} /> Invite…
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-  }
-
-  /*
-    AN EVENT'S ROW, AND — OPENED — ITS AGENDA (2026-10-04). One row, labelled
-    Event with its item count; the disclosure is the name, a real button.
-    Each item says its kind and state; an engagement's session continues on
-    the host's stage inside the event (the stage's AGENDA door leads back) and
-    opens its report, or says it has expired. A talk or a break has no session.
-  */
-  function renderEvent(event) {
-    const acts = rowActions(event);
-    const open = openEvents.has(event.gameId);
-    const title = event.title || 'Untitled event';
-    const itemsId = `shist-items-${event.gameId}`;
-    const rows = [
-      <tr key={event.gameId} data-testid="event-row">
-        <td>
-          <button
-            type="button"
-            className="shist__disclose"
-            aria-expanded={open}
-            aria-controls={itemsId}
-            onClick={() => toggleEvent(event.gameId)}
-            title={title}
-          >
-            <Icon name={open ? 'CaretDown' : 'CaretRight'} weight="bold" size={12} color="currentColor" />
-            <span className="shist__nm">{title}</span>
-          </button>
-          <span className="shist__sub2">
-            {itemCountText(event.itemCount)}
-            {event.place ? ` · ${event.place}` : ''}
-          </span>
-        </td>
-        <td className="shist__mono">{event.gameId}</td>
-        <td>
-          <span className="shist__chip shist__chip--type">
-            <Icon name={kindIcon(EVENT_KIND)} weight="bold" size={13} color="currentColor" />
-            {` ${kindLabel(EVENT_KIND)}`}
-          </span>
-        </td>
-        <td>
-          <span className={`shist__chip ${event.started ? 'shist__chip--on' : 'shist__chip--off'}`}>
-            {eventStateLabel(event)}
-          </span>
-        </td>
-        <td className="shist__num">{countOrDash(event.playerCount)}</td>
-        <td className="shist__num">—</td>
-        <td className="shist__when">{formatWhen(event.createdAt)}</td>
-        <td className="shist__when">{formatWhen(event.lastPlayedAt)}</td>
-        <td>
-          <div className="shist__acts">
-            {acts.edit && (
-              <button
-                type="button"
-                className="shist__btn shist__btn--sm"
-                onClick={() => navigate(eventAgendaPath(event.gameId))}
-                title={`Edit the agenda of "${title}"`}
-              >
-                <Icon name="PencilSimple" weight="bold" size={14} /> Edit
-              </button>
-            )}
-            {acts.open && (
-              <button
-                type="button"
-                className="shist__btn shist__btn--sm shist__btn--primary"
-                onClick={() => navigate(eventStagePath(event.gameId))}
-                title={`Open "${title}" on its stage`}
-              >
-                <Icon name="Play" weight="fill" size={14} /> Open
-              </button>
-            )}
-            <button
-              type="button"
-              className="shist__btn shist__btn--sm"
-              onClick={() => onCopyPlayerUrl(event.gameId, { event: true })}
-              title={`Copy the join link for "${title}"`}
-            >
-              <Icon name="LinkSimple" weight="bold" size={14} /> Link
-            </button>
-          </div>
-        </td>
-      </tr>,
-    ];
-    if (!open) return rows;
-    (event.items || []).forEach((item, n) => {
-      const s = item.session;
-      const itemTitle = item.title || (item.decryptFailed ? 'Unreadable item' : itemKindLabel(item.type));
-      rows.push(
-        <tr key={`${event.gameId}-${item.itemId}`} className="shist__subrow" id={n === 0 ? itemsId : undefined} data-testid="event-item-row">
-          <td>
-            <span className="shist__nm">{itemTitle}</span>
-            <span className="shist__sub2">{item.minutes ? `${item.minutes} min` : '—'}</span>
-          </td>
-          <td className="shist__mono">{s ? s.gameId : '—'}</td>
-          <td><span className="shist__chip shist__chip--type">{` ${itemKindLabel(item.type)}`}</span></td>
-          <td>
-            <span className={`shist__chip ${item.state === 'planned' ? 'shist__chip--off' : 'shist__chip--on'}`}>
-              {itemStateLabel(item.state)}
-            </span>
-          </td>
-          <td className="shist__num">{s ? countOrDash(s.playerCount) : '—'}</td>
-          <td className="shist__num">{s ? countOrDash(s.roundsPlayed) : '—'}</td>
-          <td className="shist__when">{formatWhen(item.startedAt)}</td>
-          <td className="shist__when">{formatWhen(item.endedAt)}</td>
-          <td>
-            <div className="shist__acts">
-              {s && s.started && (
-                <button
-                  type="button"
-                  className="shist__btn shist__btn--sm"
-                  onClick={() => onReport(s.gameId, itemTitle)}
-                  title={`Read the report for "${itemTitle}"`}
-                >
-                  <Icon name="ChartBar" weight="bold" size={14} /> Report
-                </button>
-              )}
-              {s && (
-                <button
-                  type="button"
-                  className="shist__btn shist__btn--sm shist__btn--primary"
-                  onClick={() => navigate(itemSessionPath(s.gameId, event.gameId))}
-                  title={`Continue "${itemTitle}" on the stage`}
-                >
-                  <Icon name="Play" weight="fill" size={14} /> Continue
-                </button>
-              )}
-              {item.sessionGone && <span className="shist__chip shist__chip--off">Session expired</span>}
-            </div>
-          </td>
-        </tr>,
-      );
-    });
-    return rows;
-  }
 }

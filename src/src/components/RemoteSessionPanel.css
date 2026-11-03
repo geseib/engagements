@@ -45,7 +45,8 @@
   display: grid;
   /* Three equal columns rather than a scrolling strip: three is few enough to
      fit at 390px, and a tab you have to scroll to is a tab nobody finds. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* The middle one is "Rounds so far", the longest of the three names. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 6px;
   padding: 4px;
   background: var(--surface);
@@ -279,3 +280,46 @@
   outline: 3px solid var(--secondary);
   outline-offset: 2px;
 }
+
+/* THE IMPROMPTU ASK on the phone (README D2, frame 5): "Write a question" at
+   the head of Rounds, and the composer as a full-height sheet over the tabs. */
+.hrs .hrs-write { width: 100%; gap: 8px; margin-bottom: 12px; }
+.hrs--own { display: flex; flex-direction: column; min-height: 70vh; }
+.hrs--own .oq { flex: 1 1 auto; }
+
+/* THE SESSION MENU'S PHONE PARTS (docs/design/session-menu D10, F8): the
+   report card on Rounds so far, Up next's categories line, and the foot's
+   End session with its confirm asked in place. Tokens only. */
+.hrs .hrs-report {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid rgb(var(--accent-rgb) / .28);
+  border-radius: 12px;
+  background: rgb(var(--accent-rgb) / .05);
+}
+.hrs .hrs-report > [class~="ui-btn"] { grid-column: 1 / -1; }
+.hrs .hrs-report-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hrs .hrs-cats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--hrs-tap);
+  padding: 2px 4px 2px 14px;
+  border: 1px solid rgb(var(--glow-rgb) / .2);
+  border-radius: 12px;
+  color: var(--muted);
+}
+.hrs .hrs-cats b { color: var(--text); }
+.hrs .hrs-cats > [class~="ui-btn"] { margin-left: auto; }
+.hrs .hrs-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(var(--glow-rgb) / .16);
+}
+.hrs .hrs-end { color: var(--danger-text); align-self: flex-start; }
+.hrs .hrs-end-ask { display: flex; flex-direction: column; gap: 8px; }

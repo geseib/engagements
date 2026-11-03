@@ -501,8 +501,10 @@ const ENCRYPTED_FIELDS = Object.freeze({
    *  rows, so both are sealed — the `session` entity's reasoning about its
    *  index row, again. `StartsAt`, `TimeZone`, `Access`, `State`,
    *  `AttendeeReports` and the three counts are when, switches and counts,
-   *  and stay plaintext. */
-  event: Object.freeze(['Title', 'Place']),
+   *  and stay plaintext. `HostName` and `TeamName` (METADATA only, since
+   *  2026-10-31: who made the event, for its summary PDF) name a person and
+   *  a team, so they are sealed with the rest. */
+  event: Object.freeze(['Title', 'Place', 'HostName', 'TeamName']),
 
   /** One agenda item: PK=EVENT#<code>, SK=ITEM#<id>. Its title and its
    *  description are what the host wrote for the room; `LedBy` is the name of
