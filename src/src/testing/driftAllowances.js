@@ -199,10 +199,6 @@ module.exports = {
     "components/stage/PhaseBar.jsx": {
       "Results": 1
     },
-    "components/stage/PlayersList.jsx": {
-      "Asking to take this name": 1,
-      "Unlock name": 1
-    },
     "components/stage/Rail.jsx": {
       "Results": 1
     },

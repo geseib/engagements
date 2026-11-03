@@ -732,8 +732,8 @@ const playerManagement = {
   summary: 'Handing a name over, removing someone who left, and what neither of those destroys.',
   sections: [
     /*
-      components/stage/PlayersList.jsx. Since 1 Nov 2026 (experience plan 1a)
-      the Session panel passes onRefuse/onLock/askingFirst for every round
+      components/stage/SessionPeople.jsx and components/people/PersonRow.jsx.
+      Since 1 Nov 2026 (experience plan 1a) the Session panel passes onRefuse/onLock/askingFirst for every round
       type, as the Build Room's always did (grant-handover.js refuse/lock).
       On one screen the flags wait behind Show on this screen
       (components/needs/PrivateReveal.jsx).
@@ -762,7 +762,8 @@ const playerManagement = {
         THE FEATURE'S OWN RATIONALE, IN THE HOST'S WORDS RATHER THAN THE
         implementer's. The owner's reason for the host being in the loop at all:
         *"they need the choice though because they may have just mistakenly
-        picked the same name."* Labels: components/stage/PlayersList.jsx.
+        picked the same name."* Labels: components/people/PersonRow.jsx
+        (PERSON_WORDS).
       */
       id: 'handing-name-over',
       title: 'Handing a name over',

@@ -101,8 +101,8 @@ function ideaCounts(room) {
 }
 
 /**
- * The roster as PlayersList draws it. `rank` carries the here or away dot, so
- * the shared list needs no column of its own for it.
+ * The roster rows the People section hands to PersonRow. `rank` carries the
+ * here or away dot, so the row needs no column of its own for it.
  */
 export function rosterOf(room, roster) {
   const builders = crewMap(room.crew);

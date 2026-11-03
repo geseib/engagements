@@ -19,14 +19,11 @@
  * pure and is asserted without a DOM at all.
  *
  * NO GEOMETRY. jsdom resolves no layout, so "the buttons are reachable" is a
- * browser check; what is testable here is document order, accessible names,
- * `disabled`, and the CSS contract read as text — which is what the last
- * section does, because hard rule 9 (a row's actions must not be pushed off the
- * unreachable end of a clipped cell) is a stylesheet claim.
+ * browser check; what is testable here is document order, accessible names and
+ * `disabled`. The rows are components/people/PersonRow, whose stylesheet
+ * contract is pinned by its own tests.
  */
 import React from 'react';
-import fs from 'fs';
-import path from 'path';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 
 jest.mock('qrcode.react', () => ({
@@ -215,60 +212,5 @@ describe('the People section offers the removal', () => {
     expect(
       screen.getByText(/answers, votes and points stay in the session report/i)
     ).toBeInTheDocument();
-  });
-});
-
-describe('the row actions are declared reachable', () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
-  const block = (selector) => {
-    const at = css.indexOf(`${selector} {`);
-    expect(at).toBeGreaterThan(-1);
-    return css.slice(at, css.indexOf('}', at));
-  };
-
-  it('pushes the action group with margin, never with flex-end', () => {
-    // Hard rule 9. `justify-content: flex-end` inside a clipped cell overflows
-    // towards the START of the line, which is the end nobody can scroll to —
-    // the failure `rowActionsReachable.test.js` was written for.
-    const acts = block('.setup-roster__acts'); // the group wraps; Remove alone carries the margin
-    expect(block('.setup-roster__act--remove')).toMatch(/margin-left:\s*auto/);
-    expect(acts).not.toMatch(/justify-content:\s*flex-end/);
-    // A long name plus two buttons wraps rather than shearing.
-    expect(acts).toMatch(/flex-wrap:\s*wrap/);
-  });
-
-  it('lets the name column shrink so the buttons keep their width', () => {
-    const row = block('.setup-roster__row');
-    expect(row).toMatch(/minmax\(0,\s*1fr\)/);
-  });
-
-  it('keeps the row action at the 12px floor, never below it', () => {
-    // RATIONALE §3: nothing on a laptop surface goes below 12px.
-    const sizes = [...block('.setup-roster__act').matchAll(/font-size:\s*(\d+)px/g)]
-      .map((m) => Number(m[1]));
-    expect(sizes.length).toBeGreaterThan(0);
-    for (const size of sizes) expect(size).toBeGreaterThanOrEqual(12);
-  });
-
-  it('marks the departed with more than opacity', () => {
-    // Opacity alone reads as "loading" on a projector, so the name is struck
-    // through as well — two signals for one state.
-    const gone = block('.setup-roster__row--gone');
-    expect(gone).toMatch(/opacity/);
-    expect(css).toMatch(/\.setup-roster__row--gone \.setup-roster__name \{[^}]*line-through/);
-  });
-
-  it('declares the row action rather than overriding the panel button rule', () => {
-    // The panel paints every button it contains unless the selector excludes
-    // it. A `.setup-roster__act` outside that exclusion would lose on
-    // specificity and silently render at the full 8px/12px button size.
-    expect(css).toMatch(/\.setup-panel button:not\([^{]*\.setup-roster__act\)/);
-  });
-
-  it('paints the new pieces from tokens, not from new hexes', () => {
-    expect(block('.setup-roster__flag')).toMatch(/var\(--primary\)/);
-    // `--danger` never carries text — it is under AA on both panel surfaces.
-    expect(block('.setup-roster__flag')).not.toMatch(/color:\s*var\(--danger\)/);
-    expect(block('.setup-roster__act')).not.toMatch(/color:\s*var\(--danger\)/);
   });
 });

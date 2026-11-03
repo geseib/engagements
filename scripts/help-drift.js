@@ -48,7 +48,7 @@ const COVERS = {
   'host-session-panel': [`${S}/components/stage/SessionSetupPanel.jsx`, `${S}/components/stage/ScreensGroup.jsx`],
   'host-stage-by-type': [`${S}/GameHostPage.jsx`, `${S}/components/stage`, `${S}/config/roomContent.js`],
   'host-late-items': [`${S}/components/LateList.jsx`, `${S}/components/ReportLate.jsx`, `${S}/config/lateWords.js`],
-  'host-player-management': [`${S}/components/stage/PlayersList.jsx`, `${S}/components/JoinNameCollision.jsx`],
+  'host-player-management': [`${S}/components/stage/SessionPeople.jsx`, `${S}/components/people/PersonRow.jsx`, `${S}/components/JoinNameCollision.jsx`],
   // hosts: two screens and the phone
   'host-two-screens': [`${S}/components/console`, `${S}/present`, `${S}/PresentPage.jsx`, `${S}/HostRemote.jsx`, `${S}/components/stage/RoomWindowStatus.jsx`, `${S}/config/consoleWords.js`],
   // hosts: surveys
