@@ -135,10 +135,14 @@ function serve(state) {
 const posts = () => calls.filter((c) => c.method === 'POST' && !c.url.endsWith('/host-ticket'));
 const lastPost = () => posts()[posts().length - 1];
 const path = (c) => c.url.slice(API.length);
-/** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
-const openMore = () => {
-  fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+/** The Session menu at a section, with its More options open (owner, 2026-10-09:
+    the three-dot menu's items live there; sections since docs/design/session-menu D10). */
+const openMore = (section = 'Claude') => {
+  if (!screen.queryByRole('dialog', { name: 'Session menu' })) fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
+  const menu = screen.getByRole('dialog', { name: 'Session menu' });
+  fireEvent.click(within(menu).getByRole('tab', { name: new RegExp(`^${section}`) }));
+  const more = menu.querySelector('[aria-controls^="smenu-more-"]');
+  if (more && more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
 };
 /** The host's pick asks first (owner, 2026-10-06): confirm it. */
 const confirmPick = () => fireEvent.click(within(screen.getByRole('dialog', { name: /Choose the room's pick\?|Choose an alternate\?/ })).getByRole('button', { name: /^Choose / }));
@@ -680,7 +684,7 @@ describe('the host side panel', () => {
   test('End session posts games/{id}/end', async () => {
     await openRoom(hostState());
     openMore();
-    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    fireEvent.click(screen.getByRole('button', { name: /^End session/ }));
     const dialog = screen.getByRole('dialog', { name: 'End this session?' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'End session' }));
     await waitFor(() => expect(path(lastPost())).toBe(`games/${GAME}/end`));
@@ -688,7 +692,7 @@ describe('the host side panel', () => {
 
   test('Wrap up saves the outcome', async () => {
     await openRoom(hostState());
-    openMore();
+    openMore('Asks so far');
     fireEvent.click(screen.getByRole('button', { name: 'Wrap up' }));
     const dialog = screen.getByRole('dialog', { name: 'Wrap up' });
     fireEvent.change(within(dialog).getByLabelText('Summary'), { target: { value: 'A sign-up site.' } });
@@ -1070,7 +1074,7 @@ describe('the report view', () => {
 
   test('the Report button opens it', async () => {
     await openRoom(hostState());
-    openMore();
+    openMore('Asks so far');
     fireEvent.click(screen.getByRole('button', { name: 'Report' }));
     expect(await screen.findByRole('heading', { name: 'What we built' })).toBeInTheDocument();
   });
@@ -1384,10 +1388,14 @@ describe('the four screens (owner, 2026-10-05: "yes to the shape")', () => {
     expect(screen.queryByRole('button', { name: 'End session' })).toBeNull();
     openMore();
     const menu = screen.getByRole('dialog', { name: 'Session menu' });
-    ['Connect Claude Code', 'Open to a crew', 'Wrap up', 'Report', 'End session'].forEach((name) => {
+    ['Connect Claude Code', 'Open to a crew', 'End session'].forEach((name) => {
       expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     });
     expect(within(menu).getByRole('switch', { name: /Review Claude's questions/ })).toBeInTheDocument();
+    openMore('Asks so far');
+    ['Wrap up', 'Report'].forEach((name) => {
+      expect(within(menu).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
+    });
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   });
@@ -2816,8 +2824,11 @@ describe('the way back to the main menu (owner, 2026-10-06; Main menu in the hea
     expect(link.querySelector('svg')).not.toBeNull();
     expect(header().querySelector('a, button')).toBe(link);
     openMore();
-    expect(within(screen.getByRole('dialog', { name: 'Session menu' })).queryByRole('link', { name: /Main menu/ })).toBeNull();
-    expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(1);
+    // The Session menu's foot has Main menu too since the redesign (as on every format).
+    const inMenu = within(screen.getByRole('dialog', { name: 'Session menu' })).getAllByRole('link', { name: /Main menu/ });
+    expect(inMenu).toHaveLength(1);
+    expect(inMenu[0].closest('.brm-sp-foot')).not.toBeNull();
+    expect(screen.getAllByRole('link', { name: /Main menu/ })).toHaveLength(2);
   });
 
   test('it is there on Build and History too (the Stage has no header; its way back is Host in the dock)', async () => {
@@ -3651,7 +3662,7 @@ describe('the room\'s window follows the laptop (parity PLAN §2.6, B7)', () => 
   test('Show codes posts the codes up (and the Stage); hiding them posts none', async () => {
     await openRoom(hostState());
     fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Joining/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: 'Show on the Stage' }));
     await waitFor(() => expect(wallPosts()).toEqual(expect.arrayContaining([{ screen: 'stage' }, { codes: 'join' }])));
     fireEvent.keyDown(window, { key: 'Escape' });

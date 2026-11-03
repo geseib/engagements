@@ -108,7 +108,7 @@ describe('§2 the host has a way in', () => {
 
   test('it stays reachable on every tab', () => {
     render(<SessionSetupPanel {...panelProps} />);
-    for (const tab of ['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']) {
+    for (const tab of ['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs']) {
       fireEvent.click(screen.getByRole('tab', { name: tab }));
       expect(screen.getByRole('button', { name: /Help and feedback/i })).toBeInTheDocument();
     }
@@ -119,15 +119,16 @@ describe('§2 the host has a way in', () => {
     render(<SessionSetupPanel {...panelProps} />);
     fireEvent.click(screen.getByRole('button', { name: /Help and feedback/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
-    expect(document.getElementById('help-host-session-panel--settings-tab')).toBeInTheDocument();
+    // The menu opens on Up next (docs/design/session-menu F7).
+    expect(document.getElementById('help-host-session-panel--choosing-ask-next')).toBeInTheDocument();
   });
 
-  test('on End session it opens Ending the session', () => {
+  test('on Rounds so far it opens Going back over a round', () => {
     render(<SessionSetupPanel {...panelProps} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'End session' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Rounds so far' }));
     fireEvent.click(screen.getByRole('button', { name: /Help and feedback/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Read the guides' }));
-    expect(document.getElementById('help-host-running-engagements--ending')).toBeInTheDocument();
+    expect(document.getElementById('help-host-session-panel--going-back-over-round')).toBeInTheDocument();
   });
 
   /*
@@ -136,10 +137,12 @@ describe('§2 the host has a way in', () => {
     This one opens documentation on the host's own screen. Moving the guides out
     of Settings must not have taken the explainer with them.
   */
-  test('the on-stage explainer is in Screens, and is a different thing', () => {
+  test('the on-screen explainer is in Screens, and is a different thing', () => {
     render(<SessionSetupPanel {...panelProps} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
-    expect(screen.getByRole('button', { name: /Show how this works on the stage/i }))
+    const more = screen.getByTestId('more-screens-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+    expect(screen.getByRole('button', { name: /Show how this works on the room's screen/i }))
       .toBeInTheDocument();
     // Exactly one help control on the surface — the move was a move, not a copy.
     expect(screen.getAllByRole('button', { name: /Help and feedback/i })).toHaveLength(1);

@@ -604,11 +604,11 @@ describe('phaseSummary', () => {
 
 describe('remotePanelTabs', () => {
   // Rejects: renaming the rounds tab's id on this surface. The desktop panel
-  // calls it `history` (config/setupPanel.js:32) and labels it `Rounds`; two
+  // calls it `history` (config/setupPanel.js) and labels it `Rounds so far` (the Session menu redesign); two
   // surfaces showing one list under two internal names is how they drift.
   it('uses the desktop panel\'s ids', () => {
-    expect(remotePanelTabs().map((t) => t.id)).toEqual(['players', 'history', 'questions']);
-    expect(remotePanelTabs().map((t) => t.label)).toEqual(['Players', 'Rounds', 'Questions']);
+    expect(remotePanelTabs().map((t) => t.id)).toEqual(['up-next', 'history', 'people']);
+    expect(remotePanelTabs().map((t) => t.label)).toEqual(['Up next', 'Rounds so far', 'People']);
   });
 
   // Rejects: adding Settings "for parity". Everything in the desktop's fourth

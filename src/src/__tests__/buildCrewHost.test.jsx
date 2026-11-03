@@ -152,10 +152,14 @@ async function openRoom(state) {
   render(<BuildRoomPage />);
   await screen.findByText('Volunteer sign-up');
 }
-/** The Session panel's Settings (owner, 2026-10-09): the three-dot menu's items live there now. */
+/** The Session menu's Claude section with its More options open, where the
+    crew lives since the redesign (docs/design/session-menu D10). */
 const openMore = () => {
   fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
-  fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+  const menu = screen.getByRole('dialog', { name: 'Session menu' });
+  fireEvent.click(within(menu).getByRole('tab', { name: /^Claude/ }));
+  const more = menu.querySelector('[aria-controls^="smenu-more-"]');
+  if (more && more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
 };
 
 async function openCrew(state = hostState()) {

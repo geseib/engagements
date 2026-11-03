@@ -127,8 +127,8 @@ describe('1. the Build Room says what hostWords says', () => {
     const sheet = screen.getByRole('dialog', { name: HW.sessionMenu });
     expect(within(sheet).getByRole('heading', { level: 2 })).toHaveTextContent(HW.sessionMenu);
     expect(within(sheet).getByRole('button', { name: HW.closeSessionMenu })).toBeInTheDocument();
-    fireEvent.click(within(sheet).getByRole('tab', { name: /^Settings/ }));
-    expect(within(sheet).getByRole('button', { name: HW.endSession })).toHaveAttribute('title', HW.endSessionHint);
+    // End session is the foot's, in every section (docs/design/session-menu F2).
+    expect(within(sheet.querySelector('.brm-sp-foot')).getByRole('button', { name: `${HW.endSession}…` })).toHaveAttribute('title', HW.endSessionHint);
   });
 });
 
@@ -159,17 +159,17 @@ describe('2. the top bar\'s slots, in order', () => {
   });
 });
 
-describe('3. the Session menu holds Build settings', () => {
-  test('console: the top bar\'s Session menu opens a sheet over the content area, at Settings, with Build settings', async () => {
+describe('3. the Session menu holds the Build Room\'s sections', () => {
+  test('console: the top bar\'s Session menu opens a sheet over the content area, at Claude', async () => {
     await openRoom(hostState());
     fireEvent.click(consoleEl().querySelector('[data-slot="session-menu"]'));
     const sheet = screen.getByRole('dialog', { name: HW.sessionMenu });
     expect(sheet.closest('[data-testid="hc-sheet"]')).not.toBeNull();
     expect(consoleEl().querySelector('.hc-now').contains(sheet)).toBe(false);
-    expect(within(sheet).getByRole('tab', { name: /^Settings/ })).toHaveAttribute('aria-selected', 'true');
-    const heads = within(sheet).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(heads).toEqual(['Screens', 'Joining', 'Build settings', 'End session']);
-    const build = sheet.querySelector('[data-group="build"]');
+    expect(within(sheet).getByRole('tab', { name: /^Claude/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(sheet).getAllByRole('tab').map((t) => t.textContent.replace(/\d.*$/, '').trim()))
+      .toEqual(['Claude', 'Asks so far', 'People', 'Screens', 'Joining']);
+    const build = sheet.querySelector('[data-group="claude"]');
     expect(within(build).getByRole('button', { name: /Connect Claude Code/ })).toBeInTheDocument();
     expect(within(build).getByRole('switch', { name: /Review Claude's questions/ })).toBeInTheDocument();
     // The rail's old Session slot is gone: set-once settings are in the Session menu only.

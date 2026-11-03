@@ -147,11 +147,11 @@ describe('the queue', () => {
 });
 
 describe('the rest of the host\'s screen', () => {
-  test('Session › Settings › Claude: the check-posts switch, on by default, posts reviewAgentPosts', async () => {
+  test('Session menu › Claude: the check-posts switch, on by default, posts reviewAgentPosts', async () => {
     await openRoom(hostState());
     fireEvent.click(screen.getAllByRole('button', { name: /^Session menu/ })[0]);
     const panel = screen.getByRole('dialog', { name: 'Session menu' });
-    fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(panel).getByRole('tab', { name: /^Claude/ }));
     const sw = within(panel).getByRole('switch', { name: "Check Claude's posts before the room sees them" });
     expect(sw).toBeChecked();
     expect(within(panel).getByText(/wait in Waiting for you until you release them/)).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('the rest of the host\'s screen', () => {
     await openRoom(hostState({ st: { Settings: { reviewAgentPosts: false } } }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Session menu/ })[0]);
     const panel = screen.getByRole('dialog', { name: 'Session menu' });
-    fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(panel).getByRole('tab', { name: /^Claude/ }));
     expect(within(panel).getByRole('switch', { name: "Check Claude's posts before the room sees them" })).not.toBeChecked();
   });
 
@@ -191,7 +191,7 @@ describe('the rest of the host\'s screen', () => {
     await openRoom(hostState({ wall: { screen: 'stage', codes: 'none', profile: 'room', rev: 1 } }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Session menu/ })[0]);
     const panel = screen.getByRole('dialog', { name: 'Session menu' });
-    fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(panel).getByRole('tab', { name: /^Joining/ }));
     fireEvent.click(within(panel).getByRole('button', { name: 'Show on the Stage' }));
     const card = () => screen.queryByTestId('stage-join-panel');
     expect(card()).not.toBeNull();

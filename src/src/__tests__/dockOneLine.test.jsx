@@ -70,7 +70,7 @@ describe('Main menu in the dock', () => {
 
   test('the Session menu on this page says Main menu too', () => {
     const panel = read('components', 'stage', 'SessionSetupPanel.jsx');
-    expect(panel).toMatch(/onClick=\{onSwitchGame\} title=\{HW\.mainMenuHint\}>\{HW\.mainMenu\}</);
+    expect(panel).toMatch(/onClick=\{onSwitchGame\} title=\{HW\.mainMenuHint\}[^>]*>[\s\S]{0,200}?HW\.mainMenu\b/);
     expect(HW.mainMenu).toBe('Main menu');
   });
 });

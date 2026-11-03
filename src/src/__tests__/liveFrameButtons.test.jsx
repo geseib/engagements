@@ -118,12 +118,17 @@ describe('the pulse', () => {
 });
 
 describe('the Session menu', () => {
-  test('its actions are ui/Button; End session is the danger look', () => {
+  test('its actions are ui/Button; End session is outlined danger text in the foot', () => {
     render(<SessionSetupPanel gameType="call-and-answer" gameState="ASK#001" initialTab="end" onEndSession={() => {}} onSwitchGame={() => {}} onSignOut={() => {}} />);
     const end = screen.getByTestId('session-menu-end');
-    expect(end).toHaveClass('ui-btn', 'ui-btn--danger', 'ui-btn--h36');
+    // Outlined text, not a filled button (docs/design/session-menu desk
+    // review 1): the outline is ui/Button's secondary; the danger-text ink is
+    // SessionMenu.css's `.smenu-end`.
+    expect(end).toHaveClass('ui-btn', 'ui-btn--quiet', 'ui-btn--h36', 'smenu-end');
+    expect(read('components', 'stage', 'SessionMenu.css')).toMatch(/\.smenu-end\[class~="ui-btn"\]\s*\{[^}]*color:\s*var\(--danger-text\)/);
     expect(screen.getByRole('button', { name: HW.mainMenu })).toHaveClass('ui-btn', 'ui-btn--quiet');
-    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveClass('ui-btn', 'ui-btn--quiet');
+    // No Sign out in the live menu (fork F5): Home has it.
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
     // The close is the Icon X, never a text glyph.
     const close = screen.getByRole('button', { name: HW.closeSessionMenu });
     expect(close.textContent).toBe('');

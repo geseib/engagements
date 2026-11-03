@@ -316,10 +316,10 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s Rounds (see Writing a question of your own); **Rounds and questions** opens the Rounds section of the Session menu.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s **Up next** (see Writing a question of your own); **All rounds** opens the Session menu\'s **Rounds so far**.' },
             { title: 'People', text: 'How many are here, and while the room answers or votes, who has and who has not (the count itself is the Answered tile). The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
-            { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the full list in the Rounds tab (see Late answers and comments).' },
-            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds what you set once: Screens, Phone remote, Rounds, Joining and End session (with **Main menu** under it). People\'s **All N, and who left** opens the full list there.' },
+            { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the Session menu\'s **Rounds so far**, where **Review** opens the full list (see Late answers and comments).' },
+            { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds Up next, Rounds so far, People, Screens, Joining and How it runs, with **End session…** and **Main menu** at its foot. The People column\'s **All N, and who left** opens its People section.' },
           ],
         },
         {
@@ -400,7 +400,7 @@ const twoScreens = {
           items: [
             { title: 'On your laptop', text: 'Point at **Join** and the code on the top bar, or tab to it: a card under it shows the QR, the code and the address on your laptop alone, for someone who walks up. Click the code to keep the card open; Esc or its close button shuts it. The room\'s window does not change.' },
             { title: 'Two screens', text: 'Press **Show on the room\'s screen** in that card, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; **Join** stays pressed on your laptop while it is up, and nothing covers your console. Press **Take it off the room\'s screen**, or J, to take it down. In the lobby the room\'s window shows it already.' },
-            { title: 'From your phone', text: '**Join code**, then **Display on screen** (and **Take it off the screen**).' },
+            { title: 'From your phone', text: '**Join code**, then **Show join code** (and **Take it off the screen**).' },
             { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Show join code** in the Session menu, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
           ],
         },
@@ -460,7 +460,7 @@ const twoScreens = {
         {
           t: 'steps',
           items: [
-            { title: 'Open it', text: 'In the Session menu\'s **Phone remote** section (on the console: **Session menu**, top right), scan the QR under **Your phone as a remote** with your own phone. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
+            { title: 'Open it', text: 'In the Session menu\'s **Screens** (on the console: **Session menu**, top right), press **Connect your phone** under **Your phone as a remote** and scan the QR with your own phone. On one screen it is first in Screens. Or go to the address shown there, or to /remote and type the session code, then **Connect**.' },
             { title: 'Sign in', text: 'On a team session, as any host or admin of that team; it does not have to be the account on this laptop. On a personal account, as you. Only your account can drive this session. The box under the QR names who is signed in on this laptop. It shows your email only while the room\'s window is up on two screens; otherwise the room might be watching this laptop, so it shows your name.' },
             { title: 'If the phone refuses', text: 'Press **Sign in as someone else**, pick the session\'s team if the phone offers a team switcher, or **Enter a different code**.' },
           ],
@@ -478,15 +478,16 @@ const twoScreens = {
             { title: 'The main button', text: 'At the bottom, the same next move as your laptop, with the second move above it. An early move asks you to tap again.' },
             { title: 'Who the room is waiting on', text: 'While the room answers or votes, **Still to answer** or **Still to vote** names who has not yet, and the names go as people submit. It never shows who wrote what.' },
             { title: 'What we heard', text: 'Which page the room is on, **Back a page**, and Workie\'s points with Ask the room beside them.' },
-            { title: 'This round', text: '**Choose next question**, and a button that puts the question or one response up large for the room.' },
+            { title: 'This round', text: 'A button that puts the question or one response up large for the room.' },
             { title: 'Scoreboard', text: '**Show the scoreboard** or **Hide the scoreboard**, its next page, and its look.' },
-            { title: 'Session', text: '**Players & rounds** (the **Players**, **Rounds** and **Questions** tabs), **Categories**, **Join code**, and **Back to Menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'Session', text: 'Three doors with the laptop\'s names: **Up next** (the running order, **Write a question**, the categories, the set), **Rounds so far** (the report first) and **People**. Then **Join code**, **Room\'s screen**, and **Main menu**, which returns the phone to the code screen; the session keeps running.' },
+            { title: 'End session', text: '**End session…** at the foot of those tabs asks **End this session?** in place.' },
             { title: 'Feedback round', text: 'How many comments have come in, and **Said in the room**, to add something said aloud to the round\'s comments.' },
           ],
         },
         {
           t: 'p',
-          text: 'The Session menu\'s set-once sections stay on the laptop: the phone has no Screens or Joining section.',
+          text: 'The Session menu\'s set-once sections stay on the laptop: the phone has no Screens, Joining or How it runs section.',
         },
       ],
     },

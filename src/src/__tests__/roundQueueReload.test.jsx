@@ -136,7 +136,7 @@ const railRows = (container) => [...container.querySelectorAll('.hc-rail [data-s
 const openRunningOrder = async (container) => {
   await act(async () => { container.querySelector('[data-slot="session-menu"]').click(); });
   const sheet = await screen.findByRole('dialog', { name: 'Session menu' });
-  await act(async () => { within(sheet).getByRole('tab', { name: 'Rounds' }).click(); });
+  await act(async () => { within(sheet).getByRole('tab', { name: 'Up next' }).click(); });
   return sheet;
 };
 

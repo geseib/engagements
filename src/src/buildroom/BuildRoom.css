@@ -1788,16 +1788,21 @@
 }
 .brm .brm-sp-x:hover, .brm .brm-sp-x:focus-visible { border-color: var(--primary); }
 .brm .brm-sp-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--brm-rule); }
-.brm .brm-sp-tabs { flex: none; display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--brm-rule); }
+.brm .brm-sp-tabs { flex: none; display: flex; flex-wrap: wrap; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--brm-rule); }
 .brm .brm-sp-tab {
-  display: inline-flex; align-items: center; gap: 8px; padding: 13px 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent;
-  font: 800 var(--brm-t-label)/1 var(--font-ui); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; padding: 13px 8px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent;
+  /* Sentence case since the Session menu redesign: five plain names in one row. */
+  font: 800 var(--brm-t-label)/1 var(--font-ui); letter-spacing: .01em; color: var(--muted); cursor: pointer;
 }
 .brm .brm-sp-tab.is-on { color: var(--text); border-bottom-color: var(--primary); }
 .brm .brm-sp-c { letter-spacing: 0; color: var(--muted); font-weight: 700; }
 .brm .brm-sp-flag { letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--primary); }
 .brm .brm-sp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 16px; container-type: inline-size; }
 .brm .brm-sp-pane { display: flex; flex-direction: column; gap: 12px; }
+/* People: the rail's person rows, a search past twelve, and who left. */
+.brm .brm-sp-people { list-style: none; margin: 0; padding: 0; }
+.brm .brm-sp-search { flex: 1 1 160px; min-width: 0; min-height: 36px; padding: 0 10px; font: inherit; font-size: var(--brm-t-body, 15px); color: var(--text); background: var(--surface); border: 1px solid var(--brm-rule); border-radius: 8px; }
+.brm .brm-sp-left { display: flex; flex-direction: column; gap: 6px; }
 .brm .brm-sp-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-top: 1px solid var(--brm-rule); }
 .brm .brm-sp-grp { display: flex; flex-direction: column; gap: 9px; padding: 12px 0 14px; border-top: 1px solid var(--brm-rule); }
 .brm .brm-sp-grp:first-child { border-top: 0; padding-top: 4px; }

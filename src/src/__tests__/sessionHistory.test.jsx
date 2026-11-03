@@ -973,7 +973,7 @@ describe('the Rounds tab is wired to the page', () => {
 
   // rejects: shipping the dialog with no way to reach it.
   test('the tab is offered', () => {
-    expect(strip(read('config', 'setupPanel.js'))).toMatch(/id: 'rounds', label: 'Rounds'/);
+    expect(strip(read('config', 'setupPanel.js'))).toMatch(/id: 'history', label: 'Rounds so far'/);
   });
 
   // rejects: a tab that renders its empty state forever because nothing ever

@@ -157,9 +157,16 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
     />,
   );
 
-  it('the Rounds section carries the Workie section', () => {
+  /* How it runs · More options since the Session menu redesign (D8). */
+  const openRun = () => {
+    fireEvent.click(screen.getByRole('tab', { name: 'How it runs' }));
+    const more = screen.getByTestId('more-run-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+  };
+
+  it('How it runs carries the Workie section, with Redo kept while a read is up (fork F4)', () => {
     renderPanel({ workie: { roundNoun: 'Round', personas, prompts, briefed: true, onRedo: () => {} } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
+    openRun();
     const section = screen.getByTestId('workie-settings');
     expect(within(section).getByLabelText('Voice (next round)')).toBeInTheDocument();
     expect(within(section).getByLabelText('Approach (next round)')).toBeInTheDocument();
@@ -169,8 +176,8 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
 
   it('...without next-round pickers on a closed survey', () => {
     renderPanel({ gameType: 'survey', gameState: 'SURVEY#CLOSED', workie: { personas, prompts, onRedo: () => {} } });
-    // A survey has no Rounds section: Workie's read sits under Close survey.
-    fireEvent.click(screen.getByRole('tab', { name: 'Close survey' }));
+    // A survey's How it runs is what happens after it closes.
+    openRun();
     expect(screen.queryByLabelText(/Voice \(next/)).toBeNull();
     expect(screen.getByTestId('workie-redo')).toBeInTheDocument();
   });
@@ -180,7 +187,10 @@ describe('#21 host-only Workie controls live in the Session panel', () => {
       categoryCounts: { '1-8': [0], '9-16': [], '17-24': [] },
       workie: { personas, prompts },
     });
-    fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'How it runs' }));
+    if (screen.queryByTestId('more-run-toggle') && screen.getByTestId('more-run-toggle').getAttribute('aria-expanded') !== 'true') {
+      fireEvent.click(screen.getByTestId('more-run-toggle'));
+    }
     expect(screen.queryByLabelText(/Voice \(next/)).toBeNull();
   });
 

@@ -53,65 +53,110 @@ export function openNow(handover, now = Date.now()) {
 
 
 /**
- * THE SESSION MENU'S SECTIONS (experience plan §3.2, §3.2a; dev QA 2 Nov:
- * they were still Players · Questions · Rounds · Settings). The menu holds
- * set-once things, in this order:
+ * THE SESSION MENU'S SECTIONS (docs/design/session-menu, approved 3 Nov 2026:
+ * "yes, add People and go with the recommendations"). The same names on every
+ * round type, in this order:
  *
- *   Screens · Phone remote · Rounds · Joining · End session
+ *   Up next · Rounds so far · People · Screens · Joining · How it runs
  *
- * An event's item adds Agenda first. A survey has no rounds and no phone
- * remote: Screens · Joining · Close survey · End session. (The Build Room's
- * own panel adds Build settings; it is buildroom/BuildSessionPanel.jsx.)
+ * A type removes a section or swaps it for its own equivalent; it never
+ * renames a shared one. A survey: Close survey · Results · People · Screens ·
+ * Joining · How it runs. (The Build Room's own menu is Claude · Asks so far ·
+ * People · Screens · Joining, buildroom/BuildSessionPanel.jsx; the phone's is
+ * Up next · Rounds so far · People, config/hostRemote.js.)
  *
- * PEOPLE IS NOT A SECTION WHERE THERE IS A PEOPLE COLUMN. Mid-round people
- * actions (name requests, removing someone) belong to People and Needs you,
- * which are on screen without opening anything; the whole list, with who
- * left, opens from People's "All N, and who left" link as a view of this
- * menu, not a tab. Where the frame has NO People column (one screen, a
- * survey's stage, Setup before round 1) the list keeps a section of its own,
- * before End session: removing it there would lose Remove, Bring back and the
- * name handover for a host without the phone Remote.
+ * PEOPLE IS A SECTION IN EVERY VERSION (the owner's one change to the design).
+ * Where the frame has a People column (the console mid-session) the column
+ * stays the at-a-glance view and its "All N, and who left" opens this section.
  *
- * `peopleColumn`: the frame draws People (the console mid-session).
+ * NO AGENDA AND NO END SESSION TAB. An event's item gets one line above the
+ * tabs (item N of M, ‹ Agenda, Bring everyone here); End session and Main menu
+ * are the sheet's foot, shown in every section. The phone remote folds into
+ * Screens.
+ *
+ * `event` and `peopleColumn` are accepted and no longer change the list: an
+ * event adds a line, not a tab, and People is always a tab.
  */
-export function setupPanelTabs({ survey = false, event = false, peopleColumn = false } = {}) {
-  const tabs = [];
-  if (event) tabs.push({ id: 'agenda', label: 'Agenda' });
-  tabs.push({ id: 'screens', label: 'Screens' });
-  if (!survey) {
-    tabs.push({ id: 'remote', label: 'Phone remote' });
-    tabs.push({ id: 'rounds', label: 'Rounds' });
+export function setupPanelTabs({ survey = false } = {}) {
+  if (survey) {
+    return [
+      { id: 'close', label: 'Close survey' },
+      { id: 'results', label: 'Survey results' },
+      { id: 'people', label: 'People' },
+      { id: 'screens', label: 'Screens' },
+      { id: 'joining', label: 'Joining' },
+      { id: 'run', label: 'How it runs' },
+    ];
   }
-  tabs.push({ id: 'joining', label: 'Joining' });
-  if (survey) tabs.push({ id: 'close', label: 'Close survey' });
-  if (!peopleColumn) tabs.push({ id: 'people', label: 'People' });
-  tabs.push({ id: 'end', label: 'End session' });
-  return tabs;
+  return [
+    { id: 'up-next', label: 'Up next' },
+    { id: 'history', label: 'Rounds so far' },
+    { id: 'people', label: 'People' },
+    { id: 'screens', label: 'Screens' },
+    { id: 'joining', label: 'Joining' },
+    { id: 'run', label: 'How it runs' },
+  ];
 }
 
 /*
-  THE OLD NAMES, STILL ASKED FOR (a link, a key, ?panel=, the Needs-you line's
-  See in People): where each one lives now. 'players' is the people view;
-  'questions' and 'history' are in Rounds; 'settings' opened on Screens.
-  'running-order' is the page's own landing, in Rounds.
+  THE OLD NAMES, STILL ASKED FOR (a link, a key, ?panel=, the rail's "All
+  rounds" / "Review them" / "All N, and who left", the Needs-you line's See in
+  People): where each one lives now. A survey reads Up next as Close survey and
+  Rounds so far as Results, the same slots.
 */
-const LEGACY_SECTIONS = Object.freeze({
+export const LEGACY_SECTIONS = Object.freeze({
   players: 'people',
-  questions: 'rounds',
-  history: 'rounds',
-  'running-order': 'rounds',
-  settings: 'screens',
+  questions: 'up-next',
+  'running-order': 'up-next',
+  rounds: 'up-next',
+  history: 'history',
+  settings: 'run',
+  agenda: 'up-next',
+  remote: 'screens',
+  phone: 'screens',
+  joining: 'joining',
+  screens: 'screens',
+  end: 'up-next',
 });
 
+const SURVEY_SLOTS = Object.freeze({ 'up-next': 'close', history: 'results' });
+
 /**
- * Which section the menu opens at, for a place asked for. The people view
- * opens even where People is not a tab (from People's own link); any other
- * name that is not a section here opens the first section.
+ * Which section the menu opens at, for a place asked for. Nothing asked: Up
+ * next during play (fork F7) and Rounds so far once the session has ended (a
+ * survey: Results). Any other name that is not a section here opens that
+ * default.
  */
-export function sessionMenuSection(asked, tabs = setupPanelTabs()) {
-  const id = LEGACY_SECTIONS[asked] || asked;
-  if (id === 'people') return 'people';
-  return tabs.some((t) => t.id === id) ? id : (tabs[0] && tabs[0].id) || 'screens';
+export function sessionMenuSection(asked, tabs = setupPanelTabs(), { ended = false } = {}) {
+  const survey = tabs.some((t) => t.id === 'close');
+  let id = LEGACY_SECTIONS[asked] || asked;
+  if (survey && SURVEY_SLOTS[id]) id = SURVEY_SLOTS[id];
+  if (id && tabs.some((t) => t.id === id)) return id;
+  if (ended) {
+    const late = survey ? 'results' : 'history';
+    if (tabs.some((t) => t.id === late)) return late;
+  }
+  return (tabs[0] && tabs[0].id) || 'up-next';
+}
+
+/**
+ * AN EVENT'S PLACE, IN ONE LINE (the event line above the tabs): "item 3 of 6",
+ * and "the room is on item 2" while the room is elsewhere. Empty when the
+ * agenda has not loaded.
+ */
+export function eventPlace({ n = null, total = null, roomOn = null } = {}) {
+  if (!(Number(n) > 0)) return '';
+  const parts = [Number(total) > 0 ? `item ${n} of ${total}` : `item ${n}`];
+  if (Number(roomOn) > 0 && Number(roomOn) !== Number(n)) parts.push(`the room is on item ${roomOn}`);
+  return parts.join(' · ');
+}
+
+/**
+ * MORE OPTIONS, NAMED (README D2): the closed expander's line is built from the
+ * labels of the groups inside it, so it can never lie about what it holds.
+ */
+export function moreOptionsSummary(groups = []) {
+  return groups.filter((g) => g && g.label).map((g) => g.label).join(' · ');
 }
 
 /**
@@ -172,6 +217,17 @@ export function categoryRows({
 /** How many questions the host can still reach — enabled categories only. */
 export function questionsRemaining(rows = []) {
   return rows.reduce((total, row) => (row.enabled ? total + (row.remaining || 0) : total), 0);
+}
+
+/**
+ * THE CATEGORIES, IN ONE LINE (Up next's default view): "4 of 6 on · 23
+ * questions left". The switches themselves are in Up next's More options.
+ */
+export function categoriesSummary(rows = []) {
+  if (!rows.length) return '';
+  const on = rows.filter((r) => r.enabled).length;
+  const left = questionsRemaining(rows);
+  return `${on} of ${rows.length} on · ${left} ${left === 1 ? 'question' : 'questions'} left`;
 }
 
 const OPTION_KEYS = [

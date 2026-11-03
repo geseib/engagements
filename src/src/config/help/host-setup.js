@@ -671,7 +671,7 @@ const gameSetup = {
       blocks: [
         {
           t: 'p',
-          text: 'A set is tagged by category, and a session can play only some of them. Pick them in Create engagement, change them in Edit before the session starts, or turn them on and off during the session in the Questions tab of the Session panel, where each one shows how many of its questions are still unasked.',
+          text: 'A set is tagged by category, and a session can play only some of them. Pick them in Create engagement, change them in Edit before the session starts, or turn them on and off during the session in the Session menu\'s **Up next** (**Categories** · **Change**), where each one shows how many of its questions are still unasked.',
         },
         {
           t: 'note',
@@ -700,13 +700,13 @@ const gameSetup = {
         {
           t: 'list',
           items: [
-            { title: 'Screens', text: 'One screen or two, and the room screen size: Room, TV, Call or Table. The right size is the difference between readable and squinting.' },
-            { title: 'Names', text: 'Under Rounds, How the rounds run: **Show who wrote each response from the start**, and **Name who is still waiting** for whether the room sees who has not answered yet.' },
-            { title: 'Controls on your phone', text: '**Phone remote**: scan its QR with your own phone and run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
+            { title: 'Screens', text: 'One screen or two, and the room screen size (under More options): Room, TV, Call or Table. The right size is the difference between readable and squinting.' },
+            { title: 'Names', text: 'Under **How it runs**: **Show who wrote each response from the start**, and, under its More options, **Name who is still waiting** for whether the room sees who has not answered yet.' },
+            { title: 'Controls on your phone', text: 'In **Screens**, **Your phone as a remote**: **Connect your phone** and scan its QR with your own phone to run the session while you walk around. You sign in on the phone; it is a host control, not a player screen.' },
             { title: 'Joining', text: 'The join link, to paste into a video call\'s chat.' },
           ],
         },
-        { t: 'p', text: 'The Session panel › Screens, joining, and how the rounds run explains each setting; Two screens and your phone covers the remote.' },
+        { t: 'p', text: 'The Session panel › Screens, joining, and how it runs explains each setting; Two screens and your phone covers the remote.' },
       ],
     },
     /*

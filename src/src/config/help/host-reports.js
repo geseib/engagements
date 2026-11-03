@@ -190,7 +190,7 @@ const reporting = {
       blocks: [
         {
           t: 'p',
-          text: 'Open it from **Session report** in the Session menu\'s Rounds section, from **Open session report** at the end, or from **Report** on its row in your sessions list. It is built fresh each time; opening it ends nothing.',
+          text: 'Open it from **Open the report** in the Session menu\'s **Rounds so far**, from **Open session report** at the end, or from **Report** on its row in your sessions list. It is built fresh each time; opening it ends nothing.',
         },
         {
           t: 'p',

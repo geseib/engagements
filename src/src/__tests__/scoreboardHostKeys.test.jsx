@@ -139,6 +139,8 @@ describe('the keys are written down where the host looks for them', () => {
   test('the Settings tab lists S and V on a Trivia session', () => {
     const utils = render(<SessionSetupPanel gameType="trivia" />);
     fireEvent.click(utils.getByRole('tab', { name: 'Screens' }));
+    // The keys are in Screens · More options since the redesign.
+    if (utils.getByTestId('more-screens-toggle').getAttribute('aria-expanded') !== 'true') fireEvent.click(utils.getByTestId('more-screens-toggle'));
     const keys = utils.container.querySelector('.setup-keys').textContent;
     expect(keys).toMatch(/S\s*show or hide the scoreboard/);
     expect(keys).toMatch(/V\s*change the scoreboard's look/);
@@ -147,6 +149,8 @@ describe('the keys are written down where the host looks for them', () => {
   test('...and not on a Poll, which has no board', () => {
     const utils = render(<SessionSetupPanel gameType="poll" />);
     fireEvent.click(utils.getByRole('tab', { name: 'Screens' }));
+    // The keys are in Screens · More options since the redesign.
+    if (utils.getByTestId('more-screens-toggle').getAttribute('aria-expanded') !== 'true') fireEvent.click(utils.getByTestId('more-screens-toggle'));
     expect(utils.container.querySelector('.setup-keys').textContent).not.toMatch(/scoreboard/);
   });
 

@@ -88,8 +88,8 @@ async function renderLiveGame() {
   render(<GameHostPage />);
   const setup = await screen.findByRole('button', { name: 'Session menu' }, { timeout: 5000 });
   await act(async () => { fireEvent.click(setup); });
-  await screen.findByRole('tab', { name: 'End session' });
-  fireEvent.click(screen.getByRole('tab', { name: 'End session' }));
+  // End session is the menu's foot since the redesign (docs/design/session-menu F2).
+  await screen.findByTestId('session-menu-foot');
 }
 
 beforeEach(() => {
@@ -109,7 +109,7 @@ describe('End session — no modal on a modal (fix round 1, item 1)', () => {
   */
   test('the setup panel is gone before the confirm dialog appears', async () => {
     await renderLiveGame();
-    fireEvent.click(screen.getByRole('button', { name: /^end session$/i }));
+    fireEvent.click(screen.getByTestId('session-menu-end'));
     expect(document.querySelector('.setup-panel')).toBeNull();
     // Exactly one "End session" on screen now — the confirm dialog's own.
     expect(screen.getAllByText(/end session/i)).toHaveLength(1);
@@ -117,7 +117,7 @@ describe('End session — no modal on a modal (fix round 1, item 1)', () => {
 
   test('confirming calls POST /games/{id}/end', async () => {
     await renderLiveGame();
-    fireEvent.click(screen.getByRole('button', { name: /^end session$/i }));
+    fireEvent.click(screen.getByTestId('session-menu-end'));
     fireEvent.click(await screen.findByRole('button', { name: /^end session/i }));
     await waitFor(() => {
       expect(global.fetch.mock.calls.some(([url]) => String(url).includes(`games/${GAME}/end`))).toBe(true);
@@ -126,7 +126,7 @@ describe('End session — no modal on a modal (fix round 1, item 1)', () => {
 
   test('cancelling never calls the route', async () => {
     await renderLiveGame();
-    fireEvent.click(screen.getByRole('button', { name: /^end session$/i }));
+    fireEvent.click(screen.getByTestId('session-menu-end'));
     const cancel = await screen.findByRole('button', { name: /cancel/i });
     fireEvent.click(cancel);
     await new Promise((r) => setTimeout(r, 0));

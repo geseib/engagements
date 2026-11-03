@@ -381,7 +381,7 @@ const eventDay = {
           t: 'list',
           items: [
             { title: 'The event\'s code', text: 'Its lobby and **Join** show the event code, not a session code. Late arrivals join the event and land in this session; in People a latecomer reads **from item 2** (the item they arrived in) where others show what they are doing.' },
-            { title: '**Agenda**', text: 'The first thing in the **Session menu** (top right), on one screen or two, beside **Bring everyone here** while the room is elsewhere. On two screens **‹ Agenda** is also the first step on the steps strip. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Main menu**, top left, still goes to your start screen, asking first when people are in the room.' },
+            { title: '**‹ Agenda**', text: 'One line under the **Session menu**\'s header (top right), in every section, on one screen or two: **This event**, item 3 of 6, and "the room is on item 2" while the room is elsewhere, with **Bring everyone here** beside it then. There is no Agenda tab. On two screens **‹ Agenda** is also the first step on the steps strip. Both go back to the event\'s stage without pausing anything: the phones stay where they are. **Main menu**, top left or at the menu\'s foot, still goes to your start screen, asking first when people are in the room.' },
             { title: 'At the end', text: 'When the session ends, Your part now offers **Back to the agenda**.' },
           ],
         },

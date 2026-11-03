@@ -45,15 +45,18 @@ export const HELP_FOR_SCREEN = {
      (GameHostPage `dockHelp`). */
   'host-dock': { guide: 'host-running-engagements', section: 'dock-and-keys' },  // the stage's top bar ? (GameHostPage)
   // The Session panel's header `?` opens the tab that is showing.
-  // The Session menu's sections (SessionSetupPanel TAB_HELP; dev QA 2 Nov).
-  'host-session-agenda': { guide: 'host-event-day', section: 'session-on-the-day' },
+  // The Session menu's sections (SessionSetupPanel TAB_HELP; the redesign,
+  // docs/design/session-menu, 3 Nov 2026). The event line, the phone and End
+  // session have no section of their own now: the host-session-panel guide
+  // names them, with links to the event-day and ending sections.
+  'host-session-up-next': { guide: 'host-session-panel', section: 'choosing-ask-next' },
+  'host-session-history': { guide: 'host-session-panel', section: 'going-back-over-round' },
   'host-session-screens': { guide: 'host-session-panel', section: 'settings-tab' },
-  'host-session-remote': { guide: 'host-two-screens', section: 'phone-remote' },
-  'host-session-rounds': { guide: 'host-session-panel', section: 'choosing-ask-next' },
   'host-session-joining': { guide: 'host-session-panel', section: 'settings-tab' },
+  'host-session-run': { guide: 'host-session-panel', section: 'settings-tab' },
   'host-session-close': { guide: 'host-surveys', section: 'warning-and-closing' },
+  'host-session-results': { guide: 'host-surveys', section: 'report' },
   'host-session-players': { guide: 'host-player-management', section: 'players-tab' },
-  'host-session-end': { guide: 'host-running-engagements', section: 'ending' },
   'host-late-items': { guide: 'host-late-items', section: 'late-not-reviewed' }, // LateList head
   'host-what-we-heard': { guide: 'host-what-we-heard', section: 'what-we-heard' }, // dock and console, on the READ moment
   'host-session-report': { guide: 'host-reporting', section: 'session-report' }, // GameReport toolbar

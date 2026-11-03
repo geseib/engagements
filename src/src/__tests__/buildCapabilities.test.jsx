@@ -115,8 +115,13 @@ async function walk(state) {
   fireEvent.click(screen.getAllByRole('button', { name: /^Session menu/ })[0]);
   const panel = screen.getByRole('dialog', { name: 'Session menu' });
   seenIn(found);
-  fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
-  seenIn(found);
+  // Every section of the redesigned menu, and its More options (docs/design/session-menu).
+  for (const t of within(panel).getAllByRole('tab')) {
+    fireEvent.click(t);
+    seenIn(found);
+    const more = panel.querySelector('[aria-controls^="smenu-more-"]');
+    if (more && more.getAttribute('aria-expanded') !== 'true') { fireEvent.click(more); seenIn(found); }
+  }
   cleanup();
   return found;
 }
@@ -150,8 +155,13 @@ async function walkConsole(state) {
   fireEvent.click(document.querySelector('.hc--build [data-slot="session-menu"]'));
   const panel = screen.getByRole('dialog', { name: 'Session menu' });
   seenIn(found);
-  fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
-  seenIn(found);
+  // Every section of the redesigned menu, and its More options (docs/design/session-menu).
+  for (const t of within(panel).getAllByRole('tab')) {
+    fireEvent.click(t);
+    seenIn(found);
+    const more = panel.querySelector('[aria-controls^="smenu-more-"]');
+    if (more && more.getAttribute('aria-expanded') !== 'true') { fireEvent.click(more); seenIn(found); }
+  }
   cleanup();
   window.localStorage.clear();
   return found;

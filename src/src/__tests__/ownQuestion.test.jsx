@@ -215,15 +215,16 @@ describe('the three doors and Q (D2)', () => {
     // Inside the Session menu's own dialog, not a second one.
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
     expect(screen.getByRole('dialog')).toContainElement(composer);
-    expect(screen.getByLabelText('What comes next', { selector: 'section' })).not.toBeVisible();
+    // The step replaces Up next's default view while it is open (session-menu D4).
+    expect(screen.queryByLabelText('What comes next', { selector: 'section' })).toBeNull();
   });
 
-  test('the phone Remote\'s Rounds tab opens the composer as a full-height sheet', () => {
+  test('the phone Remote\'s Up next tab opens the composer as a full-height sheet', () => {
     const onWriteQuestion = jest.fn();
-    const { rerender } = render(<RemoteSessionPanel initialTab="history" onWriteQuestion={onWriteQuestion} />);
+    const { rerender } = render(<RemoteSessionPanel initialTab="up-next" onWriteQuestion={onWriteQuestion} />);
     fireEvent.click(screen.getByTestId('remote-write'));
     expect(onWriteQuestion).toHaveBeenCalledTimes(1);
-    rerender(<RemoteSessionPanel initialTab="history" onWriteQuestion={onWriteQuestion} ownComposer={{ variant: 'touch', onClose: () => {}, onSubmit: () => {} }} />);
+    rerender(<RemoteSessionPanel initialTab="up-next" onWriteQuestion={onWriteQuestion} ownComposer={{ variant: 'touch', onClose: () => {}, onSubmit: () => {} }} />);
     expect(screen.getByTestId('remote-own-sheet')).toContainElement(screen.getByTestId('own-composer'));
     expect(screen.getByTestId('own-composer').className).toMatch(/oq--touch/);
   });
@@ -305,7 +306,8 @@ describe('one screen: the choice before the composer (D8, A-5)', () => {
 
   test('on one screen the door sits outside the private reveal, and the queue stays behind it', () => {
     render(<SessionSetupPanel onClose={() => {}} gameState="RESULTS#003" gameId="7924" initialTab="rounds" oneScreen onWriteQuestion={() => {}} questionQueue={['own:a1']} ownQuestions={[{ key: 'own:a1', title: 'Secret next question', status: 'queued' }]} />);
-    expect(screen.getByTestId('queue-write-onescreen')).toBeInTheDocument();
+    expect(screen.getByTestId('queue-write')).toBeInTheDocument();
+    expect(screen.getByTestId('private-questions')).not.toContainElement(screen.getByTestId('queue-write'));
     expect(screen.queryByText('Secret next question')).not.toBeInTheDocument();
   });
 
@@ -351,10 +353,10 @@ describe('a question of yours in the running order (D5, F3)', () => {
 
   test('Rounds so far marks Yours on two screens, and not on one (F6)', () => {
     const rounds = [{ number: '004', ordinal: 4, title: 'What would have to be true…', own: true, answers: [] }];
-    const { unmount } = render(<SessionSetupPanel onClose={() => {}} gameId="7924" gameState="RESULTS#004" initialTab="rounds" rounds={rounds} />);
+    const { unmount } = render(<SessionSetupPanel onClose={() => {}} gameId="7924" gameState="RESULTS#004" initialTab="history" rounds={rounds} />);
     expect(screen.getAllByTestId('yours-mark').length).toBeGreaterThan(0);
     unmount();
-    render(<SessionSetupPanel onClose={() => {}} gameId="7924" gameState="RESULTS#004" initialTab="rounds" rounds={rounds} oneScreen />);
+    render(<SessionSetupPanel onClose={() => {}} gameId="7924" gameState="RESULTS#004" initialTab="history" rounds={rounds} oneScreen />);
     expect(screen.queryAllByTestId('yours-mark')).toHaveLength(0);
   });
 

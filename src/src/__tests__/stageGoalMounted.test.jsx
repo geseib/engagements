@@ -98,10 +98,13 @@ async function renderLiveGame(hostState, { restoredText } = {}) {
   }
 }
 
-/** The Rounds section's own progress line, opened the way a host would: `\`. */
+/** Up next's own progress line, opened the way a host would: `\`. */
 async function openGoalProgress() {
   await act(async () => { fireEvent.keyDown(document.body, { key: '\\' }); });
-  fireEvent.click(await screen.findByRole('tab', { name: 'Rounds' }, { timeout: 5000 }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Up next' }, { timeout: 5000 }));
+  // Up next · More options since the Session menu redesign.
+  const more = await screen.findByTestId('more-up-next-toggle', {}, { timeout: 5000 });
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
   return screen.findByTestId('goal-progress', {}, { timeout: 5000 });
 }
 

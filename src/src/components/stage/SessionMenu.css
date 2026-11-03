@@ -1,0 +1,199 @@
+/* ============================================================================
+   THE SESSION MENU'S NEW PARTS — components/stage/SessionSetupPanel.jsx
+   (docs/design/session-menu, approved 3 Nov 2026).
+
+   The sheet itself (.setup-panel, its header, tabs and body) is styles.css's;
+   this sheet adds only what the redesign drew: the event line's parts, the
+   foot, More options, the categories line, the report card, the late line,
+   the phone and join rows, a row's ⋯ menu, the running order's Show all and
+   the put-aside list. Every selector is under `.smenu` (the sheet's own
+   class) or a `.smenu-*` / `.setup-panel__foot` name no other sheet uses.
+
+   Dusk only (the sheet carries data-theme="dark"). Roles only: --text,
+   --muted, --info (link blue), --danger-text, --surface, --surface-2,
+   --primary for the report's edge. Measured on the sheet's #111D33:
+     --text      #F4EDE4   15.1:1
+     --muted     #9BA8BE    7.3:1
+     --info      #7CA7E6    6.9:1
+     --danger-text #EF8C86  6.6:1
+   Laptop ladder 12 / 13 / 15 px; nothing below 12px.
+   ========================================================================== */
+
+/* The event line (D5): "This event · item 3 of 6", then the two links. */
+.smenu .setup-panel__event { gap: 4px 8px; padding: 6px 20px; }
+.smenu .setup-panel__event-t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--muted); }
+.smenu .setup-panel__event-k { font-size: 13px; color: var(--text); margin: 0; }
+.smenu .setup-panel__event-acts { display: flex; flex-wrap: wrap; gap: 2px; margin-left: auto; }
+
+/* The foot (fork F2): End session at the start, Main menu at the end, in
+   every section. Main menu is pushed by margin, never flex-end (hard rule 9). */
+.smenu .setup-panel__foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid rgb(var(--glow-rgb) / .16);
+}
+.smenu .setup-panel__foot .smenu-main { margin-left: auto; gap: 6px; }
+/* Outlined text, not a filled button: it is confirmed, and it sits at the
+   opposite end of the foot from Main menu (desk review 1). */
+.smenu .setup-panel__foot .smenu-end[class~="ui-btn"] {
+  color: var(--danger-text);
+  border-color: rgb(var(--danger-rgb) / .55);
+}
+
+/* The sections' panes: groups separated by a rule, as the old groups were. */
+.smenu .smenu-pane { display: flex; flex-direction: column; gap: 12px; }
+.smenu .smenu-pane > .setup-group + .setup-group { border-top: 1px solid rgb(var(--glow-rgb) / .16); padding-top: 12px; }
+
+/* One "More options" per section (D2). The closed line names what it holds. */
+.smenu .smenu-more { border-top: 1px solid rgb(var(--glow-rgb) / .16); padding-top: 8px; }
+.smenu .smenu-more__toggle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--info);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.smenu .smenu-more__toggle svg { align-self: center; }
+.smenu .smenu-more__k { font-weight: 700; color: var(--info); }
+.smenu .smenu-more__s { color: var(--muted); }
+.smenu .smenu-more__body { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.smenu .smenu-more__body > .setup-group + .setup-group { border-top: 1px solid rgb(var(--glow-rgb) / .16); padding-top: 12px; }
+
+/* Up next: the two ways to add a round, the categories line. */
+.smenu .smenu-adds { gap: 8px; }
+.smenu .smenu-adds [class~="ui-btn"] { gap: 6px; }
+.smenu .smenu-cats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 2px 6px 2px 14px;
+  border: 1px solid rgb(var(--glow-rgb) / .2);
+  border-radius: 10px;
+  background: rgb(var(--glow-rgb) / .04);
+  font-size: 13px;
+  color: var(--muted);
+}
+.smenu .smenu-cats b { color: var(--text); }
+.smenu .smenu-cats__change { margin-left: auto; color: var(--info); }
+.smenu .smenu-back { align-self: flex-start; color: var(--info); }
+
+/* The Choose step's Category select and Hide asked. */
+.smenu .smenu-select select {
+  font: inherit;
+  font-size: 15px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--glow-rgb) / .28);
+  background: var(--surface);
+  color: var(--text);
+}
+.smenu .smenu-hide-asked { font-size: 13px; color: var(--muted); }
+
+/* The running order: Show all, under the rows. */
+.smenu .setup-q__more { display: flex; align-items: center; gap: 4px; margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+
+/* A row's ⋯ menu (D9): an inline popover inside the sheet, never a modal. */
+.smenu-rowmenu { position: relative; display: inline-flex; }
+.smenu-rowmenu .smenu-rowmenu__toggle { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.smenu-rowmenu .smenu-rowmenu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 248px;
+  padding: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-strong, rgb(var(--glow-rgb) / .3));
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgb(var(--shade-rgb) / .5);
+}
+.smenu-rowmenu .smenu-rowmenu__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.smenu-rowmenu .smenu-rowmenu__item:hover:not(:disabled) { background: var(--surface); }
+.smenu-rowmenu .smenu-rowmenu__item:disabled { color: var(--muted); cursor: default; }
+.smenu-rowmenu .smenu-rowmenu__item.is-danger { color: var(--danger-text); }
+.smenu-rowmenu .smenu-rowmenu__note { font-size: 12px; color: var(--muted); }
+
+/* Put aside this session (Up next · More). */
+.smenu .smenu-aside { list-style: none; margin: 0; padding: 0; }
+.smenu .smenu-aside__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid rgb(var(--glow-rgb) / .2);
+  border-radius: 8px;
+}
+.smenu .smenu-aside__row + .smenu-aside__row { margin-top: 6px; }
+.smenu .smenu-aside__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+
+/* Rounds so far: the report card first (D3), then the late line. */
+.smenu .smenu-report {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgb(var(--accent-rgb) / .28);
+  border-radius: 10px;
+  background: rgb(var(--accent-rgb) / .05);
+}
+.smenu .smenu-report__t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.smenu .smenu-report__t b { font-size: 15px; color: var(--text); }
+.smenu .smenu-late {
+  padding: 4px 6px 4px 12px;
+  border: 1px solid rgb(var(--glow-rgb) / .2);
+  border-radius: 8px;
+}
+.smenu .smenu-late .late-heading-row { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.smenu .smenu-late__h { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--text); }
+.smenu .smenu-late__t { font-size: 13px; color: var(--muted); }
+.smenu .smenu-late__review { margin-left: auto; color: var(--info); }
+
+/* A label on the left, its one button on the right (Screens' rows). */
+.smenu .smenu-line { display: flex; align-items: center; gap: 12px; }
+.smenu .smenu-line__k { flex: 1 1 auto; min-width: 0; }
+.smenu .smenu-line__k .setup-h { margin-top: 0; }
+.smenu .smenu-phone { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 10px; }
+
+/* Joining: the code beside the address, as the mockup draws it. */
+.smenu .smenu-join { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.smenu .smenu-join__qr svg { display: block; padding: 6px; border-radius: 6px; }
+.smenu .smenu-join__code { font-size: 15px; color: var(--text); }
+
+/* People: the shared person rows, in one list. */
+.smenu .smenu-people__rows { list-style: none; margin: 0; padding: 0; }
+.smenu .smenu-people__left { margin-top: 12px; }
+.smenu .smenu-people__why { color: var(--muted); }

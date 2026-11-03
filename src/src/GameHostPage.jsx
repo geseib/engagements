@@ -55,6 +55,7 @@ import Pager from './components/stage/Pager';
 import StageGathering from './components/stage/StageGathering';
 import StageJoinPanel from './components/stage/StageJoinPanel';
 import SessionSetupPanel from './components/stage/SessionSetupPanel';
+import Button from './components/ui/Button';
 import Scoreboard from './components/stage/scoreboard/Scoreboard';
 import useScoreboardKeys from './components/stage/scoreboard/useScoreboardKeys';
 import useSessionPanelKey from './components/stage/useSessionPanelKey';
@@ -10405,6 +10406,18 @@ Focus on actionable business strategy insights.`;
                   onPage={setStagePageIndex}
                   enabled={!anyOverlayOpen}
                 />
+                {/* REDO, BESIDE THE READ IT REWRITES (docs/design/session-menu
+                    fork F4): a mid-round action, out of the menu. Only where
+                    this laptop is private (two screens): on one screen the
+                    room watches this, so Redo stays in the Session menu's How
+                    it runs · More options, which keeps a copy either way. */}
+                {twoSurfaces && currentAIInsights && !loadingAIInsights && !aiSummaryFailure ? (
+                  <div className="fn-redo">
+                    <Button variant="tertiary" size={36} onClick={handleRegenerateAISummary} data-testid="read-redo-inline" title="Rewrite the read on screen now, in the current voice">
+                      {'Redo Workie\'s read'}
+                    </Button>
+                  </div>
+                ) : null}
 
                 {/* NO HOST CONTROLS ON THIS BEAT. The Voice and Approach
                     selects, "Briefing on" and Redo were drawn here, on the
@@ -10759,6 +10772,11 @@ Focus on actionable business strategy insights.`;
              everyone here while the room is elsewhere. */
           event={eventCode ? {
             onAgenda: () => { closeAllSidePanels(); goToAgenda(); },
+            // The event line's place (docs/design/session-menu D5): item N of
+            // M, and the room's item while the room is elsewhere.
+            n: eventItem ? itemNumber(eventRun.items, eventItem.itemId) : null,
+            total: (eventRun.items || []).length || null,
+            roomOn: eventRun.liveItemId ? itemNumber(eventRun.items, eventRun.liveItemId) : null,
             onBringHere: eventWaiting && eventItem && (eventItem.state === 'planned' || eventMoved)
               ? () => { closeAllSidePanels(); runHostAction(hostControls.primary); }
               : null,
@@ -10788,10 +10806,9 @@ Focus on actionable business strategy insights.`;
             closeAllSidePanels();
             runHostAction({ intent: HOST_INTENTS.END, confirm: endSessionConfirm() });
           }}
-          onSignOut={handleSignOut}
-          // The group AdminPage's own ProtectedRoute requires. Offering the
-          // link to a plain host would open a tab onto Access Denied.
-          isAdmin={Boolean(currentUser?.groups?.includes('admins'))}
+          /* No Sign out and no Admin in the live menu (docs/design/session-menu
+             fork F5): both are account actions, and Home has both, one press
+             away through Main menu, which leaves the session running. */
           /* WORKIE'S HOST OPTIONS, off the stage (QA drive #21). Redo only
              while a read is on screen: anywhere else it rewrites nothing. */
           workie={{

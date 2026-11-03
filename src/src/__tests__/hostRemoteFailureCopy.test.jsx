@@ -145,10 +145,10 @@ async function connect() {
 async function openQuestions() {
   // Held until the state poll lands: the control is `disabled={!setId}` and a
   // click on a disabled button is silently nothing.
-  const open = await screen.findByRole('button', { name: /choose next question/i });
+  const open = await screen.findByRole('button', { name: /^up next$/i });
   await waitFor(() => expect(open).not.toBeDisabled());
   fireEvent.click(open);
-  await screen.findByRole('tab', { name: /^questions$/i });
+  await screen.findByRole('tab', { name: /^up next$/i });
 }
 
 beforeEach(() => {
@@ -212,7 +212,7 @@ describe('the Questions tab says which failure it had, and offers a way out', ()
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
 
     expect(await screen.findByText(TRIVIA.title)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^questions$/i, selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^up next$/i, selected: true })).toBeInTheDocument();
   });
 
   it('does not blame the question set when the sign-in is what failed', async () => {
@@ -256,7 +256,8 @@ describe('the category list', () => {
     serve({ categories: { status: 404 } });
     await connect();
 
-    fireEvent.click(await screen.findByRole('button', { name: /categories/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^up next$/i }));
+    fireEvent.click(await screen.findByTestId('remote-categories-change'));
     const flash = await screen.findByRole('alert');
     expect(flash.textContent).toMatch(/team/i);
   });

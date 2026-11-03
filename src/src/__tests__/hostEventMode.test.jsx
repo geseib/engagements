@@ -227,7 +227,7 @@ test('a live item\'s lobby has one Main menu and no round button that leaves bes
   that opens it that way again after it is closed; the panel opening at all
   without the parameter.
 */
-test('a preview lobby offers "Set the running order", which opens SESSION on Rounds', async () => {
+test('a preview lobby offers "Set the running order", which opens the Session menu on Up next', async () => {
   installFetch('CREATED');
   events.getEvent.mockResolvedValue(viewWith(ITEM));
   await mountItemStage();
@@ -236,7 +236,7 @@ test('a preview lobby offers "Set the running order", which opens SESSION on Rou
   expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   fireEvent.click(within(door).getByRole('button', { name: 'Set the running order' }));
   const panel = await screen.findByRole('dialog', { name: 'Session menu' });
-  expect(within(panel).getByRole('tab', { name: 'Rounds' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(panel).getByRole('tab', { name: 'Up next' })).toHaveAttribute('aria-selected', 'true');
   expect(within(panel).getByText('Running order')).toBeInTheDocument();
 });
 
@@ -248,14 +248,14 @@ test('no running-order door on a paused item\'s lobby', async () => {
   expect(screen.queryByTestId('preview-running-order')).toBeNull();
 });
 
-test('?panel=questions lands on the Session panel\'s Rounds section, once', async () => {
+test('?panel=questions lands on the Session panel\'s Up next section, once', async () => {
   installFetch('CREATED');
   events.getEvent.mockResolvedValue(viewWith(ITEM));
   window.history.pushState({}, '', `/host?gameId=${GAME}&event=${CODE}&panel=questions`);
   render(<GameHostPage />);
 
   const panel = await screen.findByRole('dialog', { name: 'Session menu' }, { timeout: 5000 });
-  expect(within(panel).getByRole('tab', { name: 'Rounds' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(panel).getByRole('tab', { name: 'Up next' })).toHaveAttribute('aria-selected', 'true');
   expect(window.location.search).not.toMatch(/panel=/);
   expect(window.location.search).toMatch(`gameId=${GAME}`);
 
@@ -264,8 +264,9 @@ test('?panel=questions lands on the Session panel\'s Rounds section, once', asyn
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull());
   fireEvent.click(screen.getByRole('button', { name: 'Session menu' }));
   const again = await screen.findByRole('dialog', { name: 'Session menu' });
-  // In an event the ordinary panel opens on Agenda, its first section (dev QA 2 Nov).
-  expect(within(again).getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+  // In an event the ordinary menu opens on Up next too, with the event line above (session-menu D5, F7).
+  expect(within(again).getByRole('tab', { name: 'Up next' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(again).getByTestId('session-menu-event')).toBeInTheDocument();
 });
 
 test('without ?panel= the stage opens with the Session panel shut', async () => {

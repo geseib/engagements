@@ -221,12 +221,13 @@ describe('Your part now at zero (finding 7)', () => {
 // ── 1. the Session menu: People as a view, a survey's close, End in the lobby ──
 describe('the Session menu\'s people and endings (finding 1)', () => {
   const players = [{ name: 'Ada', score: 3 }, { name: 'Bo', score: 1 }];
-  // rejects: dev QA 2 Nov — Players was a Session menu tab beside a People column.
-  test('beside a People column the full list is a view, "All N, and who left", not a section', () => {
-    render(<SessionSetupPanel players={players} peopleColumn initialTab="players" />);
-    expect(screen.queryByRole('tab', { name: 'People' })).toBeNull();
-    const view = screen.getByRole('region', { name: 'All 2, and who left' });
-    expect(within(view).getAllByTestId('roster-name').map((n) => n.textContent)).toEqual(['Ada', 'Bo']);
+  // Since the Session menu redesign (owner, 3 Nov 2026: "yes, add People"):
+  // People is a section in every version; beside a People column, the column's
+  // "All N, and who left" opens it.
+  test('beside a People column the full list is the People section, opened by "All N, and who left"', () => {
+    const { container } = render(<SessionSetupPanel players={players} peopleColumn initialTab="players" />);
+    expect(screen.getByRole('tab', { name: 'People' })).toHaveAttribute('aria-selected', 'true');
+    expect([...container.querySelectorAll('.prow-name')].map((n) => n.textContent)).toEqual(['Ada', 'Bo']);
     expect(read('components', 'console', 'ConsoleRail.jsx')).toMatch(/onLink=\{\(\) => onOpenSection\('players'\)\}/);
   });
   test('a survey closes from its menu with the main button\'s own control', () => {
@@ -234,16 +235,17 @@ describe('the Session menu\'s people and endings (finding 1)', () => {
     const close = { id: 'close-survey', label: 'Close the survey', intent: 'close-survey' };
     const warn = { id: 'warn-survey', label: 'Two-minute warning', intent: 'warn-survey' };
     render(<SessionSetupPanel gameType="survey" gameState="SURVEY#OPEN" surveyActs={{ close, warn, end: null, closed: false, onAct }} />);
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Screens', 'Joining', 'Close survey', 'People', 'End session']);
-    fireEvent.click(screen.getByRole('tab', { name: 'Close survey' }));
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Close survey', 'Survey results', 'People', 'Screens', 'Joining', 'How it runs']);
+    expect(screen.getByRole('tab', { name: 'Close survey' })).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(screen.getByTestId('session-menu-close-survey'));
     expect(onAct).toHaveBeenCalledWith(close);
-    fireEvent.click(screen.getByRole('tab', { name: 'End session' }));
-    expect(screen.getByText(/Close the survey first/)).toBeInTheDocument();
+    // End session is the foot's, held with its reason until the survey closes.
+    expect(screen.getByTestId('session-menu-end').getAttribute('title')).toMatch(/Close the survey first/);
   });
-  test('an event opens its menu on Agenda', () => {
+  test('an event opens its menu on Up next, with ‹ Agenda on the event line', () => {
     render(<SessionSetupPanel event={{ onAgenda: () => {}, onBringHere: null }} />);
-    expect(screen.getByRole('tab', { name: 'Agenda' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Up next' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Agenda' })).toBeNull();
     expect(screen.getByTestId('session-menu-agenda')).toBeInTheDocument();
   });
 });

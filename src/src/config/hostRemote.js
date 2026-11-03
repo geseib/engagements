@@ -661,11 +661,21 @@ export function waitingOn(rosterResponse, stateOrSnapshot) {
  *   one that can afford to be last.
  */
 export function remotePanelTabs() {
+  /* THE SESSION MENU'S NAMES ON THE PHONE (docs/design/session-menu D10,
+     approved 3 Nov 2026): Up next · Rounds so far · People — the laptop's
+     own section ids and words, so the two menus are learned once. */
   return [
-    { id: 'players', label: 'Players' },
-    { id: 'history', label: 'Rounds' },
-    { id: 'questions', label: 'Questions' },
+    { id: 'up-next', label: 'Up next' },
+    { id: 'history', label: 'Rounds so far' },
+    { id: 'people', label: 'People' },
   ];
+}
+
+/** The phone's old tab ids, still asked for: where each lives now. */
+export function remotePanelTab(asked) {
+  const map = { players: 'people', questions: 'up-next', rounds: 'history' };
+  const id = map[asked] || asked;
+  return remotePanelTabs().some((t) => t.id === id) ? id : 'up-next';
 }
 
 /**

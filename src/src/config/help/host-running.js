@@ -318,15 +318,15 @@ const running = {
         {
           t: 'list',
           items: [
-            'Press S, or **Show scoreboard on screen** in the Screens section of the Session menu. S again, Esc, Space or the board\'s close button takes it down.',
+            'Press S, or **Show scoreboard on screen** in the Session menu\'s **Screens**. S again, Esc, Space or the board\'s close button takes it down.',
             '← and → page through a long board.',
-            'V changes its look: **Departure board**, **Olympic board** or **Tote board**. The default is set under **Scoreboard style** in the Session menu\'s Screens.',
+            'V changes its look: **Departure board**, **Olympic board** or **Tote board**. The default is set under **Scoreboard look** in the Session menu\'s Screens · **More options**.',
           ],
         },
       ],
     },
     /*
-      End: SessionSetupPanel's "End session" section, the menu's last
+      End: SessionSetupPanel's foot, "End session…" in every section
       (canEndSession: not a survey, not already ended; the lobby too since
       dev QA 2 Nov; end-session.js accepts CREATED); SESSION_MENU_WORDS;
       endSessionConfirm "End this session?" / "Ending closes the session for
@@ -345,7 +345,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: 'Stop whenever you like, before round 1 too. Open the **Session menu** and its last section, **End session**, and press **End session**. It asks first (**End this session?**): ending closes the session on every device in the room straight away. Before round 1 nothing has been played, so there is no report to open; the code stops working.',
+          text: 'Stop whenever you like, before round 1 too: **End session…** at the foot of the **Session menu**, in every section, or of the phone Remote\'s tabs. It asks first (**End this session?**): ending closes the session on every device in the room straight away. Before round 1 there is no report to open; the code stops working.',
         },
         {
           t: 'p',
@@ -362,7 +362,7 @@ const running = {
           t: 'note',
           tone: 'info',
           title: 'Main menu does not end anything',
-          text: '**Main menu** (top left on the top bar, on one screen and two, or under **Leave without ending** in the End session section), or **Back to menu** once the session has ended, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions.',
+          text: '**Main menu** (top left on the top bar, or at the right of the Session menu\'s foot), or **Back to menu** once the session has ended, takes you to your start screen and leaves the session live. With people in the room it asks first (**Leave this session?**); **Stay in the session** is the safe answer. Come back to it with Continue under Sessions. Sign out and Admin are on the start screen.',
         },
       ],
     },
@@ -371,13 +371,15 @@ const running = {
 
 /*
   THE SESSION PANEL (components/stage/SessionSetupPanel.jsx; sections from
-  config/setupPanel.js setupPanelTabs since dev QA 2 Nov: Screens, Phone
-  remote, Rounds, Joining, People where there is no People column, End
-  session; Agenda first in an event; a survey: Screens, Joining, Close
-  survey, People, End session). Opened by
+  config/setupPanel.js setupPanelTabs since the Session menu redesign,
+  docs/design/session-menu, 3 Nov 2026: Up next, Rounds so far, People,
+  Screens, Joining, How it runs; a survey: Close survey, Results, People,
+  Screens, Joining, How it runs. An event's item adds the event line, not a
+  tab. The foot: End session…, Main menu. Each section: a default view and
+  one More options line, MoreOptions.jsx). Opened by
   Session menu on the top bar (one screen and two, experience plan 2h; a
   sheet below Your part now and the Needs-you line), or \ (useSessionPanelKey);
-  in an event its first item is Agenda (`event`); header "Session menu",
+  in an event the line under the header (`event`); header "Session menu",
   "Connected"/"Connecting…", Help, ✕; Esc or \ closes. Sections moved here
   from host-running-engagements in Phase 2 keep their ids (HELP_SECTION_MOVES).
 */
@@ -385,7 +387,7 @@ const sessionPanel = {
   id: 'host-session-panel',
   title: 'The Session panel',
   icon: 'SlidersHorizontal',
-  summary: 'Its sections: the screens, your phone as a remote, the rounds, joining, and ending the session.',
+  summary: 'Its sections: Up next, Rounds so far, People, Screens, Joining and How it runs, with End session and Main menu at its foot.',
   sections: [
     {
       id: 'session-panel',
@@ -394,24 +396,27 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'Press **Session menu**, top right, or \\, to open the panel over the stage (on the console, over the main area), never over Your part now. It holds what you set once; what you act on mid-round is in People and Needs you. \\ or Esc closes it. **Connected** in its header means live updates are reaching you. The room can see it on one screen, so it never shows correct answers.',
+          text: 'Press **Session menu**, top right, or \\, to open it over the stage (on the console, over the main area), never over Your part now. It opens on **Up next**, or **Rounds so far** once the session has ended. \\ or Esc closes it. **Connected** means live updates are reaching you. It never shows correct answers.',
         },
         {
           t: 'table',
           head: ['Section', 'What it is for'],
           rows: [
-            ['**Agenda**', 'An event only, first: the agenda, and **Bring everyone here**.'],
-            ['**Screens**', 'One screen or two, the room\'s window, its size, the scoreboard, the keys.'],
-            ['**Phone remote**', 'A QR for your own phone.'],
-            ['**Rounds**', 'What comes next, the rounds so far (report, late items, each round), and how rounds run.'],
-            ['**Joining**', 'The join link and code, **Invite…**, **Show join code**.'],
-            ['**People**', 'Where there is no People column (one screen, a survey, Setup). On the console: People\'s **All N, and who left**.'],
-            ['**End session**', 'In every phase, before round 1 too, with **Main menu** and Sign out under it.'],
+            ['**Up next**', 'The running order, **Write a question**, **Choose from the set**, the categories.'],
+            ['**Rounds so far**', 'The report first, the late answers, then every round played.'],
+            ['**People**', 'Everyone, and who left.'],
+            ['**Screens**', 'One screen or two, the room\'s window, your phone, the scoreboard.'],
+            ['**Joining**', 'The join address and code.'],
+            ['**How it runs**', 'Names, Pace, and Workie under More options.'],
           ],
         },
         {
           t: 'p',
-          text: 'A survey: **Screens**, **Joining**, **Close survey** (with the two-minute warning and Workie\'s read), **People**, **End session**.',
+          text: 'Each section opens short; its one **More options** line names what it holds and stays open once you open it. **End session…** and **Main menu** are at the foot.',
+        },
+        {
+          t: 'p',
+          text: 'A survey: **Close survey**, **Survey results**, **People**, **Screens**, **Joining**, **How it runs**; End session waits until it is closed. In an event, one line under the header says where you are (**This event**, item 3 of 6) with ‹ Agenda, and **Bring everyone here** while the room is elsewhere.',
         },
       ],
     },
@@ -432,14 +437,14 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'Questions come in order unless you choose. The **Rounds** section starts with what comes next, in three parts.',
+          text: 'Questions come in order unless you choose. **Up next** in the Session menu shows what comes next.',
         },
         {
           t: 'list',
           items: [
-            { title: '**Categories**', text: 'Each category with how many questions it has left. Press one to switch it off or on for the rounds still to come.' },
-            { title: '**Running order**', text: 'What comes next: your queued questions first, then the automatic order. Move a question earlier or later, take it out of the queue, or disable it for this session (it can be restored).' },
-            { title: '**Choose the next question**', text: 'Every question in the set, with a title search and filters (**Unasked only**, **Enabled only**, one category). Tags say **Asked**, Off or Queued.' },
+            { title: '**Running order**', text: 'The round on screen, then your queued questions, then the automatic order; five rows, then **Show all**. Each row has ↑ ↓ to move it, and ⋯ for **Ask next**, **Ask now**, **Put aside for this session** and taking it out of the queue (Edit and Remove on a question of yours).' },
+            { title: '**Write a question** and **Choose from the set**', text: 'Two ways to add a round. Choose from the set opens every question in the set in place, with a title search, one Category select (all, the categories that are on, or one) and **Hide asked** on. Tags say **Asked**, Off or Queued. **‹ Up next** goes back.' },
+            { title: '**Categories**', text: 'One line: how many are on and how many questions are left. **Change** opens the switches under More options, where **Put aside this session** (with Restore) and the session\'s goal are too.' },
           ],
         },
         {
@@ -448,7 +453,7 @@ const sessionPanel = {
           rows: [
             ['**Queue**', 'Adds it to the end of the running order. The round on screen carries on.'],
             ['**Ask next**', 'Puts it at the top of the running order. It is asked when the current round ends.'],
-            ['**Ask now**', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
+            ['**Ask now** (in ⋯)', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
           ],
         },
       ],
@@ -470,7 +475,7 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'In Call & Answer you can put a question of your own to the room as a full round. **Write a question** is in the Session menu under **Rounds**, beside **Running order**; in the rail\'s **Round queue** on two screens; and in the phone Remote\'s **Rounds** tab. **Q** opens it too, in Setup as well.',
+          text: 'In Call & Answer you can put a question of your own to the room as a full round. **Write a question** is in the Session menu\'s **Up next**, under the running order; in the rail\'s **Round queue** on two screens; and in the phone Remote\'s **Up next** tab. **Q** opens it too, in Setup as well.',
         },
         {
           t: 'list',
@@ -498,7 +503,7 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'In the running order it is marked **Yours**. Until it runs you can **Edit** it, move it, or **Remove** it (Remove asks once, in the row). Once it has run it cannot be changed.',
+          text: 'In the running order it is marked **Yours**. Until it runs you can move it with ↑ ↓, or open its ⋯ to **Edit** or **Remove** it (Remove asks once, in the row). Once it has run it cannot be changed.',
         },
         {
           t: 'p',
@@ -523,7 +528,7 @@ const sessionPanel = {
       blocks: [
         {
           t: 'p',
-          text: 'Under what comes next, **Rounds so far** starts with **Session report** (see The session report) and **Late & not reviewed** (see Late answers and comments), then lists every round played. An AI badge marks a round with Workie\'s read. Open a round to see its question, every response and the read.',
+          text: '**Rounds so far** is a section of its own. It starts with the **Session report** card (**Open the report**; see The session report), then one line counting the late answers, with **Review** to open them in place (see Late answers and comments), then every round played. An AI badge marks a round with Workie\'s read. Open a round to see its question, every response and the read. Before round 1 it says the report and the rounds appear once a round has been played. **Include items not reviewed** in the report is under its More options.',
         },
         { t: 'h', text: 'Reading one response at a time' },
         {
@@ -558,28 +563,22 @@ const sessionPanel = {
     */
     {
       id: 'settings-tab',
-      title: 'Screens, joining, and how the rounds run',
+      title: 'Screens, joining, and how it runs',
       icon: 'SlidersHorizontal',
       blocks: [
         {
           t: 'p',
-          text: 'Each setting says whether it applies now or from the next round; the question on screen, its answers and its votes never change.',
+          text: 'A setting that waits says **From the next round**; the question on screen, its answers and its votes never change. Anything without that label applies now.',
         },
         {
           t: 'list',
           items: [
-            { title: '**Screens**', text: 'One screen or two, the room\'s window, and room screen size: see Two screens and your phone. The scoreboard\'s button and **Scoreboard style** (Trivia and Call & Answer) are here too.' },
-            { title: '**Phone remote**', text: 'A QR for your own phone (you sign in on it): see Two screens and your phone.' },
-            { title: 'Names', text: '**Show who wrote each response from the start**. Off (the default), answers are numbered until voting closes, then show their writers. Turning it on cannot be taken back. **Name who is still waiting** lets the room meter list who has not answered.' },
-            { title: 'Feedback and Report', text: 'Whether the room meter shows comments as they arrive, and **Include items not reviewed** in the report.' },
-            { title: 'Workie', text: '**Redo the read on screen**, and the voice and approach Workie uses from the next round.' },
-            { title: 'Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. Opening anything pauses it.' },
-            { title: '**Joining**', text: 'The join address and code, **Copy join link**, **Invite…** and **Show join code**.' },
+            { title: '**Screens**', text: 'One screen or two and the room\'s window (see Two screens and your phone), **Your phone as a remote** with **Connect your phone**, and the scoreboard\'s button (Trivia and Call & Answer). More options: room screen size, **Scoreboard look**, **Show how this works on the room\'s screen →**, and the keys.' },
+            { title: '**Joining**', text: 'The join address, its QR and the code, **Copy join link** and **Show join code**. More options: **Invite…**, a calendar invite.' },
+            { title: '**How it runs**: Names', text: '**Show who wrote each response from the start** (Call & Answer). Off (the default), answers are numbered until voting closes, then show their writers. Turning it on cannot be taken back.' },
+            { title: '**How it runs**: Pace', text: '**Auto-advance when everyone has responded** moves on by itself after a short beat. Opening anything pauses it.' },
+            { title: '**How it runs**: More options', text: '**Name who is still waiting** (the room meter can list who has not answered), whether comments show on the room\'s screen as they arrive, and Workie\'s voice and approach for the next round. While a read is on screen, **Redo the read on screen** is here too; on two screens it is also beside the read itself, as **Redo Workie\'s read**.' },
           ],
-        },
-        {
-          t: 'p',
-          text: 'Names, Feedback and Report, Workie and Pace are under **How the rounds run**, at the foot of **Rounds**. **Screens** ends with **Show how this works on the stage →**, which explains the session to the room, and **Keyboard shortcuts**, which lists the main keys.',
         },
       ],
     },
@@ -698,7 +697,7 @@ const lateItems = {
       blocks: [
         {
           t: 'p',
-          text: 'The list is in the Session menu\'s Rounds section and, on two screens, in the console\'s left rail. The status line in Your part now counts what is waiting ("1 late answer kept", "3 late items not reviewed"); click the count to open the list. Each item says who and when, for example "during Round 3 · Voting".',
+          text: 'The list is in the Session menu\'s **Rounds so far** (the late line\'s **Review**) and, on two screens, in the console\'s left rail. The status line in Your part now counts what is waiting ("1 late answer kept", "3 late items not reviewed"); click the count to open the list. Each item says who and when, for example "during Round 3 · Voting".',
         },
         {
           t: 'table',
@@ -719,7 +718,7 @@ const lateItems = {
       blocks: [
         {
           t: 'p',
-          text: 'Each round in the report has an "Arrived late" part with the items and their labels. Rounds › How the rounds run › Report › **Include items not reviewed** is on by default; turn it off and the report leaves those out and says how many. Redoing Workie\'s read reads late answers in too, and says so.',
+          text: 'Each round in the report has an "Arrived late" part with the items and their labels. The Session menu\'s Rounds so far › More options › **Include items not reviewed** is on by default; turn it off and the report leaves those out and says how many. Redoing Workie\'s read reads late answers in too, and says so.',
         },
       ],
     },
@@ -746,7 +745,11 @@ const playerManagement = {
       blocks: [
         {
           t: 'p',
-          text: 'Everyone in the room, in score order, with their points, and who left. On the two-screen console it opens from People\'s **All N, and who left**; on one screen (where there is no People column) it is the Session menu\'s **People** section. During a round each row shows whether that person has answered yet, so you can see at a glance who you are waiting on.',
+          text: 'Everyone in the room, in score order, with their place and points, and who left: the Session menu\'s **People** section, in every version of the menu. On the two-screen console the People column stays the at-a-glance view, and its **All N, and who left** opens this section. During a round each row says whether that person has answered yet.',
+        },
+        {
+          t: 'p',
+          text: 'A name request turns the row amber with **Let them** and **Not now**; each row\'s ⋯ has **Move to a new device**, **Lock name** (while a name is open) and **Remove from session** (press twice); a row under **Left the session** has **Bring back**. On one screen the room can see the laptop, so the list waits behind **Show on this screen**; the phone Remote\'s **People** shows it privately.',
         },
         {
           t: 'p',

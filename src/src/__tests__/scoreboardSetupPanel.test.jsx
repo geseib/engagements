@@ -56,19 +56,26 @@ function renderPanel(props = {}) {
       onToggleScoreboard={onToggleScoreboard}
       onScoreboardStyle={onScoreboardStyle}
       onClose={onClose}
+      initialTab="screens"
       {...props}
     />,
   );
   return { ...utils, onToggleScoreboard, onScoreboardStyle, onClose };
 }
+/* Screens · More options holds the look since the redesign (docs/design/session-menu §3). */
+const openMore = () => {
+  const more = screen.getByTestId('more-screens-toggle');
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+};
 
 // The button moved from Players to Screens (dev QA 2 Nov): the scoreboard is
-// what the room's screen shows, and Screens is where the menu opens.
+// what the room's screen shows. Its look is in Screens · More options.
 describe('the Screens section', () => {
   test('the button sits above its look and opens the board', () => {
-    const { onToggleScoreboard, container } = renderPanel();
+    const { onToggleScoreboard } = renderPanel();
+    openMore();
     const button = screen.getByRole('button', { name: 'Show scoreboard on screen' });
-    const look = container.querySelector('.setup-group--scoreboard select');
+    const look = screen.getByLabelText('Scoreboard style');
     // eslint-disable-next-line no-bitwise
     expect(button.compareDocumentPosition(look) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(button);
@@ -111,6 +118,7 @@ describe('the Settings tab', () => {
   test('a Scoreboard section with the three looks, the current one chosen', () => {
     renderPanel({ scoreboard: { ...closed, style: 'olympic' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
+    openMore();
     const select = screen.getByLabelText('Scoreboard style');
     expect(select.value).toBe('olympic');
     expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
@@ -121,6 +129,7 @@ describe('the Settings tab', () => {
   test('choosing a look sends it', () => {
     const { onScoreboardStyle } = renderPanel();
     fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
+    openMore();
     fireEvent.change(screen.getByLabelText('Scoreboard style'), { target: { value: 'tote' } });
     expect(onScoreboardStyle).toHaveBeenCalledWith('tote');
   });
@@ -128,6 +137,7 @@ describe('the Settings tab', () => {
   test('no Scoreboard section for a Poll', () => {
     renderPanel({ gameType: 'poll', scoreboardAvailability: none });
     fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
+    openMore();
     expect(screen.queryByLabelText('Scoreboard style')).toBeNull();
   });
 });

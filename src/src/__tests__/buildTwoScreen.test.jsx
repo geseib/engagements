@@ -381,7 +381,9 @@ describe('5. the keys and the way out', () => {
   test('Look here, privately (in the Session menu since 2e): Build opens on the laptop; 1 comes back to the console', async () => {
     await openRoom(MOMENTS['a · between asks']());
     fireEvent.click(consoleEl().querySelector('[data-slot="session-menu"]'));
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Settings/ }));
+    // Screens · More options since the Session menu redesign (D10).
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('tab', { name: /^Screens/ }));
+    fireEvent.click(screen.getByRole('dialog', { name: 'Session menu' }).querySelector('[aria-controls^="smenu-more-"]'));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Session menu' })).getByRole('button', { name: 'Build' }));
     expect(consoleEl()).toBeNull();
     expect(document.querySelector('[data-capability="build-screen"]')).not.toBeNull();

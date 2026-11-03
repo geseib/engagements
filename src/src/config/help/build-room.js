@@ -16,10 +16,11 @@
     the Host screen, header    BuildRoomPage.jsx RoomHeader/HeaderTools,
                                AgentChip, ConnectionChip; BuildSetup.jsx
                                (Before the room starts, since 26 Oct 2026)
-    the Session menu           buildroom/BuildSessionPanel.jsx (Players filters
-                               Here/Away/Builders; Settings sections Screens,
-                               Joining, Build settings, End session; on two
-                               screens a sheet over the console, 2 Nov 2026)
+    the Session menu           buildroom/BuildSessionPanel.jsx (BUILD_MENU_TABS:
+                               Claude, Asks so far, People, Screens, Joining;
+                               the foot End session… / Main menu; session-menu
+                               redesign, 3 Nov 2026; on two screens a sheet
+                               over the console)
     the top bar and Needs you  components/console/ConsoleTop.jsx, config/hostWords.js,
                                config/needsYou.js (build items), components/
                                people/PersonRow.jsx (experience plan 2e)
@@ -166,15 +167,15 @@ const buildRoom = {
       title: 'The Session menu in a Build Room',
       icon: 'SlidersHorizontal',
       blocks: [
-        { t: 'p', text: '**Session menu**, top right, or \\, opens it. On two screens it opens over the middle of the console, never over Your part now. It has two tabs.' },
+        { t: 'p', text: '**Session menu**, top right, or \\, opens it (on two screens, over the middle of the console). Its sections: **Claude**, **Asks so far**, **People**, **Screens**, **Joining**, each with one **More options** line. **End session…** and **Main menu** are at its foot.' },
         {
           t: 'list',
           items: [
-            { title: 'Players', text: 'Who has joined, filtered by **Here**, **Away** and **Builders**. Handing a name to another device and removing someone work as in any session: see Managing players.' },
-            { title: 'Settings: Screens', text: 'Where the room watches, the room\'s window and its status, room screen size, and **New link** for a link shared by mistake.' },
-            { title: 'Settings: Joining', text: 'The join code, **Copy join link**, the demo\'s code once it is shared, and **List names on the room meter** (off: the Stage shows only the count).' },
-            { title: 'Settings: Build settings', text: 'Claude: its status, **Connect Claude Code**, which plugin is running, **Copy the Continue prompt** while Claude is away, **Review Claude\'s questions** (on: they wait for you before the room sees them; off: they open as Claude asks) and **Check Claude\'s posts before the room sees them**. Then the crew: **Open to a crew**.' },
-            { title: 'Settings: End session', text: '**Back to the opening** (once building has started), **Wrap up**, **Report** and **End session**. Screens also has **Look here, privately**: Build or History on this laptop alone.' },
+            { title: 'Claude', text: 'Its status, **Connect Claude Code**, **Copy the Continue prompt** while Claude is away, **Review Claude\'s questions** and **Check Claude\'s posts before the room sees them**. More options: the plugin, the crew (**Open to a crew**), **Back to the opening**.' },
+            { title: 'Asks so far', text: '**Report** first, then **Wrap up** and **History**.' },
+            { title: 'People', text: 'Everyone, in the People column\'s person row, and who left: **Let them** / **Not now** on a name request; ⋯ for **Move to a new device**, **Lock name**, **Remove from session**; **Bring back**. Past twelve people, a search and **Here**, **Away**, **Builders**.' },
+            { title: 'Screens', text: 'Where the room watches and the room\'s window. More options: size, **New link** for a link shared by mistake, **Look here, privately**, the keys.' },
+            { title: 'Joining', text: 'The join code, **Copy join link**, the demo\'s code once shared. More options: **List names on the room meter**.' },
           ],
         },
       ],
@@ -326,7 +327,7 @@ const running = {
           ],
         },
         { t: 'p', text: 'When Claude\'s mockups for a Choose question are all in, a **Claude\'s mockups are ready** card shows above what you are running, with the pictures. **Put to the room now** opens it (asking first if an ask is open); **Next, after this ask** opens it when the open ask closes, and leads during the opening. On the Stage the dock shows **Mockups ready**.' },
-        { t: 'p', text: 'To let Claude\'s questions open straight away, switch review off in the Session menu, Settings, Build settings.' },
+        { t: 'p', text: 'To let Claude\'s questions open straight away, switch review off in the Session menu\'s **Claude**.' },
       ],
     },
     {
@@ -535,7 +536,7 @@ const running = {
           t: 'p',
           text: 'With **Check Claude\'s posts before the room sees them** on, Claude\'s updates, answers and screenshots wait in Waiting for you. **Release to the room** puts one on the phones and the stage or the room\'s window at the time it happened; **Keep to myself** keeps it off them for good; **Release all** lets several through. History, under **Claude**, marks what the room has not been shown. Claude\'s mockups appear when their ask opens, and its live line about what it is doing always shows.',
         },
-        { t: 'p', text: 'To let posts straight through, switch it off in the Session menu, Settings, Build settings.' },
+        { t: 'p', text: 'To let posts straight through, switch it off in the Session menu\'s **Claude**.' },
       ],
     },
     {
@@ -579,7 +580,7 @@ const running = {
         {
           t: 'steps',
           items: [
-            'In the Session menu, Settings, Build settings: **Open to a crew**.',
+            'In the Session menu\'s **Claude**, More options: **Open to a crew**.',
             'Claude shares the repository. If it has not, the window says so and gives the command to type into Claude Code.',
             'Builders join with the code as usual, tap **I have Claude Code** on their phone, and type the line it shows into their own Claude Code.',
             'They take tasks and share early looks. Early looks wait for you: you decide what the room sees, and only you merge.',
@@ -679,7 +680,7 @@ const sharing = {
             'It goes through Cloudflare, who can see the demo. It closes when you turn it off or the session ends.',
             'Each person\'s button carries their own key. The panel lists who opened it, on how many devices, and whether on this network or elsewhere. **Remove**, beside anyone on more than one device, ends that person\'s link.',
             'The first time, the laptop downloads a small tool from Cloudflare, and some company networks block it.',
-            'Update the plugin first: the Session menu, Settings, Build settings says which plugin is running.',
+            'Update the plugin first: the Session menu\'s **Claude**, More options, says which plugin is running.',
           ],
         },
       ],
@@ -710,7 +711,7 @@ const twoScreens = {
             'The room sees: Stage, Build, History, like 2, 3, 4 and P, change only the room\'s window; your laptop stays where it is. **See it here** shows that screen on the laptop, and 1 comes back.',
             'The window needs no sign-in, has nothing to press, and shows no names unless **List names on the room meter** is on.',
             '**Show my typing to the room**, beside the send boxes, puts your words on the room\'s window\'s Stage as you write a direction, under The host is writing to Claude. Never the Why. It is off until you turn it on, and this browser remembers it for the session. It shows on the room\'s window opened from this laptop only; on another device the room sees the words once you send.',
-            'Link shared by mistake? In the Session menu, Settings, Screens, press **New link** twice: it cuts off every window opened with the old link.',
+            'Link shared by mistake? In the Session menu\'s **Screens**, More options, press **New link** twice: it cuts off every window opened with the old link.',
           ],
         },
       ],
@@ -758,7 +759,7 @@ const twoScreens = {
           items: [
             { title: 'Left', text: 'Waiting for you (open it in the middle for more room), People, and Later, with Points inside once Claude has posted one or you asked (What\'s next\'s **Ask Claude for points** opens it in the middle).' },
             { title: 'People', text: 'One row per person, as in every session: here or away, the name, what they are doing now (answered, voted, not yet; never what they chose), the ideas they gave, and **⋯**: **Move to a new device**, **Lock name**, **Remove from session** (press it twice).' },
-            { title: 'The Session menu', text: 'What the old Session list held is in the **Session menu**: Connect Claude, the plugin, the crew, Look here, Wrap up, Report and End session.' },
+            { title: 'The Session menu', text: 'What the old Session list held is in the **Session menu**: Connect Claude, the plugin and the crew under **Claude**; Wrap up and Report under **Asks so far**; Look here under **Screens**; End session at its foot.' },
             { title: 'Right', text: 'As on one screen: **Claude now** on top, which is also where Claude\'s status is on the console, then **The brief** and **History** with its chips, each once it has something in it.' },
           ],
         },

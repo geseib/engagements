@@ -78,11 +78,8 @@ module.exports = {
       "the summary": 2
     },
     "HostRemote.jsx": {
-      "Back to Menu": 1,
-      "Display on screen": 1,
-      "Players & rounds": 1,
       "Results": 1,
-      "big screen": 6,
+      "big screen": 5,
       "projector": 1
     },
     "PresentPage.jsx": {
@@ -214,7 +211,6 @@ module.exports = {
     },
     "components/stage/SessionSetupPanel.jsx": {
       "AI summary": 2,
-      "Feedback": 1,
       "game": 1
     },
     "components/stage/WorkieSettings.jsx": {
@@ -250,7 +246,6 @@ module.exports = {
       "Main screen": 2
     },
     "config/help/build-room.js": {
-      "Players": 1,
       "SESSION": 1,
       "game": 2,
       "stage": 1,
@@ -275,17 +270,13 @@ module.exports = {
     },
     "config/help/host-setup.js": {
       "Main screen": 1,
-      "Session panel": 5
+      "Session panel": 4
     },
     "config/help/host-surveys.js": {
-      "Back to Menu": 1,
-      "Session panel": 1
+      "Back to Menu": 1
     },
     "config/help/host-two-screens.js": {
-      "Back to Menu": 1,
-      "Display on screen": 1,
       "Feedback": 2,
-      "Players & rounds": 1,
       "Results": 2,
       "Session panel": 1,
       "Show QR": 1
@@ -304,7 +295,6 @@ module.exports = {
       "game": 2
     },
     "config/hostRemote.js": {
-      "Players": 1,
       "game": 1
     },
     "config/lateWords.js": {

@@ -65,15 +65,29 @@ const renderPanel = (props = {}) => render(
   />,
 );
 const tab = (name) => fireEvent.click(screen.getByRole('tab', { name }));
-const PRIVATE = [/Asking to take this name/, /We never write the handoff down/, /Omar Haddad/, /Plainspoken coach/, /Tensions first/, /synergy/, /The secret next question/];
+const PRIVATE = [/wants their name on a new device/, /Sam Okafor/, /We never write the handoff down/, /Omar Haddad/, /Plainspoken coach/, /Tensions first/, /synergy/, /The secret next question/];
+/* Each section of the redesigned menu (docs/design/session-menu), with its
+   More options opened too: nothing private may sit behind an expander
+   unrevealed either. */
+const SECTIONS = ['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs'];
+const openAllMore = () => {
+  for (const t of document.querySelectorAll('[data-testid$="-toggle"][aria-controls^="smenu-more-"]')) {
+    if (t.getAttribute('aria-expanded') !== 'true') fireEvent.click(t);
+  }
+};
 
-test('one screen: no tab renders a private part until it is shown', () => {
+test('one screen: no section renders a private part until it is shown, More options open or not', () => {
   renderPanel({ oneScreen: true });
   const seen = [];
-  for (const name of ['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']) {
+  for (const name of SECTIONS) {
     tab(name);
     seen.push(document.body.textContent);
+    openAllMore();
+    seen.push(document.body.textContent);
   }
+  tab('Up next');
+  fireEvent.click(screen.getByTestId('up-next-choose'));
+  seen.push(document.body.textContent);
   const all = seen.join('\n');
   PRIVATE.forEach((re) => expect([String(re), re.test(all)]).toEqual([String(re), false]));
   // What the room may see instead: a count, and the way to show it.
@@ -82,15 +96,22 @@ test('one screen: no tab renders a private part until it is shown', () => {
   expect(all).toMatch(/The room can see this screen/);
 });
 
-test('one screen: the roster still shows (owner, 25 Sep), without anyone\'s flag', () => {
+// The owner's change to the redesign (3 Nov 2026): on one screen the People
+// section keeps its privacy — the names are behind "Show on this screen", or
+// on the phone (experience plan §3.3; privateParts "scores-roster").
+test('one screen: People is a count, and the names wait behind Show on this screen', () => {
   renderPanel({ oneScreen: true, initialTab: 'players' });
-  expect(screen.getAllByTestId('roster-name').map((n) => n.textContent)).toEqual(expect.arrayContaining(['Priya', 'Sam Okafor']));
-  expect(screen.queryByTestId('handover-flag')).toBeNull();
-  expect(screen.queryByTestId('asking-heading')).toBeNull();
+  const gate = screen.getByTestId('private-people');
+  expect(gate).toHaveTextContent('2 people · 1 name request');
+  expect(document.querySelector('.prow-name')).toBeNull();
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show on this screen' }));
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show it' }));
+  expect([...document.querySelectorAll('.prow-name')].map((n) => n.textContent)).toEqual(expect.arrayContaining(['Priya', 'Sam Okafor']));
 });
 
 test('Show on this screen asks first, then shows that one part', () => {
   renderPanel({ oneScreen: true, initialTab: 'history' });
+  fireEvent.click(screen.getByTestId('late-review'));
   const gate = screen.getByTestId('private-late');
   fireEvent.click(within(gate).getByRole('button', { name: 'Show on this screen' }));
   expect(gate).toHaveTextContent('The room will see this. Show it?');
@@ -99,20 +120,23 @@ test('Show on this screen asks first, then shows that one part', () => {
   expect(document.body.textContent).toMatch(/We never write the handoff down/);
 });
 
-test('two screens (a private laptop): everything as it was, plus Not now and the asker lifted', () => {
+test('two screens (a private laptop): everything shows, with Not now and the asker first', () => {
   renderPanel({ oneScreen: false, initialTab: 'players' });
-  expect(screen.getByTestId('asking-heading')).toBeInTheDocument();
-  const asking = screen.getByTestId('asking-list');
-  expect(asking).toHaveTextContent('Sam Okafor');
-  expect(within(asking).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
-  tab('Rounds');
+  const rows = [...document.querySelectorAll('li.prow')];
+  expect(rows[0]).toHaveTextContent('Sam Okafor');
+  expect(rows[0]).toHaveAttribute('data-testid', 'person-asking');
+  expect(within(rows[0]).getByRole('button', { name: 'Not now: Sam Okafor' })).toBeInTheDocument();
+  tab('Rounds so far');
+  fireEvent.click(screen.getByTestId('late-review'));
   expect(document.body.textContent).toMatch(/We never write the handoff down/);
+  tab('Up next');
+  fireEvent.click(screen.getByTestId('up-next-choose'));
   expect(document.body.textContent).toMatch(/The secret next question/);
 });
 
 test('Not now reaches the page for a round type (it was Build Room only)', () => {
   const onRefuseHandover = jest.fn();
   renderPanel({ initialTab: 'players', onRefuseHandover });
-  fireEvent.click(within(screen.getByTestId('asking-list')).getByRole('button', { name: 'Not now' }));
+  fireEvent.click(within(screen.getByTestId('person-asking')).getByRole('button', { name: 'Not now: Sam Okafor' }));
   expect(onRefuseHandover).toHaveBeenCalledWith('Sam Okafor');
 });

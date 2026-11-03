@@ -40,9 +40,10 @@ const renderPanel = (props = {}) => render(
   />,
 );
 
-test('the Rounds tab carries the late list under its heading', () => {
+test('Rounds so far carries the late line under its heading, and Review opens the list in place', () => {
   renderPanel({ late });
   expect(screen.getByRole('heading', { name: LW.heading })).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId('late-review'));
   expect(screen.getByText('More on this')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: LW.markReviewed }));
   expect(late.onMarkReviewed).toHaveBeenCalledWith(expect.objectContaining({ ref: '202610161000000-abc' }));

@@ -201,6 +201,10 @@ const hostSurveys = {
         },
         {
           t: 'p',
+          text: 'The Session menu (top right) opens on **Close survey**, with the same close and the two-minute warning. Its other sections are **Survey results**, **People**, **Screens**, **Joining** and **How it runs** (what happens after it closes).',
+        },
+        {
+          t: 'p',
           text: 'The stage then thanks the room and says how many answered and how many finished. The QR comes down: nobody new can answer.',
         },
       ],
@@ -282,8 +286,8 @@ const hostSurveys = {
       PlayerPage: a survey's feedback round shows FeedbackRoundPanel with
       namesShown=false ("Your name is not shown with this comment."). ENDED
       (survey): "The session is over", "See the results", "Walk through",
-      "Back to Menu". canEndSession: no End session in the Session panel for
-      a survey. Checked on dev (Workie's read on dev said it did not run: no
+      "Back to Menu". The Session menu's foot: "End session…" held until the
+      survey is closed, then the same end-survey control. Checked on dev (Workie's read on dev said it did not run: no
       summary approach is set up there for surveys).
     */
     {
@@ -305,7 +309,7 @@ const hostSurveys = {
         },
         {
           t: 'p',
-          text: 'The Session panel has no End session for a survey: this button is the way to end it.',
+          text: 'The Session menu\'s foot has the same **End the session** once the survey is closed; before that it waits, saying to close the survey first.',
         },
       ],
     },
@@ -323,7 +327,7 @@ const hostSurveys = {
       blocks: [
         {
           t: 'p',
-          text: 'Open it from the survey\'s main button once it is closed, or later from **Report** on the survey\'s row in your sessions list. A closed survey\'s row has **Survey results** as its main button, and **Report** and **Continue** (back to its stage) under **⋯**.',
+          text: 'Open it from the survey\'s main button once it is closed, from **Open the report** in the Session menu\'s **Survey results** (it says the report is ready once the survey closes until then), or later from **Report** on the survey\'s row in your sessions list. A closed survey\'s row has **Survey results** as its main button, and **Report** and **Continue** (back to its stage) under **⋯**.',
         },
         {
           t: 'p',

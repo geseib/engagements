@@ -21,7 +21,9 @@ import { fetchLate, lateStatusOf } from './utils/lateClient';
 import { navigateTo } from './auth/navigate';
 import RW from './config/roundWords';
 import { useOptionalAuth } from './auth/AuthContext';
-import { categoryRows, questionKey } from './config/setupPanel';
+import { categoryRows, categoriesSummary, questionKey } from './config/setupPanel';
+import { requestEndSession } from './utils/endSession';
+import { canEndSession } from './config/hostControls';
 import { focusRequest, sameFocus, NO_FOCUS, joinShown, joinRequest } from './config/stageFocus';
 import { fetchComments, postRoomNote } from './utils/commentsClient';
 import RoomNote from './components/RoomNote';
@@ -255,7 +257,6 @@ function HostRemote() {
    * went, and why.
    */
   const [panelTab, setPanelTab] = useState(null);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   /* Why the category list is empty, when it is empty for a reason. `null` means
      nothing went wrong — see the load below. */
@@ -346,7 +347,6 @@ function HostRemote() {
     setFeedbackCommentCount(null);
     setCategories([]);
     setCategoriesFailure(null);
-    setCategoriesOpen(false);
     setPanelTab(null);
   }, [access.status]);
 
@@ -1742,6 +1742,27 @@ function HostRemote() {
               gameId={gameId}
               setId={setId}
               initialTab={panelTab}
+              /* Up next's categories line (session-menu D10): the card's
+                 Categories button moved here, its list behind Change. */
+              categoryLine={setId ? (categoriesSummary(catRows) || (categoriesFailure ? 'could not be read' : 'none in this set yet')) : ''}
+              categoryPanel={setId ? (categoriesFailure ? (
+                <p className="hr-flash hr-flash--error" role="alert">
+                  <Icon name="Warning" weight="fill" size={18} color="currentColor" />
+                  {categoriesFailure.message}
+                </p>
+              ) : (
+                <RemoteCategoryList rows={catRows} live={categoriesLive} busy={togglingCategory} onToggle={toggleCategory} />
+              )) : null}
+              ended={snapshot?.state === 'ENDED'}
+              onOpenReport={() => navigateTo(`/host?gameId=${encodeURIComponent(gameId)}&open=report`)}
+              /* END SESSION ON THE PHONE (fork F8): the laptop's route and
+                 its confirm words, asked in place. Not a survey, not once
+                 ended (canEndSession, the laptop's own rule). */
+              onEndSession={canEndSession(gameType, snapshot?.state || '') && snapshot ? async () => {
+                const r = await requestEndSession({ fetchFn: authFetch, apiBase: apiBase(), gameId });
+                if (r.ended) { setPanelTab(null); await pollState(gameId); }
+                return r;
+              } : null}
               roster={roster}
               state={snapshot?.state}
               gameType={gameType}
@@ -2046,15 +2067,9 @@ function HostRemote() {
             <section className="hr-card" aria-label="This round">
               <h2 className="hr-card-heading">This round</h2>
               <div className="hr-grid">
-                <Button
-                  variant="secondary" size={44}
-                  disabled={!setId}
-                  onClick={() => setPanelTab('questions')}
-                >
-                  <Icon name="MagnifyingGlass" weight="bold" size={18} color="currentColor" />
-                  Choose next question
-                </Button>
-
+                {/* "Choose next question" was here: it is the Session card's
+                    Up next door now (docs/design/session-menu D10: one door,
+                    not two). */}
                 {/* THE ROOM'S SCREEN, FROM THE HOST'S HAND.
 
                     Disabled outside a round rather than hidden: unlike Skip —
@@ -2173,32 +2188,36 @@ function HostRemote() {
                   have that asked again just as much as one fixing a refusal. */}
               <ActiveOrgSwitcher onSwitch={recheckAccess} />
               <div className="hr-grid">
-                {/* THE WAY IN TO THE THREE LISTS.
-
-                    First in the card, because it is the only control here that
-                    answers a question the host has DURING a round — who is in
-                    the room, what have we already asked — rather than one that
-                    changes a setting. `Choose next question` above opens the
-                    same panel on its third tab; two doors into one place, each
-                    named for what the host came for, is the shape the desktop
-                    already has (its dock button and its per-category
-                    magnifier). */}
+                {/* THE SESSION MENU'S THREE DOORS (docs/design/session-menu
+                    D10): the laptop's own names, Up next · Rounds so far ·
+                    People, each opening the panel at that section. First in
+                    the card, because they answer what a host asks DURING a
+                    round. The categories are Up next's line now. */}
                 <Button
                   variant="secondary" size={44}
-                  onClick={() => setPanelTab('players')}
+                  onClick={() => setPanelTab('up-next')}
+                  data-testid="remote-door-up-next"
                 >
-                  <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
-                  Players &amp; rounds
+                  <Icon name="ListBullets" weight="bold" size={18} color="currentColor" />
+                  Up next
                 </Button>
 
                 <Button
                   variant="secondary" size={44}
-                  aria-expanded={categoriesOpen}
-                  disabled={!setId}
-                  onClick={() => setCategoriesOpen((open) => !open)}
+                  onClick={() => setPanelTab('history')}
+                  data-testid="remote-door-history"
                 >
-                  <Icon name="Folder" weight="bold" size={18} color="currentColor" />
-                  Categories
+                  <Icon name="ListNumbers" weight="bold" size={18} color="currentColor" />
+                  Rounds so far
+                </Button>
+
+                <Button
+                  variant="secondary" size={44}
+                  onClick={() => setPanelTab('people')}
+                  data-testid="remote-door-people"
+                >
+                  <Icon name="UsersThree" weight="bold" size={18} color="currentColor" />
+                  People
                 </Button>
 
                 <Button
@@ -2235,7 +2254,8 @@ function HostRemote() {
                     title="Open it on the computer wired to the projector and press F"
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                    {Number(snapshot && snapshot.presenting) > 0 ? 'Presenting' : 'Present'}
+                    {/* "Room's screen" (experience plan §3.6), the laptop's word. */}
+                    {Number(snapshot && snapshot.presenting) > 0 ? 'Room\'s screen · on' : 'Room\'s screen'}
                   </Button>
                 ) : (
                   <Button
@@ -2244,7 +2264,7 @@ function HostRemote() {
                     onClick={() => setScreenOpen((open) => !open)}
                   >
                     <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                    Big screen
+                    Room&apos;s screen
                   </Button>
                 )}
 
@@ -2256,31 +2276,10 @@ function HostRemote() {
                       entry screen, which is the remote's menu. A cycle glyph
                       reads as "reload this session". */}
                   <Icon name="House" weight="bold" size={18} color="currentColor" />
-                  Back to Menu
+                  {/* Main menu (§3.6): one word for leaving, as on the laptop. */}
+                  Main menu
                 </Button>
               </div>
-
-              {categoriesOpen && (
-                <div className="hr-card-panel">
-                  {/* THE REFUSAL COMES BEFORE THE LIST, and replaces it. A list
-                      that is empty because the server would not answer is not an
-                      empty list, and drawing "No categories in this set" under a
-                      404 is the empty state that lies. */}
-                  {categoriesFailure ? (
-                    <p className="hr-flash hr-flash--error" role="alert">
-                      <Icon name="Warning" weight="fill" size={18} color="currentColor" />
-                      {categoriesFailure.message}
-                    </p>
-                  ) : (
-                    <RemoteCategoryList
-                      rows={catRows}
-                      live={categoriesLive}
-                      busy={togglingCategory}
-                      onToggle={toggleCategory}
-                    />
-                  )}
-                </div>
-              )}
 
               {joinOpen && (
                 <div className="hr-join">
@@ -2308,7 +2307,7 @@ function HostRemote() {
                       onClick={() => setStageFocus({ join: !joinOnWall })}
                     >
                       <Icon name="Monitor" weight="bold" size={18} color="currentColor" />
-                      {joinOnWall ? 'Take it off the screen' : 'Display on screen'}
+                      {joinOnWall ? 'Take it off the screen' : 'Show join code'}
                     </Button>
                   ) : null}
                 </div>

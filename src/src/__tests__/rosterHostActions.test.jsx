@@ -106,7 +106,24 @@ describe('the roster projection carries the two decisions', () => {
   });
 });
 
-describe('the Players tab offers the handover', () => {
+/*
+  THE PEOPLE SECTION (docs/design/session-menu; owner, 3 Nov 2026: "yes, add
+  People"): the rail's person row (components/people/PersonRow.jsx), with
+  everything the old Players list offered. The words moved with the row:
+  "Asking to take this name" is "wants their name on a new device" (PLAN
+  §3.6), Unlock name is ⋯ Move to a new device, Lock again is ⋯ Lock name.
+*/
+const prowFor = (name) => {
+  const row = [...document.querySelectorAll('li.prow')].find((r) => r.querySelector('.prow-name').textContent === name);
+  if (!row) throw new Error(`no person row for ${name}`);
+  return row;
+};
+const menuOf = (name) => {
+  fireEvent.click(within(prowFor(name)).getByRole('button', { name: `More for ${name}` }));
+  return within(prowFor(name));
+};
+
+describe('the People section offers the handover', () => {
   it('says which name is being asked for, in words rather than a colour', () => {
     renderPanel({
       players: [
@@ -114,12 +131,11 @@ describe('the Players tab offers the handover', () => {
         { name: 'Grace', score: 9 },
       ],
     });
-    // This panel is read on a projector with a lifted black point and by hosts
-    // who cannot rely on hue, so the state is printed.
-    const flags = screen.getAllByTestId('handover-flag');
-    expect(flags).toHaveLength(1);
-    expect(flags[0].textContent).toMatch(/asking to take this name/i);
-    expect(rowFor('Ada').contains(flags[0])).toBe(true);
+    // Read on a projector by hosts who cannot rely on hue: the state is printed.
+    const asking = screen.getAllByTestId('person-asking');
+    expect(asking).toHaveLength(1);
+    expect(asking[0].textContent).toMatch(/wants their name on a new device/i);
+    expect(asking[0]).toBe(prowFor('Ada'));
   });
 
   it('binds the grant to the asker when somebody asked, and leaves it open when nobody did', () => {
@@ -132,40 +148,40 @@ describe('the Players tab offers the handover', () => {
       onGrantHandover,
     });
 
-    // ASKED: only the person who asked can spend it, so a third party typing
-    // the same name at the same moment cannot steal it.
-    fireEvent.click(within(rowFor('Ada')).getByRole('button', { name: /let them take it/i }));
+    // ASKED: only the person who asked can spend it.
+    fireEvent.click(within(prowFor('Ada')).getByRole('button', { name: /let them: ada/i }));
     expect(onGrantHandover).toHaveBeenLastCalledWith('Ada', true);
 
-    // NOT ASKED: the host acting on something said out loud — the owner's
-    // second entry point, and the commoner one in a real room.
-    fireEvent.click(within(rowFor('Grace')).getByRole('button', { name: /unlock name/i }));
+    // NOT ASKED: the host acting on something said out loud.
+    fireEvent.click(menuOf('Grace').getByRole('menuitem', { name: 'Move to a new device' }));
     expect(onGrantHandover).toHaveBeenLastCalledWith('Grace', false);
   });
 
-  it('says a name is unlocked once it is, so the host is not left guessing', () => {
-    renderPanel({ players: [{ name: 'Ada', score: 3, handover: { requested: true, open: true } }] });
-    const flags = screen.getAllByTestId('handover-flag');
-    // One statement, not two: "asking" is superseded by "unlocked" rather than
-    // stacked beside it (RATIONALE §4 — never state one fact twice).
-    expect(flags).toHaveLength(1);
-    expect(flags[0].textContent).toMatch(/unlocked for one handover/i);
+  it('says a name is open once it is, and offers Lock name instead of Move', () => {
+    const onLockHandover = jest.fn();
+    const future = Math.floor(Date.now() / 1000) + 600;
+    renderPanel({ players: [{ name: 'Ada', score: 3, handover: { requested: true, open: true, expiresAt: future } }], onLockHandover });
+    // One statement, not two: the open name is not also flagged as asking.
+    expect(screen.queryAllByTestId('person-asking')).toHaveLength(0);
+    expect(prowFor('Ada').querySelector('.prow-doing').textContent).toBe('name open');
+    const menu = menuOf('Ada');
+    expect(menu.queryByRole('menuitem', { name: 'Move to a new device' })).toBeNull();
+    fireEvent.click(menu.getByRole('menuitem', { name: 'Lock name' }));
+    expect(onLockHandover).toHaveBeenCalledWith('Ada');
   });
 });
 
-describe('the Players tab offers the removal', () => {
-  it('removes by name, and says in the tooltip what removal does not do', () => {
+describe('the People section offers the removal', () => {
+  it('removes by name, pressed twice in place', () => {
     const onRemovePlayer = jest.fn();
     renderPanel({ onRemovePlayer });
-
-    const button = within(rowFor('Ada')).getByRole('button', { name: /^remove$/i });
-    fireEvent.click(button);
+    fireEvent.click(menuOf('Ada').getByRole('menuitem', { name: 'Remove from session' }));
+    expect(onRemovePlayer).not.toHaveBeenCalled();
+    fireEvent.click(within(prowFor('Ada')).getByRole('menuitem', { name: 'Press again to remove' }));
     expect(onRemovePlayer).toHaveBeenCalledWith('Ada');
-    // Destructive-looking controls state the consequence, not the severity.
-    expect(button.getAttribute('title')).toMatch(/answers and points stay in the report/i);
   });
 
-  it('shows who was removed, and offers the way back', () => {
+  it('shows who was removed, with their points, and offers the way back', () => {
     const onRestorePlayer = jest.fn();
     renderPanel({
       removedPlayers: [{ playerName: 'Tomás', totalScore: 5, removedAt: '2026-08-15T10:00:00.000Z' }],
@@ -173,33 +189,25 @@ describe('the Players tab offers the removal', () => {
     });
 
     // A row you cannot see is a row you cannot undo.
-    const departed = screen.getAllByTestId('departed-row');
-    expect(departed).toHaveLength(1);
-    expect(within(departed[0]).getByTestId('departed-name')).toHaveTextContent('Tomás');
-    expect(within(departed[0]).getByText('5 pts')).toBeInTheDocument();
-
-    fireEvent.click(within(departed[0]).getByRole('button', { name: /bring back/i }));
+    const left = screen.getByTestId('people-left');
+    expect(within(left).getByText('Tomás')).toBeInTheDocument();
+    expect(within(left).getByText('5 pts')).toBeInTheDocument();
+    fireEvent.click(menuOf('Tomás').getByRole('menuitem', { name: /bring back/i }));
     expect(onRestorePlayer).toHaveBeenCalledWith('Tomás');
   });
 
   it('does not count the departed as players', () => {
-    renderPanel({
-      removedPlayers: [{ playerName: 'Tomás', totalScore: 5 }],
-    });
-    // The heading is the host's "how many are in the room". The server already
-    // keeps the departed out of `players`; this asserts the panel does not
-    // quietly add them back for display.
-    expect(screen.getByText('2 players')).toBeInTheDocument();
-    expect(screen.getByTestId('departed-heading')).toHaveTextContent('1 removed from the room');
-    expect(screen.getAllByTestId('roster-row')).toHaveLength(2);
+    renderPanel({ removedPlayers: [{ playerName: 'Tomás', totalScore: 5 }] });
+    // The count is "how many are in the room": the departed are counted apart.
+    expect(screen.getByTestId('people-count')).toHaveTextContent('2 people · 1 left');
+    expect(within(screen.getByTestId('people-list')).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(screen.getByRole('list', { name: 'Everyone in the session' })).getAllByRole('listitem')).toHaveLength(2);
   });
 
   it('says nothing about the departed when nobody has left', () => {
     renderPanel();
-    // Never an empty state that lies. "Nobody has been removed" is a heading
-    // about a thing that has not happened.
-    expect(screen.queryByTestId('departed-heading')).toBeNull();
-    expect(screen.queryAllByTestId('departed-row')).toEqual([]);
+    // Never an empty state that lies.
+    expect(screen.queryByTestId('people-left')).toBeNull();
   });
 
   it('states that the removal is soft, where the host makes the decision', () => {

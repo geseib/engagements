@@ -317,7 +317,7 @@ describe('3. which screen the room watches', () => {
       await openRoom(hostState());
       fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
       const panel = screen.getByRole('dialog', { name: 'Session menu' });
-      fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+      fireEvent.click(within(panel).getByRole('tab', { name: /^Screens/ }));
       const g = panel.querySelector('[data-group="screens"]');
       const seg = within(g).getByRole('group', { name: 'Where the room watches' });
       expect(within(seg).getByRole('button', { name: 'One screen' })).toHaveAttribute('aria-pressed', 'true');
@@ -360,7 +360,9 @@ describe('4. one laptop, no second display', () => {
     await openRoom(hostState());
     fireEvent.click(screen.getByRole('button', { name: /^Session menu/ }));
     const panel = screen.getByRole('dialog', { name: 'Session menu' });
-    fireEvent.click(within(panel).getByRole('tab', { name: /^Settings/ }));
+    fireEvent.click(within(panel).getByRole('tab', { name: /^Screens/ }));
+    // New link is in Screens · More options since the Session menu redesign.
+    fireEvent.click(panel.querySelector('[aria-controls^="smenu-more-"]'));
     const g = panel.querySelector('[data-group="screens"]');
     expect(within(g).getByRole('link', { name: 'Open as a tab' })).toHaveAttribute('href', `${WALL}&placed=1`);
     expect(g.textContent).toMatch('No second display? Open it in a tab and share that tab, or press F.');

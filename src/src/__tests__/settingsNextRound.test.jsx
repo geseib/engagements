@@ -12,10 +12,11 @@ import SessionSetupPanel from '../components/stage/SessionSetupPanel';
 
 const board = { open: false, style: 'departure', page: 0, openedAt: null };
 
+/* How it runs, with its More options open (docs/design/session-menu D8). */
 function renderSettings(props = {}) {
-  return render(
+  const result = render(
     <SessionSetupPanel
-      initialTab="rounds"
+      initialTab="run"
       gameType="call-and-answer"
       gameState="RESULTS#002"
       scoreboard={board}
@@ -25,6 +26,9 @@ function renderSettings(props = {}) {
       {...props}
     />,
   );
+  const more = screen.getByTestId('more-run-toggle');
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+  return result;
 }
 
 describe('the panel', () => {
@@ -32,17 +36,17 @@ describe('the panel', () => {
     renderSettings({ settingsRoundLive: true, nextRoundNumber: 3 });
     expect(screen.getByText(/Settings apply from the next round/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Names · From the next round/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^Feedback · From the next round/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^Pace · Applies now/ })).toBeInTheDocument();
-    // Display is "Room screen size" in the Screens section (16 Oct regroup; its own section since dev QA 2 Nov).
+    expect(screen.getByRole('heading', { name: /^Comments on the wall · From the next round/ })).toBeInTheDocument();
+    // Applies now is the default and is no longer printed (review R4).
+    expect(screen.getByRole('heading', { name: /^Pace$/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
-    expect(screen.getByRole('heading', { name: /^Screens · Applies now/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Screens$/ })).toBeInTheDocument();
   });
 
   test('a held change shows its new value and that it waits for the next round', () => {
     renderSettings({ settingsRoundLive: true, nextRoundNumber: 3, pendingSettings: { wallComments: false } });
     expect(screen.getByTestId('wall-comments')).not.toBeChecked();
-    expect(screen.getByRole('heading', { name: /^Feedback · From the next round · Waiting for round 3/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Comments on the wall · From the next round · Waiting for round 3/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Names · From the next round$/ })).toBeInTheDocument();
   });
 

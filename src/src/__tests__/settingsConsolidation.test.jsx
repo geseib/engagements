@@ -26,7 +26,7 @@ import { stripFor } from '../config/workflowStrip';
 
 const renderSettings = (props = {}) => render(
   <SessionSetupPanel
-    initialTab="settings"
+    initialTab="screens"
     gameType="call-and-answer"
     gameState="CREATED"
     gameId="4473"
@@ -43,30 +43,32 @@ const user = { attributes: { name: 'George Seib', email: 'george@example.com' } 
 
 describe('the Session menu, in sections', () => {
   // rejects: dev QA 2 Nov — one Settings tab of four groups plus a Session
-  // fold; PLAN §3.2a names the sections, each its own, in order.
-  test('Screens, Phone remote, Rounds, Joining, then End session; the old groups live in them', () => {
+  // fold. Since the Session menu redesign (3 Nov 2026) the six sections are
+  // the same on every round type, the phone is a group of Screens, and End
+  // session is the foot.
+  test('Up next, Rounds so far, People, Screens, Joining, How it runs; the old groups live in them', () => {
     const { container } = renderSettings();
     const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']);
+    expect(tabs).toEqual(['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs']);
     const heads = (name) => {
       fireEvent.click(screen.getByRole('tab', { name }));
-      return [...container.querySelectorAll('.setup-group > h3.setup-h')].map((h) => h.childNodes[0].textContent);
+      return [...container.querySelectorAll('.setup-group h3.setup-h, .setup-group h4.setup-h')].map((h) => h.childNodes[0].textContent);
     };
-    expect(heads('Screens')[0]).toBe('Screens');
-    expect(heads('Phone remote')).toEqual(['Your phone as a remote']);
-    expect(heads('Rounds')).toEqual(['How the rounds run']);
-    expect(heads('Joining')).toEqual(['Joining']);
-    expect(heads('End session')).toEqual(['End session']);
-    // The Session fold is gone; only Keyboard shortcuts folds away, on Screens.
-    fireEvent.click(screen.getByRole('tab', { name: 'Screens' }));
-    const folds = [...container.querySelectorAll('details.setup-fold > summary')].map((s) => s.textContent);
-    expect(folds).toEqual(['Keyboard shortcuts']);
+    expect(heads('Screens')).toEqual(expect.arrayContaining(['Screens', 'Your phone as a remote']));
+    expect(heads('Joining')).toEqual(['Players join at']);
+    expect(heads('How it runs')).toEqual(['Names', 'Pace']);
+    expect(screen.getByTestId('session-menu-foot')).toHaveTextContent('End session…');
+    // No folds: each section has one More options instead.
+    expect(container.querySelectorAll('details.setup-fold')).toHaveLength(0);
   });
 
   test('"Display profile" is renamed "Room screen size" and sits with the screens', () => {
     const onProfileChange = jest.fn();
     const { container } = renderSettings({ onProfileChange });
-    const screens = container.querySelector('.setup-group--screens');
+    // Screens · More options since the redesign.
+    const more = screen.getByTestId('more-screens-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+    const screens = container.querySelector('.smenu-pane--screens');
     fireEvent.change(within(screens).getByLabelText('Room screen size'), { target: { value: 'tv' } });
     expect(onProfileChange).toHaveBeenCalledWith('tv');
     expect(container.textContent).not.toMatch(/Display profile/);
@@ -110,6 +112,8 @@ describe('the Screens group', () => {
   test('a game type two screens do not cover keeps only the room screen size', () => {
     renderSettings({ gameType: 'survey', roomScreen: 'two' });
     expect(screen.queryByRole('group', { name: 'Where the room watches' })).toBeNull();
+    const more = screen.getByTestId('more-screens-toggle');
+    if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
     expect(screen.getByLabelText('Room screen size')).toBeInTheDocument();
   });
 });
@@ -155,7 +159,7 @@ describe('the remote says who may sign in on the phone', () => {
     // rejects: the Screens group and the sign-in words in --text = dark ink
     // on the panel's navy, under a light page (walk of dev 92f8b24d).
     const panel = fs.readFileSync(path.join(__dirname, '..', 'components', 'stage', 'SessionSetupPanel.jsx'), 'utf8');
-    expect(panel).toMatch(/className=\{`setup-panel\$\{[^}]*\}`\}\s*data-theme="dark"/);
+    expect(panel).toMatch(/className=\{`setup-panel( smenu)?\$\{[^}]*\}`\}\s*data-theme="dark"/);
     const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
     expect(css).toMatch(/\.setup-panel__tabs \{[^}]*flex-wrap: wrap;/);
   });

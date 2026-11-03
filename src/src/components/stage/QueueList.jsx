@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Icon from '../Icon';
 import Button from '../ui/Button';
 import YoursMark from '../YoursMark';
+import RowMenu from './RowMenu';
 import { queueRows, queueSummary, QUEUE_MAX, isOwnKey } from '../../config/questionQueue';
 import { questionKey } from '../../config/setupPanel';
 import { ownQuestionWords as OQ } from '../../config/consoleWords';
@@ -153,7 +154,24 @@ export default function QueueList({
   */
   base = null,
   nowRound = null,
+  /*
+    THE SESSION MENU'S ROWS (docs/design/session-menu D9, fork F3): ↑ ↓ ⋯.
+    Ask next, Ask now (with its warning), Put aside for this session and
+    Remove move into one ⋯ per row; a Yours row's ⋯ holds Edit and Remove.
+    The fixed action columns stay (e91062b41): every row draws the same up,
+    down and ⋯ cells, empty rather than collapsed. Off (the phone, the
+    tests that drive the old columns): the five cells as before.
+  */
+  rowMenu = false,
+  /* Rows drawn before "N more · Show all" (the menu's default view draws
+     five). Null: all of them. The numbering and the edge rules still read
+     the whole list. */
+  limit = null,
+  /* The put-aside list under the rows. The Session menu draws it in Up next's
+     More options instead (PutAsideList below), so it passes false. */
+  showExcluded = true,
 }) {
+  const [showAll, setShowAll] = useState(false);
   const ownByKey = new Map((ownQuestions || []).filter((o) => o && o.key).map((o) => [o.key, o]));
   const [armedRemove, setArmedRemove] = useState(null);
   const rows = queueRows(queue, {
@@ -227,6 +245,11 @@ export default function QueueList({
   };
   const numbers = numberRounds(roundBase, [...rows, ...autoRows.map(() => ({ auto: true }))], passedOver);
   const numberOf = (i) => (numbers[i] === null || numbers[i] === undefined ? '·' : numbers[i]);
+  /* `limit`: how many rows draw before "N more · Show all", queued first. */
+  const capped = Number(limit) > 0 && !showAll;
+  const shownQueued = capped ? Math.min(rows.length, Number(limit)) : rows.length;
+  const shownAuto = capped ? Math.max(0, Math.min(autoRows.length, Number(limit) - shownQueued)) : autoRows.length;
+  const hiddenRows = rows.length + autoRows.length - shownQueued - shownAuto;
 
   /*
     WHICH ROW "ASK NEXT" WOULD NOT MOVE — the one the next end-of-round serves
@@ -291,12 +314,54 @@ export default function QueueList({
   const hasMove = Boolean(onMove || onAutoMove);
   const hasDrop = Boolean(onDisable || onRemoveOwn || onRemove || onRestore);
   const hasOut = Boolean(onRemove);
-  const colClasses = [
+  /* With `rowMenu` the list has two columns of moves and one of ⋯, which
+     takes the `out` track: the same named grid, so the cells still line up. */
+  const colClasses = (rowMenu ? [
+    hasMove ? 'setup-q--c-move' : '',
+    'setup-q--c-out',
+    'setup-q--menu',
+  ] : [
     hasAsks ? 'setup-q--c-asks' : (onEditOwn ? 'setup-q--c-edit' : ''),
     hasMove ? 'setup-q--c-move' : '',
     hasDrop ? 'setup-q--c-drop' : '',
     hasOut ? 'setup-q--c-out' : '',
-  ].filter(Boolean).join(' ');
+  ]).filter(Boolean).join(' ');
+  /* ⋯ for a set row (queued or automatic): the asks, then put aside, then
+     out of the queue. Ask now carries the line that says what it costs. */
+  const setRowMenu = (key, label, { pending = false, queued = false, disable = false } = {}) => (
+    <RowMenu
+      label={`More for ${label}`}
+      testId="queue-row-menu"
+      items={[
+        onAskNext && {
+          id: 'ask-next',
+          label: 'Ask next',
+          note: 'Top of the running order; the round on screen carries on.',
+          disabled: askBusy || pending || key === servesNext,
+          onSelect: () => onAskNext(key, { title: label }),
+        },
+        onAskNow && {
+          id: 'ask-now',
+          label: 'Ask now',
+          note: 'Ends the round on screen and asks this.',
+          disabled: askBusy,
+          onSelect: () => onAskNow(key, { title: label }),
+        },
+        disable && onDisable && {
+          id: 'put-aside',
+          label: 'Put aside for this session',
+          disabled: pending,
+          onSelect: () => onDisable(key, { queued }),
+        },
+        queued && onRemove && {
+          id: 'remove',
+          label: 'Take it out of the running order',
+          disabled: pending,
+          onSelect: () => onRemove(key),
+        },
+      ]}
+    />
+  );
   const actsCells = ({ primary = null, up = null, down = null, drop = null, out = null, outTestId }) => (
     <span className="setup-q__acts" data-testid="queue-acts">
       <span className="setup-q__cell setup-q__cell--primary" data-col="primary">{primary}</span>
@@ -382,6 +447,7 @@ export default function QueueList({
       ) : (
         <ol className="setup-q__list" data-testid="queue-list">
           {rows.map((row, rowIndex) => {
+            if (rowIndex >= shownQueued) return null;
             const pending = busy.has(row.key);
             /*
               PARKED, BY THE SERVER'S OWN RULE. The reason comes from the same
@@ -427,7 +493,20 @@ export default function QueueList({
                       </span>
                     ) : null}
                   </span>
-                  {actsCells({
+                  {rowMenu ? actsCells({
+                    up: onMove ? moveButton('earlier', { disabled: !row.canMoveEarlier || pending, onClick: () => onMove(row.key, 'earlier'), label: ownTitle }) : null,
+                    down: onMove ? moveButton('later', { disabled: !row.canMoveLater || pending, onClick: () => onMove(row.key, 'later'), label: ownTitle }) : null,
+                    out: (
+                      <RowMenu
+                        label={`More for ${ownTitle || OQ.yours}`}
+                        testId="queue-own-menu"
+                        items={[
+                          onEditOwn && { id: 'edit', label: OQ.edit, disabled: pending, onSelect: () => onEditOwn(row.key, ownRow) },
+                          (onRemoveOwn || onRemove) && { id: 'remove', label: OQ.remove, disabled: pending, onSelect: () => setArmedRemove(row.key) },
+                        ]}
+                      />
+                    ),
+                  }) : actsCells({
                     primary: onEditOwn ? (
                       <Button
                         variant="secondary"
@@ -525,7 +604,11 @@ export default function QueueList({
                   buttons would move under the finger as the list reorders.
                   The predicate is `queueRows`', which is `queueMove`'s clamp.
                 */}
-                {actsCells({
+                {rowMenu ? actsCells({
+                  up: onMove ? moveButton('earlier', { disabled: !row.canMoveEarlier || pending, onClick: () => onMove(row.key, 'earlier'), label: row.title || row.key }) : null,
+                  down: onMove ? moveButton('later', { disabled: !row.canMoveLater || pending, onClick: () => onMove(row.key, 'later'), label: row.title || row.key }) : null,
+                  out: setRowMenu(row.key, row.missing ? row.key : (row.title || row.key), { pending, queued: true, disable: true }),
+                }) : actsCells({
                   primary: hasAsks ? askButtons(row.key, row.missing ? row.key : (row.title || row.key), pending) : null,
                   up: onMove ? moveButton('earlier', { disabled: !row.canMoveEarlier || pending, onClick: () => onMove(row.key, 'earlier'), label: row.title || row.key }) : null,
                   down: onMove ? moveButton('later', { disabled: !row.canMoveLater || pending, onClick: () => onMove(row.key, 'later'), label: row.title || row.key }) : null,
@@ -589,13 +672,14 @@ export default function QueueList({
         this list is as current as the last poll and no warning is needed about
         a thing that repairs itself in two seconds.
       */}
-      {autoRows.length > 0 && (
+      {shownAuto > 0 && (
         <div className="setup-q__auto" data-testid="queue-auto">
           <p className="setup-q__auto-head">
             {count === 0 ? 'Coming up — automatic order' : 'Then, automatically'}
           </p>
           <ol className="setup-q__list setup-q__list--auto">
             {autoRows.map((row, autoIndex) => {
+              if (autoIndex >= shownAuto) return null;
               /*
                 THE EDGES, in the materialised list this press will create:
                 [...queue, ...autos]. The first auto can still move EARLIER
@@ -627,7 +711,21 @@ export default function QueueList({
                       move it back out of. It was a greyed-out X once, and the
                       owner read that as a broken remove button; a control
                       that can never work is not drawn, but its cell is kept. */}
-                  {acts && actsCells({
+                  {acts && rowMenu ? actsCells({
+                    up: onAutoMove ? moveButton('earlier', {
+                      disabled: !canEarlier,
+                      onClick: () => onAutoMove(row.questionId, 'earlier'),
+                      label,
+                      title: 'Moving this makes the whole listed order manual — every Auto row above becomes a queued row you can edit.',
+                    }) : null,
+                    down: onAutoMove ? moveButton('later', {
+                      disabled: !canLater,
+                      onClick: () => onAutoMove(row.questionId, 'later'),
+                      label,
+                      title: 'Moving this makes the whole listed order manual — every Auto row shown becomes a queued row you can edit.',
+                    }) : null,
+                    out: setRowMenu(questionKey(String(row.questionId)), label, { disable: Boolean(onAutoMove) }),
+                  }) : acts && actsCells({
                     primary: hasAsks ? askButtons(questionKey(String(row.questionId)), label) : null,
                     up: onAutoMove ? moveButton('earlier', {
                       disabled: !canEarlier,
@@ -669,7 +767,19 @@ export default function QueueList({
         the queue's empty line, the disable control explains itself on every
         row above, so an empty section here would teach nothing.
       */}
-      {excludedRows.length > 0 && onRestore && (
+      {/* THE REST OF THE ORDER, ONE PRESS AWAY (the menu's default view
+          draws five rows). Says how many, so nothing is hidden blind. */}
+      {hiddenRows > 0 || (limit && showAll && rows.length + autoRows.length > limit) ? (
+        <p className="setup-q__more" data-testid="queue-show-all">
+          {hiddenRows > 0 ? <span>{`${hiddenRows} more`}</span> : null}
+          {hiddenRows > 0 ? <span aria-hidden="true">{' · '}</span> : null}
+          <Button variant="tertiary" size="sm" onClick={() => setShowAll((v) => !v)}>
+            {hiddenRows > 0 ? 'Show all' : 'Show fewer'}
+          </Button>
+        </p>
+      ) : null}
+
+      {showExcluded && excludedRows.length > 0 && onRestore && (
         <div className="setup-q__auto" data-testid="queue-disabled">
           <p className="setup-q__auto-head">Disabled this session</p>
           <ol className="setup-q__list setup-q__list--auto">
@@ -711,5 +821,32 @@ export default function QueueList({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * PUT ASIDE THIS SESSION (the Session menu's Up next · More options): the
+ * per-session veto list with its way back. The same rows QueueList draws under
+ * the order when `showExcluded` is on; a veto with no undo is a trap.
+ */
+export function PutAsideList({ rows = [], onRestore = null }) {
+  if (!rows.length || !onRestore) return null;
+  return (
+    <ol className="setup-q__list setup-q__list--auto smenu-aside" data-testid="queue-disabled">
+      {rows.map((row) => (
+        <li key={row.key} className="smenu-aside__row" data-testid="queue-disabled-row">
+          <span className="smenu-aside__name" title={row.title || row.key}>{row.title || row.key}</span>
+          <Button
+            variant="secondary"
+            size={36}
+            onClick={() => onRestore(row.key)}
+            title="Put it back into play — the automatic order picks it up again."
+            aria-label={`Restore ${row.title || row.key}`}
+          >
+            Restore
+          </Button>
+        </li>
+      ))}
+    </ol>
   );
 }

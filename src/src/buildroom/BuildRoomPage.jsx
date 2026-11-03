@@ -562,7 +562,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const [roster, loadPlayers] = useBuildPlayers(api);
   const askingNow = askingOf(roster.players);
   const [panel, setPanel] = useState(null); // {tab: 'players'|'settings', group}
-  const openPanel = useCallback((tab = 'players', group = '') => setPanel({ tab, group }), []);
+  const openPanel = useCallback((tab = 'claude', group = '') => setPanel({ tab, group }), []);
   const closePanel = useCallback(() => setPanel(null), []);
   // The enlarged Join QR on the laptop, for an ended session (the Stage shows no codes then).
   const [joinZoom, setJoinZoom] = useState(false);
@@ -1018,7 +1018,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       case NEEDS_ACTIONS.SEE: {
         const row = typeof document !== 'undefined' ? document.querySelector('[data-testid="person-asking"]') : null;
         if (row && typeof row.scrollIntoView === 'function') { row.scrollIntoView({ block: 'nearest' }); return undefined; }
-        return openPanel('players');
+        return openPanel('people');
       }
       case NEEDS_ACTIONS.DECIDE: return openWaiting({ kind: 'ask', id: item.askId }, 'all');
       case NEEDS_ACTIONS.REVIEW: return openWaiting({ kind: 'waiting' }, item.kind === 'ideas' ? 'room' : 'claude');
@@ -1056,7 +1056,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
   const headerTools = {
     room, now, host, ended, connection, onReconnect: reconnect, pill: askPill(room), onScreen: showRoom, share,
     onQr: onJoinCode, bothCodes: demoLive, codesUp: codesUp && !ended,
-    onPlayers: () => openPanel('players'),
+    onPlayers: () => openPanel('people'),
   };
   const asks = room.asks || [];
   const proposed = asks.filter((a) => a.status === 'proposed');
@@ -1385,7 +1385,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
           // THE SHARED TOP BAR (experience plan 2a, 2e): the bell is the session's Needs you, and the
           // Session menu is the labelled button top right, a sheet over the content area.
           bellSession: needsBell,
-          onSessionMenu: () => (panel ? closePanel() : openPanel('settings')),
+          onSessionMenu: () => (panel ? closePanel() : openPanel('claude')),
           sessionMenuOpen: Boolean(panel),
         }}
         onLeave={() => window.location.assign('/')}
@@ -1450,7 +1450,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
             body: (
               <PeopleList
                 people={people}
-                onPlayers={(g) => openPanel('players', g)}
+                onPlayers={(g) => openPanel('people', g)}
                 menuFor={personMenu}
                 asking={needs.items.filter((i) => i.kind === 'name-request')}
                 onNeedsAct={onNeedsAct}
@@ -1642,7 +1642,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
         askingCount={askingNow.length}
         alert={alert} onAlertGo={alertGo} onAlertAll={alertAll}
         pluginOutdated={Boolean(room.plugin && room.plugin.outdated) && !ended}
-        onPlayers={() => openPanel('players')}
+        onPlayers={() => openPanel('people')}
         onQr={onJoinCode}
         bothCodes={demoLive}
         codesUp={codesUp && !ended}
@@ -1654,7 +1654,7 @@ export function BuildRoom({ gameId, initialView = 'room' }) {
       {screen === 'host' && <PendingInvites variant="bar" stay />}
       {/* SOMEONE ASKS TO TAKE A NAME (S6a): named, on the Host screen only. */}
       {screen === 'host' && !ended && (
-        <HandoverStrip asking={askingNow} busy={busy} onGrant={grantAsker} onRefuse={refuseAsker} onSee={() => openPanel('players')} />
+        <HandoverStrip asking={askingNow} busy={busy} onGrant={grantAsker} onRefuse={refuseAsker} onSee={() => openPanel('people')} />
       )}
       {host && error && (
         <div className="brm-alert brm-alert--bar" role="alert">

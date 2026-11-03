@@ -25,35 +25,33 @@ describe('setupPanelTabs — the Session menu\'s sections, none of them empty', 
    * `toContain`, because "a tab arriving unnoticed" is the thing worth
    * catching and a fifth one should come past this line too.
    */
-  // rejects: dev QA 2 Nov — the menu was still Players / Questions / Rounds /
-  // Settings; PLAN §3.2a names its set-once sections, in this order.
-  test('Screens, Phone remote, Rounds, Joining, End session, in that order, beside a People column', () => {
-    expect(setupPanelTabs({ peopleColumn: true }).map((t) => t.label))
-      .toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'End session']);
+  // rejects: the 2 Nov restructure that stacked Questions, Rounds and the run
+  // settings in one "Rounds" scroll (docs/design/session-menu §1). The
+  // redesign approved 3 Nov 2026: the same six names on every round type,
+  // People in every version.
+  test('Up next, Rounds so far, People, Screens, Joining, How it runs, with or without a People column', () => {
+    const six = ['Up next', 'Rounds so far', 'People', 'Screens', 'Joining', 'How it runs'];
+    expect(setupPanelTabs({ peopleColumn: true }).map((t) => t.label)).toEqual(six);
+    expect(setupPanelTabs({}).map((t) => t.label)).toEqual(six);
   });
-  test('an event adds Agenda first', () => {
-    expect(setupPanelTabs({ event: true, peopleColumn: true }).map((t) => t.label))
-      .toEqual(['Agenda', 'Screens', 'Phone remote', 'Rounds', 'Joining', 'End session']);
+  test('an event adds a line, not a tab: no Agenda, no End session tab', () => {
+    expect(setupPanelTabs({ event: true, peopleColumn: true }).map((t) => t.id))
+      .toEqual(['up-next', 'history', 'people', 'screens', 'joining', 'run']);
   });
-  test('a survey: Screens, Joining, Close survey, End session (no Phone remote, no Rounds)', () => {
+  test('a survey swaps the first two for its own: Close survey, Survey results', () => {
     expect(setupPanelTabs({ survey: true, peopleColumn: true }).map((t) => t.label))
-      .toEqual(['Screens', 'Joining', 'Close survey', 'End session']);
+      .toEqual(['Close survey', 'Survey results', 'People', 'Screens', 'Joining', 'How it runs']);
   });
-  test('with no People column, the full list keeps a section of its own, before End session', () => {
-    // One screen, a survey's stage, Setup: removing it would lose Remove,
-    // Bring back and the handover for a host without the phone Remote.
-    expect(setupPanelTabs({}).map((t) => t.label))
-      .toEqual(['Screens', 'Phone remote', 'Rounds', 'Joining', 'People', 'End session']);
-  });
-  test('the old names still land: players is the people view, questions and history are Rounds', () => {
+  test('the old names still land: players is People, questions Up next, history Rounds so far, settings How it runs', () => {
     const tabs = setupPanelTabs({ peopleColumn: true });
     expect(sessionMenuSection('players', tabs)).toBe('people');
-    expect(sessionMenuSection('questions', tabs)).toBe('rounds');
-    expect(sessionMenuSection('history', tabs)).toBe('rounds');
-    expect(sessionMenuSection('running-order', tabs)).toBe('rounds');
-    expect(sessionMenuSection('settings', tabs)).toBe('screens');
-    expect(sessionMenuSection('', tabs)).toBe('screens');
-    expect(sessionMenuSection('', setupPanelTabs({ event: true }))).toBe('agenda');
+    expect(sessionMenuSection('questions', tabs)).toBe('up-next');
+    expect(sessionMenuSection('history', tabs)).toBe('history');
+    expect(sessionMenuSection('running-order', tabs)).toBe('up-next');
+    expect(sessionMenuSection('settings', tabs)).toBe('run');
+    expect(sessionMenuSection('', tabs)).toBe('up-next');
+    expect(sessionMenuSection('', tabs, { ended: true })).toBe('history');
+    expect(sessionMenuSection('', setupPanelTabs({ event: true }))).toBe('up-next');
   });
 
   test('no tab is ever emitted empty', () => {

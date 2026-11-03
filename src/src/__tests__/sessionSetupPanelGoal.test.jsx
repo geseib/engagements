@@ -30,7 +30,12 @@ const renderPanel = (props = {}) => render(
     {...props}
   />,
 );
-const openQuestions = () => fireEvent.click(screen.getByRole('tab', { name: 'Rounds' }));
+// Up next · More options since the Session menu redesign (docs/design/session-menu §3).
+const openQuestions = () => {
+  fireEvent.click(screen.getByRole('tab', { name: 'Up next' }));
+  const more = screen.queryAllByTestId('more-up-next-toggle')[0];
+  if (more && more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+};
 
 test('with a goal, the Questions tab says where the session stands', () => {
   renderPanel({ goal: { progress: 'Question 3 of 5', reached: false, line: '' } });
