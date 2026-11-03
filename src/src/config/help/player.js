@@ -389,7 +389,9 @@ const playing = {
         every next action is in the dock, config/playerWords.js SEND); with the
         keyboard up the question folds, "Show the whole question ↓". After
         sending: "Locked for this round. If this page reloads, it comes back."
-        (PlayerPage ASK receipt.) A send that fails is a line above the button
+        (PlayerPage ASK receipt), and the dock's button reads "Sent" with a
+        check (components/SendButton.jsx, owner 3 Nov 2026; never for an
+        answer held offline). A send that fails is a line above the button
         ("That did not send. Try again."), never a pop-up.
       */
       id: 'answering',
@@ -401,7 +403,7 @@ const playing = {
           items: [
             { title: 'Read the question', text: 'It is at the top, with the round number above it. Under it, Your task says what the host wants.' },
             { title: 'Answer', text: 'The form depends on the kind of session (sections below). While you type, the question folds away to make room; **Show the whole question ↓** brings it back.' },
-            { title: 'Send', text: 'The button is always in the bar at the bottom of your screen, so you never scroll to find it. Your screen then shows what you sent.' },
+            { title: 'Send', text: 'The button is always in the bar at the bottom of your screen, so you never scroll to find it. Once your answer is in, the button reads **Sent** with a tick, and your screen shows what you sent.' },
           ],
         },
         {
@@ -752,8 +754,9 @@ const feedback = {
     {
       /*
         FollowUpCard + config/followUpWords.js: "Question for the room · Ideas /
-        Choose / Rate", Send, "Sent. You can change it until the results are
-        shown.", "The results are already up. Your answer is kept, but not in
+        Choose / Rate", Send, which reads "Sent" with a check once the answer
+        is in and turns back to Send on any change (owner, 3 Nov 2026), "Sent.
+        You can change it until the results are shown.", "The results are already up. Your answer is kept, but not in
         the count.", Rate ends (e.g. 1 Disagree to 5 Agree). HeldFollowUp: "The
         room has moved on. Your answer is still here, and you can still send
         it.", Leave it / Done. Anonymous (KIND_LINES).
@@ -776,7 +779,7 @@ const feedback = {
         },
         {
           t: 'p',
-          text: 'Press **Send**. You can change your answer and send again until the host shows the room\'s answer.',
+          text: 'Press **Send**. The button then reads **Sent** with a tick. Change your answer and it turns back to **Send**, so you can send again until the host shows the room\'s answer.',
         },
         {
           t: 'p',
@@ -926,7 +929,7 @@ const trouble = {
         },
         {
           t: 'p',
-          text: 'Pressed send while offline? Your screen says "Waiting for the connection." and shows what you will send. The answer is kept on this phone, so a reload does not lose it, and it sends when you are back. Until then **Change my answer** lets you edit it.',
+          text: 'Pressed send while offline? Your screen says "Not sent yet" and "Waiting for the connection." and shows what you will send; the button only says **Sent** once the answer has really gone. The answer is kept on this phone, so a reload does not lose it, and it sends when you are back. Until then **Change my answer** lets you edit it.',
         },
         {
           t: 'p',

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import Button from '../ui/Button';
 import { PlayerShell } from '../PlayerShell';
 import Icon from '../Icon';
+import SendButton from '../SendButton';
 import { namesMode } from '../../config/surveyNames';
 import { getClientId } from '../joinResult';
 import { getRespondentId } from './respondent';
@@ -443,10 +444,17 @@ export default function SurveyRunner({
       volume: 'rest',
       ctx: `Survey · ${SENT}`,
       centre: true,
+      sent: true,
+      /* "Sent" where "Send my answers" was (owner, 3 Nov 2026), beside the
+         way back in: "Change my answers" opens the review, whose Send is
+         live again. */
       dock: (
-        <Button variant="secondary" size={56} onClick={() => goTo('review')}>
-          Change my answers
-        </Button>
+        <div className="plr-pair">
+          <Button variant="secondary" size={56} onClick={() => goTo('review')}>
+            Change my answers
+          </Button>
+          <SendButton sent />
+        </div>
       ),
     }, (
       <>

@@ -653,6 +653,37 @@ describe('checking and sending', () => {
     expect(await screen.findByRole('heading', { name: 'Check your answers' })).toBeInTheDocument();
   });
 
+  // Owner, 3 Nov 2026: "Sent" where Send was, not a greyed Send; an edit
+  // brings the live Send back.
+  test('after Send the dock reads "Sent" with a check, not actionable, and Change brings "Send my answers" back', async () => {
+    const server = threeOfFour();
+    await reachReview(server);
+    const live = document.querySelector('[data-sent-live]');
+    expect(live).toHaveTextContent('');
+    fireEvent.click(screen.getByRole('button', { name: 'Send my answers' }));
+    await screen.findByRole('heading', { name: 'Your answers are in.' });
+    const sent = screen.getByRole('button', { name: 'Sent' });
+    expect(document.querySelector('.plr-dock').contains(sent)).toBe(true);
+    expect(sent).toHaveClass('ui-btn--done');
+    expect(sent).not.toHaveClass('ui-btn--action');
+    expect(sent).toHaveAttribute('aria-disabled', 'true');
+    expect(sent.querySelector('svg')).not.toBeNull();
+    // The same region, still mounted, now says it once.
+    expect(document.querySelector('[data-sent-live]')).toBe(live);
+    expect(live).toHaveTextContent(/^Sent$/);
+    const before = server.submits.length;
+    fireEvent.click(sent);
+    expect(server.submits.length).toBe(before);
+    expect(screen.getByRole('heading', { name: 'Your answers are in.' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change my answers' }));
+    await screen.findByRole('heading', { name: 'Check your answers' });
+    const send = screen.getByRole('button', { name: 'Send my answers' });
+    expect(send).toHaveClass('ui-btn--action');
+    expect(send).not.toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+    expect(live).toHaveTextContent('');
+  });
+
   test('Send in Named carries the player and no respondent id', async () => {
     const server = makeServer({
       names: 'named',

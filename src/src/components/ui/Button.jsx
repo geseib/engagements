@@ -22,6 +22,12 @@ import './Button.css';
  *                on paper). It moves the eye, not the session ("See in People").
  *   'danger'     filled destructive: --danger-deep, light ink (5.16:1 in every skin/theme)
  *   'accent'     a filled accent button: --accent / --on-accent (the room's window)
+ *   'done'       a send that landed ("Sent", owner 3 Nov 2026): a --success wash and
+ *                edge, --text ink. A STATE, not an action: it renders
+ *                aria-disabled="true" (still focusable, so a screen reader finds "Sent"),
+ *                always type="button" (so a form-attached Send cannot resubmit through
+ *                it), and swallows its click. Never the disabled grey, never orange.
+ *                Class `ui-btn--done`. components/SendButton.jsx is its one caller.
  *   Older names, kept for callers that predate 5a: 'action' = primary, 'quiet' = secondary.
  *   The default, and the fallback for an unknown name, is secondary.
  *
@@ -39,7 +45,7 @@ import './Button.css';
  * Every other prop passes through; `className` is appended; the ref is forwarded.
  */
 /** Every look, by the class it renders (`ui-btn--<class>`). */
-export const BUTTON_VARIANTS = ['action', 'accent', 'quiet', 'tertiary', 'danger'];
+export const BUTTON_VARIANTS = ['action', 'accent', 'quiet', 'tertiary', 'danger', 'done'];
 /** The §5.1 names, and the older ones, onto the class each renders. */
 export const VARIANT_CLASS = Object.freeze({
   primary: 'action',
@@ -47,6 +53,7 @@ export const VARIANT_CLASS = Object.freeze({
   tertiary: 'tertiary',
   danger: 'danger',
   accent: 'accent',
+  done: 'done',
   action: 'action',
   quiet: 'quiet',
 });
@@ -69,6 +76,16 @@ const Button = forwardRef(function Button(
   const v = Object.prototype.hasOwnProperty.call(VARIANT_CLASS, variant) ? VARIANT_CLASS[variant] : 'quiet';
   const s = sizeClass(size);
   const cls = ['ui-btn', `ui-btn--${v}`, s ? `ui-btn--${s}` : null, className].filter(Boolean).join(' ');
+
+  if (v === 'done') {
+    // Not actionable, and says so: no form submit, no handler, aria-disabled.
+    const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+    return (
+      <button ref={ref} {...rest} type="button" className={cls} aria-disabled="true" onClick={swallow}>
+        {children}
+      </button>
+    );
+  }
 
   if (As === 'button') {
     return (

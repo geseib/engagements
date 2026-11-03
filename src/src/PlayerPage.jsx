@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Button from './components/ui/Button';
 import webSocketClient from './WebSocketClient';
 import Icon from './components/Icon';
+import SendButton from './components/SendButton';
 import RankIcon, { rankLabel, VOTE_POSITIONS } from './components/RankIcon';
 import { gameTypeMeta } from './config/gameTypes';
 import { hasScoreboard } from './config/scoreboard';
@@ -4043,6 +4044,9 @@ function PlayerPage({ event = null } = {}) {
   let centre = false;
   let dock = null;
   let body = null;
+  /* A send the server took is showing as "Sent" (owner, 3 Nov). The shell's
+     live region says it once; a held send never sets it. */
+  let sentShowing = false;
 
   /* THE DOCK'S STATUS LINES (experience plan 3d). A send that did not go is
      said here, above the button that can try again, never in a browser
@@ -4603,6 +4607,12 @@ function PlayerPage({ event = null } = {}) {
          guessing whether the room is discussing their idea is not participating
          in the discussion. */
       volume = 'rest';
+      /* SENT, WHERE SEND WAS (owner, 3 Nov 2026). The main button's place
+         reads "Sent" with a check: a state, not an action (aria-disabled, no
+         handler). This round's answer is locked, so there is no edit back to
+         Send here; a held answer is the branch above and says "Not sent yet". */
+      sentShowing = true;
+      dock = <SendButton sent />;
       const submittedLetter = gameType === 'trivia' ? mySubmittedAnswer : null;
       const submittedOption = submittedLetter
         ? currentQuestion[`option${submittedLetter}`]
@@ -4669,6 +4679,9 @@ function PlayerPage({ event = null } = {}) {
          `loadVotingData` returns early once it learns this player has already
          voted and never loads the answers on that path. */
       volume = 'rest';
+      // "Sent" where "Send my votes" was (3 Nov); a held ballot is the branch below.
+      sentShowing = true;
+      dock = <SendButton sent />;
       const ranked = ['first', 'second', 'third']
         .map((slot) => ({ slot, idx: votes[slot] === '' ? null : parseInt(votes[slot], 10) }))
         .filter(({ idx }) => idx !== null && Number.isFinite(idx) && answers[idx]);
@@ -5369,6 +5382,7 @@ function PlayerPage({ event = null } = {}) {
       banner={offlineBanner || lateBanner || missedBanner}
       centre={centre}
       dock={dock}
+      sent={sentShowing}
       help={playerHelpScreen(gameState, myFeedbackShowing)}
       /* Reading one response in full.
 

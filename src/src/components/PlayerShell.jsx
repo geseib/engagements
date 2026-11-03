@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import BrandMark from './BrandMark';
 import { EventBarContext } from './event/eventBar';
 import HelpButton from './HelpButton';
+import { SentAnnouncer } from './SendButton';
 import { helpFor } from '../config/help/screens';
 // The shell is the `.plr` scope root, so it brings the scope's stylesheet with
 // it; PlayerPage imports it too, and webpack loads it once.
@@ -19,7 +20,10 @@ import './PlayerSurface.css';
  *
  * `dock` IS OMITTED, NOT DISABLED, IN REST AND WATCH (§2.2). If there is
  * nothing to do there must be nothing that looks pressable, and a design that
- * renders a greyed bar has already lost that argument. Declared at module scope
+ * renders a greyed bar has already lost that argument. The one thing a rest
+ * screen's dock may hold is the "Sent" state where Send was (owner, 3 Nov
+ * 2026; components/SendButton.jsx): a success wash and a check, aria-disabled,
+ * drawn as a state rather than a greyed control. Declared at module scope
  * so React keeps one element identity across renders — a component defined
  * inside PlayerPage would remount its whole subtree on every keystroke and take
  * the focused textarea with it.
@@ -40,7 +44,7 @@ import './PlayerSurface.css';
  */
 export const PlayerShell = ({
   phase, volume, ctx, category, who, online = true, banner,
-  centre = false, dock = null, after = null, progress = null, help = null, children,
+  centre = false, dock = null, after = null, progress = null, help = null, sent = false, children,
 }) => {
   const eventBar = useContext(EventBarContext);
   const metered = typeof progress === 'number' && Number.isFinite(progress);
@@ -111,6 +115,10 @@ export const PlayerShell = ({
         {children}
       </main>
       {dock && <footer className="plr-dock">{dock}</footer>}
+      {/* `sent`: the dock's Send has turned to "Sent" (owner, 3 Nov 2026).
+          The region is always here, outside the dock, so the change is
+          announced once, politely, whichever screen the dock was on. */}
+      <SentAnnouncer sent={sent} />
       {/* OVERLAYS, INSIDE THE SCOPE RATHER THAN BESIDE IT.
           A dialog rendered as a sibling of this shell is outside `.plr`, so it
           inherits the data-theme="light" that public/index.html puts on <html>

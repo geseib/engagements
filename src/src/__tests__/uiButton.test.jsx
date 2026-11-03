@@ -103,6 +103,26 @@ describe('Button', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  // Owner, 3 Nov 2026: a send that landed reads "Sent" where Send was. A state,
+  // not an action: focusable (a screen reader finds it), never submits a form.
+  test('done: aria-disabled, focusable, type="button", and its click goes nowhere', () => {
+    const onClick = jest.fn();
+    const onSubmit = jest.fn((e) => e.preventDefault());
+    render(
+      <form id="f" onSubmit={onSubmit}>
+        <Button variant="done" type="submit" form="f" onClick={onClick}>Sent</Button>
+      </form>,
+    );
+    const b = screen.getByRole('button', { name: 'Sent' });
+    expect(b.className).toBe('ui-btn ui-btn--done');
+    expect(b).toHaveAttribute('aria-disabled', 'true');
+    expect(b).toHaveAttribute('type', 'button');
+    expect(b).not.toBeDisabled();
+    fireEvent.click(b);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   test('as a component receives the classes and the click', () => {
     const Custom = React.forwardRef((props, ref) => <span ref={ref} role="button" {...props} />);
     const onClick = jest.fn();
