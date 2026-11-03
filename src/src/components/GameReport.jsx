@@ -56,7 +56,17 @@ import { gameTypeLabel } from '../config/gameTypes';
 import KindResult from './survey/results/KindResult';
 import TalkingPointsReport from './TalkingPointsReport';
 import { unexpectedSaveMessage } from '../config/reportPdf';
+import YoursMark from './YoursMark';
+import { ownQuestionWords as OQ } from '../config/consoleWords';
+import { ownSourceLine } from '../config/ownQuestion';
 import './GameReport.css';
+
+/** "10:42" — when a host wrote a question, for the report's source line. */
+const clockTime = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 const API_BASE = window.API_BASE;
 
@@ -210,6 +220,10 @@ function GameReport({
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveReportModal, setShowSaveReportModal] = useState(false);
   const [saveAsPermanent, setSaveAsPermanent] = useState(false);
+  /* INCLUDE MY NOTES (impromptu ask, F5): the host's private notes to Workie
+     print in this report, labelled, unless the host switches them off before
+     printing or saving. Default on. */
+  const [includeNotes, setIncludeNotes] = useState(true);
   // The save response: the key, the passkey and how long they work. Shown in
   // ReportSavedDialog once, because the passkey is never retrievable again.
   const [savedReport, setSavedReport] = useState(null);
@@ -293,6 +307,15 @@ function GameReport({
               <Icon name="ClockCounterClockwise" weight="bold" size={16} /> Your sessions
             </button>
           )}
+          {/* The impromptu ask's notes switch (F5): shown only when a round the
+              host wrote carries a note. Screen only; it decides what the print
+              and the saved PDF carry. */}
+          {ready && ((reportData && (reportData.questions || reportData.detailedQuestions)) || []).some((q) => q && q.questionData && q.questionData.own && q.questionData.own.note) ? (
+            <label className="report-tool report-tool--check" data-testid="report-include-notes">
+              <input type="checkbox" checked={includeNotes} onChange={(e) => setIncludeNotes(e.target.checked)} />
+              {OQ.includeNotes}
+            </label>
+          ) : null}
           <button
             type="button"
             className="report-tool"
@@ -356,7 +379,7 @@ function GameReport({
         </div>
       )}
 
-      {ready && <ReportDocument reportData={reportData} />}
+      {ready && <ReportDocument reportData={reportData} includeNotes={includeNotes} />}
     </div>
 
       {/* Save Report Modal */}
@@ -785,7 +808,7 @@ function ReportCover({ reportData, roundCount, roundsLabel, responseCount, topRe
  * start a new canvas when a long report would pass the 32,000 px ceiling
  * (utils/saveReport.js `partsFor`).
  */
-function ReportDocument({ reportData }) {
+function ReportDocument({ reportData, includeNotes = true }) {
   const { players = [], questions = [], questionSetData } = reportData;
 
   /*
@@ -1012,16 +1035,35 @@ function ReportDocument({ reportData }) {
                   <header className="rpt-opener">
                     <span className="rpt-opener-num" aria-hidden="true">{pad2(qIdx + 1)}</span>
                     <div className="rpt-opener-head">
-                      <Kicker quiet={questionData.category || 'General'}>
+                      <Kicker quiet={questionData.own ? '' : (questionData.category || 'General')}>
                         {noun} {qIdx + 1} of {questions.length}
                       </Kicker>
                       <h2 className="rpt-opener-title">
                         {questionData.title || `${noun} ${questionNumber}`}
+                        {questionData.own ? <> {' '}<YoursMark className="rpt-yours" /></> : null}
                       </h2>
+                      {/* YOURS (impromptu ask, D9): who wrote it, when, and
+                          where it was placed — a reader months later must not
+                          take an improvised round for a planned one. */}
+                      {questionData.own ? (
+                        <p className="rpt-own-source" data-testid="report-own-source">
+                          {ownSourceLine(questionData.own, { timeOf: clockTime })}
+                        </p>
+                      ) : null}
                     </div>
                   </header>
 
-                  {questionData.detail && (
+                  {questionData.own ? (
+                    <div className="rpt-own" data-testid="report-own">
+                      {questionData.detail ? <p className="rpt-own-line"><b>{OQ.forTheRoom}</b> {questionData.detail}</p> : null}
+                      {/* The host's note, labelled as theirs (F5): in the host's
+                          report, and in the PDF only while Include my notes is on. */}
+                      {includeNotes && questionData.own.note ? (
+                        <p className="rpt-own-line" data-testid="report-own-note"><b>{OQ.hostNote}</b> {questionData.own.note}</p>
+                      ) : null}
+                      <p className="rpt-own-line rpt-own-quiet">{OQ.noSetMaterial}</p>
+                    </div>
+                  ) : questionData.detail && (
                     <p className="rpt-lead">{questionData.detail}</p>
                   )}
 

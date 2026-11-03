@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Icon from '../Icon';
-import { queueRows, queueSummary, QUEUE_MAX } from '../../config/questionQueue';
+import Button from '../ui/Button';
+import YoursMark from '../YoursMark';
+import { queueRows, queueSummary, QUEUE_MAX, isOwnKey } from '../../config/questionQueue';
 import { questionKey } from '../../config/setupPanel';
+import { ownQuestionWords as OQ } from '../../config/consoleWords';
 
 /**
  * THE RUNNING ORDER, AS A LIST THE HOST CAN REORDER.
@@ -125,8 +128,24 @@ export default function QueueList({
      (the phone's cooldown) — a double tap must not ask two questions. */
   askBusy = false,
   variant = 'panel',
+  /*
+    THE HOST'S OWN QUESTIONS (impromptu ask, README D5): `ownQuestions` from
+    the queue route ({ key, title, status, askedRound }). A queued `own:` row
+    is marked Yours and carries Edit, earlier/later and Remove — no Disable
+    (nothing in the set to disable) and no asks. Remove arms in place, once,
+    with no second dialog (reviews W-5). `onWrite` draws "Write a question"
+    in the head; null draws nothing.
+  */
+  ownQuestions = [],
+  onWrite = null,
+  onEditOwn = null,
+  onRemoveOwn = null,
 }) {
-  const rows = queueRows(queue, { questions });
+  const ownByKey = new Map((ownQuestions || []).filter((o) => o && o.key).map((o) => [o.key, o]));
+  const [armedRemove, setArmedRemove] = useState(null);
+  const rows = queueRows(queue, {
+    questions: [...questions, ...[...ownByKey.values()].map((o) => ({ id: o.key, title: o.title }))],
+  });
   const { count, full } = queueSummary(queue);
   const blockedByKey = new Map(
     blocked
@@ -233,6 +252,12 @@ export default function QueueList({
     >
       <div className="setup-q__head">
         <h3 className="setup-q__title" id="setup-q-head">Running order</h3>
+        {onWrite ? (
+          <Button variant="secondary" size={variant === 'touch' ? 44 : 36} className="setup-q__write" onClick={onWrite} data-testid="queue-write">
+            <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+            {OQ.write}
+          </Button>
+        ) : null}
         {/*
           The count is a fact about the queue and is stated ONCE. The cap only
           appears when it is close enough to matter — a permanent "0 of 24"
@@ -268,6 +293,94 @@ export default function QueueList({
             */
             const parked = blockedByKey.get(row.key);
             const parkedHere = isParked(row);
+            const own = isOwnKey(row.key);
+            const ownRow = own ? ownByKey.get(row.key) : null;
+            const ownTitle = (ownRow && ownRow.title) || row.title || '';
+            if (own) {
+              const armed = armedRemove === row.key;
+              return (
+                <li
+                  key={row.key}
+                  className={`setup-q__row setup-q__row--own ${row.key === nextKey ? 'is-next' : ''}`}
+                  data-testid="queue-row"
+                  data-own="true"
+                >
+                  <span className="setup-q__pos" aria-hidden="true">{row.position}</span>
+                  <span className="setup-q__main">
+                    <span className="setup-q__name" title={ownTitle}>{ownTitle || OQ.yours}</span>
+                    <span className="setup-q__meta">
+                      {row.key === nextKey && (
+                        <span className="setup-q__flag" data-testid="queue-next-flag">Next</span>
+                      )}
+                      <YoursMark />
+                    </span>
+                    {armed ? (
+                      <span className="setup-q__arm" role="group" aria-label={OQ.remove} data-testid="queue-own-arm">
+                        <span className="setup-q__arm-t">{OQ.removeAsk(ownTitle)}</span>
+                        <Button variant="secondary" size={variant === 'touch' ? 44 : 36} onClick={() => setArmedRemove(null)}>{OQ.keepIt}</Button>
+                        <Button
+                          variant="danger"
+                          size={variant === 'touch' ? 44 : 36}
+                          onClick={() => { setArmedRemove(null); (onRemoveOwn || onRemove)(row.key, { title: ownTitle }); }}
+                          data-testid="queue-own-remove-confirm"
+                        >
+                          {OQ.remove}
+                        </Button>
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="setup-q__acts">
+                    {onEditOwn && (
+                      <Button
+                        variant="secondary"
+                        size={variant === 'touch' ? 44 : 36}
+                        className="setup-q__edit"
+                        disabled={pending}
+                        onClick={() => onEditOwn(row.key, ownRow)}
+                        aria-label={`${OQ.edit}: ${ownTitle}`}
+                        data-testid="queue-own-edit"
+                      >
+                        {OQ.edit}
+                      </Button>
+                    )}
+                    {onMove && (
+                      <>
+                        <button
+                          type="button"
+                          className="setup-q__btn"
+                          disabled={!row.canMoveEarlier || pending}
+                          onClick={() => onMove(row.key, 'earlier')}
+                          aria-label={`Move ${ownTitle} earlier`}
+                        >
+                          <Icon name="ArrowUp" weight="bold" size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="setup-q__btn"
+                          disabled={!row.canMoveLater || pending}
+                          onClick={() => onMove(row.key, 'later')}
+                          aria-label={`Move ${ownTitle} later`}
+                        >
+                          <Icon name="ArrowDown" weight="bold" size={14} />
+                        </button>
+                      </>
+                    )}
+                    {(onRemoveOwn || onRemove) && (
+                      <button
+                        type="button"
+                        className="setup-q__btn setup-q__btn--drop"
+                        disabled={pending}
+                        onClick={() => setArmedRemove(row.key)}
+                        aria-label={`${OQ.remove}: ${ownTitle}`}
+                        data-testid="queue-own-remove"
+                      >
+                        <Icon name="Trash" weight="bold" size={14} />
+                      </button>
+                    )}
+                  </span>
+                </li>
+              );
+            }
             return (
               <li
                 key={row.key}

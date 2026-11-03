@@ -1087,6 +1087,15 @@ Resources:
         # never throws, so nothing surfaces anywhere.
         - DynamoDBCrudPolicy:
             TableName: !Ref GameTable
+        # THE HOST'S OWN QUESTIONS (impromptu ask): add-own and edit-own seal
+        # the OWNQ# row under the session's org, and the listing opens it, so
+        # this function unwraps that org's data key — with an orgId context,
+        # which the key policy makes mandatory. No new resource: a statement.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: [ kms:Decrypt ]
+              Resource: !GetAtt TenantKey.Arn
         # The OTHER host surface has to hear about the change. Queue on the
         # phone, watch the stage follow; reorder on the stage, watch the phone
         # follow. Without this the broadcast is a silent AccessDenied and the

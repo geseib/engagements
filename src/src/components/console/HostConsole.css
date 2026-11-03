@@ -56,6 +56,10 @@
 .hc-empty { margin: 0; padding: 0 14px 10px; font-size: 13px; color: var(--muted); }
 .hc-link { font: inherit; font-size: 12px; font-weight: 700; color: var(--info); background: transparent; border: 0; padding: 0 14px 10px; cursor: pointer; text-align: left; }
 .hc-list .hc-link { padding: 0; font-size: 13px; }
+/* THE IMPROMPTU ASK in the Round queue (README D2, D5): "Write a question" is
+   a quiet link (never the orange), and a round the host wrote wears Yours. */
+.hc-write { display: inline-flex; align-items: center; gap: 4px; }
+.hc-list .hc-yours { align-self: center; }
 /* A section's link (ui/Button, tertiary) at the section's foot. */
 .hc-sec > .hc-sec-link { --ui-size: 12px; margin: 0 8px 10px; }
 .hc-late-acts .ui-btn { --ui-size: 13px; min-height: 0; padding-top: 0; padding-bottom: 0; }

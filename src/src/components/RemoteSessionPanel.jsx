@@ -3,6 +3,11 @@ import './RemoteSessionPanel.css';
 import Icon from './Icon';
 import RemoteQuestionBrowser from './RemoteQuestionBrowser';
 import QueueList from './stage/QueueList';
+import OwnQuestionComposer from './OwnQuestionComposer';
+import YoursMark from './YoursMark';
+import Button from './ui/Button';
+import { ownQuestionWords as OQ } from '../config/consoleWords';
+import { laterAnchors } from '../config/ownQuestion';
 import WorkieContextHint from './WorkieContextHint';
 import { remotePanelTabs, rosterListing } from '../config/hostRemote';
 import { roundsFrom, roundSubtitle, hasSummary } from '../config/sessionHistory';
@@ -81,6 +86,14 @@ export default function RemoteSessionPanel({
   onAskNext = () => {},
   onAskNow = () => {},
   onUnqueue = () => {},
+  /* THE IMPROMPTU ASK (README D2, frame 5): the Rounds tab's "Write a
+     question", the queue's Yours rows, and the composer's props from
+     HostRemote (null = closed) — drawn as a full-height sheet over the tabs. */
+  ownQuestions = [],
+  onWriteQuestion = null,
+  onEditOwn = null,
+  onRemoveOwn = null,
+  ownComposer = null,
 }) {
   const [tab, setTab] = useState(initialTab);
   const [rounds, setRounds] = useState([]);
@@ -105,7 +118,7 @@ export default function RemoteSessionPanel({
    * Never on a timer of its own: a list nobody has open costs nothing.
    */
   useEffect(() => {
-    if (tab !== 'questions' || !gameId) return undefined;
+    if ((tab !== 'questions' && !ownComposer) || !gameId) return undefined;
     let cancelled = false;
     (async () => {
       const result = await fetchUpNext({ apiBase: apiBase(), gameId });
@@ -116,7 +129,7 @@ export default function RemoteSessionPanel({
       }
     })();
     return () => { cancelled = true; };
-  }, [tab, gameId, round, state, queueVersion]);
+  }, [tab, gameId, round, state, queueVersion, ownComposer]);
 
   /*
     TITLES FOR THE QUEUED ROWS. QueueList names a queued key from the questions
@@ -187,6 +200,21 @@ export default function RemoteSessionPanel({
   }, [tab, round, loadRounds]);
 
   const tabs = remotePanelTabs();
+
+  if (ownComposer) {
+    const laterOptions = laterAnchors(plan.upNext.map((row, i) => ({
+      key: questionKey(String(row.questionId || '')),
+      n: Number(row.round) > 0 ? Number(row.round) : i + 1,
+      title: row.title || '',
+      source: row.source,
+    })));
+    const nextN = plan.upNext.length && Number(plan.upNext[0].round) > 0 ? Number(plan.upNext[0].round) : null;
+    return (
+      <div className="hrs hrs--own" data-testid="remote-own-sheet">
+        <OwnQuestionComposer laterOptions={laterOptions} nextRound={nextN} {...ownComposer} />
+      </div>
+    );
+  }
 
   return (
     <div className="hrs">
@@ -263,6 +291,14 @@ export default function RemoteSessionPanel({
           id="hrs-panel-history"
           aria-labelledby="hrs-tab-history"
         >
+          {/* THE IMPROMPTU ASK'S PHONE DOOR (README D2): the same composer as
+              the laptop, opened here as a full-height sheet. */}
+          {onWriteQuestion ? (
+            <Button variant="secondary" size={44} className="hrs-write" onClick={onWriteQuestion} data-testid="remote-write">
+              <Icon name="Plus" weight="bold" size={16} color="currentColor" />
+              {OQ.write}
+            </Button>
+          ) : null}
           {rounds.length === 0 ? (
             <p className="hr-hint">
               {roundsLoading
@@ -284,6 +320,7 @@ export default function RemoteSessionPanel({
                       <span className="hrs-rank">{entry.ordinal}</span>
                       <span className="hrs-round-text">
                         <span className="hrs-round-title">{entry.title}</span>
+                        {entry.own ? <YoursMark /> : null}
                         <span className="hrs-round-sub">{roundSubtitle(entry)}</span>
                       </span>
                       {/* Answers the question a host scanning this list
@@ -369,6 +406,9 @@ export default function RemoteSessionPanel({
             askNowArmedKey={askNowArmedKey}
             onAskNext={(key, meta) => onAskNext(asRow(key, meta))}
             onAskNow={(key, meta) => onAskNow(asRow(key, meta))}
+            ownQuestions={ownQuestions}
+            onEditOwn={onEditOwn}
+            onRemoveOwn={onRemoveOwn}
           />
 
           {/* THE BROWSER THAT ALREADY EXISTED, not a second question list. It

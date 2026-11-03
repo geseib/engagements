@@ -45,6 +45,7 @@ const { planAhead, seedFor } = require('./question-plan');
 const { callerMayDriveSession, ORG } = require('./tenant');
 const { decryptItems } = require('./tenant-crypto');
 const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
+const { listOwnQuestions } = require('./round-question');
 
 const client = new DynamoDBClient({});
 const db = DynamoDBDocumentClient.from(client);
@@ -285,7 +286,23 @@ exports.handler = async (event) => {
       `categoryOff` ADVISORY so the panel can still label the one-off.
       Resolved from the set rows already in hand rather than a read per item.
     */
+    /*
+      THE HOST'S OWN QUESTIONS (impromptu ask), read once beside the queue:
+      an `own:` key is servable while its row is still `queued`, titled from
+      the row, with no category. This route is host-only (the guard above),
+      so the titles of unasked questions stay where the queue's do.
+    */
+    const ownRows = await listOwnQuestions(db, process.env.TABLE_NAME, gameId).catch(() => []);
+    const ownByKey = new Map(ownRows.map((o) => [o.key, o]));
+
     const resolveQueued = (key) => {
+      if (String(key).startsWith('own:')) {
+        const own = ownByKey.get(key);
+        if (!own || own.status !== 'queued') {
+          return { servable: false, reason: 'own-gone', own: true, categoryId: null, title: own ? own.title : '', categoryName: '' };
+        }
+        return { servable: true, own: true, categoryId: null, title: own.title, categoryName: '' };
+      }
       const sk = `QUESTION#${key}`;
       if (!titleOf.has(sk)) {
         return { servable: false, reason: 'not-in-set', categoryId: null, title: '', categoryName: '' };
@@ -329,7 +346,9 @@ exports.handler = async (event) => {
       not listed: the next drain drops those for good.
     */
     const blocked = liveQueue
-      .filter((entry) => entry.servable === false)
+      // An own entry that was asked or removed is dropped by the next drain,
+      // like an asked set entry: not "parked", so not listed.
+      .filter((entry) => entry.servable === false && !entry.own)
       .map(({ key, reason, title, categoryName }) => ({
         key, questionId: `QUESTION#${key}`, reason, title, categoryName,
       }));
@@ -380,6 +399,9 @@ exports.handler = async (event) => {
         list, which is spent for the planner but was not asked.
       */
       asked: askedIds,
+      // The host's own questions, queued and asked (impromptu ask): the
+      // console marks them Yours in the queue, the rail and Rounds so far.
+      ownQuestions: ownRows,
     });
   } catch (error) {
     console.error('❌ Up next error:', error);

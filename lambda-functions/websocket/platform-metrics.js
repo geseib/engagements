@@ -150,6 +150,17 @@ const categorySk = (period, key) => `MONTH#${period}#CATEGORY#${key}`;
 const TEAM_SETS_LABEL = 'Teams’ own sets';
 const TEAM_SETS_KEY = 'org';
 
+/*
+  A ROUND THE HOST WROTE during the session (impromptu ask, README §5.5) is in
+  no set and no library: it is counted under its own bucket, "own questions",
+  so neither the platform's categories nor a team's set row claim it. Its
+  REF says `Source: 'host'` and its id is `OWNQ#<id>` (round-question.js).
+*/
+const OWN_QUESTIONS_KEY = 'own';
+const OWN_QUESTIONS_LABEL = 'Own questions';
+const ownBucket = () => ({ key: OWN_QUESTIONS_KEY, label: OWN_QUESTIONS_LABEL, library: 'own' });
+const isOwnQuestionId = (id) => String(id || '').startsWith('OWNQ#');
+
 /** The attributes this module keeps on a session's METADATA row. */
 const STARTED_MARKER = 'MetricsStartedAt';
 const ROUNDS_MARKER = 'MetricsRoundsServed';
@@ -208,6 +219,7 @@ async function categoryNameOf(c, contentPk, questionId) {
 
 /** A set reference as next-question's resolvedSet or a REF row states it. */
 async function bucketForQuestion(c, { scope, contentPk, questionId }) {
+  if (isOwnQuestionId(questionId)) return ownBucket();
   if (scope !== PLATFORM && scope !== PUBLIC) return bucketFor(scope, '');
   let name = '';
   try {
@@ -587,10 +599,13 @@ async function bucketForRound(c, gameId, round) {
   const refRes = await c.db.send(new GetCommand({
     TableName: c.tableName,
     Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${q}#REF` },
-    ProjectionExpression: 'SourceQuestionId, SetId, SetScope, SetOrgId, SetVersion',
+    ProjectionExpression: 'SourceQuestionId, SetId, SetScope, SetOrgId, SetVersion, #src',
+    ExpressionAttributeNames: { '#src': 'Source' },
   }));
   const ref = (refRes && refRes.Item) || null;
   if (!ref) return bucketFor('', '');
+  // A host-written round: no set to look in, never a category read.
+  if (ref.Source === 'host' || isOwnQuestionId(ref.SourceQuestionId)) return ownBucket();
   // A REF written before scope pinning carries no SetScope and reads as
   // platform — unless it names an org, which is the safe reading.
   const scope = clean(ref.SetScope) || (clean(ref.SetOrgId) ? 'org' : PLATFORM);
@@ -613,6 +628,7 @@ function keptBucket(stored) {
   if (!stored || typeof stored !== 'object') return null;
   if (stored.library === 'platform') return bucketFor(PLATFORM, stored.label);
   if (stored.library === 'public') return bucketFor(PUBLIC, stored.label);
+  if (stored.library === 'own') return ownBucket();
   return bucketFor('', '');
 }
 

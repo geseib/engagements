@@ -279,3 +279,9 @@
   outline: 3px solid var(--secondary);
   outline-offset: 2px;
 }
+
+/* THE IMPROMPTU ASK on the phone (README D2, frame 5): "Write a question" at
+   the head of Rounds, and the composer as a full-height sheet over the tabs. */
+.hrs .hrs-write { width: 100%; gap: 8px; margin-bottom: 12px; }
+.hrs--own { display: flex; flex-direction: column; min-height: 70vh; }
+.hrs--own .oq { flex: 1 1 auto; }

@@ -6,6 +6,9 @@ import LW from '../../config/lateWords';
 import { canShowOnWall } from '../../utils/lateClient';
 import NeedsActions from '../needs/NeedsActions';
 import { NEEDS_ACTIONS, NEEDS_WORDS } from '../../config/needsYou';
+import YoursMark from '../YoursMark';
+import Icon from '../Icon';
+import { ownQuestionWords as OQ } from '../../config/consoleWords';
 
 /** The rail shows the first few; "Review them" opens the whole list. */
 const LATE_SHOWN = 3;
@@ -47,6 +50,11 @@ export default function ConsoleRail({
   onNeedsAct = null,
   needsBusy = false,
   needsError = '',
+  /* THE IMPROMPTU ASK (README D2): a quiet "Write a question" link in the
+     Round queue that opens the same composer step as the Session menu's
+     Rounds. Null draws nothing. A round the host wrote carries `own: true`
+     and is marked Yours. */
+  onWriteQuestion = null,
 }) {
   // A refusal from the late buttons, said in the section (as LateList does).
   const [lateError, setLateError] = useState('');
@@ -85,10 +93,17 @@ export default function ConsoleRail({
           {rounds.map((r) => (
             <li key={r.n} className={r.state === 'now' ? 'is-now' : ''}>
               <span className="hc-n">{r.n}</span>
+              {r.own ? <YoursMark className="hc-yours" /> : null}
               <span>{r.title}{r.state !== 'later' ? <span className="hc-meta">{` · ${CW[r.state]}`}</span> : null}</span>
             </li>
           ))}
         </ul>
+        {onWriteQuestion ? (
+          <button type="button" className="hc-link hc-write" onClick={onWriteQuestion} data-testid="rail-write">
+            <Icon name="Plus" weight="bold" size={12} color="currentColor" />
+            {OQ.write}
+          </button>
+        ) : null}
       </Section>
       <Section
         id="people"

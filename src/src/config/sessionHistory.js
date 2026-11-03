@@ -216,6 +216,9 @@ export function roundsFrom(payload) {
         // depending on how old the round is and whether it is trivia.
         detail: textOf(q.detail) || textOf(q.questionDetail),
         category: textOf(q.category),
+        // A round the host wrote during the session (impromptu ask, D5):
+        // Rounds so far marks it Yours.
+        own: Boolean(q.own),
         image: textOf(q.image) || null,
         school: textOf(q.school) || null,
         // Normalised here, not in the JSX: the report spells the text

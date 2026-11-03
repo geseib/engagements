@@ -15,6 +15,9 @@ import { queuePosition } from '../../config/questionQueue';
 import { hasScoreboard, SCOREBOARD_STYLES, STYLE_LABELS } from '../../config/scoreboard';
 import { canEndSession, isLobbyState, isSurveyType } from '../../config/hostControls';
 import QueueList from './QueueList';
+import OwnQuestionComposer from '../OwnQuestionComposer';
+import { ownQuestionWords as OQW } from '../../config/ownQuestion';
+import YoursMark from '../YoursMark';
 import PlayersList from './PlayersList';
 import WorkieSettings from './WorkieSettings';
 import { nextRoundPickersApply } from '../../config/workieOptions';
@@ -175,6 +178,23 @@ export default function SessionSetupPanel({
   /* The disable/restore pair for the per-session veto list. */
   onDisableQuestion = () => {},
   onRestoreQuestion = () => {},
+  /* THE HOST'S OWN QUESTION (impromptu ask, README D2): the composer is an
+     inline second step of Rounds → Running order, never a modal over this
+     sheet. `ownComposer` is the composer's props from the page (null =
+     closed); `onWriteQuestion` opens it (the page decides whether one screen
+     needs its choice first); `ownQuestions`, `onEditOwn`, `onRemoveOwn` are
+     the queue's Yours rows. */
+  ownQuestions = [],
+  ownComposer = null,
+  onWriteQuestion = null,
+  onEditOwn = null,
+  onRemoveOwn = null,
+  /* The status line that confirms an own question, with Undo (D5): { text, rest, undoKey }. */
+  ownNotice = null,
+  onOwnUndo = null,
+  /* While the composer is open its own Escape is the way out (one
+     requestClose), so this panel's Esc and `\\` stand down, as for a dialog. */
+  composing = false,
 
   // Settings
   gameId = '',
@@ -384,6 +404,7 @@ export default function SessionSetupPanel({
       // it — without this bail, one Escape closes the dialog AND the panel
       // under it, and `\` shuts the panel out from under an open dialog.
       if (suppressKeys) return;
+      if (composing) return;
       if (event.key === 'Escape' || event.key === '\\') {
         event.preventDefault();
         onClose();
@@ -391,7 +412,7 @@ export default function SessionSetupPanel({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, suppressKeys]);
+  }, [onClose, suppressKeys, composing]);
 
   /**
    * Focus stays inside while it is open. Without this, Tab walks out of the
@@ -827,7 +848,12 @@ export default function SessionSetupPanel({
           {tab === 'rounds' && (
             <div className="setup-rounds" role="tabpanel" id="setup-panel-rounds" aria-labelledby="setup-tab-rounds">
               {settingsRoundLive ? <p className="setup-note setup-scope-note">{RW.view.settingsScope}</p> : null}
-              <section className="setup-questions" aria-label="What comes next">
+              {ownComposer ? (
+                <section className="setup-questions setup-own" aria-label="Write a question">
+                  <OwnQuestionComposer {...ownComposer} />
+                </section>
+              ) : null}
+              <section className="setup-questions" aria-label="What comes next" hidden={Boolean(ownComposer)}>
               <h3 className="setup-h">Categories</h3>
               <p className="setup-note" data-testid="questions-remaining">
                 {`${remaining} questions remaining`}
@@ -880,6 +906,24 @@ export default function SessionSetupPanel({
                 somewhere else, and the empty line is where the difference
                 between Ask next and Ask now is stated.
               */}
+              {/* On one screen the running order waits behind "Show on this
+                  screen", but writing a question must not: the page answers
+                  this door with the host-only choice first (README D8). */}
+              {ownNotice ? (
+                <p className="setup-own-notice" role="status" data-testid="own-notice">
+                  <Icon name="Check" weight="bold" size={14} color="currentColor" />
+                  <span><b>{ownNotice.text}</b>{ownNotice.rest ? ` ${ownNotice.rest}` : ''}</span>
+                  {onOwnUndo ? (
+                    <Button variant="tertiary" className="setup-own-undo" onClick={onOwnUndo} data-testid="own-undo">{OQW.undo}</Button>
+                  ) : null}
+                </p>
+              ) : null}
+              {oneScreen && onWriteQuestion ? (
+                <Button variant="secondary" size={36} className="setup-own-write" onClick={onWriteQuestion} data-testid="queue-write-onescreen">
+                  <Icon name="Plus" weight="bold" size={14} color="currentColor" />
+                  {OQW.write}
+                </Button>
+              ) : null}
               <PrivateReveal
                 oneScreen={oneScreen}
                 testId="private-questions"
@@ -901,6 +945,10 @@ export default function SessionSetupPanel({
                 onRestore={onRestoreQuestion}
                 onAskNext={onQueueFirst}
                 onAskNow={askNowByKey}
+                ownQuestions={ownQuestions}
+                onWrite={oneScreen ? null : onWriteQuestion}
+                onEditOwn={onEditOwn}
+                onRemoveOwn={onRemoveOwn}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the
@@ -1187,6 +1235,10 @@ export default function SessionSetupPanel({
                           <span className="setup-history__title">{round.title}</span>
                           <span className="setup-history__sub">{roundSubtitle(round)}</span>
                         </span>
+                        {/* Rounds so far marks a question the host wrote (D5) —
+                            not on one screen, where this list is the room's too
+                            and the room is never told (F6). */}
+                        {round.own && !oneScreen ? <YoursMark /> : null}
                         {/* The badge answers the question the host actually has
                             when scanning this list — which of these has a
                             summary I can read out — rather than decorating. */}

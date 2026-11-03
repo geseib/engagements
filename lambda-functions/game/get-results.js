@@ -5,9 +5,9 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 // Haiku 4.5 on Bedrock, or Haiku 5.5 on the Anthropic API where the Engage
 // switch is on (claude-route.js).
 const claudeRoute = require('./claude-route');
-const { gameSetRef, refSetRef, resolveSetPartition } = require('./set-version');
+const { readRoundByNumber } = require('./round-question');
 const { analyzeWavelength, buildMergePrompt, parseMergeReply } = require('./wavelength');
-const { ORG, callerMayDriveSession } = require('./tenant');
+const { callerMayDriveSession } = require('./tenant');
 const { encryptItem, decryptItem, decryptItems } = require('./tenant-crypto');
 const { shapeForLog } = require('./log-shape');
 const { scoreRowAfterRound, scoredRoundsOf } = require('./standings');
@@ -437,25 +437,14 @@ const recordScoresCounted = async (event, gameId, paddedQuestionId) => {
  */
 async function readRoundQuestion(gameId, paddedQuestionId) {
   try {
-    const questionRef = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
-    }));
-    if (!questionRef.Item) {
+    // THE ONE RESOLVER (round-question.js): a set row through the version and
+    // scope the REF pins, or a question the host wrote during the session.
+    const read = await readRoundByNumber(db, process.env.TABLE_NAME, gameId, paddedQuestionId);
+    if (!read.ref) {
       console.log(`❌ Question reference not found: QUESTION#${paddedQuestionId}#REF`);
       return null;
     }
-    const resolvedSet = await resolveSetPartition(
-      db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionRef.Item.SetId), questionRef.Item.SetVersion
-    );
-    const questionResponse = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: { PK: resolvedSet.pk, SK: questionRef.Item.SourceQuestionId }
-    }));
-    const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-    return questionResponse.Item && setOrgId
-      ? await decryptItem(setOrgId, 'question', questionResponse.Item)
-      : (questionResponse.Item || null);
+    return read.question || null;
   } catch (error) {
     console.error('❌ Error fetching question data:', error);
     return null;
@@ -1522,41 +1511,12 @@ async function handleWavelengthResults(event, gameId, questionId) {
     console.log(`🔍 Fetching question data for wavelength results`);
     let question = null;
     try {
-      // Get question reference record
-      const questionRef = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${paddedQuestionId}#REF` }
-      }));
-
-      if (questionRef.Item) {
-        const sourceQuestionId = questionRef.Item.SourceQuestionId;
-        const questionSetId = questionRef.Item.SetId;
-        
-        console.log(`📋 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
-
-        // Same version resolution as the trivia branch above.
-        const resolvedSet = await resolveSetPartition(
-          db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
-        );
-
-        // Get the actual question from the question set
-        const questionResponse = await db.send(new GetCommand({
-          TableName: process.env.TABLE_NAME,
-          Key: {
-            PK: resolvedSet.pk,
-            SK: sourceQuestionId
-          }
-        }));
-
-        if (questionResponse.Item) {
-          // Same rule as the trivia branch: the SET's org, from the pinned
-          // pair, not the session's and never the caller's.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          question = setOrgId
-            ? await decryptItem(setOrgId, 'question', questionResponse.Item)
-            : questionResponse.Item;
-          console.log(`✅ Question data loaded for wavelength results`);
-        }
+      // The one resolver, as the trivia branch above: the version and the
+      // SET's org from the pinned pair, never the caller's.
+      const read = await readRoundByNumber(db, process.env.TABLE_NAME, gameId, paddedQuestionId);
+      if (read.question) {
+        question = read.question;
+        console.log(`✅ Question data loaded for wavelength results`);
       }
     } catch (error) {
       console.error('Error fetching question data:', error);

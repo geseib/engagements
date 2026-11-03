@@ -187,7 +187,11 @@ function planAhead(snapshot, count) {
     // round that is never going to happen.
     while (pending.length && !placed) {
       const key = pending.shift();
-      const questionId = `QUESTION#${key}`;
+      // A QUESTION THE HOST WROTE (`own:<id>`, impromptu ask) is named by its
+      // queue key — it is in no set — and tagged `own`, the third source
+      // beside `queued` and `auto`. The resolver says whether it still waits.
+      const isOwn = String(key).startsWith('own:');
+      const questionId = isOwn ? key : `QUESTION#${key}`;
       if (spent.has(questionId)) continue;
 
       const resolved = resolveQueued(key) || {};
@@ -208,7 +212,7 @@ function planAhead(snapshot, count) {
       */
       if (resolved.servable === false) continue;
       placed = {
-        source: 'queued',
+        source: isOwn ? 'own' : 'queued',
         questionId,
         categoryId: resolved.categoryId || null,
         title: resolved.title || '',

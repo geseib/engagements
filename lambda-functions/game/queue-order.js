@@ -61,7 +61,19 @@ const QUEUE_MAX = 24;
  * everything succeeds — the write lands, the frame goes out, and the host
  * watches a button do nothing with no error anywhere in the system.
  */
-const QUEUE_OPS = ['add', 'remove', 'earlier', 'later', 'first'];
+const QUEUE_OPS = ['add', 'remove', 'earlier', 'later', 'first', 'add-own', 'edit-own', 'after'];
+
+/**
+ * A QUESTION THE HOST WROTE (docs/design/impromptu-ask README §5.2) is queued
+ * as `own:<ownId>`. `canonical` strips only `QUESTION#`, so the spelling is
+ * left alone and can never collide with a set key.
+ */
+const OWN_KEY_PREFIX = 'own:';
+const isOwnKey = (id) => String(id ?? '').trim().startsWith(OWN_KEY_PREFIX)
+  && String(id ?? '').trim().length > OWN_KEY_PREFIX.length;
+
+/** Where a new own question goes: `next` and `now` go first, `later` after an anchor, `end` at the tail. */
+const OWN_PLACES = ['next', 'later', 'now', 'end'];
 
 /** Trimmed BEFORE the prefix strip, or ` QUESTION#x` survives as a third spelling. */
 const canonical = (id) => questionKey(String(id ?? '').trim());
@@ -202,6 +214,68 @@ function queueFirst(queue, id) {
 }
 
 /**
+ * "PUT IT AFTER ROUND N" — `{ op: 'after', questionKey, anchorKey, through }`.
+ *
+ * Relative to a NAMED row, never an index, for the reason `queueMove` swaps
+ * rather than splices: an index means something different in a list another
+ * surface has moved, a named anchor does not.
+ *
+ * The anchor may be a round the automatic walk would serve, not one the host
+ * queued. Then `through` carries the displayed automatic keys from the top of
+ * the walk down to the anchor, and they are queued in that order first — the
+ * same "the listed order becomes manual" reading `materializePlanOps` gives an
+ * auto row's arrows, which is the only way "after round 5" can stay after
+ * round 5. An anchor still not in the list after that is `anchor-not-queued`.
+ */
+function queueAfter(queue, id, anchorId, through = []) {
+  const list = normaliseQueue(queue);
+  const key = canonical(id);
+  const anchor = canonical(anchorId);
+
+  if (!key) return refuse(list, 'no-key');
+  if (!anchor) return refuse(list, 'no-anchor');
+  if (key === anchor) return refuse(list, 'same');
+
+  let work = list.slice();
+  if (!work.includes(anchor)) {
+    for (const raw of (Array.isArray(through) ? through : [])) {
+      const k = canonical(raw);
+      if (!k || k === key || work.includes(k)) continue;
+      work.push(k);
+      if (k === anchor) break;
+    }
+  }
+  if (!work.includes(anchor)) return refuse(list, 'anchor-not-queued');
+
+  work = work.filter((k) => k !== key);
+  work.splice(work.indexOf(anchor) + 1, 0, key);
+  if (sameOrder(work, list)) return refuse(list, 'at-edge');
+  if (work.length > QUEUE_MAX) return refuse(list, 'full');
+  return accept(work);
+}
+
+/**
+ * A NEW QUESTION OF THE HOST'S OWN joins the running order
+ * (`{ op: 'add-own', questionKey: 'own:<id>', place, anchorKey, through }`).
+ * The handler writes the OWNQ row in the same transaction; this is only where
+ * the key goes. Next and Now go to the head (Now is then served by
+ * next-question's `select_own`, which drops it again — so a refused Now leaves
+ * it next rather than lost); Later goes after the anchor; `end`, the tail. A
+ * duplicate id is refused: one row, one place.
+ */
+function queueAddOwn(queue, id, { place = 'next', anchorKey = null, through = [] } = {}) {
+  const list = normaliseQueue(queue);
+  const key = canonical(id);
+  if (!key) return refuse(list, 'no-key');
+  if (!isOwnKey(key)) return refuse(list, 'not-own');
+  if (list.includes(key)) return refuse(list, 'duplicate');
+  if (list.length >= QUEUE_MAX) return refuse(list, 'full');
+  if (place === 'later') return queueAfter(list, key, anchorKey, through);
+  if (place === 'end') return queueEnqueue(list, key);
+  return queueFirst(list, key);
+}
+
+/**
  * The SERVER's removal, not the host's — which is why it is not in QUEUE_OPS.
  *
  * The drain in `next-question.js` uses it to pop the head it has just served,
@@ -243,6 +317,15 @@ function applyQueueOp(queue, operation = {}) {
     case 'earlier':
     case 'later': return queueMove(queue, id, operation.op);
     case 'first': return queueFirst(queue, id);
+    case 'after': return queueAfter(queue, id, operation.anchorKey, operation.through);
+    case 'add-own': return queueAddOwn(queue, id, operation);
+    // An edit changes the OWNQ row, never the order: unchanged, and named, so
+    // the handler knows whether the key is still queued (still editable).
+    case 'edit-own': {
+      const list = normaliseQueue(queue);
+      if (!isOwnKey(id)) return refuse(list, 'not-own');
+      return refuse(list, list.includes(canonical(id)) ? 'row-only' : 'not-queued');
+    }
     default:
       // Unchanged, named, and 200 — see QUEUE_OPS. A client sending an op this
       // build has never heard of is a client from a different deploy, and the
@@ -312,6 +395,11 @@ function queueSummary(queue) {
 module.exports = {
   QUEUE_MAX,
   QUEUE_OPS,
+  OWN_KEY_PREFIX,
+  OWN_PLACES,
+  isOwnKey,
+  queueAfter,
+  queueAddOwn,
   normaliseQueue,
   queueEnqueue,
   queueRemove,

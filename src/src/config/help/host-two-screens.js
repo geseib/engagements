@@ -311,7 +311,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. **Rounds and questions** opens the Rounds section of the Session menu.' },
+            { title: 'Round queue', text: 'The rounds played, the one now and what comes next. A question you wrote is marked **Yours**. **Write a question** opens the composer in the Session menu\'s Rounds (see Writing a question of your own); **Rounds and questions** opens the Rounds section of the Session menu.' },
             { title: 'People', text: 'How many are here, and while the room answers or votes, who has and who has not (the count itself is the Answered tile). The names stay on your laptop. **Show scoreboard** puts the standings over the room\'s window and **Hide scoreboard** takes them down; before the first round is scored the button waits. The link at the foot opens everyone, and who left, in the Session menu.' },
             { title: 'Late & not reviewed', text: 'How many late answers and comments wait, the first three with **Mark reviewed** and, where it can be shown now, a button to show it to the room. **Review them** opens the full list in the Rounds tab (see Late answers and comments).' },
             { title: 'Session menu', text: 'Top right. It opens over the tiles and the main area, never over Your part now, and holds what you set once: Screens, Phone remote, Rounds, Joining and End session (with **Main menu** under it). People\'s **All N, and who left** opens the full list there.' },
@@ -372,6 +372,7 @@ const twoScreens = {
             { keys: 'J', text: 'Show or hide the join code (see Showing the join code mid-session).' },
             { keys: 'S', text: 'Show or hide the scoreboard; Esc closes it.' },
             { keys: '\\', text: 'Open or close the Session panel.' },
+            { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at Rounds with the composer.' },
             { keys: 'F', text: 'Full screen for the window you are in, and back.' },
           ],
         },

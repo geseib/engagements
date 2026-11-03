@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition } = require('./set-version');
-const { ORG, callerMayDriveSession } = require('./tenant');
+const { readRoundQuestion, listOwnQuestions } = require('./round-question');
+const { callerMayDriveSession } = require('./tenant');
 const { decryptItem } = require('./tenant-crypto');
 const { POLL, pollQuestionOf } = require('./poll-question');
 const { correctSlots, drawnOptions } = require('./trivia-answer');
@@ -301,54 +301,18 @@ exports.handler = async (event) => {
         }));
 
         if (questionRef.Item) {
-          const sourceQuestionId = questionRef.Item.SourceQuestionId;
-          const questionSetId = questionRef.Item.SetId;
-          
-          // Read the VERSION this round was served from. The REF row records it
-          // (next-question.js writes SetVersion); the resolver falls through to
-          // the set's activeVersion and then to the legacy `SET#<id>` partition,
-          // so rounds started before versioning are unaffected.
-          //
-          // AND THE SCOPE, FROM THE SAME ROW. Since tenancy a `setId` alone no
-          // longer names one partition — setId is a slug of the title
-          // (upload-questions.js:298), so two organisations can both produce
-          // `teamretro`. The REF row pins the PAIR, and this reads it from
-          // there rather than from the request for the reason get-question.js
-          // gives at the same call: THIS ROUTE IS PUBLIC and its callers are
-          // anonymous participants, so a request-derived scope would resolve to
-          // `platform` for every player in every organisation's session and
-          // serve them nothing.
-          //
-          // A REF written before tenancy carries no SetScope, which reads as
-          // platform — the same reading of an absent scope as everywhere else
-          // (set-version.js `setRef`).
-          const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME,
-            {
-              scope: questionRef.Item.SetScope,
-              orgId: questionRef.Item.SetOrgId,
-              setId: questionSetId,
-            },
-            questionRef.Item.SetVersion
-          );
-
-          // Get the actual question from the question set
-          const question = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: {
-              PK: resolvedSet.pk,
-              SK: sourceQuestionId
-            }
-          }));
-
-          // Decrypted from the SET's org, which is not necessarily the
-          // SESSION's: a host in org A can run a platform set, and the pinned
-          // pair on the REF row is the only authority on which. Platform and
-          // public content is never encrypted, so it passes through as-is.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          const questionItem = question.Item && setOrgId
-            ? await decryptItem(setOrgId, 'question', question.Item)
-            : question.Item;
+          // THE ONE RESOLVER (round-question.js): the REF names a set row — read
+          // through the version and the scope PAIR it pins, never the request's,
+          // because this route is PUBLIC and its callers are anonymous — or a
+          // question the host wrote during the session (OWNQ#, the session's own
+          // partition). Decrypted from the SET's org for a set row, from the
+          // session's for an own row; platform and public pass through.
+          const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+          const resolvedSet = read.resolved;
+          const questionSetId = read.setId;
+          const setOrgId = read.setOrgId;
+          const question = { Item: read.question };
+          const questionItem = read.question;
 
           // The set's own instruction, for the wall's task line (session 7924,
           // finding #4). Encrypted at rest on an org set, so it is unwrapped
@@ -422,7 +386,7 @@ exports.handler = async (event) => {
             
             console.log(`✅ Fetched question data for question ${currentQuestionNumber}: ${currentQuestionData.title}`);
           } else {
-            console.warn(`❌ Question not found: ${sourceQuestionId} from set ${questionSetId}`);
+            console.warn(`❌ Question not found: ${read.sourceQuestionId} from set ${questionSetId}`);
           }
         } else {
           console.warn(`❌ Question reference not found: QUESTION#${currentQuestionNumber}#REF`);
@@ -695,7 +659,10 @@ exports.handler = async (event) => {
           version: Number(queueItem?.Version) || 0,
           setId: queueItem?.SetId || null,
           setVersion: queueItem?.SetVersion !== undefined ? queueItem.SetVersion : null,
-          updatedAt: queueItem?.UpdatedAt || null
+          updatedAt: queueItem?.UpdatedAt || null,
+          // The host's own questions (impromptu ask), as GET /queue lists
+          // them: this door only, never the public /state.
+          ownQuestions: await listOwnQuestions(db, process.env.TABLE_NAME, gameId).catch(() => []),
         };
       } catch (error) {
         console.error('Error fetching question queue:', error);

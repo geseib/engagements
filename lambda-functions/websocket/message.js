@@ -1,10 +1,9 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, QueryCommand, DeleteCommand, PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
-const { refSetRef, resolveSetPartition } = require('./set-version');
+const { readRoundQuestion } = require('./round-question');
 const { isHidden } = require('./anonymity');
-const { encryptItem, decryptItem } = require('./tenant-crypto');
-const { ORG } = require('./tenant');
+const { encryptItem } = require('./tenant-crypto');
 const { clearQuestionFocus } = require('./question-focus');
 const { countAnsweredQuestion, COUNT_PROJECTION } = require('./session-count');
 const { isPollRound, pollQuestionOf, pollAnswerText } = require('./poll-question');
@@ -508,47 +507,18 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         }));
         
         if (questionRef.Item) {
-          const sourceQuestionId = questionRef.Item.SourceQuestionId;
-          const questionSetId = questionRef.Item.SetId;
           const questionStartTime = questionRef.Item.StartedAt;
-          
-          // Read the VERSION this round was served from (the REF row records
-          // it). Scoring against a different version's correctAnswer than the
-          // one the player was shown is the worst possible drift.
-          //
-          // Resolved with the PAIR the REF row pins, never the bare id: a bare
-          // id reads as PLATFORM (set-version.js `setRef`), so for a session
-          // played from an organisation's own set or from a public copy this
-          // read missed, the block below was skipped without a sound, and the
-          // whole room was stored with no IsCorrect and no PointsEarned
-          // (tests/trivia-scoring-set-scope.js).
-          const resolvedSet = await resolveSetPartition(
-            db, process.env.TABLE_NAME, refSetRef(questionRef.Item, questionSetId), questionRef.Item.SetVersion
-          );
 
-          // Get the actual question to check correct answer
-          const questionRow = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: {
-              PK: resolvedSet.pk,
-              SK: sourceQuestionId
-            }
-          }));
-
-          // An org's optionA..optionF are encrypted at rest, and an envelope is
-          // not a string: trivia-answer.js draws no option from one, so every
-          // answer in the room resolves to no slot and is marked WRONG —
-          // whichever way the set spells the right one. Decrypted from the
-          // SET's org (the pinned pair above), not the session's: a host in
-          // org A may be running a platform or public set, which was never
-          // encrypted and passes through. A failure to decrypt lands in the
-          // catch below and the answer is stored unscored, as it always was.
-          const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-          const question = {
-            Item: questionRow.Item && setOrgId
-              ? await decryptItem(setOrgId, 'question', questionRow.Item)
-              : questionRow.Item
-          };
+          // THE ONE RESOLVER (round-question.js). Read through the VERSION the
+          // round was served from — scoring against another version's
+          // correctAnswer is the worst possible drift — and with the PAIR the
+          // REF pins, never the bare id (tests/trivia-scoring-set-scope.js).
+          // DECRYPTED from the SET's org: an org's optionA..F are envelopes at
+          // rest, and an envelope draws no option, so every answer would be
+          // marked wrong. A failure lands in the catch below and the answer is
+          // stored unscored, as it always was.
+          const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+          const question = { Item: read.question };
 
           if (question.Item) {
             const points = question.Item.points || 10;
@@ -620,17 +590,10 @@ async function handlePlayerAnswer(gameId, playerName, messageType, messageData) 
         console.log(`⚠️ Poll answer refused: no REF row for round ${questionNumber}`);
         return;
       }
-      const resolvedSet = await resolveSetPartition(
-        db, process.env.TABLE_NAME, refSetRef(ref, ref.SetId), ref.SetVersion
-      );
-      const questionRow = await db.send(new GetCommand({
-        TableName: process.env.TABLE_NAME,
-        Key: { PK: resolvedSet.pk, SK: ref.SourceQuestionId }
-      }));
-      const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-      const row = questionRow.Item && setOrgId
-        ? await decryptItem(setOrgId, 'question', questionRow.Item)
-        : questionRow.Item;
+      // The one resolver (round-question.js); a host-written round is never a poll's.
+      const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, ref);
+      const resolvedSet = read.resolved;
+      const row = read.own ? null : read.question;
       if (!row || !isPollRound(resolvedSet.metadata, row)) {
         console.log(`⚠️ Poll answer refused: round ${questionNumber} is not a poll's`);
         return;

@@ -10,6 +10,8 @@ import { willPlace } from '../../../present/roomWindow';
 import {
   SETUP_WORDS as W, stepNumber, recentArrivals, windowChecklist,
 } from '../../../config/sessionSetup';
+import YoursMark from '../../YoursMark';
+import { ownQuestionWords as OQ } from '../../../config/consoleWords';
 import './SessionSetup.css';
 
 /**
@@ -113,7 +115,7 @@ function WindowChecklist({ detail, href, blocked, nowMs }) {
   );
 }
 
-function Joins({ players, nowMs, firstUp, onRunningOrder }) {
+function Joins({ players, nowMs, firstUp, onRunningOrder, firstUpOwn = false, ownCount = 0 }) {
   const names = players.map((p) => (p && (p.name || p.playerName)) || '').filter(Boolean);
   const recent = recentArrivals(players, nowMs);
   const recentSet = new Set(recent);
@@ -135,8 +137,11 @@ function Joins({ players, nowMs, firstUp, onRunningOrder }) {
       {firstUp ? (
         <p className="hsetup-first">
           <span className="hsetup-k">{W.firstUp}</span>
+          {/* A question the host wrote before round 1 (impromptu ask, F8, R5). */}
+          {firstUpOwn ? <YoursMark /> : null}
           <b className="hsetup-first-t" title={firstUp}>{firstUp}</b>
           {onRunningOrder ? <button type="button" className="hsetup-change" onClick={onRunningOrder}>{W.runningOrder}</button> : null}
+          {ownCount > 0 ? <span className="hsetup-hint" data-testid="setup-own-count">{` · ${OQ.queuedCount(ownCount)}`}</span> : null}
         </p>
       ) : null}
     </div>
@@ -188,6 +193,8 @@ export default function SessionSetup({
   profile = 'room', onProfileChange = () => {},
   players = [], title = '', code = '', joinUrl = '',
   firstUp = '', onRunningOrder = null,
+  /* The impromptu ask (F8): whether First up is a question the host wrote, and how many of theirs are queued. */
+  firstUpOwn = false, ownCount = 0,
   remoteAddr = '', onUseTwo = null,
   /* A type that runs on one screen only (Wavelength): its reason, said in
      step 1 where the chooser would be (§7 decision 10; dev QA 2 Nov). The
@@ -286,7 +293,7 @@ export default function SessionSetup({
           />
           {joins === 'now' ? (
             <div className="hsetup-body">
-              <Joins players={players} nowMs={nowMs} firstUp={firstUp} onRunningOrder={onRunningOrder} />
+              <Joins players={players} nowMs={nowMs} firstUp={firstUp} onRunningOrder={onRunningOrder} firstUpOwn={firstUpOwn} ownCount={ownCount} />
             </div>
           ) : null}
         </li>

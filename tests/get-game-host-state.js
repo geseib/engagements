@@ -292,6 +292,8 @@ function assertNothingHostOnly(r, { except = [] } = {}) {
     assert.strictEqual(own.status, 200, own.raw);
     assert.deepStrictEqual(own.body.questionQueue, {
       queue: QUEUED, version: 3, setId: QUEUE_SET, setVersion: 2, updatedAt: '2026-09-26T09:10:00.000Z',
+      // The host's own questions (impromptu ask) ride the same block; none here.
+      ownQuestions: [],
     });
   });
   await check('and the category counts and masks', () => {

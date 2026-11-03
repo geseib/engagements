@@ -552,6 +552,17 @@
 }
 
 .report-doc .rpt-lead { font-size: 1.1em; line-height: 1.5; margin: 0 0 1em; overflow-wrap: anywhere; }
+/* YOURS (impromptu ask, D9; frame 6): a round the host wrote — the mark beside
+   the title, the source line under it, then the line for the room, the host's
+   labelled note and what Workie had, set off by a rule. Tokens only; the
+   mark's own colours are YoursMark.css's, re-tinted for paper there. */
+.report-doc .rpt-yours { vertical-align: middle; }
+.report-doc .rpt-own-source { margin: 4px 0 0; font-size: .9em; color: var(--muted); }
+.report-doc .rpt-own { margin: 0 0 1em; padding: 2px 0 2px 12px; border-left: 3px solid var(--rule-strong, currentColor); }
+.report-doc .rpt-own-line { margin: 0 0 4px; line-height: 1.5; overflow-wrap: anywhere; }
+.report-doc .rpt-own-quiet { color: var(--muted); }
+.report-paper .report-tool--check { cursor: pointer; }
+.report-paper .report-tool--check input { margin: 0; }
 
 .report-doc .rpt-task {
   display: flex;

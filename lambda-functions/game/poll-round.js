@@ -12,10 +12,7 @@
  * Game bundle only: the host's answers (get-answers.js, live while the round
  * is open) and the round's results (get-results.js) read it.
  */
-const { GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { refSetRef, resolveSetPartition } = require('./set-version');
-const { ORG } = require('./tenant');
-const { decryptItem } = require('./tenant-crypto');
+const { readRoundByNumber } = require('./round-question');
 const { aggregate } = require('./survey-aggregate');
 const { isPollRound, pollQuestionOf } = require('./poll-question');
 
@@ -24,19 +21,12 @@ const QID = 'q';
 
 /** `{ question, title, detail }` for this round, or null when it is not a poll's. */
 async function readPollQuestion(db, tableName, gameId, questionNumber) {
-  const ref = await db.send(new GetCommand({
-    TableName: tableName,
-    Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#REF` },
-  }));
-  if (!ref.Item) return null;
-  const resolved = await resolveSetPartition(db, tableName, refSetRef(ref.Item, ref.Item.SetId), ref.Item.SetVersion);
-  const row = await db.send(new GetCommand({
-    TableName: tableName,
-    Key: { PK: resolved.pk, SK: ref.Item.SourceQuestionId },
-  }));
-  if (!row.Item) return null;
-  const setOrgId = resolved.scope === ORG ? String(resolved.orgId || '') : '';
-  const item = setOrgId ? await decryptItem(setOrgId, 'question', row.Item) : row.Item;
+  // The one resolver (round-question.js). A host-written round is a Call &
+  // Answer round and never a poll's: it falls out below as "not a poll".
+  const read = await readRoundByNumber(db, tableName, gameId, questionNumber);
+  if (!read.ref || !read.question || read.own) return null;
+  const { resolved } = read;
+  const item = read.question;
   if (!isPollRound(resolved.metadata, item)) return null;
   return { question: pollQuestionOf(item), title: item.Title || '', detail: item.Detail || '' };
 }

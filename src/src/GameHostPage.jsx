@@ -152,7 +152,10 @@ import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './comp
 import SessionSetup from './components/console/panels/SessionSetup';
 import { setupStepFor, setupPartFor, SETUP_WORDS } from './config/sessionSetup';
 import { openRoomWindow, willPlace, ROOM_WINDOW_NAME } from './present/roomWindow';
-import CW from './config/consoleWords';
+import CW, { ownQuestionWords as OQ } from './config/consoleWords';
+import { isOwnKey, OWN_KEY_PREFIX, ownNowAllowed, ownNowIsFirst, ownAtHead, withOwnNext, laterAnchors, withOwnRounds } from './config/ownQuestion';
+import OwnQuestionChoice from './components/OwnQuestionChoice';
+import useOwnQuestionKey from './components/stage/useOwnQuestionKey';
 import { consolePeopleFor, personFactsFor } from './config/consoleRail';
 import { readLinesOf } from './config/readLines';
 import AskIcons from './components/AskIcons';
@@ -565,6 +568,8 @@ function GameHostPage() {
   const [setupPanelLanding, setSetupPanelLanding] = useState(null);
   useEffect(() => {
     if (!setupPanelOpen) setSetupPanelLanding(null);
+    // The composer is a step of the Session menu: closing the menu closes it.
+    if (!setupPanelOpen) setOwnComposer(null);
   }, [setupPanelOpen]);
   /** The title bar's four places (session flow v3 §4.8): the panel, at one tab. */
   const openSetupAt = useCallback((tab) => {
@@ -1115,6 +1120,21 @@ function GameHostPage() {
   const [upNextExcluded, setUpNextExcluded] = useState([]);
   const [queueVersion, setQueueVersion] = useState(0);
   const [queueBusyKeys, setQueueBusyKeys] = useState([]);
+  /*
+    THE HOST'S OWN QUESTIONS (impromptu ask, docs/design/impromptu-ask). The
+    list rides every host-facing queue response (`ownQuestions`); the composer
+    is one step with three doors (the Session menu's Rounds, the rail, Q), and
+    on one screen it waits behind a host-only choice (D8). `ownNotice` is the
+    status line that confirms with Undo (D5).
+  */
+  const [ownQuestions, setOwnQuestions] = useState([]);
+  const [ownComposer, setOwnComposer] = useState(null);
+  const [ownChoiceOpen, setOwnChoiceOpen] = useState(false);
+  const [ownBusy, setOwnBusy] = useState(false);
+  const [ownError, setOwnError] = useState('');
+  const [ownNotice, setOwnNotice] = useState(null);
+  // The socket handlers are registered before loadQueue exists; they read it here.
+  const loadQueueRef = useRef(() => {});
 
   // Sign-out handler: the small confirm dialog, not the browser's (step 5b).
   // Mounted in both places Sign out is offered: the start screen's early
@@ -3315,8 +3335,14 @@ Focus on actionable business strategy insights.`;
     */
     webSocketClient.onMessage('questionQueueChanged', (data) => {
       console.log('🔌 Question queue notification:', data);
+      // An edit to one of the host's own questions (edit-own) carries no
+      // list: the words changed, not the order. Re-read the queue route.
+      if (data && data.own && !Array.isArray(data.queue)) { loadQueueRef.current(); return; }
       const list = data?.queue ?? null;
       if (!Array.isArray(list)) return;
+      // A question the other surface wrote arrives as a bare `own:` key: read
+      // the queue route once for its words, so the row is named, not blank.
+      if (list.some((k) => isOwnKey(k))) loadQueueRef.current();
       setQuestionQueue(normaliseQueue(list));
       setQueueVersion(Number(data.version) || 0);
     });
@@ -4720,7 +4746,9 @@ Focus on actionable business strategy insights.`;
     }
     setQuestionQueue(result.queue);
     setQueueVersion(result.version);
+    setOwnQuestions(result.ownQuestions || []);
   }, [gameId]);
+  loadQueueRef.current = loadQueue;
 
   /**
    * WHAT THE SESSION WILL ASK NEXT, INCLUDING THE PART NOBODY QUEUED.
@@ -4753,6 +4781,8 @@ Focus on actionable business strategy insights.`;
       // questions the host has disabled for this session.
       setUpNextAdvisories(Array.isArray(payload.advisories) ? payload.advisories : []);
       setUpNextExcluded(Array.isArray(payload.excluded) ? payload.excluded : []);
+      // The host's own questions, queued and asked (Yours on the rail too).
+      if (Array.isArray(payload.ownQuestions)) setOwnQuestions(payload.ownQuestions);
       /*
         THE SERVER'S OWN ASKED LIST corrects the watched one. Locally-watched
         ids stay (union, not replace — the round on screen is asked before the
@@ -4786,6 +4816,16 @@ Focus on actionable business strategy insights.`;
       going stale in the one way a host would certainly notice.
     */
   }, [setupPanelOpen, currentQuestionId, loadQueue, loadUpNext]);
+
+  /*
+    ONCE PER SESSION, the running order and the host's own questions
+    (impromptu ask): Your part now and the rail name a queued own question
+    before the host has opened the Session menu, including straight after a
+    reload. One GET; every later change arrives by op, frame or round start.
+  */
+  useEffect(() => {
+    if (gameId) loadQueue();
+  }, [gameId, loadQueue]);
 
   /**
    * One op, applied locally, sent, then reconciled.
@@ -4970,9 +5010,111 @@ Focus on actionable business strategy insights.`;
     loadUpNext();
   }, [gameId, loadQueue, loadUpNext, hostActionFailed]);
 
+  /*
+    ── THE HOST'S OWN QUESTION (impromptu ask, docs/design/impromptu-ask) ──
+
+    One composer, three doors: the Session menu's Rounds → Running order, the
+    rail's Round queue, and Q. On one screen a door opens the host-only choice
+    first (D8): the fields never draw on the room's screen unasked. The ops are
+    the queue route's own (add-own, edit-own, remove); "Now" is add-own at the
+    head and then next-question's select_own, so a refused Now leaves it next.
+  */
+  const openOwnComposer = useCallback(({ mode = 'add', key = null, initial = null, skipChoice = false } = {}) => {
+    setOwnError('');
+    setOwnNotice(null);
+    if (mode === 'add' && !twoSurfaces && !skipChoice) {
+      setOwnChoiceOpen(true);
+      return;
+    }
+    setOwnChoiceOpen(false);
+    setOwnComposer({ mode, key, initial });
+    openSetupAt('rounds');
+  }, [twoSurfaces, openSetupAt]);
+
+  const closeOwnComposer = useCallback(() => {
+    setOwnComposer(null);
+    setOwnError('');
+  }, []);
+
+  const removeOwnQuestion = useCallback(async (key) => {
+    if (!isOwnKey(key)) return;
+    setQueueBusyKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    const result = await postQueueOp({
+      apiBase: API_BASE, gameId, op: 'remove', questionKey: key, expectedVersion: queueVersion,
+    });
+    setQueueBusyKeys((prev) => prev.filter((k) => k !== key));
+    if (!result.ok) {
+      hostActionFailed(`Could not remove your question: ${result.error}`);
+      return;
+    }
+    if (result.queue) { setQuestionQueue(result.queue); setQueueVersion(result.version); }
+    setOwnQuestions(result.ownQuestions || []);
+    setOwnNotice({ text: OQ.removed });
+    loadUpNext();
+  }, [gameId, queueVersion, loadUpNext, hostActionFailed]);
+
+  const submitOwnQuestion = useCallback(async (fields) => {
+    if (!ownComposer) return;
+    const editing = ownComposer.mode === 'edit';
+    setOwnBusy(true);
+    setOwnError('');
+    const result = await postQueueOp({
+      apiBase: API_BASE,
+      gameId,
+      op: editing ? 'edit-own' : 'add-own',
+      questionKey: editing ? ownComposer.key : undefined,
+      expectedVersion: queueVersion,
+      place: editing ? undefined : fields.place,
+      anchorKey: fields.anchorKey || undefined,
+      anchorRound: fields.anchorRound || undefined,
+      through: fields.through && fields.through.length ? fields.through : undefined,
+      question: { title: fields.title, detail: fields.detail, note: fields.note },
+    });
+    setOwnBusy(false);
+    if (!result.ok) {
+      setOwnError(`Could not save your question: ${result.error}`);
+      return;
+    }
+    if (result.ownQuestions) setOwnQuestions(result.ownQuestions);
+    if (result.changed === false) {
+      setOwnError(result.message || 'Nothing changed. The running order may have moved; look again.');
+      return;
+    }
+    // An edit answers with no list (the order did not move); only an add does.
+    if (!editing && result.queue) { setQuestionQueue(result.queue); setQueueVersion(result.version); }
+    setOwnComposer(null);
+    loadUpNext();
+    if (editing) { setOwnNotice({ text: OQ.saved }); return; }
+    const key = result.key;
+    if (fields.place === 'now' && key) {
+      const asked = await selectQuestion(null, { body: { action: 'select_own', ownId: key.slice(OWN_KEY_PREFIX.length) } });
+      if (asked) { setOwnNotice({ text: OQ.askedNow }); return; }
+      loadQueue();
+      setOwnNotice({ text: OQ.isNext, rest: OQ.isNextRest, undoKey: key });
+      return;
+    }
+    setOwnNotice(fields.place === 'later' && fields.anchorRound
+      ? { text: OQ.placedAfter(fields.anchorRound), undoKey: key }
+      : { text: OQ.isNext, rest: OQ.isNextRest, undoKey: key });
+  // selectQuestion is a plain function re-made each render; the latest is the one wanted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownComposer, gameId, queueVersion, loadQueue, loadUpNext]);
+
+  const editOwnQuestion = useCallback((key, row) => {
+    const own = row || ownQuestions.find((o) => o.key === key);
+    if (!own) return;
+    openOwnComposer({ mode: 'edit', key, initial: { title: own.title || '', detail: own.detail || '', note: own.note || '' }, skipChoice: true });
+  }, [ownQuestions, openOwnComposer]);
+
   // "Ask now": put one named question on the room's screen straight away.
   // "Ask next" is handleQueueFirst above — the top of the running order.
-  const selectQuestion = async (selectedQuestion) => {
+  //
+  // `override` is the impromptu ask's "Ask it now" (README D4): `{ body:
+  // { action: 'select_own', ownId } }`. Now is only offered between rounds, so
+  // it never needs the mid-round confirmation; the server refuses it in
+  // ASK#/VOTE# anyway (next-question.js).
+  const selectQuestion = async (selectedQuestion, override = null) => {
+    const overrideBody = override && override.body ? override.body : null;
     try {
       console.log(`🎯 HOST: Selecting specific question:`, selectedQuestion);
 
@@ -4983,7 +5125,7 @@ Focus on actionable business strategy insights.`;
       // Show confirmation when skipping to next question during Ask/Vote phase (same as handleNextQuestion)
       // It names the reversible neighbour, because a host who pressed Ask now
       // mid-round most often meant "after this one" — which is Ask next.
-      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+      if (!overrideBody && (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))) {
         const proceed = await showConfirmation(
           'Ask this question now?',
           'This ends the round on screen and puts the selected question up straight away. To ask it after this round instead, use Ask next.',
@@ -5000,13 +5142,13 @@ Focus on actionable business strategy insights.`;
       console.log(`🎯 HOST: Requesting specific question, current state: ${gameState}`);
       
       // Include skip action if we're forcing advancement from ASK/VOTE states (same logic as handleNextQuestion)
-      const requestBody = {
+      const requestBody = overrideBody ? { ...overrideBody, time: timeChoices.ask } : {
         questionId: selectedQuestion.id,
         action: 'select_specific',
         // The answering time the chip says (experience plan 2f).
         time: timeChoices.ask
       };
-      if (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#')) {
+      if (!overrideBody && (gameState.startsWith('ASK#') || gameState.startsWith('VOTE#'))) {
         requestBody.action = 'skip_to_specific';
       }
       
@@ -5066,7 +5208,8 @@ Focus on actionable business strategy insights.`;
       closeAllSidePanels();
       
       console.log(`✅ HOST: Successfully selected question ${questionId}, state: ${newState}`);
-      
+      return true;
+
     } catch (error) {
       console.error('Error selecting question:', error);
       hostActionFailed(`That question could not be asked: ${error.message}`);
@@ -7087,6 +7230,21 @@ Focus on actionable business strategy insights.`;
     onOpen: () => setSetupPanelOpen(true),
   });
 
+  /*
+    Q: WRITE A QUESTION (impromptu ask). The same `enabled` as the Session
+    menu's key just above — never under a dialog, never over a surface that
+    replaced the stage — and Call & Answer only, the one format whose round a
+    host-written question is. On one screen it opens the choice first (D8).
+  */
+  useOwnQuestionKey({
+    enabled: sessionPanelKeyOn && !createdSetup && !showWelcomeScreen
+      && !showNewGameDialog && !showReport && !showSurveyResults && !showSurveyWalkthrough
+      && !editTarget && !confirmLeave && Boolean(gameId)
+      && normalizeGameType(currentGameType) === 'call-and-answer'
+      && !ownComposer && !ownChoiceOpen && gameState !== 'ENDED',
+    onWrite: () => openOwnComposer(),
+  });
+
   // F: the host's screen full screen, and back (hooks/useFullscreenKey.js).
   // On every surface this page draws — the main screen, the stage, a report —
   // because it only asks the browser, and Esc always leaves.
@@ -7626,7 +7784,9 @@ Focus on actionable business strategy insights.`;
     asksEnabled: roundAsks.enabled && normalizeGameType(currentGameType) === 'call-and-answer',
     // The round on screen, for "Start round 3" and the workflow strip.
     roundNumber: hostPhase === 'LOBBY' || hostPhase === 'ENDED' ? null : lessonNumber,
-    totalRounds: questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions,
+    // Plus the host's own questions (impromptu ask, risk 5): "Round 3 of 12"
+    // becomes 13 when one is queued, and back when it is removed.
+    totalRounds: withOwnRounds(questionSets.find((set) => set.id === (questions[0]?.setId || selectedSetId))?.totalQuestions, ownQuestions),
     // The late items still waiting: roundStep appends the one count to the
     // status ("· 1 late answer kept"; at the end "2 items not reviewed · Review").
     late: lateStatus,
@@ -7708,9 +7868,20 @@ Focus on actionable business strategy insights.`;
   // The primary is the one the dock draws (an event relabels it), so "Your
   // part now" names the button the host can see. None while an event item
   // waits to go live: that is the agenda's moment, not the round's.
-  const workflow = !eventWaiting && hostControls.step && hostControls.snapshot
+  const workflowRaw = !eventWaiting && hostControls.step && hostControls.snapshot
     ? workflowStrip({ ...hostControls.step, primary: hostControls.primary }, hostControls.snapshot)
     : null;
+  /*
+    YOUR PART NOW NAMES THE HOST'S OWN QUESTION (impromptu ask, reviews F-2,
+    R1): when the main button starts the next round and the queue's head is a
+    question the host wrote, "Next round asks your question: '…'". On two
+    screens only: on one screen the line is on the room's screen, and the
+    queued title is the host's until it runs.
+  */
+  const ownHead = ownAtHead(questionQueue, ownQuestions, upNextBlocked);
+  const workflow = workflowRaw && ownHead && twoSurfaces
+    ? { ...workflowRaw, part: withOwnNext(workflowRaw.part, ownHead, hostControls.primary && hostControls.primary.intent) }
+    : workflowRaw;
   // Looking happens only where the laptop is private: two screens (owner,
   // 14 Oct, open question 10). Pressing the live step is the way back.
   const viewing = twoSurfaces && workflow && viewingStep && viewingStep !== workflow.live ? viewingStep : null;
@@ -7795,7 +7966,8 @@ Focus on actionable business strategy insights.`;
   */
   const anyOverlayOpen = shortcutsSuppressed({
     // The ask preview is a dialog: Space and the arrows are its own.
-    showConfirmModal: showConfirmModal || Boolean(askComposer), showExpandedQR,
+    // …and so is the one-screen choice before writing a question (impromptu ask).
+    showConfirmModal: showConfirmModal || Boolean(askComposer) || ownChoiceOpen, showExpandedQR,
     showReportsModal, lessonExpanded, isLoadingData, qrMode: qrCovers,
     spotlightOpen: !useConsole && spotlightIndex !== null,
     pastRoundOpen: pastRoundIndex !== null,
@@ -8043,9 +8215,9 @@ Focus on actionable business strategy insights.`;
   // ---------------------------------------------------------------------
 
   const currentQuestion = questions[0] || null;
-  const roundOf = questionSets.find(
+  const roundOf = withOwnRounds(questionSets.find(
     (s) => s.id === (currentQuestion?.setId || selectedSetId)
-  )?.totalQuestions;
+  )?.totalQuestions, ownQuestions);
 
   // The phase BAR speaks in hues and knows five of them; the phase CHIP names
   // the state. FIELD_NOTES stays inside RESULTS' green — it is the same beat
@@ -8865,9 +9037,10 @@ Focus on actionable business strategy insights.`;
   const consoleRounds = (() => {
     const ended = hostPhase === 'ENDED';
     const liveN = !ended && hostPhase !== 'LOBBY' && lessonNumber > 0 ? lessonNumber : 0;
+    const ownAskedEarly = new Set(ownQuestions.filter((o) => o && o.askedRound).map((o) => Number(o.askedRound)));
     const played = (rounds || [])
       .filter((r) => r.ordinal > 0 && (ended || !liveN || r.ordinal < liveN))
-      .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done' }));
+      .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done', ...(ownAskedEarly.has(Number(r.ordinal)) ? { own: true } : {}) }));
     const now = liveN && currentQuestion ? [{ n: liveN, title: currentQuestion.title || currentQuestion.question || '', state: 'now' }] : [];
     if (ended) return played;
     const lastN = Math.max(liveN, ...played.map((r) => r.n), 0);
@@ -8875,9 +9048,34 @@ Focus on actionable business strategy insights.`;
     const planned = (upNext || [])
       .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
       .slice(0, room)
-      .map((row, i) => ({ n: lastN + i + 1, title: row.title || '', state: i === 0 ? 'next' : 'later' }));
-    return played.concat(now, planned);
+      .map((row, i) => ({
+        n: lastN + i + 1,
+        title: row.title || '',
+        state: i === 0 ? 'next' : 'later',
+        // The host's own question (impromptu ask): Yours on the rail too.
+        own: row.source === 'own',
+        key: String(row.questionId || '').replace(/^QUESTION#/, ''),
+        source: row.source,
+      }));
+    // Rounds already played or on now that the host wrote: Yours, by round.
+    const ownAsked = new Set(ownQuestions.filter((o) => o && o.askedRound).map((o) => Number(o.askedRound)));
+    const markOwn = (r) => (ownAsked.has(Number(r.n)) ? { ...r, own: true } : r);
+    return played.map(markOwn).concat(now.map(markOwn), planned);
   })();
+  /*
+    THE IMPROMPTU ASK'S DOORS (README D2): Call & Answer only, and not once the
+    session has ended. Later's anchors are the planned rounds after the one on
+    screen, each carrying the automatic keys up to it (config/ownQuestion.js).
+  */
+  const ownWritable = Boolean(gameId) && normalizeGameType(currentGameType) === 'call-and-answer' && gameState !== 'ENDED';
+  const ownLaterOptions = laterAnchors((upNext || [])
+    .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
+    .map((row, i) => ({
+      key: String(row.questionId || '').replace(/^QUESTION#/, ''),
+      n: Number(row.round) > 0 ? Number(row.round) : (lessonNumber || 0) + i + 1,
+      title: row.title || '',
+      source: row.source,
+    })));
   const consoleTask = currentQuestion ? getHostInstructionText(currentQuestion) : '';
   /*
     THE QUESTION'S WORDS FOR THE ROOM (config/roomContent.js questionRoomData),
@@ -9015,6 +9213,9 @@ Focus on actionable business strategy insights.`;
       joinUrl={playUrl}
       firstUp={setupFirst ? [RW.stripRound(getHostRoundNoun(), setupFirst.n, null), setupFirst.title].filter(Boolean).join(' · ') : ''}
       onRunningOrder={mid ? null : openRunningOrder}
+      // A question the host wrote before round 1 (impromptu ask, F8, R5).
+      firstUpOwn={Boolean(setupFirst && setupFirst.own)}
+      ownCount={ownQuestions.filter((o) => o && o.status === 'queued').length}
       remoteAddr={`${window.location.host}/remote`}
       onUseTwo={setupOneOnly && !mid ? null : () => chooseRoomScreen('two')}
     />
@@ -9256,6 +9457,8 @@ Focus on actionable business strategy insights.`;
             onLateShow: showLateOnWall,
             onLateMark: markLateReviewed,
             onOpenSection: openSetupAt,
+            // The impromptu ask's rail door: the same composer step (D2).
+            onWriteQuestion: ownWritable ? () => openOwnComposer() : null,
             scoreboard: { ...scoreboardAvail, open: scoreboard.open, onToggle: (open) => publishScoreboard({ open }) },
             // Askers lifted to the top of People, with Let them / Not now on the row.
             asking: needs.items.filter((i) => i.kind === 'name-request' || i.kind === 'name-open'),
@@ -10325,6 +10528,21 @@ Focus on actionable business strategy insights.`;
           Mounted inside the stage it sat in `.main`'s stacking context (z 2),
           so the workflow strip (z 3) and the dock (z 12) painted over its
           header and its Send button. Out here its scrim covers everything. */}
+      {/* ONE SCREEN: WHERE WILL YOU TYPE IT? (impromptu ask, D8). Host-only
+          and first: the composer's fields never draw on the room's screen
+          unasked. There is no Remote-presence signal on this page (the needs
+          bell passes remoteConnected={false} for the same reason), so the
+          phone row offers Connect your phone, which opens the Session menu's
+          Phone remote; the Remote's Rounds tab has the same composer. */}
+      {ownChoiceOpen && (
+        <OwnQuestionChoice
+          remoteConnected={false}
+          onOpenPhone={() => setOwnChoiceOpen(false)}
+          onConnectPhone={() => { setOwnChoiceOpen(false); openSetupAt('remote'); }}
+          onWriteHere={() => openOwnComposer({ skipChoice: true })}
+          onClose={() => setOwnChoiceOpen(false)}
+        />
+      )}
       {askComposer && !useConsole && (
         <AskComposer
           suggestions={(roundAsks.suggestions || []).map((ask, index) => ({
@@ -10428,6 +10646,25 @@ Focus on actionable business strategy insights.`;
             createdAt: gameCreatedAt,
           })}
           suppressKeys={Boolean(inviteTarget)}
+          composing={Boolean(ownComposer)}
+          ownQuestions={ownQuestions}
+          onWriteQuestion={ownWritable ? () => openOwnComposer() : null}
+          onEditOwn={editOwnQuestion}
+          onRemoveOwn={removeOwnQuestion}
+          ownNotice={ownNotice}
+          onOwnUndo={ownNotice && ownNotice.undoKey ? () => removeOwnQuestion(ownNotice.undoKey) : null}
+          ownComposer={ownComposer ? {
+            mode: ownComposer.mode,
+            initial: ownComposer.initial,
+            canNow: ownNowAllowed(gameState),
+            lobby: ownNowIsFirst(gameState),
+            laterOptions: ownLaterOptions,
+            nextRound: (lessonNumber || 0) + 1,
+            busy: ownBusy,
+            error: ownError,
+            onSubmit: submitOwnQuestion,
+            onClose: closeOwnComposer,
+          } : null}
           onShowJoinCode={showJoinCode}
           profile={profile}
           onProfileChange={setProfile}

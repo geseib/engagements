@@ -246,7 +246,7 @@ const running = {
       blocks: [
         {
           t: 'p',
-          text: '**Your part now**, under the top bar on one screen and two, holds the button that moves the room on; Space or → presses it. The round\'s time button sits beside it. A grey button says why it cannot act yet. A late count in its status line opens the list.',
+          text: '**Your part now**, under the top bar on one screen and two, holds the button that moves the room on; Space or → presses it. The round\'s time button sits beside it. A grey button says why it cannot act yet; a late count in its status opens the list.',
         },
         {
           t: 'p',
@@ -256,7 +256,7 @@ const running = {
           t: 'keys',
           items: [
             { keys: 'Space  →', text: 'The main button. While Workie\'s read has more pages, → turns the page first.' },
-            { keys: '←', text: 'Back a page of the read, then back a step (comments to the read, the read to the results).' },
+            { keys: '←', text: 'Back a page of the read, then back a step.' },
             { keys: '↑ ↓', text: 'Page through answers that do not fit.' },
             { keys: 'U', text: 'Show or hide names on the room meter.' },
             { keys: 'J', text: 'Show or hide the join QR and code.' },
@@ -264,6 +264,7 @@ const running = {
             { keys: 'S', text: 'Show or hide the scoreboard (Trivia and Call & Answer).' },
             { keys: 'V', text: 'Change the scoreboard\'s look while it is up.' },
             { keys: '\\', text: 'Open and close the Session panel.' },
+            { keys: 'Q', text: 'Write your own question.' },
             { keys: 'F', text: 'Full screen, and back again. Esc also leaves.' },
             { keys: 'Esc', text: 'Close whatever is open.' },
           ],
@@ -427,6 +428,63 @@ const sessionPanel = {
             ['**Ask next**', 'Puts it at the top of the running order. It is asked when the current round ends.'],
             ['**Ask now**', 'Puts it on the stage, or the room\'s window, straight away; the round on screen ends. For a question already asked it reads **Ask again now**.'],
           ],
+        },
+      ],
+    },
+    /*
+      THE IMPROMPTU ASK (docs/design/impromptu-ask; README D2–D10, F2, F3, F5,
+      F6, F8): components/OwnQuestionComposer.jsx (Write a question, The
+      question, A line for the room, For Workie only, Where it goes: Next /
+      Later / Now, Put it next / Put it after round N / Ask it now), the doors
+      in SessionSetupPanel (Rounds → Running order), ConsoleRail and the Remote's
+      Rounds tab, Q (useOwnQuestionKey.js), OwnQuestionChoice.jsx on one screen,
+      QueueList's Yours rows (Edit, Remove armed in place), GameReport's Yours
+      line and Include my notes.
+    */
+    {
+      id: 'own-question',
+      title: 'Writing a question of your own',
+      icon: 'PencilSimple',
+      blocks: [
+        {
+          t: 'p',
+          text: 'In Call & Answer you can put a question of your own to the room as a full round. **Write a question** is in the Session menu under **Rounds**, beside **Running order**; in the rail\'s **Round queue** on two screens; and in the phone Remote\'s **Rounds** tab. **Q** opens it too, in Setup as well.',
+        },
+        {
+          t: 'list',
+          items: [
+            { title: '**The question**', text: 'What the room answers, up to 200 characters.' },
+            { title: '**A line for the room**', text: 'Optional. Shown under the question, like a set question\'s detail.' },
+            { title: '**For Workie only**', text: 'Optional. A note Workie reads with the answers. It is never shown to the room or on any phone. It appears in your report, labelled as yours; switch off **Include my notes** before you print or save to leave it out.' },
+          ],
+        },
+        {
+          t: 'table',
+          head: ['Where it goes', 'What happens'],
+          rows: [
+            ['**Next**', 'It is asked when you press Next round. Your part now says so: "Next round asks your question".'],
+            ['**Later**', 'It goes after a round you pick. Rounds in the automatic order up to that one join the running order, so it stays after that round.'],
+            ['**Now**', 'Only between rounds (before round 1, or at the results, the read or the comments). While answers or votes are still coming in, Now waits and says why.'],
+          ],
+        },
+      ],
+    },
+    {
+      id: 'own-question-queued',
+      title: 'Your question, queued and asked',
+      icon: 'PencilSimple',
+      blocks: [
+        {
+          t: 'p',
+          text: 'In the running order it is marked **Yours**. Until it runs you can **Edit** it, move it, or **Remove** it (Remove asks once, in the row). Once it has run it cannot be changed.',
+        },
+        {
+          t: 'p',
+          text: 'The room sees an ordinary round: no category, no label, and the task "Answer in a sentence or two." Votes score as in any round, and its answers count toward the session\'s answered questions, so one added to a one-round rehearsal makes the session count.',
+        },
+        {
+          t: 'p',
+          text: 'On one screen the room can see your laptop, so **Write a question** asks first: write it on your phone, or **Write it here** with the room watching. Saving a question to the set is not offered yet.',
         },
       ],
     },

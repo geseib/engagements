@@ -1,7 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
-const { resolveSetPartition } = require('./set-version');
-const { ORG } = require('./tenant');
+const { readRoundQuestion } = require('./round-question');
 const { decryptItem } = require('./tenant-crypto');
 const { isPollRound, pollQuestionOf } = require('./poll-question');
 
@@ -87,8 +86,6 @@ exports.handler = async (event) => {
       };
     }
 
-    const sourceQuestionId = questionRef.Item.SourceQuestionId;
-    const questionSetId = questionRef.Item.SetId;
     // THE SESSION IS THE AUTHORITY ON WHICH LIBRARY, NOT THE CALLER.
     //
     // Most participants here are anonymous — they joined with a 4-digit code
@@ -97,34 +94,26 @@ exports.handler = async (event) => {
     // they would read an empty partition and see no question.
     //
     // The REF row is the right source: the host picked the set, the session
-    // pinned the pair, and that pin already carries the authorisation. Rows
-    // written before tenancy have no SetScope, which means platform — the same
-    // reading of an absent scope as everywhere else (set-version.js setRef).
-    const questionSetRef = {
-      scope: questionRef.Item.SetScope,
-      orgId: questionRef.Item.SetOrgId,
-      setId: questionSetId,
-    };
+    // pinned the pair (and the VERSION the round was started on), and that pin
+    // already carries the authorisation. A round the HOST WROTE during the
+    // session names an OWNQ# row on the session instead. Both are read by the
+    // one resolver (round-question.js), so this route can never go to the set
+    // for a question that is not in it and show "Source question not found".
+    //
+    // ── DECRYPTED FROM THE ROW'S OWN ORG, NEVER FROM THE CALLER ─────────────
+    //
+    // THIS ROUTE IS PUBLIC AND ITS CALLERS ARE ANONYMOUS. A participant joined
+    // with a four-digit code and carries no authorizer context at all, so
+    // `tenant.callerOrgId(event)` resolves to '' for every player — and a blank
+    // orgId THROWS in tenant-crypto. The resolver opens a set row with the org
+    // the REF pinned (the AES-GCM AAD) and an own row with the org it records.
+    const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, questionRef.Item);
+    const sourceQuestionId = read.sourceQuestionId;
+    const questionSetId = read.setId;
+    const resolved = read.resolved;
+    const question = { Item: read.question };
 
-    console.log(`📖 Found question reference: ${sourceQuestionId} from set ${questionSetId}`);
-
-    // The REF row records the set VERSION the round was started on
-    // (next-question.js writes SetVersion beside SetId). That is the tightest
-    // pin available — tighter than the game's, and it costs no extra read. REF
-    // rows written before versioning have no SetVersion, so the resolver falls
-    // through to the set's activeVersion and then to the legacy partition.
-    const resolved = await resolveSetPartition(
-      db, process.env.TABLE_NAME, questionSetRef, questionRef.Item.SetVersion
-    );
-
-    // Get the actual question from the resolved version of the question set
-    const question = await db.send(new GetCommand({
-      TableName: process.env.TABLE_NAME,
-      Key: {
-        PK: resolved.pk,
-        SK: sourceQuestionId
-      }
-    }));
+    console.log(`📖 Found question reference: ${sourceQuestionId} from ${read.own ? 'the host' : `set ${questionSetId}`}`);
 
     if (!question.Item) {
       return {
@@ -138,27 +127,10 @@ exports.handler = async (event) => {
       };
     }
 
-    // ── DECRYPT FROM THE ROW'S OWN ORG, NEVER FROM THE CALLER ────────────────
-    //
-    // THIS ROUTE IS PUBLIC AND ITS CALLERS ARE ANONYMOUS. A participant joined
-    // with a four-digit code and carries no authorizer context at all, so
-    // `tenant.callerOrgId(event)` resolves to '' for every player in every
-    // organisation's session — and a blank orgId does not "fall back", it
-    // THROWS (`tenant-crypto: an orgId is required`). Every question in the
-    // product would 500.
-    //
-    // The org therefore comes from the same place the PARTITION did: the REF
-    // row the host pinned when the round started, resolved above. That pin is
-    // the authorisation — the host chose this set for this session — and it is
-    // the only org that could possibly decrypt these rows anyway, because the
-    // orgId is the AES-GCM AAD.
-    //
-    // Platform and public sets are never encrypted (upload-questions.js says
-    // why), so they are used exactly as they came back.
-    const setOrgId = resolved.scope === ORG ? String(resolved.orgId || '') : '';
-    const questionItem = setOrgId
-      ? await decryptItem(setOrgId, 'question', question.Item)
-      : question.Item;
+    // Already opened by the resolver (above); platform and public sets were
+    // never encrypted and came back exactly as stored.
+    const setOrgId = read.setOrgId;
+    const questionItem = question.Item;
     // `resolved.metadata` is the SETS row this handler already had in hand, and
     // two of its fields ride out on the payload below — so it needs the same
     // treatment or a player sees an envelope where a per-set instruction goes.

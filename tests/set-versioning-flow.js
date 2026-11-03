@@ -1163,9 +1163,19 @@ function decorate(setId, fields) {
         `these read the platform library for every caller, org or not:\n  ${offenders.join('\n  ')}`);
     });
     check('every reader that touches set content requires set-version', () => {
-      const missing = readerFiles.filter((rel) =>
-        !fs.readFileSync(path.join(REPO, 'lambda-functions', rel), 'utf8').includes('set-version'));
+      // Directly, or through round-question.js — the one resolver of a round's
+      // question since the impromptu ask, which itself resolves the set
+      // through set-version (tests/round-question-readers.js holds the readers
+      // to it).
+      const missing = readerFiles.filter((rel) => {
+        const src = fs.readFileSync(path.join(REPO, 'lambda-functions', rel), 'utf8');
+        return !src.includes('set-version') && !src.includes("require('./round-question')");
+      });
       assert.deepStrictEqual(missing, []);
+      for (const dir of ['game', 'websocket']) {
+        assert.ok(fs.readFileSync(path.join(REPO, 'lambda-functions', dir, 'round-question.js'), 'utf8')
+          .includes("require('./set-version')"), `${dir}/round-question.js no longer resolves through set-version`);
+      }
     });
     check('the three copies of set-version.js are identical apart from the marker', () => {
       const norm = (p) => fs.readFileSync(path.join(REPO, 'lambda-functions', p), 'utf8')

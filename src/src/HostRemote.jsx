@@ -32,6 +32,9 @@ import FW from './config/followUpWords';
 import { placeAsks } from './config/askAnchors';
 import { sendAsk, closeAsk, cancelAsk } from './utils/followUpsClient';
 import { postQueueOp } from './utils/questionQueueClient';
+import { ownQuestionWords as OQ } from './config/consoleWords';
+import { ownNowAllowed, ownNowIsFirst } from './config/ownQuestion';
+import { normalizeGameType } from './config/gameTypes';
 import {
   remoteStep,
   snapshotFromHostState,
@@ -1440,6 +1443,65 @@ function HostRemote() {
   /** Take one back out of the running order — the undo for a stray Ask next. */
   const unqueue = useCallback((key) => queueOp('remove', key), [queueOp]);
 
+  /*
+    THE HOST'S OWN QUESTION, FROM THE PHONE (impromptu ask, README D2, frame 5).
+    The Rounds tab's "Write a question" opens the same composer as the laptop,
+    as a full-height sheet whose commit is the one orange on the screen. The
+    ops are the queue route's (add-own, edit-own); Now is add-own at the head
+    and then next-question's select_own, so a refused Now leaves it next.
+  */
+  const [ownComposer, setOwnComposer] = useState(null);
+  const [ownBusy, setOwnBusy] = useState(false);
+  const [ownError, setOwnError] = useState('');
+  const submitOwn = useCallback(async (fields) => {
+    if (!gameId || !ownComposer) return;
+    const editing = ownComposer.mode === 'edit';
+    setOwnBusy(true);
+    setOwnError('');
+    try {
+      const result = await postQueueOp({
+        apiBase: apiBase(),
+        gameId,
+        op: editing ? 'edit-own' : 'add-own',
+        questionKey: editing ? ownComposer.key : undefined,
+        expectedVersion: snapshot?.questionQueue?.version,
+        place: editing ? undefined : fields.place,
+        anchorKey: fields.anchorKey || undefined,
+        anchorRound: fields.anchorRound || undefined,
+        through: fields.through && fields.through.length ? fields.through : undefined,
+        question: { title: fields.title, detail: fields.detail, note: fields.note },
+      });
+      if (!result.ok) { setOwnError(`Could not save your question: ${result.error}`); return; }
+      if (result.changed === false) { setOwnError(result.message || 'Nothing changed. Look at the running order again.'); return; }
+      setOwnComposer(null);
+      if (!editing && fields.place === 'now' && result.key) {
+        const res = await authFetch(`${apiBase()}games/${encodeURIComponent(gameId)}/next-question`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select_own', ownId: result.key.slice('own:'.length) }),
+        });
+        if (res.ok) {
+          setPanelTab(null);
+          setNotice(OQ.askedNow);
+        } else {
+          const payload = await res.json().catch(() => ({}));
+          setNotice(`${OQ.isNext} ${payload.message || payload.error || ''}`.trim());
+        }
+      } else {
+        setNotice(editing ? OQ.saved : (fields.place === 'later' && fields.anchorRound ? OQ.placedAfter(fields.anchorRound) : `${OQ.isNext} ${OQ.isNextRest}`));
+      }
+      await pollState(gameId);
+    } catch {
+      setOwnError('No connection. Check signal and try again.');
+    } finally {
+      setOwnBusy(false);
+    }
+  }, [gameId, ownComposer, snapshot, pollState]);
+  const removeOwn = useCallback(async (key) => {
+    const done = await queueOp('remove', key);
+    if (done) setNotice(OQ.removed);
+  }, [queueOp]);
+
   /**
    * Turn a category on or off mid-session — the same endpoint and the same
    * argument order `GameHostPage.toggleCategoryDuringGame` uses. `position` is
@@ -1692,6 +1754,29 @@ function HostRemote() {
               onAskNext={askNext}
               onAskNow={askNow}
               onUnqueue={unqueue}
+              // The impromptu ask (README D2): the Rounds tab's door, the
+              // queue's Yours rows, and the composer as a full-height sheet.
+              ownQuestions={(snapshot?.questionQueue && snapshot.questionQueue.ownQuestions) || []}
+              onWriteQuestion={normalizeGameType(gameType) === 'call-and-answer' && snapshot?.state !== 'ENDED'
+                ? () => { setOwnError(''); setOwnComposer({ mode: 'add' }); }
+                : null}
+              onEditOwn={(key, row) => {
+                const own = row || ((snapshot?.questionQueue?.ownQuestions) || []).find((o) => o.key === key);
+                if (own) { setOwnError(''); setOwnComposer({ mode: 'edit', key, initial: { title: own.title || '', detail: own.detail || '', note: own.note || '' } }); }
+              }}
+              onRemoveOwn={removeOwn}
+              ownComposer={ownComposer ? {
+                variant: 'touch',
+                mode: ownComposer.mode,
+                initial: ownComposer.initial,
+                canNow: ownNowAllowed(snapshot?.state),
+                lobby: ownNowIsFirst(snapshot?.state),
+                backLabel: OQ.backRounds,
+                busy: ownBusy,
+                error: ownError,
+                onSubmit: submitOwn,
+                onClose: () => setOwnComposer(null),
+              } : null}
             />
           </>
         ) : (

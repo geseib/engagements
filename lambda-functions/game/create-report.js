@@ -2,6 +2,7 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { readReport, writeReport } = require('./report-store');
 const { gameSetRef, refSetRef, resolveSetPartition, setMetadataKey } = require('./set-version');
+const { readRoundQuestion, isOwnRef } = require('./round-question');
 const { ORG, callerMayDriveSession } = require('./tenant');
 const { uniquePlayerRecords } = require('./player-rows');
 const { isHidden } = require('./anonymity');
@@ -654,88 +655,41 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
       
       console.log(`📊 Question ${questionNumber}: ${questionAnswers.length} answers, ${questionVotes.length} votes, hasResults=${!!questionResults}, hasAI=${!!questionAISummary}`);
       
-      // Get question details from question set if available
+      // THE ROUND'S QUESTION, through the one resolver (round-question.js).
+      //
+      // The REF row is the authority: it pins the set, its scope and the
+      // VERSION the round was served from — or names a question the HOST WROTE
+      // during the session (OWNQ#, `Source: 'host'`). When the REF has gone
+      // (an older session), the RESULTS row's SourceQuestionId stands in, read
+      // through the version this game played, exactly as this report always
+      // did; an `OWNQ#` id there still resolves to the session's own row.
       let questionDetails = null;
       let sourceQuestionId = null;
-      
-      // First try to get source question ID from results
-      if (questionResults?.SourceQuestionId) {
-        sourceQuestionId = questionResults.SourceQuestionId;
-      } else {
-        // If no results, try to find source question ID from question reference
-        try {
-          const questionRef = await db.send(new GetCommand({
-            TableName: process.env.TABLE_NAME,
-            Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#REF` }
-          }));
-          
-          if (questionRef.Item?.SourceQuestionId) {
-            sourceQuestionId = questionRef.Item.SourceQuestionId;
-            console.log(`📊 Found source question ID from reference: ${sourceQuestionId}`);
-          }
-        } catch (error) {
-          console.log(`⚠️ Could not fetch question reference for ${questionNumber}:`, error.message);
+      let ownRound = false;
+      try {
+        const refRead = await db.send(new GetCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: { PK: `GAME#${gameId}`, SK: `QUESTION#${questionNumber}#REF` }
+        }));
+        const refLike = refRead.Item && refRead.Item.SourceQuestionId
+          ? refRead.Item
+          : (questionResults?.SourceQuestionId && questionSetId ? {
+            SourceQuestionId: questionResults.SourceQuestionId,
+            SetId: questionSetId,
+            SetScope: resolvedSet.scope,
+            ...(resolvedSet.orgId ? { SetOrgId: resolvedSet.orgId } : {}),
+            ...(resolvedSet.version !== null && resolvedSet.version !== undefined ? { SetVersion: resolvedSet.version } : {}),
+          } : (isOwnRef(questionResults) ? { SourceQuestionId: questionResults.SourceQuestionId } : null));
+        if (refLike) {
+          const read = await readRoundQuestion(db, process.env.TABLE_NAME, gameId, refLike);
+          sourceQuestionId = read.sourceQuestionId;
+          questionDetails = read.question;
+          ownRound = read.own;
         }
+      } catch (error) {
+        console.log(`⚠️ Could not read the question for round ${questionNumber}:`, error.message);
       }
-      
-      if (sourceQuestionId) {
-        console.log(`📊 Source question ID: ${sourceQuestionId || 'Not found'} for question ${questionNumber}`);
-        
-        if (useNewFormat && questionSetId) {
-          // For new format, questions are stored with PK=SET#{setId}
-          try {
-            console.log(`📊 Fetching question details using NEW format...`);
-            const questionResult = await db.send(new GetCommand({
-              TableName: process.env.TABLE_NAME,
-              Key: {
-                PK: resolvedSet.pk,
-                SK: sourceQuestionId
-              }
-            }));
-            questionDetails = questionResult.Item;
-            console.log(`📊 Question details (new format): ${questionDetails ? 'Found' : 'Not found'} for sourceId: ${sourceQuestionId}`);
-          } catch (error) {
-            console.log(`Could not fetch question details (new format) for ${sourceQuestionId}:`, error.message);
-          }
-        } else if (questionSetData) {
-          // For old format, we need to search through the question set data
-          // or try a different query pattern
-          console.log(`📊 Fetching question details using OLD format...`);
-          try {
-            // Try querying for questions in the old format
-            const questionsQuery = await db.send(new QueryCommand({
-              TableName: process.env.TABLE_NAME,
-              KeyConditionExpression: 'PK = :pk AND SK = :sk',
-              ExpressionAttributeValues: {
-                ':pk': resolvedSet.pk,
-                ':sk': sourceQuestionId
-              }
-            }));
-            
-            if (questionsQuery.Items && questionsQuery.Items.length > 0) {
-              questionDetails = questionsQuery.Items[0];
-              console.log(`📊 Question details (old format): Found for sourceId: ${sourceQuestionId}`);
-            } else {
-              console.log(`📊 Question details (old format): Not found for sourceId: ${sourceQuestionId}`);
-            }
-          } catch (error) {
-            console.log(`Could not fetch question details (old format) for ${sourceQuestionId}:`, error.message);
-          }
-        }
-
-        // DECRYPTED, with the SET's org from the pinned pair — both branches
-        // above read `resolvedSet.pk`, and on an org set ENCRYPTED_FIELDS.question
-        // seals Title, Detail, the options and AnswerDetails, which the report
-        // quotes below. Not the caller's org, and not the session's by
-        // assumption: the same rule get-question.js and get-results.js follow.
-        // Platform and public sets are never encrypted and pass through.
-        const setOrgId = resolvedSet.scope === ORG ? String(resolvedSet.orgId || '') : '';
-        if (questionDetails && setOrgId) {
-          questionDetails = await decryptItem(setOrgId, 'question', questionDetails);
-        }
-
-        console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${shapeForLog(questionDetails?.Title)}`);
-      }
+      console.log(`📊 Question details final result: ${questionDetails ? 'Found' : 'Not found'}, Title: ${shapeForLog(questionDetails?.Title)}`);
 
       // Calculate vote tallies for ranking (same logic as get-ai-summary.js)
       const voteTallies = {};
@@ -858,8 +812,29 @@ async function buildReportFrom(gameId, metadataItem, { ttlSeconds = null } = {})
           // 7924, finding #5). The report resolves it as the phone does: this,
           // else the set's customInstruction, else the game type's default.
           customInstructions: questionDetails?.CustomInstructions || questionDetails?.customInstructions || '',
-          category: questionDetails?.Category || 'General',
+          // A host-written round has no category; "General" would be a claim.
+          category: ownRound ? '' : (questionDetails?.Category || 'General'),
           sourceQuestionId: sourceQuestionId,
+
+          /*
+            YOURS (impromptu ask, README D9): a reader months later must not
+            take an improvised round for a planned one. Who wrote it, when, and
+            where it was placed; what Workie had; and the host's private note,
+            labelled as theirs. This report is the HOST's (the route carries the
+            Cognito authorizer and callerMayDriveSession); nothing a participant
+            receives is built from it, and the PDF prints the note only when
+            the host leaves "Include my notes" on (F5).
+          */
+          ...(ownRound ? {
+            own: {
+              createdAt: questionDetails?.CreatedAt || null,
+              createdByName: typeof questionDetails?.CreatedByName === 'string' ? questionDetails.CreatedByName : '',
+              placement: questionDetails?.Placement || null,
+              placedAtRound: Number.isInteger(questionDetails?.PlacedAtRound) ? questionDetails.PlacedAtRound : null,
+              placedAfterRound: Number.isInteger(questionDetails?.PlacedAfterRound) ? questionDetails.PlacedAfterRound : null,
+              note: typeof questionDetails?.Background === 'string' ? questionDetails.Background : '',
+            },
+          } : {}),
 
           // Art Title rounds are ordinary call-and-answer sets that carry an
           // image, so `image` is the ONLY thing that lets resolveRoundNoun()
