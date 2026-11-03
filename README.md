@@ -19,10 +19,21 @@ scanning a QR code or typing a four-digit code. Players never sign in and instal
 On two screens (the room watches a separate window on the projector), the host's laptop
 shows a private console instead of a copy of the wall: the round's steps, who has
 answered, responses as they land, and whether the room's window is really up. Two screens
-is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer.
+is switched on per game type in `src/src/config/surfaces.js`; today that is Call & Answer,
+Trivia, Poll and the Build Room (Wavelength and Survey run on one screen).
 In Chrome or Edge with a second display attached, "Room's window" opens the window on that
 display and fills it (`src/src/present/roomWindow.js`); elsewhere it opens beside you to drag
 across.
+
+Every live session, whatever its format and on one screen or two, uses one host frame
+(`docs/design/experience-plan/PLAN.md`): a top bar (Main menu, name, Join, the room's
+screen, **Needs you**, ?, **Session menu**), **Your part now** with the one orange button, a
+Needs-you line, then the format's content. Anything waiting on the host (a name request, a
+failed read, late items, Claude's asks) is one list, `src/src/config/needsYou.js`, shown on
+the line, on the person and on the bell; on one screen it is a count only, never a name.
+Drift guards (`src/src/__tests__/driftRatchets.test.js`, allowances in
+`src/src/testing/driftAllowances.js`) fail the build if new hard-coded colours, button
+styles, browser pop-ups or retired labels creep back.
 
 Call & Answer results show the ideas first, ranked by the room's votes, with the names as
 a small credit; the standings are on the scoreboard, on demand. Nothing that arrives late

@@ -41,7 +41,7 @@ const COVERS = {
   'player-trouble': [`${S}/PlayerPage.jsx`, `${S}/components/joinResult.js`, `${S}/config/lateWords.js`],
   'player-surveys': [`${S}/components/survey`, `${S}/config/surveyNames.js`, `${S}/components/FeedbackRoundPanel.jsx`, `${L}/game/survey-kinds.js`],
   // hosts: setting up
-  'host-quick-start': [`${S}/components/WelcomeScreen.jsx`, `${S}/components/GameSetupDialog.jsx`, `${S}/components/QuickstartMenu.jsx`, `${S}/components/stage/Dock.jsx`],
+  'host-quick-start': [`${S}/components/WelcomeScreen.jsx`, `${S}/components/GameSetupDialog.jsx`, `${S}/config/quickStart.js`, `${S}/components/stage/Dock.jsx`],
   'host-game-setup': [`${S}/components/GameSetupDialog.jsx`, `${S}/components/HostQuestionSetsDialog.jsx`, `${S}/components/stage/ScreensGroup.jsx`, `${S}/config/roomScreen.js`, `${S}/config/displayProfile.js`],
   // hosts: running the room
   'host-running-engagements': [`${S}/components/stage/SessionSetupPanel.jsx`, `${S}/components/QuestionsPanel.jsx`, `${S}/components/PastRound.jsx`, `${S}/GameHostPage.jsx`],

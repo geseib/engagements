@@ -9,6 +9,66 @@ Entries name the dev commit that was merged, so the review can be matched to the
 
 ---
 
+## 3 Nov 2026 (one Engage: the experience plan, the impromptu ask, suspension enforced)
+
+**Test:** merge of dev `b22b96143`. This push also carries the three entries directly below (**1 Nov**, **Build Room: fixes from the test walk**, **the event summary names its host**), which never reached test on their own. Everything below those is already on test.
+
+The owner asked on 1 Nov to "step back and really organize the end to end experience". The plan is `docs/design/experience-plan/PLAN.md` (mockups in its `index.html`); every phase of it is in this push.
+
+### New
+
+- **Needs you: one place for anything waiting on the host.** A name request, a failed Workie read, late answers, the event moving on, Claude's asks: each shows on a line under the main button, on the person it concerns, and on the bell, which counts this session's items during a live session. On one screen (the room sees the laptop) it is a count only, never a name; the detail is on the phone remote or shown one item at a time after "the room will see this".
+- **Moving a name to a new device works end to end.** The new device asks and waits, gets in by itself when the host says **Let them** (it asks for a second press while the first device is still open), can **Ask again** after a minute, and the request lapses after ten. The old device is told "Sam is now on another device" and can no longer answer.
+- **One host frame for every format, on one screen or two.** The same top bar (Main menu, name, Join, the room's screen, Needs you, ?, Session menu), **Your part now** with the one orange button, and the Needs-you line. On one screen the controls fade after three seconds without the mouse and come back when it moves; a clicker or the phone remote does not bring them back.
+- **Setup is the lobby.** Start asks where the room watches, puts the room's screen up, then shows the QR with a live count. Returning two-screen hosts get "Start · two screens" in one click. Dev's two-screen default is gone.
+- **Stat tiles and a round timer.** Answered N of M (green when everyone's in), Time, and who joined. A time chip beside Start round / Start voting (No limit, 1, 2, 3, 5 min), +1 min (button, `+` key, phone); advisory unless "Close answering at zero" is ticked. The room and phones see words and a bar, never seconds.
+- **Trivia and Poll on two screens.** The trivia answer shows only on the laptop until you show results; the room's window never carries it early.
+- **Event items use the same console**, with ‹ Agenda and Bring everyone here; screens are set up once per event day.
+- **The impromptu ask.** "Write a question" (Session menu › Up next, the round queue, the phone remote, or **Q**) queues your own question as a full round: Next, Later or Now (between rounds). It is marked **Yours** for you and in the report, with an optional private note for Workie.
+- **A simpler Session menu.** Six tabs, the same everywhere: Up next · Rounds so far · People · Screens · Joining · How it runs, each short with **More options** below. Rounds so far is back (the report first, then every earlier round). End session and Main menu are at its foot. Events show one line, "item N of M · ‹ Agenda · Bring everyone here", instead of an Agenda tab.
+- **The left bar says something even when closed.** People reads "6 here · waiting on Marcus" (or "top: Priya, 40" at results); the round queue "2 of 21 · next: …"; Late "2 to review". Someone who needs you fades in once on the Needs-you line and their row; scores show for Call & Answer and Trivia, quiet until results.
+- **The join QR on the laptop.** Hover or click the code in the top bar on two screens: the QR pops up on your screen only. "Show on the room's screen" is now its own button. **S** and **V** (scoreboard) also work when the room's window has focus.
+- **The participant's phone, consistent.** One set of words and screens across formats ("Sent · Your answer is in.", "Waiting for the host."); one end screen (no "Final score 0" on a poll); every next action in the bottom bar; the send button turns into **✓ Sent**; votes are held while offline; no browser pop-ups. Comments come in three headed sections with "Reply to this response", and replies stay anchored to the right answer even on a tie.
+- **One home and one New button.** Home has New engagement, Rejoin, five recent sessions and events; the console is **Library & team**. One Sessions list everywhere. Quick start, Build Room and events all start from New engagement, and everything created lands on its own Setup with Start and Edit. Editing a question set is a page (`/sets/<id>`), and the AI builders open in one dark window.
+- **One look.** One button style and one dialog head with an X close everywhere; browser confirm pop-ups replaced by a small in-app dialog.
+- **Suspension is enforced.** A suspended account, or the members of a suspended organisation, are refused on their next request and see one clear screen; a suspended organisation's sessions stop taking joins and answers. Admins can always reinstate, and Reinstate restores everything.
+
+### Fixed
+
+- A slow laptop could drop a round's answers from the host screen for good (they arrived before the page drew and were thrown away).
+- The round queue on the left was incomplete after a refresh until "Rounds and questions" was opened; Call & Answer scores were missing from People.
+- The Running order numbered your question 1 and then jumped to 3; its buttons didn't line up.
+- On one screen the old Session panel showed private things (Workie's warnings, late answers with names) on the screen the room watches.
+- A Workie read for "round 1" could fetch the wrong round's read; phones and the host logged needless errors on background checks.
+- End session works before round 1; issue reports name their own tier, not prod.
+
+### What to look at
+
+1. Create a Call & Answer session and press **Start**: Setup asks where the room watches, opens the room's window, then shows the QR and a live count. Start round 1.
+2. On two screens, watch the top bar, the Needs-you line and the tiles through a round with three phones: "Answered N of M" turns green when everyone's in.
+3. From a second browser, join with a name that is taken and choose **That's me**: the request shows on the Needs-you line, on the person and on the bell. Press **Let them** (twice, if the first device is open). The new device gets in; the first is told its name moved.
+4. Give a round a one-minute timer; press **+1 min**; check the phones say words, not seconds.
+5. Press **Q**, write a question, choose **Next**: it shows as **Yours** in the round queue and runs as a normal round; the report marks it.
+6. Open the **Session menu**: six tabs, each short with More options; Rounds so far has the report and earlier rounds; End session is at the foot.
+7. Close **People** on the left during answering: it says who is still out. At results, scores brighten.
+8. Hover the join code in the top bar: the QR appears on your laptop only. Click into the room's window and press **S**.
+9. Switch to one screen: the controls fade after three seconds without the mouse; Needs you shows a count, never a name.
+10. Run a Trivia round on two screens: the answer is on the laptop only until you show results.
+11. On a phone, answer a question: the button reads **✓ Sent**.
+12. Go **Home**: New engagement, Rejoin, recent sessions; open **Library & team**. Create a session and land on its Setup.
+13. In Library & team › Accounts, suspend a test account and try it; reinstate it.
+
+### Known gaps
+
+- The laptop can't yet tell when your phone remote is open, so it offers "Connect your phone" rather than "Open on my phone".
+- "Joined from item N" in an event only knows the current item; two-screen events still need one click per item to open the room's window.
+- Trivia's main button says "Show results", not "Show the answer"; at 1280×720 the private answer sits just below the fold.
+- The account Suspend confirm doesn't ask for a reason; comments in a suspended organisation's sessions are still accepted. Deleting an organisation or account is designed (`docs/design/account-org-deletion/`) and waits on the owner's decisions.
+- Drift still to burn down: 9 browser pop-ups, 89 button families, 216 retired labels; the guards stop them rising.
+- The Verdict Board's corrected prompt reaches a tier only when an admin takes "Repo has a newer version" for it.
+
+---
+
 ## 1 Nov 2026 (new engagement reveals as you go; Space on the button; review #48 fixes; the two lesson sets)
 
 **Test:** merge of dev `d93829e7`. Everything below this entry is already on test, except the two entries directly below (**Build Room: fixes from the test walk** and **the event summary names its host**): they were written for pushes that had not happened, and arrive on test with this one.
