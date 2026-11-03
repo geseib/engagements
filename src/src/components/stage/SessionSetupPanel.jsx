@@ -185,6 +185,10 @@ export default function SessionSetupPanel({
      needs its choice first); `ownQuestions`, `onEditOwn`, `onRemoveOwn` are
      the queue's Yours rows. */
   ownQuestions = [],
+  /* ONE NUMBERING WITH THE RAIL (config/roundNumbers.js): the round the
+     session is on, and the round on screen as { title, key }. QueueList. */
+  queueRoundBase = null,
+  queueNowRound = null,
   ownComposer = null,
   onWriteQuestion = null,
   onEditOwn = null,
@@ -949,6 +953,8 @@ export default function SessionSetupPanel({
                 onWrite={oneScreen ? null : onWriteQuestion}
                 onEditOwn={onEditOwn}
                 onRemoveOwn={onRemoveOwn}
+                base={queueRoundBase}
+                nowRound={queueNowRound}
               />
 
               {/* THE BROWSER, AS A SECTION RATHER THAN A MODAL. Until now the

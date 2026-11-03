@@ -154,8 +154,11 @@ describe('a populated running order', () => {
     // queue"). The slot holds the column's width and is not a control.
     expect(within(auto).getAllByRole('button')).toHaveLength(3);
     expect(within(auto).queryByRole('button', { name: /not in the queue/i })).toBeNull();
-    expect(within(auto).getByTestId('queue-auto-slot')).toHaveAttribute('aria-hidden', 'true');
-    expect(block('.setup-q__btn--slot')).toMatch(/visibility:\s*hidden/);
+    // The slot is now the row's EMPTY out cell: it holds the column and is not
+    // a control (queueAlignment.test.jsx pins the fixed columns).
+    const slot = within(auto).getByTestId('queue-auto-slot');
+    expect(slot).toHaveAttribute('aria-hidden', 'true');
+    expect(slot).toBeEmptyDOMElement();
     // The row announces that it has an action group, which is what gives it
     // the third grid track — without it the buttons wrap under the title.
     expect(auto.className).toMatch(/setup-q__row--acts/);

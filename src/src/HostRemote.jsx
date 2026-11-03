@@ -51,6 +51,7 @@ import {
   scoreboardControl,
   accessDeniedMessage,
   remoteGoal,
+  parseGamePhase,
 } from './config/hostRemote';
 import { workflowStrip } from './config/workflowStrip';
 import RemoteStepDots from './components/RemoteStepDots';
@@ -1747,6 +1748,14 @@ function HostRemote() {
               round={round}
               unaskedCount={unaskedCount}
               questionQueue={snapshot?.questionQueue || null}
+              /* ONE NUMBERING WITH THE STAGE (config/roundNumbers.js): the
+                 round on screen is the running order's first, quiet row. */
+              queueNowRound={(() => {
+                const live = parseGamePhase(snapshot?.state);
+                const data = snapshot?.currentQuestionData;
+                if (!live.round || !data) return null;
+                return { n: live.round, title: data.title || data.question || '' };
+              })()}
               busy={!!busyAction || cooling}
               askNowArmedKey={typeof armedAction === 'string' && armedAction.startsWith('ask-now:')
                 ? armedAction.slice('ask-now:'.length)

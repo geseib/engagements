@@ -8,6 +8,7 @@ import { requestEndSession } from './utils/endSession';
 import { fetchQueue, postQueueOp } from './utils/questionQueueClient';
 import { postExclusionOp } from './utils/questionExclusionsClient';
 import { queueEnqueue, queueFirst, queueMove, queueRemove, normaliseQueue, materializePlanOps } from './config/questionQueue';
+import { plannedRounds, sessionRoundBase } from './config/roundNumbers';
 import {
   focusFromFrame, focusToStage, focusRequest, sameFocus, normaliseFocus, roundOfState,
 } from './config/stageFocus';
@@ -9043,24 +9044,31 @@ Focus on actionable business strategy insights.`;
       .map((r) => ({ n: r.ordinal, title: r.title || '', state: 'done', ...(ownAskedEarly.has(Number(r.ordinal)) ? { own: true } : {}) }));
     const now = liveN && currentQuestion ? [{ n: liveN, title: currentQuestion.title || currentQuestion.question || '', state: 'now' }] : [];
     if (ended) return played;
-    const lastN = Math.max(liveN, ...played.map((r) => r.n), 0);
+    // ONE NUMBERING (config/roundNumbers.js): the Session menu's Running order
+    // numbers from this same base through the same function (queueRoundBase).
+    const lastN = sessionRoundBase(liveN, played.map((r) => r.n));
     const room = roundOf > 0 ? Math.max(0, roundOf - lastN) : (upNext || []).length;
-    const planned = (upNext || [])
-      .filter((row) => row && String(row.questionId) !== String(currentQuestionId || ''))
-      .slice(0, room)
-      .map((row, i) => ({
-        n: lastN + i + 1,
-        title: row.title || '',
-        state: i === 0 ? 'next' : 'later',
-        // The host's own question (impromptu ask): Yours on the rail too.
-        own: row.source === 'own',
-        key: String(row.questionId || '').replace(/^QUESTION#/, ''),
-        source: row.source,
-      }));
+    const planned = plannedRounds(lastN, upNext, { currentQuestionId, room });
     // Rounds already played or on now that the host wrote: Yours, by round.
     const ownAsked = new Set(ownQuestions.filter((o) => o && o.askedRound).map((o) => Number(o.askedRound)));
     const markOwn = (r) => (ownAsked.has(Number(r.n)) ? { ...r, own: true } : r);
     return played.map(markOwn).concat(now.map(markOwn), planned);
+  })();
+  /*
+    THE RUNNING ORDER'S BASE AND ITS "NOW" ROW, from the rail's own rounds so
+    the two lists cannot number apart (owner, 3 Nov 2026): the round on
+    screen is the Running order's first, quiet row, and the queue numbers on
+    from it.
+  */
+  const queueRoundBase = hostPhase === 'ENDED'
+    ? null
+    : sessionRoundBase(
+      hostPhase !== 'LOBBY' && lessonNumber > 0 ? lessonNumber : 0,
+      (rounds || []).map((r) => r.ordinal),
+    );
+  const queueNowRound = (() => {
+    const nowRow = consoleRounds.find((r) => r.state === 'now');
+    return nowRow && nowRow.title ? { title: nowRow.title, key: currentQuestionId ? String(currentQuestionId) : null } : null;
   })();
   /*
     THE IMPROMPTU ASK'S DOORS (README D2): Call & Answer only, and not once the
@@ -10621,6 +10629,8 @@ Focus on actionable business strategy insights.`;
           upNextBlocked={upNextBlocked}
           upNextAdvisories={upNextAdvisories}
           upNextExcluded={upNextExcluded}
+          queueRoundBase={queueRoundBase}
+          queueNowRound={queueNowRound}
           onQueueQuestion={handleQueueQuestion}
           onQueueFirst={handleQueueFirst}
           onQueueMove={handleQueueMove}

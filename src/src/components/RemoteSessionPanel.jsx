@@ -94,6 +94,10 @@ export default function RemoteSessionPanel({
   onEditOwn = null,
   onRemoveOwn = null,
   ownComposer = null,
+  /* The round on screen, { n, title }, from the state poll: the running
+     order numbers on from it, as the stage and the rail do. Null: the plan's
+     own round numbers say where the next round is. */
+  queueNowRound = null,
 }) {
   const [tab, setTab] = useState(initialTab);
   const [rounds, setRounds] = useState([]);
@@ -409,6 +413,8 @@ export default function RemoteSessionPanel({
             ownQuestions={ownQuestions}
             onEditOwn={onEditOwn}
             onRemoveOwn={onRemoveOwn}
+            base={queueNowRound && queueNowRound.n > 0 ? queueNowRound.n : null}
+            nowRound={queueNowRound}
           />
 
           {/* THE BROWSER THAT ALREADY EXISTED, not a second question list. It
