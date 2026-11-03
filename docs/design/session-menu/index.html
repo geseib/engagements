@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session menu, simplified</title>
+<style>
+/* THE SESSION MENU, SIMPLIFIED. Mockups, 3 Nov 2026. Mockup only; no application code.
+   Warm Summit dusk: tokens from styles.css :root and the theme-invariant set. Laptop ladder
+   12/13/15/19/24/30, rows 36px; phone ladder 34/24/19/16/13, rows 44px. One orange per screen
+   (Your part now's, the phone dock's). --danger never carries text; End session is
+   --danger-text on transparent. Pins are violet so they read as annotation. Sample content
+   invented. Every frame has a fixed size so the PNGs are honest. */
+:root{
+  --bg:#0F1A2E;--surface:#1B2942;--surface-2:#25375A;--text:#F4EDE4;--muted:#9BA8BE;
+  --primary:#F6A94C;--on-primary:#1B2942;--secondary:#7CA7E6;
+  --success:#4FB286;--success-text:#6FD0A4;--danger:#E5645E;--danger-text:#EF8C86;
+  --rule:rgba(244,237,228,.12);--rule-2:rgba(244,237,228,.22);--rule-3:rgba(244,237,228,.32);
+  --amber-wash:rgba(246,169,76,.12);--blue-wash:rgba(124,167,230,.14);--green-wash:rgba(79,178,134,.14);
+  --yours:#C9B6FF;--yours-wash:rgba(167,139,250,.16);--yours-rule:rgba(167,139,250,.55);
+  --pin:#8B6CF6;--r-ctl:10px;--r-card:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0a1220;color:var(--text);font:15px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2,h3,h4,h5{font-family:Archivo,Inter,system-ui,sans-serif}
+.doc{max-width:2300px;margin:0 auto;padding:24px 16px 80px}
+.doc>h1{font-size:30px;margin:0 0 6px}
+.doc>p{color:var(--muted);max-width:1100px;margin:0 0 8px}
+.doc>p b{color:var(--text)}
+.toc{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 26px;padding:0;list-style:none}
+.toc a{display:inline-block;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;border:1px solid var(--rule-2);border-radius:999px;padding:5px 12px;background:var(--surface)}
+.cap{margin:40px 0 10px;max-width:1300px}
+.cap h2{font-size:19px;margin:0 0 6px}
+.cap p,.cap ol{color:var(--muted);font-size:13px;margin:0 0 6px}
+.cap ol{padding-left:22px}
+.cap b{color:var(--text)}
+.scroll{overflow-x:auto;padding-bottom:6px}
+.board{display:flex;gap:20px;align-items:flex-start;padding:16px;background:#0a1220;width:max-content}
+.col{display:flex;flex-direction:column;gap:8px}
+.blabel{font-size:13px;font-weight:700;color:var(--text);margin:0}
+.blabel span{color:var(--muted);font-weight:500}
+.frame{position:relative;overflow:hidden;background:var(--bg);border:1px solid var(--rule-2);border-radius:10px;flex:none}
+.f-laptop{width:1366px;height:768px}
+.f-sheet{width:600px;height:720px;background:#0d1628}
+.f-phone{width:390px;height:844px;border-radius:28px}
+.f-map{width:1500px;height:auto}
+.pin{position:absolute;z-index:30;width:22px;height:22px;border-radius:50%;background:var(--pin);color:#fff;font:800 12px/22px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #0a1220}
+.pin.in{position:static;display:inline-block;vertical-align:middle;margin-right:6px}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.s{width:14px;height:14px}
+svg.i.l{width:20px;height:20px}
+
+/* ---------- the live frame behind the sheet ---------- */
+.lf{position:absolute;inset:0;display:grid;grid-template-rows:auto auto auto minmax(0,1fr)}
+.tb{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border-bottom:1px solid var(--rule);min-width:0}
+.tb .sp{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:1px solid var(--rule-2);border-radius:var(--r-ctl);color:var(--text);font-size:13px;font-weight:700;white-space:nowrap}
+.tbtn.ghost{border-color:transparent}
+.tbtn.on{border-color:var(--secondary);background:var(--blue-wash)}
+.tbtn .code{color:var(--primary);letter-spacing:.08em;font-weight:800}
+.tname{font-size:15px;font-weight:700;white-space:nowrap}
+.sepv{width:1px;height:22px;background:var(--rule-2)}
+.stat{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--success);background:var(--green-wash)}
+.stat i{width:8px;height:8px;border-radius:50%;background:var(--success);display:block}
+.stat.pub{border-color:var(--secondary);background:var(--blue-wash)} .stat.pub i{background:var(--secondary)}
+.qbtn{width:36px;justify-content:center;padding:0}
+.ypn{display:flex;align-items:center;gap:18px;margin:12px 16px 0;padding:12px 16px 12px 18px;border-radius:var(--r-card);background:var(--surface);border-left:4px solid var(--primary)}
+.ypn .t{flex:1;min-width:0}
+.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ypn .s{margin:2px 0 0;font-size:19px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ypn .s b{color:var(--primary)}
+.ypn.slim{margin:8px 16px 0;padding:8px 14px}
+.ypn.slim .s{font-size:15px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--r-ctl);font-size:13px;font-weight:700;white-space:nowrap;border:1px solid var(--rule-3);background:transparent;color:var(--text)}
+.btn.main{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:800}
+.btn.l{height:44px;padding:0 18px;font-size:15px}
+.btn.s{height:30px;padding:0 10px}
+.btn.quiet{border-color:transparent;color:var(--secondary);padding:0 6px}
+.btn.end{color:var(--danger-text);border-color:rgba(239,140,134,.55)}
+.btn.on{border-color:var(--secondary);background:var(--blue-wash)}
+.kc{font-size:12px;font-weight:700;border:1px solid rgba(27,41,66,.45);border-radius:5px;padding:0 5px;line-height:18px}
+.nys{display:flex;align-items:center;gap:12px;margin:10px 16px 0;min-height:48px;padding:8px 12px 8px 14px;border-radius:var(--r-card);background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--rule-3)}
+.nys p{margin:0;font-size:15px;color:var(--muted)}
+.nys p b{color:var(--text)}
+.body{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:0;margin-top:12px;border-top:1px solid var(--rule)}
+.body.one{grid-template-columns:minmax(0,1fr)}
+.rail{border-right:1px solid var(--rule);overflow:hidden;min-height:0}
+.rsec{border-bottom:1px solid var(--rule)}
+.rsec>h3{display:flex;align-items:center;gap:8px;margin:0;padding:12px 14px 8px;font-size:15px}
+.rsec>h3 .ct{font-size:13px;color:var(--muted);font-weight:600;margin-left:auto}
+.rsec.closed>h3{padding-bottom:12px}
+.qrow{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 14px;font-size:15px}
+.qrow .n{width:20px;font-size:13px;font-weight:800;color:var(--muted);flex:none;text-align:right}
+.qrow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow .mt{font-size:12px;color:var(--muted);white-space:nowrap}
+.qrow.now{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.qrow.done .tt{color:var(--muted)}
+.rlinks{display:flex;flex-direction:column;gap:2px;padding:6px 14px 12px}
+.rlink{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--secondary);min-height:30px}
+.cc{min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px 16px 0;gap:10px;overflow:hidden}
+.loop{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.loop .stp{padding:3px 10px;border-radius:7px;border:1px solid var(--rule-2)}
+.loop .stp.done{color:var(--text)}
+.loop .stp.live{color:var(--text);background:rgba(124,167,230,.28);border-color:var(--secondary);font-weight:800}
+.loop .rnd{font-weight:800;color:var(--text);margin:0 2px 0 6px}
+.loop .crumb{color:var(--secondary);font-weight:800;border:1px solid var(--secondary);border-radius:7px;padding:3px 10px}
+.content{position:relative;flex:1;min-height:0;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r-card);padding:14px 18px;overflow:hidden}
+.content h4{margin:2px 0 6px;font-size:24px;line-height:1.25}
+.content p.r{margin:0 0 8px;font-size:15px;max-width:880px}
+.scrim{position:absolute;inset:0;background:rgba(10,18,32,.55);z-index:9}
+
+/* ---------- THE SESSION MENU SHEET ---------- */
+.sm{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--rule-2);border-radius:14px;overflow:hidden}
+.in-frame{position:absolute;right:16px;top:206px;bottom:16px;width:600px;z-index:10;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.in-frame.one{top:120px}
+.in-frame .smbody{padding:12px 16px}
+.in-frame .more{margin-top:8px}
+.in-frame .orow{min-height:38px}
+.f-sheet .sm{position:absolute;inset:0;border:0;border-radius:0}
+.sm .hd{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--rule)}
+.sm .hd h4{margin:0;font-size:19px;flex:1}
+.ws{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--success-text)}
+.ws i{width:7px;height:7px;border-radius:50%;background:var(--success);display:block}
+.xbtn{width:36px;height:36px;border-radius:var(--r-ctl);border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text);flex:none;font-weight:800;font-size:15px}
+/* the event's one line, instead of an Agenda tab */
+.evl{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--rule);background:rgba(124,167,230,.08);font-size:13px;color:var(--muted)}
+.evl b{color:var(--text)}
+.evl .sp{flex:1}
+.evl a{color:var(--secondary);font-weight:800;text-decoration:none;white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid var(--rule)}
+.tab{font-size:13px;font-weight:700;color:var(--muted);padding:7px 11px;border-radius:8px;white-space:nowrap}
+.tab.on{color:var(--text);background:var(--surface-2);box-shadow:inset 0 -2px 0 var(--secondary)}
+.tab b{font-weight:800;color:var(--primary);margin-left:4px}
+.smbody{flex:1;min-height:0;overflow:hidden;padding:14px 16px}
+.smfoot{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--rule)}
+.smfoot .sp{flex:1}
+.smfoot .hint{font-size:12px;color:var(--muted)}
+.lede{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.lede b{color:var(--text)}
+.grp{margin:0 0 14px}
+.gh{display:flex;align-items:baseline;gap:8px;margin:0 0 6px}
+.gh h5{margin:0;font-size:15px}
+.gh .scope{font-size:12px;color:var(--muted);font-weight:600}
+.gh .sp{flex:1}
+.note{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.note b{color:var(--text)}
+.row{display:flex;align-items:center;gap:10px;min-height:36px}
+.row .lab{flex:1;min-width:0;font-size:15px}
+.row .lab small{display:block;font-size:12px;color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sw{width:38px;height:22px;border-radius:999px;background:var(--surface-2);border:1px solid var(--rule-3);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted)}
+.sw.on{background:rgba(124,167,230,.45);border-color:var(--secondary)}
+.sw.on::after{left:18px;background:var(--text)}
+.seg2{display:inline-grid;grid-auto-flow:column;border:1px solid var(--rule-3);border-radius:10px;overflow:hidden}
+.seg2 span{padding:7px 14px;font-size:13px;font-weight:700;border-left:1px solid var(--rule-3);color:var(--muted)}
+.seg2 span:first-child{border-left:0}
+.seg2 span.on{background:var(--blue-wash);color:var(--text);box-shadow:inset 0 0 0 2px var(--secondary)}
+.sel{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--rule-3);font-size:15px;min-width:180px}
+.sel .sp{flex:1}
+.olist{border:1px solid var(--rule);border-radius:var(--r-card);overflow:hidden}
+.orow{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 8px 4px 12px;border-top:1px solid var(--rule);font-size:15px}
+.orow:first-child{border-top:0}
+.orow .n{width:22px;font-size:13px;font-weight:800;color:var(--muted);flex:none;text-align:right}
+.orow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.orow .src{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.orow .oa{display:flex;gap:4px;flex:none}
+.orow.now{background:var(--blue-wash);box-shadow:inset 3px 0 0 var(--secondary)}
+.orow.now .tt{font-weight:700}
+.orow.mine{background:var(--yours-wash);box-shadow:inset 3px 0 0 var(--yours-rule)}
+.orow.click .chev{color:var(--muted)}
+.orow .ai{font-size:12px;font-weight:800;color:var(--secondary);border:1px solid rgba(124,167,230,.55);border-radius:6px;padding:0 6px;line-height:20px}
+.orow .sub{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--rule-2);display:grid;place-items:center;color:var(--text)}
+.nextw{font-size:12px;font-weight:800;color:var(--primary);letter-spacing:.06em;text-transform:uppercase;flex:none}
+.yours{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:999px;font-size:12px;font-weight:800;color:var(--yours);background:var(--yours-wash);border:1px solid var(--yours-rule);white-space:nowrap;flex:none}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--rule-2);white-space:nowrap;flex:none}
+.tag.q{color:var(--text);border-color:var(--secondary)}
+.sumline{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 12px;border-radius:10px;border:1px solid var(--rule);background:rgba(244,237,228,.03);font-size:13px;color:var(--muted)}
+.sumline b{color:var(--text)}
+.sumline .sp{flex:1}
+.sumline a{color:var(--secondary);font-weight:800;text-decoration:none;white-space:nowrap}
+.sumline.late{border-color:rgba(246,169,76,.45);background:var(--amber-wash)}
+/* the report card: the first thing in Rounds so far */
+.rep{display:flex;gap:14px;align-items:center;padding:12px 14px;border-radius:var(--r-card);background:var(--surface-2);border:1px solid var(--rule-2);margin:0 0 12px}
+.rep .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:rgba(124,167,230,.18);color:var(--secondary);flex:none}
+.rep .w{flex:1;min-width:0}
+.rep .w b{display:block;font-size:15px}
+.rep .w span{font-size:13px;color:var(--muted)}
+/* the one expander */
+.more{border-top:1px solid var(--rule);margin-top:12px;padding-top:4px}
+.more-h{display:flex;align-items:center;gap:8px;min-height:40px;font-size:13px;font-weight:800;color:var(--secondary)}
+.more-h small{font-weight:500;color:var(--muted);font-size:12px}
+.more-h svg{transition:none}
+.more.open .more-h svg{transform:rotate(180deg)}
+.more-in{padding:4px 0 0 2px}
+.qr{width:120px;height:120px;border-radius:8px;background:
+  conic-gradient(from 90deg at 25% 25%,#F4EDE4 0 25%,transparent 0) 0 0/30px 30px,
+  repeating-linear-gradient(90deg,#F4EDE4 0 6px,#0F1A2E 6px 12px),#F4EDE4;border:6px solid #F4EDE4;flex:none}
+.code-big{font-size:30px;font-weight:800;letter-spacing:.12em;color:var(--primary);line-height:1}
+.url{font-size:15px;font-weight:700}
+.pv{border:1px dashed var(--rule-3);border-radius:10px;padding:10px 12px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+.pv .w{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.pv .w b{display:block;color:var(--text);font-size:15px}
+.search{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--rule-3);font-size:15px;color:var(--muted);flex:1;min-width:0}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--secondary);margin:0 0 10px}
+.privnote{font-size:12px;color:var(--muted);margin:8px 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--rule-2);font-size:13px;white-space:nowrap}
+.chip.on{border-color:var(--primary);background:var(--amber-wash)}
+.chip small{font-size:12px;color:var(--muted)}
+.chip.off{color:var(--muted)}
+.prow{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 10px;border-top:1px solid var(--rule);font-size:15px}
+.prow:first-child{border-top:0}
+.prow .dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex:none}
+.prow .dot.away{background:var(--muted)}
+.prow .nm{flex:1;min-width:0}
+.prow .dn{font-size:12px;color:var(--muted);width:90px}
+.prow .fact{font-size:13px;font-weight:700;width:52px;text-align:right}
+.prow.ask{background:var(--amber-wash);box-shadow:inset 3px 0 0 var(--primary)}
+.statechip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--success);background:var(--green-wash);font-size:13px;font-weight:700}
+.statechip i{width:7px;height:7px;border-radius:50%;background:var(--success);display:block}
+.prog{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin:6px 0}
+.prog i{display:block;height:100%;background:var(--secondary)}
+
+/* ---------- phone ---------- */
+.ph-in{position:absolute;inset:0;display:flex;flex-direction:column}
+.ph-top{display:flex;align-items:center;gap:8px;height:56px;padding:0 16px;border-bottom:1px solid var(--rule);font-size:13px}
+.ph-top b{font-size:16px}
+.ph-top .sp{flex:1}
+.live{font-size:12px;font-weight:700;color:var(--success-text);border:1px solid var(--success);border-radius:999px;padding:1px 8px}
+.ph-tabs{display:flex;gap:2px;padding:8px 10px;border-bottom:1px solid var(--rule)}
+.ph-tabs .tab{font-size:13px;padding:10px 10px;flex:1;text-align:center}
+.ph-body{flex:1;min-height:0;overflow:hidden;padding:14px 16px}
+.ph-dock{padding:12px 16px 20px;border-top:1px solid var(--rule)}
+.ph-dock .btn{width:100%;height:56px;border-radius:14px;font-size:19px}
+.ph-h{margin:0 0 10px;font-size:19px}
+.ph-card{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:12px;margin:0 0 12px}
+.ph-card h5{margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ph-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ph-grid .btn{height:44px;font-size:15px;justify-content:flex-start;padding:0 12px}
+.ph-sheet-back{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px;border-bottom:1px solid var(--rule);font-size:16px;font-weight:800}
+.f-phone .orow{min-height:44px;font-size:16px}
+.f-phone .rep .w b{font-size:16px}
+.f-phone .btn{height:44px;font-size:15px}
+.f-phone .prow{min-height:44px;font-size:16px}
+
+/* ---------- map ---------- */
+table.map{border-collapse:collapse;table-layout:fixed;width:100%;font-size:13px}
+table.map th,table.map td{border:1px solid var(--rule-2);padding:7px 9px;vertical-align:top;text-align:left}
+table.map th{background:var(--surface-2);font-size:13px}
+table.map td.k{font-weight:800;width:150px;background:var(--surface)}
+table.map .t{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:7px;border:1px solid var(--rule-3);font-weight:700;white-space:nowrap}
+table.map .t.gone{color:var(--muted);text-decoration:line-through;border-style:dashed}
+table.map .t.new{border-color:var(--secondary);background:var(--blue-wash)}
+table.map .t.foot{border-color:rgba(239,140,134,.55);color:var(--danger-text)}
+.map-in{padding:18px}
+.map-in h3{margin:0 0 4px;font-size:19px}
+.map-in p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7M14 20h3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16zM14 6l3 3"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6M16 4.5a3.5 3.5 0 0 1 0 7M22 20c0-3-2-5-5-5.8"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h8l5 5v15H6zM14 2v5h5M9 13h7M9 17h7"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></symbol>
+</svg>
+
+<div class="doc">
+<h1>The Session menu, simplified</h1>
+<p>Owner, 3 Nov 2026: <b>"really think through how to provide all the functionality while simplifying the basic views here.
+advanced setting etc, could be in expanded sections. remember we want the first experience to be really simple and easy to navigate."</b></p>
+<p>What ships: a Rounds tab holding the categories, the running order, a sixty-row question browser, the rounds so far with the
+report, and then twelve settings under "How the rounds run". An event adds an Agenda tab that holds one link. End session is
+its own tab. The Build Room's menu has two different tabs, and the phone has three more.</p>
+<p>The proposal: <b>five sections with the same names on every type</b>: <b>Up next · Rounds so far · Screens · Joining · How it runs</b>.
+Each one opens on a short default view, and everything else sits behind one <b>More options</b> line at the bottom, which says what is inside.
+<b>End session</b> and <b>Main menu</b> move to the sheet's foot, so they show in every section. An event gets one line at the top of the menu instead of an Agenda tab.
+A type adds or removes sections; it never renames one. Mockup only; sample content invented.</p>
+<ul class="toc">
+  <li><a href="#f-1">1 Up next (C&amp;A, two screens)</a></li><li><a href="#f-2">2 The other four sections</a></li>
+  <li><a href="#f-3">3 More options, opened</a></li><li><a href="#f-4">4 In an event</a></li>
+  <li><a href="#f-5">5 Trivia, Poll, Wavelength</a></li><li><a href="#f-6">6 Survey</a></li>
+  <li><a href="#f-7">7 Build Room</a></li><li><a href="#f-8">8 Phone Remote</a></li>
+  <li><a href="#f-9">9 One screen</a></li><li><a href="#f-10">10 Before and after</a></li>
+</ul>
+
+<!-- =============================== 1 =============================== -->
+<div class="cap"><h2>1 · Up next: what the room does next, and nothing else</h2>
+<ol>
+  <li><b>The running order</b> comes first. The round on screen is the first row, in quiet blue. Each row shows only ↑ ↓ and ⋯. <b>Ask now</b>, <b>Put aside for this session</b> and <b>Remove</b> are in ⋯ (fork F3).</li>
+  <li><b>Write a question</b> and <b>Choose from the set</b> are the two ways to add a round. Each one opens as a step inside this section with "‹ Up next" to go back, the way the composer works today. The 60-row browser is no longer drawn under the queue.</li>
+  <li><b>Categories</b> collapses to one line: how many are on and how many questions are left, with <b>Change</b>. Change opens More options, where the switches are.</li>
+  <li><b>End session</b> and <b>Main menu</b> are in the foot of every section. End session is no longer a tab of its own.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-1">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Q4 strategy offsite</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">7924</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is answering. Press <b>Start voting</b> when they are done.</p></div><span class="btn main l">Start voting <span class="kc">Space</span></span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">3 of 8</span></h3>
+          <div class="qrow done"><span class="n">1</span><span class="tt">Warm-up: one word for Q3</span><span class="mt">done</span></div>
+          <div class="qrow done"><span class="n">2</span><span class="tt">Where do we lose deals?</span><span class="mt">done</span></div>
+          <div class="qrow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="mt">now</span></div>
+          <div class="qrow"><span class="n">4</span><span class="tt">Pricing we would change</span><span class="mt">next</span></div>
+          <div class="rlinks"><span class="rlink"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="rlink">All rounds</span></div>
+        </div>
+        <div class="rsec"><h3>People <span class="ct">9 of 12 answered</span></h3>
+          <div class="qrow"><span class="n">✓</span><span class="tt">Priya</span><span class="mt">120</span></div>
+          <div class="qrow"><span class="n">✓</span><span class="tt">Marcus</span><span class="mt">90</span></div>
+          <div class="qrow"><span class="n">…</span><span class="tt">Sam</span><span class="mt">80</span></div>
+          <div class="rlinks"><span class="rlink">All 12, and who left</span></div>
+        </div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="rnd">Round 3</span><span class="stp live">Answer</span><span class="stp">Vote</span><span class="stp">Results</span><span class="stp">What we heard</span></div>
+        <div class="content"><h4>What would you stop doing?</h4><p class="r" style="color:var(--muted)">9 responses so far.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="scrim" style="top:206px"></div>
+  <div class="sm in-frame">
+    <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+    <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+    <div class="smbody">
+      <div class="gh"><h5>Running order</h5><span class="scope">Round 3 of 8</span></div>
+      <div class="olist">
+        <div class="orow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="src">on now</span></div>
+        <div class="orow"><span class="n">4</span><span class="nextw">Next</span><span class="tt">Pricing we would change</span><span class="tag q">Queued</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow mine"><span class="n">5</span><span class="tt">One promise to the customer</span><span class="yours"><svg class="i s"><use href="#i-pen"/></svg>Yours</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow"><span class="n">6</span><span class="tt">The customer we under-serve</span><span class="src">from the set</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      </div>
+      <p class="note">2 more queued · <a style="color:var(--secondary);font-weight:800">Show all</a> · then the set carries on by itself.</p>
+      <div class="acts"><span class="btn"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="btn"><svg class="i s"><use href="#i-search"/></svg>Choose from the set</span></div>
+      <div class="sumline" style="margin-top:10px"><span><b>Categories</b> · 4 of 6 on · 23 questions left</span><span class="sp"></span><a>Change</a></div>
+      <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Category switches · Put aside this session (1) · Goal</small></div></div>
+    </div>
+    <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+  </div>
+  <span class="pin" style="right:622px;top:290px">1</span>
+  <span class="pin" style="right:232px;top:552px">2</span>
+  <span class="pin" style="right:622px;top:600px">3</span>
+  <span class="pin" style="right:452px;top:710px">4</span>
+</div>
+</div></div>
+
+<!-- =============================== 2 =============================== -->
+<div class="cap"><h2>2 · The other four sections, at their defaults</h2>
+<ol>
+  <li><b>Rounds so far</b> brings back the tab the owner liked. The <b>session report</b> is the first thing in it. Below that is a line for late answers, then every round played. Each round opens the existing round view, which has Previous and Next and lets you redo Workie's read.</li>
+  <li><b>Screens</b> covers where the room watches, the room's window, <b>your phone as a remote</b> (folded in from its own tab) and the scoreboard.</li>
+  <li><b>Joining</b>: the link, the code, Copy, and Show join code.</li>
+  <li><b>How it runs</b> shows just two choices by default. One is the only one that affects privacy (Names); the other is Pace. Everything else is one More options line, and that line names what it holds.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-2">
+<div class="col"><p class="blabel">Rounds so far</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab on">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="rep"><span class="ic"><svg class="i l"><use href="#i-file"/></svg></span><span class="w"><b>Session report</b><span>Rounds 1–2 so far, with Workie's reads. It grows as you go.</span></span><span class="btn">Open the report</span></div>
+    <div class="sumline late"><span><b>2 late answers</b> to review, from round 2</span><span class="sp"></span><a>Review</a></div>
+    <div class="gh" style="margin-top:14px"><h5>Rounds</h5><span class="scope">Press one to read it again</span></div>
+    <div class="olist">
+      <div class="orow now"><span class="n">3</span><span class="tt">What would you stop doing?<span class="sub">On now · answering</span></span></div>
+      <div class="orow click"><span class="n">2</span><span class="tt">Where do we lose deals?<span class="sub">11 responses · 9 voted · top: "Slow legal review"</span></span><span class="ai">AI</span><svg class="i chev"><use href="#i-right"/></svg></div>
+      <div class="orow click"><span class="n">1</span><span class="tt">Warm-up: one word for Q3<span class="sub">12 responses · 12 voted · top: "Stretched"</span></span><span class="ai">AI</span><svg class="i chev"><use href="#i-right"/></svg></div>
+    </div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Late items in the report · All saved reports</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:14px;top:110px">1</span></div></div>
+
+<div class="col"><p class="blabel">Screens <span>· two screens chosen</span></p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab on">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Where the room watches</h5></div>
+      <span class="seg2"><span>This laptop</span><span class="on">A second screen</span></span>
+      <p class="note">The room watches the room's window. This laptop is yours alone.</p></div>
+    <div class="grp"><div class="gh"><h5>The room's window</h5></div>
+      <div class="row"><span class="statechip"><i></i>On · 1 window</span><span class="sp" style="flex:1"></span><span class="btn">Open it again</span></div></div>
+    <div class="grp"><div class="gh"><h5>Your phone as a remote</h5></div>
+      <div class="row"><span class="lab">Not connected<small>Drive the room from your own phone. You sign in once.</small></span><span class="btn"><svg class="i s"><use href="#i-phone"/></svg>Connect your phone</span></div></div>
+    <div class="grp"><div class="gh"><h5>Scoreboard</h5></div>
+      <div class="row"><span class="lab">Hidden<small>The full standings on the room's screen. Key S.</small></span><span class="btn">Show the scoreboard</span></div></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Screen size · Scoreboard look · Show how this works · Keys</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:4px;top:300px">2</span></div></div>
+
+<div class="col"><p class="blabel">Joining</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab on">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="grp" style="display:flex;gap:18px;align-items:center">
+      <span class="qr"></span>
+      <div><p class="eyebrow">Players join at</p><p class="url" style="margin:2px 0 8px">engage.seibtribe.us/play</p><p class="eyebrow">Code</p><p class="code-big" style="margin:4px 0 0">7924</p></div>
+    </div>
+    <p class="note">12 here. Anyone with the code can join until the session ends.</p>
+    <div class="acts"><span class="btn"><svg class="i s"><use href="#i-link"/></svg>Copy join link</span><span class="btn"><svg class="i s"><use href="#i-monitor"/></svg>Show join code</span></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Calendar invite</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:14px;top:110px">3</span></div></div>
+
+<div class="col"><p class="blabel">How it runs</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab on">How it runs</span></div>
+  <div class="smbody">
+    <p class="lede">Changes made during a round wait for the next one, and say so.</p>
+    <div class="grp"><div class="gh"><h5>Names</h5><span class="scope">From the next round</span></div>
+      <div class="row"><span class="sw"></span><span class="lab">Show who wrote each response from the start</span></div>
+      <p class="note">Off: responses are numbered until voting closes, then each shows its author and points. <b>Turning it on shows names to everyone and cannot be taken back.</b></p></div>
+    <div class="grp"><div class="gh"><h5>Pace</h5></div>
+      <div class="row"><span class="sw"></span><span class="lab">Move on by itself when everyone has responded</span></div>
+      <p class="note">Your own controls always work. Opening anything pauses it.</p></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Who is still waiting · Comments on the wall · Workie's voice and approach</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:14px;top:440px">4</span></div></div>
+</div></div>
+
+<!-- =============================== 3 =============================== -->
+<div class="cap"><h2>3 · More options opened, and the "Choose from the set" step</h2>
+<ol>
+  <li><b>How it runs › More options</b> holds every remaining setting. Each keeps its explanation and its "From the next round" tag. On one screen, Workie's part stays behind <b>Show on this screen</b>, as it does today.</li>
+  <li><b>Up next › More options</b>: the category switches with their counts, the questions put aside for this session (each with Restore), and the session's goal.</li>
+  <li><b>Choose from the set</b> is a step, not a wall. It has search, one Category filter, and "Hide asked" on by default. Each row shows <b>Queue</b> and <b>Ask next</b>; <b>Ask now</b> is in ⋯ with its warning. "Correct answers are not on this screen" stays.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-3">
+<div class="col"><p class="blabel">How it runs <span>· More options open</span></p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab on">How it runs</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Names</h5><span class="scope">From the next round</span></div>
+      <div class="row"><span class="sw"></span><span class="lab">Show who wrote each response from the start</span></div></div>
+    <div class="grp"><div class="gh"><h5>Pace</h5></div>
+      <div class="row"><span class="sw"></span><span class="lab">Move on by itself when everyone has responded</span></div></div>
+    <div class="more open"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>Fewer options</div>
+      <div class="more-in">
+        <div class="grp"><div class="gh"><h5>Who is still waiting</h5><span class="scope">From the next round</span></div>
+          <div class="row"><span class="sw on"></span><span class="lab">Name who is still waiting<small>On the room meter, only while you hover it. It also shows who has answered.</small></span></div></div>
+        <div class="grp"><div class="gh"><h5>Comments on the wall</h5><span class="scope">From the next round</span></div>
+          <div class="row"><span class="sw on"></span><span class="lab">Show comments as they arrive<small>What they say, never who wrote them. Off: only the count.</small></span></div></div>
+        <div class="grp"><div class="gh"><h5>Workie</h5><span class="scope">From the next round</span></div>
+          <div class="row" style="gap:12px"><span class="lab" style="flex:none;width:90px">Voice</span><span class="sel">Plain-spoken<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span></div>
+          <div class="row" style="gap:12px;margin-top:6px"><span class="lab" style="flex:none;width:90px">Approach</span><span class="sel">Themes first<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span></div>
+          <p class="note">Briefing on: Workie has your briefing for this session.</p></div>
+      </div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:2px;top:282px">1</span></div></div>
+
+<div class="col"><p class="blabel">Up next <span>· More options open</span></p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="gh"><h5>Running order</h5><span class="scope">Round 3 of 8</span></div>
+    <div class="olist">
+      <div class="orow now"><span class="n">3</span><span class="tt">What would you stop doing?</span><span class="src">on now</span></div>
+      <div class="orow"><span class="n">4</span><span class="nextw">Next</span><span class="tt">Pricing we would change</span><span class="tag q">Queued</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="n">…</span><span class="tt" style="color:var(--muted)">3 more · show all</span></div>
+    </div>
+    <div class="acts"><span class="btn"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="btn"><svg class="i s"><use href="#i-search"/></svg>Choose from the set</span></div>
+    <div class="more open"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>Fewer options</div>
+      <div class="more-in">
+        <div class="grp"><div class="gh"><h5>Categories</h5><span class="scope">23 questions left</span></div>
+          <div class="chips"><span class="chip on">Strategy <small>8 left · on</small></span><span class="chip on">Customers <small>6 left · on</small></span><span class="chip on">Pricing <small>5 left · on</small></span><span class="chip on">People <small>4 left · on</small></span><span class="chip off">Risk <small>7 left · off</small></span><span class="chip off">Warm-ups <small>0 left · off</small></span></div></div>
+        <div class="grp"><div class="gh"><h5>Put aside this session</h5><span class="scope">Never asked unless you restore it</span></div>
+          <div class="olist"><div class="orow"><span class="tt">Our biggest competitor's best move</span><span class="btn s">Restore</span></div></div></div>
+        <div class="grp"><div class="gh"><h5>Goal</h5></div><p class="note" style="margin:0">Question 3 of 5 · from the session's setup</p></div>
+      </div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:2px;top:356px">2</span></div></div>
+
+<div class="col"><p class="blabel">Up next › Choose from the set</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <span class="back"><svg class="i s"><use href="#i-left"/></svg>Up next</span>
+    <div class="row" style="gap:8px"><span class="search"><svg class="i s"><use href="#i-search"/></svg>Search titles…</span><span class="sel" style="min-width:150px">All categories<span class="sp"></span><svg class="i s"><use href="#i-chev"/></svg></span></div>
+    <div class="row" style="margin-top:6px"><span class="sw on"></span><span class="lab" style="font-size:13px">Hide asked · showing 23 of 41</span></div>
+    <p class="privnote"><b style="color:var(--text)">Correct answers are not on this screen.</b> The room may be watching it.</p>
+    <div class="olist">
+      <div class="orow"><span class="tt">The customer we under-serve<span class="sub">Customers · open answer</span></span><span class="tag q">Queued #3</span><span class="oa"><span class="btn s">Unqueue</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="tt">A pricing move we fear<span class="sub">Pricing · open answer</span></span><span class="oa"><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="tt">Which promise do we break most?<span class="sub">Customers · open answer</span></span><span class="oa"><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="tt">What should a new hire unlearn?<span class="sub">People · open answer</span></span><span class="oa"><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow" style="position:relative"><span class="tt">A habit worth keeping<span class="sub">People · open answer</span></span><span class="oa"><span class="btn s">Queue</span><span class="btn s">Ask next</span><span class="ib" style="border-color:var(--secondary)"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+    </div>
+    <div style="margin:6px 0 0 auto;width:300px;background:var(--surface-2);border:1px solid var(--rule-3);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.45)">
+      <div class="row" style="padding:0 8px"><span class="lab">Ask now<small>Ends the round on screen and asks this.</small></span></div>
+      <div class="row" style="padding:0 8px;border-top:1px solid var(--rule)"><span class="lab">Put aside for this session</span></div>
+    </div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div><span class="pin" style="left:2px;top:110px">3</span></div></div>
+</div></div>
+
+<!-- =============================== 4 =============================== -->
+<div class="cap"><h2>4 · Call &amp; Answer as an event item: one line, not an Agenda tab</h2>
+<ol>
+  <li>The Agenda tab is gone. Its two buttons both already exist outside the menu: <b>‹ Agenda</b> is the steps strip's first crumb (<code>WorkflowStrip.jsx:72-88</code>), and <b>Bring everyone here</b> is Your part now's main button while the room is somewhere else (<code>GameHostPage.jsx:7835-7839</code>).</li>
+  <li>The menu gets one line at the top that tells the host where they are in the event, on every section: <b>This event · Leadership day · item 3 of 6</b>, with <b>‹ Agenda</b>. When the room is somewhere else, the line says so and adds <b>Bring everyone here</b>.</li>
+  <li>The five sections are the same as standalone's. The menu opens on Up next, not on the agenda.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-4">
+<div class="frame f-laptop">
+  <div class="lf">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Leadership day · Strategy round</span><span class="sp"></span>
+      <span class="tbtn"><svg class="i"><use href="#i-qr"/></svg>Join <span class="code">5531</span></span>
+      <span class="stat"><i></i>Room's window · on</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn"><div class="t"><p class="eyebrow">Your part now</p><p class="s">The room is still on item 2. Press <b>Bring everyone here</b> when you are ready.</p></div><span class="btn main l">Bring everyone here</span></div>
+    <div class="nys"><p>Nothing needs you now.</p></div>
+    <div class="body">
+      <div class="rail">
+        <div class="rsec"><h3>Round queue <span class="ct">not started</span></h3>
+          <div class="qrow"><span class="n">1</span><span class="tt">Our one bet for next year</span><span class="mt">next</span></div>
+          <div class="qrow"><span class="n">2</span><span class="tt">What would you stop doing?</span></div>
+        </div>
+        <div class="rsec"><h3>People <span class="ct">24 in the event</span></h3></div>
+      </div>
+      <div class="cc">
+        <div class="loop"><span class="crumb">‹ Agenda</span><span class="rnd">Item 3 · Strategy round</span><span class="stp">Answer</span><span class="stp">Vote</span><span class="stp">Results</span></div>
+        <div class="content"><h4>Strategy round</h4><p class="r" style="color:var(--muted)">A preview. The phones are still on item 2.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="scrim" style="top:206px"></div>
+  <div class="sm in-frame">
+    <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+    <div class="evl"><span><b>This event</b> · item 3 of 6 · the room is on item 2</span><span class="sp"></span><a>Bring everyone here</a><a>‹ Agenda</a></div>
+    <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+    <div class="smbody">
+      <div class="gh"><h5>Running order</h5><span class="scope">Nothing asked yet</span></div>
+      <div class="olist">
+        <div class="orow"><span class="n">1</span><span class="nextw">First</span><span class="tt">Our one bet for next year</span><span class="tag q">Queued</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+        <div class="orow"><span class="n">2</span><span class="tt">What would you stop doing?</span><span class="src">from the set</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-up"/></svg></span><span class="ib"><svg class="i s"><use href="#i-down"/></svg></span><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      </div>
+      <div class="acts"><span class="btn"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="btn"><svg class="i s"><use href="#i-search"/></svg>Choose from the set</span></div>
+      <div class="sumline" style="margin-top:14px"><span><b>Categories</b> · 3 of 3 on · 14 questions left</span><span class="sp"></span><a>Change</a></div>
+      <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Category switches · Goal</small></div></div>
+    </div>
+    <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+  </div>
+  <span class="pin" style="right:600px;top:258px">2</span>
+  <span class="pin" style="left:356px;top:232px">1</span>
+</div>
+</div></div>
+
+<!-- =============================== 5 =============================== -->
+<div class="cap"><h2>5 · Trivia, Poll and Wavelength: the same five sections, with less in them</h2>
+<ol>
+  <li><b>Trivia</b>: Up next is the same. In Choose from the set, a row's sub-line shows its difficulty, and correct answers stay off this screen. Screens has the scoreboard. How it runs has no Names, because Trivia does not vote, so Pace is its only default.</li>
+  <li><b>Poll</b>: the same as Trivia, without the scoreboard (frame not drawn; see the README's per-type table).</li>
+  <li><b>Wavelength</b>: Screens says why it runs on one screen and has no chooser (<code>ONE_SCREEN_WHY</code>). There is no scoreboard.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-5">
+<div class="col"><p class="blabel">Trivia · Up next</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span></div>
+  <div class="smbody">
+    <div class="gh"><h5>Running order</h5><span class="scope">Question 6 of 20</span></div>
+    <div class="olist">
+      <div class="orow now"><span class="n">6</span><span class="tt">Which planet has the shortest day?</span><span class="src">on now</span></div>
+      <div class="orow"><span class="n">7</span><span class="nextw">Next</span><span class="tt">The year the Berlin Wall fell</span><span class="src">History · easy</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="n">8</span><span class="tt">Largest desert by area</span><span class="src">Geography · hard</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+      <div class="orow"><span class="n">9</span><span class="tt">Who painted the Sistine ceiling?</span><span class="src">Art · medium</span><span class="oa"><span class="ib"><svg class="i s"><use href="#i-dots"/></svg></span></span></div>
+    </div>
+    <div class="acts"><span class="btn"><svg class="i s"><use href="#i-search"/></svg>Choose from the set</span></div>
+    <p class="note">Write a question is for Call &amp; Answer only (impromptu-ask D1).</p>
+    <div class="sumline" style="margin-top:14px"><span><b>Categories</b> · 5 of 6 on · 61 questions left</span><span class="sp"></span><a>Change</a></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Category switches · Put aside this session</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+
+<div class="col"><p class="blabel">Trivia · How it runs</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab on">How it runs</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Pace</h5></div>
+      <div class="row"><span class="sw on"></span><span class="lab">Move on by itself when everyone has answered</span></div>
+      <p class="note">Your own controls always work. Opening anything pauses it.</p></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Comments on the wall · Workie's voice and approach</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+
+<div class="col"><p class="blabel">Wavelength · Screens</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Up next</span><span class="tab">Rounds so far</span><span class="tab on">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span><span class="tab">People</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Where the room watches</h5></div>
+      <p class="note" style="margin:0">This laptop. Wavelength runs on one screen for now: the room's window has no Write and Reveal moments yet.</p></div>
+    <div class="grp"><div class="gh"><h5>Your phone as a remote</h5></div>
+      <div class="row"><span class="lab">Connected · Sam's phone<small>Private things wait there: the words as they come in.</small></span><span class="btn">Show the code again</span></div></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Screen size · Show how this works · Keys</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+</div></div>
+
+<!-- =============================== 6 =============================== -->
+<div class="cap"><h2>6 · Survey: Close survey takes Up next's place, and Rounds so far becomes Results</h2>
+<ol>
+  <li>A survey has no rounds. Its first section is <b>Close survey</b>: where it stands, the two-minute warning, and Close now. The confirm and the words are the ones that ship (<code>SESSION_MENU_WORDS</code>).</li>
+  <li><b>Results</b> is Rounds so far's place, and the report is its first thing. Before the survey closes it says when the report will be ready, instead of hiding the section.</li>
+  <li>The survey's feedback and Workie settings move from "After it closes" (under Close survey) into <b>How it runs</b>, the same home they have on every other type.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-6">
+<div class="col"><p class="blabel">Survey · Close survey</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Close survey</span><span class="tab">Results</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span><span class="tab">People</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Open · closes Friday 5:00 pm</h5></div>
+      <div class="prog"><i style="width:65%"></i></div>
+      <p class="note" style="margin:0"><b>31 of 48 finished.</b> 6 started and have not finished.</p></div>
+    <p class="note">Closing stops every phone mid-answer and freezes the counts. It cannot be reopened. The two-minute warning tells everyone first.</p>
+    <div class="acts"><span class="btn">Two-minute warning</span><span class="btn">Close survey now…</span></div>
+  </div>
+  <div class="smfoot"><span class="btn end" style="opacity:.6">End session…</span><span class="hint">Close the survey first</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+<div class="col"><p class="blabel">Survey · Results</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Close survey</span><span class="tab on">Results</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span><span class="tab">People</span></div>
+  <div class="smbody">
+    <div class="rep"><span class="ic"><svg class="i l"><use href="#i-file"/></svg></span><span class="w"><b>Survey report</b><span>Ready when the survey closes, with Workie's read of each question.</span></span><span class="btn" style="opacity:.6">Open the report</span></div>
+    <div class="gh"><h5>Questions</h5><span class="scope">Counts so far</span></div>
+    <div class="olist">
+      <div class="orow"><span class="n">1</span><span class="tt">How clear is our strategy?<span class="sub">Rating · 31 answers</span></span></div>
+      <div class="orow"><span class="n">2</span><span class="tt">Best day to meet in person<span class="sub">Choice · 30 answers</span></span></div>
+      <div class="orow"><span class="n">3</span><span class="tt">One thing we should stop<span class="sub">Open · 27 answers</span></span></div>
+    </div>
+  </div>
+  <div class="smfoot"><span class="btn end" style="opacity:.6">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+</div></div>
+
+<!-- =============================== 7 =============================== -->
+<div class="cap"><h2>7 · Build Room: the same menu, Claude in Up next's place</h2>
+<ol>
+  <li>The Players and Settings tabs go. People is in the console's rail, as on Call &amp; Answer, and Settings splits into the shared sections.</li>
+  <li><b>Claude</b> takes Up next's place. Its default view is whether Claude is connected, whether its questions wait for you, and whether its posts wait for you. The plugin version, the crew and Back to the opening are in More options.</li>
+  <li><b>Asks so far</b> takes Rounds so far's place: the report first, then <b>Wrap up</b>, then the asks, each opening the History view privately.</li>
+  <li>Screens and Joining keep the Build Room's own parts: the demo tile, New link, and Look here, privately. The extra parts go under More options.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-7">
+<div class="col"><p class="blabel">Build Room · Claude</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab on">Claude</span><span class="tab">Asks so far</span><span class="tab">Screens</span><span class="tab">Joining</span></div>
+  <div class="smbody">
+    <div class="grp"><div class="gh"><h5>Claude Code</h5></div>
+      <div class="row"><span class="statechip"><i></i>Connected · working on the ask</span><span style="flex:1"></span><span class="btn">Connect again</span></div></div>
+    <div class="grp"><div class="gh"><h5>Claude's questions</h5></div>
+      <div class="row"><span class="sw on"></span><span class="lab">Wait for me before they open<small>Off: they open to the room as Claude asks them.</small></span></div></div>
+    <div class="grp"><div class="gh"><h5>Claude's posts</h5></div>
+      <div class="row"><span class="sw on"></span><span class="lab">Check posts before the room sees them<small>Updates and screenshots wait in Waiting for you.</small></span></div></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Plugin version · Crew · Back to the opening</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+<div class="col"><p class="blabel">Build Room · Asks so far</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Claude</span><span class="tab on">Asks so far</span><span class="tab">Screens</span><span class="tab">Joining</span></div>
+  <div class="smbody">
+    <div class="rep"><span class="ic"><svg class="i l"><use href="#i-file"/></svg></span><span class="w"><b>Session report</b><span>What the room asked for and what Claude built.</span></span><span class="btn">Open the report</span></div>
+    <div class="row" style="margin:0 0 12px"><span class="lab">Finishing?<small>Wrap up shows the room what was built, then the report.</small></span><span class="btn">Wrap up</span></div>
+    <div class="gh"><h5>Asks</h5><span class="scope">Opens History on this laptop only</span></div>
+    <div class="olist">
+      <div class="orow now"><span class="n">4</span><span class="tt">Rate the new sign-up page<span class="sub">On now · 14 of 18 rated</span></span></div>
+      <div class="orow click"><span class="n">3</span><span class="tt">Choose: one column or two<span class="sub">Two columns · sent to Claude</span></span><svg class="i chev"><use href="#i-right"/></svg></div>
+      <div class="orow click"><span class="n">2</span><span class="tt">Ideas for the empty state<span class="sub">9 ideas · 3 sent</span></span><svg class="i chev"><use href="#i-right"/></svg></div>
+      <div class="orow click"><span class="n">1</span><span class="tt">What should we build?<span class="sub">"A team check-in board"</span></span><svg class="i chev"><use href="#i-right"/></svg></div>
+    </div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+<div class="col"><p class="blabel">Build Room · Joining</p>
+<div class="frame f-sheet"><div class="sm">
+  <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+  <div class="tabs"><span class="tab">Claude</span><span class="tab">Asks so far</span><span class="tab">Screens</span><span class="tab on">Joining</span></div>
+  <div class="smbody">
+    <div class="grp" style="display:flex;gap:18px;align-items:center">
+      <span class="qr"></span>
+      <div><p class="eyebrow">Join · any network</p><p class="url" style="margin:2px 0 8px">engage.seibtribe.us/play</p><p class="eyebrow">Code</p><p class="code-big" style="margin:4px 0 0">8812</p></div>
+    </div>
+    <p class="note">18 joined.</p>
+    <div class="acts"><span class="btn"><svg class="i s"><use href="#i-link"/></svg>Copy join link</span><span class="btn"><svg class="i s"><use href="#i-monitor"/></svg>Show on the Stage</span></div>
+    <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Share the demo on this Wi-Fi · List names on the room meter</small></div></div>
+  </div>
+  <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+</div></div></div>
+</div></div>
+
+<!-- =============================== 8 =============================== -->
+<div class="cap"><h2>8 · Phone Remote: the same names, in a phone's shape</h2>
+<ol>
+  <li>The Remote's Session card had five buttons, and two of them opened the same panel. It now has <b>Up next · Rounds so far · People</b>, which open the panel at that tab, plus Join code, the room's screen and Main menu. Categories moves into Up next's line, so it is no longer a sixth button.</li>
+  <li>The panel's tabs go from Players / Rounds / Questions to <b>Up next · Rounds so far · People</b>. Write a question moves from the Rounds tab to Up next, where the laptop has it.</li>
+  <li>Rounds so far on the phone gets the <b>session report</b> at the top, which it never had, and keeps its inline accordion with the "Workie had" hint.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-8">
+<div class="col"><p class="blabel">Remote · the Session card</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-top"><b>Q4 strategy offsite</b><span class="sp"></span><span class="live">Round 3</span></div>
+  <div class="ph-body">
+    <div class="ph-card"><h5>Session</h5>
+      <div class="ph-grid">
+        <span class="btn"><svg class="i"><use href="#i-list"/></svg>Up next</span>
+        <span class="btn"><svg class="i"><use href="#i-file"/></svg>Rounds so far</span>
+        <span class="btn"><svg class="i"><use href="#i-users"/></svg>People</span>
+        <span class="btn"><svg class="i"><use href="#i-link"/></svg>Join code</span>
+        <span class="btn"><svg class="i"><use href="#i-monitor"/></svg>Room's screen</span>
+        <span class="btn"><svg class="i"><use href="#i-house"/></svg>Main menu</span>
+      </div>
+    </div>
+    <div class="ph-card"><h5>This round</h5><p class="note" style="margin:0;font-size:16px;color:var(--text)">What would you stop doing?</p><p class="note">9 of 12 answered · 1:24 open</p></div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:8px;top:84px">1</span></div></div>
+
+<div class="col"><p class="blabel">Remote · Up next</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-sheet-back"><svg class="i"><use href="#i-left"/></svg>Session</div>
+  <div class="ph-tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">People</span></div>
+  <div class="ph-body">
+    <div class="olist">
+      <div class="orow now"><span class="n">3</span><span class="tt">What would you stop doing?</span></div>
+      <div class="orow"><span class="n">4</span><span class="tt">Pricing we would change</span><span class="ib" style="width:44px;height:44px">✕</span></div>
+      <div class="orow mine"><span class="n">5</span><span class="tt">One promise to the customer</span><span class="yours">Yours</span></div>
+      <div class="orow"><span class="n">6</span><span class="tt">The customer we under-serve</span></div>
+    </div>
+    <div class="acts" style="display:grid;gap:8px"><span class="btn"><svg class="i"><use href="#i-plus"/></svg>Write a question</span><span class="btn"><svg class="i"><use href="#i-search"/></svg>Choose from the set</span></div>
+    <div class="sumline" style="margin-top:12px;font-size:15px"><span><b>Categories</b> · 4 of 6 on</span><span class="sp"></span><a>Change</a></div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:8px;top:60px">2</span></div></div>
+
+<div class="col"><p class="blabel">Remote · Rounds so far</p>
+<div class="frame f-phone"><div class="ph-in">
+  <div class="ph-sheet-back"><svg class="i"><use href="#i-left"/></svg>Session</div>
+  <div class="ph-tabs"><span class="tab">Up next</span><span class="tab on">Rounds so far</span><span class="tab">People</span></div>
+  <div class="ph-body">
+    <div class="rep"><span class="ic"><svg class="i l"><use href="#i-file"/></svg></span><span class="w"><b>Session report</b><span>Rounds 1–2</span></span><span class="btn">Open</span></div>
+    <div class="olist">
+      <div class="orow click" style="background:var(--surface-2)"><span class="n">2</span><span class="tt">Where do we lose deals?<span class="sub">11 responses · 9 voted</span></span><span class="ai">AI</span></div>
+      <div style="padding:10px 12px;font-size:15px;border-top:1px solid var(--rule)"><p style="margin:0 0 6px"><b>Workie's read:</b> legal review and late pricing approval came up in 7 of 11.</p><p class="note" style="margin:0 0 8px">Workie had: your briefing, the set's background.</p><p style="margin:0;font-size:15px"><b>Response 1</b> Slow legal review</p></div>
+      <div class="orow click"><span class="n">1</span><span class="tt">Warm-up: one word for Q3<span class="sub">12 responses</span></span><span class="ai">AI</span></div>
+    </div>
+  </div>
+  <div class="ph-dock"><span class="btn main">Start voting</span></div>
+</div><span class="pin" style="left:8px;top:120px">3</span></div></div>
+</div></div>
+
+<!-- =============================== 9 =============================== -->
+<div class="cap"><h2>9 · One screen: the same sections, with People added and private parts held back</h2>
+<ol>
+  <li>On one screen the laptop is the room's screen, and the frame has no People column. So <b>People</b> is a sixth section here, as it is today.</li>
+  <li>The running order's titles wait behind <b>Show on this screen</b> (<code>PrivateReveal</code>, unchanged). <b>Write a question</b> opens the host-only choice first: write it on my phone, or here where the room will see you type (impromptu-ask D8).</li>
+  <li>Screens shows <b>Connect your phone</b> near the top, because on one screen the phone is the host's private half.</li>
+</ol></div>
+<div class="scroll"><div class="board" id="f-9">
+<div class="frame f-laptop">
+  <div class="lf" style="grid-template-rows:auto auto minmax(0,1fr)">
+    <div class="tb">
+      <span class="tbtn ghost"><svg class="i"><use href="#i-house"/></svg>Main menu</span><span class="sepv"></span>
+      <span class="tname">Team retro</span><span class="sp"></span>
+      <span class="tbtn">Show join code</span>
+      <span class="stat pub"><i></i>The room sees this screen</span>
+      <span class="tbtn"><svg class="i"><use href="#i-bell"/></svg>Needs you</span>
+      <span class="tbtn qbtn">?</span>
+      <span class="tbtn on"><svg class="i"><use href="#i-menu"/></svg>Session menu</span>
+    </div>
+    <div class="ypn slim"><div class="t"><p class="s">Round 2 · the room is answering. <b>Start voting</b> when they are done.</p></div><span class="btn main">Start voting <span class="kc">Space</span></span></div>
+    <div style="padding:30px 56px"><p class="eyebrow" style="font-size:20px;color:var(--secondary)">Round 2 · Process</p><h3 style="font-size:40px;margin:6px 0 10px;max-width:640px">What slows our handoffs down?</h3><p style="font-size:22px;color:var(--muted)">7 of 9 answered</p></div>
+  </div>
+  <div class="scrim" style="top:110px"></div>
+  <div class="sm in-frame one">
+    <div class="hd"><h4>Session menu</h4><span class="ws"><i></i>Connected</span><span class="xbtn">?</span><span class="xbtn">✕</span></div>
+    <div class="tabs"><span class="tab on">Up next</span><span class="tab">Rounds so far</span><span class="tab">Screens</span><span class="tab">Joining</span><span class="tab">How it runs</span><span class="tab">People</span></div>
+    <div class="smbody">
+      <div class="pv"><svg class="i l"><use href="#i-eye"/></svg><span class="w"><b>4 in the running order · 18 questions left</b>The room can see this screen. The titles wait until you show them.</span><span class="btn">Show on this screen</span></div>
+      <div class="acts"><span class="btn"><svg class="i s"><use href="#i-plus"/></svg>Write a question</span><span class="btn"><svg class="i s"><use href="#i-search"/></svg>Choose from the set</span></div>
+      <p class="note">Both ask where first: on your phone, or here where the room will see.</p>
+      <div class="sumline" style="margin-top:14px"><span><b>Categories</b> · 3 of 3 on · 18 questions left</span><span class="sp"></span><a>Change</a></div>
+      <div class="more"><div class="more-h"><svg class="i s"><use href="#i-chev"/></svg>More options <small>Category switches · Put aside this session</small></div></div>
+    </div>
+    <div class="smfoot"><span class="btn end">End session…</span><span class="sp"></span><span class="btn"><svg class="i s"><use href="#i-house"/></svg>Main menu</span></div>
+  </div>
+  <span class="pin" style="right:40px;top:208px">1</span>
+  <span class="pin" style="right:600px;top:250px">2</span>
+</div>
+</div></div>
+
+<!-- =============================== 10 =============================== -->
+<div class="cap"><h2>10 · Before and after, every type</h2>
+<p>Struck through: a tab that goes. Blue: a section name that is new or shared now. Red: End session, which moves to the foot of every section.</p></div>
+<div class="scroll"><div class="board" id="f-10">
+<div class="frame f-map"><div class="map-in">
+<h3>Session menu sections, by type</h3>
+<p>One set of names. A type adds or removes a section; it never renames one.</p>
+<table class="map">
+<thead><tr><th style="width:150px">Type</th><th>Ships today (Phase 2, 2 Nov)</th><th>Proposed</th></tr></thead>
+<tbody>
+<tr><td class="k">C&amp;A, two screens</td><td><span class="t">Screens</span><span class="t">Phone remote</span><span class="t">Rounds</span><span class="t">Joining</span><span class="t">End session</span></td><td><span class="t new">Up next</span><span class="t new">Rounds so far</span><span class="t">Screens</span><span class="t">Joining</span><span class="t new">How it runs</span> · foot: <span class="t foot">End session</span><span class="t">Main menu</span></td></tr>
+<tr><td class="k">C&amp;A, event item</td><td><span class="t gone">Agenda</span><span class="t">Screens</span><span class="t">Phone remote</span><span class="t">Rounds</span><span class="t">Joining</span><span class="t">End session</span></td><td>the same five, with the <b>This event</b> line on top (‹ Agenda · Bring everyone here) · same foot</td></tr>
+<tr><td class="k">C&amp;A, one screen</td><td><span class="t">Screens</span><span class="t">Phone remote</span><span class="t">Rounds</span><span class="t">Joining</span><span class="t">People</span><span class="t">End session</span></td><td>the five + <span class="t">People</span></td></tr>
+<tr><td class="k">Trivia</td><td>as C&amp;A</td><td>as C&amp;A; How it runs has no Names; no Write a question</td></tr>
+<tr><td class="k">Poll</td><td>as C&amp;A</td><td>as Trivia, no scoreboard</td></tr>
+<tr><td class="k">Wavelength</td><td>as C&amp;A one screen</td><td>the five + <span class="t">People</span>; Screens says why there is one screen</td></tr>
+<tr><td class="k">Survey</td><td><span class="t">Screens</span><span class="t">Joining</span><span class="t">Close survey</span><span class="t">People</span><span class="t">End session</span></td><td><span class="t">Close survey</span><span class="t new">Results</span><span class="t">Screens</span><span class="t">Joining</span><span class="t new">How it runs</span><span class="t">People</span> · foot</td></tr>
+<tr><td class="k">Build Room</td><td><span class="t gone">Players</span><span class="t gone">Settings</span> (Screens · Joining · Build settings · End session as groups in one scroll)</td><td><span class="t new">Claude</span><span class="t new">Asks so far</span><span class="t">Screens</span><span class="t">Joining</span> · foot</td></tr>
+<tr><td class="k">Phone Remote</td><td><span class="t gone">Players</span><span class="t gone">Rounds</span><span class="t gone">Questions</span>; card: Players &amp; rounds · Categories · Join code · Present · Back to Menu</td><td><span class="t new">Up next</span><span class="t new">Rounds so far</span><span class="t new">People</span>; card: those three · Join code · Room's screen · Main menu</td></tr>
+</tbody></table>
+</div></div>
+</div></div>
+
+</div>
+</body>
+</html>
