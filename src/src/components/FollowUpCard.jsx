@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Button from './ui/Button';
+import SendButton, { SentAnnouncer } from './SendButton';
 import { createPortal } from 'react-dom';
 import RatingInput from './survey/RatingInput';
 import ChoiceInput from './survey/ChoiceInput';
@@ -154,22 +155,31 @@ export default function FollowUpCard({ ask, yours = null, onSend, draft = null, 
           onBlur={() => {}}
         />
       </form>
+      {/* "Sent" said once, from a region that outlives the switch (3 Nov). */}
+      <SentAnnouncer sent={sent && !late} />
       {place(
         <>
-          {sent && <p className="fu-sent" role="status">{late ? FW.keptLate : FW.sent}</p>}
+          {/* The line under it says what "Sent" allows. Not a live region on
+              time: the announcer above says "Sent" once. Kept late, it is the
+              only word, so it stays the status. */}
+          {sent && <p className="fu-sent" role={late ? 'status' : undefined}>{late ? FW.keptLate : FW.sent}</p>}
           {error && <p className="fu-error" role="alert">{error}</p>}
           {late && onDone ? (
             <Button variant="secondary" size={56} onClick={onDone}>{FW.done}</Button>
           ) : (
-            <Button
+            /* SENT, NOT GREYED (owner, 3 Nov): once the answer is in, the
+               button reads "Sent" with a check; a change to the answer
+               (`setSent(false)` in onChange) brings the live Send back. */
+            <SendButton
+              sent={sent && !busy}
               type="submit"
               form={formId}
               variant={plain ? 'secondary' : 'primary'}
               size={56}
-              disabled={busy || sent || !answered(ask, value)}
+              disabled={busy || !answered(ask, value)}
             >
               {busy ? FW.sending : FW.send}
-            </Button>
+            </SendButton>
           )}
         </>,
       )}

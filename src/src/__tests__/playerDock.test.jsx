@@ -458,3 +458,147 @@ describe('FollowUpCard draws its actions where it is told', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('ui-btn--quiet');
   });
 });
+
+/* ======================================================================= */
+
+/*
+  "SENT", NOT A GREYED SEND (owner, 3 Nov 2026: "could the button on the player
+  screen change to sent when answering a question instead of greyed out send.
+  it would change back to send if you edit as it does now.").
+
+  rejects: the disabled grey "Send my answer" (or no word at all) after a send
+  the socket or server took; a "Sent" that can be pressed or resubmits a form;
+  "Sent" over an answer or ballot held offline; a "Sent" said by nothing to a
+  screen reader, or said by a region that only mounted with it.
+*/
+const live = () => document.querySelector('[data-sent-live]');
+
+function expectSent() {
+  const sent = within(dock()).getByRole('button', { name: 'Sent' });
+  expect(sent).toHaveClass('ui-btn--done');
+  expect(sent).not.toHaveClass('ui-btn--action');
+  expect(sent).toHaveAttribute('aria-disabled', 'true');
+  expect(sent).toHaveAttribute('type', 'button');
+  expect(sent.querySelector('svg')).not.toBeNull();
+  expect(live()).toHaveTextContent(/^Sent$/);
+  return sent;
+}
+
+describe('after a send, the dock reads "Sent" with a check, and pressing it does nothing', () => {
+  const POLL_Q = { title: 'Best day?', questionNumber: '001', id: '001', poll: { kind: 'choice', options: ['Monday', 'Friday'], allowMultiple: false, allowOther: false, shuffle: false } };
+  test.each(['call-and-answer', 'trivia', 'wavelength', 'poll'])('%s', async (gameType) => {
+    const server = makeServer({ gameType, ...(gameType === 'poll' ? { question: POLL_Q } : {}) });
+    await reach(server, 'ASK#001');
+    if (gameType === 'call-and-answer') {
+      fireEvent.change(await screen.findByRole('textbox', { name: /Your response/i }), { target: { value: 'An answer' } });
+    } else if (gameType === 'trivia') {
+      fireEvent.click(await screen.findByRole('radio', { name: /Paris/ }));
+    } else if (gameType === 'wavelength') {
+      fireEvent.change(await screen.findByLabelText('Word 1'), { target: { value: 'cloud' } });
+    } else {
+      fireEvent.click(await screen.findByRole('radio', { name: /Friday/ }));
+    }
+    const region = live();
+    expect(region).toHaveTextContent('');
+    const label = gameType === 'wavelength' ? SEND.words(1) : SEND.answer;
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: label })); });
+    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(1);
+
+    const sent = expectSent();
+    // The region was on the page before the send: its change is what is said.
+    expect(live()).toBe(region);
+    expect(screen.queryByRole('button', { name: label })).toBeNull();
+    await act(async () => { fireEvent.click(sent); });
+    expect(webSocketClient.sendCleanMessage).toHaveBeenCalledTimes(1);
+    expectNoMainInStage();
+  });
+
+  test('votes: "Send my votes" turns to "Sent"', async () => {
+    const server = makeServer({ ballot: [...BALLOT] });
+    await reach(server, 'VOTE#001');
+    await fillBallot();
+    expect(live()).toHaveTextContent('');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: SEND.votes })); });
+    await screen.findByText(/Your votes are in/);
+    const sent = expectSent();
+    const posts = server.votePosts.length;
+    await act(async () => { fireEvent.click(sent); });
+    expect(server.votePosts.length).toBe(posts);
+  });
+});
+
+describe('held offline is "Not sent yet", never "Sent"', () => {
+  test('an answer pressed while the socket is down', async () => {
+    const server = makeServer();
+    await reach(server, 'ASK#001');
+    webSocketClient.sendCleanMessage.mockReturnValue(false);
+    fireEvent.change(await screen.findByRole('textbox', { name: /Your response/i }), { target: { value: 'Held one' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: SEND.answer })); });
+    await screen.findByText(HELD.heading);
+    expect(screen.getByText(HELD.eyebrow)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+    expect(document.querySelector('.ui-btn--done')).toBeNull();
+    expect(live()).toHaveTextContent('');
+    // "Change my answer" puts it back under a live Send.
+    fireEvent.click(screen.getByRole('button', { name: HELD.changeAnswer }));
+    const send = screen.getByRole('button', { name: SEND.answer });
+    expect(send).toHaveClass('ui-btn--action');
+    expect(send).not.toBeDisabled();
+  });
+
+  test('a ballot pressed offline', async () => {
+    const server = makeServer({ ballot: [...BALLOT], vote: () => 'offline' });
+    await reach(server, 'VOTE#001');
+    await fillBallot();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: SEND.votes })); });
+    await screen.findByText(HELD.heading);
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+    expect(live()).toHaveTextContent('');
+  });
+});
+
+describe('a question for the room: "Sent", and an edit brings "Send" back', () => {
+  test('in the card on its own', async () => {
+    const onSend = jest.fn().mockResolvedValue({ ok: true });
+    render(<FollowUpCard ask={ASK} onSend={onSend} />);
+    const box = screen.getByRole('textbox');
+    fireEvent.change(box, { target: { value: 'The finance team' } });
+    expect(live()).toHaveTextContent('');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+    const sent = await screen.findByRole('button', { name: 'Sent' });
+    expect(sent).toHaveClass('ui-btn--done');
+    expect(sent).toHaveAttribute('aria-disabled', 'true');
+    expect(sent).toHaveAttribute('type', 'button');
+    expect(sent).not.toHaveAttribute('form');
+    expect(sent.querySelector('svg')).not.toBeNull();
+    expect(live()).toHaveTextContent(/^Sent$/);
+    await act(async () => { fireEvent.click(sent); });
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(box, { target: { value: 'The finance team, then legal' } });
+    const send = screen.getByRole('button', { name: 'Send' });
+    expect(send).toHaveClass('ui-btn--action');
+    expect(send).not.toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+    expect(live()).toHaveTextContent('');
+    await act(async () => { fireEvent.click(send); });
+    expect(onSend).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('button', { name: 'Sent' })).toBeInTheDocument();
+  });
+
+  test('on the phone, in the dock', async () => {
+    const server = makeServer({ ask: ASK });
+    await reach(server, 'RESULTS#001');
+    await screen.findByText('Who pushes back first?');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'The finance team' } });
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Send' })); });
+    const sent = await within(dock()).findByRole('button', { name: 'Sent' });
+    expect(sent).toHaveClass('ui-btn--done');
+    expect(sent).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Legal' } });
+    const send = within(dock()).getByRole('button', { name: 'Send' });
+    expect(send).not.toBeDisabled();
+    expect(send).toHaveClass('ui-btn--action');
+    expectNoMainInStage();
+  });
+});

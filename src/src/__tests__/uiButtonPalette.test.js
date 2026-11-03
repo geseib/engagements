@@ -135,6 +135,14 @@ describe('the variants read the roles SPEC §6 names', () => {
     expect(decl('.ui-btn--action:disabled', 'color')).toBe('var(--muted)');
     expect(decl('.ui-btn--action:disabled', 'opacity')).toBe('1');
   });
+  test('done ("Sent", 3 Nov): a --success wash and edge, --text ink, never orange, never the grey or the fade', () => {
+    expect(decl('.ui-btn--done', 'background')).toBe('rgb(var(--success-rgb) / .16)');
+    expect(decl('.ui-btn--done', 'border-color')).toBe('var(--success)');
+    expect(decl('.ui-btn--done', 'color')).toBe('var(--text)');
+    expect(decl('.ui-btn--done[aria-disabled="true"]', 'opacity')).toBe('1');
+    const done = RULES.filter((r) => r.selectors.some((x) => x.startsWith('.ui-btn--done')));
+    for (const r of done) expect(Object.values(r.decls).join(' ')).not.toMatch(/--action|--slate-rgb|--muted/);
+  });
   test('radius from --radius-sm', () => {
     expect(decl('.ui-btn', 'border-radius')).toBe('var(--radius-sm)');
   });
@@ -194,6 +202,11 @@ describe.each(H.CASES)('%s / %s: contrast, composited', (skin, theme) => {
   test.each(GROUNDS)('tertiary: the link ink on %s', (_, ground) => {
     const ink = H.role(theme === 'light' ? '--accent-text' : '--info', opts);
     expect(H.on(ink, ground)).toBeGreaterThanOrEqual(H.AA);
+  });
+
+  test.each(GROUNDS)('done: the ink on the success wash over %s', (_, ground) => {
+    const ink = paint('.ui-btn--done', 'color', opts);
+    expect(H.on(ink, [...ground, paint('.ui-btn--done', 'background', opts)])).toBeGreaterThanOrEqual(H.AA);
   });
 
   test.each(GROUNDS)('the focus ring clears 3:1 on %s', (_, ground) => {

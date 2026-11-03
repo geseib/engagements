@@ -264,7 +264,9 @@ describe('the volume is set by the state machine, and the player never chooses',
 
   // rejects: an action surviving the submission. Once the task is done the
   //          phone yields; a second submit affordance in a REST state is an
-  //          invitation to do something that cannot be done.
+  //          invitation to do something that cannot be done. Since 3 Nov the
+  //          dock keeps ONE thing in Send's place: the "Sent" state, which is
+  //          aria-disabled, swallows its click and is not the orange action.
   test('an answered round is REST and offers nothing to press', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
@@ -281,7 +283,11 @@ describe('the volume is set by the state machine, and the player never chooses',
     });
 
     await waitFor(() => expect(shell()).toHaveAttribute('data-volume', 'rest'));
-    expect(dock()).toBeNull();
+    const only = within(dock()).getAllByRole('button');
+    expect(only).toHaveLength(1);
+    expect(only[0]).toHaveAccessibleName('Sent');
+    expect(only[0]).toHaveAttribute('aria-disabled', 'true');
+    expect(dock().querySelector('.ui-btn--action')).toBeNull();
   });
 
   // rejects: RESULTS growing an action beyond the one way into comments. The

@@ -89,6 +89,23 @@
   opacity: 1;
 }
 
+/* ---- done: a send that landed ("Sent", owner 3 Nov 2026) ----
+   A state in the main button's place, not an action and not the disabled grey:
+   a --success wash and edge under --text ink, beside a check. The ink is
+   --text, not --success-text, because Classic paper's --success-text is the
+   dusk green (1.7:1 on paper); the green is the wash and the edge, the word
+   and the check say it. It is aria-disabled, so the generic fade above must
+   not reach it (opacity 1), and the cursor says nothing will happen. No
+   hover: there is nothing to press. */
+.ui-btn--done,
+.ui-btn--done[aria-disabled="true"] {
+  background: rgb(var(--success-rgb) / .16);
+  border-color: var(--success);
+  color: var(--text);
+  opacity: 1;
+  cursor: default;
+}
+
 /* ---- accent ---- */
 .ui-btn--accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .ui-btn--accent:hover:not(:disabled):not([aria-disabled="true"]) {
