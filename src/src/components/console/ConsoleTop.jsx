@@ -5,6 +5,7 @@ import HostNotificationsBell from '../HostNotificationsBell';
 import HelpButton from '../HelpButton';
 import Icon from '../Icon';
 import Button from '../ui/Button';
+import JoinCodeChip from './JoinCodeChip';
 import { helpFor } from '../../config/help/screens';
 
 export { TOP_SLOTS };
@@ -39,7 +40,7 @@ export default function ConsoleTop({
   title, code, onJoin, joinHint = '', joinPressed, presentHref, presentDetail, onOpenPresent,
   onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '',
   bellSession = null, connected = null, onSessionMenu = null, sessionMenuOpen = false,
-  oneScreen = false, bell = null,
+  oneScreen = false, bell = null, joinQr = null,
 }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   // Never a dead control (engage-design hard rule 2): without a page's own way
@@ -60,8 +61,20 @@ export default function ConsoleTop({
       <span className="hc-name" data-slot="name" title={title}>{title}</span>
       <span className="hc-spacer" />
       {/* THE ONE JOIN TOGGLE (§3.6): the code on the room's screen, or not.
-          A press shows it; the next press takes it down. */}
-      {code ? (
+          A press shows it; the next press takes it down.
+          TWO SCREENS WITH `joinQr` ({ playUrl, joinUrl }; owner, 3 Nov 2026):
+          the code shows its QR on this laptop on hover, focus or a click, and
+          the room's toggle moves inside that card (JoinCodeChip). */}
+      {code && joinQr && !oneScreen ? (
+        <JoinCodeChip
+          code={code}
+          playUrl={joinQr.playUrl}
+          joinUrl={joinQr.joinUrl}
+          onRoomToggle={onJoin}
+          roomPressed={pressed}
+          buttonProps={codeProps}
+        />
+      ) : code ? (
         <Button
           variant="secondary"
           size={36}

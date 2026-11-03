@@ -86,6 +86,9 @@
                        (two screens), useScoreboardKeys, useSessionPanelKey,
                        useFullscreenKey; roundWords arm texts.
     join-code          GameHostPage.jsx qrMode pinned → /stage-focus {join};
+                       components/console/JoinCodeChip.jsx (two screens: hover,
+                       focus or click shows the QR card on the laptop; its
+                       "Show on the room's screen" is the room's toggle);
                        expanded-QR overlay (click anywhere closes, the address
                        copies); presentModel.js withJoin (ASK, VOTE, RESULTS
                        only); JoinPanel; StageJoinPanel.jsx and joinPanelAllowed
@@ -93,7 +96,9 @@
                        ConsoleTop's Join toggles (no overlay on the console);
                        HostRemote.jsx Join code panel.
     drive-from-window  present/presentControls.js (keys armed only for a host
-                       who may drive; STRIP_MS 3 s; CONFIRM_MS 8 s; Enter/Esc);
+                       who may drive; STRIP_MS 3 s; CONFIRM_MS 8 s; Enter/Esc;
+                       J; S/V/Esc/Space/arrows on the scoreboard, POST
+                       /scoreboard, since 3 Nov 2026); useFullscreenKey F;
                        present/presentKeys.js; PresentPage.jsx strip and the
                        "Next step" card. Seen on dev: → on the card started
                        round 2.
@@ -370,7 +375,8 @@ const twoScreens = {
             { keys: 'Space or →', text: 'Press the main button in **Your part now**. In Workie\'s read it turns the page first. A clicker does the same.' },
             { keys: '←', text: 'One step back: a page of the read, or from feedback back to the read. While you look at another step, back to the room.' },
             { keys: 'J', text: 'Show or hide the join code (see Showing the join code mid-session).' },
-            { keys: 'S', text: 'Show or hide the scoreboard; Esc closes it.' },
+            { keys: 'S', text: 'Show or hide the scoreboard; Esc closes it. Works from the room\'s window too.' },
+            { keys: 'V', text: 'Change the scoreboard\'s look while it is up. Works from the room\'s window too.' },
             { keys: '\\', text: 'Open or close the Session panel.' },
             { keys: 'Q', text: 'Write a question of your own (Call & Answer): the Session menu opens at Rounds with the composer.' },
             { keys: 'F', text: 'Full screen for the window you are in, and back.' },
@@ -392,7 +398,8 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Two screens', text: 'Press **Join** and the code on the top bar, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; **Join** stays pressed on your laptop while it is up, and nothing covers your console. Press **Join** again, or J, to take it down. In the lobby the room\'s window shows it already.' },
+            { title: 'On your laptop', text: 'Point at **Join** and the code on the top bar, or tab to it: a card under it shows the QR, the code and the address on your laptop alone, for someone who walks up. Click the code to keep the card open; Esc or its close button shuts it. The room\'s window does not change.' },
+            { title: 'Two screens', text: 'Press **Show on the room\'s screen** in that card, or J. During a round the room\'s window shows the QR, the address and the code beside what is up, and squeezes the rest to fit; **Join** stays pressed on your laptop while it is up, and nothing covers your console. Press **Take it off the room\'s screen**, or J, to take it down. In the lobby the room\'s window shows it already.' },
             { title: 'From your phone', text: '**Join code**, then **Display on screen** (and **Take it off the screen**).' },
             { title: 'One screen', text: 'During a round, J, the code on the stage\'s rail, or **Show join code** in the Session menu, under Joining, puts the QR in a panel beside the round; J again hides it. Outside a round the code covers the stage until you click.' },
           ],
@@ -414,7 +421,11 @@ const twoScreens = {
         },
         {
           t: 'p',
-          text: 'Not signed in, or signed in as someone else, the keys do nothing and the window says why.',
+          text: 'The scoreboard keys work here too: S shows or hides it, and while it is up V changes its look, ← and → (or the clicker) turn its pages, and Esc or Space take it down. J shows or hides the join code and F fills the screen, as on the laptop. \\, Q and + stay on the laptop.',
+        },
+        {
+          t: 'p',
+          text: 'Not signed in, or signed in as someone else, the keys do nothing and the window says why. Anyone else watching the room\'s window cannot change it.',
         },
       ],
     },

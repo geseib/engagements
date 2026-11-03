@@ -9400,6 +9400,9 @@ Focus on actionable business strategy insights.`;
               ? () => { if (setupChoice) setScreenCheckedFor(gameId); }
               : () => setQrMode((mode) => (mode === 'pinned' ? null : 'pinned')),
             joinPressed: setupFrame && !twoSurfaces ? undefined : qrMode === 'pinned',
+            // TWO SCREENS (owner, 3 Nov 2026): the code's QR on this laptop on
+            // hover or click, the room's toggle inside that card (JoinCodeChip).
+            joinQr: twoSurfaces ? { playUrl, joinUrl: joinDisplayUrl } : null,
             codeProps: setupFrame && !setupChoice
               ? { disabled: true, title: SETUP_WORDS.part.where.after.trim() }
               : null,
@@ -9593,6 +9596,7 @@ Focus on actionable business strategy insights.`;
             oneScreen={!twoSurfaces}
             onJoin={toggleJoinCode}
             joinPressed={joinCodeUp}
+            joinQr={twoSurfaces ? { playUrl, joinUrl: joinDisplayUrl } : null}
             presentHref={twoSurfaces && gameId ? presentHref(gameId) : ''}
             presentDetail={presentDetail}
             short

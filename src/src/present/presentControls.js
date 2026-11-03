@@ -18,12 +18,27 @@
  *
  * 250 ms per key, so a clicker's double pulse is one press. Keys never act
  * while a text field has focus or with a modifier held (that is the browser's).
+ *
+ * THE SCOREBOARD FROM THE ROOM'S WINDOW (owner, 3 Nov 2026: "the scoreboard
+ * shortcut key should work on two screen mode from either screen in focus").
+ * S shows and hides it, and while it is up V changes its look, ← / → (and a
+ * clicker's page keys) turn its pages, and Esc or Space take it down — the
+ * host page's own map (config/scoreboard.js scoreboardKeyIntent). Each is the
+ * same POST /games/{id}/scoreboard the host page sends (useScoreboardSync), so
+ * the host's laptop hears the change on its `scoreboardChanged` frame like any
+ * other. Armed exactly as the other keys are: only after the host's door said
+ * 200, and the server checks `callerMayDriveSession` again. A viewer of a
+ * public /present link is never armed, so S there only says why on the strip.
+ * Never for a session type with no board (Poll, Wavelength).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch, getAuthToken } from '../auth/authFetch';
 import { remoteStep, requestFor } from '../config/hostRemote';
 import { presentKeyStep } from './presentKeys';
 import { joinShown, joinRequest } from '../config/stageFocus';
+import {
+  hasScoreboard, nextStyle, normaliseScoreboard, scoreboardKeyIntent, scoreboardRequest,
+} from '../config/scoreboard';
 
 /**
  * THE ROUND'S OWN NEXT STEP FROM THE WALL (owner, 2026-10-13: "when
@@ -44,6 +59,10 @@ export const KEY_DEBOUNCE_MS = 250;
 const FORWARD = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Spacebar']);
 const BACK = new Set(['ArrowLeft', 'ArrowUp', 'PageUp']);
 const TYPING = { INPUT: true, TEXTAREA: true, SELECT: true };
+const isTyping = (event) => {
+  const t = event && event.target;
+  return Boolean(t && ((t.tagName && TYPING[t.tagName]) || t.isContentEditable));
+};
 
 /** 'forward', 'back' or null for a key event. */
 export function keyDirection(event) {
@@ -277,8 +296,68 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
     }
   }, [gameId, recheck, showStrip, after]);
 
+  // THE SCOREBOARD (header): the host page's request, from this window.
+  const board = normaliseScoreboard(snapshot && snapshot.scoreboard);
+  const boardTyped = hasScoreboard(snapshot && snapshot.gameType);
+  live.current.board = board;
+  live.current.boardTyped = boardTyped;
+  const changeScoreboard = useCallback(async (change) => {
+    const now = Date.now();
+    if (now - lastRef.current < KEY_DEBOUNCE_MS) return;
+    lastRef.current = now;
+    let a = live.current.access;
+    if (a !== 'host') a = await recheck();
+    if (a !== 'host') { showStrip(); return; }
+    const body = scoreboardRequest(change);
+    if (!body) return;
+    try {
+      // A 409 (no round scored yet) changes nothing; the board stays as it is.
+      await authFetch(`${apiBase()}games/${gameId}/scoreboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      /* the wall keeps what it shows; the next press tries again */
+    } finally {
+      after();
+    }
+  }, [gameId, recheck, showStrip, after]);
+
+  /** The board's share of a key press, or false when the key is not the board's. */
+  const boardKey = useCallback((event) => {
+    if (!live.current.boardTyped) return false;
+    const open = live.current.board.open;
+    const intent = scoreboardKeyIntent(event, { open });
+    if (intent === 'toggle') {
+      event.preventDefault();
+      changeScoreboard({ open: !open });
+      return true;
+    }
+    if (!open) return false;
+    if (intent === 'style') {
+      event.preventDefault();
+      changeScoreboard({ style: nextStyle(live.current.board.style) });
+      return true;
+    }
+    if (intent === 'close') {
+      // Space closes and does not advance, as on the host page.
+      event.preventDefault();
+      changeScoreboard({ open: false });
+      return true;
+    }
+    // ← / → and a clicker's keys page the board; they never move the wall
+    // hidden under it.
+    const dir = intent === 'next' ? 'forward' : intent === 'prev' ? 'back' : keyDirection(event);
+    if (!dir) return false;
+    event.preventDefault();
+    changeScoreboard({ step: dir === 'forward' ? 'next' : 'prev' });
+    return true;
+  }, [changeScoreboard]);
+
   const onKey = useCallback((event) => {
     if (!event || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (isTyping(event)) return;
     if (event.key === 'j' || event.key === 'J') {
       event.preventDefault();
       toggleJoin();
@@ -289,11 +368,12 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
       if (event.key === 'Enter') runConfirmed(); else closeConfirm();
       return;
     }
+    if (!live.current.confirm && boardKey(event)) return;
     const dir = keyDirection(event);
     if (!dir) return;
     event.preventDefault();
     move(dir, { vertical: isVerticalKey(event) });
-  }, [move, toggleJoin, runConfirmed, closeConfirm]);
+  }, [move, toggleJoin, runConfirmed, closeConfirm, boardKey]);
 
   // Keys are always heard, so a press while the controls are off says why.
   useEffect(() => {
@@ -320,5 +400,6 @@ export default function usePresentControls({ gameId, snapshot, total, overview =
     confirmCancel: closeConfirm,
     toggleJoin,
     joinShown: qrShown,
+    scoreboardOpen: board.open,
   };
 }
