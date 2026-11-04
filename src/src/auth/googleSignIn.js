@@ -117,6 +117,43 @@ export async function startGoogleSignIn(mode = 'login') {
  */
 export const isGoogleUsername = (username) => /^google_/i.test(String(username || ''));
 
+/**
+ * Was this sign-in made through Google? The username prefix covers a user
+ * Cognito created from Google (`google_<sub>`); the ID token's `identities`
+ * claim also covers a native account LINKED to Google, whose username is not
+ * google_* but whose Google sign-in still leaves a hosted session behind.
+ * `identities` arrives as an array, or as a JSON string from some SDK paths.
+ */
+export function isGoogleSession(username, idTokenPayload) {
+  if (isGoogleUsername(username)) return true;
+  let ids = idTokenPayload && idTokenPayload.identities;
+  if (typeof ids === 'string') {
+    try { ids = JSON.parse(ids); } catch (_) { ids = null; }
+  }
+  return Array.isArray(ids) && ids.some((i) => i && (
+    /^google$/i.test(String(i.providerName || '')) || /^google$/i.test(String(i.providerType || ''))
+  ));
+}
+
+/*
+ * WHY SAFARI NEVER OFFERS ANOTHER GOOGLE ACCOUNT (owner, 2026-11-04).
+ *
+ * `prompt=select_account` in googleAuthorizeUrl above is NOT passed on to
+ * Google by these pools. Cognito's /oauth2/authorize documents `prompt` as
+ * "Available in the managed login branding version only, not in the classic
+ * hosted UI", and template-clean.yaml's UserPoolDomainV2 sets no
+ * ManagedLoginVersion, i.e. classic. So Google is asked with no prompt at all,
+ * and Google answers silently with the one account the browser is signed in
+ * to. Chrome users usually have several Google accounts signed in, so Google
+ * shows its chooser anyway; a Safari user usually has one, so it never asks.
+ *
+ * Until the domain moves to managed login (an AWS-side change), the only way
+ * to a different account is through Google itself: add or switch the account
+ * at Google, and with two signed in Google asks which one. LoginForm's "Use a
+ * different Google account" says so and links here.
+ */
+export const GOOGLE_ACCOUNT_CHOOSER_URL = 'https://accounts.google.com/AccountChooser';
+
 export function hostedLogoutUrl() {
   const clientId = window.USER_POOL_CLIENT_ID || process.env.REACT_APP_CLIENT_ID;
   const userPoolId = window.USER_POOL_ID || process.env.REACT_APP_USER_POOL_ID;
