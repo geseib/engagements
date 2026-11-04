@@ -527,7 +527,13 @@ function GameHostPage() {
     comes from the server.
   */
   const [phaseSeenAt, setPhaseSeenAt] = useState({});
-  useEffect(() => { setPhaseSeenAt({}); }, [gameId]);
+  /* THE PHASE THAT WAS ALREADY UNDER WAY when this page loaded (the owner's
+     "Took 10:30:37", 4 Nov 2026). Its entry in phaseSeenAt is the load time,
+     not the moment it began, and the pulse subtracted the round's server start
+     from it — so reopening the console at Results reported "Took" as however
+     long ago the round opened. `seenFor` below treats it as not witnessed. */
+  const phaseAtLoadRef = useRef(null);
+  useEffect(() => { setPhaseSeenAt({}); phaseAtLoadRef.current = null; }, [gameId]);
   /*
     THE ROUND TIMER (experience plan 2f; config/roundTimer.js, server half
     lambda-functions/game/round-timer.js). `timeChoices` is what the time
@@ -556,6 +562,7 @@ function GameHostPage() {
   }, []);
   useEffect(() => {
     if (!gameState) return;
+    if (phaseAtLoadRef.current === null) phaseAtLoadRef.current = gameState;
     setPhaseSeenAt((seen) => (seen[gameState] ? seen : { ...seen, [gameState]: Date.now() }));
   }, [gameState]);
   // The workflow strip's step the host is LOOKING at (session flow v3 §4.8),
@@ -9001,7 +9008,9 @@ Focus on actionable business strategy insights.`;
   const seenFor = (prefix) => {
     if (!pulseRound) return null;
     const key = `${prefix}#${pulseRound}`;
-    const ts = Object.entries(phaseSeenAt).filter(([k]) => k === key || k.startsWith(`${key}#`)).map(([, t]) => t);
+    const ts = Object.entries(phaseSeenAt)
+      .filter(([k]) => (k === key || k.startsWith(`${key}#`)) && k !== phaseAtLoadRef.current)
+      .map(([, t]) => t);
     return ts.length ? Math.min(...ts) : null;
   };
   const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
