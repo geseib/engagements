@@ -748,7 +748,13 @@ export default function SessionSetupPanel({
       </div>
       {phoneOpen ? (
         <div className="smenu-phone" data-testid="phone-qr">
-          <QRCodeSVG value={remoteUrl} size={160} />
+          {/* SCANNABLE BY MORE THAN THE iPHONE CAMERA (owner, 4 Nov 2026: Google
+              Lens on an iPhone 15 could not read this off a 14in MacBook until
+              the screen was zoomed 1.5x). At 160px with an 8px pad the code had
+              ~5.5px modules and a third of the quiet zone the spec asks for, on
+              a dark panel; Lens needs both. Now 256px with the four-module
+              white margin drawn inside the code. */}
+          <QRCodeSVG value={remoteUrl} size={256} marginSize={4} />
           <p className="setup-note">Scan with your own phone to drive the room from it.</p>
           <p className="setup-url">{remoteUrl}</p>
           {remoteWho ? (
@@ -1301,6 +1307,7 @@ export default function SessionSetupPanel({
         players={players}
         gameState={gameState}
         oneScreen={oneScreen}
+        gameId={gameId}
         peopleColumn={peopleColumn}
         onGrant={onGrantHandover}
         onRefuse={onRefuseHandover}

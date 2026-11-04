@@ -67,6 +67,8 @@ export default function SessionPeople({
   players = [],
   gameState = '',
   oneScreen = false,
+  // Keys the one-screen show/hide choice to this session (PrivateReveal `remember`).
+  gameId = '',
   peopleColumn = false,
   onGrant = () => {},
   onRefuse = null,
@@ -154,6 +156,7 @@ export default function SessionPeople({
       <PrivateReveal
         oneScreen={oneScreen}
         testId="private-people"
+        remember={gameId ? `${gameId}.people` : ''}
         summary={`${peopleCountLine({ rows, departed })}. ${PEOPLE_WORDS.onPhone}`}
       >
         {list}

@@ -109,6 +109,28 @@ test('one screen: People is a count, and the names wait behind Show on this scre
   expect([...document.querySelectorAll('.prow-name')].map((n) => n.textContent)).toEqual(expect.arrayContaining(['Priya', 'Sam Okafor']));
 });
 
+// Owner, 4 Nov 2026: the one-screen People choice is kept for the session,
+// until the host changes it — the panel closing must not reset it.
+test('one screen: showing People is kept for the session, across the panel closing, until Hide', () => {
+  window.localStorage.clear();
+  const first = renderPanel({ oneScreen: true, initialTab: 'players' });
+  const gate = screen.getByTestId('private-people');
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show on this screen' }));
+  fireEvent.click(within(gate).getByRole('button', { name: 'Show it' }));
+  first.unmount();
+
+  const again = renderPanel({ oneScreen: true, initialTab: 'players' });
+  expect(screen.getByTestId('private-people-shown')).toBeInTheDocument();
+  expect(document.querySelector('.prow-name')).not.toBeNull();
+  fireEvent.click(within(screen.getByTestId('private-people-shown')).getByRole('button', { name: 'Hide' }));
+  again.unmount();
+
+  renderPanel({ oneScreen: true, initialTab: 'players' });
+  expect(screen.getByTestId('private-people')).toBeInTheDocument();
+  expect(document.querySelector('.prow-name')).toBeNull();
+  window.localStorage.clear();
+});
+
 test('Show on this screen asks first, then shows that one part', () => {
   renderPanel({ oneScreen: true, initialTab: 'history' });
   fireEvent.click(screen.getByTestId('late-review'));
