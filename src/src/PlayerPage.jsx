@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useMediaQuery from './hooks/useMediaQuery';
 import Button from './components/ui/Button';
 import webSocketClient from './WebSocketClient';
 import Icon from './components/Icon';
@@ -55,6 +56,12 @@ import { rankResponses } from './config/responseOrder';
 import RoomTimeLine from './components/RoomTimeLine';
 import { timerOnPhase } from './config/roundTimer';
 import { noteServerNow } from './utils/serverClock';
+
+/** Past this many characters a headline is a passage (PlayerSurface.css `.plr-q--long`). */
+const LONG_HEADLINE = 160;
+
+/** Matches PlayerSurface.css §2b's media query exactly. */
+export const WIDE_COMPOSE_QUERY = '(min-width: 1024px) and (orientation: landscape)';
 
 const API_BASE = window.API_BASE;
 
@@ -441,6 +448,9 @@ function PlayerPage({ event = null } = {}) {
   const [myFeedbackDrafts, setMyFeedbackDrafts] = useState({});
   const [playerName, setPlayerName] = useState('');
   const [nameInput, setNameInput] = useState('');
+  // Read by the event redirect, which runs in an effect keyed on the code.
+  const nameInputRef = useRef('');
+  nameInputRef.current = nameInput;
   const [accessCodeInput, setAccessCodeInput] = useState('');
   const [needsAccessCode, setNeedsAccessCode] = useState(false);
   const [joined, setJoined] = useState(false);
@@ -575,6 +585,11 @@ function PlayerPage({ event = null } = {}) {
   */
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
   const [showFullQuestion, setShowFullQuestion] = useState(false);
+  /* A LAPTOP OR A TABLET HELD SIDEWAYS (owner, 4 Nov 2026: "the screen should
+     be laid out well to read and write, no need for a narrow scroll"). There
+     the answer screen reads on the left and writes on the right, and nothing
+     folds: no soft keyboard covers half of it. PlayerSurface.css §2b. */
+  const wideCompose = useMediaQuery(WIDE_COMPOSE_QUERY);
   const [gameIdFromUrl, setGameIdFromUrl] = useState(false);
   /*
     Has the player asked to type a code over the one the link supplied?
@@ -1098,7 +1113,12 @@ function PlayerPage({ event = null } = {}) {
           // event" leaves this page exactly as it was.
           if (res.status === 404 && !eventRef.current) {
             const kind = await resolveJoinCode(briefCode, { apiBase: API_BASE });
-            if (!cancelled && kind === 'event') navigateTo(joinPathFor(briefCode, kind));
+            if (!cancelled && kind === 'event') {
+              // A name already typed goes with it: the event page joins as
+              // THAT person rather than whoever this browser held (4 Nov).
+              const typedName = String(nameInputRef.current || '').trim();
+              navigateTo(`${joinPathFor(briefCode, kind)}${typedName ? `&name=${encodeURIComponent(typedName)}` : ''}`);
+            }
           }
           return;
         }
@@ -4044,6 +4064,8 @@ function PlayerPage({ event = null } = {}) {
   let centre = false;
   let dock = null;
   let body = null;
+  // The answer screen's read-and-write layout (PlayerShell `wide`).
+  let composing = false;
   /* A send the server took is showing as "Sent" (owner, 3 Nov). The shell's
      live region says it once; a held send never sets it. */
   let sentShowing = false;
@@ -4305,12 +4327,14 @@ function PlayerPage({ event = null } = {}) {
        cannot both have them. Focus is the trigger because no browser reliably
        reports the keyboard's height. The control that undoes it is rendered
        with it, always — a fold, not a deletion. */
-    const folded = isAnswerInputFocused && !showFullQuestion;
+    const folded = isAnswerInputFocused && !showFullQuestion && !wideCompose;
+    // A passage, not a question: read at body size rather than shouted (4 Nov).
+    const longHeadline = String(headline || '').length > LONG_HEADLINE;
 
     const questionBlock = (
       <>
         {subtitle && !folded && <p className="plr-lab">{subtitle}</p>}
-        <p className={`plr-q${folded ? ' plr-q--fold' : ''}`}>{headline}</p>
+        <p className={`plr-q${folded ? ' plr-q--fold' : longHeadline ? ' plr-q--long' : ''}`}>{headline}</p>
         {folded ? (
           <button
             type="button"
@@ -4554,11 +4578,14 @@ function PlayerPage({ event = null } = {}) {
            were answering — carrying THREE submit affordances at once (an
            airplane icon, a button inside its form, and the form beneath it once
            dismissed). The question folds instead. */
+        composing = true;
         body = (
-          <>
-            {questionBlock}
-            {taskBlock}
-            <form id="plr-answer-form" onSubmit={handleSubmitAnswer}>
+          <div className="plr-compose">
+            <div className="plr-compose__read">
+              {questionBlock}
+              {taskBlock}
+            </div>
+            <form id="plr-answer-form" className="plr-compose__write" onSubmit={handleSubmitAnswer}>
               <label className="plr-lab" htmlFor="plr-answer">Your response</label>
               <textarea
                 id="plr-answer"
@@ -4586,7 +4613,7 @@ function PlayerPage({ event = null } = {}) {
               </p>
               <input type="submit" hidden aria-hidden="true" tabIndex={-1} />
             </form>
-          </>
+          </div>
         );
         dock = (
           <>
@@ -5381,6 +5408,7 @@ function PlayerPage({ event = null } = {}) {
       online={wsConnected}
       banner={offlineBanner || lateBanner || missedBanner}
       centre={centre}
+      wide={composing}
       dock={dock}
       sent={sentShowing}
       help={playerHelpScreen(gameState, myFeedbackShowing)}

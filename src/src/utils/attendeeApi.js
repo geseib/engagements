@@ -76,20 +76,31 @@ export const whoAmI = (code, token) => call(`events/${enc(code)}/me`, {
  * can say "Priya" before /me answers. Every read and write is wrapped:
  * private browsing can throw on localStorage, and an attendee who cannot keep
  * a token simply types their name again next time.
+ *
+ * TWO COPIES, BECAUSE A BROWSER IS NOT A PERSON (owner, 4 Nov 2026: "when
+ * another person tries to use /play and enters a new name, it is ignored and
+ * the previous name is used"). localStorage is shared by every tab and every
+ * person who picks up the laptop, so on its own it silently made the next
+ * person the last one. The same key in sessionStorage is THIS TAB's identity:
+ * a reload resumes from it without a word, while a new tab (a scanned code, a
+ * typed one, a second person) finds only the browser's copy and is asked
+ * "Continue as Priya?" first — the session join's rejoin prompt (B2), for an
+ * event. `thisTab` says which copy answered.
  */
 export const attendeeKey = (code) => `engage.event.${code}`;
 
-function store() {
+function store(kind = 'localStorage') {
   try {
-    return window.localStorage || null;
+    return window[kind] || null;
   } catch (_) {
     return null;
   }
 }
 
-export function readAttendee(code) {
+function readFrom(kind, code) {
   try {
-    const raw = store() && store().getItem(attendeeKey(code));
+    const box = store(kind);
+    const raw = box && box.getItem(attendeeKey(code));
     const parsed = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed.token === 'string' && parsed.token) {
       return { token: parsed.token, name: typeof parsed.name === 'string' ? parsed.name : '' };
@@ -98,14 +109,29 @@ export function readAttendee(code) {
   return null;
 }
 
+/** `{ token, name, thisTab }` — this tab's own identity first, else the browser's — or null. */
+export function readAttendee(code) {
+  const tab = readFrom('sessionStorage', code);
+  if (tab) return { ...tab, thisTab: true };
+  const browser = readFrom('localStorage', code);
+  return browser ? { ...browser, thisTab: false } : null;
+}
+
 export function saveAttendee(code, { token, name }) {
-  try {
-    if (store()) store().setItem(attendeeKey(code), JSON.stringify({ token, name }));
-  } catch (_) { /* this browser cannot keep it; the attendee is still in for this visit */ }
+  const value = JSON.stringify({ token, name });
+  for (const kind of ['localStorage', 'sessionStorage']) {
+    try {
+      const box = store(kind);
+      if (box) box.setItem(attendeeKey(code), value);
+    } catch (_) { /* this browser cannot keep it; the attendee is still in for this visit */ }
+  }
 }
 
 export function forgetAttendee(code) {
-  try {
-    if (store()) store().removeItem(attendeeKey(code));
-  } catch (_) { /* nothing to forget */ }
+  for (const kind of ['localStorage', 'sessionStorage']) {
+    try {
+      const box = store(kind);
+      if (box) box.removeItem(attendeeKey(code));
+    } catch (_) { /* nothing to forget */ }
+  }
 }

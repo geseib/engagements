@@ -348,6 +348,52 @@
   justify-content: center;
 }
 
+/* --- 2b. READ AND WRITE, SIDE BY SIDE (owner, 4 Nov 2026) ---------------------
+   "When a participant is using a laptop or tablet the screen should be laid out
+   well to read and write, no need for a narrow scroll." A call-and-answer brief
+   can run to a dozen lines; in the single 660px column above it pushed the
+   composer below the fold, so the participant scrolled away from what they were
+   answering to write the answer. On a laptop, or a tablet held sideways, the
+   answer screen (`PlayerShell wide`) becomes two columns: the brief and the
+   task on the left, the response on the right, beside it, never below it.
+
+   ONLY WHERE THERE IS ROOM AND NO SOFT KEYBOARD. Landscape and 1024px+, the
+   same query PlayerPage reads (WIDE_COMPOSE_QUERY) so the question stops
+   folding exactly where this layout starts: there is no keyboard here to fold
+   for. A phone, and a tablet held upright, keep the one column they have.
+
+   THE GUTTER STILL ABSORBS THE EXCESS (§5.1), it just absorbs less: 1240px of
+   content rather than 660, so a 2000px window is not a phone layout stretched,
+   and not a 2000px line either. The dock's padding puts Send under the write
+   column, where the eye already is when the answer is done. */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .plr[data-layout="wide"] {
+    --plr-write: 400px;
+    --plr-gut: clamp(36px, calc((100% - 1240px) / 2), 25%);
+  }
+  .plr[data-layout="wide"] .plr-compose {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--plr-write);
+    column-gap: 44px;
+    align-items: start;
+  }
+  .plr[data-layout="wide"] .plr-compose__read { min-width: 0; }
+  /* The composer stays in view while a long brief is read beside it. */
+  .plr[data-layout="wide"] .plr-compose__write {
+    position: sticky;
+    top: 0;
+    min-width: 0;
+  }
+  .plr[data-layout="wide"] .plr-compose__write .plr-inp--area { min-height: 240px; }
+  .plr[data-layout="wide"] .plr-dock {
+    padding-left: calc(100% - var(--plr-gut) - var(--plr-write));
+  }
+}
+
+@media (min-width: 1200px) and (orientation: landscape) {
+  .plr[data-layout="wide"] { --plr-write: 440px; }
+}
+
 /* THE DOCK IS A FLEX ROW, NOT position:fixed (§5.1). A grid or flex row has no
    fold. `position: fixed` on iOS Safari interacts badly with the collapsing URL
    bar and with the soft keyboard, which is how a primary action ends up
@@ -431,6 +477,18 @@
   font-size: var(--plr-t-body);
   font-weight: 600;
   line-height: 1.4;
+}
+
+/* A PASSAGE, NOT A QUESTION (4 Nov 2026). A call-and-answer brief of several
+   sentences set at the question's size read as a wall: 600 characters at 32px
+   on a laptop is twenty lines. Past 160 characters (PlayerPage LONG_HEADLINE)
+   the headline drops to the answers' size and a reading weight; it is still
+   the largest text on the screen after the heading. */
+.plr-q.plr-q--long {
+  font-size: var(--plr-t-secondary);
+  font-weight: 600;
+  line-height: 1.42;
+  letter-spacing: 0;
 }
 
 .plr-detail {

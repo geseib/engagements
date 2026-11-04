@@ -274,6 +274,7 @@ describe('the phone, following the talk', () => {
     restore();
     restore = stubBox('evp-deck-slide', 360, 225);
     window.localStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Priya Raman' }));
+    window.sessionStorage.setItem(`engage.event.${CODE}`, JSON.stringify({ token: 'tok', name: 'Priya Raman' }));
     attendee.whoAmI.mockResolvedValue({ attendee: { name: 'Priya Raman' } });
     attendee.getAgenda.mockResolvedValue(agenda);
     attendee.getDeck.mockResolvedValue({ id: DECK.id, url: 'https://media.test/decks/x.pdf', pages: 12, page: 3 });

@@ -55,6 +55,17 @@ const POLL_MS = 4000;
 const FULL_READ_MS = 60000;
 const BEAT_MS = 1200;
 
+/** The name typed on /play's form, carried here as `?name=` (or ''). */
+const typedNameFromUrl = () => {
+  try {
+    return String(new URLSearchParams(window.location.search).get('name') || '').trim().slice(0, 80);
+  } catch (_) {
+    return '';
+  }
+};
+/** Whether two names are one person's, as a host would read them. */
+const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || '';
 
 // p-06 / p-09: an engagement is named by its kind ("Trivia · How well…"),
@@ -71,7 +82,10 @@ function ItemTypeIcon({ type }) {
 }
 
 export default function EventAttendeePage({ code }) {
-  const [phase, setPhase] = useState('loading'); // loading | missing | error | name | ready
+  const [phase, setPhase] = useState('loading'); // loading | missing | error | name | confirm | ready
+  // The browser's earlier attendee, when this tab has not been anyone yet:
+  // `{ token, name }`, asked about before it is resumed (phase 'confirm').
+  const [earlier, setEarlier] = useState(null);
   const [agenda, setAgenda] = useState(null);
   const [attendee, setAttendee] = useState(null);
   const [nameInput, setNameInput] = useState('');
@@ -144,11 +158,25 @@ export default function EventAttendeePage({ code }) {
       }
       if (cancelled || !first) return;
       const saved = api.readAttendee(code);
+      // A NAME TYPED ON THE WAY IN (/play's form, carried as `?name=`): that
+      // person, never whoever this browser held before.
+      const typed = typedNameFromUrl();
+      if (saved && typed && sameName(saved.name, typed) === false) {
+        if (!cancelled) joinAs(typed, first.event.liveItemId);
+        return;
+      }
+      // A NEW TAB ON A BROWSER SOMEBODY ALREADY USED: ask, never assume.
+      if (saved && !saved.thisTab && !typed && first.event.state !== 'ENDED') {
+        setEarlier({ token: saved.token, name: saved.name });
+        setPhase('confirm');
+        return;
+      }
       if (saved) {
         try {
           const me = await api.whoAmI(code, saved.token);
           if (cancelled) return;
           const who = { token: saved.token, name: (me.attendee && me.attendee.name) || saved.name };
+          api.saveAttendee(code, who);
           setAttendee(who);
           setPhase('ready');
           applyLive(first.event.liveItemId);
@@ -167,6 +195,10 @@ export default function EventAttendeePage({ code }) {
           }
         }
       }
+      if (typed && first.event.state !== 'ENDED') {
+        joinAs(typed, first.event.liveItemId);
+        return;
+      }
       // The day is over and this browser never joined: the agenda, to read.
       if (first.event.state === 'ENDED') {
         setPhase('ready');
@@ -175,7 +207,7 @@ export default function EventAttendeePage({ code }) {
       setPhase('name');
     })();
     return () => { cancelled = true; };
-  }, [code, readAgenda, applyLive]);
+  }, [code, readAgenda, applyLive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Following ─────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -232,6 +264,32 @@ export default function EventAttendeePage({ code }) {
   }, [phase, code, readAgenda, applyLive]);
 
   // ── Joining, once ─────────────────────────────────────────────────────────
+  /** Join the event as `name`; `liveId` is what is live, for landing in it. */
+  const joinAs = async (name, liveId) => {
+    setJoining(true);
+    setJoinError('');
+    try {
+      const res = await api.joinEvent(code, name);
+      const who = { token: res.token, name: (res.attendee && res.attendee.name) || name };
+      api.saveAttendee(code, who);
+      if (!mounted.current) return;
+      setEarlier(null);
+      setAttendee(who);
+      setPhase('ready');
+      applyLive(liveId || '');
+    } catch (error) {
+      if (!mounted.current) return;
+      if (error && error.status === 404) setPhase('missing');
+      else {
+        setNameInput(name);
+        setJoinError((error && error.message) || 'Could not join. Try again.');
+        setPhase('name');
+      }
+    } finally {
+      if (mounted.current) setJoining(false);
+    }
+  };
+
   const submitName = async (e) => {
     if (e) e.preventDefault();
     const name = nameInput.trim();
@@ -239,18 +297,37 @@ export default function EventAttendeePage({ code }) {
       setJoinError('Type your name.');
       return;
     }
+    await joinAs(name, agenda && agenda.event ? agenda.event.liveItemId : '');
+  };
+
+  /** "Continue as Priya": the browser's earlier attendee, now this tab's too. */
+  const continueAsEarlier = async () => {
+    const saved = earlier;
+    if (!saved) return;
     setJoining(true);
-    setJoinError('');
+    const liveId = agenda && agenda.event ? agenda.event.liveItemId : '';
     try {
-      const res = await api.joinEvent(code, name);
-      const who = { token: res.token, name: (res.attendee && res.attendee.name) || name };
+      const me = await api.whoAmI(code, saved.token);
+      const who = { token: saved.token, name: (me.attendee && me.attendee.name) || saved.name };
       api.saveAttendee(code, who);
+      if (!mounted.current) return;
+      setEarlier(null);
       setAttendee(who);
       setPhase('ready');
-      applyLive(agenda && agenda.event ? agenda.event.liveItemId : '');
+      applyLive(liveId);
     } catch (error) {
-      if (error && error.status === 404) setPhase('missing');
-      else setJoinError((error && error.message) || 'Could not join. Try again.');
+      if (!mounted.current) return;
+      if (error && (error.status === 401 || error.status === 404)) {
+        api.forgetAttendee(code);
+        setEarlier(null);
+        setPhase('name');
+      } else {
+        api.saveAttendee(code, saved);
+        setEarlier(null);
+        setAttendee(saved);
+        setPhase('ready');
+        applyLive(liveId);
+      }
     } finally {
       if (mounted.current) setJoining(false);
     }
@@ -258,6 +335,7 @@ export default function EventAttendeePage({ code }) {
 
   const notYou = () => {
     api.forgetAttendee(code);
+    setEarlier(null);
     setAttendee(null);
     setNameInput('');
     setView('agenda');
@@ -353,6 +431,35 @@ export default function EventAttendeePage({ code }) {
             {phase === 'missing'
               ? <a className="plr-linkish" href="/join">Type a different code</a>
               : <button type="button" className="plr-linkish" onClick={() => window.location.reload()}>Try again</button>}
+          </p>
+        </div>
+      </EventShell>
+    );
+  }
+
+  if (phase === 'confirm' && earlier) {
+    const them = earlier.name || 'the last person';
+    return (
+      <EventShell
+        phase="join"
+        volume="act"
+        ctx={title}
+        dock={(
+          <>
+            <Button variant="primary" size={56} onClick={continueAsEarlier} disabled={joining}>
+              {joining ? 'Joining…' : `Continue as ${firstName(them) || them}`}
+            </Button>
+            <Button variant="secondary" size={44} onClick={notYou} disabled={joining}>
+              I&rsquo;m someone else
+            </Button>
+          </>
+        )}
+      >
+        <div className="evp">
+          <p className="evp-when">{rules.formatEventDay(event.startsAt)}{event.place ? ` · ${event.place}` : ''}</p>
+          <h1 className="plr-h1">{`Are you ${them}?`}</h1>
+          <p className="plr-lede plr-muted">
+            {`This browser joined ${title} as ${them}. If that is you, carry on where you were. If not, join with your own name.`}
           </p>
         </div>
       </EventShell>
