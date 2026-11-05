@@ -1,0 +1,1036 @@
+{
+  "title": "Space: Cosmic Curiosities",
+  "description": "60 questions from planetary plot twists to cosmic detective work. Explore strange worlds, historic missions, astronaut life, and the science behind the sky—with surprising reveals and no astronaut training required.",
+  "categories": [
+    "Planetary Plot Twists",
+    "Moons & Small Worlds",
+    "Mission Milestones",
+    "Astronaut Life",
+    "Cosmic Wonders",
+    "Sky Detective"
+  ],
+  "questions": [
+    {
+      "id": "space-01",
+      "category": "Planetary Plot Twists",
+      "difficulty": "easy",
+      "question": "Mercury is closest to the Sun, but which planet wins the hottest-surface contest?",
+      "options": [
+        "Neptune",
+        "Jupiter",
+        "Mars",
+        "Venus"
+      ],
+      "correctIndex": 3,
+      "explanation": "Venus traps enormous amounts of heat beneath its thick atmosphere. Being closest to the Sun is not the whole recipe for a planetary oven!",
+      "sources": [
+        "https://science.nasa.gov/venus/venus-facts/"
+      ]
+    },
+    {
+      "id": "space-02",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "On Venus, which takes longer: one full spin relative to the stars or one trip around the Sun?",
+      "options": [
+        "One trip around the Sun",
+        "Venus does not spin",
+        "One full spin",
+        "They take exactly the same time"
+      ],
+      "correctIndex": 2,
+      "explanation": "Venus takes about 243 Earth days to rotate and about 225 to orbit the Sun. This compares rotation with a year, not the interval from one sunrise to the next.",
+      "sources": [
+        "https://science.nasa.gov/venus/venus-facts/"
+      ]
+    },
+    {
+      "id": "space-03",
+      "category": "Planetary Plot Twists",
+      "difficulty": "easy",
+      "question": "Mars looks rusty because its soil contains what?",
+      "options": [
+        "Oxidized iron minerals",
+        "Crushed rubies",
+        "Liquid copper",
+        "Red food coloring"
+      ],
+      "correctIndex": 0,
+      "explanation": "Iron minerals react with oxygen to form oxides, a process familiar as rusting. The Red Planet has a remarkably down-to-Earth reason for its color.",
+      "sources": [
+        "https://science.nasa.gov/mars/facts/"
+      ]
+    },
+    {
+      "id": "space-04",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "A Mars rover team schedules work by the sol. What is a sol?",
+      "options": [
+        "A rover wheel rotation",
+        "A Martian season",
+        "A Martian solar day",
+        "A Martian year"
+      ],
+      "correctIndex": 2,
+      "explanation": "A sol is a day on Mars, slightly longer than a day on Earth. Your Mars alarm clock would need a little extra patience.",
+      "sources": [
+        "https://science.nasa.gov/mars/facts/"
+      ]
+    },
+    {
+      "id": "space-05",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "Jupiter’s Great Red Spot is an enormous what?",
+      "options": [
+        "Volcano",
+        "Storm",
+        "Impact crater",
+        "Ocean"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Great Red Spot is a long-lived storm in Jupiter’s atmosphere. That famous spot is weather, not a permanent painted landmark.",
+      "sources": [
+        "https://science.nasa.gov/jupiter/jupiter-facts/"
+      ]
+    },
+    {
+      "id": "space-06",
+      "category": "Planetary Plot Twists",
+      "difficulty": "hard",
+      "question": "Which pair are classified as ice giants rather than gas giants?",
+      "options": [
+        "Venus and Mercury",
+        "Jupiter and Saturn",
+        "Uranus and Neptune",
+        "Earth and Mars"
+      ],
+      "correctIndex": 2,
+      "explanation": "Uranus and Neptune are the ice giants; Jupiter and Saturn are the gas giants. These labels describe their different compositions, not four solid frozen surfaces.",
+      "sources": [
+        "https://science.nasa.gov/solar-system/planets/"
+      ]
+    },
+    {
+      "id": "space-07",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "Which planet has an average density lower than liquid water?",
+      "options": [
+        "Saturn",
+        "Neptune",
+        "Earth",
+        "Mars"
+      ],
+      "correctIndex": 0,
+      "explanation": "Saturn’s average density is lower than water’s. The famous giant-bathtub comparison is a thought experiment, not a practical swimming-pool plan!",
+      "sources": [
+        "https://science.nasa.gov/mission/cassini/faq/"
+      ]
+    },
+    {
+      "id": "space-08",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "Saturn’s bright rings are mostly made of what?",
+      "options": [
+        "Countless pieces of water ice",
+        "One solid metal disk",
+        "Glowing clouds of oxygen",
+        "Liquid-water hoops"
+      ],
+      "correctIndex": 0,
+      "explanation": "The rings contain countless icy particles, with dust and rocky material mixed in. They are a swarm of orbiting pieces, not a solid cosmic hula hoop.",
+      "sources": [
+        "https://science.nasa.gov/mission/cassini/faq/"
+      ]
+    },
+    {
+      "id": "space-09",
+      "category": "Planetary Plot Twists",
+      "difficulty": "medium",
+      "question": "Which planet looks as if it rolls around the Sun on its side?",
+      "options": [
+        "Mercury",
+        "Jupiter",
+        "Uranus",
+        "Mars"
+      ],
+      "correctIndex": 2,
+      "explanation": "Uranus has an extreme axial tilt that makes its rotation look sideways. Most planets have not taken their spinning-top impression quite this far.",
+      "sources": [
+        "https://science.nasa.gov/uranus/"
+      ]
+    },
+    {
+      "id": "space-10",
+      "category": "Planetary Plot Twists",
+      "difficulty": "hard",
+      "question": "Which planet was located in 1846 after mathematical predictions pointed astronomers toward it?",
+      "options": [
+        "Saturn",
+        "Neptune",
+        "Venus",
+        "Mercury"
+      ],
+      "correctIndex": 1,
+      "explanation": "Unexpected motion in Uranus’s orbit helped reveal the pull of an unseen planet. Neptune was an impressive case of doing the math before aiming the telescope.",
+      "sources": [
+        "https://science.nasa.gov/neptune/neptune-facts/"
+      ]
+    },
+    {
+      "id": "space-11",
+      "category": "Moons & Small Worlds",
+      "difficulty": "easy",
+      "question": "Which moon has lakes and seas of liquid methane and ethane on its surface?",
+      "options": [
+        "Io",
+        "Earth’s Moon",
+        "Phobos",
+        "Titan"
+      ],
+      "correctIndex": 3,
+      "explanation": "Saturn’s moon Titan has a hydrocarbon version of a water cycle. Its lakes are not swimming pools: the chemistry and temperatures are dramatically different from Earth’s.",
+      "sources": [
+        "https://science.nasa.gov/saturn/moons/titan/facts/"
+      ]
+    },
+    {
+      "id": "space-12",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "Which moon is larger in diameter than the planet Mercury?",
+      "options": [
+        "Phobos",
+        "Ganymede",
+        "Earth’s Moon",
+        "Deimos"
+      ],
+      "correctIndex": 1,
+      "explanation": "Jupiter’s Ganymede is the largest moon in the solar system. A moon can be bigger than a planet because the label describes what it orbits, not just its size.",
+      "sources": [
+        "https://science.nasa.gov/jupiter/jupiter-moons/ganymede/facts/"
+      ]
+    },
+    {
+      "id": "space-13",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "Which Jovian moon is famous for being the solar system’s most volcanically active world?",
+      "options": [
+        "Io",
+        "Europa",
+        "Callisto",
+        "Ganymede"
+      ],
+      "correctIndex": 0,
+      "explanation": "Io is covered with volcanic activity, including dramatic eruptions. Jupiter’s powerful gravity and the tugs of nearby moons help keep this little world’s interior hot.",
+      "sources": [
+        "https://science.nasa.gov/jupiter/jupiter-moons/io/facts/"
+      ]
+    },
+    {
+      "id": "space-14",
+      "category": "Moons & Small Worlds",
+      "difficulty": "hard",
+      "question": "Which moon of Saturn sprays water vapor and ice grains into space from geyser-like jets?",
+      "options": [
+        "Mimas",
+        "Enceladus",
+        "Iapetus",
+        "Titan"
+      ],
+      "correctIndex": 1,
+      "explanation": "Enceladus ejects material associated with its hidden ocean. The jets let spacecraft investigate an ocean world without drilling through its icy shell.",
+      "sources": [
+        "https://science.nasa.gov/saturn/moons/enceladus/"
+      ]
+    },
+    {
+      "id": "space-15",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "Why does Earth usually see the same face of the Moon?",
+      "options": [
+        "Earth’s shadow hides the other half",
+        "The far side produces no reflected light",
+        "The Moon never rotates",
+        "Its rotation period matches its orbital period"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Moon rotates once in about the time it takes to orbit Earth. This synchronous rotation keeps roughly the same hemisphere facing us.",
+      "sources": [
+        "https://science.nasa.gov/moon/facts/"
+      ]
+    },
+    {
+      "id": "space-16",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "Calling the Moon’s far side the dark side is misleading because…",
+      "options": [
+        "The far side also receives sunlight",
+        "The far side is made of glowing lava",
+        "It has no nighttime",
+        "Earth lights it continuously"
+      ],
+      "correctIndex": 0,
+      "explanation": "Far side means facing away from Earth, not permanently away from the Sun. Both sides experience daylight and darkness over the lunar cycle.",
+      "sources": [
+        "https://science.nasa.gov/moon/facts/"
+      ]
+    },
+    {
+      "id": "space-17",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "Where would you find the dwarf planet Ceres?",
+      "options": [
+        "Beyond the Oort Cloud",
+        "Inside Saturn’s rings",
+        "Orbiting Earth",
+        "In the main asteroid belt"
+      ],
+      "correctIndex": 3,
+      "explanation": "Ceres is the largest object in the main asteroid belt between Mars and Jupiter. Not every dwarf planet lives out in Pluto’s neighborhood.",
+      "sources": [
+        "https://science.nasa.gov/dwarf-planets/ceres/facts/"
+      ]
+    },
+    {
+      "id": "space-18",
+      "category": "Moons & Small Worlds",
+      "difficulty": "hard",
+      "question": "A comet’s ion tail generally points in which direction?",
+      "options": [
+        "Toward the nearest planet",
+        "Toward the Sun",
+        "Away from the Sun",
+        "Always behind its direction of travel"
+      ],
+      "correctIndex": 2,
+      "explanation": "The solar wind drives the ionized gas away from the Sun. A comet’s tail is not simply a speed trail like a scarf blowing behind a cyclist.",
+      "sources": [
+        "https://science.nasa.gov/solar-system/comets/facts/"
+      ]
+    },
+    {
+      "id": "space-19",
+      "category": "Moons & Small Worlds",
+      "difficulty": "easy",
+      "question": "A space rock survives its trip through the atmosphere and lands on the ground. What is it now called?",
+      "options": [
+        "A comet nucleus",
+        "A constellation",
+        "A meteorite",
+        "A solar flare"
+      ],
+      "correctIndex": 2,
+      "explanation": "A meteoroid is the object in space, and a meteor is its bright atmospheric streak. A surviving piece on the ground earns the name meteorite.",
+      "sources": [
+        "https://science.nasa.gov/solar-system/meteors-meteorites/"
+      ]
+    },
+    {
+      "id": "space-20",
+      "category": "Moons & Small Worlds",
+      "difficulty": "medium",
+      "question": "The Perseid meteor shower happens when Earth passes through debris left by what?",
+      "options": [
+        "Comet Halley",
+        "Comet Swift–Tuttle",
+        "Comet Encke",
+        "Comet Tempel 1"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Perseids are tiny pieces shed by comet Swift–Tuttle. The annual light show is Earth meeting a trail of space leftovers.",
+      "sources": [
+        "https://science.nasa.gov/solar-system/comets/109p-swift-tuttle/"
+      ]
+    },
+    {
+      "id": "space-21",
+      "category": "Mission Milestones",
+      "difficulty": "easy",
+      "question": "Which mission first landed humans on the Moon?",
+      "options": [
+        "Voyager 1",
+        "Gemini 4",
+        "Apollo 8",
+        "Apollo 11"
+      ],
+      "correctIndex": 3,
+      "explanation": "Apollo 11 delivered Neil Armstrong and Buzz Aldrin to the lunar surface in 1969. Michael Collins kept the command module in lunar orbit.",
+      "sources": [
+        "https://www.nasa.gov/missions/apollo/apollo-11/apollo-11-mission-overview/"
+      ]
+    },
+    {
+      "id": "space-22",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "What was the name of Apollo 11’s lunar module?",
+      "options": [
+        "Eagle",
+        "Columbia",
+        "Discovery",
+        "Endeavour"
+      ],
+      "correctIndex": 0,
+      "explanation": "Eagle carried Armstrong and Aldrin down to the Moon. Columbia was the command module, so the spacecraft names really did have different jobs.",
+      "sources": [
+        "https://nssdc.gsfc.nasa.gov/planetary/lunar/apollo11info.html"
+      ]
+    },
+    {
+      "id": "space-23",
+      "category": "Mission Milestones",
+      "difficulty": "hard",
+      "question": "Apollo 11 landed in the Sea of Tranquility. What sort of destination was that?",
+      "options": [
+        "A bay on Earth",
+        "A liquid ocean on Mars",
+        "A region on the Moon",
+        "A lake on Titan"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Sea of Tranquility is a lunar region, not a body of water. The poetic name sounds much more beach-friendly than the actual landing site.",
+      "sources": [
+        "https://nssdc.gsfc.nasa.gov/planetary/lunar/apollo11info.html"
+      ]
+    },
+    {
+      "id": "space-24",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "Which spacecraft made the first close flyby of Pluto in July 2015?",
+      "options": [
+        "New Horizons",
+        "Juno",
+        "Mariner 2",
+        "Cassini"
+      ],
+      "correctIndex": 0,
+      "explanation": "New Horizons transformed Pluto from a distant blur into a detailed world. It flew past rather than settling into orbit around the dwarf planet.",
+      "sources": [
+        "https://science.nasa.gov/mission/new-horizons/"
+      ]
+    },
+    {
+      "id": "space-25",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "NASA’s Ingenuity made aviation history in 2021 on which world?",
+      "options": [
+        "Titan",
+        "Venus",
+        "Earth’s Moon",
+        "Mars"
+      ],
+      "correctIndex": 3,
+      "explanation": "Ingenuity achieved the first powered, controlled aircraft flight on another planet. The little helicopter turned the thin Martian air into a major engineering triumph.",
+      "sources": [
+        "https://www.jpl.nasa.gov/missions/ingenuity/"
+      ]
+    },
+    {
+      "id": "space-26",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "ESA’s Philae became the first spacecraft to land on what kind of object in 2014?",
+      "options": [
+        "An exoplanet",
+        "A star",
+        "A comet",
+        "A gas giant’s solid surface"
+      ],
+      "correctIndex": 2,
+      "explanation": "Rosetta released Philae toward comet 67P/Churyumov–Gerasimenko. It was a historic touchdown on a small, icy traveler rather than a planet.",
+      "sources": [
+        "https://education.esa.int/rosetta_timeline/"
+      ]
+    },
+    {
+      "id": "space-27",
+      "category": "Mission Milestones",
+      "difficulty": "easy",
+      "question": "What unusual cargo did both Voyager spacecraft carry as a greeting from Earth?",
+      "options": [
+        "A capsule of seeds",
+        "A film reel of world cities",
+        "A Golden Record with sounds and images",
+        "A printed encyclopedia"
+      ],
+      "correctIndex": 2,
+      "explanation": "The gold-plated records carry a selection of Earth’s sounds, music, greetings, and pictures. Think of them as humanity’s extremely long-distance mixtapes.",
+      "sources": [
+        "https://science.nasa.gov/mission/voyager/voyager-golden-record-overview/"
+      ]
+    },
+    {
+      "id": "space-28",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "Which spacecraft spent years orbiting Saturn before its mission ended in 2017?",
+      "options": [
+        "Pioneer Venus",
+        "Viking 1",
+        "New Horizons",
+        "Cassini"
+      ],
+      "correctIndex": 3,
+      "explanation": "Cassini explored Saturn, its rings, and its moons in extraordinary detail. Its travels helped make that distant planetary system feel like a place, not just a picture.",
+      "sources": [
+        "https://science.nasa.gov/mission/cassini/the-journey/timeline/"
+      ]
+    },
+    {
+      "id": "space-29",
+      "category": "Mission Milestones",
+      "difficulty": "medium",
+      "question": "Which was humanity’s first artificial satellite of Earth?",
+      "options": [
+        "Sputnik 1",
+        "Explorer 1",
+        "Hubble",
+        "Vostok 1"
+      ],
+      "correctIndex": 0,
+      "explanation": "The Soviet Union launched Sputnik 1 in October 1957. This small satellite marked the beginning of the Space Age.",
+      "sources": [
+        "https://www.nasa.gov/history/65-years-ago-sputnik-ushers-in-the-space-age/"
+      ]
+    },
+    {
+      "id": "space-30",
+      "category": "Mission Milestones",
+      "difficulty": "hard",
+      "question": "Where does the Hubble Space Telescope orbit?",
+      "options": [
+        "Around the Sun near Earth’s L2 point",
+        "Around the Moon",
+        "Around Mars",
+        "Around Earth"
+      ],
+      "correctIndex": 3,
+      "explanation": "Hubble operates in low Earth orbit. It does not need to travel to distant galaxies to collect the light arriving from them.",
+      "sources": [
+        "https://science.nasa.gov/mission/hubble/overview/hubble-by-the-numbers/"
+      ]
+    },
+    {
+      "id": "space-31",
+      "category": "Astronaut Life",
+      "difficulty": "easy",
+      "question": "Why do astronauts float aboard an orbiting space station?",
+      "options": [
+        "They and the station are falling together around Earth",
+        "Their suits cancel gravity",
+        "There is no mass in space",
+        "Earth’s gravity stops at the atmosphere"
+      ],
+      "correctIndex": 0,
+      "explanation": "Orbit is continuous free fall, not a region where gravity has disappeared. The station keeps moving sideways fast enough to keep missing the ground.",
+      "sources": [
+        "https://www.nasa.gov/centers-and-facilities/glenn/what-is-microgravity/"
+      ]
+    },
+    {
+      "id": "space-32",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "Why is regular exercise especially important during a long space-station stay?",
+      "options": [
+        "To make the spacecraft orbit faster",
+        "To increase gravity inside the station",
+        "To create oxygen by sweating",
+        "To help protect muscles and bones"
+      ],
+      "correctIndex": 3,
+      "explanation": "Muscles and bones lose some of their usual loading in microgravity. Exercise helps counter those changes: the orbital gym is more than a hobby.",
+      "sources": [
+        "https://www.nasa.gov/humans-in-space/counteracting-bone-and-muscle-loss-in-microgravity/"
+      ]
+    },
+    {
+      "id": "space-33",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "Why are tortillas such useful space sandwich wrappers?",
+      "options": [
+        "They produce fewer loose crumbs than bread",
+        "They stick to magnets",
+        "They generate oxygen",
+        "They do not need to be chewed"
+      ],
+      "correctIndex": 0,
+      "explanation": "Floating crumbs can get into eyes or equipment. Tortillas are a practical way to keep lunch from becoming a tiny debris field.",
+      "sources": [
+        "https://www.nasa.gov/wp-content/uploads/2012/02/146852main_food_for_spaceflight_educator.pdf"
+      ]
+    },
+    {
+      "id": "space-34",
+      "category": "Astronaut Life",
+      "difficulty": "hard",
+      "question": "A spacewalking astronaut’s cooling garment carries what through small tubes?",
+      "options": [
+        "Mineral oil",
+        "Water",
+        "Helium gas",
+        "Liquid nitrogen"
+      ],
+      "correctIndex": 1,
+      "explanation": "Water circulating through tubes helps remove body heat. Under the impressive outer suit is some very practical personal plumbing.",
+      "sources": [
+        "https://www.nasa.gov/centers-and-facilities/johnson/spacewalk-spacesuit-basics/"
+      ]
+    },
+    {
+      "id": "space-35",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "Besides supplying breathing oxygen, a spacesuit must provide what essential condition?",
+      "options": [
+        "A constant magnetic north",
+        "An artificial sunrise",
+        "Pressure around the astronaut’s body",
+        "Earth-strength gravity"
+      ],
+      "correctIndex": 2,
+      "explanation": "A spacesuit’s pressure garment and life-support system help create a survivable environment. It is a wearable spacecraft, not merely a thick winter coat.",
+      "sources": [
+        "https://www.nasa.gov/centers-and-facilities/johnson/spacewalk-spacesuit-basics/"
+      ]
+    },
+    {
+      "id": "space-36",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "How can a rocket accelerate in empty space?",
+      "options": [
+        "By expelling material in the opposite direction",
+        "By pulling on the stars",
+        "By catching an invisible wind",
+        "By pushing on surrounding air"
+      ],
+      "correctIndex": 0,
+      "explanation": "A rocket gains momentum as its exhaust gains momentum in the opposite direction. It does not require air to push against.",
+      "sources": [
+        "https://www.grc.nasa.gov/WWW/k-12/TRC/Rockets/rocket_principles.html"
+      ]
+    },
+    {
+      "id": "space-37",
+      "category": "Astronaut Life",
+      "difficulty": "easy",
+      "question": "About how long does the International Space Station take to orbit Earth once?",
+      "options": [
+        "Seven days",
+        "90 minutes",
+        "One year",
+        "24 hours"
+      ],
+      "correctIndex": 1,
+      "explanation": "The ISS circles Earth in roughly an hour and a half. A single orbit is closer to a movie night than a calendar day.",
+      "sources": [
+        "https://www.nasa.gov/international-space-station/space-station-facts-and-figures/"
+      ]
+    },
+    {
+      "id": "space-38",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "What is the main purpose of the ISS’s large solar arrays?",
+      "options": [
+        "Storing the station’s oxygen",
+        "Generating electricity from sunlight",
+        "Cooling the station’s cabin air",
+        "Shielding the station from radiation"
+      ],
+      "correctIndex": 1,
+      "explanation": "Solar arrays convert sunlight into electrical power for station systems and research. Those huge wings are power equipment, not airplane wings.",
+      "sources": [
+        "https://www.nasa.gov/missions/station/new-solar-arrays-to-power-nasas-international-space-station-research/"
+      ]
+    },
+    {
+      "id": "space-39",
+      "category": "Astronaut Life",
+      "difficulty": "medium",
+      "question": "Why does the ISS recover and recycle water?",
+      "options": [
+        "To replace the need for air filters",
+        "To provide fuel for the main thrusters",
+        "To increase the station’s artificial gravity",
+        "To reduce how much water must be delivered from Earth"
+      ],
+      "correctIndex": 3,
+      "explanation": "Recycling reduces dependence on cargo deliveries. In orbit, wasting water also means wasting the effort needed to launch it.",
+      "sources": [
+        "https://www.nasa.gov/international-space-station/space-station-facts-and-figures/"
+      ]
+    },
+    {
+      "id": "space-40",
+      "category": "Astronaut Life",
+      "difficulty": "hard",
+      "question": "Why do astronauts attach their sleeping bags to the wall?",
+      "options": [
+        "To make the station stop rotating",
+        "To avoid drifting into equipment while asleep",
+        "To keep blood from freezing",
+        "To create artificial gravity"
+      ],
+      "correctIndex": 1,
+      "explanation": "In microgravity, a sleeping person can drift just like an unattended object. Securing the bag keeps bedtime from becoming a slow-motion cabin tour.",
+      "sources": [
+        "https://www.esa.int/ESA_Multimedia/Images/2022/01/Samantha_s_sleeping_quarters"
+      ]
+    },
+    {
+      "id": "space-41",
+      "category": "Cosmic Wonders",
+      "difficulty": "easy",
+      "question": "What powers the Sun’s enormous energy output?",
+      "options": [
+        "Friction against space",
+        "Burning coal",
+        "Chemical fire fed by oxygen",
+        "Nuclear fusion"
+      ],
+      "correctIndex": 3,
+      "explanation": "Hydrogen nuclei fuse to make helium in the Sun’s core. The Sun shines through nuclear reactions, not an enormous oxygen-fed campfire.",
+      "sources": [
+        "https://science.nasa.gov/sun/facts/"
+      ]
+    },
+    {
+      "id": "space-42",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "Which color generally indicates a hotter stellar surface?",
+      "options": [
+        "Red",
+        "Yellow",
+        "Orange",
+        "Blue"
+      ],
+      "correctIndex": 3,
+      "explanation": "Blue stars generally have hotter surfaces than red stars. In astronomy, the familiar red-hot warning color does not win the temperature contest.",
+      "sources": [
+        "https://science.nasa.gov/exoplanets/stars/"
+      ]
+    },
+    {
+      "id": "space-43",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "After shedding its outer layers late in life, the Sun is expected to leave behind what?",
+      "options": [
+        "A white dwarf",
+        "A neutron star",
+        "A new rocky planet",
+        "A stellar-mass black hole"
+      ],
+      "correctIndex": 0,
+      "explanation": "A Sun-like star leaves a compact, hot stellar core called a white dwarf. Our Sun is not massive enough to follow the massive-star route to a neutron star or black hole.",
+      "sources": [
+        "https://science.nasa.gov/universe/stars/"
+      ]
+    },
+    {
+      "id": "space-44",
+      "category": "Cosmic Wonders",
+      "difficulty": "hard",
+      "question": "A pulsar acts like a cosmic lighthouse because it is…",
+      "options": [
+        "A star repeatedly disappearing",
+        "A planet switching its lights on and off",
+        "A rotating neutron star whose beams sweep past us",
+        "A comet reflecting a flashlight"
+      ],
+      "correctIndex": 2,
+      "explanation": "A pulsar is a dense rotating neutron star with beams of radiation. We detect pulses when the beam crosses our line of sight, much like a lighthouse flash.",
+      "sources": [
+        "https://science.nasa.gov/mission/hubble/science/science-behind-the-discoveries/hubble-pulsars/"
+      ]
+    },
+    {
+      "id": "space-45",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "What is a black hole’s event horizon?",
+      "options": [
+        "A ring of orbiting planets",
+        "A solid outer crust",
+        "The boundary beyond which light cannot escape",
+        "The edge of its galaxy"
+      ],
+      "correctIndex": 2,
+      "explanation": "The event horizon marks a point of no return for escaping light. It is a boundary in spacetime, not a solid surface you could stand on.",
+      "sources": [
+        "https://science.nasa.gov/universe/10-questions-you-might-have-about-black-holes/"
+      ]
+    },
+    {
+      "id": "space-46",
+      "category": "Cosmic Wonders",
+      "difficulty": "easy",
+      "question": "The Milky Way belongs to which broad galaxy family?",
+      "options": [
+        "Lenticular galaxies",
+        "Spiral galaxies",
+        "Elliptical galaxies",
+        "Irregular galaxies"
+      ],
+      "correctIndex": 1,
+      "explanation": "Our home is a barred spiral galaxy. From inside its disk we see the Milky Way across the sky, rather than a convenient face-on portrait.",
+      "sources": [
+        "https://science.nasa.gov/universe/galaxies/types/"
+      ]
+    },
+    {
+      "id": "space-47",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "A nebula is best described as what?",
+      "options": [
+        "A single solid star",
+        "A type of spacesuit",
+        "A cloud of gas and dust in space",
+        "A rocky ring around Earth"
+      ],
+      "correctIndex": 2,
+      "explanation": "Nebulae are clouds of gas and dust. Some are stellar nurseries, while others are material expelled by aging or dying stars.",
+      "sources": [
+        "https://spaceplace.nasa.gov/nebula/en/"
+      ]
+    },
+    {
+      "id": "space-48",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "Despite its name, a light-year measures what?",
+      "options": [
+        "Distance",
+        "Time",
+        "Brightness",
+        "Temperature"
+      ],
+      "correctIndex": 0,
+      "explanation": "A light-year is the distance light travels in one year. It is astronomy’s long-distance measuring tape, not a special calendar.",
+      "sources": [
+        "https://science.nasa.gov/exoplanets/what-is-a-light-year/"
+      ]
+    },
+    {
+      "id": "space-49",
+      "category": "Cosmic Wonders",
+      "difficulty": "medium",
+      "question": "What do astronomers call the huge explosion that can accompany a massive star’s core collapse?",
+      "options": [
+        "An equinox",
+        "A supernova",
+        "A transit",
+        "A lunar phase"
+      ],
+      "correctIndex": 1,
+      "explanation": "A massive star can end its life in a supernova when its core collapses. Not every star ends this way, so the Sun is not scheduled for that particular fireworks display.",
+      "sources": [
+        "https://science.nasa.gov/universe/stars/"
+      ]
+    },
+    {
+      "id": "space-50",
+      "category": "Cosmic Wonders",
+      "difficulty": "hard",
+      "question": "What can make a distant galaxy appear stretched into arcs or even multiple images?",
+      "options": [
+        "The galaxy’s magnetic field alone",
+        "The galaxy’s daily rotation",
+        "Light reflecting off its planets",
+        "Gravitational lensing"
+      ],
+      "correctIndex": 3,
+      "explanation": "Massive foreground objects warp spacetime and bend the path of light. Nature can act like a giant, wonderfully distorted telescope.",
+      "sources": [
+        "https://science.nasa.gov/mission/hubble/science/science-behind-the-discoveries/hubble-gravitational-lenses/"
+      ]
+    },
+    {
+      "id": "space-51",
+      "category": "Sky Detective",
+      "difficulty": "easy",
+      "question": "During a solar eclipse, which object moves between Earth and the Sun?",
+      "options": [
+        "Mars",
+        "Jupiter",
+        "Venus’s shadow",
+        "The Moon"
+      ],
+      "correctIndex": 3,
+      "explanation": "The Moon blocks part or all of the Sun from certain places on Earth. Its shadow is the key to the show.",
+      "sources": [
+        "https://science.nasa.gov/eclipses/geometry/"
+      ]
+    },
+    {
+      "id": "space-52",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "During a lunar eclipse, whose shadow falls on the Moon?",
+      "options": [
+        "Jupiter’s",
+        "The Moon’s own ring system",
+        "Earth’s",
+        "Venus’s"
+      ],
+      "correctIndex": 2,
+      "explanation": "Earth lies between the Sun and Moon during a lunar eclipse. This is different from ordinary lunar phases, which are not caused by Earth’s shadow.",
+      "sources": [
+        "https://science.nasa.gov/moon/eclipses/"
+      ]
+    },
+    {
+      "id": "space-53",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "What creates the glowing light of auroras in Earth’s upper atmosphere?",
+      "options": [
+        "Energetic charged particles interacting with atmospheric gases",
+        "Cities reflecting off clouds",
+        "Meteors turning into fireflies",
+        "Moonlight bouncing off snow"
+      ],
+      "correctIndex": 0,
+      "explanation": "Energetic particles transfer energy to atmospheric gases, which then emit light. Different gases and conditions help produce different colors.",
+      "sources": [
+        "https://science.nasa.gov/sun/auroras/"
+      ]
+    },
+    {
+      "id": "space-54",
+      "category": "Sky Detective",
+      "difficulty": "hard",
+      "question": "When astronomers use the transit method to find a planet, what clue do they measure?",
+      "options": [
+        "A star suddenly becoming twice as large",
+        "A dip in starlight as the planet crosses in front",
+        "The planet making a sound",
+        "A permanent hole in the star"
+      ],
+      "correctIndex": 1,
+      "explanation": "A transiting planet blocks a small fraction of its star’s light from our viewpoint. Repeated dips help reveal the rhythm of its orbit.",
+      "sources": [
+        "https://science.nasa.gov/exoplanets/whats-a-transit/"
+      ]
+    },
+    {
+      "id": "space-55",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "What is the main reason Earth has seasons?",
+      "options": [
+        "The Sun turns off over one hemisphere",
+        "The Moon blocks winter sunlight",
+        "It moves much closer to the Sun every summer",
+        "Its axis is tilted as it orbits the Sun"
+      ],
+      "correctIndex": 3,
+      "explanation": "Earth’s tilt changes sunlight angles and day lengths through the year. Distance from the Sun is not the main cause of our familiar seasons.",
+      "sources": [
+        "https://www.weather.gov/fgz/Seasons"
+      ]
+    },
+    {
+      "id": "space-56",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "Webb’s giant sunshield mainly helps its telescope do what?",
+      "options": [
+        "Magnify visible light",
+        "Stay cold enough for sensitive infrared observations",
+        "Transmit signals toward Earth",
+        "Shield the mirrors from meteoroids"
+      ],
+      "correctIndex": 1,
+      "explanation": "Webb studies primarily infrared light and must limit unwanted heat. Its sunshield is more like a precision thermal umbrella than a camera shutter.",
+      "sources": [
+        "https://science.nasa.gov/mission/webb/webbs-sunshield/"
+      ]
+    },
+    {
+      "id": "space-57",
+      "category": "Sky Detective",
+      "difficulty": "easy",
+      "question": "One astronomical unit is approximately what distance?",
+      "options": [
+        "The Earth–Moon distance",
+        "The average Earth–Sun distance",
+        "The distance light travels in one second",
+        "The width of the Milky Way"
+      ],
+      "correctIndex": 1,
+      "explanation": "The AU is a convenient scale for distances within our solar system. Earth’s average distance from the Sun supplies the reference.",
+      "sources": [
+        "https://science.nasa.gov/solar-system/solar-system-facts/"
+      ]
+    },
+    {
+      "id": "space-58",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "How can scientists identify elements in a distant star without collecting a sample?",
+      "options": [
+        "By studying patterns of lines in its spectrum",
+        "By measuring its shape alone",
+        "By listening for its chemical name",
+        "By counting its planets"
+      ],
+      "correctIndex": 0,
+      "explanation": "Atoms interact with particular wavelengths of light, producing recognizable spectral patterns. A spectrum can act like a chemical fingerprint sent across space.",
+      "sources": [
+        "https://www.eso.org/public/teles-instr/technology/spectroscopy/"
+      ]
+    },
+    {
+      "id": "space-59",
+      "category": "Sky Detective",
+      "difficulty": "medium",
+      "question": "Why does the Moon appear to change shape during its normal phases?",
+      "options": [
+        "Clouds always cover half its surface",
+        "The Moon changes its physical shape",
+        "We see different amounts of its sunlit half",
+        "Earth’s shadow covers it every night"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Sun always illuminates roughly half the Moon, while our viewing angle changes. The familiar crescent is a lighting-and-perspective effect, not a shrinking Moon.",
+      "sources": [
+        "https://science.nasa.gov/moon/facts/"
+      ]
+    },
+    {
+      "id": "space-60",
+      "category": "Sky Detective",
+      "difficulty": "hard",
+      "question": "Why can sunlight take hours to reach Neptune but only minutes to reach Earth?",
+      "options": [
+        "Light slows to walking speed near Neptune",
+        "Light travels at a finite speed and Neptune is farther away",
+        "Earth creates its own sunlight",
+        "Neptune turns sunlight off"
+      ],
+      "correctIndex": 1,
+      "explanation": "Light takes time to cross space; Neptune is about 30 times Earth’s average distance from the Sun. The same cosmic speed limit makes greater distances mean longer waits.",
+      "sources": [
+        "https://science.nasa.gov/neptune/neptune-facts/"
+      ]
+    }
+  ],
+  "verificationDate": "2026-11-02",
+  "editorialNotes": "NASA and ESA primary sources; ESO spectroscopy and US National Weather Service seasons. Historical dates fixed; no changing moon-count questions. Difficulty is editorial. All explanations are original paraphrases."
+}
