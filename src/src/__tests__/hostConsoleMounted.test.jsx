@@ -102,7 +102,8 @@ test('the top bar, the pulse, and the Session menu as a sheet over the content a
   expect(slots[0]).toBe('main-menu');
   expect(slots[slots.length - 1]).toBe('session-menu');
   expect(slots).toEqual(expect.arrayContaining(['name', 'join', 'needs-you', 'help']));
-  expect(container.querySelectorAll('.hc-pulse [data-tile]')).toHaveLength(3);
+  // One room tile (cut 5, 5 Nov 2026), where the pulse had three.
+  expect(container.querySelectorAll('.hc-pulse .cpulse-tile')).toHaveLength(1);
   expect(screen.queryByRole('dialog', { name: 'Session menu' })).toBeNull();
   await act(async () => { container.querySelector('[data-slot="session-menu"]').click(); });
   const sheet = await screen.findByRole('dialog', { name: 'Session menu' });

@@ -14,8 +14,11 @@ import RW from '../../config/roundWords';
  *   ask     the host's wire for the question on screen (useRoundAsks().shown)
  *   total   people in the room
  *   onPick  (askId, ideaId, picked) => void
+ *   showCount  the live "2 of 5 answered" line: true on one screen and the
+ *           room's view; false on the console, whose room tile says the count
+ *           (one fact, once: host-attention PLAN §4.3, D2)
  */
-export default function AskStage({ ask, total = 0, onPick }) {
+export default function AskStage({ ask, total = 0, onPick, showCount = true }) {
   if (!ask) return <p className="qdetail">{FW.questionForRoom}</p>;
   const kind = KINDS[ask.kind] || KINDS.ideas;
   const closed = ask.status === 'closed';
@@ -41,7 +44,7 @@ export default function AskStage({ ask, total = 0, onPick }) {
       {!closed && ask.kind === 'rate' && (
         <div className="askstage-ends"><span>{scaleLabel(endsOf(ask), 1)}</span><span>{scaleLabel(endsOf(ask), 5)}</span></div>
       )}
-      {!closed && (
+      {!closed && showCount && (
         <p className="askstage-count">{FW.answeredOn(n, total || n)}</p>
       )}
 

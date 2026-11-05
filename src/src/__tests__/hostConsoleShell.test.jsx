@@ -47,7 +47,8 @@ test('the rail opens the moment\'s section; the host\'s choice holds until the m
   expect(open()).toEqual([]);
   rerender(<HostConsole {...props()}><div /></HostConsole>);
   expect(open()).toEqual([]);
-  rerender(<HostConsole {...props({ rail: { ...props().rail, moment: 'READ' } })}><div /></HostConsole>);
+  // Late & not reviewed is drawn only with something in it (cut 6).
+  rerender(<HostConsole {...props({ rail: { ...props().rail, moment: 'READ', lateCount: 1 } })}><div /></HostConsole>);
   expect(open()).toEqual(['late']);
 });
 

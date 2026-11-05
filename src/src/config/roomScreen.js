@@ -121,6 +121,8 @@ export const SCREEN_WORDS = Object.freeze({
   // browser, opened as a placed window is (placed=1), so its first click fills
   // the screen; then share that tab on the call, or press F on a mirrored projector.
   openTab: 'Open as a tab',
+  /** The one room's-window control on the top bar, while the window is up (cut 7). */
+  bringForward: 'Press to bring it forward',
   openTabHint: 'Opens the room\'s window in a tab of this browser. Share that tab, or click it once to fill the screen.',
   noSecondDisplay: 'No second display? Open it in a tab and share that tab, or press F.',
   fillOnce: FILL_ONCE,

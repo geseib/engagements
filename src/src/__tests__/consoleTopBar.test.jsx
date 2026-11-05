@@ -169,11 +169,13 @@ describe('the Session menu', () => {
   });
 });
 
-describe('the pulse and the one count', () => {
-  test('three tiles under the Needs-you line, above the main area', () => {
+describe('the room tile and the one count', () => {
+  test('one room tile (the time inside it) under the Needs-you line, above the main area (cut 5)', () => {
     const { container } = frame();
     const pulse = container.querySelector('.hc-pulse');
-    expect([...pulse.querySelectorAll('[data-tile]')].map((t) => t.dataset.tile)).toEqual(['room', 'time', 'since']);
+    // rejects: the room, time and "since this round opened" tiles side by side.
+    expect([...pulse.querySelectorAll('.cpulse-tile')]).toHaveLength(1);
+    expect([...pulse.querySelectorAll('[data-tile]')].map((t) => t.dataset.tile)).toEqual(['room', 'time']);
     expect(container.querySelector('.hc-needs').compareDocumentPosition(pulse) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(pulse.compareDocumentPosition(screen.getByTestId('panel')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -182,24 +184,52 @@ describe('the pulse and the one count', () => {
     const status = moment === 'ANSWERING' ? { text: '3 of 4 answered', tone: 'pending' } : { text: '1 of 4 voted · Showing response 1 of 3', tone: 'pending' };
     const { container } = frame({ moment, status });
     const n = moment === 'ANSWERING' ? '3' : '1';
-    expect(container.querySelector('[data-testid="pulse-count"]').textContent).toBe(`${n} of 4`);
+    expect(container.querySelector('[data-testid="pulse-count"]').textContent).toBe(`${n}/4 ${moment === 'ANSWERING' ? 'answered' : 'voted'}`);
     const text = container.querySelector('.hc').textContent;
-    expect(text.match(new RegExp(`${n} of 4`, 'g'))).toHaveLength(1);
+    expect(text.match(new RegExp(`${n} of 4`, 'g'))).toBeNull();
+    expect(text.match(new RegExp(`${n}/4`, 'g'))).toHaveLength(1);
     expect(container.querySelector('[data-section="people"] summary').textContent).toMatch('4 here');
   });
 
-  test('the late count in the pulse opens the Needs-you item\'s review', () => {
-    const onLate = jest.fn();
-    render(<ConsolePulse moment="ANSWERING" players={4} answered={2} late={1} onLate={onLate} now={0} />);
-    fireEvent.click(screen.getByRole('button', { name: '1 late item not reviewed' }));
-    expect(onLate).toHaveBeenCalled();
+  test('the late count is not on the room tile: the Needs-you line and the rail carry it (one fact, once)', () => {
+    render(<ConsolePulse moment="ANSWERING" players={4} answered={2} late={1} now={0} />);
+    expect(screen.queryByText(/late item/)).toBeNull();
   });
 
   test('the host page wires the pulse from the server\'s round start, the phase stamps and the arrivals', () => {
     const page = fs.readFileSync(path.join(__dirname, '..', 'GameHostPage.jsx'), 'utf8');
     expect(page).toMatch(/const pulseOpenedAt = \(currentQuestion && currentQuestion\.startedAt\) \|\| seenFor\('ASK'\)/);
     expect(page).toMatch(/arrivals=\{arrivalsSince\(players, pulseOpenedAt\)\}/);
+    // The one source for the counts (host-attention PLAN §4.1).
+    expect(page).toMatch(/progress=\{roomProgress\}/);
+    expect(page).toMatch(/const roomProgress = roomProgressFor\(\{/);
     expect(page).toMatch(/withoutRoomCount\(hostControls\.status, consoleMoment\)/);
     expect(page).toMatch(/pulse=\{setupFrame \? null : consolePulse\}/);
+  });
+});
+
+describe('the room\'s window: one control with its status (cut 7)', () => {
+  const ConsoleTop = require('../components/console/ConsoleTop').default;
+  const detail = { open: true, fullscreen: true, visible: true, ageMs: 1000 };
+  test('one link, the status inside it; no separate pill', () => {
+    const { container } = render(<ConsoleTop title="T" presentHref="/present?gameId=1" presentDetail={detail} short oneRoomWindow />);
+    const links = [...container.querySelectorAll('[data-slot="room-screen"] a')];
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveTextContent("Room's window: on, full screen ↗");
+    expect(links[0]).toHaveAttribute('target', 'engage-room');
+    expect(container.querySelector('[data-slot="room-screen"] [role="status"]')).toBeNull();
+  });
+  test('a press while it is up brings that window forward, never a second one', () => {
+    const existing = { location: { href: 'https://x/present' }, focus: jest.fn() };
+    const open = jest.spyOn(window, 'open').mockReturnValue(existing);
+    const { container } = render(<ConsoleTop title="T" presentHref="/present?gameId=1" presentDetail={detail} short oneRoomWindow />);
+    fireEvent.click(container.querySelector('[data-slot="room-screen"] a'));
+    expect(open).toHaveBeenCalledWith('', 'engage-room');
+    expect(existing.focus).toHaveBeenCalled();
+    open.mockRestore();
+  });
+  test('without it (the Build Room) the link and the pill stay a pair', () => {
+    const { container } = render(<ConsoleTop title="T" presentHref="/present?gameId=1" presentDetail={detail} short />);
+    expect(container.querySelector('[data-slot="room-screen"] [role="status"]')).toHaveTextContent('On, full screen');
   });
 });

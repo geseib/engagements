@@ -56,9 +56,9 @@ const running = {
           t: 'list',
           items: [
             { title: 'The top bar', text: 'The two-screen console\'s bar: **Main menu**, the name, **Show join code**, **The room sees this screen**, **Needs you** (a count, never a name), **?** and **Session menu**.' },
-            { title: 'Your part now', text: 'Under the top bar, where it is on two screens: a status line and the main button, with a small **Space** on it (that key presses it too).' },
-            { title: 'The Needs-you line', text: 'Under that: **Nothing needs you now.**, or a count by kind ("1 name request") with **Open**. Never a name, never **Let them** or **Not now**.' },
-            { title: 'The rail', text: 'Where the session is (Lobby, Answering, Voting, Results), the round, and JOIN with the code for the room.' },
+            { title: 'Your part now', text: 'Under the top bar, where it is on two screens: a status line and the main button, with a small **Space** on it (that key presses it too). **Skip this round** is behind **⋯** just left of it.' },
+            { title: 'The Needs-you line', text: 'Under that, only while something needs you: a count by kind ("1 name request") with **Open**. Never a name, never **Let them** or **Not now**. With nothing waiting there is no line.' },
+            { title: 'The rail', text: 'Where the session is (Lobby, Answering, Voting, Results), the round, and JOIN with the code. A session goal is not shown to the room.' },
             { title: 'No step strip', text: 'On one screen the rail and the question\'s own heading say where the round is; the steps (Answer, Vote, What we heard) are on your laptop only on two screens.' },
             { title: 'The room meter', text: 'How many have answered or voted. Click it, or press U, to list who is still to answer.' },
           ],
@@ -127,7 +127,8 @@ const running = {
       Meter "Answered x / n". Primary RW.startVoting (C&A) or RW.showResults
       (no-vote types, hostRunsVotePhase); disabled with RW.nobodyAnswered;
       early press arms in place (RW.armVote/armResults, RW.anyway). Secondary
-      "Skip this round" (RW.skipRound) with skipConfirm in hostControls.js:
+      "Skip this round" (RW.skipRound), behind the bar's ⋯ (HostActionBar
+      BarMore, cut 8), with skipConfirm in hostControls.js:
       "The room loses this round: answers and votes so far are not counted."
     */
     {
@@ -145,7 +146,7 @@ const running = {
             'The meter counts the answers ("Answered 1 / 4"). Your part now says "Some are still answering", then **Safe to move on** when everyone is in.',
             'The main button is **Start voting** for Call & Answer and **Show results** for the other types. It stays grey until someone has answered.',
             'Pressed early, it does not open a dialog: it changes to "Start voting anyway" and says who is still writing ("1 of 3 still writing"). Press again within a few seconds to go on; wait and it settles back.',
-            '"Skip this round" asks first: the room loses the round, and its answers are not counted.',
+            '**Skip this round** is behind **⋯** beside the main button. It asks first: the room loses the round, and its answers are not counted.',
           ],
         },
       ],
@@ -154,7 +155,7 @@ const running = {
       THE ROUND TIMER (experience plan 2f; session-start D4, F2-F4):
       components/console/TimeChip.jsx before the opening move (presets
       config/roundTimer.js TIME_PRESETS, remembered in localStorage); the
-      pulse's Time tile (config/consolePulse.js); +1 min button, + / = key
+      room tile's time (config/consolePulse.js); +1 min button, + / = key
       (HostActionBar onAddTime), Remote card (components/RemoteTimeCard.jsx);
       wall and phone words (components/RoomTimeLine.jsx, roomTimeWords);
       close at zero opt-in through start-vote { timeUp } (round-timer.js).
@@ -171,8 +172,8 @@ const running = {
         {
           t: 'list',
           items: [
-            'The time is a guide, not a lock. At zero nothing closes: the **Time** tile turns amber and counts over ("Time\'s up · 0:18 over 2:00"), and Your part now says "Time\'s up. Start voting, or give them another minute." Once everyone has answered it says "Everyone\'s in" instead.',
-            '**+1 min** on the Time tile (on one screen, beside the main button), the **+** or **=** key, or **+1 min** on your phone Remote gives the room another minute. Once time is up it is a minute from now.',
+            'The time is a guide, not a lock. At zero nothing closes: the time in the room tile (on two screens) turns amber and counts over ("Time\'s up · 0:18 over 2:00"), and Your part now says "Time\'s up. Start voting, or give them another minute." Once everyone has answered it says "Everyone\'s in" instead.',
+            '**+1 min** beside the time in the room tile (on one screen, beside the main button), the **+** or **=** key, or **+1 min** on your phone Remote gives the room another minute. Once time is up it is a minute from now.',
           ],
         },
       ],
@@ -187,7 +188,7 @@ const running = {
           items: [
             '**Show the time on the room\'s window** is ticked at first. The room\'s window and everyone\'s phone then show words and a thin bar, never seconds: "About 2 minutes left", "About a minute left", "Nearly time", "Time\'s up". Untick it to keep the time to yourself.',
             '**Close answering at zero** is off unless you tick it. With it on, voting opens by itself when time is up, as long as this page or your phone Remote is open and someone has answered. Start voting still works at any moment.',
-            'With **No limit** the Time tile shows how long the round has been open, as before.',
+            'With **No limit** the room tile on two screens shows how long the round has been open ("open 1:24").',
             'The time is kept by the server, so a laptop or phone whose clock is wrong still shows the right time left.',
           ],
         },
@@ -839,7 +840,7 @@ const playerManagement = {
           t: 'note',
           tone: 'info',
           title: 'On one screen the room can see the laptop',
-          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting it says **Nothing needs you now.** The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way. While the bar is faded, a dot with the count shows top right.',
+          text: 'The bell on the top bar (**Needs you**) shows a count, never a name, and the line under Your part now says the same by kind ("1 name request") with **Open**; with nothing waiting there is no line. The bell and **Open** open one sheet, which starts **The room can see this screen** and lists each item by kind; **Show on this screen** asks first, then shows that one item. Late answers, name requests, Workie\'s settings and the running order are held back the same way. While the bar is faded, a dot with the count shows top right.',
         },
       ],
     },

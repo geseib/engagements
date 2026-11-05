@@ -41,6 +41,9 @@ export default function ConsoleTop({
   onLeave = null, leaveLabel = '', children = null, short = false, codeProps = null, help = '',
   bellSession = null, connected = null, onSessionMenu = null, sessionMenuOpen = false,
   oneScreen = false, bell = null, joinQr = null,
+  /* Call & Answer's console (owner, 5 Nov 2026, cut 7): the room's window
+     and its status as ONE control. The Build Room keeps the pair. */
+  oneRoomWindow = false,
 }) {
   const open = typeof onOpenPresent === 'function' ? onOpenPresent : undefined;
   // Never a dead control (engage-design hard rule 2): without a page's own way
@@ -106,6 +109,7 @@ export default function ConsoleTop({
           detail={presentDetail}
           onOpen={open}
           short={short}
+          one={oneRoomWindow}
           linkLabel={`${HW.roomsWindow} ↗`}
           classes={{ link: 'ui-btn ui-btn--quiet ui-btn--h36', stat: 'hc-winstat', dot: 'hc-dot' }}
         />

@@ -131,8 +131,8 @@ export const ATTENTION_EVENTS = Object.freeze([
     audit: [12],
     level: 'glance',
     needsYouLine: null,
-    markedOn: 'The pulse tiles',
-    helpLine: 'A survey\'s progress, and when it closes, are in the pulse tiles.',
+    markedOn: 'The room tile',
+    helpLine: 'A survey\'s progress, and when it closes, are in the room tile.',
     actions: [],
   },
   {
@@ -158,8 +158,8 @@ export const ATTENTION_EVENTS = Object.freeze([
     audit: [],
     level: 'glance',
     needsYouLine: null,
-    markedOn: 'The pulse tiles',
-    helpLine: 'Everyone in, time up and a goal reached show in the pulse tiles, never on the bell.',
+    markedOn: 'The room tile',
+    helpLine: 'Everyone in and time up show in the room tile, and a goal reached in Your part now, never on the bell.',
     actions: [],
   },
   {

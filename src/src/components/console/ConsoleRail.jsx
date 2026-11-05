@@ -162,6 +162,11 @@ export default function ConsoleRail({
   });
   const live = scoresLive(moment);
   const unscored = Boolean(scoreboard && scoreboard.show && !scoreboard.enabled);
+  /* NO SCORE COLUMN UNTIL THERE IS A SCORE (owner, 5 Nov 2026, cut 6): a
+     column of zeros (or dashes) beside every name before anyone has scored
+     is noise. It appears with the first score above zero, or the first
+     Trivia mark. */
+  const scored = peopleRows.some((p) => p.fact && (Number(p.fact.score) > 0 || p.fact.mark));
   const menuFor = (name) => [
     onPersonMove && { id: 'move', label: PERSON_WORDS.move, onSelect: () => onPersonMove(name) },
     onPersonRemove && { id: 'remove', label: PERSON_WORDS.remove, danger: true, onSelect: () => onPersonRemove(name) },
@@ -236,14 +241,15 @@ export default function ConsoleRail({
         ) : null}
         {/* THE SHARED PERSON ROW (PLAN §3.2b), at the rail's compact density:
             the status a glyph, the score muted mid-round and bright from
-            Results (README D6, D7). Rows never re-sort during a round. */}
+            Results (README D6, D7). While the room answers or votes the
+            people still out come first (consoleRail.js peopleRows, cut 6). */}
         {peopleRows.length ? (
           // The columns' heads (frames 1, 3, 6): decorative, the row's own labels speak.
           <div className="hc-colhd" aria-hidden="true">
             <span />
             <span>{CW.colName}</span>
             <span>{peopleRows.some((p) => MARK[p.state]) ? '✓' : ''}</span>
-            <span>{peopleRows.some((p) => p.fact) ? CW.colScore : ''}</span>
+            <span>{scored ? CW.colScore : ''}</span>
             <span />
           </div>
         ) : null}
@@ -253,11 +259,11 @@ export default function ConsoleRail({
               key={p.name}
               density="rail"
               name={p.name}
-              status="here"
+              status={p.away ? 'away' : 'here'}
               mark={MARK[p.state] || null}
               doing={WORD[p.state] || ''}
               note={!MARK[p.state] && p.from ? p.from : ''}
-              fact={<Fact fact={p.fact} unscored={unscored} />}
+              fact={scored ? <Fact fact={p.fact} unscored={unscored} /> : ''}
               factLive={live && !unscored}
               menu={menuFor(p.name)}
             />
@@ -285,6 +291,10 @@ export default function ConsoleRail({
           few with their two quiet buttons; "Review them" opens the full list
           in the Session panel's Rounds tab. A Soon item: a dot and "2 to
           review", never amber (PLAN §4.1; console-rail fork 7). */}
+      {/* NOT DRAWN WHEN IT SAYS "none" (owner, 5 Nov 2026, cut 6): a header
+          whose only word is "none" is a row to read for nothing. It appears
+          with the first late item. */}
+      {waiting > 0 || late.length ? (
       <Section
         id="late"
         title={CW.late}
@@ -316,6 +326,7 @@ export default function ConsoleRail({
         ) : <p className="hc-empty">{CW.noLate}</p>}
         {lateError ? <p className="hc-empty hc-error" role="alert">{lateError}</p> : null}
       </Section>
+      ) : null}
       {/* No fourth section (experience plan 2a): the connection is on the top
           bar when it is broken, and Questions, Rounds and the settings are in
           the Session menu, top right. */}

@@ -42,18 +42,27 @@ test('the laptop ladder with its one numeral: 12 / 13 / 15 / 19 / 24 / 30, nothi
   expect(scale.sort((a, b) => a - b)).toEqual([12, 13, 15, 19, 24, 30]);
   expect(css).not.toMatch(/font-size:\s*\d+px/); // every size through the scale
   expect(css).not.toMatch(/font-size:\s*[\d.]+(rem|em)\b/);
-  // One 30px numeral (the room's count); time and arrivals at 24 (D3).
+  // One 30px numeral (the live count); the round's record after it at 24.
   expect(rule('.cpulse .cpulse-num')).toMatch(/font-size:\s*var\(--cpulse-t-numeral\)/);
   expect(rule('.cpulse .cpulse-val')).toMatch(/font-size:\s*var\(--cpulse-t-title\)/);
   expect((css.match(/var\(--cpulse-t-numeral\)/g) || []).length).toBe(1);
 });
 
-test('names truncate as one text node with min-width 0 (hard rule 8), the full list in title=', () => {
+test('ONE tile (cut 5), and names truncate as one text node with min-width 0 (hard rule 8), the full list in title=', () => {
+  expect(rule('.cpulse')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/);
   const sub = rule('.cpulse .cpulse-sub');
   expect(sub).toMatch(/text-overflow:\s*ellipsis/);
   expect(sub).toMatch(/min-width:\s*0/);
   expect(sub).toMatch(/white-space:\s*nowrap/);
-  expect(read('components', 'console', 'ConsolePulse.jsx')).toMatch(/<p className="cpulse-sub" title=\{since\.sub\}>/);
+  const nudge = rule('.cpulse .cpulse-nudge');
+  expect(nudge).toMatch(/text-overflow:\s*ellipsis/);
+  expect(nudge).toMatch(/min-width:\s*0/);
+  // Who is left is said aloud: body size, text colour (cut 5).
+  expect(nudge).toMatch(/font-size:\s*var\(--cpulse-t-body\)/);
+  expect(nudge).toMatch(/color:\s*var\(--text\)/);
+  const jsx = read('components', 'console', 'ConsolePulse.jsx');
+  expect(jsx).toMatch(/className="cpulse-nudge"[^>]*title=\{room\.nudgeTitle/);
+  expect(jsx).toMatch(/data-testid="pulse-joined" title=\{joined\}/);
 });
 
 test('calm: info for progress, green only for Everyone\'s in', () => {

@@ -100,25 +100,24 @@ describe('Trivia: the question, the live counts and the private answer', () => {
   });
 });
 
-describe('Pulse tile 3 for Trivia: "Correct so far"', () => {
-  it('takes the third tile, host-only words, and keeps three tiles', () => {
+describe('Trivia\'s "Correct so far", one line in the room tile (cut 5)', () => {
+  it('a host-only line inside the one tile; no third tile', () => {
     const { container } = render(<ConsolePulse moment="ANSWERING" players={12} answered={11} now={0} correct={{ right: 6, of: 11 }} />);
-    expect(container.querySelectorAll('[data-tile]')).toHaveLength(3);
-    const tile = container.querySelector('[data-tile="correct"]');
-    expect(within(tile).getByText('Correct so far')).toBeInTheDocument();
-    expect(screen.getByTestId('pulse-correct')).toHaveTextContent('6 of 11');
-    expect(within(tile).getByText('only you see this')).toBeInTheDocument();
+    expect(container.querySelectorAll('.cpulse-tile')).toHaveLength(1);
+    const tile = container.querySelector('[data-tile="room"]');
+    expect(within(tile).getByTestId('pulse-correct')).toHaveTextContent('Correct so far: 6 of 11 · only you see this');
     expect(container.querySelector('[data-tile="since"]')).toBeNull();
   });
-  it('after the round a no-vote format says "N here", never "0 voted"', () => {
+  it('after the round a no-vote format says the answered record, never "0 voted"', () => {
     const { container } = render(<ConsolePulse moment="RESULTS" players={12} answered={10} now={0} noVote />);
     const tile = container.querySelector('[data-tile="room"]');
-    expect(tile).toHaveTextContent('12 here');
+    expect(tile).toHaveTextContent('10/12 answered');
     expect(tile).not.toHaveTextContent(/voted/);
   });
-  it('without it, tile 3 is "Since this round opened", as before', () => {
+  it('without it, nothing about correct answers, and no "since" tile', () => {
     const { container } = render(<ConsolePulse moment="ANSWERING" players={12} answered={11} now={0} />);
-    expect(container.querySelector('[data-tile="since"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="pulse-correct"]')).toBeNull();
+    expect(container.querySelector('[data-tile="since"]')).toBeNull();
   });
 });
 

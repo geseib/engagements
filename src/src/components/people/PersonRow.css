@@ -84,6 +84,25 @@
   width: 28px; height: 28px; padding: 0;
 }
 .prow .prow-more-toggle[aria-expanded="true"] { background: var(--surface-2); }
+/* THE RAIL'S ⋯ WAITS TO BE WANTED (owner, 5 Nov 2026, cut 6): fifteen
+   outlined ⋯ down the People column were the loudest thing in it. On a
+   pointer that can hover, ⋯ shows on the row's hover and whenever focus is
+   inside the row; it is transparent, never display:none, so Tab still lands
+   on it and a keyboard user sees it the moment it has focus. A touch screen
+   (hover: none) has no hover, so there it is always drawn. An open menu
+   keeps its ⋯. The Session menu's and the Remote's full rows are unchanged. */
+@media (hover: hover) {
+  .prow.prow--rail .prow-more-toggle { opacity: 0; transition: opacity 120ms ease-out; }
+  .prow.prow--rail:hover .prow-more-toggle,
+  .prow.prow--rail:focus-within .prow-more-toggle,
+  .prow.prow--rail .prow-more-toggle[aria-expanded="true"] { opacity: 1; }
+}
+@media (hover: none) {
+  .prow.prow--rail .prow-more-toggle { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prow.prow--rail .prow-more-toggle { transition: none; }
+}
 .prow .prow-menu {
   position: absolute; top: 100%; right: 0; z-index: 30;
   display: flex; flex-direction: column; min-width: 200px; padding: 6px;

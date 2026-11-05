@@ -149,6 +149,7 @@ import {
 } from './config/roundTimer';
 import { noteServerNow, serverNowMs } from './utils/serverClock';
 import { arrivalsSince, withoutRoomCount, answersAreChoices } from './config/consolePulse';
+import { roomProgressFor } from './config/roomProgress';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import SessionSetup from './components/console/panels/SessionSetup';
@@ -555,10 +556,16 @@ function GameHostPage() {
   const [roundTime, setRoundTime] = useState(null);
   useEffect(() => { setRoundTime(null); }, [gameId]);
   /** A reply or read that may carry the host's timer and the server's clock. */
+  /* When the server says the phase on now opened (the host door's
+     `phaseStartedAt`, round-timer.js PhaseStartedAt), with the state it was
+     read beside: the room tile's "open 0:42" during voting, on the server's
+     clock, also after a reload (host-attention PLAN D5). */
+  const [hostPhaseOpened, setHostPhaseOpened] = useState(null);
   const takeHostTime = useCallback((data, sentAt = null) => {
     if (!data || typeof data !== 'object') return;
     noteServerNow(data.serverNow, sentAt);
     if (Object.prototype.hasOwnProperty.call(data, 'hostTime')) setRoundTime(data.hostTime || null);
+    if (data.phaseStartedAt && data.state) setHostPhaseOpened({ state: String(data.state), at: data.phaseStartedAt });
   }, []);
   useEffect(() => {
     if (!gameState) return;
@@ -8856,7 +8863,9 @@ Focus on actionable business strategy insights.`;
       noun: getHostRoundNoun(),
       round: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : lessonNumber,
       of: (hostPhase === 'LOBBY' || hostPhase === 'ENDED') ? undefined : roundOf,
-      goal: stageGoal.rail || undefined,
+      /* No "Goal 5" on the room's view (owner, 5 Nov 2026, cut 3): jargon
+         to the room. The goal's notice is still Your part now's status on
+         the goal round (goalStage.js goalLine). */
     };
   const surveyFitKey = isSurvey && survey.progress
     ? `${surveyQuestionCount}:${survey.progress.finished}:${survey.people ? survey.people.length : -1}`
@@ -9014,8 +9023,38 @@ Focus on actionable business strategy insights.`;
     return ts.length ? Math.min(...ts) : null;
   };
   const pulseOpenedAt = (currentQuestion && currentQuestion.startedAt) || seenFor('ASK');
-  const pulseTimer = phaseTimer
-    || (roundTime && pulseRound && /^RESULTS#/.test(basePhase(gameState)) && String(roundTime.phase || '').endsWith(`#${pulseRound}`) ? roundTime : null);
+  /* WHEN VOTING OPENED: the server's PhaseStartedAt for this VOTE (the host
+     door's `phaseStartedAt`, or the timer's own start), else the moment this
+     page saw it open, never a page's load time (seenFor skips that). */
+  const pulseVoteAt = (() => {
+    if (!pulseRound) return null;
+    const key = `VOTE#${pulseRound}`;
+    if (hostPhaseOpened && String(hostPhaseOpened.state || '').startsWith(key) && hostPhaseOpened.at) return hostPhaseOpened.at;
+    if (roundTime && String(roundTime.phase || '').startsWith(key) && roundTime.startedAt) return roundTime.startedAt;
+    return seenFor('VOTE');
+  })();
+  /*
+    HOW FAR ALONG IS THE ROOM (config/roomProgress.js; host-attention PLAN
+    §4.1; owner's cut 5, 5 Nov 2026): one answer for the step that is live,
+    read by the room tile and the People rail. A latecomer during an open
+    step is owed it; one who joined after it closed is not.
+  */
+  const roomProgress = roomProgressFor({
+    moment: consoleMoment,
+    roster: players,
+    noVote: !closesIntoVote,
+    choice: answersAreChoices(normalizeGameType(currentGameType), currentQuestion),
+    answer: {
+      names: playersWhoAnswered, count: answeredCount, openedAt: pulseOpenedAt,
+      closedAt: closesIntoVote ? pulseVoteAt : null,
+    },
+    vote: { names: playersWhoVoted, count: playersWhoVoted.length, openedAt: pulseVoteAt },
+    ask: roundAsks.shown ? {
+      n: (roundAsks.shown.tally && roundAsks.shown.tally.n) || 0,
+      answeredBy: Array.isArray(roundAsks.shown.answeredBy) ? roundAsks.shown.answeredBy : null,
+      sentAt: roundAsks.shown.sentAt || null,
+    } : null,
+  });
   /*
     THE TIME CHIP beside the opening move (2f, D4): Start round N takes the
     answering chip, Start voting the voting chip. `timeChipFor` builds it for
@@ -9042,22 +9081,18 @@ Focus on actionable business strategy insights.`;
   const consolePulse = useConsole ? (
     <ConsolePulse
       moment={consoleMoment}
-      players={players.length}
-      answered={answeredCount}
-      voted={playersWhoVoted.length}
+      // THE ONE SOURCE (config/roomProgress.js): the count, who is still out,
+      // who is away. Everything on the console that counts reads it.
+      progress={roomProgress}
       everyoneIn={consoleMoment === 'ANSWERING' || consoleMoment === 'VOTING' || consoleMoment === 'VOTE_RESPONSES' ? everybodyIn : null}
       openedAt={pulseOpenedAt}
-      voteAt={seenFor('VOTE')}
-      resultsAt={seenFor('RESULTS')}
+      voteAt={pulseVoteAt}
+      askAt={roundAsks.shown ? roundAsks.shown.sentAt || null : null}
       arrivals={arrivalsSince(players, pulseOpenedAt)}
-      late={lateCounts.notReviewed}
-      // The late count is the Needs-you item's own Review (one home for the late list).
-      onLate={openLateList}
-      // The round timer (2f): the phase's own while it is on; after the round,
-      // the last phase's, for "2:00 given".
-      timer={pulseTimer}
+      // The round timer (2f): the phase's own while it is on.
+      timer={phaseTimer}
       onAddMinute={phaseTimer ? addMinute : null}
-      // Trivia's tile 3, "Correct so far" (2g): host-only, from the answer letters.
+      // Trivia's "Correct so far" (2g): host-only, from the answer letters.
       correct={consoleTrivia && (consoleMoment === 'ANSWERING' || (consoleMoment === 'RESULTS' && stageResponsesReady)) ? correctSoFar(answers, triviaLetters) : null}
       noVote={!closesIntoVote}
       choice={consoleChoice}
@@ -9131,7 +9166,11 @@ Focus on actionable business strategy insights.`;
     ? questionRoomData(askRecord, { task: getHostInstructionText(askRecord), sessionTitle: eventTitle })
     : null;
   const consoleAuthorsHidden = authorsHiddenNow({ gameType: currentGameType, anonymousUntilReveal, authorsRevealed });
-  const consoleKicker = (label) => [workflow && workflow.round ? workflow.round.label : '', label].filter(Boolean).join(' · ');
+  /* NO EYEBROW OVER THE CONTENT (owner, 5 Nov 2026, cut 7: "say each thing
+     once"): "Round 3 · Answer" repeated the step bar directly above it, and
+     "Page 2 of 6" the strip's own "What we heard · page 2 of 6". The panels
+     draw no kicker for an empty one. */
+  const consoleKicker = () => '';
   // The one line roundStep writes for what the main button puts up next.
   const consoleNext = hostControls.step && hostControls.step.next && consoleMoment !== 'UNKNOWN' && consoleMoment !== 'OTHER'
     ? `${CW.nextOnWall}: ${hostControls.step.next.charAt(0).toLowerCase()}${hostControls.step.next.slice(1)}`
@@ -9364,7 +9403,7 @@ Focus on actionable business strategy insights.`;
       case 'LOBBY':
         return <LobbyPanel code={eventCode || gameId} joined={players.map((p) => p.name || p.playerName)} firstTask={consoleTask} />;
       case 'ANSWERING':
-        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} stillWriting={Math.max(0, players.length - answeredCount)} side={consoleNotes} />;
+        return <ResponsesPanel kicker={consoleKicker(RW.stepAnswer)} title={currentQuestion?.title || ''} lesson={askRoomData ? askRoomData.story : String(currentQuestion?.detail || currentQuestion?.questionDetail || '').trim()} task={askRoomData ? askRoomData.task : consoleTask} taskOwn={Boolean(askRoomData && askRoomData.taskOwn)} phase="ASK" responses={answers} authorsHidden={consoleAuthorsHidden} side={consoleNotes} />;
       case 'VOTING':
       case 'VOTE_RESPONSES':
         // `answers` is /answers/host in the voting order every ballot shows: the stage cards' index space.
@@ -9382,7 +9421,7 @@ Focus on actionable business strategy insights.`;
         return <FeedbackPanel comments={scopedRoundComments} onFeature={handleFeatureComment} />;
       case 'ROOM_QUESTION':
       case 'ROOM_RESULTS':
-        return <RoomQuestionPanel><AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} /></RoomQuestionPanel>;
+        return <RoomQuestionPanel><AskStage ask={roundAsks.shown} total={players.length} onPick={pickRoomIdea} showCount={false} /></RoomQuestionPanel>;
       case 'ENDED':
         return <EndedPanel onOpenReport={() => runHostAction({ intent: HOST_INTENTS.REPORT })} />;
       default:
@@ -9445,6 +9484,8 @@ Focus on actionable business strategy insights.`;
             presentDetail,
             // The state alone beside "Room's window ↗", as the Build Room's bar does, so the bar fits at 1280.
             short: true,
+            // ONE CONTROL (cut 7): the room's window with its status in it.
+            oneRoomWindow: true,
             help: consoleHelp,
             // The bell is the Needs-you door in a live session (experience plan §4.3).
             bellSession: needsBell,
@@ -9747,9 +9788,16 @@ Focus on actionable business strategy insights.`;
             />
           </Dock>
         )}
+        /* NOTHING EMPTY PROJECTED (owner, 5 Nov 2026, cut 3): on one screen
+           the room reads this laptop, so the calm "Nothing needs you now."
+           is never drawn there, nor a Soon item's count (the bell counts
+           it). The public line comes up only while a Now item waits, a
+           count by kind and Open, as before. */
         needs={twoSurfaces
           ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
-          : <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />}
+          : (((needs && needs.items) || []).some((i) => i.level === NEEDS_LEVELS.NOW)
+            ? <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />
+            : null)}
         rail={(
           <Rail
             phase={hostPhase}

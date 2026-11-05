@@ -40,9 +40,9 @@ export function peopleSummary({ players = 0 } = {}) {
   owner, 3 Nov 2026, "Looks good", every fork at its recommendation).
 
   A closed header says one thing worth reading that the rest of the screen
-  does not; never a fact the pulse already states in the same viewport (hard
-  rule 5). So People closed says WHO is still out ("6 here · waiting on
-  Marcus"), never "5/6 answered", which tile 1 says at 30px.
+  does not; never a fact the room tile already states in the same viewport
+  (hard rule 5). Who is still out is the room tile's since 5 Nov (cut 5), so
+  People says "6 here" while the room answers or votes.
 */
 export const RAIL_WORDS = Object.freeze({
   rounds: (n) => (n === 1 ? '1 round' : `${n} rounds`),
@@ -67,8 +67,6 @@ export const RAIL_WORDS = Object.freeze({
 export const RAIL_NAMES_MAX = 12;
 
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || String(name || '');
-const andList = (names) => (names.length <= 1 ? (names[0] || '')
-  : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
 /**
  * "waiting on Marcus"; "Marcus, Ana" in full for two; "Marcus, Ana +3" for
@@ -95,7 +93,6 @@ export function leaderOf(people = []) {
 }
 
 const ROUNDING = new Set(['ANSWERING', 'VOTING', 'VOTE_RESPONSES']);
-const STILL = new Set(['writing', 'answering', 'not-yet']);
 
 /**
  * Scores read in text colour from Results on, muted while the room answers
@@ -159,19 +156,11 @@ export function railSummaries({
     const long = askNames.map((n) => `${n} ${RAIL_WORDS.wantsName}`).join('. ');
     peopleH = { who, text: here, dot: true, level: 'now', title: long, label: join(who, here, long) };
   } else if (ROUNDING.has(moment)) {
-    // The rows' own list, so the clause can never disagree with them; when
-    // the names lag the count (state 'unknown') it says nothing.
-    const lagging = people.some((p) => p.state === 'unknown');
-    const out = lagging ? [] : people.filter((p) => STILL.has(p.state)).map((p) => p.name);
-    const clause = !open.people ? waitingClause(out) : '';
-    const word = people.some((p) => p.state === 'answering') ? RAIL_WORDS.stillAnswering : RAIL_WORDS.stillOut[moment];
-    peopleH = {
-      text: here,
-      strong: clause,
-      level: 'calm',
-      title: clause ? `${word}: ${out.join(', ')}` : undefined,
-      label: clause ? join(here, RAIL_WORDS.waitingOn(andList(out))) : here,
-    };
+    // WHO IS STILL OUT IS THE ROOM TILE'S NOW (owner, 5 Nov 2026, cut 5;
+    // host-attention PLAN §4.3, Q2): the closed header's "waiting on Marcus"
+    // went there, always in view. While the room answers or votes the header
+    // is the plain count, and the rows sort the people still out first.
+    peopleH = { text: here, strong: '', level: 'calm', label: here };
   } else {
     // Results and after, in a scored format: the leader, light (fork F7).
     const leader = !open.people ? leaderOf(people) : null;
@@ -253,7 +242,11 @@ function peopleRows({
   const names = (players || []).map((p) => (p && (p.name || p.playerName)) || '').filter(Boolean);
   const answering = moment === 'ANSWERING';
   const voting = moment === 'VOTING' || moment === 'VOTE_RESPONSES';
-  const here = (name) => (from && from[name] ? { name, state: 'here', from: from[name] } : { name, state: 'here' });
+  // AWAY (host-attention D8): no page open for this person (get-players
+  // `deviceConnected`); a row not read yet counts as here.
+  const away = new Set((players || []).filter((p) => p && p.deviceConnected === false).map((p) => p.name || p.playerName));
+  const mark = (row) => (away.has(row.name) ? { ...row, away: true } : row);
+  const here = (name) => mark(from && from[name] ? { name, state: 'here', from: from[name] } : { name, state: 'here' });
   if (!answering && !voting) return names.map(here);
   const waiting = waitingRoster({
     players,
@@ -267,10 +260,15 @@ function peopleRows({
   // The names lag the count (a hidden round): keep the names and blank only
   // the status ('unknown', drawn "—"), rather than an empty People section,
   // which reads as "everyone left" (console-rail README D7).
-  if (!waiting) return names.map((name) => ({ name, state: 'unknown' }));
+  if (!waiting) return names.map((name) => mark({ name, state: 'unknown' }));
   const still = new Set(waiting);
-  return names.map((name) => ({
+  /* THE PEOPLE STILL OUT FIRST (owner, 5 Nov 2026, cut 6): while the room
+     answers or votes, the rows the host may need are at the top. A stable
+     sort, roster order inside each group, so a row moves once, when that
+     person acts, and never otherwise. */
+  const rows = names.map((name) => mark({
     name,
     state: still.has(name) ? (answering ? (choice ? 'answering' : 'writing') : 'not-yet') : (answering ? 'answered' : 'voted'),
   }));
+  return rows.filter((r) => still.has(r.name)).concat(rows.filter((r) => !still.has(r.name)));
 }

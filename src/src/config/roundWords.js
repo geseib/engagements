@@ -42,6 +42,8 @@ const RW = Object.freeze({
   /** "Start round 3" (owner, 14 Oct: it names the round; matches the lobby's "Start round 1"). */
   startRound: (noun, n) => `Start ${nounOf(noun)} ${n}`,
   skipRound: (noun) => `Skip this ${nounOf(noun)}`,
+  /** The ⋯ beside the main button that holds Skip (owner, 5 Nov 2026, cut 8). */
+  moreRoundActions: 'More for this round',
   /** RESULTS' secondary: the first response of N, in tally order. */
   showResponse: (i, n) => `Show response ${i} of ${n}`,
   nextResponse: 'Next response',

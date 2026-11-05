@@ -1,12 +1,14 @@
 /* ============================================================================
-   THE PULSE — components/console/ConsolePulse.jsx (session-start D3;
-   experience plan §3.2a, Phase 2 step 2c). Three tiles under the Needs-you
-   line on the two-screen console; same positions in every phase.
+   THE ROOM TILE — components/console/ConsolePulse.jsx (owner, 5 Nov 2026,
+   cut 5; host-attention PLAN §4.2). One tile under Your part now on the
+   two-screen console, where the pulse had three (session-start D3): the
+   count and its bar, the time beside it, who is still out under it.
 
    Dusk only: HostConsole's root declares data-theme="dark". Roles only, no
    literal (consolePulsePalette.test.js). Laptop ladder 12 / 13 / 15 / 19 /
-   24 / 30px: the room's count is the panel's one 30px numeral, time and
-   arrivals take the 24px step (D3 "One numeral per panel").
+   24 / 30px: the room's count is the panel's one 30px numeral, the round's
+   record after it takes 24px, the clock 19px, the nudge line body (15px,
+   text colour: it is what the host says aloud), the step line 13px.
 
    Calm (D3): --info for progress, green only for Everyone's in. Measured on
    dusk --surface #1B2942 over --bg #0F1A2E (consolePulsePalette.test.js):
@@ -22,8 +24,7 @@
   --cpulse-t-title: 24px;
   --cpulse-t-numeral: 30px;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
 .cpulse .cpulse-tile {
@@ -45,10 +46,53 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
-.cpulse .cpulse-num small {
+.cpulse .cpulse-num small,
+.cpulse .cpulse-num .cpulse-verb {
   font-size: var(--cpulse-t-head);
   font-weight: 700;
   color: var(--muted);
+}
+.cpulse .cpulse-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.cpulse .cpulse-steps {
+  font-size: var(--cpulse-t-label);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cpulse .cpulse-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.cpulse .cpulse-row > :first-child { flex: 1 1 auto; min-width: 0; }
+.cpulse .cpulse-clock {
+  margin: 0;
+  font-size: var(--cpulse-t-head);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* WHO IS STILL OUT: what the host says aloud, so text colour at body size.
+   One text node, min-width 0 (hard rule 8); the whole list is in title=. */
+.cpulse .cpulse-nudge {
+  margin: 0;
+  min-height: 1.35em;
+  font-size: var(--cpulse-t-body);
+  line-height: 1.35;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .cpulse .cpulse-val {
   margin: 0;
@@ -104,25 +148,20 @@
 @media (prefers-reduced-motion: reduce) {
   .cpulse .cpulse-room.is-in, .cpulse .cpulse-room.is-in .cpulse-bar i { animation: none; }
 }
-.cpulse .cpulse-room.is-in .cpulse-sub {
+.cpulse .cpulse-room.is-in .cpulse-nudge {
   color: var(--success-text);
   font-weight: 700;
-}
-.cpulse .cpulse-late {
-  justify-self: start;
-  --ui-size: var(--cpulse-t-label);
 }
 /* THE TIMER (experience plan 2f; session-start D3 row 2, D4): a draining
    ring beside time left of time given, and +1 min. Info blue while it runs;
    amber (--warn, "a status, not the accent") only once time is up, counting
    over. Never red. --warn #F6A94C on --surface #1B2942 measures 7.92:1
    (consolePulsePalette.test.js). */
-.cpulse .cpulse-timer {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.cpulse .cpulse-time {
+  display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  flex: 0 0 auto;
 }
 .cpulse .cpulse-timer-text {
   display: grid;
@@ -142,10 +181,7 @@
 .cpulse .cpulse-ring.is-up .tring-track {
   stroke: rgb(var(--warn-rgb) / .45);
 }
-.cpulse .cpulse-time.is-up {
-  border-color: var(--warn);
-}
-.cpulse .cpulse-time.is-up .cpulse-val {
+.cpulse .cpulse-time.is-up .cpulse-clock {
   color: var(--warn);
 }
 .cpulse .cpulse-plus {

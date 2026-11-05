@@ -29,7 +29,8 @@
   --ny-line-h: 56px;
 }
 
-/* ---- the line, under Your part now ---- */
+/* ---- the line, under Your part now: a bar at one height while something
+   waits, one quiet line when calm (below) ---- */
 .ny.ny-line {
   display: flex;
   align-items: center;
@@ -66,6 +67,21 @@
   .ny.ny-line.is-now[data-arrived], .ny.ny-asking[data-arrived] .ny-asker, .ny.ny-asking[data-arrived] .ny-dot { animation: none; }
 }
 .ny.ny-line.is-soon { color: var(--text); }
+/* CALM IS ONE QUIET LINE, NOT A BAR (owner, 5 Nov 2026, cut 4): "Nothing
+   needs you now." in a full-width 56px box was the second-largest thing on
+   the console while it said nothing. Calm is now muted text at the label
+   size under Your part now, with no box; the bar (edge, wash, buttons) is
+   drawn only when something waits. This reverses the earlier "one fixed
+   height so nothing moves" (owner review O1): the owner accepted that the
+   content moves down when an item arrives. */
+.ny.ny-line.is-calm {
+  height: auto;
+  padding: 0 2px;
+  border-left: 0;
+  border-radius: 0;
+  background: none;
+  font-size: var(--ny-t-label);
+}
 /* THE PUBLIC LINE (PublicNeedsLine.jsx, PLAN §3.3, 2h): the room can read it.
    Calm is the muted line; waiting is an amber EDGE and no wash (a wash reads
    as an alarm from the back of the room), with the count by kind in --text.

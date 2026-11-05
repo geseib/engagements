@@ -49,11 +49,12 @@ describe('every header, open and closed, per phase (README D1, frame 7)', () => 
   });
   const marcusOut = answering(SIX.filter((n) => n !== 'Marcus Webb'));
 
-  test('answering: People open says "6 here"; closed adds who is still out, never the count', () => {
+  test('answering: People says "6 here", open or closed; who is still out is the room tile\'s (cut 5)', () => {
     expect(sum('ANSWERING', marcusOut, { people: true }).people).toMatchObject({ text: '6 here', strong: '' });
     const closed = sum('ANSWERING', marcusOut).people;
-    expect(closed).toMatchObject({ text: '6 here', strong: 'waiting on Marcus' });
-    expect(`${closed.text} ${closed.strong}`).not.toMatch(/5\s*(\/|of)\s*6|answered/);
+    // rejects: "waiting on Marcus" here as well as on the room tile (one fact, once).
+    expect(closed).toMatchObject({ text: '6 here', strong: '' });
+    expect(`${closed.text} ${closed.strong}`).not.toMatch(/5\s*(\/|of)\s*6|answered|waiting/);
   });
   test('the queue: open "2 of 21"; closed adds the next round; lobby counts and names the first; ended says done', () => {
     expect(sum('ANSWERING', marcusOut, { queue: true }).queue.text).toBe('2 of 21');
@@ -67,12 +68,12 @@ describe('every header, open and closed, per phase (README D1, frame 7)', () => 
   test('everyone in: the waiting clause simply leaves', () => {
     expect(sum('ANSWERING', answering(SIX)).people).toMatchObject({ text: '6 here', strong: '' });
   });
-  test('voting: "4 here · waiting on Ana, Lee +1"', () => {
+  test('voting: "4 here", and the people still out sorted first (cut 6)', () => {
     const four = [{ name: 'Ana Lucía Ortega' }, { name: 'Jordan Lee' }, { name: 'Lee Chen' }, { name: 'Sam Okafor' }];
     const voting = consolePeopleFor({ moment: 'VOTING', players: four, votedNames: ['Jordan Lee'], votedCount: 1 });
     const h = railSummaries({ moment: 'VOTING', players: 4, people: voting });
-    expect(`${h.people.text} · ${h.people.strong}`).toBe('4 here · waiting on Ana, Lee +1');
-    expect(h.people.title).toBe('Not voted yet: Ana Lucía Ortega, Lee Chen, Sam Okafor');
+    expect(h.people).toMatchObject({ text: '4 here', strong: '' });
+    expect(voting.map((p) => p.name)).toEqual(['Ana Lucía Ortega', 'Lee Chen', 'Sam Okafor', 'Jordan Lee']);
   });
   test('results, scored: closed adds the leader; open does not; ended says who took part', () => {
     const results = consolePeopleFor({ moment: 'RESULTS', players, facts: personFactsFor({ gameType: 'trivia', players }) });
@@ -92,7 +93,7 @@ describe('every header, open and closed, per phase (README D1, frame 7)', () => 
     renderRail({ lateCount: 2 });
     fireEvent.click(head('people'));
     expect(sec('people').open).toBe(false);
-    expect(headText('people')).toBe('6 here · waiting on Marcus');
+    expect(headText('people')).toBe('6 here');
     expect(headText('queue')).toBe('2 of 21 · next: Pricing for the EU launch');
     expect(headText('late')).toBe('2 to review');
     fireEvent.click(head('queue'));
@@ -121,12 +122,12 @@ describe('waiting on: names, and the large-room switch (README D7, review H2)', 
     });
     expect(railSummaries({ moment: 'ANSWERING', players: 6, people: lag }).people.strong).toBe('');
   });
-  test('the whole list is in the summary\'s accessible name, not only title= (review A2)', () => {
+  test('closed while the room answers, the header is "6 here": the names are the room tile\'s now (cut 5)', () => {
     renderRail({ people: answering(['Priya Raman', 'Sam Okafor', 'Jordan Lee']) });
     fireEvent.click(head('people'));
-    expect(headText('people')).toBe('6 here · waiting on Marcus, Ana +1');
-    expect(head('people').getAttribute('aria-label')).toBe('People, 6 here · waiting on Marcus Webb, Ana Lucía Ortega and Lee Chen');
-    expect(head('people').getAttribute('title')).toBe('Still writing: Marcus Webb, Ana Lucía Ortega, Lee Chen');
+    expect(headText('people')).toBe('6 here');
+    expect(head('people').getAttribute('aria-label')).toBe('People, 6 here');
+    expect(head('people').getAttribute('title')).toBeNull();
   });
 });
 
@@ -220,7 +221,7 @@ describe('the alert: one fade, both places together (README D4, fork 3)', () => 
 
 describe('People opens once on a request, and can be closed (README D3, fork 4)', () => {
   function Rail({ roster, moment = 'READ' }) {
-    return <ConsoleRail moment={moment} people={[]} counts={{ players: 3 }} asking={needsYou({ players: roster }).items} />;
+    return <ConsoleRail moment={moment} people={[]} counts={{ players: 3 }} lateCount={1} asking={needsYou({ players: roster }).items} />;
   }
   test('opens on arrival; the host closes it; the same request does not reopen it; a new one does', () => {
     const { rerender } = render(<Rail roster={calm} />);
@@ -310,7 +311,7 @@ describe('per-person status: a ✓ / … glyph with the word as its label (D7, f
 
 describe('carets (README D2)', () => {
   test('every header has a decorative caret first; <details> carries the state', () => {
-    renderRail();
+    renderRail({ lateCount: 1 });
     ['queue', 'people', 'late'].forEach((id) => {
       const caret = head(id).firstElementChild;
       expect(caret.className).toBe('hc-caret');
@@ -330,11 +331,10 @@ describe('Late is a Soon dot, never amber (fork 7)', () => {
     expect(head('late').querySelector('.hc-count').className).not.toMatch(/is-alert/);
     expect(head('late').querySelector('b')).toHaveTextContent('2 to review');
   });
-  test('nothing waiting: "none", calm, no dot', () => {
+  test('nothing waiting: the section is not drawn at all (cut 6: a header that says "none")', () => {
     renderRail({ lateCount: 0 });
-    expect(headText('late')).toBe('none');
-    expect(head('late').getAttribute('data-level')).toBe('calm');
-    expect(head('late').querySelector('.hc-dot')).toBeNull();
+    expect(sec('late')).toBeNull();
+    expect(sec('people')).not.toBeNull();
   });
 });
 
@@ -356,7 +356,7 @@ describe('kept as it was', () => {
       return (
         <>
           <button type="button" onClick={() => setMoment('READ')}>read</button>
-          <ConsoleRail moment={moment} people={[]} counts={{ players: 0 }} />
+          <ConsoleRail moment={moment} people={[]} counts={{ players: 0 }} lateCount={1} />
         </>
       );
     }
