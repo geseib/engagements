@@ -59,6 +59,9 @@ import { noteServerNow } from './utils/serverClock';
 
 /** Past this many characters a headline is a passage (PlayerSurface.css `.plr-q--long`). */
 const LONG_HEADLINE = 160;
+/** Past this many characters the ballot's question line may run past its two-line clamp
+ *  (`.plr-q--clamp`), so it carries "Show the whole question". */
+const VOTE_LINE_CLAMP = 70;
 
 /** Matches PlayerSurface.css §2b's media query exactly. */
 export const WIDE_COMPOSE_QUERY = '(min-width: 1024px) and (orientation: landscape)';
@@ -585,6 +588,9 @@ function PlayerPage({ event = null } = {}) {
   */
   const [isAnswerInputFocused, setIsAnswerInputFocused] = useState(false);
   const [showFullQuestion, setShowFullQuestion] = useState(false);
+  /* The ballot's question line opens to the whole question for ONE round: the
+     gameState it was opened on, so the next ballot starts folded again. */
+  const [voteQuestionOpenFor, setVoteQuestionOpenFor] = useState(null);
   /* A LAPTOP OR A TABLET HELD SIDEWAYS (owner, 4 Nov 2026: "the screen should
      be laid out well to read and write, no need for a narrow scroll"). There
      the answer screen reads on the left and writes on the right, and nothing
@@ -4296,26 +4302,23 @@ function PlayerPage({ event = null } = {}) {
        single player. Two of five shipped game types had no ASK design at all
        (INVENTORY §4). */
     const isArtwork = gameType === 'call-and-answer' && !!currentQuestion.image;
+    /* THE QUESTION IS THE HEADLINE (owner, 5 Nov 2026), as on the room's
+       screen: a call-and-answer title is the line in large type and the brief
+       is body text under it. Until then the brief was the headline and the
+       title a grey caps label above it, so "What should we stop doing next
+       quarter?" read as a caption to a 400-character passage. With no title
+       the brief is still the headline (and `.plr-q--long` sets it at a
+       reading size). */
+    const callBrief = currentQuestion.detail || currentQuestion.question;
     const headline = isArtwork
       ? (currentQuestion.title || currentQuestion.question)
       : gameType === 'call-and-answer'
-        // `|| title` is the fallback the shipped chain lacked: a call-and-answer
-        // question carrying only a `title` rendered an empty prompt and pushed
-        // the real one into a "subtitle" beneath it.
-        ? (currentQuestion.detail || currentQuestion.question || currentQuestion.title)
+        ? (currentQuestion.title || callBrief)
         : (currentQuestion.title || currentQuestion.question);
-    // Compared against the RESOLVED headline rather than against `detail ||
-    // question`, so it can never restate the line directly above it.
-    const subtitle = gameType === 'call-and-answer'
-      && currentQuestion.title
-      && currentQuestion.title !== headline
-      && currentQuestion.title.length < 100
-      ? currentQuestion.title
-      : null;
     const detail = isArtwork
       ? currentQuestion.detail
       : gameType === 'call-and-answer'
-        ? null
+        ? (currentQuestion.title && callBrief !== currentQuestion.title ? callBrief : null)
         : gameType === 'trivia'
           ? currentQuestion.questionDetail
           : gameType === 'wavelength'
@@ -4327,14 +4330,22 @@ function PlayerPage({ event = null } = {}) {
        cannot both have them. Focus is the trigger because no browser reliably
        reports the keyboard's height. The control that undoes it is rendered
        with it, always — a fold, not a deletion. */
-    const folded = isAnswerInputFocused && !showFullQuestion && !wideCompose;
     // A passage, not a question: read at body size rather than shouted (4 Nov).
     const longHeadline = String(headline || '').length > LONG_HEADLINE;
+    /* What the fold takes away. A call-and-answer TITLE is the question line
+       and stays whole; only the brief under it folds. Every other headline
+       (a passage standing in for a missing title, a "title" that is itself a
+       passage, a trivia or poll question) condenses as it always has. With nothing to fold there is no fold, so
+       no control that opens nothing. */
+    const titleLine = gameType === 'call-and-answer' && !isArtwork && !!currentQuestion.title
+      && !longHeadline;
+    const foldable = !titleLine || !!detail;
+    const folded = foldable && isAnswerInputFocused && !showFullQuestion && !wideCompose;
+    const headlineFolds = folded && !titleLine;
 
     const questionBlock = (
       <>
-        {subtitle && !folded && <p className="plr-lab">{subtitle}</p>}
-        <p className={`plr-q${folded ? ' plr-q--fold' : longHeadline ? ' plr-q--long' : ''}`}>{headline}</p>
+        <p className={`plr-q${headlineFolds ? ' plr-q--fold' : longHeadline ? ' plr-q--long' : ''}`}>{headline}</p>
         {folded ? (
           <button
             type="button"
@@ -4358,7 +4369,12 @@ function PlayerPage({ event = null } = {}) {
                 and any words about its meaning seed the very answers the game
                 exists to compare. The term is the headline; the words form's
                 own copy says what to do (the owner, off the AI Jargon set). */}
-            {detail && <p className="plr-detail plr-muted">{detail}</p>}
+            {/* A call-and-answer brief under its title is the thing they must
+                read to answer, so it is set in --text, not the muted grey a
+                trivia or poll aside wears. */}
+            {detail && (
+              <p className={`plr-detail${titleLine ? ' plr-brief' : ' plr-muted'}`}>{detail}</p>
+            )}
           </>
         )}
       </>
@@ -4775,16 +4791,45 @@ function PlayerPage({ event = null } = {}) {
          player who joined at round three — or who has been discussing something
          else for two minutes — ranks six answers to a question the phone will
          not show them (INVENTORY §5). */
-      const votedQuestion = currentQuestion?.image
-        ? (currentQuestion.title || currentQuestion.question)
-        : (currentQuestion?.detail || currentQuestion?.title || currentQuestion?.question);
+      /* WHAT TO VOTE ON, FIRST, IN ONE LINE (owner, 5 Nov 2026). The screen
+         used to open on "Rank your top three.", the whole brief again (eleven
+         lines on a phone), a two-line privacy note and a mode toggle, and no
+         response was on the first phone screen. Now: the question as one line
+         (the title; or, with no title, the brief clamped to two lines), then
+         the ballot. The rest of the question is one tap away: a reduction with
+         no recovery is a deletion. */
+      const voteBrief = currentQuestion?.detail || currentQuestion?.question || '';
+      const voteTitle = currentQuestion?.title || '';
+      const voteLine = voteTitle || voteBrief;
+      const voteRest = voteTitle && voteBrief && voteBrief !== voteTitle ? voteBrief : '';
+      // The clamp only folds something when the line can run past two lines:
+      // an untitled brief, or a "title" that is itself a passage.
+      const voteClamps = voteLine.length > VOTE_LINE_CLAMP;
+      const voteOpen = voteQuestionOpenFor === gameState;
+      const voteFoldable = !currentQuestion?.image && (voteRest || voteClamps);
+      const rankWord = requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three';
 
       body = (
         <>
-          <h1 className="plr-h1 plr-h1--primary">
-            Rank your top {requiredVotes === 1 ? 'one' : requiredVotes === 2 ? 'two' : 'three'}.
-          </h1>
-          {votedQuestion && <p className="plr-detail plr-muted">{votedQuestion}</p>}
+          {voteLine && (
+            <h1
+              className={`plr-q plr-q--vote${voteClamps && !voteOpen ? ' plr-q--clamp' : ''}`}
+            >
+              {voteLine}
+            </h1>
+          )}
+          {voteFoldable && !voteOpen && (
+            <button
+              type="button"
+              className="plr-more plr-more--after"
+              onClick={() => setVoteQuestionOpenFor(gameState)}
+            >
+              Show the whole question ↓
+            </button>
+          )}
+          {voteFoldable && voteOpen && voteRest && (
+            <p className="plr-detail plr-brief">{voteRest}</p>
+          )}
           {/* STILL WRITING WHEN VOTING STARTED (session flow v3 §4.4). The
               draft is not thrown away: it can still be sent, and the server
               keeps it with this round, labelled late, outside the vote. */}
@@ -4805,42 +4850,9 @@ function PlayerPage({ event = null } = {}) {
             />
           )}
 
-          {/* THE ROOM-FACING SENTENCE, VERBATIM, ABOVE THE BALLOT, EVERY TIME,
-              NOT DISMISSIBLE — and the qualifier is not a footnote (§6.3). It
-              is the difference between a true statement and an overclaim, and
-              the product has to be able to say the true one out loud. Before
-              this, rows were labelled `Response 1…N` and nothing anywhere said
-              why, which reads as a bug or as the app having lost the names. */}
-          <p className="plr-anon">
-            <b>Nobody sees who wrote what — the host included — until voting closes.</b>{' '}
-            This hides names, not identities.
-          </p>
-
-          {/* TWO BALLOTS SURVIVE, WHICH IS A DEPARTURE FROM RATIONALE §6.1.
-              §6.1 deletes Quick Vote outright; `__tests__/voteSwitching.test.jsx`
-              (commit a4bd7127, today) pins the fix that made a vote switchable
-              at all and drives the quick ballot's three selects with user-event.
-              Deleting the mode deletes the regression test for a defect the
-              owner reported this morning, so both are restyled instead. See the
-              report. */}
-          <div className="plr-modes" role="group" aria-label="How to rank">
-            <button
-              type="button"
-              className="plr-mode"
-              aria-pressed={votingMode === 'quick'}
-              onClick={() => setVotingMode('quick')}
-            >
-              Quick Vote
-            </button>
-            <button
-              type="button"
-              className="plr-mode"
-              aria-pressed={votingMode === 'detailed'}
-              onClick={() => setVotingMode('detailed')}
-            >
-              Detailed Vote
-            </button>
-          </div>
+          {/* The instruction is the ballot's own label now, not a heading over
+              the question: one line, directly above what it describes. */}
+          <p className="plr-rank-cue">Rank your top {rankWord}.</p>
 
           {votingMode === 'quick' ? (
             <div className="plr-quick">
@@ -4917,6 +4929,30 @@ function PlayerPage({ event = null } = {}) {
               mySubmittedAnswer={mySubmittedAnswer}
             />
           )}
+
+          {/* ONE WAY TO VOTE BY DEFAULT (owner, 5 Nov 2026): the quick vote.
+              The detailed ballot (every response in full, place buttons on
+              each) stays one quiet tap away, below the ballot, rather than a
+              two-button toggle above it that asked a first-timer to choose a
+              method before they had seen a single response. Both ballots
+              survive because `__tests__/voteSwitching.test.jsx` pins the fix
+              that made a vote switchable in each (commit a4bd7127). */}
+          <button
+            type="button"
+            className="plr-more plr-more--switch"
+            onClick={() => setVotingMode(votingMode === 'quick' ? 'detailed' : 'quick')}
+          >
+            {votingMode === 'quick' ? 'Detailed vote: read each response in full' : 'Back to the quick vote'}
+          </button>
+
+          {/* THE ROOM-FACING PROMISE, ON EVERY BALLOT, NOT DISMISSIBLE, in one
+              short line under it (owner, 5 Nov 2026; was two lines above it).
+              "Only names" carries the qualifier the long form spelled out
+              ("This hides names, not identities"): it never says anonymous,
+              because a room of twelve can still recognise a voice. */}
+          <p className="plr-anon plr-anon--line">
+            Only names are hidden, from the host too, until voting closes.
+          </p>
         </>
       );
 
@@ -5329,24 +5365,29 @@ function PlayerPage({ event = null } = {}) {
           </div>
         )}
 
-        <div className="plr-card">
-          <p className="plr-lab">If you lose this page</p>
+        {/* ONE CARD, NOT TWO (owner, 5 Nov 2026). The way back was a second
+            six-line card that every participant read before anything had gone
+            wrong; it is now one line that opens in place to the same words.
+            A <details>, so it opens without script and announces as a
+            disclosure. */}
+        <details className="plr-lost">
+          <summary>Lost this page?</summary>
           {/* IN AN EVENT the way back is the EVENT's code, which knows this
               phone without a name; the item's own code would ask for one and
               seat a stranger (found driving the day in Chromium, 27 Sep 2026). */}
           {inEvent ? (
-            <p className="plr-quote">
+            <p className="plr-detail">
               Open the join screen and enter <b>{event.code}</b> again. This device is
               remembered, so no name is needed, and your answers come back with you.
             </p>
           ) : (
-            <p className="plr-quote">
+            <p className="plr-detail">
               On this device, go back to the join screen and enter <b>{gameId}</b> and the
               same name: your answers come back with you. On another device?
               You can move your name there; the host lets you in.
             </p>
           )}
-        </div>
+        </details>
 
         <LookUpCue>{LOOK_UP.lobby}</LookUpCue>
       </>

@@ -21,6 +21,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import PlayerPage from '../PlayerPage';
+import webSocketClient from '../WebSocketClient';
 
 jest.mock('../WebSocketClient', () => ({
   __esModule: true,
@@ -142,6 +143,13 @@ const stage = () => document.querySelector('.plr-stage');
 beforeEach(() => {
   global.fetch.mockClear();
   localStorage.clear();
+  // A held answer is mirrored in sessionStorage; without this one test's held
+  // answer seats the next test's round in HELD.
+  sessionStorage.clear();
+  // CRA's resetMocks strips the factory's `() => true` before every test, and
+  // an undefined send reads as "the socket was down": the answer is HELD, not
+  // sent, and "an answered round" never reaches its receipt.
+  webSocketClient.sendCleanMessage.mockImplementation(() => true);
   window.history.pushState({}, '', '/play');
   Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
 });
@@ -248,6 +256,29 @@ describe('the volume is set by the state machine, and the player never chooses',
     expect(screen.getByText(/Waiting for the host/i)).toBeInTheDocument();
   });
 
+  // rejects: the lobby's way-back card returning as a second six-line card.
+  //          It is one line, "Lost this page?", that opens in place to the
+  //          same words — the code included — and nothing else became a card.
+  test('the lobby: one card at most, and the way back is a one-line disclosure', async () => {
+    installFetch(makeServer({ state: 'CREATED', engagementInfo: 'Half-day planning session.' }));
+    await join();
+    await screen.findByText(/Waiting for the host/i);
+
+    const cards = stage().querySelectorAll('.plr-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveTextContent(/About this session/);
+
+    const lost = stage().querySelector('details.plr-lost');
+    expect(lost).not.toBeNull();
+    expect(lost.open).toBe(false);
+    const summary = lost.querySelector('summary');
+    expect(summary).toHaveTextContent(/^Lost this page\?$/);
+    expect(lost).toHaveTextContent(new RegExp(`enter ${GAME} and the same name`));
+    expect(stage().textContent).not.toMatch(/If you lose this page/i);
+    // The disclosure comes after the session card.
+    expect(cards[0].compareDocumentPosition(lost) & 4).toBeTruthy();
+  });
+
   // rejects: ASK losing its dock — the one state where the phone legitimately
   //          wins the room's attention, because the host has just asked
   //          everyone to answer.
@@ -348,8 +379,10 @@ describe('ASK', () => {
   // rejects: the full-screen composer overlay returning, and with it a screen
   //          where a player cannot see the question they are answering. The one
   //          legal reduction folds the question and SAYS SO, with a control that
-  //          opens it again — a fold, not a deletion.
-  test('focusing the composer folds the question and offers it back', async () => {
+  //          opens it again — a fold, not a deletion. Since 5 Nov 2026 a
+  //          call-and-answer TITLE is the question line and stays whole on
+  //          focus; only the brief under it folds away.
+  test('focusing the composer folds the brief, keeps the question line, and offers it back', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
     await join();
@@ -357,14 +390,66 @@ describe('ASK', () => {
     await resync();
 
     const composer = await screen.findByRole('textbox', { name: /Your response/i });
+    expect(screen.getByText(/Our regional teams each built/)).toBeInTheDocument();
+
+    fireEvent.focus(composer);
+    expect(document.querySelector('.plr-q')).toHaveTextContent('What is the capital of France?');
     expect(document.querySelector('.plr-q--fold')).toBeNull();
+    expect(screen.queryByText(/Our regional teams each built/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show the whole question/i }));
+    expect(screen.getByText(/Our regional teams each built/)).toBeInTheDocument();
+  });
+
+  // rejects: a passage-as-headline losing its fold. PlayerPage only seats a
+  //          question that has a title, so the passage case that reaches a
+  //          phone is a "title" that is itself the whole brief: it is set at
+  //          the reading size (.plr-q--long) and it is what condenses on focus.
+  test('a title that is a passage is read at body size, and it is what folds', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    server.question = { ...server.question, title: 'Our regional teams each built their own intake process, and now nobody can say which form a request should start on, who owns it, or when it is finished. Name the one change that would fix that.', detail: '' };
+    installFetch(server);
+    await join();
+    server.state = 'ASK#001';
+    await resync();
+
+    const composer = await screen.findByRole('textbox', { name: /Your response/i });
+    expect(document.querySelector('.plr-q')).toHaveTextContent(/Our regional teams each built/);
+    expect(document.querySelector('.plr-q')).toHaveClass('plr-q--long');
+    expect(document.querySelector('.plr-brief')).toBeNull();
 
     fireEvent.focus(composer);
     expect(document.querySelector('.plr-q--fold')).not.toBeNull();
-
-    const opener = screen.getByRole('button', { name: /Show the whole question/i });
-    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole('button', { name: /Show the whole question/i }));
     expect(document.querySelector('.plr-q--fold')).toBeNull();
+  });
+
+  // rejects: the title going back to being a small grey caps label over a
+  //          400-character brief set as the headline. The room's screen puts
+  //          the title large and the detail as body; the phone matches it.
+  test('call-and-answer: the title is the headline, the brief is body text, the task follows', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await join();
+    server.state = 'ASK#001';
+    await resync();
+    await screen.findByRole('textbox', { name: /Your response/i });
+
+    const q = document.querySelector('.plr-stage .plr-q');
+    expect(q).toHaveTextContent('What is the capital of France?');
+    expect(q).not.toHaveClass('plr-q--long');
+    const brief = document.querySelector('.plr-stage .plr-brief');
+    expect(brief).toHaveTextContent(/Our regional teams each built/);
+    // Content they must read, so not the muted aside.
+    expect(brief).toHaveClass('plr-detail');
+    expect(brief).not.toHaveClass('plr-muted');
+    // The title appears once, and never as a caps label.
+    const labels = [...document.querySelectorAll('.plr-stage .plr-lab')].map((l) => l.textContent);
+    expect(labels).not.toContain('What is the capital of France?');
+    // Document order: question, brief, then the task.
+    const task = document.querySelector('.plr-stage .plr-task');
+    if (task) expect(brief.compareDocumentPosition(task) & 4).toBeTruthy();
+    expect(q.compareDocumentPosition(brief) & 4).toBeTruthy();
   });
 
   // rejects: the receipt disappearing. handleSubmitAnswer clears the composer on
@@ -398,20 +483,81 @@ describe('the ballot', () => {
     await waitFor(() => expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0));
   }
 
-  // rejects: the anonymity copy being softened, shortened, or turned into
-  //          "anonymous". The qualifier is not a footnote: a room of twelve where
-  //          somebody writes in their own voice about their own team is not
-  //          anonymous in any cryptographic sense, and the product has to be able
-  //          to say the true sentence out loud.
-  test('the ballot carries the exact sentence and its qualifier', async () => {
+  // rejects: the anonymity copy being softened into "anonymous", or vanishing.
+  //          Since 5 Nov 2026 it is ONE short line under the ballot; "Only
+  //          names" carries the qualifier ("hides names, not identities"): a
+  //          room of twelve is not anonymous in any cryptographic sense.
+  test('the ballot carries the privacy line, once, under the ballot', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
     await reachBallot(server);
 
+    const lines = document.querySelectorAll('.plr-anon');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toHaveTextContent('Only names are hidden, from the host too, until voting closes.');
     const text = document.querySelector('.plr').textContent.replace(/\s+/g, ' ');
-    expect(text).toContain('Nobody sees who wrote what — the host included — until voting closes.');
-    expect(text).toContain('This hides names, not identities.');
     expect(text).not.toMatch(/anonymous/i);
+    const ballot = document.querySelector('.plr-quick');
+    expect(ballot.compareDocumentPosition(lines[0]) & 4).toBeTruthy();
+  });
+
+  // rejects: the vote screen opening on an instruction, the whole brief again,
+  //          a privacy paragraph and a mode toggle, with no response on the
+  //          first phone screen. The order is: the question as one line, the
+  //          ballot, then the quiet way to the other ballot and the privacy line.
+  test('the vote screen shows what to vote on first, then the ballot', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await reachBallot(server);
+
+    const st = stage();
+    const q = st.querySelector('h1.plr-q');
+    expect(q).toHaveTextContent('What is the capital of France?');
+    // Nothing before the question in the stage's content.
+    const first = st.querySelector('.plr-q, .plr-h1, .plr-anon, .plr-rank-cue, .plr-quick, .plr-detail');
+    expect(first).toBe(q);
+    const quick = st.querySelector('.plr-quick');
+    const switchLink = screen.getByRole('button', { name: /Detailed vote/i });
+    const anon = st.querySelector('.plr-anon');
+    const follows = (a, b) => expect(a.compareDocumentPosition(b) & 4).toBeTruthy();
+    follows(q, quick);
+    follows(quick, switchLink);
+    follows(switchLink, anon);
+    // The brief is NOT repeated on the ballot until asked for.
+    expect(screen.queryByText(/Our regional teams each built/)).toBeNull();
+    // One way by default: the quick vote, and no toggle group above it.
+    expect(st.querySelector('[role="group"][aria-label="How to rank"]')).toBeNull();
+    expect(st.querySelectorAll('[aria-pressed]')).toHaveLength(0);
+    expect(screen.getAllByRole('combobox')).toHaveLength(3);
+  });
+
+  // rejects: the detailed ballot becoming unreachable, or the way back
+  //          missing once it is open.
+  test('the detailed vote is one quiet link away, and so is the way back', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    installFetch(server);
+    await reachBallot(server);
+
+    const link = screen.getByRole('button', { name: /Detailed vote/i });
+    expect(link).toHaveClass('plr-more');
+    fireEvent.click(link);
+    expect(document.querySelectorAll('.plr-resp')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: /Back to the quick vote/i }));
+    expect(screen.getAllByRole('combobox')).toHaveLength(3);
+  });
+
+  // rejects: a long question line clamped with no way to read the rest.
+  test('a passage as the question line is clamped to two lines and opens with "Show the whole question"', async () => {
+    const server = makeServer({ state: 'CREATED' });
+    server.question = { ...server.question, title: 'Our regional teams each built their own intake process, and now nobody can say which form a request should start on, who owns it, or when it is finished. Name the one change that would fix that.', detail: '' };
+    installFetch(server);
+    await reachBallot(server);
+
+    const q = stage().querySelector('h1.plr-q');
+    expect(q).toHaveClass('plr-q--clamp');
+    fireEvent.click(screen.getByRole('button', { name: /Show the whole question/i }));
+    expect(stage().querySelector('h1.plr-q')).not.toHaveClass('plr-q--clamp');
+    expect(screen.queryByRole('button', { name: /Show the whole question/i })).toBeNull();
   });
 
   // rejects: a sort control, a filter, or any reindexing. Vote indices map to
@@ -445,13 +591,15 @@ describe('the ballot', () => {
   });
 
   // rejects: voting on a question the phone will not show. `currentQuestion` is
-  //          loaded during VOTE and was simply never rendered, so a player who
+  //          loaded during VOTE and was once never rendered, so a player who
   //          joined at round three ranked six answers to a question nobody had
-  //          shown them.
-  test('the question being voted on is on the screen', async () => {
+  //          shown them. The title is on screen; the brief is one tap away.
+  test('the question being voted on is on the screen, and the brief is recoverable', async () => {
     const server = makeServer({ state: 'CREATED' });
     installFetch(server);
     await reachBallot(server);
+    expect(screen.getByRole('heading', { name: 'What is the capital of France?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Show the whole question/i }));
     expect(screen.getByText(/Our regional teams each built their own intake process/i))
       .toBeInTheDocument();
   });

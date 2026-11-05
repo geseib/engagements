@@ -221,7 +221,7 @@ export const ENDED = Object.freeze({
  * never the main screen, the big screen or the projector.
  */
 export const LOOK_UP = Object.freeze({
-  lobby: 'Everything the room shares, the questions, the results and the discussion, is on the room’s screen. This page is only ever your half.',
+  lobby: 'The questions, the results and the discussion go up on the room’s screen.',
   between: 'The discussion is on the room’s screen. Join in: this is the part the session is for.',
   receiptTrivia: 'The room’s answers go up on the room’s screen when the round closes.',
   receiptWavelength: 'Nothing shows until everyone is in. When the round closes, the words the whole room shares light up on the room’s screen.',
