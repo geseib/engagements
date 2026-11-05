@@ -142,6 +142,24 @@ export function roomProgressFor({
   return { live, steps: steps.map(({ acted, ...s }) => s), byName, here: people.length }; // eslint-disable-line no-unused-vars
 }
 
+/**
+ * A PAGE OPENED OR CLOSED (websocket/presence.js `presenceChanged`; dev QA
+ * 5 Nov): the roster with that person's `deviceConnected` set, so the room
+ * tile and the rail say "away" in the same render the frame lands in. A name
+ * not on the roster, or no change, returns the same array (no re-render).
+ */
+export function applyPresence(players, name, connected) {
+  const list = Array.isArray(players) ? players : [];
+  let changed = false;
+  const next = list.map((p) => {
+    const n = p && (p.name || p.playerName);
+    if (n !== name || p.deviceConnected === connected) return p;
+    changed = true;
+    return { ...p, deviceConnected: connected };
+  });
+  return changed ? next : players;
+}
+
 /** The live step, or null. */
 export function liveStepOf(progress) {
   if (!progress || !progress.live) return null;

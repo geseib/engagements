@@ -139,7 +139,7 @@ import ResponsesPanel from './components/console/panels/ResponsesPanel';
 import { TriviaPanel, PollPanel, correctSoFar, revealedLetters } from './components/console/panels/FormatPanels';
 import ReadPanel from './components/console/panels/ReadPanel';
 import { fetchReadCheck, readCheckNote } from './utils/readCheckClient';
-import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS } from './config/needsYou';
+import { needsYou, markHandoverRequested, NEEDS_ACTIONS, NEEDS_LEVELS, projectNeedsLine } from './config/needsYou';
 import NeedsYouLine from './components/needs/NeedsYouLine';
 import ConsolePulse from './components/console/ConsolePulse';
 import TimeChip from './components/console/TimeChip';
@@ -149,7 +149,7 @@ import {
 } from './config/roundTimer';
 import { noteServerNow, serverNowMs } from './utils/serverClock';
 import { arrivalsSince, withoutRoomCount, answersAreChoices } from './config/consolePulse';
-import { roomProgressFor } from './config/roomProgress';
+import { roomProgressFor, applyPresence } from './config/roomProgress';
 import OneScreenNeedsBell from './components/needs/OneScreenNeedsBell';
 import { LobbyPanel, RoomQuestionPanel, FeedbackPanel, EndedPanel } from './components/console/panels/SimplePanels';
 import SessionSetup from './components/console/panels/SessionSetup';
@@ -1803,17 +1803,21 @@ function GameHostPage() {
    * for on the screen they are standing in front of — the phone falls back to
    * its own two-second poll of get-game-state, which reads the same record.
    */
+  // The last beat this page published, in flight or settled (publishNotesPage waits on it).
+  const beatPublishRef = useRef(null);
   const publishStageBeat = (beat) => {
     // The round on screen — a closed survey's is 0 (resultsRoundOf).
     const padded = resultsRoundOf(gameState);
     if (!gameId || padded === null) return;
     const round = parseInt(padded, 10);
     // authFetch: /stage-beat carries the Cognito authorizer, like /close-round.
-    authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
+    const sent = authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ beat, questionNumber: round }),
     }).catch((err) => console.error('Stage beat publish failed (continuing):', err));
+    // The page of Workie's read waits for this (publishNotesPage below).
+    beatPublishRef.current = sent;
   };
 
   /**
@@ -3081,6 +3085,20 @@ Focus on actionable business strategy insights.`;
       fetchPlayers('websocket-leave');
     });
 
+    /* A PAGE OPENED OR CLOSED (websocket/presence.js; dev QA 5 Nov: a closed
+       tab showed as away only after a console reload, the room tile kept
+       "Waiting on Ben, Cy"). The frame names the person, so their row's
+       `deviceConnected` changes in this render (config/roomProgress.js reads
+       it for the room tile, config/consoleRail.js for the rail); the roster
+       read that follows is the authority. */
+    webSocketClient.onMessage('presenceChanged', (data) => {
+      const name = data && data.playerName;
+      if (name && typeof data.connected === 'boolean') {
+        setPlayers((prev) => applyPresence(prev, name, data.connected));
+      }
+      fetchPlayers('websocket-presence');
+    });
+
     /* SOMEBODY IS LOCKED OUT OF THEIR OWN NAME AND IS ASKING FOR IT BACK.
        The frame names them, so the flag goes on their roster row in this same
        render (config/needsYou.js markHandoverRequested): the Needs-you line,
@@ -3537,6 +3555,7 @@ Focus on actionable business strategy insights.`;
       webSocketClient.offMessage('initialStateSync');
       webSocketClient.offMessage('playerJoined');
       webSocketClient.offMessage('playerLeft');
+      webSocketClient.offMessage('presenceChanged');
       webSocketClient.offMessage('handoverRequested');
       webSocketClient.offMessage('playerRemoved');
       webSocketClient.offMessage('playerRestored');
@@ -5988,6 +6007,8 @@ Focus on actionable business strategy insights.`;
   // The one-screen Needs-you sheet (2h): the top bar's bell and the public
   // Needs-you line's Open open this one sheet.
   const [needsSheetOpen, setNeedsSheetOpen] = useState(false);
+  // The stage's main button is armed, waiting for its second press (HostActionBar onArmedChange).
+  const [stageArmed, setStageArmed] = useState(false);
 
   /**
    * BACK TO THE EVENT'S AGENDA — the HOST's screen only (the owner, 27 Sep
@@ -7172,8 +7193,20 @@ Focus on actionable business strategy insights.`;
     notesSyncPages = pageCount(points, pageSizeFor(profile));
     notesSyncPage = clampPage(notesSyncRaw, notesSyncPages);
   }
+  /*
+    THE PAGE WAITS FOR THE BEAT (dev QA 5 Nov: one "Failed to load resource:
+    409" early in a two-screen session). Pressing What we heard sends the beat
+    (publishStageBeat, fire and forget) and, a render later, the read's first
+    page (useStageNotesSync). Two POSTs in flight at once: when the page
+    landed first, stage-beat.js refused it, "The room is not on What we
+    heard", a 409 the hook then retried a second later. Not a "not ready"
+    state the server should hide, a race in this page: so the page post waits
+    for the beat this page sent, and the server still refuses a page for a
+    read the room is not on.
+  */
   const publishNotesPage = async (body) => {
     try {
+      if (beatPublishRef.current) await beatPublishRef.current;
       const res = await authFetch(`${API_BASE}games/${gameId}/stage-beat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -9430,6 +9463,24 @@ Focus on actionable business strategy insights.`;
   })();
 
 
+  /* THE NEEDS-YOU LINE, ONE RULE FOR BOTH FRAMES (owner, 5 Nov 2026, cut 3;
+     dev QA 5 Nov). Two screens: a private laptop, the full line, calm
+     included. One screen: the room reads this laptop, so Setup's console
+     frame and the live stage alike draw nothing while calm (no "Nothing
+     needs you now.", no Soon count: the bell counts it) and the public line,
+     a count by kind and Open, only while a Now item waits
+     (config/needsYou.js projectNeedsLine). Setup on one screen used to draw
+     the private line, calm and all, where the room could read it. Before
+     step 1 is answered nothing says this laptop is the room's screen (and
+     the count-only bell, whose sheet Open opens, is not up yet), so Setup
+     keeps the private line until one screen is chosen. */
+  const roomReadsThisLaptop = !twoSurfaces && (!setupFrame || setupChoice === 'classic');
+  const needsLine = !roomReadsThisLaptop
+    ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
+    : (projectNeedsLine(needs)
+      ? <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />
+      : null);
+
   return (
     <>
     {/* No `rail-right-*` / `rail-left` classes any more: those reserved a
@@ -9585,7 +9636,7 @@ Focus on actionable business strategy insights.`;
             onBackKey: consoleOnBackKey,
             onReviewLate: openLateList,
           }}
-          needs={<NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />}
+          needs={needsLine}
         >
           {consolePanel}
         </HostConsole>
@@ -9604,7 +9655,10 @@ Focus on actionable business strategy insights.`;
            items: a dot and the number in the corner while the chrome is
            away, never a name. */
         autoHide={!twoSurfaces}
-        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal}
+        /* An armed press ("3 questions not asked yet. Press again to move
+           on.") holds the chrome too (dev QA 5 Nov): its words are in Your
+           part now, and fading them would undo the warning. */
+        chromeHold={setupPanelOpen || needsSheetOpen || showConfirmModal || Boolean(askComposer) || ownChoiceOpen || showReportsModal || stageArmed}
         urgent={((needs && needs.items) || []).filter((i) => i.level === NEEDS_LEVELS.NOW).length}
         /* The fitter's deps live in Stage but the content that changes lives
            here. Without this a question arriving, an answer list growing or a
@@ -9749,6 +9803,7 @@ Focus on actionable business strategy insights.`;
             <HostActionBar
               controls={stageControls}
               onAction={runHostAction}
+              onArmedChange={setStageArmed}
               bigScreen
               shortcutsEnabled={!anyOverlayOpen}
               /* The time chip and +1 min (2f), beside the main button as on
@@ -9793,11 +9848,7 @@ Focus on actionable business strategy insights.`;
            is never drawn there, nor a Soon item's count (the bell counts
            it). The public line comes up only while a Now item waits, a
            count by kind and Open, as before. */
-        needs={twoSurfaces
-          ? <NeedsYouLine needs={needs} onAct={onNeedsAct} busy={needsBusy} error={needsError} />
-          : (((needs && needs.items) || []).some((i) => i.level === NEEDS_LEVELS.NOW)
-            ? <PublicNeedsLine needs={needs} onOpen={() => setNeedsSheetOpen(true)} remoteConnected={false} />
-            : null)}
+        needs={needsLine}
         rail={(
           <Rail
             phase={hostPhase}

@@ -49,7 +49,7 @@ async function joinAs(name = 'Ada') {
 describe('what a participant sees when they join', () => {
   // A successful join writes `playerName_<gameId>`, and the next render would
   // otherwise open on the rejoin prompt rather than the join form.
-  beforeEach(() => { window.localStorage.clear(); });
+  beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
   afterEach(() => { global.fetch = jest.fn(); });
 
   // rejects: the shipped state, where the host types a session brief, the
@@ -130,7 +130,7 @@ describe('the join screens speak the session\'s own terms', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   }
 
-  beforeEach(() => { window.localStorage.clear(); window.history.pushState({}, '', '/play'); });
+  beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); window.history.pushState({}, '', '/play'); });
   afterEach(() => { global.fetch = jest.fn(); window.history.pushState({}, '', '/'); });
 
   // rejects: a survey told its name is for a scoreboard and for voting rounds.
@@ -171,8 +171,11 @@ describe('the join screens speak the session\'s own terms', () => {
 
   describe('the rejoin prompt', () => {
     const rejoinLine = () => text(document.querySelector('.plr-lede'));
+    // This tab's seat as well as the browser's: a reload (utils/sessionSeat.js).
+    // A seat only the browser holds asks "Are you Ada?" (rejoinSeat.test.jsx).
     function returnTo(brief) {
       window.localStorage.setItem(`playerName_${CODE}`, 'Ada');
+      window.sessionStorage.setItem(`playerName_${CODE}`, 'Ada');
       openFromLink(brief);
     }
 

@@ -363,7 +363,7 @@ const twoScreens = {
         {
           t: 'list',
           items: [
-            { title: 'Each row', text: 'A ✓ when the person has answered or voted, … while they have not (a screen reader says the word). While the room answers or votes, the people still out come first. A grey dot means their device is away. Each row\'s ⋯ (shown when you point at the row or Tab to it; always on a touch screen) has **Move to a new device** and **Remove from session**.' },
+            { title: 'Each row', text: 'A ✓ when the person has answered or voted, … while they have not (a screen reader says the word). While the room answers or votes, the people still out come first. Someone whose page has closed reads **away**, muted, as soon as it closes. Each row\'s ⋯ (shown when you point at the row or Tab to it; always on a touch screen) has **Move to a new device** and **Remove from session**.' },
             { title: 'Scores', text: 'In Call & Answer and Trivia, each person\'s score, once someone has scored: grey while the room answers or votes, bright from **Show results**. Trivia puts a ✓ or ✗ in front once the answer is out. Poll, Wavelength and Survey show no score.' },
             { title: 'Closed', text: 'Fold People and its header says "6 here"; who you wait for is in the room tile. At results it says who leads ("top: Priya, 40").' },
             { title: 'Other closed headers', text: 'The round queue adds the next round ("2 of 21 · next: Pricing"), or the first in the lobby. Late & not reviewed, when it is there, shows a small dot and "2 to review" (never amber: it can wait).' },

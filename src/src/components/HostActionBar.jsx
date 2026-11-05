@@ -190,6 +190,9 @@ export default function HostActionBar({
     it. Quiet, never orange: the main button keeps the one orange.
   */
   showAddTime = false,
+  /* Told true while a press is armed and false when it lets go, so the page
+     can hold its one-screen chrome up (Stage `chromeHold`) while it waits. */
+  onArmedChange = null,
 }) {
   const primary = controls?.primary || null;
   const secondaryControl = controls?.secondary || null;
@@ -212,17 +215,35 @@ export default function HostActionBar({
     does not act on its first press: the button turns to its warning look and
     its `confirmLabel` ("Start round 3 anyway"), the reason appears above the
     buttons ("3 questions not asked yet. Press again to move on."), and the
-    next press acts. It lets go after ARM_MS, on any other button, or when the
+    next press acts. It lets go on any other button, on Escape, or when the
     moment changes, so an armed button is never left waiting to surprise.
+
+    NO TIMEOUT (dev QA 5 Nov: "Start round 2" armed, and the warning vanished
+    within a few seconds, so a slow second click read as nothing happening).
+    It used to let go after 6s on its own; on one screen the auto-hiding
+    chrome then took the bar away after 3s as well. Now the armed state and
+    its words stay until the host decides: press again, press something
+    else, the room moves on, or Escape. `onArmedChange` tells the page, so
+    the one-screen chrome is held up while a press is pending.
   */
-  const ARM_MS = 6000;
   const [armedId, setArmedId] = useState(null);
-  const armTimer = useRef(null);
-  const disarm = () => {
-    if (armTimer.current) clearTimeout(armTimer.current);
-    armTimer.current = null;
-    setArmedId(null);
-  };
+  const disarm = () => { setArmedId(null); };
+  useEffect(() => {
+    if (typeof onArmedChange === 'function') onArmedChange(Boolean(armedId));
+  }, [armedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (typeof onArmedChange === 'function') onArmedChange(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Escape lets go of an armed press (and only then is the key taken).
+  useEffect(() => {
+    if (!armedId) return undefined;
+    const onKey = (event) => {
+      if (event.key !== 'Escape' && event.key !== 'Esc') return;
+      setArmedId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [armedId]);
   const controlIds = [primary?.id, secondaryControl?.id, tertiary?.id].join('|');
   useEffect(() => { disarm(); }, [controlIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // THE BUTTON STOPPED NEEDING A SECOND PRESS (review #38, 19 Oct 2026). Show
@@ -231,13 +252,10 @@ export default function HostActionBar({
   // nothing: the host page went blank. An armed control without `arm` lets go.
   const armedStill = [primary, secondary, tertiary].some((c) => c && c.id === armedId && c.arm);
   useEffect(() => { if (armedId && !armedStill) disarm(); }, [armedId, armedStill]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { if (armTimer.current) clearTimeout(armTimer.current); }, []);
   const press = (control) => {
     if (!control) return;
     if (control.arm && control.arm.inPlace && armedId !== control.id) {
-      if (armTimer.current) clearTimeout(armTimer.current);
       setArmedId(control.id);
-      armTimer.current = setTimeout(() => setArmedId(null), ARM_MS);
       return;
     }
     disarm();
@@ -355,9 +373,19 @@ export default function HostActionBar({
           {primary.disabled && primary.hint && (
             <span className="host-action-bar__hint">{primary.hint}</span>
           )}
-          {armedControl && (
-            <span className="host-action-bar__armed" role="alert">{armedControl.arm.text}</span>
-          )}
+          {/* THE REASON, BESIDE THE BUTTON, SAID POLITELY (dev QA 5 Nov). One
+              live region that is always mounted, so a screen reader hears the
+              words the moment they arrive (a region mounted with its text is
+              often not read), polite rather than an alert: the host asked for
+              this by pressing. Empty, it takes no room in the row. */}
+          <span
+            className={armedControl ? 'host-action-bar__armed' : 'host-action-bar__armed-slot'}
+            role="status"
+            aria-live="polite"
+            data-testid="bar-armed"
+          >
+            {armedControl ? armedControl.arm.text : ''}
+          </span>
           {/* ui/Button (experience plan §5.1, step 5a): the main move is the
               one primary, every other button secondary, 36px. The
               host-action-bar__* classes stay as hooks for the stage dock's

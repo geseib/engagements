@@ -375,6 +375,17 @@ export function kindSummary(needs, { remoteConnected = false } = {}) {
   return remoteConnected ? `${line} · ${NEEDS_WORDS.onPhone}` : line;
 }
 
+/**
+ * IS THERE ANYTHING TO PROJECT? (owner, 5 Nov 2026, cut 3; dev QA 5 Nov.) On
+ * one screen the room reads this laptop, so the Needs-you line is drawn only
+ * while a Now item waits: never the calm "Nothing needs you now.", never a
+ * Soon item's count (the bell counts it). One rule for every one-screen host
+ * surface, the live stage and Setup alike, so the two cannot disagree again.
+ */
+export function projectNeedsLine(needs) {
+  return ((needs && needs.items) || []).some((i) => i && i.level === NEEDS_LEVELS.NOW);
+}
+
 /** A name for each item kind, for the one-screen sheet ("A name request"). */
 export function kindLabel(item) {
   return item ? item.kindText : '';
